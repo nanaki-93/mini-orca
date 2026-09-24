@@ -1,0 +1,158 @@
+<!doctype html>
+<!-- Approved Instrument · Calibrated direction, applied across the full app atlas.
+     Illustrative fixtures only: no provider calls, project execution or source writes.
+     ?persona=reading is the larger-text/offline mirror. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mini-Orca · Benchmark evidence · Calibrated</title><link rel="stylesheet" href="../../design-system/tokens.css"><link rel="stylesheet" href="../../design-system/components.css"><style>.facts { display:flex; flex-wrap:wrap; gap:.6rem; margin-bottom:1.4rem; }
+.metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1rem; margin-bottom:1.2rem; }
+.two-col { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(270px,1fr); gap:var(--space-4); align-items:start; }
+.equal-col { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--space-4); }
+.three-col { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1rem; }
+.topology { width:100%; height:auto; display:block; min-height:180px; }
+.section-intro { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin:1.5rem 0 1rem; }
+.code-layout { display:grid; grid-template-columns:170px minmax(0,1fr) 280px; gap:1rem; align-items:start; }
+.file-tree { display:grid; gap:.25rem; padding:.6rem; }
+.file-tree a { padding:.5rem; color:var(--color-secondary); text-decoration:none; font-size:.8rem; overflow-wrap:anywhere; }
+.file-tree a.selected { background:var(--color-selected); color:var(--color-cyan); }
+.file-tree .indent { padding-left:1.4rem; }
+.editor-stage { margin-bottom:1.25rem; }
+.scope-line { margin:.8rem 0; overflow-wrap:anywhere; font-size:.85rem; color:var(--color-muted); }
+.diff-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1px; background:var(--color-border); }
+.diff-grid > div { min-width:0; background:var(--color-surface); }
+.diff-grid h3 { padding:1rem; font-size:.85rem; }
+.diff-grid pre { border-radius:0; min-height:290px; }
+.result-list { display:grid; gap:1rem; }
+.message { padding:1.2rem; background:var(--color-rail); border-left:2px solid var(--color-violet); }
+.message strong { color:var(--color-violet); display:block; margin-bottom:.5rem; }
+.action-footer { margin-top:1.4rem; padding-top:1.25rem; border-top:1px solid var(--color-border); }
+.review-hint { border-bottom:1px solid var(--color-border); padding:.55rem 1.25rem; font-size:.8rem; color:var(--color-muted); background:var(--color-deep); }
+.receipt-mark { width:65px; height:65px; display:grid; place-items:center; border:1px solid var(--color-success); color:var(--color-success); border-radius:50%; font-size:2rem; margin-bottom:1.25rem; }
+.terminal-output { min-height:240px; }
+.terminal-tabs { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; margin-bottom:1rem; }
+.terminal-tabs button[aria-pressed="true"] { border-color:var(--color-cyan); color:var(--color-cyan); }
+.command-entry { display:flex; align-items:center; gap:1rem; padding:1rem; border-bottom:1px solid var(--color-border); text-decoration:none; color:var(--color-text); }
+.command-entry:hover { background:var(--color-selected); color:var(--color-cyan); }
+.command-entry small { display:block; color:var(--color-muted); }
+.command-entry kbd { margin-left:auto; }
+.diagram-viewport { overflow:auto; }
+.diagram-viewport .topology { max-width:none; }
+.metrics .metric { display:grid; grid-template-columns:1fr auto; gap:.25rem; }
+.metrics .metric .metric-value { grid-column:2; grid-row:1 / 3; margin:0; }
+.metrics .metric > p { grid-column:1; }
+html[data-persona="reading"] .two-col, html[data-persona="reading"] .equal-col, html[data-persona="reading"] .three-col, html[data-persona="reading"] .code-layout { display:flex; flex-direction:column; }
+html[data-persona="reading"] .two-col > *, html[data-persona="reading"] .equal-col > *, html[data-persona="reading"] .three-col > *, html[data-persona="reading"] .code-layout > * { width:100%; }
+@media(max-width:1150px) { .code-layout { grid-template-columns:minmax(0,1fr) 260px; } .code-layout > .file-tree { grid-column:1 / -1; display:flex; flex-wrap:wrap; } }
+@media(max-width:850px) { .two-col, .equal-col, .three-col, .code-layout { grid-template-columns:minmax(0,1fr); } }
+@media(max-width:580px) { .metrics, .diff-grid { grid-template-columns:1fr; } }
+</style></head>
+<body data-page="benchmark"><a class="skip" href="#main">Skip to content</a><header class="mock-meta"><strong>INSTRUMENT · CALIBRATED / MOCK</strong><span>ILLUSTRATIVE DATA · NO REAL ACTIONS</span><a href="index.html" target="_top">Screen atlas</a><a id="reading-link" href="?persona=reading">Larger text</a></header>
+<div class="app"><header class="app-top"><a class="brand" href="01-summary.html"><span class="brand-mark">◈</span>mini-orca</a><a class="project-root" href="02-project.html">~/dev/mini-orca ⌄</a><span class="badge" data-tone="">main</span><a class="btn command-trigger" href="19-search.html"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg><span>Files, symbols, commands</span><kbd>⌘P</kbd></a><div class="connection"><a id="header-analysis" href="05-analysis-run.html">Analysis · needs attention</a><span class="success" id="daemon-status">● Daemon · demo</span></div></header><div class="app-shell"><nav class="app-nav" aria-label="Application workspaces"><div class="nav-primary"><a class="nav-link" href="01-summary.html"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11h-6v-7H9v7H3z"/></svg><span>Summary</span></a><a class="nav-link" href="03-analysis-files.html" ><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l5 4"/></svg><span>Analysis</span></a><a class="nav-link" href="06-bugs.html" ><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 9h8v8a4 4 0 0 1-8 0zM9 9V6a3 3 0 0 1 6 0v3M3 10h5m8 0h5M3 15h5m8 0h5M5 21l3-3m8 0 3 3"/></svg><span>Bugs</span></a><a class="nav-link" href="07-performance.html" aria-current="page" ><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18a9 9 0 1 1 16 0M12 13l5-6M5 18h14"/><circle cx="12" cy="13" r="2"/></svg><span>Performance</span></a><a class="nav-link" href="08-security.html" ><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 4-3 7-8 9-5-2-8-5-8-9V6zM9 12l2 2 4-4"/></svg><span>Security</span></a><a class="nav-link" href="09-source.html" ><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5-6 7 6 7m8-14 6 7-6 7M14 3l-4 18"/></svg><span>Editor</span></a></div><div class="nav-tools"><a class="nav-link" href="18-terminal.html"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 6 6 6-6 6m9 0h7"/></svg><span>Terminal</span></a><a class="nav-link" href="19-search.html"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg><span>Commands</span></a><a class="nav-link" href="20-providers.html"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v4m10-4v4M5 7h14v3a7 7 0 0 1-14 0zm7 10v4"/></svg><span>Models</span></a></div></nav><div class="workspace"><main class="main" id="main" tabindex="-1"><header class="page-head"><div><span class="eyebrow">Analyze / Mini-Orca</span><h1>Benchmark evidence</h1><p>Choose one existing benchmark; compare isolated copies.</p></div><div class="page-tools"></div></header><div class="two-col"><section class="panel "><div class="panel-head"><h2>Compare one existing benchmark</h2></div><div class="stack"><span class="badge" data-tone="success">Fixture: current validated candidate</span><p class="muted">Compatible benchmark discovery is read-only. Running the selected command requires local execution trust.</p><div class="field"><label for="benchmark-choice">Existing compatible benchmark</label><select class="select" id="benchmark-choice"><option>BenchmarkScanPaths · internal/project</option></select></div><div class="scope mono">go test ./internal/project -run ^$ -bench ^BenchmarkScanPaths$ -benchmem -count 5</div><p class="small muted">Baseline and candidate run in isolated copies. The real command is daemon-built, not a freeform shell input.</p><label class="check"><input type="checkbox" id="benchmark-trust" data-consent="benchmark"><span>Trust local execution of the displayed benchmark in this project revision.</span></label><button class="btn btn-primary" id="run-benchmark" data-gate="benchmark">Trust and run selected benchmark · simulate</button><details><summary>Unavailable example</summary><div class="alert" data-tone="warning"><strong>No compatible benchmark</strong><p>This candidate has no matching existing benchmark. No runtime improvement can be claimed.</p></div></details></div></section><section class="panel "><div class="panel-head"><h2>Measurement, not speculation</h2></div><div id="benchmark-result" hidden><div class="stack"><div class="field"><label for="benchmark-condition">Evidence scenario</label><select class="select" id="benchmark-condition"><option value="measured">Measured</option><option value="inconclusive">Inconclusive</option><option value="stale">Stale</option><option value="failed">Failed</option></select></div><h3 id="measurement-state">Measured fixture · current identity</h3><div id="measurement-values"><div class="table-wrap"><table class="table"><thead><tr><th scope="col">Median</th><th scope="col">Baseline</th><th scope="col">Candidate</th></tr></thead><tbody><tr><td>ns/op</td><td>12,840</td><td>10,960</td></tr><tr><td>B/op</td><td>2,048</td><td>1,536</td></tr><tr><td>allocs/op</td><td>24</td><td>18</td></tr></tbody></table></div><p class="small muted">5 samples each · illustrative values, not a Mini-Orca benchmark result. Relative time range: 3.1% / 3.6%.</p></div><details><summary>Conditions & identity</summary><p>Fixture workload: 10k paths. Same toolchain and machine, separate copies, matching candidate/source identities. Inconclusive or stale samples must not support a current improvement claim.</p></details></div></div><p class="muted">Run the simulation to reveal the measurement specimen. Unknown metrics are unavailable, not zero.</p></section></div></main></div></div><footer class="app-foot"><span>LOCAL-FIRST · SOURCE WRITES REQUIRE APPLY</span><a href="18-terminal.html">⌁ Terminal</a><a href="20-providers.html">1 local · 2 cloud models ↗</a></footer></div>
+<dialog class="modal" id="discard-dialog" aria-labelledby="discard-title"><h2 id="discard-title">Discard the current draft?</h2><p>Your editable candidate and its evidence will be removed. The source file remains unchanged. Cancel keeps the draft and target intact.</p><div class="actions"><button class="btn" data-close>Keep draft</button><a class="btn btn-danger" href="09-source.html">Discard draft · simulate</a></div></dialog>
+<div id="toast" class="toast" role="status" hidden></div><script>const ROUTES={"summary": "01-summary.html", "project": "02-project.html", "analysis-files": "03-analysis-files.html", "analysis-consent": "04-analysis-consent.html", "analysis-run": "05-analysis-run.html", "bugs": "06-bugs.html", "performance": "07-performance.html", "security": "08-security.html", "source": "09-source.html", "context": "10-context.html", "assistant": "11-assistant.html", "new-declaration": "12-new-declaration.html", "draft": "13-draft.html", "checks": "14-checks.html", "review": "15-review.html", "receipt": "16-receipt.html", "benchmark": "17-benchmark.html", "terminal": "18-terminal.html", "search": "19-search.html", "providers": "20-providers.html", "states": "21-states.html", "diagrams": "22-diagrams.html", "verified-scan": "23-verified-scan.html", "context-manifest": "24-context-manifest.html"};
+const params = new URLSearchParams(location.search);
+const persona = params.get('persona') === 'reading' ? 'reading' : 'standard';
+document.documentElement.dataset.persona = persona;
+for (const a of document.querySelectorAll('a[href]')) {
+  const url = new URL(a.getAttribute('href'), location.href);
+  if (url.pathname.endsWith('.html') && persona === 'reading') url.searchParams.set('persona', persona);
+  a.href = url.href;
+}
+const readingLink = document.querySelector('#reading-link');
+const readingURL = new URL(location.href);
+readingURL.searchParams.set('persona', persona === 'reading' ? 'standard' : 'reading');
+readingLink.href = readingURL.href;
+readingLink.textContent = persona === 'reading' ? 'Standard text' : 'Larger text';
+readingLink.addEventListener('click', () => {
+  const url = new URL(readingLink.href);
+  const coverage = document.querySelector('#coverage-state');
+  if (coverage) url.searchParams.set('state', coverage.value);
+  readingLink.href = url.href;
+});
+function go(slug, extra = {}) {
+  const url = new URL(ROUTES[slug], location.href);
+  if (persona === 'reading') url.searchParams.set('persona', persona);
+  for (const [k,v] of Object.entries(extra)) url.searchParams.set(k,v);
+  location.href = url.href;
+}
+function toast(message) { const t = document.querySelector('#toast'); t.textContent = message; t.hidden = false; clearTimeout(window.toastTimer); window.toastTimer = setTimeout(() => t.hidden = true, 7000); }
+for (const b of document.querySelectorAll('[data-dialog]')) b.addEventListener('click', () => document.getElementById(b.dataset.dialog).showModal());
+for (const b of document.querySelectorAll('[data-close]')) b.addEventListener('click', () => b.closest('dialog').close());
+for (const b of document.querySelectorAll('[data-toast]')) b.addEventListener('click', () => toast(b.dataset.toast));
+for (const b of document.querySelectorAll('[data-go]')) b.addEventListener('click', () => go(b.dataset.go));
+for (const b of document.querySelectorAll('[data-gate]')) {
+  const inputs = [...document.querySelectorAll(`[data-consent="${b.dataset.gate}"]`)];
+  const update = () => b.disabled = !inputs.every(i => i.checked);
+  inputs.forEach(i => i.addEventListener('change', update)); update();
+}
+const fileSearch = document.querySelector('#file-search');
+if (fileSearch) {
+  const boxes = [...document.querySelectorAll('.file-check')];
+  const updateCount = () => document.querySelector('#selection-count').textContent = `${boxes.filter(b=>b.checked).length} of ${boxes.length} eligible fixture files included · selection saved in this preview only`;
+  const filter = () => { const q=fileSearch.value.toLowerCase(); const state=document.querySelector('#file-state').value; let n=0; for(const row of document.querySelectorAll('[data-file-row]')) { const match=row.textContent.toLowerCase().includes(q) && (state==='all' || (state==='attention' && ['Outdated','Failed'].includes(row.dataset.state)) || (state==='excluded' && !row.querySelector('input').checked)); row.hidden=!match; if(match)n++; } document.querySelector('#matching-count').textContent=`${n} matching / ${boxes.length} files`; };
+  fileSearch.addEventListener('input',filter); document.querySelector('#file-state').addEventListener('change',filter);
+  boxes.forEach(b=>b.addEventListener('change',()=>{updateCount();filter();}));
+  document.querySelectorAll('[data-select-files]').forEach(b=>b.addEventListener('click',()=>{boxes.forEach(c=>c.checked=b.dataset.selectFiles==='all');updateCount();filter();}));
+  if(params.get('locked')==='1') { boxes.forEach(b=>b.disabled=true); document.querySelectorAll('[data-select-files]').forEach(b=>b.hidden=true); document.querySelector('#selection-lock').hidden=false; }
+  updateCount(); filter();
+}
+if(document.querySelector('#analysis-start')) document.querySelector('#analysis-start').addEventListener('click',()=>go('analysis-run'));
+if(document.querySelector('#run-state')) {
+  let runState='running'; document.querySelector('#header-analysis').textContent='Analysis · running';
+  const show = (state) => { runState=state; document.querySelector('#header-analysis').textContent='Analysis · '+({running:'running',pausing:'pausing',paused:'paused',canceled:'canceled'})[state]; document.querySelector('#run-state').textContent = ({running:'Running',pausing:'Pause requested',paused:'Paused',canceled:'Canceled · partial results retained'})[state]; document.querySelector('#run-explanation').textContent=({running:'Reviewing internal/project/index.go. Finished includes partial and failed stages.',pausing:'Waiting for the active stage to finish. No new stage will start.',paused:'Paused at a stage boundary. Resume requires a fresh preview and consent.',canceled:'No further work will be dispatched. A new Start is required; completed evidence remains readable.'})[state]; document.querySelector('#pause-run').hidden=state!=='running'; document.querySelector('#finish-stage').hidden=state!=='pausing'; document.querySelector('#resume-run').hidden=state!=='paused'; document.querySelector('#cancel-run').hidden=state==='canceled'; document.querySelector('#restart-run').hidden=state!=='canceled'; };
+  document.querySelector('#pause-run').onclick=()=>show('pausing'); document.querySelector('#finish-stage').onclick=()=>show('paused'); document.querySelector('#cancel-run').onclick=()=>show('canceled'); document.querySelector('#resume-run').onclick=()=>go('analysis-consent',{resume:'1'});
+}
+if(params.get('resume')==='1' && document.querySelector('#analysis-start')) { document.querySelector('#analysis-start').textContent='Resume displayed analysis · simulate'; document.querySelector('#consent-title').textContent='Fresh preview for a paused run'; }
+const newName=document.querySelector('#new-name');
+if(newName) {
+ const validate=()=>{const name=newName.value.trim(); const valid=/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) && !['Refresh','Cache','init','main','func','type','var','const','return','package','import','if','else','for','range','break','continue','switch','case','default','select','go','defer','chan','map','struct','interface','fallthrough','goto','_'].includes(name); newName.setAttribute('aria-invalid',String(!valid)); document.querySelector('#name-error').textContent=valid?'Absent in the sample file. The daemon would recheck before a request.':'Use an absent valid Go name, not a reserved or existing identifier.'; document.querySelector('#create-declaration').disabled=!valid || !document.querySelector('#new-intent').value.trim() || !document.querySelector('#new-consent').checked; };
+ [newName,document.querySelector('#new-intent'),document.querySelector('#new-consent')].forEach(x=>x.addEventListener('input',validate));
+ document.querySelector('#create-declaration').onclick=()=>go('draft',{creation:document.querySelector('#declaration-kind').value,name:newName.value.trim()}); validate();
+}
+if(document.querySelector('#send-request')) {
+ const send=document.querySelector('#send-request'); const update=()=>send.disabled=!document.querySelector('#function-consent').checked || !document.querySelector('#intent').value.trim();
+ document.querySelector('#function-consent').addEventListener('change',update); document.querySelector('#intent').addEventListener('input',update);
+ document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{document.querySelector('#intent').value=b.dataset.preset;update();}); send.onclick=()=>go('draft'); update();
+}
+if(document.querySelector('#draft-code')) {
+ const draft=document.querySelector('#draft-code');
+ const creation=params.get('creation');
+ if(creation) { const name=/^[A-Za-z_][A-Za-z0-9_]*$/.test(params.get('name')||'')?params.get('name'):'CacheKey'; draft.value=creation==='type'?`type ${name} struct {\n    Path string\n    Revision string\n}`.replaceAll('\\n','\n'):`func ${name}(path string) string {\n    return filepath.Clean(path)\n}`.replaceAll('\\n','\n'); document.querySelector('#draft-target').textContent=`New ${creation}: ${name} · internal/project/index.go`; document.querySelector('#draft-imports').value=creation==='type'?'':'path/filepath'; document.querySelector('#creation-note').hidden=false; }
+ const dirty=()=>{document.querySelector('#draft-state').textContent='Edited · validation and check evidence invalidated';document.querySelector('#draft-next').hidden=true;document.querySelector('#validation-result').hidden=true;};
+ draft.addEventListener('input',dirty); document.querySelector('#draft-imports').addEventListener('input',dirty);
+ document.querySelector('#validate-draft').onclick=()=>{const result=document.querySelector('#validation-result'); result.hidden=false; result.textContent='Fixture validation passed. This prototype does not parse or validate arbitrary Go; no checks ran.'; document.querySelector('#draft-state').textContent='Fixture validated · focused checks not run';document.querySelector('#draft-next').hidden=false;};
+}
+if(document.querySelector('#run-checks')) document.querySelector('#run-checks').onclick=()=> { document.querySelector('#check-results').hidden=false; document.querySelector('#check-before').hidden=true; document.querySelector('#run-checks').disabled=true; toast('Simulated checks only. No command was executed.'); };
+if(document.querySelector('#check-outcome')) document.querySelector('#check-outcome').onchange=()=>{const failed=document.querySelector('#check-outcome').value==='failed';document.querySelector('#check-pass').hidden=failed;document.querySelector('#check-fail').hidden=!failed;};
+if(document.querySelector('#diff-side')) {
+ document.querySelector('#diff-side').onclick=()=>setDiff(false); document.querySelector('#diff-unified').onclick=()=>setDiff(true);
+ function setDiff(unified) {document.querySelector('#split-diff').hidden=unified;document.querySelector('#unified-diff').hidden=!unified;document.querySelector('#diff-side').setAttribute('aria-pressed',String(!unified));document.querySelector('#diff-unified').setAttribute('aria-pressed',String(unified));}
+ document.querySelector('#stale-source').onchange=e=>{document.querySelector('#apply-change').disabled=e.target.checked;document.querySelector('#stale-warning').hidden=!e.target.checked;document.querySelector('#identity-state').textContent=e.target.checked?'Changed · blocked':'Matches current source';};
+ document.querySelector('#apply-change').onclick=()=>go('receipt',{applied:'1'});
+}
+if(document.querySelector('#undo-change')) {
+ const applied=params.get('applied')==='1'; document.querySelector('#undo-change').disabled=!applied; document.querySelector('#receipt-note').textContent=applied?'Simulated Apply completed in this walkthrough. Undo is available while the sample source is unchanged.':'Receipt specimen. Walk through Review → Apply to enable simulated Undo.';
+ document.querySelector('#undo-conflict').onchange=e=>{document.querySelector('#undo-change').disabled=!applied || e.target.checked;document.querySelector('#undo-warning').hidden=!e.target.checked;};
+ document.querySelector('#undo-change').onclick=()=>{document.querySelector('#receipt-title').textContent='Previous source restored · simulation';document.querySelector('#receipt-note').textContent='The immediately preceding sample change was undone. There is no older Undo chain.';document.querySelector('#undo-change').disabled=true;document.querySelector('#undo-conflict').disabled=true;};
+}
+if(document.querySelector('#run-benchmark')) { document.querySelector('#run-benchmark').onclick=()=>{document.querySelector('#benchmark-result').hidden=false;document.querySelector('#run-benchmark').disabled=true;toast('Fixture comparison revealed. No benchmark ran.');}; document.querySelector('#benchmark-condition').onchange=e=>{document.querySelector('#measurement-state').textContent=({measured:'Measured fixture · current identity',inconclusive:'Inconclusive · variance too high',stale:'Stale · candidate identity no longer matches',failed:'Failed · no comparable result'})[e.target.value];document.querySelector('#measurement-values').hidden=e.target.value==='failed';}; }
+if(document.querySelector('#terminal-body')) {
+ let tabs=[1], active=1, sequence=1; const render=()=>{const rail=document.querySelector('#shell-tabs');rail.replaceChildren();for(const id of tabs){const b=document.createElement('button');b.className='btn';b.textContent=`Shell ${id}`;b.setAttribute('aria-pressed',String(id===active));b.onclick=()=>{active=id;render();};rail.append(b);} document.querySelector('#terminal-output').textContent=tabs.length?`DEMO SHELL ${active} · no real process\n\n$ pwd\n~/dev/mini-orca\n\n$ git status --short\n M internal/project/index.go\n\nShell input is not executed in this mock.\nEach real shell keeps in-memory scrollback until closed.`:'No active shell. Use + New shell to simulate a new session.';document.querySelector('#close-shell').disabled=!tabs.length;};
+ document.querySelector('#new-shell').onclick=()=>{active=++sequence;tabs.push(active);render();};document.querySelector('#close-shell').onclick=()=>{tabs=tabs.filter(t=>t!==active);active=tabs.at(-1);render();};document.querySelector('#hide-terminal').onclick=()=>{document.querySelector('#terminal-body').hidden=true;document.querySelector('#show-terminal').hidden=false;};document.querySelector('#show-terminal').onclick=()=>{document.querySelector('#terminal-body').hidden=false;document.querySelector('#show-terminal').hidden=true;};render();
+}
+const commandSearch=document.querySelector('#command-search');
+if(commandSearch) {
+ let mode='files'; const filter=()=>{let count=0; for(const e of document.querySelectorAll('.command-entry')){e.hidden=e.dataset.mode!==mode || !e.textContent.toLowerCase().includes(commandSearch.value.toLowerCase());if(!e.hidden)count++;}document.querySelector('#search-empty').hidden=count>0;};
+ document.querySelectorAll('[data-command-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.commandMode;document.querySelectorAll('[data-command-mode]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));filter();});commandSearch.addEventListener('input',filter);commandSearch.addEventListener('keydown',e=>{if(e.key==='ArrowDown'){document.querySelector('.command-entry:not([hidden])')?.focus();e.preventDefault();}if(e.key==='Enter'){document.querySelector('.command-entry:not([hidden])')?.click();e.preventDefault();}});
+ document.querySelector('#command-results').addEventListener('keydown',e=>{const rows=[...document.querySelectorAll('.command-entry:not([hidden])')];const index=rows.indexOf(document.activeElement);if(['ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();rows[(index+(e.key==='ArrowDown'?1:-1)+rows.length)%rows.length]?.focus();}});filter();
+}
+if(document.querySelector('#state-select')) { const update=()=>{document.querySelectorAll('[data-state-panel]').forEach(p=>p.hidden=p.dataset.statePanel!==document.querySelector('#state-select').value);}; document.querySelector('#state-select').onchange=update;update(); }
+if(document.querySelector('#zoom')) document.querySelector('#zoom').oninput=e=>document.querySelector('#diagram-canvas').style.width=e.target.value+'%';
+if(document.querySelector('#invalid-diagram')) document.querySelector('#invalid-diagram').onchange=e=>{document.querySelector('#diagram-canvas').hidden=e.target.checked;document.querySelector('#diagram-error').hidden=!e.target.checked;};
+if(document.querySelector('#run-scan')) document.querySelector('#run-scan').onclick=()=>{document.querySelector('#scan-results').hidden=false;document.querySelector('#scan-trust').hidden=true;};
+document.querySelectorAll('[data-retry]').forEach(a=>{const u=new URL(a.href);u.searchParams.set('retry','1');a.href=u;});
+document.querySelectorAll('[data-locked]').forEach(a=>{const u=new URL(a.href);u.searchParams.set('locked','1');a.href=u;});
+document.querySelectorAll('[data-kind]').forEach(a=>{const u=new URL(a.href);u.searchParams.set('kind',a.dataset.kind);a.href=u;});
+if(params.get('kind')==='type' && document.querySelector('#declaration-kind')) document.querySelector('#declaration-kind').value='type';
+if(params.get('retry')==='1' && document.querySelector('#consent-title')) { document.querySelector('#consent-title').textContent='Stale & failed · scope preview specimen'; }
+if(document.querySelector('#draft-code')) document.querySelector('#draft-code').classList.add('code-input');
+</script></body></html>

@@ -1,0 +1,261 @@
+<!doctype html>
+<!-- Approved Instrument · Calibrated direction, applied across the full app atlas.
+     Illustrative fixtures only: no provider calls, project execution or source writes.
+     ?persona=reading is the larger-text/offline mirror. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mini-Orca · Project summary · Calibrated</title><link rel="stylesheet" href="../../design-system/tokens.css"><link rel="stylesheet" href="../../design-system/components.css"><style>.project-heading { display:flex; align-items:center; justify-content:space-between; gap:1.5rem; margin-bottom:1.5rem; }
+.project-heading h1 { font-size:2rem; margin:.35rem 0; }
+.project-heading p { color:var(--color-muted); font-size:.88rem; }
+.project-identity { display:flex; align-items:center; gap:1rem; }
+.project-meta { display:flex; flex-wrap:wrap; gap:.6rem; margin-top:.85rem; }
+.summary-board { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:1.1rem; align-items:start; }
+.hero-row { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(300px,1fr); gap:1.1rem; align-items:stretch; }
+.analysis-panel { display:flex; flex-direction:column; }
+.coverage-layout { display:grid; grid-template-columns:200px minmax(0,1fr); gap:1.5rem; align-items:center; flex:1; }
+.coverage-copy h3 { font:1.25rem/1.35 var(--font-sans); letter-spacing:-.025em; margin-bottom:.35rem; }
+.coverage-copy > p { color:var(--color-muted); font-size:.82rem; }
+.coverage-legend { display:grid; grid-template-columns:1fr; margin:.6rem 0; }
+.coverage-foot { display:flex; flex-wrap:wrap; gap:.5rem 1.5rem; justify-content:space-between; font-size:.74rem; color:var(--color-muted); margin-top:.9rem; padding-top:.9rem; border-top:1px solid var(--color-border); }
+.coverage-readout { margin-top:.7rem; }
+.results { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.75rem; }
+.architecture-svg { display:block; width:100%; height:auto; max-height:210px; }
+.architecture-caption { font-size:.8rem; color:var(--color-muted); margin:.8rem 0; }
+.insight-quote { font:1.2rem/1.5 var(--font-sans); letter-spacing:-.025em; margin:.5rem 0 1rem; max-width:38em; }
+.insight-copy { color:var(--color-muted); font-size:.85rem; }
+.insight-foot { display:flex; align-items:center; gap:.75rem; flex-wrap:wrap; margin-top:1.3rem; font-size:.75rem; color:var(--color-muted); }
+.package-item { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:1rem; padding:.6rem 0; border-top:1px solid var(--color-border); font-size:.82rem; }
+.package-item code { color:var(--color-secondary); overflow-wrap:anywhere; }
+.package-item span { color:var(--color-muted); }
+.flow-strip { display:flex; gap:.45rem; align-items:center; flex-wrap:wrap; margin:.75rem 0; font:.78rem var(--font-mono); }
+.flow-strip span { background:var(--color-rail); border:1px solid var(--color-border); padding:.45rem .6rem; border-radius:var(--radius-control); }
+.flow-strip b { color:var(--color-violet); font-weight:400; }
+.lower-board { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:var(--space-4); align-items:stretch; }
+.data-table { width:100%; border-collapse:collapse; font:.8rem/1.6 var(--font-mono); }
+.data-table td,.data-table th { text-align:left; padding:.7rem .5rem; border-bottom:1px solid var(--color-border); }
+.data-table th { color:var(--color-muted); font-weight:400; font-size:.7rem; text-transform:uppercase; letter-spacing:.08em; }
+.data-table tr:last-child td { border-bottom:0; }
+.data-table td:first-child { overflow-wrap:anywhere; }
+.data-table .state-cell { white-space:nowrap; }
+.scope-note { font-size:.76rem; color:var(--color-muted); margin-top:.75rem; }
+.project-heading { padding-bottom:1.25rem; border-bottom:1px solid var(--color-control); }
+.project-heading h1 { font-size:1.7rem; }
+.coverage-layout { grid-template-columns:180px minmax(0,1fr); gap:1rem; }
+.hero-row { grid-template-columns:minmax(360px,1fr) minmax(0,1.2fr); }
+.results .result-number { font-size:1.7rem; }
+.coverage-copy h3 { font:.95rem/1.4 var(--font-mono); }
+.summary-content { display:grid; gap:var(--space-4); }
+.project-title { display:flex; align-items:center; flex-wrap:wrap; gap:var(--space-3); }
+.project-title h1 { overflow-wrap:anywhere; }
+.project-identity { min-width:0; }
+.project-title .badge { font-size:.78rem; }
+html[data-persona="reading"] .hero-row, html[data-persona="reading"] .summary-board, html[data-persona="reading"] .lower-board { grid-template-columns:1fr; }
+html[data-persona="reading"] .coverage-layout { grid-template-columns:210px minmax(0,1fr); }
+html[data-persona="reading"] .coverage-legend { grid-template-columns:1fr; }
+html[data-persona="reading"] .coverage-key { font-size:.88rem; flex-wrap:nowrap; }
+html[data-persona="reading"] .coverage-key strong { margin-left:auto; }
+@media(max-width:1200px) { .hero-row { grid-template-columns:1fr 1.2fr; } .coverage-layout { grid-template-columns:150px minmax(0,1fr); gap:.8rem; } .dial-center strong { font-size:2.2rem; } .results { gap:.5rem; } }
+@media(max-width:1000px) { .hero-row { grid-template-columns:1fr; } .coverage-layout { grid-template-columns:180px minmax(0,1fr); } }
+@media(max-width:750px) { .summary-board, .lower-board { grid-template-columns:1fr; } .project-heading { align-items:flex-start; flex-direction:column; gap:1rem; } .project-meta { gap:.3rem; } }
+@media(max-width:580px) { .coverage-layout, html[data-persona="reading"] .coverage-layout { grid-template-columns:1fr; } .analysis-dial { max-width:210px; } .coverage-legend { grid-template-columns:repeat(3,minmax(0,1fr)); } .coverage-key { flex-wrap:wrap; gap:.4rem; font-size:.78rem; } .coverage-key strong { margin-left:0; } .results { grid-template-columns:1fr; } .package-item { grid-template-columns:1fr; gap:.2rem; } .summary-finding { grid-template-columns:auto minmax(0,1fr); } .summary-finding > a { grid-column:2; justify-self:end; } }
+</style></head>
+<body data-page="summary"><a class="skip" href="#main">Skip to content</a><header class="mock-meta"><strong>INSTRUMENT · CALIBRATED / MOCK</strong><span>ILLUSTRATIVE DATA · NO REAL ACTIONS</span><a href="index.html" target="_top">Screen atlas</a><a id="reading-link" href="?persona=reading">Larger text</a><div class="meta-controls"><label>Coverage specimen<select id="coverage-state"><option value="mixed">Mixed</option><option value="running">Running</option><option value="partial">Partial</option><option value="current">All current</option><option value="unknown">Unavailable</option><option value="empty">No selection</option></select></label></div></header>
+<div class="app"><header class="app-top"><a class="brand" href="01-summary.html"><span class="brand-mark">◈</span>mini-orca</a><a class="project-root" href="02-project.html">~/dev/mini-orca ⌄</a><span class="badge" data-tone="">main</span><a class="btn command-trigger" href="19-search.html"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg><span>Files, symbols, commands</span><kbd>⌘P</kbd></a><div class="connection"><a id="header-analysis" href="05-analysis-run.html">Analysis · needs attention</a><span class="success" id="daemon-status">● Daemon · demo</span></div></header><div class="app-shell"><nav class="app-nav" aria-label="Application workspaces"><div class="nav-primary"><a class="nav-link" href="01-summary.html" aria-current="page"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v11h-6v-7H9v7H3z"/></svg><span>Summary</span></a><a class="nav-link" href="03-analysis-files.html" ><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l5 4"/></svg><span>Analysis</span></a><a class="nav-link" href="06-bugs.html" ><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 9h8v8a4 4 0 0 1-8 0zM9 9V6a3 3 0 0 1 6 0v3M3 10h5m8 0h5M3 15h5m8 0h5M5 21l3-3m8 0 3 3"/></svg><span>Bugs</span></a><a class="nav-link" href="07-performance.html" ><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18a9 9 0 1 1 16 0M12 13l5-6M5 18h14"/><circle cx="12" cy="13" r="2"/></svg><span>Performance</span></a><a class="nav-link" href="08-security.html" ><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 4-3 7-8 9-5-2-8-5-8-9V6zM9 12l2 2 4-4"/></svg><span>Security</span></a><a class="nav-link" href="09-source.html" ><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5-6 7 6 7m8-14 6 7-6 7M14 3l-4 18"/></svg><span>Editor</span></a></div><div class="nav-tools"><a class="nav-link" href="18-terminal.html"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 6 6 6-6 6m9 0h7"/></svg><span>Terminal</span></a><a class="nav-link" href="19-search.html"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg><span>Commands</span></a><a class="nav-link" href="20-providers.html"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v4m10-4v4M5 7h14v3a7 7 0 0 1-14 0zm7 10v4"/></svg><span>Models</span></a></div></nav><div class="workspace"><main class="main" id="main" tabindex="-1"><header class="project-heading"><div class="project-identity"><div><span class="eyebrow">Project / Summary</span><div class="project-title"><h1>mini-orca</h1><span class="badge" data-tone="cyan">Go workspace</span></div><p>Local-first coding assistant. One deliberate change at a time.</p><div class="project-meta"><span class="badge" data-tone="">main</span><span class="badge" data-tone="">8 indexed files</span></div></div></div><a class="btn btn-primary" href="04-analysis-consent.html">Start analysis</a></header>
+<div class="summary-content"><div class="hero-row"><section class="panel analysis-panel "><header class="panel-head"><h2>Analysis coverage</h2><span class="badge" data-tone="warning">Needs attention</span></header><div class="coverage-layout"><div class="analysis-dial" data-dial data-state="mixed"><svg viewBox="0 0 240 240" role="img" aria-label="Analysis coverage: 5 up to date, 1 outdated, 1 failed; 7 selected files"><circle class="dial-guide" cx="120" cy="120" r="113"/><circle class="dial-guide" cx="120" cy="120" r="79"/><circle class="dial-track" cx="120" cy="120" r="96" pathLength="100"/><g data-segments transform="rotate(-90 120 120)"><circle class="dial-segment" data-state="fresh" cx="120" cy="120" r="96" pathLength="100" stroke-dasharray="69.9 100" stroke-dashoffset="0"/><circle class="dial-segment" data-state="stale" cx="120" cy="120" r="96" pathLength="100" stroke-dasharray="12.7 100" stroke-dashoffset="-71.43"/><circle class="dial-segment" data-state="failed" cx="120" cy="120" r="96" pathLength="100" stroke-dasharray="12.7 100" stroke-dashoffset="-85.71"/></g></svg><div class="dial-center" aria-hidden="true"><strong data-dial-value>71%</strong><span data-dial-label>up to date</span></div></div><div class="coverage-copy"><h3 data-coverage-title>5 of 7 files are up to date.</h3><p data-coverage-subtitle>One source changed. One analysis failed.</p><div class="coverage-legend" data-legend><button class="coverage-key" data-state="fresh" aria-pressed="false"><span class="coverage-dot" data-state="fresh"></span><span>Up to date</span><strong>5</strong></button><button class="coverage-key" data-state="stale" aria-pressed="false"><span class="coverage-dot" data-state="stale"></span><span>Outdated</span><strong>1</strong></button><button class="coverage-key" data-state="failed" aria-pressed="false"><span class="coverage-dot" data-state="failed"></span><span>Failed</span><strong>1</strong></button></div><div class="coverage-readout" data-readout role="status"><strong>Coverage, not a health score.</strong><span>Select a status to inspect its file scope.</span></div></div></div><div class="coverage-foot"><span data-coverage-scope>7 selected · 1 excluded</span><a href="03-analysis-files.html">View analysis ↗</a></div></section><div class="stack"><div class="results"><a class="result-tile" href="06-bugs.html"><span class="result-label"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 9h8v8a4 4 0 0 1-8 0zM9 9V6a3 3 0 0 1 6 0v3M3 10h5m8 0h5M3 15h5m8 0h5M5 21l3-3m8 0 3 3"/></svg> Bugs<span aria-hidden="true">↗</span></span><strong class="result-number danger">3</strong><p>2 model suggestions · 1 tool finding</p></a><a class="result-tile" href="07-performance.html"><span class="result-label"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18a9 9 0 1 1 16 0M12 13l5-6M5 18h14"/><circle cx="12" cy="13" r="2"/></svg> Performance<span aria-hidden="true">↗</span></span><strong class="result-number warning">1</strong><p>Unmeasured recommendation</p></a><a class="result-tile" href="08-security.html"><span class="result-label"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 4-3 7-8 9-5-2-8-5-8-9V6zM9 12l2 2 4-4"/></svg> Security<span aria-hidden="true">↗</span></span><strong class="result-number violet">2</strong><p>1 source rule · 1 AI hypothesis</p></a></div><section class="panel ledger-panel"><header class="panel-head"><h2>File evidence</h2><a class="small" href="03-analysis-files.html">All files ↗</a></header><div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">Selected file</th><th scope="col">Analysis state</th></tr></thead><tbody><tr data-ledger-file="1"><td>project/index.go</td><td class="state-cell"><span class="coverage-dot" data-state="fresh"></span> <span data-file-state>Up to date</span></td></tr><tr data-ledger-file="5"><td>project/scan.go</td><td class="state-cell"><span class="coverage-dot" data-state="stale"></span> <span data-file-state>Outdated</span></td></tr><tr data-ledger-file="6"><td>api/handler.go</td><td class="state-cell"><span class="coverage-dot" data-state="failed"></span> <span data-file-state>Failed</span></td></tr></tbody></table></div><p class="scope-note">Representative rows · saved source identities, not runtime measurements.</p></section></div></div><div class="summary-board"><section class="panel architecture-panel"><header class="panel-head"><h2>Architecture</h2><a href="22-diagrams.html" class="small">Explore ↗</a></header><svg class="architecture-svg" viewBox="0 0 620 210" role="img" aria-label="Desktop calls the loopback API, API calls App; App uses Project and Storage."><g fill="none" stroke="var(--color-control)" stroke-width="1.2"><path d="M134 63H228m132 0h94M520 85v44H179v22m185-22v22"/></g><g fill="var(--color-selected)" stroke="var(--color-accent)"><rect x="8" y="38" width="126" height="48" rx="6"/><rect x="228" y="38" width="132" height="48" rx="6"/><rect x="454" y="38" width="132" height="48" rx="6"/><rect x="116" y="151" width="126" height="44" rx="6"/><rect x="301" y="151" width="126" height="44" rx="6"/></g><g fill="var(--color-text)" font-family="monospace" font-size="12" text-anchor="middle"><text x="71" y="67">Desktop</text><text x="294" y="67">API</text><text x="520" y="67">App</text><text x="179" y="178">Project</text><text x="364" y="178">Storage</text></g><text x="181" y="51" text-anchor="middle" fill="var(--color-muted)" font-family="monospace" font-size="9">loopback</text></svg><p class="architecture-caption">Presentation → request policy → guarded workflow.</p><details><summary>Responsibilities & diagram source</summary><p class="small muted">Project owns indexing and context. Storage owns durable file primitives. Expanding this diagram is local.</p><pre>flowchart LR
+  Desktop --> API --> App
+  App --> Project
+  App --> Storage</pre></details></section><section class="panel insight-panel"><header class="panel-head"><h2>Engineering insight</h2></header><p class="insight-quote">The most important boundary is the moment before Apply.</p><p class="insight-copy">Keep target identity, source freshness, and check evidence next to the final decision—not behind the model’s confidence.</p><div class="insight-foot"><span class="badge" data-tone="violet">Model narrative</span><span>Illustrative saved report</span></div></section></div><div class="lower-board"><section class="panel findings-panel"><header class="panel-head"><h2>Recent findings</h2><a href="06-bugs.html" class="small">View results ↗</a></header><article class="summary-finding"><span class="badge" data-tone="danger">HIGH</span><div><h3>Cache replaced after a failed scan</h3><p>internal/project/index.go:118 · model suggestion</p></div><a href="06-bugs.html" aria-label="Open cache finding">↗</a></article><article class="summary-finding"><span class="badge" data-tone="warning">PERF</span><div><h3>Repeated path normalization</h3><p>internal/project/scan.go:76 · unmeasured</p></div><a href="07-performance.html" aria-label="Open performance recommendation">↗</a></article></section><section class="panel packages-panel"><header class="panel-head"><h2>Packages / modules</h2><span class="badge" data-tone="">5 packages</span></header><div class="package-item"><code>internal/project</code><span>Indexing & context</span></div><div class="package-item"><code>internal/app</code><span>Workflow orchestration</span></div><div class="package-item"><code>internal/api</code><span>Local request policy</span></div><div class="package-item"><code>internal/storage</code><span>Durable storage</span></div><div class="package-item"><code>cmd/orcad</code><span>Startup & configuration</span></div></section></div><section class="panel flows-panel"><header class="panel-head"><h2>Change lifecycle</h2><a href="09-source.html" class="small">Editor ↗</a></header><div class="flow-strip"><span>Request</span><b>→</b><span>Draft</span><b>→</b><span>Checks</span><b>→</b><span>Review</span><b>→</b><span>Apply</span></div><p class="small muted">One declaration. One file. Explicit source mutation.</p></section></div>
+</main></div></div><footer class="app-foot"><span>LOCAL-FIRST · SOURCE WRITES REQUIRE APPLY</span><a href="18-terminal.html">⌁ Terminal</a><a href="20-providers.html">1 local · 2 cloud models ↗</a></footer></div>
+<dialog class="modal" id="discard-dialog" aria-labelledby="discard-title"><h2 id="discard-title">Discard the current draft?</h2><p>Your editable candidate and its evidence will be removed. The source file remains unchanged. Cancel keeps the draft and target intact.</p><div class="actions"><button class="btn" data-close>Keep draft</button><a class="btn btn-danger" href="09-source.html">Discard draft · simulate</a></div></dialog>
+<div id="toast" class="toast" role="status" hidden></div><script>const ROUTES={"summary": "01-summary.html", "project": "02-project.html", "analysis-files": "03-analysis-files.html", "analysis-consent": "04-analysis-consent.html", "analysis-run": "05-analysis-run.html", "bugs": "06-bugs.html", "performance": "07-performance.html", "security": "08-security.html", "source": "09-source.html", "context": "10-context.html", "assistant": "11-assistant.html", "new-declaration": "12-new-declaration.html", "draft": "13-draft.html", "checks": "14-checks.html", "review": "15-review.html", "receipt": "16-receipt.html", "benchmark": "17-benchmark.html", "terminal": "18-terminal.html", "search": "19-search.html", "providers": "20-providers.html", "states": "21-states.html", "diagrams": "22-diagrams.html", "verified-scan": "23-verified-scan.html", "context-manifest": "24-context-manifest.html"};
+const params = new URLSearchParams(location.search);
+const persona = params.get('persona') === 'reading' ? 'reading' : 'standard';
+document.documentElement.dataset.persona = persona;
+for (const a of document.querySelectorAll('a[href]')) {
+  const url = new URL(a.getAttribute('href'), location.href);
+  if (url.pathname.endsWith('.html') && persona === 'reading') url.searchParams.set('persona', persona);
+  a.href = url.href;
+}
+const readingLink = document.querySelector('#reading-link');
+const readingURL = new URL(location.href);
+readingURL.searchParams.set('persona', persona === 'reading' ? 'standard' : 'reading');
+readingLink.href = readingURL.href;
+readingLink.textContent = persona === 'reading' ? 'Standard text' : 'Larger text';
+readingLink.addEventListener('click', () => {
+  const url = new URL(readingLink.href);
+  const coverage = document.querySelector('#coverage-state');
+  if (coverage) url.searchParams.set('state', coverage.value);
+  readingLink.href = url.href;
+});
+function go(slug, extra = {}) {
+  const url = new URL(ROUTES[slug], location.href);
+  if (persona === 'reading') url.searchParams.set('persona', persona);
+  for (const [k,v] of Object.entries(extra)) url.searchParams.set(k,v);
+  location.href = url.href;
+}
+function toast(message) { const t = document.querySelector('#toast'); t.textContent = message; t.hidden = false; clearTimeout(window.toastTimer); window.toastTimer = setTimeout(() => t.hidden = true, 7000); }
+for (const b of document.querySelectorAll('[data-dialog]')) b.addEventListener('click', () => document.getElementById(b.dataset.dialog).showModal());
+for (const b of document.querySelectorAll('[data-close]')) b.addEventListener('click', () => b.closest('dialog').close());
+for (const b of document.querySelectorAll('[data-toast]')) b.addEventListener('click', () => toast(b.dataset.toast));
+for (const b of document.querySelectorAll('[data-go]')) b.addEventListener('click', () => go(b.dataset.go));
+for (const b of document.querySelectorAll('[data-gate]')) {
+  const inputs = [...document.querySelectorAll(`[data-consent="${b.dataset.gate}"]`)];
+  const update = () => b.disabled = !inputs.every(i => i.checked);
+  inputs.forEach(i => i.addEventListener('change', update)); update();
+}
+const fileSearch = document.querySelector('#file-search');
+if (fileSearch) {
+  const boxes = [...document.querySelectorAll('.file-check')];
+  const updateCount = () => document.querySelector('#selection-count').textContent = `${boxes.filter(b=>b.checked).length} of ${boxes.length} eligible fixture files included · selection saved in this preview only`;
+  const filter = () => { const q=fileSearch.value.toLowerCase(); const state=document.querySelector('#file-state').value; let n=0; for(const row of document.querySelectorAll('[data-file-row]')) { const match=row.textContent.toLowerCase().includes(q) && (state==='all' || (state==='attention' && ['Outdated','Failed'].includes(row.dataset.state)) || (state==='excluded' && !row.querySelector('input').checked)); row.hidden=!match; if(match)n++; } document.querySelector('#matching-count').textContent=`${n} matching / ${boxes.length} files`; };
+  fileSearch.addEventListener('input',filter); document.querySelector('#file-state').addEventListener('change',filter);
+  boxes.forEach(b=>b.addEventListener('change',()=>{updateCount();filter();}));
+  document.querySelectorAll('[data-select-files]').forEach(b=>b.addEventListener('click',()=>{boxes.forEach(c=>c.checked=b.dataset.selectFiles==='all');updateCount();filter();}));
+  if(params.get('locked')==='1') { boxes.forEach(b=>b.disabled=true); document.querySelectorAll('[data-select-files]').forEach(b=>b.hidden=true); document.querySelector('#selection-lock').hidden=false; }
+  updateCount(); filter();
+}
+if(document.querySelector('#analysis-start')) document.querySelector('#analysis-start').addEventListener('click',()=>go('analysis-run'));
+if(document.querySelector('#run-state')) {
+  let runState='running'; document.querySelector('#header-analysis').textContent='Analysis · running';
+  const show = (state) => { runState=state; document.querySelector('#header-analysis').textContent='Analysis · '+({running:'running',pausing:'pausing',paused:'paused',canceled:'canceled'})[state]; document.querySelector('#run-state').textContent = ({running:'Running',pausing:'Pause requested',paused:'Paused',canceled:'Canceled · partial results retained'})[state]; document.querySelector('#run-explanation').textContent=({running:'Reviewing internal/project/index.go. Finished includes partial and failed stages.',pausing:'Waiting for the active stage to finish. No new stage will start.',paused:'Paused at a stage boundary. Resume requires a fresh preview and consent.',canceled:'No further work will be dispatched. A new Start is required; completed evidence remains readable.'})[state]; document.querySelector('#pause-run').hidden=state!=='running'; document.querySelector('#finish-stage').hidden=state!=='pausing'; document.querySelector('#resume-run').hidden=state!=='paused'; document.querySelector('#cancel-run').hidden=state==='canceled'; document.querySelector('#restart-run').hidden=state!=='canceled'; };
+  document.querySelector('#pause-run').onclick=()=>show('pausing'); document.querySelector('#finish-stage').onclick=()=>show('paused'); document.querySelector('#cancel-run').onclick=()=>show('canceled'); document.querySelector('#resume-run').onclick=()=>go('analysis-consent',{resume:'1'});
+}
+if(params.get('resume')==='1' && document.querySelector('#analysis-start')) { document.querySelector('#analysis-start').textContent='Resume displayed analysis · simulate'; document.querySelector('#consent-title').textContent='Fresh preview for a paused run'; }
+const newName=document.querySelector('#new-name');
+if(newName) {
+ const validate=()=>{const name=newName.value.trim(); const valid=/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) && !['Refresh','Cache','init','main','func','type','var','const','return','package','import','if','else','for','range','break','continue','switch','case','default','select','go','defer','chan','map','struct','interface','fallthrough','goto','_'].includes(name); newName.setAttribute('aria-invalid',String(!valid)); document.querySelector('#name-error').textContent=valid?'Absent in the sample file. The daemon would recheck before a request.':'Use an absent valid Go name, not a reserved or existing identifier.'; document.querySelector('#create-declaration').disabled=!valid || !document.querySelector('#new-intent').value.trim() || !document.querySelector('#new-consent').checked; };
+ [newName,document.querySelector('#new-intent'),document.querySelector('#new-consent')].forEach(x=>x.addEventListener('input',validate));
+ document.querySelector('#create-declaration').onclick=()=>go('draft',{creation:document.querySelector('#declaration-kind').value,name:newName.value.trim()}); validate();
+}
+if(document.querySelector('#send-request')) {
+ const send=document.querySelector('#send-request'); const update=()=>send.disabled=!document.querySelector('#function-consent').checked || !document.querySelector('#intent').value.trim();
+ document.querySelector('#function-consent').addEventListener('change',update); document.querySelector('#intent').addEventListener('input',update);
+ document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{document.querySelector('#intent').value=b.dataset.preset;update();}); send.onclick=()=>go('draft'); update();
+}
+if(document.querySelector('#draft-code')) {
+ const draft=document.querySelector('#draft-code');
+ const creation=params.get('creation');
+ if(creation) { const name=/^[A-Za-z_][A-Za-z0-9_]*$/.test(params.get('name')||'')?params.get('name'):'CacheKey'; draft.value=creation==='type'?`type ${name} struct {\n    Path string\n    Revision string\n}`.replaceAll('\\n','\n'):`func ${name}(path string) string {\n    return filepath.Clean(path)\n}`.replaceAll('\\n','\n'); document.querySelector('#draft-target').textContent=`New ${creation}: ${name} · internal/project/index.go`; document.querySelector('#draft-imports').value=creation==='type'?'':'path/filepath'; document.querySelector('#creation-note').hidden=false; }
+ const dirty=()=>{document.querySelector('#draft-state').textContent='Edited · validation and check evidence invalidated';document.querySelector('#draft-next').hidden=true;document.querySelector('#validation-result').hidden=true;};
+ draft.addEventListener('input',dirty); document.querySelector('#draft-imports').addEventListener('input',dirty);
+ document.querySelector('#validate-draft').onclick=()=>{const result=document.querySelector('#validation-result'); result.hidden=false; result.textContent='Fixture validation passed. This prototype does not parse or validate arbitrary Go; no checks ran.'; document.querySelector('#draft-state').textContent='Fixture validated · focused checks not run';document.querySelector('#draft-next').hidden=false;};
+}
+if(document.querySelector('#run-checks')) document.querySelector('#run-checks').onclick=()=> { document.querySelector('#check-results').hidden=false; document.querySelector('#check-before').hidden=true; document.querySelector('#run-checks').disabled=true; toast('Simulated checks only. No command was executed.'); };
+if(document.querySelector('#check-outcome')) document.querySelector('#check-outcome').onchange=()=>{const failed=document.querySelector('#check-outcome').value==='failed';document.querySelector('#check-pass').hidden=failed;document.querySelector('#check-fail').hidden=!failed;};
+if(document.querySelector('#diff-side')) {
+ document.querySelector('#diff-side').onclick=()=>setDiff(false); document.querySelector('#diff-unified').onclick=()=>setDiff(true);
+ function setDiff(unified) {document.querySelector('#split-diff').hidden=unified;document.querySelector('#unified-diff').hidden=!unified;document.querySelector('#diff-side').setAttribute('aria-pressed',String(!unified));document.querySelector('#diff-unified').setAttribute('aria-pressed',String(unified));}
+ document.querySelector('#stale-source').onchange=e=>{document.querySelector('#apply-change').disabled=e.target.checked;document.querySelector('#stale-warning').hidden=!e.target.checked;document.querySelector('#identity-state').textContent=e.target.checked?'Changed · blocked':'Matches current source';};
+ document.querySelector('#apply-change').onclick=()=>go('receipt',{applied:'1'});
+}
+if(document.querySelector('#undo-change')) {
+ const applied=params.get('applied')==='1'; document.querySelector('#undo-change').disabled=!applied; document.querySelector('#receipt-note').textContent=applied?'Simulated Apply completed in this walkthrough. Undo is available while the sample source is unchanged.':'Receipt specimen. Walk through Review → Apply to enable simulated Undo.';
+ document.querySelector('#undo-conflict').onchange=e=>{document.querySelector('#undo-change').disabled=!applied || e.target.checked;document.querySelector('#undo-warning').hidden=!e.target.checked;};
+ document.querySelector('#undo-change').onclick=()=>{document.querySelector('#receipt-title').textContent='Previous source restored · simulation';document.querySelector('#receipt-note').textContent='The immediately preceding sample change was undone. There is no older Undo chain.';document.querySelector('#undo-change').disabled=true;document.querySelector('#undo-conflict').disabled=true;};
+}
+if(document.querySelector('#run-benchmark')) { document.querySelector('#run-benchmark').onclick=()=>{document.querySelector('#benchmark-result').hidden=false;document.querySelector('#run-benchmark').disabled=true;toast('Fixture comparison revealed. No benchmark ran.');}; document.querySelector('#benchmark-condition').onchange=e=>{document.querySelector('#measurement-state').textContent=({measured:'Measured fixture · current identity',inconclusive:'Inconclusive · variance too high',stale:'Stale · candidate identity no longer matches',failed:'Failed · no comparable result'})[e.target.value];document.querySelector('#measurement-values').hidden=e.target.value==='failed';}; }
+if(document.querySelector('#terminal-body')) {
+ let tabs=[1], active=1, sequence=1; const render=()=>{const rail=document.querySelector('#shell-tabs');rail.replaceChildren();for(const id of tabs){const b=document.createElement('button');b.className='btn';b.textContent=`Shell ${id}`;b.setAttribute('aria-pressed',String(id===active));b.onclick=()=>{active=id;render();};rail.append(b);} document.querySelector('#terminal-output').textContent=tabs.length?`DEMO SHELL ${active} · no real process\n\n$ pwd\n~/dev/mini-orca\n\n$ git status --short\n M internal/project/index.go\n\nShell input is not executed in this mock.\nEach real shell keeps in-memory scrollback until closed.`:'No active shell. Use + New shell to simulate a new session.';document.querySelector('#close-shell').disabled=!tabs.length;};
+ document.querySelector('#new-shell').onclick=()=>{active=++sequence;tabs.push(active);render();};document.querySelector('#close-shell').onclick=()=>{tabs=tabs.filter(t=>t!==active);active=tabs.at(-1);render();};document.querySelector('#hide-terminal').onclick=()=>{document.querySelector('#terminal-body').hidden=true;document.querySelector('#show-terminal').hidden=false;};document.querySelector('#show-terminal').onclick=()=>{document.querySelector('#terminal-body').hidden=false;document.querySelector('#show-terminal').hidden=true;};render();
+}
+const commandSearch=document.querySelector('#command-search');
+if(commandSearch) {
+ let mode='files'; const filter=()=>{let count=0; for(const e of document.querySelectorAll('.command-entry')){e.hidden=e.dataset.mode!==mode || !e.textContent.toLowerCase().includes(commandSearch.value.toLowerCase());if(!e.hidden)count++;}document.querySelector('#search-empty').hidden=count>0;};
+ document.querySelectorAll('[data-command-mode]').forEach(b=>b.onclick=()=>{mode=b.dataset.commandMode;document.querySelectorAll('[data-command-mode]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));filter();});commandSearch.addEventListener('input',filter);commandSearch.addEventListener('keydown',e=>{if(e.key==='ArrowDown'){document.querySelector('.command-entry:not([hidden])')?.focus();e.preventDefault();}if(e.key==='Enter'){document.querySelector('.command-entry:not([hidden])')?.click();e.preventDefault();}});
+ document.querySelector('#command-results').addEventListener('keydown',e=>{const rows=[...document.querySelectorAll('.command-entry:not([hidden])')];const index=rows.indexOf(document.activeElement);if(['ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();rows[(index+(e.key==='ArrowDown'?1:-1)+rows.length)%rows.length]?.focus();}});filter();
+}
+if(document.querySelector('#state-select')) { const update=()=>{document.querySelectorAll('[data-state-panel]').forEach(p=>p.hidden=p.dataset.statePanel!==document.querySelector('#state-select').value);}; document.querySelector('#state-select').onchange=update;update(); }
+if(document.querySelector('#zoom')) document.querySelector('#zoom').oninput=e=>document.querySelector('#diagram-canvas').style.width=e.target.value+'%';
+if(document.querySelector('#invalid-diagram')) document.querySelector('#invalid-diagram').onchange=e=>{document.querySelector('#diagram-canvas').hidden=e.target.checked;document.querySelector('#diagram-error').hidden=!e.target.checked;};
+if(document.querySelector('#run-scan')) document.querySelector('#run-scan').onclick=()=>{document.querySelector('#scan-results').hidden=false;document.querySelector('#scan-trust').hidden=true;};
+document.querySelectorAll('[data-retry]').forEach(a=>{const u=new URL(a.href);u.searchParams.set('retry','1');a.href=u;});
+document.querySelectorAll('[data-locked]').forEach(a=>{const u=new URL(a.href);u.searchParams.set('locked','1');a.href=u;});
+document.querySelectorAll('[data-kind]').forEach(a=>{const u=new URL(a.href);u.searchParams.set('kind',a.dataset.kind);a.href=u;});
+if(params.get('kind')==='type' && document.querySelector('#declaration-kind')) document.querySelector('#declaration-kind').value='type';
+if(params.get('retry')==='1' && document.querySelector('#consent-title')) { document.querySelector('#consent-title').textContent='Stale & failed · scope preview specimen'; }
+if(document.querySelector('#draft-code')) document.querySelector('#draft-code').classList.add('code-input');
+const labels = {fresh:'Up to date',stale:'Outdated',failed:'Failed',running:'Running',missing:'Not analyzed',partial:'Incomplete',unavailable:'Unavailable'};
+const explanations = {fresh:'Saved evidence matches the selected source.',stale:'Source changed after analysis. Existing evidence is outdated.',failed:'Analysis failed. A retained result is not a successful new analysis.',running:'An admitted stage is running in this specimen. No work runs here.',missing:'No saved analysis exists for this selected file.',partial:'Only part of the required analysis completed.',unavailable:'The saved state could not be established. This is not a successful result.'};
+const filePaths = ['cmd/orcad/main.go','internal/project/index.go','internal/storage/store.go','internal/app/workflow.go','internal/project/index_test.go','internal/project/scan.go','internal/api/handler.go'];
+const scenarios = {
+ mixed:['fresh','fresh','fresh','fresh','fresh','stale','failed'],
+ running:['fresh','fresh','fresh','running','missing','stale','failed'],
+ partial:['fresh','fresh','fresh','partial','unavailable','stale','failed'],
+ current:['fresh','fresh','fresh','fresh','fresh','fresh','fresh'],
+ unknown:null,
+ empty:[]
+};
+const scenarioControl=document.querySelector('#coverage-state');
+scenarioControl.value=Object.hasOwn(scenarios,params.get('state'))?params.get('state'):'mixed';
+let inspecting=null;
+function populateReadout(key,states) {
+ const readout=document.querySelector('[data-readout]');readout.replaceChildren();
+ const strong=document.createElement('strong');
+ const text=document.createElement('span');
+ if(key) {
+  const paths=filePaths.filter((_,i)=>states[i]===key);
+  strong.textContent=`${paths.length} ${labels[key].toLowerCase()} · local inspection`;
+  text.textContent=explanations[key]+' '+paths.join(' · ');
+ } else {
+  strong.textContent='Coverage, not a health score.';
+  text.textContent='Select a status to inspect its file scope. No request starts.';
+ }
+ readout.append(strong,text);
+}
+function renderCoverage() {
+ const scenario=scenarioControl.value;
+ const states=scenarios[scenario];
+ const counts=Object.fromEntries(Object.keys(labels).map(k=>[k,states?.filter(s=>s===k).length??null]));
+ const dial=document.querySelector('[data-dial]');
+ const svg=dial.querySelector('svg');
+ const segments=dial.querySelector('[data-segments]');
+ const legend=document.querySelector('[data-legend]');
+ const unavailable=states===null, empty=states?.length===0;
+ if(!states || !counts[inspecting]) inspecting=null;
+ dial.dataset.state=scenario;
+ if(inspecting) dial.dataset.inspecting=inspecting;else delete dial.dataset.inspecting;
+ segments.replaceChildren();
+ const pieces=states?.length?Object.keys(labels).filter(s=>counts[s]>0).map(s=>({state:s,count:counts[s]})):[];
+ let offset=0;
+ for(const piece of pieces) {
+  const length=piece.count/states.length*100;
+  const gap=pieces.length===1?0:1.6;
+  const arc=document.createElementNS('http://www.w3.org/2000/svg','circle');
+  for(const [key,value] of Object.entries({cx:120,cy:120,r:96,pathLength:100,'stroke-dasharray':`${length-gap} 100`,'stroke-dashoffset':String(-offset)})) arc.setAttribute(key,value);
+  arc.classList.add('dial-segment');arc.dataset.state=piece.state;if(piece.state===inspecting)arc.classList.add('is-inspected');
+  segments.append(arc);offset+=length;
+ }
+ const current=states?.length?Math.round(counts.fresh/states.length*100):null;
+ dial.querySelector('[data-dial-value]').textContent=unavailable?'—':empty?'0':inspecting?`${counts[inspecting]}/${states.length}`:`${current}%`;
+ dial.querySelector('[data-dial-label]').textContent=unavailable?'unavailable':empty?'selected files':inspecting?labels[inspecting]:'up to date';
+ const description=unavailable?'Analysis coverage unavailable; file counts unknown.':empty?'No files selected. No coverage percentage.':`Analysis coverage: ${Object.keys(labels).filter(k=>counts[k]>0).map(k=>`${counts[k]} ${labels[k].toLowerCase()}`).join(', ')}; ${states.length} selected files. Not a health score.`;
+ svg.setAttribute('aria-label',description);
+ document.querySelector('[data-coverage-title]').textContent=unavailable?'Coverage is unavailable.':empty?'No files selected.':`${counts.fresh} of ${states.length} files are up to date.`;
+ document.querySelector('[data-coverage-subtitle]').textContent=unavailable?'No percentage can be calculated. Counts are not zero.':empty?'Choose files before starting analysis.':scenario==='current'?'Current analysis is not an assurance of safety.':scenario==='running'?'Running and missing evidence stay distinct.':scenario==='partial'?'Incomplete and unavailable are not successes.':'One source changed. One analysis failed.';
+ document.querySelector('[data-coverage-scope]').textContent=unavailable?'Selected-file counts unavailable':empty?'0 selected · 8 excluded':'7 selected · 1 excluded';
+ const status=document.querySelector('.analysis-panel .panel-head .badge');
+ status.textContent=unavailable?'Unavailable':empty?'No selection':scenario==='current'?'Up to date':scenario==='running'?'Running':scenario==='partial'?'Partial':'Needs attention';
+ status.dataset.tone=scenario==='current'?'success':scenario==='running'?'cyan':'warning';
+ document.querySelector('#header-analysis').textContent=`Analysis · ${status.textContent.toLowerCase()}`;
+ legend.replaceChildren();
+ for(const key of Object.keys(labels).filter(k=>counts[k]>0)) {
+  const button=document.createElement('button');button.className='coverage-key';button.dataset.state=key;button.setAttribute('aria-pressed',String(inspecting===key));
+  const dot=document.createElement('span');dot.className='coverage-dot';dot.dataset.state=key;
+  const label=document.createElement('span');label.textContent=labels[key];
+  const count=document.createElement('strong');count.textContent=counts[key];
+  button.append(dot,label,count);button.addEventListener('click',()=>{inspecting=inspecting===key?null:key;renderCoverage();document.querySelector(`[data-legend] [data-state="${key}"]`)?.focus();});legend.append(button);
+ }
+ populateReadout(inspecting,states??[]);
+ if(unavailable||empty) {
+  const r=document.querySelector('[data-readout]');r.querySelector('strong').textContent=unavailable?'Unknown is not zero.':'No selected-file denominator.';
+  r.querySelector('span').textContent=unavailable?'Keep category evidence separate. Review the analysis workspace for recovery.':'The empty ring is neutral, not a 0% project-health result.';
+ }
+ const ledgerPanel=document.querySelector('.ledger-panel');
+ ledgerPanel.querySelector('.table-wrap').hidden=unavailable||empty;
+ ledgerPanel.querySelector('.scope-note').textContent=unavailable?'Selection and evidence counts are unavailable in this specimen.':empty?'0 selected files · all 8 indexed files excluded.':'Representative rows · saved source identities, not runtime measurements.';
+ document.querySelectorAll('[data-ledger-file]').forEach(row=>{
+  const key=states?.[Number(row.dataset.ledgerFile)];row.querySelector('[data-file-state]').textContent=empty?'Not selected':key?labels[key]:'Unavailable';row.querySelector('.coverage-dot').dataset.state=key??'unavailable';
+ });
+}
+scenarioControl.addEventListener('change',()=>{inspecting=null;renderCoverage();});
+renderCoverage();
+</script></body></html>

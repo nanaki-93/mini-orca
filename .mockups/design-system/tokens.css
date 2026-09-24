@@ -1,0 +1,40 @@
+/* Instrument · Calibrated — approved I1.1 direction, Tokyo Midnight palette.
+   Compact technical typography and flat evidence panels; a softer labeled rail.
+   System font stacks and local assets only. Mockup tokens, not a production theme. */
+:root {
+  color-scheme: dark;
+  --color-bg: #1a1b26;
+  --color-deep: #13141d;
+  --color-rail: #171821;
+  --color-surface: #202130;
+  --color-raised: #292b3c;
+  --color-selected: #242a41;
+  --color-border: #34364b;
+  --color-control: #787fa5;
+  --color-text: #c0caf5;
+  --color-secondary: #a9b1d6;
+  --color-muted: #9299be;
+  --color-accent: #7aa2f7;
+  --color-cyan: #7dcfff;
+  --color-violet: #bb9af7;
+  --color-success: #9ece6a;
+  --color-warning: #e0af68;
+  --color-danger: #f7768e;
+  --color-inverse: #161824;
+  --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-body: var(--font-mono);
+  --font-display: var(--font-mono);
+  --space-1: .25rem;
+  --space-2: .5rem;
+  --space-3: .75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --radius-control: .125rem;
+  --radius-panel: .125rem;
+  --panel-padding: .85rem;
+  --title-size: 1.75rem;
+}
