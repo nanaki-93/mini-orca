@@ -68,6 +68,47 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun toolbarMarkAndActivityIconsRenderAtOneAndTwoTimesDensity() {
+    listOf(1f, 2f).forEach { density ->
+      ComposeVisualFixture(
+              (220 * density).toInt(), (80 * density).toInt(), densityScale = density) {
+                Row(
+                    Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                      MiniOrcaMark()
+                      listOf(
+                              DesktopIcon.Summary,
+                              DesktopIcon.Analysis,
+                              DesktopIcon.Problems,
+                              DesktopIcon.Performance,
+                              DesktopIcon.Security,
+                              DesktopIcon.Editor)
+                          .forEach { icon ->
+                            Column(
+                                horizontalAlignment =
+                                    androidx.compose.ui.Alignment.CenterHorizontally) {
+                                  DesktopLineIcon(
+                                      icon, "${icon.name} destination", iconSize = 16.dp)
+                                  Spacer(Modifier.height(4.dp))
+                                  DesktopLineIcon(
+                                      icon, "${icon.name} destination at 20dp", iconSize = 20.dp)
+                                }
+                          }
+                    }
+              }
+          .use { fixture ->
+            fixture.render("tokyo-midnight-icons-${density}x")
+            assertTrue(fixture.hasDescription("Mini-Orca"))
+            listOf("Summary", "Analysis", "Problems", "Performance", "Security", "Editor").forEach {
+              assertTrue(fixture.hasDescription("$it destination"))
+              assertTrue(fixture.hasDescription("$it destination at 20dp"))
+            }
+          }
+    }
+  }
+
+  @Test
   fun productionReferenceMatrixUsesAttachmentSizeAndRepresentativeDensity() {
     listOf(Triple("1x", 1_512, 712), Triple("2x", 3_024, 1_424)).forEach {
         (densityLabel, width, height) ->

@@ -288,18 +288,25 @@ internal fun projectTypePresentation(type: String?): ProjectTypePresentation =
 @Composable
 internal fun MiniOrcaMark() {
   Canvas(Modifier.size(26.dp).semantics { contentDescription = "Mini-Orca" }) {
+    val stroke = 1.8.dp.toPx()
+    val center = Offset(size.width * 0.5f, size.height * 0.5f)
     drawRoundRect(
-        SelectionAccent, cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()))
-    drawCircle(
-        FocusAccent,
-        radius = size.minDimension * 0.18f,
-        center = Offset(size.width * 0.36f, size.height * 0.42f))
-    drawLine(
-        PrimaryText,
-        Offset(size.width * 0.26f, size.height * 0.68f),
-        Offset(size.width * 0.72f, size.height * 0.68f),
-        strokeWidth = 2.dp.toPx(),
-        cap = StrokeCap.Round)
+        ToolWindowSurface, cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()))
+    drawRoundRect(
+        SelectionAccent,
+        topLeft = Offset(size.width * 0.08f, size.height * 0.08f),
+        size = androidx.compose.ui.geometry.Size(size.width * 0.84f, size.height * 0.84f),
+        cornerRadius = androidx.compose.ui.geometry.CornerRadius(7.dp.toPx()),
+        style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+    drawArc(
+        MiniOrcaPalette.identityAccent,
+        startAngle = 205f,
+        sweepAngle = 235f,
+        useCenter = false,
+        topLeft = Offset(size.width * 0.24f, size.height * 0.24f),
+        size = androidx.compose.ui.geometry.Size(size.width * 0.52f, size.height * 0.52f),
+        style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = StrokeCap.Round))
+    drawCircle(Information, size.minDimension * 0.08f, center)
   }
 }
 
