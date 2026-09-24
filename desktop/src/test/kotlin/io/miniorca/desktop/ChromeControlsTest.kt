@@ -1,6 +1,17 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -34,6 +45,117 @@ class ChromeControlsTest {
     assertEquals(
         Color.LightGray,
         ideActionBackground(colors, false, true, IdeActionInteraction(pressed = true)))
+  }
+
+  @Test
+  fun selectedTabKeepsItsSelectionWhenKeyboardFocusMovesAndActivatesWithEnter() {
+    var activations = 0
+    ComposeVisualFixture(360, 140, 1.5f) {
+          Column(Modifier.fillMaxSize().background(Panel).padding(12.dp)) {
+            ChromeTab(
+                onClick = { activations++ }, selected = true, accessibleName = "Results tab") {
+                  Text("Results tab")
+                }
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasDescription("Results tab"))
+          assertTrue(fixture.isDescriptionSelected("Results tab"))
+          fixture.assertColorVisible(SelectionAccent)
+          assertTrue(fixture.requestDescriptionFocus("Results tab"))
+          fixture.render("focused-selected-tab")
+          assertTrue(fixture.isDescriptionFocused("Results tab"))
+          assertTrue(fixture.isDescriptionSelected("Results tab"))
+          fixture.assertColorVisible(FocusAccent)
+          fixture.assertColorVisible(SelectionAccent)
+          fixture.assertTextFits("Results tab")
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals(1, activations)
+          assertTrue(fixture.isDescriptionSelected("Results tab"))
+        }
+  }
+
+  @Test
+  fun focusedSelectedTabTooltipDoesNotCoverItsSelectionAtDoubleDensity() {
+    ComposeVisualFixture(720, 280, 1.5f, 2f) {
+          Column(Modifier.fillMaxSize().background(Panel).padding(12.dp)) {
+            ChromeTab(onClick = {}, selected = true, accessibleName = "Results tab") {
+              Text("Results tab")
+            }
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestDescriptionFocus("Results tab"))
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("Results tab"))
+          fixture.assertColorVisible(FocusAccent)
+          fixture.assertColorVisible(SelectionAccent)
+        }
+  }
+
+  @Test
+  fun disabledButtonsAndMenuItemsRetainNamesAndCannotActivate() {
+    var activations = 0
+    ComposeVisualFixture(440, 220, 1.5f) {
+          Column(Modifier.fillMaxSize().background(Panel).padding(12.dp)) {
+            ChromeButton(
+                onClick = { activations++ }, enabled = false, accessibleName = "Unavailable") {
+                  Text("Unavailable")
+                }
+            MiniOrcaButton(onClick = { activations++ }, enabled = false) { Text("Blocked action") }
+            IdePopupMenuSurface(
+                content = {
+                  IdeDropdownMenuItem("Disabled menu action", { activations++ }, enabled = false)
+                })
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasDescription("Unavailable"))
+          assertTrue(fixture.isDescriptionDisabled("Unavailable"))
+          listOf("Unavailable", "Blocked action", "Disabled menu action").forEach { label ->
+            fixture.assertTextFits(label)
+            assertTrue(fixture.isDisabled(label), "$label must expose disabled semantics")
+            assertTrue(!fixture.tryClick(label), "$label must not expose an enabled click")
+            assertTrue(!fixture.requestFocus(label), "$label must not be keyboard focusable")
+          }
+          fixture.pressKey(Key.Enter)
+          fixture.pressKey(Key.Spacebar)
+          assertEquals(0, activations)
+        }
+  }
+
+  @Test
+  fun disclosureRetainsStateLabelAndTogglesWithoutInvokingTrailingAction() {
+    var expanded by mutableStateOf(false)
+    var trailingClicks = 0
+    ComposeVisualFixture(480, 140, 1.5f) {
+          IdeDisclosureHeader(
+              title = "Evidence",
+              expanded = expanded,
+              onToggle = { expanded = !expanded },
+              stateLabel = "Partial results",
+              actions = {
+                ChromeButton(onClick = { trailingClicks++ }, accessibleName = "Other action") {
+                  Text("Other action")
+                }
+              })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasDescription("Expand Evidence"))
+          assertEquals("Collapsed", fixture.descriptionStateDescription("Expand Evidence"))
+          fixture.assertTextFits("Partial results")
+          assertTrue(fixture.requestDescriptionFocus("Expand Evidence"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertTrue(fixture.hasDescription("Collapse Evidence"))
+          assertEquals("Expanded", fixture.descriptionStateDescription("Collapse Evidence"))
+          assertEquals(0, trailingClicks)
+        }
   }
 
   @Test

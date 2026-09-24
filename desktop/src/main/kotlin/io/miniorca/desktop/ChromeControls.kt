@@ -205,7 +205,9 @@ internal object IdeTooltipPosition : PopupPositionProvider {
       IntOffset(
           (anchorBounds.right - popupContentSize.width).coerceIn(
               0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)),
-          anchorBounds.bottom.coerceIn(
+          // The popup anchors to the row's content, not its padded control. Leave room for
+          // the bottom selection indicator when keyboard focus opens the tooltip.
+          (anchorBounds.bottom + 8).coerceIn(
               0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)),
       )
 }
