@@ -1215,7 +1215,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun filledWorkspacePanesKeepRoundedCornersGuttersAndFullWidthTerminal() {
+  fun filledWorkspacePanesKeepFlatCornersGuttersAndFullWidthTerminal() {
     listOf(1600 to 1000, 1440 to 900, 1000 to 760, 999 to 760, 800 to 650, 1280 to 600).forEach {
         (width, height) ->
       listOf(1f, 1.25f, 1.5f).forEach { scale ->
@@ -1889,6 +1889,74 @@ class DesktopVisualLayoutTest {
           assertEquals(
               "Confirmed", fixture.stateDescription("Confirm remote destination · confirmed"))
         }
+  }
+
+  @Test
+  fun flatSharedSurfacesKeepBordersAndGrowAroundLargerText() {
+    val heights = mutableListOf<Pair<Float, Float>>()
+    listOf(1f, 1.5f).forEach { scale ->
+      ComposeVisualFixture(520, 420, scale) {
+            Column(
+                Modifier.fillMaxSize().background(ActivityRail).padding(MiniOrcaSpacing.section),
+                verticalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.standard)) {
+                  MiniOrcaPanel(Modifier.fillMaxWidth().testTag("flat-panel")) {
+                    Text("Panel content")
+                  }
+                  MiniOrcaPanel(Modifier.fillMaxWidth().testTag("flat-raised"), raised = true) {
+                    Text("Raised content")
+                  }
+                  WorkspaceSection("Workspace", Modifier.testTag("flat-workspace")) {
+                    Text("Workspace content")
+                  }
+                  CompactSingleLineField(
+                      value = "Search files",
+                      onValueChange = {},
+                      label = "Search",
+                      showLabel = false,
+                      modifier = Modifier.testTag("flat-field"))
+                  Row(horizontalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.standard)) {
+                    MiniOrcaButton(onClick = {}, modifier = Modifier.testTag("flat-button")) {
+                      Text("Ready")
+                    }
+                    MiniOrcaButton(
+                        onClick = {},
+                        focusHighlight = true,
+                        modifier = Modifier.testTag("growing-button")) {
+                          Text("Apply\nNow")
+                        }
+                  }
+                  IdeProgressBar(
+                      0.5f, Modifier.width(120.dp).height(12.dp).testTag("round-progress"))
+                }
+          }
+          .use { fixture ->
+            fixture.render("flat-shared-geometry-${(scale * 100).toInt()}")
+            listOf("Panel content", "Raised content", "Workspace", "Workspace content", "Ready")
+                .forEach(fixture::assertTextFits)
+            fixture.assertTextLineCount("Apply\nNow", 2)
+            listOf(
+                    "flat-panel" to Panel,
+                    "flat-raised" to Card,
+                    "flat-workspace" to Panel,
+                    "flat-field" to EditorCanvas,
+                    "flat-button" to StrongSurface)
+                .forEach { (tag, fill) -> fixture.assertFlatCorner(tag, fill) }
+            fixture.assertColorVisible(FocusAccent)
+            val field = fixture.taggedBounds("flat-field")
+            val button = fixture.taggedBounds("flat-button")
+            val growing = fixture.taggedBounds("growing-button")
+            val progress = fixture.taggedBounds("round-progress")
+            assertTrue(field.height >= 34f, "Field minimum height at $scale: $field")
+            assertTrue(button.height >= 32f, "Button minimum height at $scale: $button")
+            assertTrue(growing.height > button.height, "Multiline action must grow at $scale")
+            assertTrue(progress.height == 12f, "Progress capsule retains its track height")
+            assertTrue(fixture.firstVisibleTextBounds("Ready").bottom <= button.bottom)
+            assertTrue(fixture.firstVisibleTextBounds("Apply\nNow").bottom <= growing.bottom)
+            heights += field.height to growing.height
+          }
+    }
+    assertTrue(heights[1].first > heights[0].first, "Field must grow with font scale")
+    assertTrue(heights[1].second > heights[0].second, "Button must grow with font scale")
   }
 
   @Test
@@ -4402,20 +4470,38 @@ internal class ComposeVisualFixture(
           }
         }
     (panes + terminal).forEach { pane ->
-      listOf(pane.left + 1, pane.right - 2).forEach { x ->
-        listOf(pane.top + 1, pane.bottom - 2).forEach { y ->
-          assertEquals(
-              MiniOrcaPalette.editorCanvas.toArgb(),
-              rendered.getRGB(x.toInt(), y.toInt()),
-              "Filled children must be clipped to the rounded pane at $x,$y")
-        }
-      }
       val paneFill = if (pane == editor) EditorCanvas else ToolWindowSurface
+      assertEquals(
+          EditorCanvas.toArgb(),
+          rendered.getRGB(pane.center.x.toInt(), (pane.top - 2).toInt()),
+          "Filled children must not escape the pane into the outer inset")
       assertEquals(
           paneFill.toArgb(),
           rendered.getRGB(pane.center.x.toInt(), (pane.top + 2).toInt()),
           "The top edge must show the actual filled pane")
     }
+  }
+
+  fun assertFlatCorner(tag: String, fill: Color) {
+    val bounds = taggedBounds(tag)
+    val rendered =
+        surface.makeImageSnapshot().use { snapshot ->
+          requireNotNull(snapshot.encodeToData()).use { data ->
+            javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(data.bytes))
+          }
+        }
+    val left = bounds.left.toInt()
+    val top = bounds.top.toInt()
+    assertTrue(rendered.getRGB(left, top) != fill.toArgb(), "$tag corner must remain clipped")
+    assertEquals(
+        fill.toArgb(),
+        rendered.getRGB(left + 5, top + 5),
+        "$tag must fill just inside its flat corner")
+    assertEquals(
+        (if (tag == "flat-field" || tag == "flat-button") ControlBorder else PaneSeparator)
+            .toArgb(),
+        rendered.getRGB(left + bounds.width.toInt() / 2, top),
+        "$tag top keyline must remain visible")
   }
 
   fun assertColorVisible(color: Color) {
