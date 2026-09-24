@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -28,6 +29,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.Icon
 import androidx.compose.material.LocalContentColor
@@ -49,6 +51,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
@@ -604,22 +609,46 @@ internal fun IdeDialog(
     content: @Composable ColumnScope.() -> Unit,
     actions: @Composable RowScope.() -> Unit,
 ) {
+  // Capture the owner window before entering the separate Desktop dialog window. Its own
+  // container size can grow with its content and is not a useful bound for a long body.
+  val windowHeight =
+      with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
+  val maxHeight = if (windowHeight > 0.dp) (windowHeight - 64.dp).coerceIn(0.dp, 520.dp) else 520.dp
   Dialog(onDismissRequest = onDismissRequest) {
-    Column(
-        Modifier.widthIn(min = 320.dp, max = 640.dp)
-            .clip(MiniOrcaShapes.overlay)
-            .background(OverlaySurface)
-            .border(BorderStroke(1.dp, PaneSeparator), MiniOrcaShapes.overlay)
-            .padding(16.dp)) {
-          title()
-          IdeHorizontalSeparator(Modifier.padding(vertical = 12.dp))
-          content()
-          Row(
-              Modifier.fillMaxWidth().padding(top = 16.dp),
-              horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-              content = actions)
-        }
+    IdeDialogSurface(maxHeight, title, content, actions)
   }
+}
+
+@Composable
+internal fun IdeDialogSurface(
+    maxHeight: Dp,
+    title: @Composable () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+    actions: @Composable RowScope.() -> Unit,
+) {
+  Column(
+      Modifier.widthIn(min = 320.dp, max = 640.dp)
+          .heightIn(max = maxHeight)
+          .clip(MiniOrcaShapes.overlay)
+          .background(OverlaySurface)
+          .border(BorderStroke(1.dp, PaneSeparator), MiniOrcaShapes.overlay)
+          .padding(16.dp)) {
+        title()
+        IdeHorizontalSeparator(Modifier.padding(vertical = 12.dp))
+        Column(
+            Modifier.fillMaxWidth()
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState())
+                .testTag("ide-dialog-body"),
+            content = content)
+        FlowRow(
+            Modifier.fillMaxWidth().padding(top = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          actions(this)
+        }
+      }
 }
 
 /**

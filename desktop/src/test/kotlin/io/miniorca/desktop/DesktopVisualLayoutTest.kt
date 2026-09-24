@@ -18,6 +18,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -68,6 +69,52 @@ import org.jetbrains.skia.Surface
 
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
+  @Test
+  fun admissionKeepsFailureConsentAndDecisionsReachableInBoundedDialog() {
+    val error =
+        "Destination unavailable: /project/日本語/long-provider-path. Refresh the preview before starting."
+    for ((width, height) in listOf(800 to 650, 1280 to 600)) {
+      val preview = analysisPreviewFixture()
+      val state = ProjectAnalysisRunState(admission = AnalysisAdmission(preview), error = error)
+      var starts = 0
+      var confirmations = 0
+      ComposeVisualFixture(width, height, 1.5f) {
+            Box(Modifier.fillMaxSize().background(Panel), contentAlignment = Alignment.Center) {
+              IdeDialogSurface(
+                  maxHeight = 520.dp,
+                  title = { Text("Analyze whole project") },
+                  content = {
+                    DesktopAnalysisAdmissionContent(
+                        state, { _, _ -> confirmations++ }, { confirmations++ })
+                  },
+                  actions = {
+                    MiniOrcaButton(onClick = {}, tone = ActionTone.Neutral) { Text("Close") }
+                    MiniOrcaButton(
+                        onClick = { starts++ }, enabled = false, tone = ActionTone.Primary) {
+                          Text("Start analysis")
+                        }
+                  })
+            }
+          }
+          .use { fixture ->
+            fixture.render("admission-dialog-$width-$height-150")
+            fixture.revealText(error, "ide-dialog-body")
+            fixture.assertTextWrapsWithoutClipping(error)
+            fixture.revealText("Remote destination: https://bug.example", "ide-dialog-body")
+            fixture.revealText("Include AI Security review", "ide-dialog-body")
+            val consent = fixture.firstVisibleTextBounds("Include AI Security review")
+            assertTrue(consent.bottom <= height, "Consent must be reachable by body scrolling")
+            for (label in listOf("Close", "Start analysis")) {
+              val bounds = fixture.firstVisibleTextBounds(label)
+              assertTrue(bounds.top >= 0 && bounds.bottom <= height, "$label must remain visible")
+            }
+            assertTrue(fixture.verticalScrollValue("ide-dialog-body") > 0f)
+            assertEquals(0, starts)
+            assertEquals(0, confirmations)
+          }
+    }
+  }
+
   @Test
   fun productionNavigationAndCommandsRemainSansSerifWhileEvidenceIsMonospaced() {
     ComposeVisualFixture(1_600, 1_000) { RoundedSummaryVisualFixture(1_600f) }

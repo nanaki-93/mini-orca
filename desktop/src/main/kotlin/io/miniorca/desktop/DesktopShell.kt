@@ -15,9 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -972,7 +970,7 @@ private fun ContextInspectorDialog(manifest: ContextManifest, onDismiss: () -> U
       onDismissRequest = onDismiss,
       title = { Text("Context inspector · read-only") },
       content = {
-        Column(Modifier.verticalScroll(rememberScrollState())) {
+        Column {
           Column(Modifier.fillMaxWidth()) {
             IdePaneHeader("Destination")
             val scope =

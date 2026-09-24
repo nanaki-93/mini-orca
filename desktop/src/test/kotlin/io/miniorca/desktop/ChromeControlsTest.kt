@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -8,6 +9,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
@@ -292,6 +294,58 @@ class ChromeControlsTest {
           assertTrue(!fixture.requestDescriptionFocus(description))
           fixture.assertTextFits("Unavailable · —")
         }
+  }
+
+  @Test
+  fun dialogBodyScrollsWithoutActivatingReflowedDecisions() {
+    var decisions = 0
+    for (height in listOf(650, 600)) {
+      decisions = 0
+      ComposeVisualFixture(340, height, 1.5f) {
+            Box(Modifier.fillMaxSize().background(Panel), contentAlignment = Alignment.Center) {
+              IdeDialogSurface(
+                  maxHeight = 520.dp,
+                  title = { Text("Review destination") },
+                  content = {
+                    repeat(18) { index ->
+                      Text("Destination $index: /project/日本語/very-long-provider-path")
+                    }
+                  },
+                  actions = {
+                    MiniOrcaButton(onClick = { decisions++ }, tone = ActionTone.Neutral) {
+                      Text("Keep project unchanged")
+                    }
+                    MiniOrcaButton(onClick = { decisions++ }, tone = ActionTone.Primary) {
+                      Text("Confirm destination")
+                    }
+                  })
+            }
+          }
+          .use { fixture ->
+            fixture.render("dialog-reflow-340-$height-150")
+            assertTrue(fixture.verticalScrollValue("ide-dialog-body") == 0f)
+            fixture.scrollBy(100_000f, "ide-dialog-body")
+            fixture.render()
+            assertTrue(fixture.verticalScrollValue("ide-dialog-body") > 0f)
+            assertTrue(
+                fixture.taggedBounds("ide-dialog-body").bottom <=
+                    fixture.firstVisibleTextBounds("Keep project unchanged").top)
+            fixture.revealText(
+                "Destination 17: /project/日本語/very-long-provider-path", "ide-dialog-body")
+            assertEquals(0, decisions)
+            for (label in listOf("Keep project unchanged", "Confirm destination")) {
+              fixture.assertTextFits(label)
+              val bounds = fixture.firstVisibleTextBounds(label)
+              assertTrue(bounds.top >= 0 && bounds.bottom <= height, "$label must stay reachable")
+            }
+            assertTrue(
+                fixture.firstVisibleTextBounds("Confirm destination").top >
+                    fixture.firstVisibleTextBounds("Keep project unchanged").top,
+                "Actions must reflow at narrow widths")
+            assertTrue(fixture.tryClick("Keep project unchanged"))
+            assertEquals(1, decisions)
+          }
+    }
   }
 
   @Test
