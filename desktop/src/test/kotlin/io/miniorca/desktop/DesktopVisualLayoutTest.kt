@@ -2027,6 +2027,7 @@ class DesktopVisualLayoutTest {
         }
 
     var remoteConfirmation by mutableStateOf(false)
+    val remoteChanges = mutableListOf<Boolean>()
     ComposeVisualFixture(480, 180, 1.3f) {
           Column(Modifier.fillMaxSize().background(AppBackground).padding(8.dp)) {
             RemoteProviderConfirmation(
@@ -2038,20 +2039,66 @@ class DesktopVisualLayoutTest {
                         model = "provider/reviewer",
                         remoteProvider = true),
                 confirmed = remoteConfirmation,
-                onConfirmed = { remoteConfirmation = it },
+                onConfirmed = {
+                  remoteChanges += it
+                  remoteConfirmation = it
+                },
             )
           }
         }
         .use { fixture ->
           fixture.render("remote-consent-unconfirmed-480-1.3")
           assertTrue(fixture.hasText("Confirm remote destination"))
-          assertEquals("Not confirmed", fixture.stateDescription("Confirm remote destination"))
-          fixture.clickText("Confirm remote destination")
-          fixture.render("remote-consent-confirmed-480-1.3")
-          assertTrue(remoteConfirmation)
-          assertTrue(fixture.hasText("Confirm remote destination · confirmed"))
+          assertEquals(1, fixture.clickableDescriptionCount("Confirm remote destination"))
           assertEquals(
-              "Confirmed", fixture.stateDescription("Confirm remote destination · confirmed"))
+              ToggleableState.Off, fixture.descriptionToggleableState("Confirm remote destination"))
+          assertEquals(
+              "Not confirmed", fixture.descriptionStateDescription("Confirm remote destination"))
+          fixture.clickVisibleDescription("Confirm remote destination")
+          fixture.render("remote-consent-confirmed-480-1.3")
+          assertEquals(listOf(true), remoteChanges)
+          assertEquals(
+              ToggleableState.On, fixture.descriptionToggleableState("Confirm remote destination"))
+          assertEquals(
+              "Confirmed", fixture.descriptionStateDescription("Confirm remote destination"))
+          assertTrue(fixture.requestDescriptionFocus("Confirm remote destination"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals(listOf(true, false), remoteChanges)
+          assertEquals(
+              ToggleableState.Off, fixture.descriptionToggleableState("Confirm remote destination"))
+        }
+  }
+
+  @Test
+  fun disabledAndLocalDestinationsDoNotGrantRemoteConfirmation() {
+    val remote =
+        ScopedModel(
+            scope = ModelScope.Analyze.wireValue,
+            profile = "review-profile",
+            model = "provider/reviewer",
+            remoteProvider = true)
+    var changes = 0
+    ComposeVisualFixture(480, 220, 1.5f) {
+          Column(Modifier.fillMaxSize().background(AppBackground).padding(8.dp)) {
+            RemoteProviderConfirmation(
+                ModelScope.Analyze, remote, true, { changes++ }, enabled = false)
+            RemoteProviderConfirmation(
+                ModelScope.Analyze, remote.copy(remoteProvider = false), false, { changes++ })
+          }
+        }
+        .use { fixture ->
+          fixture.render("remote-consent-disabled-and-local-480-150")
+          assertEquals(1, fixture.textCount("Confirm remote destination"))
+          assertTrue(fixture.isDescriptionDisabled("Confirm remote destination"))
+          assertEquals(
+              ToggleableState.On, fixture.descriptionToggleableState("Confirm remote destination"))
+          assertEquals(
+              "Confirmed", fixture.descriptionStateDescription("Confirm remote destination"))
+          assertFalse(fixture.tryClick("Confirm remote destination"))
+          assertFalse(fixture.requestDescriptionFocus("Confirm remote destination"))
+          fixture.pressKey(Key.Enter)
+          assertEquals(0, changes)
         }
   }
 
