@@ -3,6 +3,7 @@ package io.miniorca.desktop
 import androidx.compose.ui.graphics.Color
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class ChromeControlsTest {
   @Test
@@ -33,5 +34,15 @@ class ChromeControlsTest {
     assertEquals(
         Color.LightGray,
         ideActionBackground(colors, false, true, IdeActionInteraction(pressed = true)))
+  }
+
+  @Test
+  fun sharedChromeUsesSelectionEdgeWithoutReplacingFocusAndRetainsOverlayContrast() {
+    assertTrue(SelectionAccent != FocusAccent)
+    assertEquals(OverlaySurface, Card)
+    assertEquals(PaneSeparator, Border)
+    assertTrue(contrastRatio(PrimaryText, OverlaySurface) >= 4.5)
+    assertTrue(contrastRatio(SecondaryText, OverlaySurface) >= 4.5)
+    assertTrue(contrastRatio(SelectionAccent, ToolWindowSurface) >= 3.0)
   }
 }

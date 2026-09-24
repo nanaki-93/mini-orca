@@ -131,6 +131,78 @@ class DesktopContrastTest {
   }
 
   @Test
+  fun sharedChromeRendersSelectionFocusTooltipMenuAndDialogSurfaces() {
+    var activated = false
+    ComposeVisualFixture(680, 420, 1.5f) {
+          Column(Modifier.fillMaxSize().background(Panel).padding(12.dp)) {
+            ChromeTab(
+                onClick = {},
+                selected = true,
+                focusHighlight = true,
+                accessibleName = "Selected tab") {
+                  Text("Selected tab")
+                }
+            IdeControlTooltip("Keyboard shortcut")
+            IdePopupMenuSurface(
+                content = {
+                  IdeDropdownMenuItem(label = "Open project", onClick = { activated = true })
+                })
+            IdeDialog(
+                onDismissRequest = {},
+                title = { Text("Confirm action", color = PrimaryText) },
+                content = { Text("Local operation", color = SecondaryText) },
+                actions = { MiniOrcaButton(onClick = { activated = true }) { Text("Continue") } })
+          }
+        }
+        .use { fixture ->
+          fixture.render("shared-chrome-overlays")
+          listOf(
+                  "Selected tab",
+                  "Keyboard shortcut",
+                  "Open project",
+                  "Confirm action",
+                  "Local operation",
+                  "Continue")
+              .forEach(fixture::assertTextFits)
+          fixture.assertTextContrast("Selected tab", SelectionSurface)
+          fixture.assertTextContrast("Keyboard shortcut", OverlaySurface)
+          fixture.assertTextContrast("Open project", Card)
+          fixture.assertTextContrast("Confirm action", OverlaySurface)
+          fixture.assertTextContrast("Local operation", OverlaySurface)
+          assertTrue(!activated)
+        }
+  }
+
+  @Test
+  fun selectedChromeEdgeAndFocusedSelectedChromeRenderIndependentIndicators() {
+    listOf(false to SelectionAccent, true to FocusAccent).forEach { (focused, indicator) ->
+      ComposeVisualFixture(300, 100) {
+            Column(Modifier.fillMaxSize().background(Panel).padding(12.dp)) {
+              ChromeButton(onClick = {}, selected = true, focusHighlight = focused) {
+                Text("Selected")
+              }
+            }
+          }
+          .use { fixture ->
+            fixture.render("selected-chrome-focus-$focused")
+            fixture.assertColorVisible(indicator)
+            fixture.assertTextContrast("Selected", SelectionSurface)
+          }
+    }
+    ComposeVisualFixture(300, 100) {
+          Column(Modifier.fillMaxSize().background(Panel).padding(12.dp)) {
+            ChromeTab(onClick = {}, selected = true, focusHighlight = true) { Text("Focused tab") }
+          }
+        }
+        .use { fixture ->
+          fixture.render("selected-tab-focus")
+          fixture.assertColorVisible(FocusAccent)
+          fixture.assertColorVisible(SelectionAccent)
+          fixture.assertTextContrast("Focused tab", SelectionSurface)
+        }
+  }
+
+  @Test
   fun focusedPrimaryActionRetainsBothFocusKeylinesInTheRenderedPixels() {
     ComposeVisualFixture(300, 120) {
           Column(Modifier.fillMaxSize().background(Panel).padding(12.dp)) {

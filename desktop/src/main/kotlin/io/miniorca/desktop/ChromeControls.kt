@@ -152,7 +152,13 @@ internal fun IdeActionSurface(
               .clip(shape)
               .background(background)
               .border(
-                  BorderStroke(1.dp, if (focused || focusHighlight) FocusAccent else colors.border),
+                  BorderStroke(
+                      1.dp,
+                      when {
+                        focused || focusHighlight -> FocusAccent
+                        selected -> SelectionAccent
+                        else -> colors.border
+                      }),
                   shape)
               // Draw the light outline outside the dark keyline, including on bright actions.
               .then(
