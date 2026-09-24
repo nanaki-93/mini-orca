@@ -62,7 +62,7 @@ internal fun SummaryAnalysisStatus(presentation: ProjectSummaryPresentation) {
       }
   val tint = summaryAnalysisTint(presentation.summaryStatus)
   var focused by remember { mutableStateOf(false) }
-  val description = presentation.analysisMessage
+  val description = "$label · ${presentation.analysisMessage}"
   val tooltip: @Composable () -> Unit = {
     IdeControlTooltip(description, Modifier.widthIn(max = 360.dp))
   }
@@ -167,7 +167,7 @@ private fun SummaryCoverageBar(
                             .background(summaryMetricTint(metric.tone), MiniOrcaShapes.pill))
                     Text(
                         "${metric.value} ${metric.label.lowercase()}",
-                        color = SecondaryText,
+                        color = summaryMetricTint(metric.tone),
                         style = IdeTypography.workspaceMetadata)
                   }
             }
