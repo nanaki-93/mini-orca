@@ -1066,6 +1066,79 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun diagnosticDisclosureKeepsSanitizedAvailableOutputSelectableAndBounded() {
+    val raw =
+        "start \u0000 diagnostic\n" + "more evidence\n".repeat(420) + "END OF AVAILABLE OUTPUT"
+    val cleaned = raw.replace('\u0000', ' ')
+    var value by mutableStateOf(raw)
+    var work = 0
+    ComposeVisualFixture(360, 500, 1.5f) {
+          Column {
+            DiagnosticText(value)
+            ChromeButton(onClick = { work++ }) { Text("Run checks") }
+          }
+        }
+        .use { fixture ->
+          fixture.render("diagnostic-preview-360-150")
+          val preview = cleaned.take(4_096)
+          assertTrue(fixture.hasText(preview))
+          assertTrue(fixture.hasText("… output truncated"))
+          assertFalse(fixture.hasText(sanitizedOutputText(raw)))
+          assertFalse(fixture.hasText(cleaned))
+          val previewCopy = fixture.copyTextByDragging(preview)
+          assertTrue(
+              previewCopy.isNotEmpty() && preview.startsWith(previewCopy), "Copied: $previewCopy")
+          assertFalse(previewCopy.contains("… output truncated"))
+          assertFalse(previewCopy.contains('\u0000'))
+          assertEquals(0, work, "Copying the preview must not start checks")
+          assertEquals(
+              "Collapsed",
+              fixture.descriptionStateDescription("Expand available diagnostic output"))
+          assertTrue(fixture.requestDescriptionFocus("Expand available diagnostic output"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render("diagnostic-expanded-360-150")
+          assertEquals(
+              "Expanded",
+              fixture.descriptionStateDescription("Collapse available diagnostic output"))
+          assertTrue(fixture.hasText(cleaned))
+          assertFalse(fixture.hasText(raw))
+          assertFalse(fixture.hasText(sanitizedOutputText(raw)))
+          assertTrue(fixture.taggedBounds("diagnostic-output-scroll").height <= 360f)
+          val copied = fixture.copyTextByDragging(cleaned)
+          assertTrue(copied.isNotEmpty() && cleaned.contains(copied), "Copied: $copied")
+          assertFalse(copied.contains('\u0000'))
+          assertFalse(copied.contains("Show full available output"))
+          fixture.scrollBy(100_000f, "diagnostic-output-scroll")
+          fixture.render("diagnostic-tail-360-150")
+          assertTrue(fixture.verticalScrollValue("diagnostic-output-scroll") > 0f)
+          assertEquals(0, work)
+
+          assertTrue(fixture.requestDescriptionFocus("Collapse available diagnostic output"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals(
+              "Collapsed",
+              fixture.descriptionStateDescription("Expand available diagnostic output"))
+          assertTrue(fixture.hasText(preview))
+          assertTrue(fixture.hasText("… output truncated"))
+          assertEquals(0, work)
+          fixture.clickDescription("Expand available diagnostic output")
+          fixture.render()
+          assertTrue(fixture.hasText(cleaned))
+
+          value = "replacement \u0001 output" + "x".repeat(4_100)
+          fixture.render()
+          assertEquals(
+              "Collapsed",
+              fixture.descriptionStateDescription("Expand available diagnostic output"))
+          assertTrue(fixture.hasText("… output truncated"))
+          assertFalse(fixture.hasText(sanitizedOutputText(value)))
+          assertFalse(fixture.hasText(cleaned))
+          assertEquals(0, work)
+        }
+  }
+
+  @Test
   fun compactFieldKeepsEditingAndItsAccessibleNameAfterInput() {
     var query by mutableStateOf("")
     ComposeVisualFixture(360, 100) {

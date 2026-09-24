@@ -50,8 +50,15 @@ class ReviewEvidencePaneTest {
             fixture.clickText(if (state == "failed") "Failed check details" else "Check details")
             fixture.render("bottom-review-$state-360-1.5")
             assertTrue(fixture.hasText("$ go test ./..."))
-            assertTrue(fixture.hasText(sanitizedOutputText(output)))
+            assertTrue(fixture.hasText(output.replace('\u0000', ' ').take(4_096)))
+            assertTrue(fixture.hasText("… output truncated"))
+            assertFalse(fixture.hasText(sanitizedOutputText(output)))
             assertFalse(fixture.hasText(output))
+            assertTrue(fixture.hasText("Show full available output"))
+            fixture.clickDescription("Expand available diagnostic output")
+            fixture.render()
+            assertTrue(fixture.hasText(output.replace('\u0000', ' ').trim()))
+            assertFalse(fixture.hasText(sanitizedOutputText(output)))
             assertEquals(0, calls)
           }
     }
@@ -61,6 +68,9 @@ class ReviewEvidencePaneTest {
   fun diagnosticSanitizationPreservesLinesAndTabsWhileBoundingRecordedOutput() {
     assertEquals("line one\n\tline two", sanitizedOutputText("line one\n\tline two\u0000"))
     assertEquals("01234\n… output truncated", sanitizedOutputText("0123456789", 5))
+    assertEquals(
+        4_096 + "\n… output truncated".length, sanitizedOutputText("x".repeat(5_000)).length)
+    assertEquals("01234", sanitizedOutputText("01234", 5))
     assertEquals("", sanitizedOutputText("\u0000\u0001"))
     val failed =
         DraftCheckReport(
