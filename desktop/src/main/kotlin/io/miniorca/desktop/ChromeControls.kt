@@ -22,10 +22,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.DropdownMenu
+import androidx.compose.material.Icon
 import androidx.compose.material.LocalContentColor
 import androidx.compose.material.ProvideTextStyle
 import androidx.compose.material.Text
@@ -50,9 +53,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.dismiss
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -311,6 +317,72 @@ internal fun ChromeTab(
           },
       content = content,
   )
+}
+
+/** A single toggle target for both the indicator and its optional visible label. */
+@Composable
+internal fun IdeCheckbox(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    accessibleName: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    stateLabel: String? = null,
+    label: String? = null,
+) {
+  val interactions = remember { MutableInteractionSource() }
+  val focused by interactions.collectIsFocusedAsState()
+  val hovered by interactions.collectIsHoveredAsState()
+  val pressed by interactions.collectIsPressedAsState()
+  val toggleBehavior =
+      if (enabled)
+          Modifier.toggleable(
+              value = checked,
+              role = Role.Checkbox,
+              interactionSource = interactions,
+              indication = null,
+              onValueChange = onCheckedChange)
+      else
+          Modifier.semantics {
+            role = Role.Checkbox
+            toggleableState = ToggleableState(checked)
+            disabled()
+          }
+  Row(
+      modifier =
+          modifier
+              .heightIn(min = 32.dp)
+              .clip(MiniOrcaShapes.control)
+              .background(if (enabled && (hovered || pressed)) ControlHover else Color.Transparent)
+              .border(1.dp, if (focused) FocusAccent else Color.Transparent, MiniOrcaShapes.control)
+              .semantics {
+                contentDescription = accessibleName
+                stateLabel?.let { stateDescription = it }
+              }
+              .then(toggleBehavior)
+              .padding(horizontal = 8.dp, vertical = 4.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
+    Box(
+        Modifier.size(18.dp)
+            .background(if (checked) SelectionSurface else EditorCanvas, MiniOrcaShapes.indicator)
+            .border(
+                1.dp,
+                if (enabled) if (checked) SelectionAccent else ControlBorder else FaintText,
+                MiniOrcaShapes.indicator),
+        contentAlignment = Alignment.Center) {
+          if (checked)
+              Icon(
+                  DesktopIcon.Check.image,
+                  contentDescription = null,
+                  modifier = Modifier.size(14.dp),
+                  tint = if (enabled) SelectionText else FaintText)
+        }
+    label?.let {
+      Text(it, color = if (enabled) PrimaryText else FaintText, style = IdeTypography.action)
+    }
+  }
 }
 
 /** One flat pane-header composition keeps disclosure targets separate from trailing actions. */
