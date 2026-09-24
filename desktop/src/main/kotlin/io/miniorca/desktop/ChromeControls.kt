@@ -5,7 +5,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -144,7 +143,7 @@ internal fun IdeActionSurface(
               role = role,
               onClickLabel = accessibleName,
               onClick = onClick)
-      else Modifier.hoverable(interactions).semantics { disabled() }
+      else Modifier.semantics { disabled() }
   Row(
       modifier =
           modifier
@@ -164,6 +163,16 @@ internal fun IdeActionSurface(
               .then(
                   if (focused || focusHighlight) Modifier.border(3.dp, ActivityRail, shape)
                   else Modifier)
+              .drawWithContent {
+                drawContent()
+                if (selected && role != Role.Tab) {
+                  drawLine(
+                      SelectionAccent,
+                      Offset(8.dp.toPx(), size.height - 5.dp.toPx()),
+                      Offset(size.width - 8.dp.toPx(), size.height - 5.dp.toPx()),
+                      2.dp.toPx())
+                }
+              }
               .semantics {
                 accessibleName?.let { contentDescription = it }
                 if (role == Role.Tab) this.selected = selected
@@ -176,7 +185,8 @@ internal fun IdeActionSurface(
     CompositionLocalProvider(LocalContentColor provides contentColor) {
       ProvideTextStyle(IdeTypography.action) { content() }
     }
-    if (tooltip != null) IdeActionTooltip(tooltip, focused, observedHovered && !observedPressed)
+    if (enabled && tooltip != null)
+        IdeActionTooltip(tooltip, focused, observedHovered && !observedPressed)
   }
 }
 
@@ -428,8 +438,8 @@ internal fun IdeLabelBadge(
       style = IdeTypography.resultLabel,
       modifier =
           modifier
-              .background(labelBadgeBackground(tint), MiniOrcaShapes.pill)
-              .border(BorderStroke(1.dp, tint.copy(alpha = 0.75f)), MiniOrcaShapes.pill)
+              .background(Panel, MiniOrcaShapes.control)
+              .border(BorderStroke(1.dp, tint.copy(alpha = 0.75f)), MiniOrcaShapes.control)
               .semantics { contentDescription = accessibleName }
               .padding(horizontal = MiniOrcaSpacing.standard, vertical = MiniOrcaSpacing.compact),
   )

@@ -483,9 +483,9 @@ internal fun MiniOrcaPanel(
 ) {
   Column(
       modifier
-          .clip(MiniOrcaShapes.interactiveCard)
+          .clip(MiniOrcaShapes.workspace)
           .background(if (raised) Card else Panel)
-          .border(BorderStroke(1.dp, Border), MiniOrcaShapes.interactiveCard)
+          .border(BorderStroke(1.dp, Border), MiniOrcaShapes.workspace)
           .padding(contentPadding)) {
         content()
       }

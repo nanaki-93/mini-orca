@@ -122,8 +122,8 @@ class DesktopContrastTest {
     val tints = listOf(SelectionAccent, Information, Success, Warning, Error, SecondaryText)
     hosts.forEach { host ->
       tints.forEach { tint ->
-        // IdeLabelBadge paints an opaque panel-resolved tint before the translucent outline.
-        val fill = blendOver(labelBadgeBackground(tint), host)
+        // The badge is a flat, opaque panel surface even when hosted on selected chrome.
+        val fill = Panel
         val outline = blendOver(tint.copy(alpha = 0.75f), fill)
         assertTrue(contrastRatio(tint, fill) >= 4.5, "Badge $tint on $host")
         assertTrue(contrastRatio(outline, fill) >= 3.0, "Badge outline $tint on $host")
@@ -202,7 +202,7 @@ class DesktopContrastTest {
             listOf("fresh", "running", "stale", "failed", "missing").forEach { status ->
               val style = statusBadgeStyle(status)
               fixture.assertTextFits(style.label)
-              fixture.assertTextContrast(style.label, labelBadgeBackground(style.color))
+              fixture.assertTextContrast(style.label, Panel)
             }
             fixture.assertTextFits("Search files")
           }
@@ -297,8 +297,11 @@ class DesktopContrastTest {
               fixture.render("selected-$tone-focus-$focused")
               fixture.assertTextFits("Selected $tone")
               fixture.assertTextContrast("Selected $tone", actionToneStyle(tone).selectedBackground)
-              fixture.assertColorVisible(if (focused) FocusAccent else SelectionAccent)
-              if (focused) fixture.assertColorVisible(ActivityRail)
+              fixture.assertColorVisible(SelectionAccent)
+              if (focused) {
+                fixture.assertColorVisible(FocusAccent)
+                fixture.assertColorVisible(ActivityRail)
+              }
             }
       }
     }
