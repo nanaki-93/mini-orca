@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -189,6 +190,79 @@ class ChromeControlsTest {
           assertTrue(fixture.hasDescription("Collapse Evidence"))
           assertEquals("Expanded", fixture.descriptionStateDescription("Collapse Evidence"))
           assertEquals(0, trailingClicks)
+        }
+  }
+
+  @Test
+  fun checkboxHasOneLabeledTargetAndTogglesOncePerPointerAndKeyboardGesture() {
+    var checked by mutableStateOf(false)
+    val changes = mutableListOf<Boolean>()
+    ComposeVisualFixture(400, 140, 1.5f) {
+          Column(Modifier.fillMaxSize().background(Panel).padding(12.dp)) {
+            IdeCheckbox(
+                checked = checked,
+                accessibleName = "Include security review",
+                label = "Include security review",
+                stateLabel = if (checked) "Confirmed" else "Not confirmed",
+                onCheckedChange = {
+                  checked = it
+                  changes += it
+                })
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(1, fixture.clickableDescriptionCount("Include security review"))
+          assertEquals(
+              ToggleableState.Off, fixture.descriptionToggleableState("Include security review"))
+          assertEquals(
+              "Not confirmed", fixture.descriptionStateDescription("Include security review"))
+          fixture.clickVisibleDescription("Include security review")
+          assertEquals(listOf(true), changes)
+          assertEquals(
+              ToggleableState.On, fixture.descriptionToggleableState("Include security review"))
+          assertEquals("Confirmed", fixture.descriptionStateDescription("Include security review"))
+          assertTrue(fixture.tryClick("Include security review"))
+          fixture.render()
+          assertEquals(listOf(true, false), changes)
+          assertTrue(fixture.requestDescriptionFocus("Include security review"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals(listOf(true, false, true), changes)
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals(listOf(true, false, true, false), changes)
+          assertEquals(
+              ToggleableState.Off, fixture.descriptionToggleableState("Include security review"))
+        }
+  }
+
+  @Test
+  fun disabledCheckboxRetainsStateAndNameWithoutAnActivationTarget() {
+    var changes = 0
+    ComposeVisualFixture(400, 140, 1.5f) {
+          Column(Modifier.fillMaxSize().background(Panel).padding(12.dp)) {
+            IdeCheckbox(
+                checked = true,
+                accessibleName = "Locked selection",
+                label = "Locked selection",
+                stateLabel = "Selected for analysis",
+                enabled = false,
+                onCheckedChange = { changes++ })
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasDescription("Locked selection"))
+          assertTrue(fixture.isDescriptionDisabled("Locked selection"))
+          assertEquals(ToggleableState.On, fixture.descriptionToggleableState("Locked selection"))
+          assertEquals(
+              "Selected for analysis", fixture.descriptionStateDescription("Locked selection"))
+          assertTrue(!fixture.tryClick("Locked selection"))
+          assertTrue(!fixture.requestDescriptionFocus("Locked selection"))
+          fixture.pressKey(Key.Enter)
+          fixture.pressKey(Key.Spacebar)
+          assertEquals(0, changes)
         }
   }
 
