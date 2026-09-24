@@ -1059,6 +1059,146 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun compactFieldsKeepRequiredErrorsVisibleAndAnnouncedAcrossEditingAndResizing() {
+    var search by mutableStateOf("")
+    var notes by mutableStateOf(TextFieldValue(""))
+    var searchError by mutableStateOf<String?>(null)
+    var notesError by mutableStateOf<String?>(null)
+    ComposeVisualFixture(320, 370, 1.5f) {
+          Column(Modifier.fillMaxWidth().background(Panel).padding(8.dp)) {
+            CompactSingleLineField(
+                search,
+                { search = it },
+                "Search findings",
+                showLabel = false,
+                helperText = "Optional search hint",
+                errorText = searchError)
+            CompactMultilineField(
+                notes,
+                { notes = it },
+                "Notes",
+                minLines = 2,
+                helperText = "Optional note hint",
+                errorText = notesError)
+          }
+        }
+        .use { fixture ->
+          fixture.render("fields-help-320-150")
+          assertTrue(fixture.hasText("Optional search hint"))
+          assertTrue(fixture.hasText("Optional note hint"))
+          assertEquals(null, fixture.descriptionError("Search findings"))
+          searchError = "Search must contain a project path"
+          notesError = "Notes must explain why the change is safe across lines and narrow windows"
+          fixture.render("fields-invalid-320-150")
+          fixture.assertTextFits("Search must contain a project path", maxLines = 2)
+          fixture.assertTextWrapsWithoutClipping(notesError!!)
+          assertFalse(fixture.hasText("Optional search hint"))
+          assertFalse(fixture.hasText("Optional note hint"))
+          assertEquals(searchError, fixture.descriptionError("Search findings"))
+          assertEquals(notesError, fixture.descriptionError("Notes"))
+          fixture.setTextForDescription("Search findings", "résumé")
+          fixture.render()
+          assertEquals("résumé", search)
+          assertTrue(fixture.hasDescription("Search findings"))
+          assertEquals(searchError, fixture.descriptionError("Search findings"))
+          fixture.resize(450, 370)
+          fixture.render("fields-invalid-resized-450-150")
+          fixture.assertTextFits("Search must contain a project path", maxLines = 2)
+          assertEquals(notesError, fixture.descriptionError("Notes"))
+          searchError = null
+          notesError = null
+          fixture.render()
+          assertEquals(null, fixture.descriptionError("Search findings"))
+          assertTrue(fixture.hasText("Optional search hint"))
+        }
+  }
+
+  @Test
+  fun compactSingleLineFieldRetainsLongInputAndCaretAtLargeText() {
+    val longValue = "résumé/日本語/" + "very-long-search-segment/".repeat(8)
+    var value by mutableStateOf(longValue)
+    ComposeVisualFixture(210, 110, 1.5f) {
+          CompactSingleLineField(
+              value,
+              { value = it },
+              "Search",
+              showLabel = false,
+              placeholder = "Find a declaration",
+              errorText = "Choose a shorter query")
+        }
+        .use { fixture ->
+          fixture.render("field-long-single-line-210-150")
+          fixture.assertTextFits("Choose a shorter query", maxLines = 2)
+          assertTrue(fixture.editorTextWidth("Search") > 210f)
+          fixture.focusDescribedEditor("Search")
+          fixture.selectEditorText("Search", longValue.length, longValue.length)
+          fixture.render("field-long-single-line-end-210-150")
+          assertEquals(longValue, value)
+          assertEquals(longValue.length, fixture.editorSelectionEnd("Search"))
+        }
+  }
+
+  @Test
+  fun compactFieldsPreserveTextEditingSelectionAndDisabledPresentation() {
+    var query by mutableStateOf("Initial search")
+    var notes by mutableStateOf(TextFieldValue("First line\nSecond line"))
+    var enabled by mutableStateOf(true)
+    ComposeVisualFixture(280, 320, 1.5f) {
+          Column(Modifier.fillMaxWidth().background(Panel).padding(8.dp)) {
+            CompactSingleLineField(
+                query,
+                { query = it },
+                "Filter",
+                showLabel = false,
+                enabled = enabled,
+                errorText = "Invalid filter")
+            CompactMultilineField(
+                notes,
+                { notes = it },
+                "Details",
+                enabled = enabled,
+                minLines = 2,
+                errorText = "Invalid details")
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.focusDescribedEditor("Filter")
+          fixture.render()
+          assertTrue(fixture.isDescriptionFocused("Filter"))
+          fixture.pressKey(Key.Spacebar)
+          fixture.render()
+          assertTrue(query.contains(' '), "Space must enter text, not activate a parent")
+          fixture.setTextForDescription("Details", "First line\nSecond line\nThird line")
+          fixture.render("fields-multiline-edited-280-150")
+          assertEquals("First line\nSecond line\nThird line", notes.text)
+          fixture.focusDescribedEditor("Details")
+          val lineBreaks = notes.text.count { it == '\n' }
+          fixture.pressKey(Key.Enter)
+          fixture.render()
+          assertEquals(lineBreaks + 1, notes.text.count { it == '\n' }, "Enter inserts a line")
+          assertTrue(fixture.hasDescription("Details"))
+          assertEquals("Invalid details", fixture.descriptionError("Details"))
+          fixture.selectEditorText("Details", 6, 10)
+          fixture.render()
+          assertEquals(6, notes.selection.start)
+          assertEquals(10, notes.selection.end)
+          assertTrue(fixture.pressKey(Key.Copy))
+          assertEquals("line", fixture.clipboardText())
+          fixture.resize(360, 320)
+          fixture.render()
+          assertEquals(6, notes.selection.start)
+          assertEquals(10, notes.selection.end)
+          enabled = false
+          fixture.render("fields-disabled-360-150")
+          assertTrue(fixture.isDescriptionDisabled("Filter"))
+          assertTrue(fixture.isDescriptionDisabled("Details"))
+          assertEquals("Invalid filter", fixture.descriptionError("Filter"))
+          assertEquals("Invalid details", fixture.descriptionError("Details"))
+        }
+  }
+
+  @Test
   fun selectedDeclarationShowsDescriptionAndExplicitActionsWithoutDetailTabs() {
     listOf(Triple(280, 600, 1f), Triple(320, 600, 1.5f), Triple(480, 650, 1.25f)).forEach {
         (width, height, scale) ->
@@ -3792,6 +3932,59 @@ internal class ComposeVisualFixture(
         requireNotNull(editor.config.getOrNull(SemanticsActions.SetText)?.action)
             .invoke(AnnotatedString(value)))
   }
+
+  private fun describedEditor(label: String): SemanticsNode =
+      nodes().single { node ->
+        node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true &&
+            node.config.getOrNull(SemanticsActions.SetText) != null
+      }
+
+  fun descriptionError(label: String): String? =
+      nodes()
+          .firstOrNull {
+            it.config.getOrNull(SemanticsProperties.ContentDescription) == listOf(label)
+          }
+          ?.config
+          ?.getOrNull(SemanticsProperties.Error)
+
+  fun focusDescribedEditor(label: String) {
+    val position = describedEditor(label).boundsInRoot.center
+    scene.sendPointerEvent(PointerEventType.Press, position, button = PointerButton.Primary)
+    scene.sendPointerEvent(PointerEventType.Release, position, button = PointerButton.Primary)
+    render()
+  }
+
+  fun setTextForDescription(label: String, value: String) {
+    assertTrue(
+        requireNotNull(describedEditor(label).config.getOrNull(SemanticsActions.SetText)?.action)
+            .invoke(AnnotatedString(value)))
+  }
+
+  fun selectEditorText(label: String, start: Int, end: Int) {
+    assertTrue(
+        requireNotNull(
+                describedEditor(label).config.getOrNull(SemanticsActions.SetSelection)?.action)
+            .invoke(start, end, false))
+  }
+
+  fun clipboardText(): String = clipboard.nativeClipboard.getData(DataFlavor.stringFlavor) as String
+
+  fun editorTextWidth(label: String): Int {
+    val layouts = mutableListOf<TextLayoutResult>()
+    assertTrue(
+        requireNotNull(
+                describedEditor(label)
+                    .config
+                    .getOrNull(SemanticsActions.GetTextLayoutResult)
+                    ?.action)
+            .invoke(layouts))
+    return layouts.single().size.width
+  }
+
+  fun editorSelectionEnd(label: String): Int =
+      requireNotNull(
+              describedEditor(label).config.getOrNull(SemanticsProperties.TextSelectionRange))
+          .end
 
   fun clickText(label: String) {
     clickNode(textNodes(label).firstOrNull(), label)

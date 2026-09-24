@@ -192,6 +192,14 @@ class DesktopThemeTest {
   }
 
   @Test
+  fun fieldSupportColorsRemainReadableOnTheirSurfaces() {
+    assertTrue(contrastRatio(SecondaryText, Panel) >= 4.5)
+    assertTrue(contrastRatio(Error, Panel) >= 4.5)
+    assertTrue(contrastRatio(Error, EditorCanvas) >= 3.0)
+    assertTrue(contrastRatio(FocusAccent, EditorCanvas) >= 3.0)
+  }
+
+  @Test
   fun keyboardFocusRemainsDistinctFromSelection() {
     assertNotEquals(SelectionSurface, FocusAccent)
     assertNotEquals(SelectionAccent, FocusAccent)
