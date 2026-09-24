@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.Icon
 import androidx.compose.material.LocalContentColor
@@ -541,6 +542,46 @@ internal fun IdeDisclosureHeader(
       overflow = overflow,
       collapse = collapse,
   )
+}
+
+/** Passive evidence presentation; callers supply status wording, tint and any marker. */
+@Composable
+internal fun IdeEvidenceRow(
+    label: String,
+    statusText: String,
+    statusTint: Color,
+    detail: String,
+    modifier: Modifier = Modifier,
+    marker: @Composable () -> Unit,
+) {
+  Column(
+      modifier.fillMaxWidth().heightIn(min = 44.dp),
+      verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              marker()
+              Text(
+                  label,
+                  color = PrimaryText,
+                  style = IdeTypography.workspaceBody,
+                  modifier =
+                      Modifier.weight(1f).semantics {
+                        contentDescription = "$label: $detail"
+                        stateDescription = statusText
+                      })
+              IdeLabelBadge(statusText, statusTint)
+            }
+        if (detail.isNotBlank())
+            SelectionContainer {
+              Text(
+                  detail,
+                  color = PrimaryText,
+                  style = IdeTypography.workspaceMetadata,
+                  modifier = Modifier.padding(start = 30.dp, bottom = 6.dp))
+            }
+      }
 }
 
 @Composable

@@ -1,7 +1,5 @@
 package io.miniorca.desktop
 
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -34,7 +32,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -546,9 +543,19 @@ internal fun ReviewToolWindow(
                   listOf(
                           evidence.validation,
                           evidence.checks,
-                          evidence.identity.copy(label = "Source unchanged"))
+                          evidence.identity.copy(
+                              label =
+                                  if (evidence.identity.status == ReviewEvidenceStatus.Passed)
+                                      "Source unchanged"
+                                  else "Source identity"))
                       .forEach { row ->
-                        EvidenceRow(row)
+                        IdeEvidenceRow(
+                            label = row.label,
+                            statusText = row.status.label,
+                            statusTint = evidenceColor(row.status),
+                            detail = row.detail) {
+                              ReviewEvidenceMarker(row.status)
+                            }
                         IdeHorizontalSeparator()
                       }
                 }
@@ -882,28 +889,6 @@ private fun ReviewEvidenceDetails(
           }
         }
       }
-}
-
-@Composable
-@OptIn(ExperimentalFoundationApi::class)
-private fun EvidenceRow(row: ReviewEvidenceRow) {
-  TooltipArea(tooltip = { IdeControlTooltip(row.detail) }) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 44.dp).semantics(mergeDescendants = true) {
-          contentDescription = "${row.label}: ${row.detail}"
-          stateDescription = row.status.label
-        },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          ReviewEvidenceMarker(row.status)
-          Text(
-              row.label,
-              color = PrimaryText,
-              style = IdeTypography.workspaceBody,
-              modifier = Modifier.weight(1f))
-          IdeLabelBadge(row.status.label, evidenceColor(row.status))
-        }
-  }
 }
 
 @Composable

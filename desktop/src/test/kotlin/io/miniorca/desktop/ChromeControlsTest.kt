@@ -267,6 +267,34 @@ class ChromeControlsTest {
   }
 
   @Test
+  fun evidenceRowDisplaysCallerSuppliedStatusAndDetailWithoutAnAction() {
+    ComposeVisualFixture(360, 200, 1.5f) {
+          Column(Modifier.fillMaxSize().background(Panel).padding(12.dp)) {
+            IdeEvidenceRow(
+                label = "Source identity",
+                statusText = "Unavailable · —",
+                statusTint = Warning,
+                detail = "The candidate does not match the open file. Reopen the draft.") {
+                  Text("!", color = Warning)
+                }
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Unavailable · —"))
+          assertTrue(
+              fixture.hasText("The candidate does not match the open file. Reopen the draft."))
+          val description =
+              "Source identity: The candidate does not match the open file. Reopen the draft."
+          assertTrue(fixture.hasDescription(description))
+          assertEquals("Unavailable · —", fixture.descriptionStateDescription(description))
+          assertTrue(!fixture.tryClick("Source identity"))
+          assertTrue(!fixture.requestDescriptionFocus(description))
+          fixture.assertTextFits("Unavailable · —")
+        }
+  }
+
+  @Test
   fun sharedChromeUsesSelectionEdgeWithoutReplacingFocusAndRetainsOverlayContrast() {
     assertTrue(SelectionAccent != FocusAccent)
     assertEquals(OverlaySurface, Card)
