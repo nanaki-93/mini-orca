@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.state.ToggleableState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -42,10 +43,13 @@ class DesktopAnalysisAdmissionTest {
       var state by
           mutableStateOf(
               ProjectAnalysisRunState(admission = AnalysisAdmission(analysisPreviewFixture())))
+      val providerChanges = mutableListOf<Pair<String, Boolean>>()
+      val securityChanges = mutableListOf<Boolean>()
       ComposeVisualFixture(width, 1600, scale) {
             DesktopAnalysisAdmissionContent(
                 state,
                 { id, checked ->
+                  providerChanges += id to checked
                   state =
                       state.copy(
                           admission =
@@ -55,6 +59,7 @@ class DesktopAnalysisAdmissionTest {
                                       else state.admission!!.providerIds - id))
                 },
                 { checked ->
+                  securityChanges += checked
                   state = state.copy(admission = state.admission!!.copy(securityReview = checked))
                 },
                 Modifier.fillMaxWidth())
@@ -69,16 +74,49 @@ class DesktopAnalysisAdmissionTest {
                     "Remote destination: https://analyze.example")) assertTrue(
                 fixture.hasText(label))
             assertFalse(state.admission!!.isConfirmed())
-            assertTrue(fixture.requestFocus("Confirm bug destination"))
-            fixture.pressKey(Key.Enter)
+            for (label in
+                listOf(
+                    "Confirm bug destination",
+                    "Confirm analyze destination",
+                    "Include AI Security review")) {
+              assertEquals(1, fixture.clickableDescriptionCount(label))
+              assertEquals(ToggleableState.Off, fixture.descriptionToggleableState(label))
+              assertEquals("Not confirmed", fixture.descriptionStateDescription(label))
+            }
+            assertTrue(fixture.requestDescriptionFocus("Confirm bug destination"))
+            assertTrue(fixture.pressKey(Key.Enter))
             fixture.render()
-            assertEquals("Confirmed", fixture.stateDescription("Confirm bug destination"))
-            fixture.clickDescription("Confirm analyze destination")
+            assertEquals(listOf("bug-provider" to true), providerChanges)
+            assertEquals(setOf("bug-provider"), state.admission!!.providerIds)
+            assertFalse(state.admission!!.securityReview)
+            assertEquals(
+                ToggleableState.On, fixture.descriptionToggleableState("Confirm bug destination"))
+            assertEquals(
+                "Confirmed", fixture.descriptionStateDescription("Confirm bug destination"))
+            assertEquals(
+                ToggleableState.Off,
+                fixture.descriptionToggleableState("Confirm analyze destination"))
+            fixture.clickVisibleDescription("Confirm analyze destination")
             fixture.render()
-            assertFalse(state.admission!!.isConfirmed())
-            fixture.clickDescription("Include AI Security review")
+            assertEquals(
+                listOf("bug-provider" to true, "analyze-provider" to true), providerChanges)
+            assertFalse(state.admission!!.isConfirmed(), "Security consent still blocks Start")
+            assertTrue(securityChanges.isEmpty())
+            fixture.clickVisibleDescription("Include AI Security review")
             fixture.render()
+            assertEquals(listOf(true), securityChanges)
+            assertEquals(setOf("bug-provider", "analyze-provider"), state.admission!!.providerIds)
             assertTrue(state.admission!!.isConfirmed())
+            assertEquals(
+                ToggleableState.On,
+                fixture.descriptionToggleableState("Include AI Security review"))
+            assertTrue(fixture.requestDescriptionFocus("Include AI Security review"))
+            assertTrue(fixture.pressKey(Key.Spacebar))
+            fixture.render()
+            assertEquals(listOf(true, false), securityChanges)
+            assertFalse(state.admission!!.isConfirmed())
+            assertEquals(
+                listOf("bug-provider" to true, "analyze-provider" to true), providerChanges)
             fixture.assertTextFits("Include AI Security review")
           }
     }

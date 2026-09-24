@@ -2,17 +2,12 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import org.jetbrains.jewel.ui.component.Text
 
@@ -115,16 +110,22 @@ internal fun DesktopAnalysisAdmissionContent(
             "${if (provider.model.remoteProvider) "Remote" else "Local"} destination: ${provider.model.providerOrigin}")
         if (provider.remoteConfirmationRequired) {
           val checked = provider.id in admission.providerIds
-          AnalysisConsentToggle("Confirm ${provider.model.scope} destination", checked) {
-            confirmProvider(provider.id, !checked)
-          }
+          IdeCheckbox(
+              checked = checked,
+              onCheckedChange = { confirmProvider(provider.id, it) },
+              accessibleName = "Confirm ${provider.model.scope} destination",
+              stateLabel = if (checked) "Confirmed" else "Not confirmed",
+              label = "Confirm ${provider.model.scope} destination")
         }
       }
       if (preview.securityReviewIntentRequired) {
         IdeHorizontalSeparator()
-        AnalysisConsentToggle("Include AI Security review", admission.securityReview) {
-          confirmSecurity(!admission.securityReview)
-        }
+        IdeCheckbox(
+            checked = admission.securityReview,
+            onCheckedChange = confirmSecurity,
+            accessibleName = "Include AI Security review",
+            stateLabel = if (admission.securityReview) "Confirmed" else "Not confirmed",
+            label = "Include AI Security review")
         Text(
             "Review eligible project source for possible security issues. Findings remain unverified until reviewed.",
             color = SecondaryText)
@@ -134,21 +135,6 @@ internal fun DesktopAnalysisAdmissionContent(
           color = SecondaryText)
     }
   }
-}
-
-@Composable
-private fun AnalysisConsentToggle(label: String, checked: Boolean, onClick: () -> Unit) {
-  ChromeButton(
-      onClick = onClick,
-      selected = checked,
-      role = Role.Checkbox,
-      accessibleName = label,
-      modifier =
-          Modifier.semantics { stateDescription = if (checked) "Confirmed" else "Not confirmed" }) {
-        Text(if (checked) "✓" else "□")
-        Spacer(Modifier.width(4.dp))
-        Text(label)
-      }
 }
 
 internal fun analysisStageLabel(stage: String): String =
