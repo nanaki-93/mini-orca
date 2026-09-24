@@ -32,8 +32,7 @@ execution actions. Source hypotheses are not runtime measurements.
 
 Mini-Orca does not automatically edit source, run scans, write tests to your
 project, commit or push. Exact declaration editing is currently Go-first; other
-languages have conservative analysis and symbol information. Completed delivery,
-accepted scope and insight deferrals are tracked in [PLAN.md](PLAN.md).
+languages have conservative analysis and symbol information.
 
 ## Run
 
@@ -93,7 +92,7 @@ explicitly after adding, removing or renaming files in the terminal.
 ## Development and documentation
 
 Follow [AGENTS.md](AGENTS.md). UI contributions follow the
-[self-explanatory UI and copy guidelines](desktop/UI_DESIGN_GUIDELINES.md#self-explanatory-ui-and-copy).
+[UI interaction and accessibility guidelines](desktop/UI_DESIGN_GUIDELINES.md).
 Run focused tests while editing. For a clean checkout,
 install Go 1.22 and use the checked-in Gradle wrapper. The full local gate is:
 
@@ -117,11 +116,9 @@ verifies its published SHA-256 before use.
 vet and desktop tests. `make quality` runs the pinned static/reachability/complexity/
 clone and Desktop static stages and reports every failed stage.
 
-- [Plan and task ledger](PLAN.md) · [agent execution workflow](tasks/README.md)
 - [Desktop runtime, usage and keys](desktop/README.md) · [UI guidelines](desktop/UI_DESIGN_GUIDELINES.md)
 - [API guide](docs/api-contract.md) · [OpenAPI](docs/openapi.yaml) · [configuration](CONFIG.md)
-- [Docker](DOCKER.md) · [release notes](RELEASE_NOTES.md) · [acceptance evidence](docs/RELEASE_ACCEPTANCE.md)
+- [Docker](DOCKER.md) · [release notes](RELEASE_NOTES.md)
 
-Completed plans and task history live in Git. New documentation should describe
-current use, a real contract or an unresolved decision, with one owner per fact.
+Documentation describes current use and supported contracts, with one owner per fact.
 MIT licensed; see [LICENSE](LICENSE).

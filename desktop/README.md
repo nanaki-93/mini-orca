@@ -8,8 +8,7 @@ in the ignored daemon configuration, not desktop preferences.
 
 The checked-in build uses Gradle 9.1.0, Kotlin/Compose compiler 2.3.20, Compose
 Multiplatform 1.11.0 and Jewel standalone `0.40.0-262.10315.125`. Use JBR
-25 SDK for app launch and packaging; the current native checks use JBR
-`25.0.4.1+1-b583.48` on macOS arm64. The root
+25 SDK for app launch and packaging. The root
 [development guide](../README.md#development-and-documentation) owns clean-checkout
 toolchain setup and full validation, including explicit JDK/JBR locations. Do not
 commit a local runtime path or replace a system JDK as part of a task.
@@ -32,15 +31,8 @@ Java 21 `JAVA_HOME` and no discoverable Java 25 toolchain cannot start the app.
 
 Packaged images include `java.net.http` for the daemon client and `jdk.unsupported`
 for Jewel's native bridge. Package with the JBR launcher, not the Detekt launcher.
-The earlier macOS arm64 UI-04 observations are historical. IDEUX-13 native
-open/restore and guarded Apply/Undo acceptance is pending; current limitations and
-package evidence are recorded in [acceptance](../docs/RELEASE_ACCEPTANCE.md).
-
-Pinned dependency provenance from the completed migration:
-[Jewel POM](https://repo1.maven.org/maven2/org/jetbrains/jewel/jewel-int-ui-standalone/0.40.0-262.10315.125/jewel-int-ui-standalone-0.40.0-262.10315.125.pom),
-[JBR release](https://github.com/JetBrains/JetBrainsRuntime/releases/tag/jbr-release-25.0.4b508.27).
-The migration recorded Skiko 0.144.6, JNA 5.17.0 and transitive Kotlin stdlib 2.4.0.
-Recheck the resolved graph before an upgrade; no upgrade is needed for the new plan.
+Native behavior should be checked on the target host; component tests cannot
+prove OS focus, popup placement or screen-reader behavior.
 
 ## Working in the app
 
@@ -66,9 +58,9 @@ bug priority counts remain in the Bugs card. Overall tool-reported issues and AI
 suggestions appear separately below the cards, since those totals cannot be
 reliably assigned to individual categories.
 
-Architecture and flat Packages / modules rows occupy the wider left column;
-Engineering insight and Flows occupy the right. The window remains resizable, but
-its full-size composition is fixed; reduced windows may clip or fit awkwardly.
+In the current layout, Architecture and flat Packages / modules rows occupy the
+left column; Engineering insight and Flows occupy the right. This arrangement
+can change in a redesign.
 Module names, exact paths and responsibilities remain selectable/readable. Entry
 points and next steps are omitted from Summary.
 
@@ -90,13 +82,11 @@ dependencies, run `npm ci --prefix desktop/mermaid --ignore-scripts` and
 `npm run build --prefix desktop/mermaid`. Commit the lockfile and generated resource
 bundle together; do not edit `src/main/resources/mermaid/renderer.js` manually.
 
-The app requests a maximized native window at startup and remains resizable, with
-no minimum size. Editor keeps docked Files and Context/Assistant/Review panes and
-Terminal remains docked beneath the workspace at every size. The existing full-size
-layout is the sole designed layout; reduced windows may clip or fit awkwardly.
-Source and composed diffs are selectable/read-only; only the isolated draft is editable.
-The expanded terminal keeps an 8dp side/bottom inset around its native canvas so
-the rounded dock remains visible during shell use and resizing.
+The current app requests a maximized native window at startup and remains
+resizable. Editor currently docks Files and Context/Assistant/Review panes, with
+Terminal beneath the workspace. This describes the shipped layout, not a limit
+on future responsive designs. Source and composed diffs are selectable/read-only;
+only the isolated draft is editable.
 **Source** and **Candidate diff** share file/declaration breadcrumbs. A validated
 candidate opens a full-height Current/Candidate comparison with synchronized
 vertical rows and independent horizontal scrolling; diffs default to **Side-by-side**, and **Unified** remains an explicit local choice. The Request → Draft →
@@ -119,10 +109,8 @@ collapsed; failed output and validation diagnostics remain visible. A check reru
 shows Running even if the previous report passed.
 
 The bottom action names the exact declaration/file scope. **Apply change** uses
-the existing eligibility checks and a solid green action; a returned receipt alone
-can enable **Undo this change**. Normal-height panes keep the action beneath the
-scrolling evidence at every size; reduced windows may clip the fixed arrangement.
-Unusually long scope text can scroll within the bounded action region. **Edit draft** returns to the
+the existing eligibility checks; a returned receipt alone can enable **Undo this
+change**. Keep the action and its scope accessible in any new layout. **Edit draft** returns to the
 existing editor. Check actions that execute a generated test show the exact
 command and an explicit **Trust local execution & run checks** label; rerun is
 available inside Check details. No disclosure or navigation executes those actions.
@@ -215,10 +203,8 @@ See [terminal support and reproduction](TERMINAL.md).
 | Ctrl+Shift+F12 | Return from terminal input to Editor |
 | Escape | Dismiss the top transient surface or cancel the active operation |
 
-Use arrows and Enter/Space for tree/tab/disclosure navigation. Native keyboard and
-reader observations and limits are in [acceptance](../docs/RELEASE_ACCEPTANCE.md);
-the [keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md) owns the operator procedure. [Visual reproduction](../docs/RELEASE_ACCEPTANCE.md#reproduce-ui-component-checks) describes
-fixture captures; these are not native-window evidence.
+Use arrows and Enter/Space for tree/tab/disclosure navigation. The [keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md) covers native operation.
+`DesktopVisualLayoutTest` produces component captures, not native-window evidence.
 
 Security entry and selection stay local. Whole-project analysis owns
 passive rules and explicitly admitted advisory review. Prepare fix opens the
@@ -226,18 +212,17 @@ existing Assistant composer only for current, exact Go declarations; it does not
 send a request or change source. No file-scoped start controls or duplicate bottom
 Problems/Checks/Output panels remain.
 
-UI work follows [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) and the
-[current product decisions](../PLAN.md#current-ui-direction--2026-09-15), including
-the [self-explanatory UI and copy rules](UI_DESIGN_GUIDELINES.md#self-explanatory-ui-and-copy)
-for new and changed features. Existing metadata and visual-preference migration
+UI work follows [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) for
+interaction and accessibility, not for a fixed visual direction. Existing metadata
+and visual-preference migration
 is documented in the
 [root guide](../README.md#existing-projects-and-preferences); model-scope names are unchanged.
 
 ### Choose files for project analysis
 
 In **Analysis**, **Files** opens expanded for each project and can be collapsed
-locally. Search and state filters remain usable during a run. The table aligns File, Analysis state and Details in the full-size layout; reduced
-windows may clip the fixed arrangement. Text can still wrap naturally.
+locally. Search and state filters remain usable during a run. The current table aligns File, Analysis state and Details. Its arrangement may
+change in a future responsive design.
 The footer counts matching files against the full list. **Select all** and
 **Exclude all** apply to all eligible
 files, regardless of the search filter. Changes save automatically per project

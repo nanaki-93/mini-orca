@@ -1,22 +1,19 @@
 # Desktop keyboard smoke checklist
 
 Use a disposable Go project, a fake provider and isolated preferences. This is an
-operator procedure, not passing evidence. [Release acceptance](../docs/RELEASE_ACCEPTANCE.md)
-owns observed results and host limitations; [UI guidelines](UI_DESIGN_GUIDELINES.md)
-owns the visual rules.
+operator procedure. [UI guidelines](UI_DESIGN_GUIDELINES.md) cover interaction
+and accessibility.
 
-Launch maximized, then restore and resize the window through its former breakpoints
-and to smaller heights. Confirm it remains resizable and the fixed full-size layout
-does not switch to alternate presentations; clipping at reduced sizes is accepted.
+Launch, restore and resize the window through representative widths and smaller
+heights. Check the chosen responsive behavior and action reachability.
 Repeat affected surfaces at 125% and 150% text. Record native versus component
 observations separately; native accessibility names do not establish spoken reader
 behavior.
 
-For changed flows, also apply the [UI copy review](UI_DESIGN_GUIDELINES.md#verification):
-with optional details collapsed, identify the task, state and next action from
-the visible controls. Check for redundant headings and helper paragraphs; verify
-that labels, blocked reasons and required consent remain clear
-with keyboard focus. Record this review separately from historical observations.
+For changed flows, also apply the [UI review](UI_DESIGN_GUIDELINES.md#verification):
+identify the task, state and next action. Verify that labels, blocked reasons
+and required consent remain clear
+with keyboard focus.
 
 1. Before opening a project, verify Open project and Cmd/Ctrl+O work. Cancel the
    chooser and confirm the landing state remains. When entering a disposable path,
@@ -39,8 +36,8 @@ with keyboard focus. Record this review separately from historical observations.
    canceled and completed-empty evidence retain their distinct labels/counts.
 5. In each result page, verify the three category boxes name their destinations,
    mark the current category and navigate with Enter/Space without starting work.
-   Select a rounded result row and inspect severity, exact source location and its
-   evidence disclosure. The list and detail remain together at every size; selection
+   Select a result and inspect severity, exact source location and its
+   evidence. Selection
    remains local and does not prepare or
    apply a fix. Only **Prepare fix** prefills Assistant, and its disabled reason
    remains visible when the source identity is ineligible. Performance hypotheses
@@ -49,8 +46,8 @@ with keyboard focus. Record this review separately from historical observations.
 6. Use Cmd/Ctrl+P to choose a file and Cmd/Ctrl+Shift+O to choose a declaration.
    Source and diff must remain selectable/read-only. Relative paths disambiguate
    equal basenames. Source drag selects text without changing the draft target.
-7. Editor retains docked Files and Context/Assistant/Review panes while resized;
-   there are no compact drawer fallbacks. Verify palette focus restoration and
+7. Resize Editor and check access to Files and Context/Assistant/Review in the
+   chosen layout. Verify palette focus restoration and
    selected source after resize; Cmd/Ctrl+P remains available.
 8. Open a Go file containing only `package main`. Select New function in the file
    header or Context; Assistant focuses the name field without a model request.
@@ -72,11 +69,9 @@ with keyboard focus. Record this review separately from historical observations.
 11. Confirm Terminal and its shell tabs share one bottom bar. Selecting Terminal
     or Ctrl+Shift+T immediately opens a real shell in the project. Use + to create
     independent shells, switch tabs, and × to close one without stopping others.
-    Collapse/reopen, workspace changes and resizing preserve the docked presentation,
-    PID, history and scrollback; no terminal overlay appears.
-    Resize the dock and verify real PTY dimensions change without losing content.
-    Inspect the real Swing canvas: its side/bottom inset must preserve the rounded
-    terminal perimeter when expanded, resized and reopened.
+    Collapse/reopen, workspace changes and resizing preserve the shell PID,
+    history and scrollback. Resize the terminal and verify real PTY dimensions
+    change without losing content or hiding the canvas.
 12. With terminal focus, verify typing, Unicode paste, selection/copy, shell history,
     Ctrl+C, scrolling and a disposable full-screen program. App shortcuts must not
     steal ordinary shell input. Ctrl+Shift+F12 returns to Editor; Cmd/Ctrl+P then
@@ -92,11 +87,11 @@ with keyboard focus. Record this review separately from historical observations.
     terminal labels. Failures remain visible and retry/close controls reachable.
     At reduced windows and large text, verify ordinary scrolling and access to long
     paths/errors, headings, badges, disclosure controls, row actions and status details;
-    fixed-layout clipping is acceptable. Color
+    record any clipping or unreachable actions. Color
     must supplement text labels for selection, severity and meaningful lifecycle
     states.
 
 Use Escape to dismiss only the top transient surface before canceling a request.
 With no transient surface or active request, Escape leaves source unchanged.
 Record runtime, viewport, text/density scale, input method and actual observations
-in the acceptance ledger. Historical qualification limits remain unchanged.
+when reporting a native check.
