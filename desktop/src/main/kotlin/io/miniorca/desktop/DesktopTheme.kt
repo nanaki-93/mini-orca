@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.LocalContentColor
 import androidx.compose.material.ProvideTextStyle
 import androidx.compose.material.Text
@@ -594,14 +595,9 @@ internal fun CompactKeyValueRow(
         style = IdeTypography.compactBody,
         modifier = Modifier.width(96.dp),
     )
-    Text(
-        value,
-        color = PrimaryText,
-        style = IdeTypography.compactBody,
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.weight(1f),
-    )
+    SelectionContainer(Modifier.weight(1f)) {
+      Text(value, color = PrimaryText, style = IdeTypography.compactBody)
+    }
   }
 }
 

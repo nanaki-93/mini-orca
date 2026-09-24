@@ -1042,6 +1042,30 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun compactMetadataKeepsLongUnicodeValuesReadableAndSelectableAtLargeText() {
+    val destination = "internal/über/日本語/very-long-destination/".repeat(3) + "résumé.go"
+    listOf(320, 480).forEach { width ->
+      var actions = 0
+      ComposeVisualFixture(width, 440, 1.5f) {
+            Column(Modifier.fillMaxWidth().background(Panel).padding(8.dp)) {
+              CompactKeyValueRows(listOf("Destination" to destination, "Status" to "Available"))
+              ChromeButton(onClick = { actions++ }) { Text("Run") }
+            }
+          }
+          .use { fixture ->
+            fixture.render("compact-metadata-$width-150")
+            assertTrue(fixture.hasDescription("Destination: $destination"))
+            fixture.assertTextWrapsWithoutClipping(destination)
+            fixture.assertTextFits("Available")
+            assertFalse(fixture.hasEditableText())
+            val copied = fixture.copyTextByDragging(destination)
+            assertTrue(copied.isNotEmpty() && destination.contains(copied), "Copied: $copied")
+            assertEquals(0, actions, "Selecting metadata must not activate an action")
+          }
+    }
+  }
+
+  @Test
   fun compactFieldKeepsEditingAndItsAccessibleNameAfterInput() {
     var query by mutableStateOf("")
     ComposeVisualFixture(360, 100) {
