@@ -65,18 +65,18 @@ Small app-owned source/diff components remain appropriate. Low-level text/layout
 primitives must use the shared semantic roles, not stock Material/Swing appearance.
 Runtime and dependency setup lives in [README.md](README.md#runtime-and-build).
 
-| Role | Current target |
+| Role | Tokyo Midnight target |
 | --- | --- |
-| Activity rail / outer chrome | `#203238` |
-| Tool windows / sidebars / bottom panes | `#24282F` |
-| Editor / input canvas | `#1B1E23` |
-| Section headers / overlay | `#303640` |
-| Contained neutral controls / hover | `#343E4A` / `#414E5F` |
-| Active indicator / primary action | `#73ABFF` / `#78ACFF` |
-| Information / explanation / running | `#66DBEB` |
-| Success / warning / failure | `#74E0AC` / `#FFD078` / `#FF929E` |
-| Selected surface / selected text | `#263F62` / `#C9DFFF` |
-| Pane separator / control outline | `#4B5665` / `#8E9EAF`, 1dp |
+| Activity rail / outer chrome | `#171821` |
+| Tool windows / sidebars / bottom panes | `#1D1E2B` |
+| Editor / input canvas | `#1A1B26` |
+| Section headers / overlay | `#303145` / `#232436` |
+| Contained neutral controls / hover | `#303145` / `#34364B` |
+| Selection edge / primary action | `#7DCFFF` / `#7AA2F7` |
+| Information / explanation / running | `#7DCFFF` |
+| Success / warning / failure | `#9ECE6A` / `#E0AF68` / `#FF8FA3` |
+| Identity / selected surface / selected text | `#BB9AF7` / `#292E45` / `#C0CAF5` |
+| Pane separator / control outline | `#9299BE` (1dp) |
 
 Keep text, disabled, success/warning/error, diff and focus as separate semantic
 roles. Use tinted fills and matching outlines for semantic actions and badges. Keep
@@ -172,7 +172,7 @@ Model results use primary body text; where needed, headings use 13sp semibold
 and labels use 12sp semibold. These styles do not require a heading or label on
 every block. Keep the supported summary, severity/state and useful action visible;
 place metadata and optional technical details behind a labeled disclosure. Use
-the teal result accent for explanation identity, not as a severity verdict.
+the cyan result accent for explanation identity, not as a severity verdict.
 Badges always include a text label and wrap rather than clipping their meaning.
 Headers grow for long titles and larger fonts; do not shrink the text to fit.
 
