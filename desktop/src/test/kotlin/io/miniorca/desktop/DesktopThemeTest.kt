@@ -9,6 +9,26 @@ import kotlin.test.assertTrue
 
 class DesktopThemeTest {
   @Test
+  fun semanticPaletteSeparatesIdentityInformationAndLabeledStatusOnResolvedSurfaces() {
+    assertNotEquals(ActivityRail, ToolWindowSurface)
+    assertNotEquals(ToolWindowSurface, EditorCanvas)
+    assertNotEquals(EditorCanvas, OverlaySurface)
+    val statusColors =
+        listOf(
+            statusBadgeStyle("fresh").color,
+            statusBadgeStyle("stale").color,
+            statusBadgeStyle("failed").color)
+    assertEquals(3, statusColors.distinct().size)
+    assertNotEquals(Information, MiniOrcaPalette.identityAccent)
+    assertTrue(statusColors.none { it == Information || it == MiniOrcaPalette.identityAccent })
+    listOf(ActivityRail, ToolWindowSurface, EditorCanvas, OverlaySurface).forEach { surface ->
+      listOf(MiniOrcaPalette.identityAccent, Information, Success, Warning, Error).forEach { tint ->
+        assertTrue(contrastRatio(tint, surface) >= 4.5, "$tint label on $surface")
+      }
+    }
+  }
+
+  @Test
   fun paneBoundariesAndControlOutlinesRemainVisibleOnTheirActualSurfaces() {
     listOf(ActivityRail, ToolWindowSurface, EditorCanvas, OverlaySurface).forEach { surface ->
       assertTrue(contrastRatio(PaneSeparator, surface) >= 1.4, "Pane boundary on $surface")
