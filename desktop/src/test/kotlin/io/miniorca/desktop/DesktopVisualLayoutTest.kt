@@ -92,6 +92,83 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun longAnalysisPathUsesTechnicalTypeWithoutLosingSelectableContent() {
+    val path = "internal/services/identity/handlers/über-long-request-validation-handler.go"
+    val selection = selectionFixture().copy(files = listOf(AnalysisSelectableFile(path, "")))
+    ComposeVisualFixture(900, 420, 1.5f) {
+          AnalysisFileSelector(
+              ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selection)),
+              AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+        }
+        .use { fixture ->
+          fixture.render("typography-analysis-long-path-900-150")
+          fixture.assertTextFontFamily(path, FontFamily.Monospace)
+          fixture.assertTextWrapsWithoutClipping(path)
+          assertFalse(fixture.hasEditableText(withinTag = "analysis-file-row-$path"))
+          fixture.assertTextFontFamily("Status unavailable", FontFamily.SansSerif)
+        }
+  }
+
+  @Test
+  fun unicodeProjectAndEngineeringProseStayReadableAtLargeText() {
+    val purpose =
+        "Résumé: 日本語 notes explain the project’s boundary and its local-first behavior. ".repeat(5)
+    val mechanism =
+        "日本語: the handler validates names before repository access; résumé preserved. ".repeat(3)
+    val overview =
+        visualFixtureOverview.copy(
+            analysis = visualFixtureOverview.analysis.copy(purpose = purpose))
+    ComposeVisualFixture(800, 650, 1.5f) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
+        .use { fixture ->
+          fixture.render("typography-summary-unicode-800-150")
+          fixture.assertTextFontFamily(purpose, FontFamily.SansSerif)
+          fixture.assertTextWrapsWithoutClipping(purpose)
+          assertFalse(fixture.hasEditableText(withinTag = "summary-introduction"))
+        }
+    ComposeVisualFixture(520, 440, 1.5f) {
+          SummaryEngineeringInsightPanel(
+              listOf(EngineeringInsightPiece("Mechanism", mechanism)),
+              stale = false,
+              ownerIdentity = "typography-fixture")
+        }
+        .use { fixture ->
+          fixture.render("typography-engineering-unicode-520-150")
+          fixture.assertTextFontFamily("Mechanism", FontFamily.Monospace)
+          fixture.assertTextFontFamily(mechanism, FontFamily.SansSerif)
+          fixture.assertTextWrapsWithoutClipping(mechanism)
+        }
+  }
+
+  @Test
+  fun wrappedFindingSummaryKeepsTechnicalLocationAndSansSerifNarrative() {
+    val path = "internal/api/über-long-request-validation-handler.go:42"
+    val summary =
+        "The identifier may contain 日本語 input; validate it before repository access so the " +
+            "caller receives the original failure instead of a misleading success."
+    val finding =
+        visualFixtureFindings
+            .first()
+            .copy(
+                message = summary,
+                location =
+                    FindingLocation("internal/api/über-long-request-validation-handler.go", 42),
+                freshness = "stale")
+    ComposeVisualFixture(520, 650, 1.5f) {
+          Column(Modifier.fillMaxSize().background(Panel).padding(16.dp)) {
+            FindingDetailsRegion(finding, FindingActions({}, { _, _ -> }))
+          }
+        }
+        .use { fixture ->
+          fixture.render("typography-finding-wrapped-520-150")
+          fixture.assertTextFontFamily(path, FontFamily.Monospace)
+          fixture.assertTextFontFamily(summary, FontFamily.SansSerif)
+          fixture.assertTextWrapsWithoutClipping(summary)
+          assertFalse(fixture.hasEditableText())
+          assertTrue(fixture.hasText("Stale"))
+        }
+  }
+
+  @Test
   fun toolbarMarkAndActivityIconsRenderAtOneAndTwoTimesDensity() {
     listOf(1f, 2f).forEach { density ->
       ComposeVisualFixture(
