@@ -96,8 +96,7 @@ private fun ResultBrowserFilters(
             selected = browser.filter == ResultBrowserFilter.All,
             onClick = { browser.filter = ResultBrowserFilter.All },
             accessibleName = "All ${rows.size}") {
-              androidx.compose.material.Text(
-                  "All ${rows.size}", style = IdeTypography.workspaceMetadata)
+              androidx.compose.material.Text("All ${rows.size}", style = IdeTypography.action)
             }
         facets.forEach { facet ->
           ChromeTab(
@@ -105,7 +104,7 @@ private fun ResultBrowserFilters(
               onClick = { browser.filter = ResultBrowserFilter.Value(facet.value) },
               accessibleName = "$facetLabel ${facet.label} ${facet.count}") {
                 androidx.compose.material.Text(
-                    "${facet.label} ${facet.count}", style = IdeTypography.workspaceMetadata)
+                    "${facet.label} ${facet.count}", style = IdeTypography.action)
               }
         }
         if (browser.filter != ResultBrowserFilter.All || browser.query.isNotBlank())
@@ -115,8 +114,7 @@ private fun ResultBrowserFilters(
                   browser.query = ""
                 },
                 accessibleName = "Clear filters") {
-                  androidx.compose.material.Text(
-                      "Clear filters", style = IdeTypography.workspaceMetadata)
+                  androidx.compose.material.Text("Clear filters", style = IdeTypography.action)
                 }
       }
 }

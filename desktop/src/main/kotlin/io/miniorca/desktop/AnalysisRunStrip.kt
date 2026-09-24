@@ -351,7 +351,7 @@ private fun AnalysisRunControls(
                     AnalysisRunCommand.RetryStaleFailed -> ActionTone.Neutral
                     else -> ActionTone.Primary
                   }) {
-                Text(command.label, style = IdeTypography.workspaceMetadata)
+                Text(command.label, style = IdeTypography.action)
               }
         }
       }

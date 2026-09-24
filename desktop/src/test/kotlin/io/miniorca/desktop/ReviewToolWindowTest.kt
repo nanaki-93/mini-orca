@@ -340,7 +340,7 @@ class ReviewToolWindowTest {
           fixture.revealText("Updates GetUser in $path.", "review-action-scroll")
           fixture.render("review-long-target-scope-300-850-1.5")
           assertTrue(fixture.verticalScrollValue("review-action-scroll") > 0f)
-          fixture.assertTextFits("Updates GetUser in $path.", maxLines = 12)
+          fixture.assertTextWrapsWithoutClipping("Updates GetUser in $path.")
         }
   }
 

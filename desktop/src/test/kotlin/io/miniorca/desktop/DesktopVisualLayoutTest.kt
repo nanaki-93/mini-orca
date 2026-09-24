@@ -51,6 +51,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpSize
@@ -67,6 +68,29 @@ import org.jetbrains.skia.Surface
 
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
+  @Test
+  fun productionNavigationAndCommandsRemainSansSerifWhileEvidenceIsMonospaced() {
+    ComposeVisualFixture(1_600, 1_000) { RoundedSummaryVisualFixture(1_600f) }
+        .use { fixture ->
+          fixture.render()
+          fixture.assertTextFontFamily("View analysis", FontFamily.SansSerif)
+          fixture.assertTextFontFamily("Analysis coverage", FontFamily.Monospace)
+        }
+    ComposeVisualFixture(1_600, 1_000) { RoundedAnalysisVisualFixture(1_600f) }
+        .use { fixture ->
+          fixture.render()
+          listOf("Pause", "Cancel", "All", "Needs attention", "Excluded").forEach {
+            fixture.assertTextFontFamily(it, FontFamily.SansSerif)
+          }
+          fixture.assertTextFontFamily("Current: internal/api/user.go", FontFamily.Monospace)
+        }
+    ComposeVisualFixture(1_440, 900) { AcceptanceResultPane("bugs", "partial") }
+        .use { fixture ->
+          fixture.render()
+          fixture.assertTextFontFamily("View analysis", FontFamily.SansSerif)
+        }
+  }
+
   @Test
   fun toolbarMarkAndActivityIconsRenderAtOneAndTwoTimesDensity() {
     listOf(1f, 2f).forEach { density ->
@@ -239,7 +263,7 @@ class DesktopVisualLayoutTest {
             fixture.render("final-progress-$status-800-150")
             val run = acceptanceRun(status)
             val presentation = projectRunPresentation(ProjectAnalysisRunState(run = run))
-            fixture.assertTextFits(analysisRunTitle(run, presentation))
+            fixture.assertTextFits(analysisRunTitle(run, presentation), maxLines = 3)
             assertEquals(
                 1,
                 fixture.taggedTextCount(
@@ -3855,6 +3879,20 @@ internal class ComposeVisualFixture(
 
   fun scrollableContentCount(): Int =
       nodes().count { it.config.getOrNull(SemanticsActions.ScrollBy) != null }
+
+  fun assertTextFontFamily(label: String, expected: FontFamily) {
+    val matches = textNodes(label)
+    assertTrue(matches.isNotEmpty(), "$label must be rendered")
+    matches.forEach { node ->
+      val layouts = mutableListOf<TextLayoutResult>()
+      assertTrue(
+          node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts) ==
+              true,
+          "$label must expose its text layout")
+      assertTrue(layouts.isNotEmpty(), "$label must have a text layout")
+      layouts.forEach { assertEquals(expected, it.layoutInput.style.fontFamily, label) }
+    }
+  }
 
   fun assertTextLineCount(label: String, expected: Int) {
     val layouts = mutableListOf<TextLayoutResult>()

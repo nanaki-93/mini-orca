@@ -112,7 +112,7 @@ internal fun SummaryCoverage(presentation: ProjectSummaryPresentation, openAnaly
                 onClick = openAnalysis,
                 modifier = Modifier.testTag("summary-view-analysis"),
                 tone = ActionTone.Navigation) {
-                  Text("View analysis", style = IdeTypography.workspaceMetadata)
+                  Text("View analysis", style = IdeTypography.action)
                 }
           }
     }
