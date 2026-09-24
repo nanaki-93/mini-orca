@@ -71,6 +71,52 @@ class DesktopContrastTest {
   }
 
   @Test
+  fun chromeHoverPressSelectionAndDisabledLabelsResolveOnTheirActualHosts() {
+    val hosts = listOf(ActivityRail, Panel, EditorCanvas, OverlaySurface, SelectionSurface)
+    val states =
+        listOf(
+            "rest" to IdeActionInteraction(),
+            "hover" to IdeActionInteraction(hovered = true),
+            "press" to IdeActionInteraction(hovered = true, pressed = true))
+    hosts.forEachIndexed { index, host ->
+      ComposeVisualFixture(480, 260, 1.5f) {
+            Column(
+                Modifier.fillMaxSize().background(host).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                  states.forEach { (name, interaction) ->
+                    ChromeButton(onClick = {}, interactionOverride = interaction) { Text(name) }
+                  }
+                  ChromeTab(onClick = {}, selected = true) { Text("selected tab") }
+                  ChromeButton(onClick = {}, enabled = false) { Text("disabled chrome") }
+                  MiniOrcaButton(onClick = {}, enabled = false, tone = ActionTone.Primary) {
+                    Text("disabled primary")
+                  }
+                }
+          }
+          .use { fixture ->
+            fixture.render("chrome-interactions-$index")
+            states.forEach { (name, _) ->
+              fixture.assertTextFits(name)
+              val fill =
+                  when (name) {
+                    "hover" -> ControlHover
+                    "press" -> SelectionSurface
+                    else -> host
+                  }
+              fixture.assertTextContrast(name, blendOver(fill, host))
+            }
+            fixture.assertTextContrast("selected tab", blendOver(SelectionSurface, host))
+            fixture.assertTextContrast("disabled chrome", host)
+            fixture.assertTextContrast(
+                "disabled primary",
+                blendOver(actionToneStyle(ActionTone.Primary).disabledBackground, host))
+            listOf("selected tab", "disabled chrome", "disabled primary")
+                .forEach(fixture::assertTextFits)
+          }
+    }
+  }
+
+  @Test
   fun badgesResolveTheirTintAndOutlineOnEachActionHost() {
     val hosts = listOf(ActivityRail, Panel, EditorCanvas, OverlaySurface, SelectionSurface)
     val tints = listOf(SelectionAccent, Information, Success, Warning, Error, SecondaryText)
