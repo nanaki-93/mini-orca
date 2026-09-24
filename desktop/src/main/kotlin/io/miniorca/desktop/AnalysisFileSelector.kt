@@ -299,7 +299,7 @@ private fun AnalysisFileRow(
                 AnalysisFileCheckbox(row.file.path, selected, editable, toggle)
                 DesktopLineIcon(DesktopIcon.Document, "", iconSize = 16.dp, tint = SecondaryText)
                 SelectionContainer {
-                  Text(row.file.path, style = IdeTypography.workspaceBody, color = PrimaryText)
+                  Text(row.file.path, style = IdeTypography.workspaceMetadata, color = PrimaryText)
                 }
               }
         }
