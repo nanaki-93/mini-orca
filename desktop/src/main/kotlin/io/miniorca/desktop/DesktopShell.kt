@@ -613,6 +613,8 @@ internal fun DesktopShell(
                       gitStatus = appState.gitStatus,
                       analysisStatus = toolbarAnalysisStatus(appState),
                       openingAttempt = appState.projectState.openingAttempt,
+                      preferenceReadWarning = appState.projectState.preferenceReadWarning,
+                      preferenceSaveWarning = appState.projectState.preferenceSaveWarning,
                   ),
               actions =
                   ToolbarActions(
@@ -1238,23 +1240,29 @@ internal fun ProjectLanding(
                   }
                 })
           }
-          projectState.preferenceReadWarning?.let { warning ->
-            Spacer(Modifier.height(12.dp))
-            SystemStateMessage(
-                "Could not read last project preference",
-                "Open project is still available. Local preference storage could not be read.",
-                accent = Warning,
-                action = { DiagnosticText(warning, color = Warning) })
-          }
-          projectState.preferenceSaveWarning?.let { warning ->
-            Spacer(Modifier.height(12.dp))
-            SystemStateMessage(
-                "Could not remember project",
-                "The opened project could not be remembered for the next launch.",
-                accent = Warning,
-                action = { DiagnosticText(warning, color = Warning) })
-          }
+          ProjectPreferenceWarnings(
+              projectState.preferenceReadWarning, projectState.preferenceSaveWarning)
         }
+  }
+}
+
+@Composable
+internal fun ProjectPreferenceWarnings(readWarning: String?, saveWarning: String?) {
+  readWarning?.let { warning ->
+    Spacer(Modifier.height(12.dp))
+    SystemStateMessage(
+        "Could not read last project preference",
+        "Open project is still available. Local preference storage could not be read.",
+        accent = Warning,
+        action = { DiagnosticText(warning, color = Warning) })
+  }
+  saveWarning?.let { warning ->
+    Spacer(Modifier.height(12.dp))
+    SystemStateMessage(
+        "Could not remember project",
+        "The opened project could not be remembered for the next launch.",
+        accent = Warning,
+        action = { DiagnosticText(warning, color = Warning) })
   }
 }
 

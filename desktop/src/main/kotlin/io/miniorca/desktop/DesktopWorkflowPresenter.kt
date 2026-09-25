@@ -129,7 +129,8 @@ class DesktopWorkflowPresenter(
           try {
             require(path.isNotBlank()) { "The opened project has no path to remember." }
             io { lastProjectStore.save(path) }
-            dispatch(DesktopEvent.ProjectPreferenceSaved(path))
+            if (request == latestAcceptedProjectRequest)
+                dispatch(DesktopEvent.ProjectPreferenceSaved(path))
           } catch (canceled: CancellationException) {
             throw canceled
           } catch (error: Exception) {

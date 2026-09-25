@@ -166,6 +166,28 @@ class DesktopShellTest {
         }
         .use { fixture ->
           fixture.render()
+          shell.value =
+              shell.value.copy(
+                  app =
+                      shell.value.app.copy(
+                          projectState =
+                              shell.value.app.projectState.copy(
+                                  preferenceSaveWarning = "Disk denied: next launch not saved")))
+          fixture.render()
+          assertEquals(Workspace.Editor, shell.value.app.workspace)
+          assertTrue(fixture.hasText("Could not remember project"))
+          assertTrue(
+              fixture.hasText("The opened project could not be remembered for the next launch."))
+          assertTrue(fixture.hasText("Disk denied: next launch not saved"))
+          assertEquals(emptyList(), operations)
+          shell.value =
+              shell.value.copy(
+                  app =
+                      shell.value.app.copy(
+                          projectState =
+                              shell.value.app.projectState.copy(preferenceSaveWarning = null)))
+          fixture.render()
+          assertTrue(!fixture.hasText("Could not remember project"))
           assertTrue(fixture.hasText("another.go"), "Explorer should render the indexed file")
           fixture.clickText("another.go")
           fixture.render()
@@ -536,6 +558,31 @@ class DesktopShellTest {
           fixture.clickText("Reconnect")
           assertEquals(1, reconnects)
           assertEquals(0, analyses)
+        }
+  }
+
+  @Test
+  fun summaryHeaderShowsLocalPreferenceWarningWithoutAnOpeningAttempt() {
+    val project = resultProjectFixture()
+    ComposeVisualFixture(800, 650, 1.5f) {
+          MainToolbar(
+              ToolbarState(
+                  project = project,
+                  busy = false,
+                  operationStatus = "Daemon ready",
+                  connection = ConnectionState(),
+                  gitStatus = null,
+                  preferenceSaveWarning = "Disk denied"),
+              ToolbarActions({}, {}, {}, {}))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText(project.name))
+          fixture.assertTextFits("Could not remember project")
+          fixture.revealText("Disk denied", "project-preference-scroll")
+          assertTrue(
+              fixture.hasText("The opened project could not be remembered for the next launch."))
+          assertTrue(!fixture.hasText("Could not restore project"))
         }
   }
 

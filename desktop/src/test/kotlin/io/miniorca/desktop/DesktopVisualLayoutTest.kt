@@ -80,9 +80,7 @@ class DesktopVisualLayoutTest {
     for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
       for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
         var requests = 0
-        var app by
-            mutableStateOf(
-                DesktopState(projectState = ProjectWorkspaceState(rememberedPath = path)))
+        var app by mutableStateOf(DesktopState())
         ComposeVisualFixture(
                 (width * density).toInt(), (height * density).toInt(), scale, density) {
                   ProjectLanding(
@@ -93,6 +91,11 @@ class DesktopVisualLayoutTest {
                 }
             .use { fixture ->
               val label = "f06-landing-$width-$height-$scale-${density}x"
+              fixture.render("$label-empty")
+              fixture.assertTextFits("Open project")
+              assertTrue(fixture.hasText("No project remembered on this device."))
+              assertFalse(fixture.hasText("Retry restore"))
+              app = app.copy(projectState = app.projectState.copy(rememberedPath = path))
               fixture.render("$label-remembered")
               fixture.assertTextFits("Open project")
               fixture.revealText("Remembered path", "project-landing-scroll")
@@ -129,6 +132,22 @@ class DesktopVisualLayoutTest {
               }
               fixture.revealText("Cannot read saved metadata", "project-landing-scroll")
               assertTrue(fixture.hasText("Cannot read saved metadata"))
+              app =
+                  app.copy(
+                      projectState =
+                          app.projectState.copy(
+                              openingAttempt = null, preferenceReadWarning = null))
+              fixture.render("$label-disconnected")
+              fixture.revealText("Reconnect daemon", "project-landing-scroll")
+              fixture.assertTextFits("Reconnect daemon")
+              app =
+                  app.copy(
+                      connection = ConnectionState(),
+                      projectState =
+                          app.projectState.copy(preferenceReadWarning = "Preferences unavailable"))
+              fixture.render("$label-preference-warning")
+              fixture.revealText("Could not read last project preference", "project-landing-scroll")
+              fixture.assertTextFits("Could not read last project preference")
               assertEquals(0, requests)
             }
       }
@@ -143,7 +162,10 @@ class DesktopVisualLayoutTest {
     for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
       for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
         var actions = 0
-        var attempt by mutableStateOf(ProjectOpeningAttempt(1, path, ProjectOpeningKind.Restore))
+        var attempt by
+            mutableStateOf<ProjectOpeningAttempt?>(
+                ProjectOpeningAttempt(1, path, ProjectOpeningKind.Restore))
+        var saveWarning by mutableStateOf<String?>(null)
         ComposeVisualFixture(
                 (width * density).toInt(), (height * density).toInt(), scale, density) {
                   MainToolbar(
@@ -158,7 +180,8 @@ class DesktopVisualLayoutTest {
                               "Whole-project analysis · Running",
                               true,
                               false),
-                          openingAttempt = attempt),
+                          openingAttempt = attempt,
+                          preferenceSaveWarning = saveWarning),
                       ToolbarActions({ actions++ }, {}, { actions++ }, {}, { actions++ }))
                 }
             .use { fixture ->
@@ -173,7 +196,7 @@ class DesktopVisualLayoutTest {
               assertTrue(fixture.hasText("Daemon disconnected"))
               assertFalse(fixture.hasText("Retry restore"))
               attempt =
-                  attempt.copy(
+                  attempt?.copy(
                       outcome = ProjectOpeningOutcome.Failed("Could not read saved metadata"))
               fixture.render("$label-failed")
               fixture.revealText("Retry restore", "project-opening-scroll")
@@ -181,6 +204,14 @@ class DesktopVisualLayoutTest {
               fixture.revealText("Could not read saved metadata", "project-opening-scroll")
               assertTrue(fixture.hasText(project.name))
               assertTrue(fixture.hasText(path))
+              attempt = null
+              saveWarning = "Disk denied: project not saved for next launch"
+              fixture.render("$label-preference-save-failed")
+              fixture.revealText(
+                  "Disk denied: project not saved for next launch", "project-preference-scroll")
+              fixture.assertTextFits("Could not remember project")
+              assertTrue(fixture.hasText(project.name))
+              assertFalse(fixture.hasText("Could not restore project"))
               assertEquals(0, actions)
             }
       }

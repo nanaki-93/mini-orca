@@ -84,6 +84,15 @@ internal fun MainToolbar(
         Spacer(Modifier.height(8.dp))
         ProjectOpeningFeedback(state.project, attempt, actions)
       }
+      if (state.preferenceReadWarning != null || state.preferenceSaveWarning != null) {
+        Column(
+            Modifier.fillMaxWidth()
+                .heightIn(max = 160.dp)
+                .verticalScroll(rememberScrollState())
+                .testTag("project-preference-scroll")) {
+              ProjectPreferenceWarnings(state.preferenceReadWarning, state.preferenceSaveWarning)
+            }
+      }
       if (wrapped) {
         Spacer(Modifier.height(4.dp))
         if (compact) {
@@ -136,6 +145,8 @@ internal data class ToolbarState(
     val gitStatus: GitStatus?,
     val analysisStatus: ToolbarAnalysisStatus? = null,
     val openingAttempt: ProjectOpeningAttempt? = null,
+    val preferenceReadWarning: String? = null,
+    val preferenceSaveWarning: String? = null,
 )
 
 @Composable
