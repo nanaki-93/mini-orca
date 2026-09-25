@@ -833,6 +833,10 @@ class DesktopWorkflowPresenterTest {
       main.runPending()
       assertEquals("/tmp/second", presenter.snapshot.value.state.project?.path)
       assertEquals(0, preferences.flushCount)
+      io.runNext() // Complete the older save after the newer project was accepted.
+      main.runPending()
+      assertEquals(1, preferences.flushCount)
+      assertNull(presenter.snapshot.value.state.projectState.rememberedPath)
       repeat(6) {
         io.runPending()
         main.runPending()
@@ -2935,6 +2939,10 @@ class DesktopWorkflowPresenterTest {
 
     fun runLast() {
       pending.removeLast().run()
+    }
+
+    fun runNext() {
+      pending.removeFirst().run()
     }
   }
 
