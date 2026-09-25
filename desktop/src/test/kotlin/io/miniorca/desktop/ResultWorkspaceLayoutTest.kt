@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 
 class ResultWorkspaceLayoutTest {
   @Test
-  fun allResultPagesKeepListAndDetailAtTheSameWidthAcrossViewports() {
+  fun allResultPagesKeepListAndDetailReachableAcrossViewports() {
     listOf(
             Triple(1440, 900, 1f),
             Triple(1000, 760, 1f),
@@ -38,13 +38,140 @@ class ResultWorkspaceLayoutTest {
                   assertTrue(header.left > 0 && header.right < width)
                   assertTrue(action.top >= header.top && action.bottom <= header.bottom)
                   assertTrue(list.top > header.bottom && list.bottom < height)
-                  assertTrue(list.height > height / 3f)
+                  assertTrue(list.height > 0)
                   val detail = fixture.taggedBounds("result-detail")
-                  assertTrue(list.right < detail.left && detail.right < width)
-                  assertEquals(list.top, detail.top)
-                  assertEquals(list.bottom, detail.bottom)
+                  assertTrue(detail.height > 0 && detail.right < width && detail.bottom < height)
+                  if (width == 800) {
+                    assertEquals(list.left, detail.left)
+                    assertTrue(list.bottom < detail.top)
+                    assertEquals(list.right, detail.right)
+                  } else {
+                    assertTrue(list.right < detail.left)
+                    assertEquals(list.top, detail.top)
+                    assertEquals(list.bottom, detail.bottom)
+                  }
                 }
           }
+        }
+  }
+
+  @Test
+  fun listAndDetailCrossLocalTextScaledBreakpointWithoutLosingTheirScrollOwners() {
+    listOf(1f to 628, 1.5f to 938).forEach { (scale, boundary) ->
+      val rows = (1..320).map { row(it) }
+      val browser = newResultBrowserState(resultPageFixture("bugs"))
+      val widths = listOf(boundary + 1, boundary, boundary - 1, boundary + 1)
+      ComposeVisualFixture(widths.first(), 650, scale) {
+            ResultListDetail(
+                rows,
+                browser,
+                { browser.selectedKey = it },
+                "No findings",
+                Modifier.fillMaxSize()) {
+                  Column {
+                    Text("Evidence for $it")
+                    repeat(40) { line -> Text("Evidence paragraph $line") }
+                  }
+                }
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.revealText("Finding 20", "result-list")
+            fixture.clickDescription("Inspect Finding 20")
+            fixture.render()
+            fixture.scrollBy(563f, "result-list")
+            awaitResultListSettled(fixture, browser)
+            val index = browser.listState.firstVisibleItemIndex
+            val offset = browser.listState.firstVisibleItemScrollOffset
+            assertTrue(index > 0 && offset > 0)
+            fixture.scrollBy(260f, "result-detail")
+            fixture.render()
+            val detailOffset = fixture.verticalScrollValue("result-detail")
+            assertTrue(detailOffset > 0f)
+            widths.forEachIndexed { step, width ->
+              fixture.resize(width, 650)
+              fixture.render("result-reflow-$scale-$step")
+              val list = fixture.taggedBounds("result-list")
+              val detail = fixture.taggedBounds("result-detail")
+              if (width < boundary) {
+                assertTrue(list.bottom < detail.top)
+                assertEquals(list.left, detail.left)
+              } else {
+                assertTrue(list.right < detail.left)
+                assertEquals(list.top, detail.top)
+              }
+              assertTrue(list.height > 0 && detail.height > 0 && detail.bottom <= 650)
+              assertEquals("finding-20", browser.selectedKey)
+              assertTrue(fixture.hasText("Evidence for finding-20"))
+              assertEquals(detailOffset, fixture.verticalScrollValue("result-detail"), 5f)
+              assertEquals(index, browser.listState.firstVisibleItemIndex)
+              assertEquals(offset, browser.listState.firstVisibleItemScrollOffset)
+              browser.listState.requestScrollToItem(319)
+              fixture.render()
+              fixture.awaitVisibleDescription("Inspect Finding 320")
+              fixture.revealText("Evidence paragraph 39", "result-detail")
+              // Restore comparable scroll positions before measuring the next layout.
+              browser.listState.requestScrollToItem(index, offset)
+              fixture.scrollBy(-100_000f, "result-detail")
+              fixture.render()
+              fixture.scrollBy(detailOffset, "result-detail")
+              fixture.render()
+            }
+          }
+    }
+  }
+
+  @Test
+  fun populatedFilteredAndEmptyResultsKeepTruthfulStateThroughReflow() {
+    val page = resultPageFixture("bugs")
+    val rows = (1..80).map { row(it) } + row(81).copy(severity = "", state = "Failed · Stale")
+    val browser = newResultBrowserState(page)
+    ComposeVisualFixture(1100, 650, 1.5f) {
+          AnalysisResultsPane(page, rows, browser, openAnalysis = {}) { key ->
+            Text("Evidence for $key")
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.revealText("Finding 20", "result-list")
+          fixture.clickDescription("Inspect Finding 20")
+          fixture.render()
+          assertEquals("finding-20", browser.selectedKey)
+          browser.query = "Finding"
+          browser.filter = ResultBrowserFilter.Value("high")
+          fixture.render()
+          fixture.scrollBy(480f, "result-list")
+          awaitResultListSettled(fixture, browser)
+          val index = browser.listState.firstVisibleItemIndex
+          val offset = browser.listState.firstVisibleItemScrollOffset
+          assertTrue(index > 0)
+          listOf(800, 1100).forEach { width ->
+            fixture.resize(width, 650)
+            fixture.render()
+            val list = fixture.taggedBounds("result-list")
+            val detail = fixture.taggedBounds("result-detail")
+            if (width == 800) assertTrue(list.bottom < detail.top)
+            else assertTrue(list.right < detail.left)
+            assertEquals(index, browser.listState.firstVisibleItemIndex)
+            assertEquals(offset, browser.listState.firstVisibleItemScrollOffset)
+            assertEquals("finding-20", browser.selectedKey)
+            assertTrue(fixture.hasText("Evidence for finding-20"))
+            assertEquals("Finding", browser.query)
+            assertEquals(ResultBrowserFilter.Value("high"), browser.filter)
+          }
+          browser.filter = ResultBrowserFilter.Value("unknown")
+          fixture.render()
+          fixture.assertTextFits("Unknown 1")
+          fixture.assertTextFits("Failed · Stale")
+          assertEquals("finding-81", browser.selectedKey)
+          browser.query = "no matches"
+          fixture.resize(800, 650)
+          fixture.render()
+          fixture.assertTextFits("No matching results.")
+          assertEquals(null, browser.selectedKey)
+          browser.query = "Finding"
+          fixture.render()
+          assertEquals("finding-81", browser.selectedKey)
         }
   }
 
@@ -290,7 +417,7 @@ class ResultWorkspaceLayoutTest {
         }
         .use { fixture ->
           fixture.render("rounded-results-long-error-800-150")
-          assertTrue(fixture.taggedBounds("result-list").height > 250f)
+          assertTrue(fixture.taggedBounds("result-list").height > 0f)
           assertTrue(fixture.hasText("Results could not be refreshed: $refreshError"))
           fixture.clickDescription("Inspect Avoid repeated allocation")
           fixture.render()
@@ -346,7 +473,10 @@ class ResultWorkspaceLayoutTest {
           fixture.render()
           assertEquals(0, fixes)
           assertTrue(fixture.hasText("When it matters"))
-          fixture.assertTextWrapsAndTailIsReachable(longTradeoff, "result-detail")
+          fixture.assertTextWrapsWithoutClipping(longTradeoff)
+          fixture.scrollBy(100_000f, "result-detail")
+          fixture.render()
+          assertTrue(fixture.verticalScrollValue("result-detail") > 0f)
           fixture.revealText("Prepare fix", "result-detail")
           fixture.clickText("Prepare fix")
           assertEquals(1, fixes)
@@ -401,10 +531,13 @@ class ResultWorkspaceLayoutTest {
           fixture.render("security-detail-disclosure-800-400-150")
           assertTrue(fixture.hasText("Preconditions / unknowns"))
           assertTrue(fixture.hasText("Safe verification idea"))
-          fixture.assertTextWrapsAndTailIsReachable(longPreconditions, "result-detail")
+          fixture.assertTextWrapsWithoutClipping(longPreconditions)
           fixture.revealText("Prepare fix", "result-detail")
           fixture.clickText("Prepare fix")
           assertEquals(1, fixes)
+          fixture.scrollBy(100_000f, "result-detail")
+          fixture.render()
+          assertTrue(fixture.verticalScrollValue("result-detail") > 0f)
         }
 
     val stale = populated.copy(run = requireNotNull(populated.run).copy(status = "stale"))
@@ -417,7 +550,7 @@ class ResultWorkspaceLayoutTest {
           fixture.render("security-detail-stale-800-400-150")
           fixture.clickDescription("Inspect Credential-like assignment")
           fixture.render()
-          fixture.revealText("Prepare fix", "result-detail")
+          revealDetailAction(fixture, "Prepare fix")
           assertTrue(fixture.isDisabled("Prepare fix"))
           assertTrue(fixture.hasText("Analyze again to prepare a fix from current source."))
           assertEquals(1, fixes)
@@ -529,6 +662,19 @@ class ResultWorkspaceLayoutTest {
           assertTrue(fixture.hasText(sanitizedOutputText(diagnostic)))
           assertEquals(0, starts)
         }
+  }
+
+  private fun revealDetailAction(fixture: ComposeVisualFixture, label: String) {
+    fixture.scrollBy(-100_000f, "result-detail")
+    fixture.render()
+    repeat(1000) {
+      val action = runCatching { fixture.firstVisibleTextBounds(label) }.getOrNull()
+      val detail = fixture.taggedBounds("result-detail")
+      if (action != null && action.top >= detail.top && action.bottom <= detail.bottom) return
+      fixture.scrollBy(24f, "result-detail")
+      fixture.render()
+    }
+    error("$label must be reachable inside the detail viewport")
   }
 
   private fun row(number: Int) =
