@@ -93,20 +93,23 @@ to the shell script selects another built `Mini-Orca.app`.
 ## Terminal pane
 
 The current app starts maximized and remains resizable. Terminal is currently
-docked beneath the workspace; its placement may change in a redesign. Select
-**Terminal** at the bottom to open the pane and immediately start a local
-interactive shell in the open project. **Ctrl+Shift+T** opens or focuses the pane.
-Shell tabs sit alongside Terminal in the same bar: **+** starts another independent
-shell, selecting a tab focuses that shell, and its **×** closes that shell and its
-children. Closing the last tab leaves **+** available; reopening the collapsed pane
+docked beneath the workspace; its placement may change in a redesign. The
+separate **Terminal** action in the labeled left rail opens/focuses the dock; it
+may start a local interactive shell in the open project if there is no session.
+The collapsed dock's **Terminal** control also opens it, and **Ctrl+Shift+T** opens
+or focuses it from the application. Repeated rail activation does not create a
+replacement shell while a tab remains, even if that tab has exited or failed.
+Shell tabs sit alongside Terminal in the
+dock bar: **+** starts another independent shell, selecting a tab focuses that
+shell, and its **×** closes that shell and its children. Closing the last tab leaves **+** available; reopening the collapsed pane
 starts a shell if no tabs remain. Exited and failed tabs retain their state until
 closed; reopening the pane does not automatically restart them. Use **+** to retry
 with a new shell. No replacement can start while cleanup is pending.
 
-Select **Terminal** again to collapse the dock. Collapsing, changing workspaces,
-resizing, or switching shell tabs keeps each session's reader and bounded in-memory
-scrollback. Launch,
-exit and cleanup states remain visible in their tabs, with errors in the selected
+Select **Terminal** in the expanded dock bar to collapse it; the rail action does
+not toggle collapse. Collapsing, changing workspaces, resizing, or switching shell
+tabs keeps each session's reader and bounded in-memory scrollback. Launch, exit
+and cleanup states remain visible in their tabs, with errors in the selected
 terminal. A restored layout restores pane dimensions with Terminal collapsed.
 Old Problems, Checks and Output selections are discarded; no layout preference
 launches a shell.
