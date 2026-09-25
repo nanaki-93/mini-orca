@@ -78,12 +78,48 @@ class ProjectSummaryIssuesTest {
   }
 
   @Test
-  fun completedEmptyBugsHaveZeroPrioritiesAndANeutralCard() {
-    val (run, _) = summaryBugFixture(emptyList())
-    val metric = summaryIssueMetrics(resultProjectFixture(), run, emptyMap()).first()
-    assertEquals(SummaryBugPriorities(0, 0, 0, 0), metric.priorities)
-    assertEquals(0, metric.value)
-    assertEquals(FaintText, summaryIssueTint(metric))
+  fun zeroReportedBugsRequireMatchingCompletedDetailsBeforeClaimingEmpty() {
+    val (fixtureRun, _) = summaryBugFixture(emptyList())
+    val run =
+        fixtureRun.copy(
+            status = "completed",
+            sections =
+                fixtureRun.sections.map {
+                  if (it.category == "bugs") it.copy(status = "completed_empty") else it
+                })
+    val details =
+        AnalysisSectionState(
+            results =
+                AnalysisSectionResults(run.identity, run.sections.first { it.category == "bugs" }))
+    val pending = summaryIssueMetrics(resultProjectFixture(), run, emptyMap()).first()
+    assertEquals(0, pending.value)
+    assertNull(pending.priorities)
+    assertEquals("Completed · details not confirmed", pending.status)
+    assertEquals("0 reported · details not confirmed", pending.detailStatus)
+    assertEquals("completed", pending.statusCode)
+    assertEquals(FaintText, summaryIssueTint(pending))
+
+    val completed = summaryIssueMetrics(resultProjectFixture(), run, bugSections(details)).first()
+    assertEquals(SummaryBugPriorities(0, 0, 0, 0), completed.priorities)
+    assertEquals("completed_empty", completed.statusCode)
+    assertEquals("Completed · no findings", completed.status)
+    assertEquals("0 reported", completed.detailStatus)
+
+    val result = requireNotNull(details.results)
+    listOf(
+            details.copy(loading = true),
+            details.copy(error = "Read failed"),
+            details.copy(results = result.copy(identity = run.identity.copy(generation = "old"))),
+            details.copy(
+                results = result.copy(progress = result.progress.copy(status = "partial"))))
+        .forEach { incomplete ->
+          val metric =
+              summaryIssueMetrics(resultProjectFixture(), run, bugSections(incomplete)).first()
+          assertEquals(0, metric.value)
+          assertNull(metric.priorities)
+          assertEquals("completed", metric.statusCode)
+          assertEquals("Completed · details not confirmed", metric.status)
+        }
   }
 
   @Test
@@ -111,7 +147,11 @@ class ProjectSummaryIssuesTest {
     assertEquals(listOf(7, 8, 9), metrics.map { it.value })
     assertNull(metrics.first().priorities, "Mismatched evidence cannot classify a newer count")
     assertEquals(
-        listOf(null, "Loading details", "Details unavailable"), metrics.map { it.detailStatus })
+        listOf(
+            "7 reported",
+            "Loading saved details · 8 reported",
+            "Saved details unavailable · 9 reported"),
+        metrics.map { it.detailStatus })
   }
 }
 

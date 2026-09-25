@@ -153,10 +153,10 @@ class ProjectSummaryPaneTest {
     assertEquals(listOf("Bugs", "Performance", "Security"), summary.issueMetrics.map { it.label })
     assertEquals(listOf(0, 3, null), summary.issueMetrics.map { it.value })
     assertEquals(
-        listOf("Completed · no findings", "Partial", "Failed"),
+        listOf("Completed · details not confirmed", "Partial", "Failed"),
         summary.issueMetrics.map { it.status })
     assertEquals(
-        listOf("completed_empty", "partial", "failed"), summary.issueMetrics.map { it.statusCode })
+        listOf("completed", "partial", "failed"), summary.issueMetrics.map { it.statusCode })
     assertTrue(projectSummaryPresentation(null, project).issueMetrics.all { it.value == null })
     listOf(
             run.copy(status = "stale"),
@@ -167,6 +167,42 @@ class ProjectSummaryPaneTest {
               projectSummaryPresentation(null, project, stale).issueMetrics.all {
                 it.value == null
               })
+        }
+  }
+
+  @Test
+  fun summaryCardKeepsReportedZeroAndSavedReadFailureSeparateFromRunLifecycle() {
+    val project = resultProjectFixture()
+    val (completedRun, details) = summaryBugFixture(emptyList())
+    val pausedRun = completedRun.copy(status = "paused", reason = "Paused by user")
+    val sections = bugSections(details.copy(error = "Saved results could not be read"))
+    val summary = projectSummaryPresentation(null, project, pausedRun, sections)
+    assertEquals("paused", summary.summaryStatus)
+    assertEquals("paused", summary.issueMetrics.first().statusCode)
+    assertEquals(
+        "Saved details unavailable · 0 reported", summary.issueMetrics.first().detailStatus)
+    listOf("interrupted", "canceled").forEach { lifecycle ->
+      val other =
+          projectSummaryPresentation(
+              null,
+              project,
+              pausedRun.copy(
+                  status = lifecycle,
+                  sections = pausedRun.sections.map { it.copy(status = lifecycle) }),
+              sections)
+      assertEquals(lifecycle, other.summaryStatus)
+      assertEquals(lifecycle, other.issueMetrics.first().statusCode)
+      assertEquals(
+          "Saved details unavailable · 0 reported", other.issueMetrics.first().detailStatus)
+    }
+    ComposeVisualFixture(800, 650) {
+          ProjectSummaryPane(null, project, {}, run = pausedRun, sections = sections)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Saved details unavailable · 0 reported"))
+          assertTrue(fixture.hasText("Paused by user"))
+          assertFalse(fixture.hasText("No results"))
         }
   }
 

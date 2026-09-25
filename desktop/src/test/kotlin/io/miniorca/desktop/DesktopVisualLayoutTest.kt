@@ -4245,7 +4245,7 @@ class DesktopVisualLayoutTest {
           fixture.assertSummaryCategoryContentContained()
           fixture.assertTextFits("Interrupted")
           fixture.assertTextFits("High: 1 · Medium: 1 · Low: 1", maxLines = 2)
-          fixture.assertTextFits("Details unavailable")
+          fixture.assertTextFits("Saved details unavailable · 19 reported")
           val bugsCard = fixture.taggedBounds("summary-metric-Bugs")
           assertTrue(
               bugsCard.height > 132f,
@@ -4285,7 +4285,7 @@ class DesktopVisualLayoutTest {
           fixture.assertSummaryStatusPlacement("Updating")
           fixture.assertSummaryCategoryBoxesFit()
           listOf("17", "18", "19").forEach(fixture::assertTextFits)
-          fixture.assertTextFits("Loading details")
+          fixture.assertTextFits("Loading saved details · 18 reported")
           AnalysisResultType.entries.forEach { type ->
             fixture.clickVisibleDescription("View ${type.workspace.name} results")
           }
@@ -4306,7 +4306,9 @@ class DesktopVisualLayoutTest {
                       })
           sections = emptyMap()
           fixture.render("summary-live-completed-1440")
-          listOf("17", "18", "19", "Loading details").forEach { assertFalse(fixture.hasText(it)) }
+          listOf("17", "18", "19", "Loading saved details").forEach {
+            assertFalse(fixture.hasText(it))
+          }
           listOf("27", "28", "29").forEach(fixture::assertTextFits)
           fixture.assertSummaryStatusPlacement("Updated")
           fixture.assertSummaryCategoryBoxesFit()
@@ -5047,7 +5049,9 @@ internal class ComposeVisualFixture(
         AnalysisResultType.entries.map { visibleActionBounds("View ${it.workspace.name} results") }
     bounds.forEach {
       assertEquals(bounds.first().width, it.width, 1f, "Category widths must match")
-      assertEquals(bounds.first().height, it.height, 1f, "Category heights must match")
+      if (bounds[0].top == bounds[1].top)
+          assertEquals(
+              bounds.first().height, it.height, 1f, "Side-by-side category heights must match")
     }
     bounds.zipWithNext().forEach { (first, next) ->
       assertTrue(

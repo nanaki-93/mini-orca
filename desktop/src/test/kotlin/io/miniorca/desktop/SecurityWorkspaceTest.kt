@@ -180,6 +180,43 @@ class SecurityWorkspaceTest {
   }
 
   @Test
+  fun summaryAndSecurityResultDoNotTreatMissingSavedDetailsAsAssurance() {
+    val page = securityPageFixture()
+    val run =
+        page.run!!.copy(
+            status = "completed",
+            sections =
+                page.run.sections.map {
+                  if (it.category == "security")
+                      it.copy(status = "completed_empty", findingCount = 0)
+                  else it
+                })
+    val pending = page.copy(run = run, section = AnalysisSectionState())
+    val metric = summaryIssueMetrics(page.project, run, emptyMap())[2]
+    assertEquals(0, metric.value)
+    assertEquals("Completed · details not confirmed", metric.status)
+    assertEquals("0 reported · details not confirmed", metric.detailStatus)
+    assertEquals(
+        AnalysisResultAvailability.PendingDetails, pending.emptyPresentation(0).availability)
+    assertEquals("0 reported", pending.countLabel(0))
+
+    val unknownRun =
+        run.copy(
+            sections =
+                run.sections.map {
+                  if (it.category == "security") it.copy(findingCount = null) else it
+                })
+    val unknown = summaryIssueMetrics(page.project, unknownRun, emptyMap())[2]
+    assertNull(unknown.value)
+    assertEquals("Count unavailable", unknown.detailStatus)
+    assertTrue(
+        page
+            .copy(run = unknownRun, section = AnalysisSectionState())
+            .countLabel(0)
+            .contains("count unavailable"))
+  }
+
+  @Test
   fun evidenceIdentityRequiresTheValidReportAndFindingSourcePair() {
     val source = SecurityResult(report("deterministic", listOf(finding)), finding, stale = false)
     val modelFinding = finding.copy(evidenceKind = "model_suspicion")
