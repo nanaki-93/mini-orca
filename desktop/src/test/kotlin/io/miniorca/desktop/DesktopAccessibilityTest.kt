@@ -10,6 +10,57 @@ import kotlin.test.assertTrue
 
 class DesktopAccessibilityTest {
   @Test
+  fun savedReadFailureNamesRecoveryAndKeepsFilteredFailureAccessible() {
+    AnalysisResultType.entries.forEach { type ->
+      val page =
+          resultPageFixture(type.category).let {
+            it.copy(section = it.section.copy(error = "saved read failed"))
+          }
+      val browser = newResultBrowserState(page)
+      browser.query = "no matching result"
+      val rows =
+          listOf(
+              ResultRowPresentation(
+                  "retained", "Retained result", "main.go:1", "Evidence", "high", "", ""))
+      ComposeVisualFixture(800, 650, 1.5f) {
+            AnalysisResultsPane(page, rows, browser, openAnalysis = {}, retryResults = {}) {
+              androidx.compose.material.Text("Retained detail")
+            }
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.hasText("No matching results."))
+            assertTrue(fixture.hasText("Results could not be refreshed: saved read failed"))
+            assertTrue(
+                fixture.hasText(
+                    "Reloads saved results for ${type.workspace.name}; does not start analysis."))
+            assertTrue(fixture.hasText("Retry loading results"))
+            assertTrue(fixture.hasDescription("Clear filters"))
+          }
+    }
+  }
+
+  @Test
+  fun reviewAttemptRetainsFailureAndDisabledReasonWithHelpCollapsed() {
+    val base = editorComparisonReviewFixture()
+    val draft = requireNotNull(base.draft)
+    val running =
+        base.copy(
+            checkAttempt = CheckAttempt(6, CheckCandidate(draft), ValidationAttemptStatus.Running))
+    ComposeVisualFixture(800, 650, 1.5f) {
+          ReviewToolWindow(
+              running, ReviewToolWindowActions({}, {}, {}), DraftApplicationActions({}, {}))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Checks running"))
+          assertTrue(fixture.hasText("Previous check report (retained; not current approval)"))
+          assertFalse(fixture.hasText("Ready to apply"))
+          assertFalse(fixture.hasText("Apply change"))
+        }
+  }
+
+  @Test
   fun resultPagesStartKeyboardNavigationAtViewAnalysis() {
     AnalysisResultType.entries.forEach { current ->
       ComposeVisualFixture(1_000, 760, 1.25f) { AcceptanceResultPane(current.category, "partial") }

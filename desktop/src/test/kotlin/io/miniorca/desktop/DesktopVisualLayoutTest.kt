@@ -1527,6 +1527,311 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun f05SavedResultRecoveryCapturesProductionPagesAtSupportedSizesAndScales() {
+    val viewports = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in viewports) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        AnalysisResultType.entries.forEach { type ->
+          val original =
+              when (type.category) {
+                "performance" -> performancePageFixture()
+                "security" -> securityPageFixture()
+                else -> resultPageFixture("bugs")
+              }
+          var page by
+              mutableStateOf(
+                  original.copy(section = AnalysisSectionState(error = "saved read failed")))
+          val browser = newResultBrowserState(original)
+          val rows =
+              when (type.category) {
+                "performance" -> performanceResults(original).map(PerformanceResult::row)
+                "security" -> securityResults(original).map(SecurityResult::row)
+                else -> original.semantic.map(::semanticResultRow)
+              }
+          var visibleRows by mutableStateOf(emptyList<ResultRowPresentation>())
+          var retries = 0
+          var navigations = 0
+          ComposeVisualFixture(
+                  (width * density).toInt(), (height * density).toInt(), scale, density) {
+                    AnalysisResultsPane(
+                        page,
+                        visibleRows,
+                        browser,
+                        openAnalysis = { navigations++ },
+                        retryResults = { retries++ }) { key ->
+                          Text("Retained detail for $key")
+                        }
+                  }
+              .use { fixture ->
+                val label = "f05-${type.category}-$width-$height-$scale-${density}x"
+                fixture.render("$label-empty-read-failed")
+                fixture.assertTextFits("Retry loading results")
+                fixture.assertTextFits("No result details loaded yet.")
+                assertFalse(fixture.hasText("No findings in the analyzed scope."))
+                fixture.revealText("Retry loading results", "result-read-feedback")
+                fixture.render("$label-empty-recovery-revealed")
+                assertTrue(
+                    fixture.firstVisibleTextBounds("Retry loading results").bottom <=
+                        height * density)
+                page = original.copy(section = original.section.copy(error = "saved read failed"))
+                visibleRows = rows
+                fixture.render("$label-retained-read-failed")
+                fixture.assertTextFits("Results could not be refreshed: saved read failed")
+                assertTrue(fixture.taggedBounds("result-list").height > 0f)
+                assertTrue(
+                    fixture.taggedBounds("result-read-feedback").bottom <=
+                        fixture.taggedBounds("result-list").top)
+                browser.query = "no matching saved finding"
+                fixture.render("$label-filtered-read-failed")
+                fixture.assertTextFits("No matching results.")
+                fixture.assertTextFits("Results could not be refreshed: saved read failed")
+                assertTrue(
+                    fixture.taggedBounds("result-read-feedback").bottom <=
+                        fixture.taggedBounds("result-empty").top)
+                fixture.revealText("Retry loading results", "result-read-feedback")
+                fixture.render("$label-filtered-recovery-revealed")
+                assertTrue(
+                    fixture.firstVisibleTextBounds("Retry loading results").bottom <=
+                        height * density)
+                fixture.revealText("Clear filters", "result-overview")
+                fixture.clickDescription("Clear filters")
+                fixture.render("$label-cleared-local-filter")
+                assertTrue(fixture.taggedBounds("result-list").height > 0f)
+                assertEquals(0, retries + navigations, label)
+              }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun f05ReviewAttemptCapturesDoNotPromoteRetainedPass() {
+    val base = editorComparisonReviewFixture()
+    val draft = requireNotNull(base.draft)
+    val diagnostic = "Validation transport failed for the selected declaration."
+    val started =
+        DesktopState(
+                review =
+                    DraftReviewState(draft = draft, editor = base.editor, checks = base.checks))
+            .reduce(DesktopEvent.DraftValidationStarted(4))
+    val stopped =
+        started.reduce(
+            DesktopEvent.DraftValidationStopped(4, ValidationAttemptStatus.Failed, diagnostic))
+    assertFalse(
+        draftReviewEligibility(
+                stopped.review.editor,
+                stopped.review.draft,
+                stopped.checks,
+                base.selected,
+                base.project,
+                stopped.review.checkAttempt)
+            .eligible)
+    for ((width, height) in
+        listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+          var state by
+              mutableStateOf(
+                  base.copy(
+                      editor = stopped.review.editor,
+                      draft = stopped.review.draft,
+                      checks = stopped.review.checks))
+          var actions = 0
+          ComposeVisualFixture(
+                  (width * density).toInt(), (height * density).toInt(), scale, density) {
+                    ReviewToolWindow(
+                        state,
+                        ReviewToolWindowActions({ actions++ }, { actions++ }, { actions++ }),
+                        DraftApplicationActions({ actions++ }, { actions++ }))
+                  }
+              .use { fixture ->
+                val label = "f05-review-$width-$height-$scale-${density}x"
+                fixture.render("$label-validation-failed")
+                assertTrue(fixture.hasText("Validation failed"))
+                assertFalse(fixture.hasText("Ready to apply"))
+                assertFalse(fixture.hasText("Apply change"))
+                assertTrue(fixture.hasText("Validate the latest draft before applying it."))
+                fixture.revealText("Edit draft", "review-action-scroll")
+                fixture.assertTextFits("Edit draft")
+                state =
+                    base.copy(
+                        checkAttempt =
+                            CheckAttempt(7, CheckCandidate(draft), ValidationAttemptStatus.Running))
+                fixture.render("$label-checks-running-after-pass")
+                assertTrue(fixture.hasText("Checks running"))
+                assertTrue(
+                    fixture.hasText("Previous check report (retained; not current approval)"))
+                assertFalse(fixture.hasText("Ready to apply"))
+                assertFalse(fixture.hasText("Apply change"))
+                assertEquals(0, actions)
+              }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun f05SelectionConnectionOpeningAndLifecycleCapturesUseProductionOwners() {
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    val selection = selectionFixture()
+    val actions = AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {})
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        val label = "f05-owners-$width-$height-$scale-${density}x"
+        val pxWidth = (width * density).toInt()
+        val pxHeight = (height * density).toInt()
+        var refreshes = 0
+        val failedSelection =
+            ProjectAnalysisRunState(
+                fileSelection =
+                    AnalysisSelectionState(
+                        selection,
+                        error = "Saved selection could not be written",
+                        failure = AnalysisSelectionFailure.Save))
+        ComposeVisualFixture(pxWidth, pxHeight, scale, density) {
+              AnalysisFileSelector(
+                  failedSelection, actions.copy(refreshSelection = { refreshes++ }))
+            }
+            .use { fixture ->
+              fixture.render("$label-selection-save-failed")
+              fixture.clickDescription("Collapse Files")
+              fixture.render("$label-selection-failed-collapsed")
+              assertTrue(fixture.hasText("Could not save file selection"))
+              assertTrue(
+                  fixture.hasText(
+                      "The last confirmed selection is still shown. Refresh files reads the saved selection; it does not retry a failed change or start analysis."))
+              assertTrue(fixture.hasText("Refresh files"))
+              fixture.assertTextFits("Refresh files")
+              assertTrue(fixture.requestFocus("Refresh files"))
+              fixture.render()
+              assertEquals(0, refreshes)
+              assertTrue(fixture.pressKey(Key.Enter))
+              assertEquals(1, refreshes)
+            }
+        var opens = 0
+        var reconnects = 0
+        val landingActions =
+            DesktopShellProjectActions(
+                importProject = { opens++ }, reanalyzeProject = {}, reconnect = { reconnects++ })
+        ComposeVisualFixture(pxWidth, pxHeight, scale, density) {
+              ProjectLanding(
+                  DesktopState(
+                      projectState = ProjectWorkspaceState(openingError = "Local read failed"),
+                      connection = ConnectionState(label = "Disconnected")),
+                  landingActions,
+                  FocusRequester())
+            }
+            .use { fixture ->
+              fixture.render("$label-landing-opening-and-offline")
+              assertTrue(fixture.hasText("Could not open project"))
+              assertTrue(fixture.hasText("Daemon disconnected"))
+              fixture.assertTextFits("Open project")
+              fixture.assertTextFits("Reconnect daemon")
+              assertEquals(0, opens + reconnects)
+            }
+        ComposeVisualFixture(pxWidth, pxHeight, scale, density) {
+              MainToolbar(
+                  ToolbarState(
+                      visualFixtureProject,
+                      false,
+                      "",
+                      ConnectionState(label = "Disconnected"),
+                      null,
+                      openingError = "Local read failed"),
+                  ToolbarActions({ opens++ }, {}, { reconnects++ }, {}))
+            }
+            .use { fixture ->
+              fixture.render("$label-toolbar-opening-failed")
+              assertTrue(fixture.hasText("Could not open project"))
+              fixture.assertTextFits("Open project")
+              assertEquals(0, opens + reconnects)
+            }
+        ComposeVisualFixture(pxWidth, pxHeight, scale, density) {
+              ExplorerPane(
+                  ExplorerPaneState(
+                      null,
+                      null,
+                      "",
+                      emptySet(),
+                      false,
+                      projectAvailable = false,
+                      readError = "Local file read failed"),
+                  ExplorerPaneActions({}, {}, {}, {}, {}, openProject = { opens++ }),
+                  Modifier.fillMaxSize())
+            }
+            .use { fixture ->
+              fixture.render("$label-explorer-read-failed")
+              assertTrue(fixture.hasText("Could not open file"))
+              fixture.assertTextFits("Open project")
+              assertFalse(fixture.hasText("No project open"))
+              assertEquals(0, opens)
+            }
+        ComposeVisualFixture(pxWidth, pxHeight, scale, density) {
+              ContextToolWindow(
+                  ContextToolWindowState(
+                      null,
+                      ScopedModel(),
+                      false,
+                      null,
+                      null,
+                      fileReadError = "Local file read failed"),
+                  ContextToolWindowActions({}, {}, {}, {}, {}, openFile = { opens++ }))
+            }
+            .use { fixture ->
+              fixture.render("$label-context-read-failed")
+              assertTrue(fixture.hasText("Could not open file"))
+              fixture.assertTextFits("Select a file")
+              assertFalse(fixture.hasText("No file selected"))
+              assertEquals(0, opens)
+            }
+        val run = analysisRunFixture().copy(status = "interrupted")
+        ComposeVisualFixture(pxWidth, pxHeight, scale, density) {
+              AnalysisRunStrip(
+                  AnalysisWorkspacePaneState(
+                      visualFixtureProject,
+                      ProjectAnalysisRunState(
+                          run = run,
+                          error = "Daemon status read failed",
+                          fileSelection = failedSelection.fileSelection)),
+                  actions,
+                  AnalysisRunStripScope.Analysis)
+            }
+            .use { fixture ->
+              fixture.render("$label-interrupted-run-error")
+              assertTrue(fixture.hasText("Analysis action needs attention"))
+              assertTrue(fixture.hasText("Daemon status read failed"))
+              assertFalse(fixture.hasText("Ready to apply"))
+            }
+        ComposeVisualFixture(pxWidth, pxHeight, scale, density) {
+              ProjectSummaryPane(
+                  visualFixtureOverview,
+                  resultProjectFixture(),
+                  {},
+                  run =
+                      run.copy(
+                          sections =
+                              run.sections.map {
+                                if (it.category == "security")
+                                    it.copy(status = "failed", findingCount = 19)
+                                else it
+                              }),
+                  sections =
+                      mapOf(
+                          AnalysisResultKey("security") to
+                              AnalysisSectionState(error = "Saved details could not be read")))
+            }
+            .use { fixture ->
+              fixture.render("$label-summary-unavailable-details")
+              fixture.revealText("Saved details unavailable · 19 reported")
+              fixture.render("$label-summary-details-revealed")
+              assertTrue(fixture.hasText("Saved details unavailable · 19 reported"))
+              assertFalse(fixture.hasText("No Security findings"))
+            }
+      }
+    }
+  }
+
+  @Test
   fun stalePartialEmptyAndHistoricalEvidenceRemainDistinct() {
     val base = performancePageFixture()
     val stale =
