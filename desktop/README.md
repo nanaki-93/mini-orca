@@ -39,10 +39,15 @@ prove OS focus, popup placement or screen-reader behavior.
 The last successfully opened project is restored from local metadata without
 contacting a model. If restore fails, the landing screen offers Open project/retry.
 Summary describes the project. Analysis owns one whole-project run and progress;
-Bugs, Performance and Security own separate results. The sidebar uses icons with
-hover labels. Analysis status appears at the
-top right, immediately before daemon connectivity. Editor owns one declaration change.
-Go, Java and Kotlin projects show a type icon beside the project name in the top bar.
+Bugs, Performance and Security own separate results. The scrollable left rail shows
+icons and visible labels in the order Summary, Analysis, Bugs, Performance, Security,
+Editor. Below them, separate Terminal, Commands and Models actions do not change
+the selected workspace. Commands opens the actions palette; header search opens
+indexed file search. Models opens the same configured model and destination details
+as the footer counts, including when configuration is unavailable. Analysis status
+appears immediately before the separate daemon connectivity status in the header;
+neither is provider health. Editor owns one declaration change. Go, Java and Kotlin
+projects show a type icon beside the project name in the top bar.
 
 Summary starts with the project name, purpose and indexed metadata. A segmented
 coverage bar shows the current selected files: up to date, outdated, not analyzed,
@@ -171,14 +176,17 @@ review the read-only diff. Apply and Undo retain the existing file/hash guards.
 Review keeps check diagnostics; Assistant keeps its current request failure;
 Analysis and Bugs retain their own operational evidence. The bottom bar shows only
 counts of distinct configured local and cloud models, aligned to the right;
-select the counts to view model and destination details. It has no hover tooltips.
-The compact left rail shows icons with destination names on hover.
+select the counts to view model and destination details. Incomplete configuration
+is labeled unavailable, not zero. The counts have no hover tooltips.
 
 ## Terminal
 
-Selecting **Terminal** or pressing **Ctrl+Shift+T** opens a shell rooted in the
-project. Shell tabs share the Terminal bar: **+** starts another shell and **×**
-closes its tab and process. Selecting tabs, collapsing the dock, changing
+Explicitly selecting **Terminal** in the rail, selecting the collapsed dock's
+**Terminal** control, or pressing **Ctrl+Shift+T** opens or focuses the dock and
+may start a local shell rooted in the project if no session exists. Repeating the
+rail action does not create another shell while a tab remains; use the expanded
+dock's **Terminal** control to collapse it. Shell tabs share the Terminal bar: **+** starts another
+shell and **×** closes its tab and process. Selecting tabs, collapsing the dock, changing
 workspaces or resizing preserves each shell's process and in-memory scrollback.
 Project switching explicitly closes all active shells; application exit cleans
 up every owned session.
@@ -208,7 +216,11 @@ See [terminal support and reproduction](TERMINAL.md).
 | Ctrl+Shift+F12 | Return from terminal input to Editor |
 | Escape | Dismiss the top transient surface or cancel the active operation |
 
-Use arrows and Enter/Space for tree/tab/disclosure navigation. The [keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md) covers native operation.
+In the focused workspace rail group, arrows move focus through the six destinations
+without selecting; Enter/Space activates the focused destination. Tab to the
+separate utility actions; rail focus and workspace switching do not start a shell.
+Use arrows and Enter/Space for other tree/tab/disclosure navigation. The
+[keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md) covers native operation.
 `DesktopVisualLayoutTest` produces component captures, not native-window evidence.
 
 Security entry and selection stay local. Whole-project analysis owns

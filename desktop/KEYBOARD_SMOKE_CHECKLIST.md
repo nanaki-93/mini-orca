@@ -4,11 +4,12 @@ Use a disposable Go project, a fake provider and isolated preferences. This is a
 operator procedure. [UI guidelines](UI_DESIGN_GUIDELINES.md) cover interaction
 and accessibility.
 
-Launch, restore and resize the window through representative widths and smaller
-heights. Check the chosen responsive behavior and action reachability.
-Repeat affected surfaces at 125% and 150% text. Record native versus component
-observations separately; native accessibility names do not establish spoken reader
-behavior.
+Launch, restore and resize the native window at 1600×1000, 1440×900, 1024×768,
+800×650 and 1280×600 where the host permits. Check action reachability, header
+wrapping and footer alignment. Repeat affected surfaces at 125% and 150% text;
+record viewport, display density and text scale separately. Compare native and
+component observations without treating offscreen captures as proof of OS focus,
+popup placement or spoken screen-reader output.
 
 For changed flows, also apply the [UI review](UI_DESIGN_GUIDELINES.md#verification):
 identify the task, state and next action. Verify that labels, blocked reasons
@@ -20,10 +21,18 @@ with keyboard focus.
    confirm its native field is visible before operating it; record an offscreen
    computer-use failure as pending native evidence. Project shortcuts must have no
    action until a project opens. Restore must not call a provider or start a shell.
-2. Verify Project, Results and Editing groups have distinct labeled destinations.
+2. Verify the scrollable rail shows all six icon-and-label destinations in order:
+   Summary, Analysis, Bugs, Performance, Security, Editor, then the separated
+   Terminal, Commands and Models actions. At small heights and 150% text, scroll
+   and keyboard-focus/reveal every entry; labels must not require hovering or be
+   truncated. Check that selected and focused workspace entries remain distinct.
+   With the workspace group focused, arrows move focus without selecting;
+   Enter/Space selects once. Tab to each utility and activate it with Enter/Space;
+   arrows/activation in the workspace group must not steal utility input.
    Cmd/Ctrl+1–4 select Summary, Analysis, Bugs and Editor. Cmd/Ctrl+Tab cycles all
-   workspaces. Commands offers View Performance results and View Security results;
-   navigation preserves the selected file, draft and loaded results.
+   six workspaces. Commands offers View Performance results and View Security results;
+   navigation preserves the selected file, draft and loaded results. Merely focusing
+   rail entries or switching workspaces must not start a shell or request a model.
 3. In Analysis, Start analysis opens a whole-project preview with file/stage scope,
    exclusions, cache use and request bounds. Confirm every required remote
    destination and explicit Security intent. Admission is one operation; starting
@@ -47,8 +56,15 @@ with keyboard focus.
    Source and diff must remain selectable/read-only. Relative paths disambiguate
    equal basenames. Source drag selects text without changing the draft target.
 7. Resize Editor and check access to Files and Context/Assistant/Review in the
-   chosen layout. Verify palette focus restoration and
-   selected source after resize; Cmd/Ctrl+P remains available.
+   chosen layout. Activate rail Commands and check that it opens the actions palette;
+   header search opens file search. Close and Escape each palette from its own
+   opener (keyboard and pointer) and verify *native focus* returns to that surviving
+   control, not just its region. Activate rail Models and footer counts separately:
+   each opens the same configured model details, even when unavailable, without
+   changing workspace or probing a provider. Close/Escape must return native focus
+   to the corresponding rail or footer opener. Repeat after switching projects or
+   closing one: focus must land in a valid region or landing, not a removed control.
+   Check selected source after resize; Cmd/Ctrl+P remains available.
 8. Open a Go file containing only `package main`. Select New function in the file
    header or Context; Assistant focuses the name field without a model request.
    New Go function and New Go type remain in Commands. Reject keywords, duplicate
@@ -66,12 +82,15 @@ with keyboard focus.
     At reduced heights and 150% text, verify scrolling exposes the complete Apply
     scope and recovery action. Expand Check details and Project context without dispatching a request.
     During a rerun, show Running even when the previous report passed.
-11. Confirm Terminal and its shell tabs share one bottom bar. Selecting Terminal
-    or Ctrl+Shift+T immediately opens a real shell in the project. Use + to create
-    independent shells, switch tabs, and × to close one without stopping others.
-    Collapse/reopen, workspace changes and resizing preserve the shell PID,
-    history and scrollback. Resize the terminal and verify real PTY dimensions
-    change without losing content or hiding the canvas.
+11. Confirm Terminal and its shell tabs share one bottom bar. Explicitly activate
+    rail Terminal, collapsed-dock Terminal or Ctrl+Shift+T: each opens/focuses the
+    dock and may start a real shell in the project if none exists. Repeating rail
+    activation must not create another session or collapse the dock. Use the
+    expanded dock's Terminal control to collapse it; collapse does not close a tab.
+    Use + to create independent shells, switch tabs, and × to close one without
+    stopping others. Collapse/reopen, workspace changes and resizing preserve each
+    shell's PID, history and scrollback. Resize the terminal and verify real PTY
+    dimensions change without losing content or hiding the canvas.
 12. With terminal focus, verify typing, Unicode paste, selection/copy, shell history,
     Ctrl+C, scrolling and a disposable full-screen program. App shortcuts must not
     steal ordinary shell input. Ctrl+Shift+F12 returns to Editor; Cmd/Ctrl+P then
