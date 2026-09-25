@@ -40,6 +40,7 @@ internal enum class ReviewEvidenceStatus(val label: String) {
   Missing("Missing"),
   Running("Running"),
   Failed("Failed"),
+  Canceled("Canceled"),
   Stale("Stale"),
   Skipped("Skipped"),
   Passed("Passed"),
@@ -75,6 +76,7 @@ internal data class ReviewEvidenceUiState(
     val identity: ReviewEvidenceRow,
     val canRunChecks: Boolean,
     val runChecksLabel: String,
+    val checkAttemptStatus: ValidationAttemptStatus? = null,
 )
 
 internal enum class ReviewNextActionKind {
@@ -133,14 +135,6 @@ internal fun reviewNextActionUiState(
           "Wait for current focused check evidence before reviewing Apply.",
           false,
       )
-  if (decision.eligible)
-      return ReviewNextActionUiState(
-          ReviewNextActionKind.Apply,
-          decision.actionLabel,
-          scope,
-          "Apply changes only this declaration in this file.",
-          true,
-      )
   if (evidence.validation.status != ReviewEvidenceStatus.Passed)
       return ReviewNextActionUiState(
           ReviewNextActionKind.EditDraft,
@@ -149,16 +143,30 @@ internal fun reviewNextActionUiState(
           decision.reason,
           true,
       )
-  if (evidence.canRunChecks && evidence.checks.status != ReviewEvidenceStatus.Failed)
+  if (evidence.checkAttemptStatus == null &&
+      decision.eligible &&
+      evidence.checks.status in setOf(ReviewEvidenceStatus.Passed, ReviewEvidenceStatus.Skipped))
+      return ReviewNextActionUiState(
+          ReviewNextActionKind.Apply,
+          decision.actionLabel,
+          scope,
+          "Apply changes only this declaration in this file.",
+          true,
+      )
+  if (evidence.canRunChecks &&
+      (evidence.checks.status != ReviewEvidenceStatus.Failed ||
+          evidence.checkAttemptStatus != null))
       return ReviewNextActionUiState(
           ReviewNextActionKind.RunChecks,
           evidence.runChecksLabel,
           scope,
-          "Run focused checks for the validated declaration.",
+          decision.reason,
           true,
       )
   if (evidence.checks.status == ReviewEvidenceStatus.Failed) {
-    val repair = repairMessageForChecks(session, draft, checks)
+    val repair =
+        if (evidence.checkAttemptStatus == null) repairMessageForChecks(session, draft, checks)
+        else null
     return ReviewNextActionUiState(
         if (repair != null) ReviewNextActionKind.ReviseWithCheckOutput
         else ReviewNextActionKind.EditDraft,
@@ -170,12 +178,7 @@ internal fun reviewNextActionUiState(
     )
   }
   return ReviewNextActionUiState(
-      ReviewNextActionKind.EditDraft,
-      "Edit draft",
-      scope,
-      decision.reason,
-      true,
-  )
+      ReviewNextActionKind.EditDraft, "Edit draft", scope, decision.reason, true)
 }
 
 /** Renders the workflow in order without inventing a second set of mutation guards. */
@@ -217,11 +220,18 @@ internal fun reviewProgressionRows(
             evidence.validation.status == ReviewEvidenceStatus.Running ||
                 evidence.checks.status == ReviewEvidenceStatus.Running ->
                 ReviewEvidenceStatus.Running
-            decision.eligible -> ReviewEvidenceStatus.Passed
+            decision.eligible &&
+                evidence.validation.status == ReviewEvidenceStatus.Passed &&
+                evidence.checks.status in
+                    setOf(ReviewEvidenceStatus.Passed, ReviewEvidenceStatus.Skipped) ->
+                ReviewEvidenceStatus.Passed
             evidence.validation.status == ReviewEvidenceStatus.Stale ||
                 evidence.checks.status == ReviewEvidenceStatus.Stale -> ReviewEvidenceStatus.Stale
             evidence.validation.status == ReviewEvidenceStatus.Failed ||
                 evidence.checks.status == ReviewEvidenceStatus.Failed -> ReviewEvidenceStatus.Failed
+            evidence.validation.status == ReviewEvidenceStatus.Canceled ||
+                evidence.checks.status == ReviewEvidenceStatus.Canceled ->
+                ReviewEvidenceStatus.Canceled
             else -> ReviewEvidenceStatus.Missing
           },
       )
@@ -238,9 +248,16 @@ internal fun editorProgressionRows(state: ReviewToolWindowState): List<ReviewEvi
             state.editor,
             state.draft,
             state.checks,
-            state.checksRunning),
+            state.checksRunning,
+            state.checkAttempt),
         applyDecisionUiState(
-            state.project, state.selected, state.editor, state.draft, state.checks, state.applied),
+            state.project,
+            state.selected,
+            state.editor,
+            state.draft,
+            state.checks,
+            state.applied,
+            state.checkAttempt),
     )
 
 /** Presentation-only review evidence; daemon-owned draft and check guards remain authoritative. */
@@ -251,11 +268,17 @@ internal fun reviewEvidenceUiState(
     draft: DeclarationDraft?,
     checks: DraftCheckReport?,
     checksRunning: Boolean = false,
+    checkAttempt: CheckAttempt? = null,
 ): ReviewEvidenceUiState {
-  val validationCurrent =
-      editor?.status == DraftEditorStatus.Valid && draft?.validation?.applicable == true
   val identityCurrent = draftEditorMatchesOpenFile(editor, selected, project)
-  val checksRow = focusedChecksEvidence(checks, draft, checksRunning)
+  val validationAttempt = editor?.validationAttempt?.takeIf { identityCurrent }
+  val validationCurrent =
+      editor?.status == DraftEditorStatus.Valid &&
+          draft?.validation?.applicable == true &&
+          validationAttempt == null
+  val currentAttempt =
+      checkAttempt?.takeIf { draft != null && it.candidate == CheckCandidate(draft) }
+  val checksRow = focusedChecksEvidence(checks, draft, currentAttempt, checksRunning)
 
   return ReviewEvidenceUiState(
       validation =
@@ -263,12 +286,20 @@ internal fun reviewEvidenceUiState(
               label = "Validation",
               detail =
                   when {
+                    validationAttempt != null -> validationAttemptDetail(validationAttempt)
                     validationCurrent -> "Validation is current."
                     editor == null -> "No editable draft is loaded."
                     else -> reviewValidationSummary(editor, validationCurrent)
                   },
               status =
-                  if (validationCurrent) ReviewEvidenceStatus.Passed else validationStatus(editor),
+                  when (validationAttempt?.status) {
+                    ValidationAttemptStatus.Running -> ReviewEvidenceStatus.Running
+                    ValidationAttemptStatus.Failed -> ReviewEvidenceStatus.Failed
+                    ValidationAttemptStatus.Canceled -> ReviewEvidenceStatus.Canceled
+                    null ->
+                        if (validationCurrent) ReviewEvidenceStatus.Passed
+                        else validationStatus(editor)
+                  },
           ),
       checks = checksRow,
       identity =
@@ -288,10 +319,27 @@ internal fun reviewEvidenceUiState(
                     else -> ReviewEvidenceStatus.Stale
                   },
           ),
-      canRunChecks = validationCurrent && identityCurrent && !checksRunning,
-      runChecksLabel = if (checksRunning) "Focused checks are running" else "Run focused checks",
+      canRunChecks =
+          validationCurrent &&
+              identityCurrent &&
+              !checksRunning &&
+              currentAttempt?.status != ValidationAttemptStatus.Running,
+      runChecksLabel =
+          if (checksRunning || currentAttempt?.status == ValidationAttemptStatus.Running)
+              "Focused checks are running"
+          else "Run focused checks",
+      checkAttemptStatus = currentAttempt?.status,
   )
 }
+
+private fun validationAttemptDetail(attempt: ValidationAttempt): String =
+    when (attempt.status) {
+      ValidationAttemptStatus.Running -> "Validating the current draft."
+      ValidationAttemptStatus.Failed ->
+          "Validation request failed: ${sanitizedOutputText(attempt.message, 240).ifBlank { "No diagnostic was returned." }} Edit the draft and validate again."
+      ValidationAttemptStatus.Canceled ->
+          "Validation was canceled. Edit the draft and validate again."
+    }
 
 private fun validationStatus(editor: EditableDraftState?): ReviewEvidenceStatus =
     when (editor?.status) {
@@ -335,10 +383,8 @@ internal fun repairMessageForChecks(
       session.repairCount >= 3 ||
       !checksMatchDraft(checks, draft))
       return null
-  val failures =
-      checks!!.checks.filter {
-        it.state.lowercase() in setOf("failed", "error", "canceled", "cancelled")
-      }
+  val failures = checks!!.checks.filter { it.state.lowercase() in setOf("failed", "error") }
+  if (checks.checks.any { it.state.lowercase() in setOf("canceled", "cancelled") }) return null
   if (failures.isEmpty() && checks.applicable) return null
   val evidence =
       failures
@@ -361,13 +407,31 @@ private fun repairLimitReached(
         repairTaskSpecMatches(session.taskSpec, draft.taskSpec) &&
         session.repairCount >= 3 &&
         checksMatchDraft(checks, draft) &&
-        !checks!!.applicable
+        !checks!!.applicable &&
+        checks.checks.none { it.state.lowercase() in setOf("canceled", "cancelled") }
 
 private fun focusedChecksEvidence(
     checks: DraftCheckReport?,
     draft: DeclarationDraft?,
+    attempt: CheckAttempt?,
     checksRunning: Boolean,
 ): ReviewEvidenceRow {
+  if (attempt != null)
+      return ReviewEvidenceRow(
+          "Focused checks",
+          when (attempt.status) {
+            ValidationAttemptStatus.Running ->
+                "Focused checks are running for the current draft. Previous check evidence is retained below."
+            ValidationAttemptStatus.Failed ->
+                "Focused checks failed to run: ${sanitizedOutputText(attempt.message, 240).ifBlank { "No diagnostic was returned." }} Previous check evidence is retained below; run checks again."
+            ValidationAttemptStatus.Canceled ->
+                "Focused checks were canceled. Previous check evidence is retained below; run checks again."
+          },
+          when (attempt.status) {
+            ValidationAttemptStatus.Running -> ReviewEvidenceStatus.Running
+            ValidationAttemptStatus.Failed -> ReviewEvidenceStatus.Failed
+            ValidationAttemptStatus.Canceled -> ReviewEvidenceStatus.Canceled
+          })
   if (checksRunning)
       return ReviewEvidenceRow(
           "Focused checks",
@@ -381,18 +445,22 @@ private fun focusedChecksEvidence(
           "Focused checks",
           "Check results no longer match the latest draft.",
           ReviewEvidenceStatus.Stale)
+  val states = checks.checks.map { it.state.lowercase() }
+  if (states.any { it in setOf("canceled", "cancelled") })
+      return ReviewEvidenceRow(
+          "Focused checks",
+          "Focused check execution was canceled; run checks again.",
+          ReviewEvidenceStatus.Canceled)
   if (!checks.applicable)
       return ReviewEvidenceRow(
           "Focused checks",
           "Focused checks could not produce applicable evidence for this draft.",
           ReviewEvidenceStatus.Failed)
 
-  val states = checks.checks.map { it.state.lowercase() }
   val status =
       when {
         states.any { it == "running" } -> ReviewEvidenceStatus.Running
-        states.any { it in setOf("failed", "error", "canceled", "cancelled") } ->
-            ReviewEvidenceStatus.Failed
+        states.any { it in setOf("failed", "error") } -> ReviewEvidenceStatus.Failed
         states.isNotEmpty() && states.all { it == "skipped" } -> ReviewEvidenceStatus.Skipped
         states.all { it in setOf("passed", "skipped") } -> ReviewEvidenceStatus.Passed
         else -> ReviewEvidenceStatus.Missing
@@ -405,6 +473,7 @@ private fun focusedChecksEvidence(
         ReviewEvidenceStatus.Skipped -> "${checks.checks.size} checks were skipped."
         ReviewEvidenceStatus.Running -> "Focused checks are running."
         ReviewEvidenceStatus.Failed -> "At least one focused check failed."
+        ReviewEvidenceStatus.Canceled -> "Focused check execution was canceled."
         ReviewEvidenceStatus.Missing -> "Focused check state is unavailable for the latest draft."
         ReviewEvidenceStatus.Stale -> error("Stale evidence returns before details are derived.")
       }
@@ -451,6 +520,7 @@ internal fun applyDecisionUiState(
     draft: DeclarationDraft?,
     checks: DraftCheckReport?,
     applied: ApplyResult?,
+    checkAttempt: CheckAttempt? = null,
 ): ApplyDecisionUiState {
   if (applied != null) {
     val action = applyReceiptTitle(applied)
@@ -466,7 +536,7 @@ internal fun applyDecisionUiState(
             if (applied.undoAvailable) "Undo this change" else "Undo is no longer available",
     )
   }
-  val eligibility = draftReviewEligibility(editor, draft, checks, selected, project)
+  val eligibility = draftReviewEligibility(editor, draft, checks, selected, project, checkAttempt)
   return ApplyDecisionUiState(
       eligible = eligibility.eligible,
       actionLabel = applyActionLabel(draft),
@@ -493,10 +563,17 @@ internal fun ReviewToolWindow(
           state.editor,
           state.draft,
           state.checks,
-          state.checksRunning)
+          state.checksRunning,
+          state.checkAttempt)
   val decision =
       applyDecisionUiState(
-          state.project, state.selected, state.editor, state.draft, state.checks, state.applied)
+          state.project,
+          state.selected,
+          state.editor,
+          state.draft,
+          state.checks,
+          state.applied,
+          state.checkAttempt)
   val nextAction =
       reviewNextActionUiState(
           evidence, decision, state.draft, state.checks, state.session, state.checksRunning)
@@ -530,14 +607,18 @@ internal fun ReviewToolWindow(
                     if (state.draft == null) "No candidate"
                     else reviewReadinessTitle(evidence, decision),
                     when {
-                      evidence.validation.status == ReviewEvidenceStatus.Running ->
+                      evidence.validation.status != ReviewEvidenceStatus.Passed ->
                           evidence.validation.detail
-                      nextAction.kind == ReviewNextActionKind.Waiting -> evidence.checks.detail
-                      decision.eligible -> "Validation and check evidence match this candidate."
+                      evidence.checks.status in
+                          setOf(
+                              ReviewEvidenceStatus.Running,
+                              ReviewEvidenceStatus.Failed,
+                              ReviewEvidenceStatus.Canceled) -> evidence.checks.detail
+                      nextAction.kind == ReviewNextActionKind.Apply ->
+                          "Validation and check evidence match this candidate."
                       else -> decision.reason
                     },
-                    if (decision.eligible && nextAction.kind != ReviewNextActionKind.Waiting)
-                        ReviewEvidenceStatus.Passed
+                    if (nextAction.kind == ReviewNextActionKind.Apply) ReviewEvidenceStatus.Passed
                     else reviewReadinessStatus(evidence))
                 Column {
                   listOf(
@@ -559,12 +640,21 @@ internal fun ReviewToolWindow(
                         IdeHorizontalSeparator()
                       }
                 }
+                if (state.checks != null &&
+                    checksMatchDraft(state.checks, state.draft) &&
+                    state.checkAttempt?.candidate == state.draft?.let(::CheckCandidate))
+                    Text(
+                        "Previous check report (retained; not current approval)",
+                        color = Warning,
+                        style = IdeTypography.workspaceMetadata)
                 requiredChecksSummary(state.checks, state.draft, state.checksRunning)?.let {
                   Text(it, color = SecondaryText, style = IdeTypography.workspaceMetadata)
                 }
-                checkFailurePreview(state.checks)?.let {
-                  Text(it, color = Error, style = IdeTypography.workspaceBody)
-                }
+                if (checksMatchDraft(state.checks, state.draft) &&
+                    state.checkAttempt?.candidate != state.draft?.let(::CheckCandidate))
+                    checkFailurePreview(state.checks)?.let {
+                      Text(it, color = Error, style = IdeTypography.workspaceBody)
+                    }
                 DraftValidationDiagnostics(
                     state.editor?.diagnostics.orEmpty(),
                     retained = state.editor?.diagnosticsAreRetained == true)
@@ -597,12 +687,16 @@ internal fun reviewReadinessTitle(
     when {
       evidence.validation.status == ReviewEvidenceStatus.Running -> "Validating draft"
       evidence.checks.status == ReviewEvidenceStatus.Running -> "Checks running"
-      decision.eligible -> "Ready to apply"
       evidence.validation.status == ReviewEvidenceStatus.Failed -> "Validation failed"
+      evidence.validation.status == ReviewEvidenceStatus.Canceled -> "Validation canceled"
       evidence.identity.status == ReviewEvidenceStatus.Stale -> "Candidate needs attention"
       evidence.validation.status != ReviewEvidenceStatus.Passed -> "Validation needed"
       evidence.checks.status == ReviewEvidenceStatus.Failed -> "Checks failed"
+      evidence.checks.status == ReviewEvidenceStatus.Canceled -> "Checks canceled"
       evidence.checks.status == ReviewEvidenceStatus.Stale -> "Checks are stale"
+      decision.eligible &&
+          evidence.checks.status in
+              setOf(ReviewEvidenceStatus.Passed, ReviewEvidenceStatus.Skipped) -> "Ready to apply"
       evidence.checks.status == ReviewEvidenceStatus.Skipped -> "Checks skipped"
       else -> "Checks needed"
     }
@@ -617,7 +711,9 @@ internal fun requiredChecksSummary(
     draft: DeclarationDraft?,
     running: Boolean
 ): String? {
-  if (running) return "Checks are running."
+  if (running)
+      return if (checks == null) "Checks are running."
+      else "Previous check report is retained while checks run."
   if (checks == null) return null
   if (!checksMatchDraft(checks, draft)) return "Results belong to an earlier candidate."
   if (!checks.applicable) return "Required check evidence is unavailable."
@@ -664,7 +760,10 @@ private fun ReviewDetails(
       !state.checks?.draftHash.isNullOrBlank()) {
     ReviewEvidenceDetails(
         title =
-            if (evidence.checks.status == ReviewEvidenceStatus.Failed) "Failed check details"
+            if (evidence.checks.status == ReviewEvidenceStatus.Failed && state.checkAttempt == null)
+                "Failed check details"
+            else if (state.checkAttempt?.candidate == state.draft?.let(::CheckCandidate))
+                "Previous check details (retained)"
             else "Check details",
         checks = state.checks?.checks.orEmpty(),
         candidateHash = state.draft?.hash,
@@ -672,6 +771,7 @@ private fun ReviewDetails(
         expanded = expanded,
         onToggle = { expanded = !expanded })
     if (expanded &&
+        state.checkAttempt == null &&
         evidence.canRunChecks &&
         next.kind !in setOf(ReviewNextActionKind.RunChecks, ReviewNextActionKind.Waiting)) {
       if (state.draft?.taskSpec?.goTestCandidate != null) ReviewExecutionScope(state.draft)
@@ -734,6 +834,25 @@ private fun ReviewActionRegion(
         }
         if (action.kind == ReviewNextActionKind.Undo)
             Text(action.detail, color = PrimaryText, style = IdeTypography.workspaceMetadata)
+        if (action.kind == ReviewNextActionKind.EditDraft ||
+            action.kind == ReviewNextActionKind.RunChecks ||
+            action.kind == ReviewNextActionKind.ReviseWithCheckOutput) {
+          Text(action.detail, color = Warning, style = IdeTypography.workspaceMetadata)
+          val validationFailure =
+              state.editor?.validationAttempt?.takeIf {
+                draftEditorMatchesOpenFile(state.editor, state.selected, state.project) &&
+                    it.status == ValidationAttemptStatus.Failed
+              }
+          val checkFailure =
+              state.checkAttempt?.takeIf {
+                state.draft != null &&
+                    it.candidate == CheckCandidate(state.draft) &&
+                    it.status == ValidationAttemptStatus.Failed
+              }
+          (validationFailure?.message ?: checkFailure?.message)?.takeIf(String::isNotBlank)?.let {
+            DiagnosticText(it)
+          }
+        }
         ReviewNextAction(action, state.draft, evidenceActions, applicationActions)
         if (action.kind == ReviewNextActionKind.Apply)
             Text(
@@ -761,6 +880,7 @@ internal data class ReviewToolWindowState(
     val gitStatus: GitStatus?,
     val applied: ApplyResult?,
     val checksRunning: Boolean,
+    val checkAttempt: CheckAttempt? = null,
 )
 
 /** Review and repair intents that leave guarded Apply and Undo separate. */
@@ -825,9 +945,8 @@ private fun ReviewNextAction(
 
 internal fun checkFailurePreview(checks: DraftCheckReport?, limit: Int = 240): String? {
   val failed =
-      checks?.checks?.firstOrNull {
-        it.state.lowercase() in setOf("failed", "error", "canceled", "cancelled")
-      } ?: return null
+      checks?.checks?.firstOrNull { it.state.lowercase() in setOf("failed", "error") }
+          ?: return null
   val output = sanitizedOutputText(failed.output).replace(Regex("\\s+"), " ").trim()
   val summary = if (output.isBlank()) failed.name else "${failed.name}: $output"
   return summary.take(limit).let { if (summary.length > limit) "$it…" else it }
@@ -966,9 +1085,9 @@ internal fun checkStatus(state: String): ReviewEvidenceStatus =
       "skipped" -> ReviewEvidenceStatus.Skipped
       "running" -> ReviewEvidenceStatus.Running
       "failed",
-      "error",
+      "error" -> ReviewEvidenceStatus.Failed
       "canceled",
-      "cancelled" -> ReviewEvidenceStatus.Failed
+      "cancelled" -> ReviewEvidenceStatus.Canceled
       else -> ReviewEvidenceStatus.Missing
     }
 
@@ -977,6 +1096,7 @@ internal fun evidenceColor(status: ReviewEvidenceStatus): Color =
       ReviewEvidenceStatus.Passed -> Success
       ReviewEvidenceStatus.Running -> Information
       ReviewEvidenceStatus.Skipped,
+      ReviewEvidenceStatus.Canceled,
       ReviewEvidenceStatus.Missing,
       ReviewEvidenceStatus.Stale -> Warning
       ReviewEvidenceStatus.Failed -> Error

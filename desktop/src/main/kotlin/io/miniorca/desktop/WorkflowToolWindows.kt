@@ -41,8 +41,18 @@ private fun reviewToolWindowBadge(
 ): RightToolWindowBadge? =
     when {
       decision.receiptTitle != null -> RightToolWindowBadge("Applied")
-      decision.eligible -> RightToolWindowBadge("Ready to apply")
+      evidence.validation.status == ReviewEvidenceStatus.Running ->
+          RightToolWindowBadge("Validating")
+      evidence.validation.status == ReviewEvidenceStatus.Failed ->
+          RightToolWindowBadge("Validation failed")
+      evidence.validation.status == ReviewEvidenceStatus.Canceled ->
+          RightToolWindowBadge("Validation canceled")
+      evidence.checks.status == ReviewEvidenceStatus.Running ->
+          RightToolWindowBadge("Checks running")
       evidence.checks.status == ReviewEvidenceStatus.Failed -> RightToolWindowBadge("Checks failed")
+      evidence.checks.status == ReviewEvidenceStatus.Canceled ->
+          RightToolWindowBadge("Checks canceled")
+      decision.eligible -> RightToolWindowBadge("Ready to apply")
       else -> null
     }
 

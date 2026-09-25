@@ -116,6 +116,7 @@ internal fun MiniOrcaApp(
                   checks = appState.review.checks,
                   checksRunning =
                       appState.review.checkAttempt?.status == ValidationAttemptStatus.Running,
+                  checkAttempt = appState.review.checkAttempt,
               ),
           decision =
               applyDecisionUiState(
@@ -125,6 +126,7 @@ internal fun MiniOrcaApp(
                   draft = appState.review.draft,
                   checks = appState.review.checks,
                   applied = appState.review.applied,
+                  checkAttempt = appState.review.checkAttempt,
               ),
       )
   LaunchedEffect(editorProgress.progress) {
@@ -718,6 +720,7 @@ internal fun reviewToolWindowState(state: DesktopState) =
         gitStatus = state.gitStatus,
         applied = state.review.applied,
         checksRunning = state.review.checkAttempt?.status == ValidationAttemptStatus.Running,
+        checkAttempt = state.review.checkAttempt,
     )
 
 private fun reviewToolWindowActions(
