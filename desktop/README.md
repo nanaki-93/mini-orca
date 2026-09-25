@@ -91,7 +91,10 @@ only the isolated draft is editable.
 candidate opens a full-height Current/Candidate comparison with synchronized
 vertical rows and independent horizontal scrolling; diffs default to **Side-by-side**, and **Unified** remains an explicit local choice. The Request → Draft →
 Validate → Checks → Review strip reflects current evidence, including missing,
-stale, failed and running states. **Edit draft** opens the existing isolated
+stale, failed and running states. Long metadata values can wrap and be selected;
+recorded diagnostic output has a bounded preview and a local **Show full available
+output** disclosure when more sanitized text was supplied to the client. Expanding
+or copying evidence does not run checks. **Edit draft** opens the existing isolated
 editor. Tabs and these navigation controls never generate, validate, run checks
 or apply a change.
 
@@ -105,8 +108,8 @@ A current draft must be discarded explicitly before changing its target. Editing
 it invalidates validation/check evidence. Review shows target identity, readiness,
 three compact Validation / Focused checks / Source unchanged rows, and a summary
 of reported required checks. Check details and read-only project context start
-collapsed; failed output and validation diagnostics remain visible. A check rerun
-shows Running even if the previous report passed.
+collapsed; failed output and validation diagnostics remain visible without hovering.
+A check rerun shows Running even if the previous report passed.
 
 The bottom action names the exact declaration/file scope. **Apply change** uses
 the existing eligibility checks; a returned receipt alone can enable **Undo this
@@ -130,8 +133,10 @@ files have no status dot in the file tree. Opening a file does not change the
 project analysis scope.
 The preview shows exclusions, stage eligibility, cache use, expected requests and
 inclusive retry bounds. Confirm each displayed
-remote destination and explicit Security review intent. One admission coordinates
-the existing specialized producers; it can make multiple model requests.
+remote destination and explicit Security review intent. Each confirmation is a
+checkbox; selecting it alone does not start the run. Admission and other dialogs
+keep their decisions below a scrollable body, and closing them does not confirm
+an action. One admission coordinates the existing specialized producers; it can make multiple model requests.
 
 The daemon retains its default 100-file/900-second dispatch bounds; the desktop
 does not expose Run limits controls.

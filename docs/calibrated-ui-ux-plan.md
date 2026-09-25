@@ -52,9 +52,9 @@ Feature IDs identify scope, not a mandatory numeric implementation order. Respec
 | 4 — Results | F17–F20 | Complete Bugs, Performance and Security experiences, including explicitly trusted Go scans |
 | 5 — Declaration change | F23–F34 | Source → context/request → draft → validation → checks/repair → review → Apply → receipt/Undo |
 | 6 — Benchmarks and Terminal | F21–F22, F37–F38 | Identity-bound measurements and the native terminal integrated with the new shell |
-| 7 — Integrated qualification | Release gate below | Visual, workflow, accessibility and native acceptance for the complete application |
+| 7 — Integrated qualification | Release gate below | Automated visual, workflow and accessibility qualification; user-led native review afterward |
 
-**Recommended first review milestone:** waves 1 and 2. Validate the real native shell and Summary before extending the composition across every workflow.
+**Recommended first review milestone:** waves 1 and 2. Validate production shell and Summary compositions before extending them across every workflow; reserve native-window observation for the final user-led review.
 
 Independent work can proceed after shared components stabilize: Summary/diagrams, analysis, and the read-only Editor can be separate streams. Diff review can proceed alongside checks once draft validation is available. Benchmark work requires the validated-draft path. Coordinate edits to shared shell, theme, presenter wiring and `ReviewEvidencePane.kt` rather than assigning overlapping implementations blindly.
 
@@ -123,7 +123,7 @@ Sizes below are relative scope, **not calendar estimates**: **S** = bounded view
 
 **Acceptance:** the standard rail approximates the approved 78px reference without truncating labels; selected and keyboard-focused states are distinct; existing shortcuts still reach every workspace. Workspace changes preserve file, draft, results and shells. Unknown branch/model values are not fabricated. Analysis and daemon status do not claim provider health.
 
-**Owners/checks:** `IdeShell.kt`, `DesktopHeader.kt`, `DesktopShell.kt`, `DesktopStatusBar.kt`, `DesktopLayoutState.kt`; shell, status-bar and keyboard-navigation tests, native focus smoke.
+**Owners/checks:** `IdeShell.kt`, `DesktopHeader.kt`, `DesktopShell.kt`, `DesktopStatusBar.kt`, `DesktopLayoutState.kt`; shell, status-bar and keyboard-navigation tests.
 
 ### F04 — Adaptive layout, larger text and preference compatibility
 
@@ -153,7 +153,7 @@ Sizes below are relative scope, **not calendar estimates**: **S** = bounded view
 
 **Acceptance:** chooser cancellation preserves the current state; inaccessible paths show recoverable errors; successful restore loads local metadata without requesting a model or starting a shell. Project-only shortcuts stay unavailable before a project opens. Late responses from an older open attempt cannot replace the latest project.
 
-**Owners/checks:** `DesktopShell.kt`, `DesktopHeader.kt`, `LastProjectStore.kt`, `DesktopWorkflowPresenter.kt`; `LastProjectStoreTest`, shell/presenter tests and native chooser smoke.
+**Owners/checks:** `DesktopShell.kt`, `DesktopHeader.kt`, `LastProjectStore.kt`, `DesktopWorkflowPresenter.kt`; `LastProjectStoreTest` and shell/presenter tests.
 
 ### F07 — Project switching and explicit re-indexing
 
@@ -173,7 +173,7 @@ Sizes below are relative scope, **not calendar estimates**: **S** = bounded view
 
 **Acceptance:** Go, Java, Kotlin and unknown project types come from real metadata; names/types wrap without overlap. Empty/stale/failed project descriptions retain their meaning independently of file coverage. The lifecycle gap uses a shared spacing role; the application workflow explainer is not presented as the analyzed project's architecture or flows.
 
-**Owners/checks:** `ProjectSummaryPane.kt`, `EngineeringInsightPanel.kt`, `ModelResultContent.kt`; Summary/insight tests and native component comparisons with M01.
+**Owners/checks:** `ProjectSummaryPane.kt`, `EngineeringInsightPanel.kt`, `ModelResultContent.kt`; Summary/insight tests and production-component comparisons with M01.
 
 ### F09 — Continuous-arc analysis coverage and local inspection
 
@@ -323,7 +323,7 @@ Sizes below are relative scope, **not calendar estimates**: **S** = bounded view
 
 **Acceptance:** source is never editable; dragging/selecting text does not retarget a draft. Duplicate basenames use relative paths; read errors are explicit. Opening files does not change analysis scope or request model output. Symbol target changes respect active-draft discard rules. Resizing preserves scroll, selection and keyboard access.
 
-**Owners/checks:** `EditorWorkspace.kt`, `SourceEditorPane.kt`, `ExplorerPane.kt`, `EditorInspectionState.kt`; explorer/editor/inspection tests and source-selection native smoke.
+**Owners/checks:** `EditorWorkspace.kt`, `SourceEditorPane.kt`, `ExplorerPane.kt`, `EditorInspectionState.kt`; explorer/editor/inspection and source-selection component tests.
 
 ### F24 — Declaration/file context and on-demand explanation
 
@@ -423,7 +423,7 @@ Sizes below are relative scope, **not calendar estimates**: **S** = bounded view
 
 **Acceptance:** existing eligibility is authoritative; source/draft/project identity changes immediately block stale evidence. One explicit action submits one guarded operation; no optimistic “applied” receipt or hidden auto-Apply. Failed/conflicting writes are not successes. The complete scope and action remain reachable at reduced height/150% text with optional help collapsed.
 
-**Owners/checks:** `ReviewEvidencePane.kt`, `DraftEditorState.kt`, `DesktopWorkflowPresenter.kt`; Apply eligibility/conflict/double-activation tests and native action-reachability checks.
+**Owners/checks:** `ReviewEvidencePane.kt`, `DraftEditorState.kt`, `DesktopWorkflowPresenter.kt`; Apply eligibility/conflict/double-activation tests and reduced-height action-reachability renders.
 
 ### F34 — Apply receipt and guarded Undo
 
@@ -443,7 +443,7 @@ Sizes below are relative scope, **not calendar estimates**: **S** = bounded view
 
 **Acceptance:** arrow keys navigate results; Enter activates from the search field, while Enter/Space activates focused result controls without stealing spaces from text entry. Escape closes only the top transient surface and restores focus. Query/filtering is local and no-result state is not a loading failure. Commands retain their existing eligibility/confirmation rules. Source navigation and composer preparation do not accidentally generate or execute anything; terminal keystrokes are not intercepted.
 
-**Owners/checks:** `CommandPalette.kt`, `DesktopKeyboardNavigation.kt`, `DesktopAccessibility.kt`, `DesktopShell.kt`; palette/keyboard tests and native popup/focus smoke.
+**Owners/checks:** `CommandPalette.kt`, `DesktopKeyboardNavigation.kt`, `DesktopAccessibility.kt`, `DesktopShell.kt`; palette/keyboard and popup-position tests.
 
 ### F36 — Provider/model details and honest connectivity
 
@@ -463,7 +463,7 @@ Sizes below are relative scope, **not calendar estimates**: **S** = bounded view
 
 **Acceptance:** the Swing/PTY canvas stays visible within its bounds; tabs and close actions remain reachable when space is limited. Hiding or switching tabs preserves the process and in-memory scrollback; closing a tab is visibly different from hiding the dock. Use real native sessions, never the mock's simulated shell. Qualify this together with F38 before release.
 
-**Owners/checks:** `IdeShell.kt`, `TerminalToolWindow.kt`, `TerminalTabs.kt`; terminal-tab/tool-window tests, native canvas bounds and resize smoke.
+**Owners/checks:** `IdeShell.kt`, `TerminalToolWindow.kt`, `TerminalTabs.kt`; terminal-tab/tool-window tests and component canvas-bounds checks.
 
 ### F38 — Terminal focus, session lifecycle and source return
 
@@ -473,7 +473,7 @@ Sizes below are relative scope, **not calendar estimates**: **S** = bounded view
 
 **Acceptance:** ordinary shell input/Ctrl+C stays with Terminal; Ctrl+Shift+F12 returns to Editor without closing it. Resize reaches real PTY dimensions. Restore starts no shell; canceled switching preserves all sessions; confirmed switching/exit uses owned-process cleanup and shows cleanup-pending failures. Shell edits invalidate stale source/draft/check evidence on return. No transcripts enter persistence or provider context.
 
-**Owners/checks:** `DesktopTerminalWorkspace.kt`, `DesktopTerminalSession.kt`, `TerminalToolWindow.kt`, `DesktopShell.kt`; terminal/session/presenter tests and the documented native/packaged terminal checks on the supported host.
+**Owners/checks:** `DesktopTerminalWorkspace.kt`, `DesktopTerminalSession.kt`, `TerminalToolWindow.kt`, `DesktopShell.kt`; terminal/session/presenter tests and distributable build verification.
 
 ## 5. Definition of done for every feature
 
@@ -495,7 +495,7 @@ Sizes below are relative scope, **not calendar estimates**: **S** = bounded view
 - All-current/mixed/unavailable/empty selected-file coverage; running/pausing/paused/interrupted/canceled/partial/failed analysis; completed-empty results versus unknown results.
 - Missing/stale/failed/running validation and checks; blocked/current Apply; actual receipt, Undo conflict and Undo failure; measured/inconclusive/stale/unavailable benchmark evidence.
 - Long project names, paths, destinations, error output and many files/findings. Large lists must remain scrollable and responsive without silently truncating the loaded dataset.
-- Keyboard-only operation, topmost-dialog Escape behavior, focus restoration, text selection/copy, visible focus and accessible names/states. Native screen-reader behavior requires separate observation.
+- Keyboard-only operation, topmost-dialog Escape behavior, focus restoration, text selection/copy, visible focus and accessible names/states in production-component and workflow tests.
 
 ### End-to-end acceptance journeys
 
@@ -505,8 +505,7 @@ Sizes below are relative scope, **not calendar estimates**: **S** = bounded view
 4. Request replacement/new function/new type → edit isolated draft → validate → trusted checks → repair if needed → review → Apply → receipt → guarded Undo.
 5. Change a file externally at Review/after Apply → verify stale Apply/Undo blocking and clear recovery; repeat with a failed freshness read.
 6. Select a compatible benchmark → review command/trust → compare → inspect measurements; change the draft while work is pending and reject the obsolete result.
-7. Open two real terminal sessions → switch/hide/resize → edit a temporary file → return to Review → confirm invalidation → cancel/confirm project switching and cleanup.
-8. Trigger project/provider/read failures and canceled operations → verify no fabricated success, lost draft, provider-health claim or automatic retry.
+7. Trigger project/provider/read failures and canceled operations → verify no fabricated success, lost draft, provider-health claim or automatic retry.
 
 ### Commands and evidence
 
@@ -517,9 +516,16 @@ Use the documented toolchain and root commands; do not hardcode a local JDK path
 ./scripts/validate.sh
 ```
 
-For F37/F38, also follow [Terminal validation](../desktop/TERMINAL.md#validate-the-terminal), including the explicit native probe, distributable and packaged smoke checks. Native terminal support is currently the documented macOS arm64 target; this plan does not expand it.
+For F37/F38, also run `./scripts/desktop-gradle.sh createDistributable`. Native terminal support remains the documented macOS arm64 target; this plan does not expand it.
 
-Report unit/contract results, production offscreen captures and native-window observations separately. A successful browser mock run is **not** evidence that Compose, screen readers, provider consent, backend guards or real terminals pass.
+Native-window observations are deferred to the user's manual review after
+implementation, following the [keyboard checklist](../desktop/KEYBOARD_SMOKE_CHECKLIST.md)
+and [terminal validation](../desktop/TERMINAL.md#validate-the-terminal). This
+includes chooser behavior, focus containment/restoration, popup placement, text
+selection/copy, screen-reader output and real/packaged terminal operation. These
+are not per-feature automated acceptance gates. Record observations separately
+from unit tests and production offscreen captures; unobserved behavior stays
+pending, never passed by inference from fixtures or browser mocks.
 
 ## 7. Planning assumptions and approval boundaries
 
