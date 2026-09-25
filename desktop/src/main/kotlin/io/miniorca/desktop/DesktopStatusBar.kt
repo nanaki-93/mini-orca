@@ -12,8 +12,12 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -73,23 +77,37 @@ internal fun PersistentStatusBar(
     modifier: Modifier = Modifier,
     detailsFocusRequester: FocusRequester? = null,
 ) {
-  Column(modifier.fillMaxWidth().background(ActivityRail)) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 32.dp).padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-      ChromeButton(
-          onClick = onOpenDetails,
-          modifier = detailsFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier,
-          contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-          accessibleName = "Configured model details",
-          tooltip = null,
-      ) {
-        Text(presentation.modelsLabel, color = SecondaryText, fontSize = 11.sp)
+  Column(
+      modifier
+          .fillMaxWidth()
+          .background(ActivityRail)
+          .drawBehind {
+            val stroke = 1.dp.toPx()
+            drawLine(PaneSeparator, Offset(0f, stroke / 2), Offset(size.width, stroke / 2), stroke)
+          }
+          .testTag("model-count-footer")) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 32.dp).padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+          ChromeButton(
+              onClick = onOpenDetails,
+              modifier =
+                  (detailsFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier).testTag(
+                      "model-count-action"),
+              contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+              accessibleName = "Configured model details",
+              tooltip = null,
+          ) {
+            Text(
+                presentation.modelsLabel,
+                color = SecondaryText,
+                style = IdeTypography.resultCode.copy(lineHeight = 16.sp),
+                textAlign = TextAlign.End)
+          }
+        }
       }
-    }
-  }
 }
 
 @Composable
