@@ -218,10 +218,11 @@ internal fun resolveDesktopLayout(
 }
 
 // WorkspaceFrame passes the allocation below the toolbar and above the footer, after its
-// vertical insets. Reserve a readable pane above the dock and a bar/tabs/collapse control
-// inside it at larger text. If the allocation cannot fit both, keep the dock chrome first;
+// vertical insets. Reserve enough Editor height for its tabs, draft actions, breadcrumbs,
+// progression and a usable source/diff viewport at larger text. Keep the dock bar and tabs
+// inside it. If the allocation cannot fit both, keep the dock chrome first;
 // Compose's weighted pane receives the remaining space. The collapsed bar sizes itself.
-internal const val MIN_WORKSPACE_PANE_HEIGHT = 160f
+internal const val MIN_WORKSPACE_PANE_HEIGHT = 320f
 internal const val MIN_EXPANDED_DOCK_HEIGHT = 80f
 
 internal fun resolveTerminalDockHeight(

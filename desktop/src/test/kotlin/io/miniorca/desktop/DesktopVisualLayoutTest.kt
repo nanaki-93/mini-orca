@@ -39,6 +39,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.platform.asAwtTransferable
@@ -54,6 +55,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Density
@@ -160,6 +162,280 @@ class DesktopVisualLayoutTest {
         }
       }
     }
+  }
+
+  @Test
+  fun adaptiveProductionEditorAndContentMatrixKeepsRegionsBounded() {
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    val extreme = DesktopLayoutState(explorerWidth = 520f, actionWidth = 560f, bottomHeight = 520f)
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        for (review in listOf(false, true)) {
+          val label =
+              "f04-editor-${if (review) "review" else "source"}-$width-$height-$scale-${density}x"
+          ComposeVisualFixture(
+                  (width * density).toInt(), (height * density).toInt(), scale, density) {
+                    AdaptiveProductionEditorFixture(extreme, review)
+                  }
+              .use { fixture ->
+                fixture.render(label)
+                val files = fixture.taggedBounds("f04-files")
+                val canvas = fixture.taggedBounds("f04-canvas")
+                val tool = fixture.taggedBounds("f04-tool")
+                val dock = fixture.taggedBounds("f04-dock")
+                val footer = fixture.taggedBounds("model-count-footer")
+                assertTrue(dock.bottom <= footer.top, label)
+                assertTrue(footer.bottom <= height * density, label)
+                val mode = resolveDesktopLayout(extreme, width.toFloat(), scale).mode
+                if (mode == DesktopLayoutMode.Wide) {
+                  assertTrue(files.width > 0 && canvas.width > 0 && tool.width > 0, label)
+                  assertTrue(files.right <= canvas.left && canvas.right <= tool.left, label)
+                  assertTrue(canvas.bottom <= dock.top, label)
+                } else {
+                  assertTrue(files.width > 0, label)
+                  fixture.scrollBy(380f * density, "f04-arrangement")
+                  fixture.render()
+                  assertTrue(fixture.taggedBounds("f04-canvas").height > 0, label)
+                  if (review && width == 800 && height == 650 && scale == 1.5f) {
+                    val viewport = fixture.taggedBounds("diff-Current-vertical")
+                    assertTrue(viewport.height >= 100f * density, "$label: $viewport")
+                  }
+                  fixture.scrollBy(100_000f, "f04-arrangement")
+                  fixture.render("$label-tool-revealed")
+                  val revealed = fixture.taggedBounds("f04-tool")
+                  assertTrue(revealed.width > 0 && revealed.height > 0, "$label: $revealed")
+                  assertTrue(revealed.top < dock.top, label)
+                }
+                if (review && width == 1440 && height == 900 && scale == 1.5f) {
+                  val viewport = fixture.taggedBounds("diff-Current-vertical")
+                  assertTrue(
+                      viewport.height >= 120f * density,
+                      "$label: usable diff viewport required, got $viewport")
+                  assertTrue(viewport.bottom <= dock.top, label)
+                }
+                assertTrue(fixture.hasText(if (review) "Candidate diff" else "Read-only"), label)
+                assertFalse(
+                    fixture.hasEditableText(
+                        withinTag = if (review) "diff-Current-column" else "source-viewport"))
+                assertTrue(fixture.hasDescription("Files tool window"))
+                assertTrue(fixture.hasDescription("Tool windows tool window"))
+              }
+        }
+        // These are the real page components, not a placeholder pane inside the shell.
+        ComposeVisualFixture(
+                (width * density).toInt(), (height * density).toInt(), scale, density) {
+                  RoundedSummaryVisualFixture(width.toFloat())
+                }
+            .use { fixture ->
+              fixture.render("f04-summary-$width-$height-$scale-${density}x")
+              assertTrue(fixture.hasText("Analysis coverage"))
+            }
+        ComposeVisualFixture(
+                (width * density).toInt(), (height * density).toInt(), scale, density) {
+                  ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
+                }
+            .use { fixture ->
+              fixture.render("f04-summary-content-$width-$height-$scale-${density}x")
+              fixture.scrollBy(520f * density)
+              fixture.render("f04-summary-categories-$width-$height-$scale-${density}x")
+              assertTrue(fixture.hasDescription("View Bugs results"))
+              assertTrue(fixture.hasDescription("View Security results"))
+              if (width == 800 && scale == 1.5f && density == 1f) {
+                fixture.clickText("Show diagram")
+                fixture.render("f04-summary-help-expanded-800-650-1.5-1x")
+                assertTrue(fixture.hasText("Hide diagram"))
+              }
+            }
+        ComposeVisualFixture(
+                (width * density).toInt(), (height * density).toInt(), scale, density) {
+                  AcceptanceResultPane("bugs", "partial")
+                }
+            .use { fixture ->
+              fixture.render("f04-results-$width-$height-$scale-${density}x")
+              val list = fixture.taggedBounds("result-list")
+              val detail = fixture.taggedBounds("result-detail")
+              assertTrue(list.height > 0 && detail.height > 0)
+              assertTrue(list.bottom <= height * density && detail.bottom <= height * density)
+              assertTrue(list.right <= detail.left || list.bottom <= detail.top)
+              assertTrue(fixture.hasText("View analysis"))
+            }
+      }
+    }
+  }
+
+  @Test
+  fun adaptiveProductionEditorCapturesBothSidesOfItsMeasuredBoundary() {
+    val preferred = DesktopLayoutState(bottomHeight = 140f)
+    for (scale in listOf(1f, 1.25f, 1.5f)) {
+      val boundary =
+          (TOOL_WINDOW_BAR_WIDTH * scale +
+                  2 * WORKSPACE_FRAME_INSET +
+                  (DesktopLayoutState.MIN_EXPLORER_WIDTH +
+                      MIN_EDITOR_CANVAS_WIDTH +
+                      DesktopLayoutState.MIN_ACTION_WIDTH) * scale +
+                  2 * RESIZE_DIVIDER_WIDTH)
+              .toInt()
+      for (width in listOf(boundary - 1, boundary, boundary + 1)) {
+        val mode = resolveDesktopLayout(preferred, width.toFloat(), scale).mode
+        ComposeVisualFixture(width, 768, scale) {
+              AdaptiveProductionEditorFixture(preferred, review = false)
+            }
+            .use { fixture ->
+              fixture.render("f04-boundary-$width-$scale-$mode")
+              val files = fixture.taggedBounds("f04-files")
+              val canvas = fixture.taggedBounds("f04-canvas")
+              if (mode == DesktopLayoutMode.Wide) {
+                assertTrue(files.right <= canvas.left)
+                assertTrue(canvas.width >= MIN_EDITOR_CANVAS_WIDTH * scale - 2f)
+              } else {
+                assertTrue(files.bottom <= canvas.top)
+                fixture.scrollBy(100_000f, "f04-arrangement")
+                fixture.render()
+                assertTrue(fixture.taggedBounds("f04-tool").height > 0)
+              }
+              assertTrue(
+                  fixture.taggedBounds("f04-dock").bottom <=
+                      fixture.taggedBounds("model-count-footer").top)
+            }
+      }
+    }
+  }
+
+  @Test
+  fun adaptiveEditorRetainsEditedDraftSourceDiffAndRunningTerminalAcrossBreakpoint() {
+    val original = editorComparisonReviewFixture()
+    val file =
+        requireNotNull(original.selected).let {
+          it.copy(content = it.content + "\n" + "veryLongArgument".repeat(30))
+        }
+    val longLine = "    return repository.Lookup(id, " + "veryLongArgument".repeat(25) + ")"
+    val draft =
+        requireNotNull(original.draft).let {
+          it.copy(
+              validation =
+                  it.validation!!.copy(
+                      diff =
+                          UnifiedDiff(
+                              file.path,
+                              file.path,
+                              listOf(
+                                  DiffLine("context", 1, 1, longLine),
+                                  DiffLine("removed", 2, 0, longLine),
+                                  DiffLine("added", 0, 2, longLine + " // candidate")))))
+        }
+    val evidence = original.copy(selected = file, draft = draft)
+    var input by mutableStateOf(TextFieldValue(draft.declaration))
+    var right by mutableStateOf(RightToolWindow.Context)
+    var surface by mutableStateOf(EditorSurface.Source)
+    val runningTab =
+        TerminalTabState(17, "Shell 17", TerminalSessionState(TerminalSessionPhase.Running))
+    val terminalState = TerminalWorkspaceState(tabs = listOf(runningTab), activeTabId = 17)
+    var validations = 0
+    var requests = 0
+    var writes = 0
+    var starts = 0
+    val preferred = DesktopLayoutState(explorerWidth = 520f, actionWidth = 560f)
+    ComposeVisualFixture(1600, 900, 1.5f) {
+          AdaptiveProductionEditorFixture(
+              preferred,
+              review = false,
+              evidence = evidence,
+              terminalState = terminalState,
+              rightTool = right,
+              onRightTool = { right = it },
+              selectedSurface = surface,
+              onSurface = { surface = it },
+              draftInput = input,
+              onDraftInput = { input = it },
+              onValidate = { validations++ },
+              onRequest = { requests++ },
+              onWrite = { writes++ },
+              onTerminal = { starts++ })
+        }
+        .use { fixture ->
+          fun assertPassiveState() {
+            assertEquals(RightToolWindow.Assistant, right)
+            assertEquals(terminalState.activeTab, runningTab)
+            assertTrue(fixture.hasText("Shell 17"))
+            assertEquals(0, validations + requests + writes + starts)
+          }
+          fixture.render("f04-reflow-wide")
+          assertTrue(
+              fixture.taggedBounds("f04-files").right <= fixture.taggedBounds("f04-canvas").left)
+          assertEquals(DesktopLayoutMode.Wide, resolveDesktopLayout(preferred, 1600f, 1.5f).mode)
+          assertEquals(DesktopLayoutMode.Compact, resolveDesktopLayout(preferred, 800f, 1.5f).mode)
+          assertFalse(fixture.hasEditableText(withinTag = "source-viewport"))
+          val selectedSource = fixture.copyTextByDragging("package api")
+          assertTrue(selectedSource.isNotEmpty())
+          for (width in listOf(800, 1600)) {
+            fixture.resize(width, 900)
+            fixture.render()
+            fixture.pressKey(Key.Copy)
+            assertEquals(selectedSource, fixture.clipboardText())
+          }
+          fixture.clickText("Assistant")
+          fixture.render()
+          assertEquals(RightToolWindow.Assistant, right)
+          fixture.horizontalScrollWithin("source-viewport", 230f)
+          fixture.render()
+          val sourceScroll = fixture.horizontalScrollWithinValue("source-viewport")
+          assertTrue(sourceScroll > 0f)
+          assertTrue(fixture.requestDescriptionFocus("Declaration only"))
+          fixture.render()
+          assertTrue(fixture.isDescriptionFocused("Declaration only"))
+          fixture.setFocusedText(draft.declaration + " // edited")
+          fixture.render()
+          fixture.selectEditorText("Declaration only", 7, 13)
+          fixture.render()
+          val edited = input
+          assertEquals(TextRange(7, 13), edited.selection)
+          assertTrue(fixture.isDescriptionFocused("Declaration only"))
+          for (width in listOf(800, 1600)) {
+            fixture.resize(width, 900)
+            fixture.render("f04-reflow-source-$width")
+            assertEquals(edited, input)
+            assertTrue(fixture.isDescriptionFocused("Declaration only"))
+            assertEquals(sourceScroll, fixture.horizontalScrollWithinValue("source-viewport"), 5f)
+            assertPassiveState()
+          }
+          fixture.clickText("Candidate diff")
+          fixture.render()
+          assertEquals(EditorSurface.Review, surface)
+          assertFalse(fixture.hasEditableText("Read-only composed diff"))
+          val selectedDiff = fixture.copyTextByDragging(longLine)
+          assertTrue(selectedDiff.isNotEmpty())
+          for (width in listOf(800, 1600)) {
+            fixture.resize(width, 900)
+            fixture.render()
+            fixture.pressKey(Key.Copy)
+            assertEquals(selectedDiff, fixture.clipboardText())
+          }
+          fixture.horizontalScrollBy("diff-Current-horizontal", 220f)
+          fixture.render()
+          val currentScroll = fixture.horizontalScrollValue("diff-Current-horizontal")
+          assertTrue(currentScroll > 0f)
+          assertEquals(0f, fixture.horizontalScrollValue("diff-Candidate-horizontal"))
+          for (width in listOf(800, 1600)) {
+            fixture.resize(width, 900)
+            fixture.render("f04-reflow-diff-$width")
+            assertEquals(
+                currentScroll, fixture.horizontalScrollValue("diff-Current-horizontal"), 5f)
+            assertEquals(0f, fixture.horizontalScrollValue("diff-Candidate-horizontal"))
+            assertEquals(edited.text, input.text)
+            assertEquals(EditorSurface.Review, surface)
+            assertPassiveState()
+          }
+          fixture.clickDescription("Unified diff")
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("Unified diff"))
+          fixture.resize(800, 900)
+          fixture.render("f04-reflow-unified-compact")
+          fixture.resize(1600, 900)
+          fixture.render("f04-reflow-unified-wide")
+          assertTrue(fixture.isDescriptionSelected("Unified diff"))
+          assertEquals(edited.text, input.text)
+          assertPassiveState()
+        }
   }
 
   @Test
@@ -4966,6 +5242,27 @@ internal class ComposeVisualFixture(
   private fun taggedNode(tag: String): SemanticsNode =
       nodes().single { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
 
+  private fun horizontalScrollerWithin(tag: String): SemanticsNode =
+      nodes().single { node ->
+        node.config.getOrNull(SemanticsProperties.HorizontalScrollAxisRange) != null &&
+            generateSequence(node.parent) { it.parent }
+                .any { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
+      }
+
+  fun horizontalScrollWithin(tag: String, pixels: Float) {
+    assertTrue(
+        requireNotNull(
+                horizontalScrollerWithin(tag).config.getOrNull(SemanticsActions.ScrollBy)?.action)
+            .invoke(pixels, 0f))
+  }
+
+  fun horizontalScrollWithinValue(tag: String): Float =
+      requireNotNull(
+              horizontalScrollerWithin(tag)
+                  .config
+                  .getOrNull(SemanticsProperties.HorizontalScrollAxisRange))
+          .value()
+
   fun horizontalScrollBy(tag: String, pixels: Float) {
     assertTrue(
         requireNotNull(taggedNode(tag).config.getOrNull(SemanticsActions.ScrollBy)?.action)
@@ -6208,6 +6505,178 @@ internal fun EditorVisualFixture(
             DesktopStatusProviderPresentation(
                 "Visual fixture · local-function-model · no backend", remoteProvider = false),
             "Models: 1 local · 2 cloud",
+            "Visual fixture · no backend"),
+        {})
+  }
+}
+
+// Uses WorkspaceFrame's measured allocation and the same keyed arrangement as DesktopShell.
+// Callbacks deliberately fail the test if passive composition dispatches a workflow action.
+@Composable
+internal fun AdaptiveProductionEditorFixture(
+    layout: DesktopLayoutState,
+    review: Boolean,
+    evidence: ReviewToolWindowState = editorComparisonReviewFixture(),
+    terminalState: TerminalWorkspaceState = TerminalWorkspaceState(),
+    rightTool: RightToolWindow = if (review) RightToolWindow.Review else RightToolWindow.Context,
+    onRightTool: (RightToolWindow) -> Unit = {},
+    selectedSurface: EditorSurface = if (review) EditorSurface.Review else EditorSurface.Source,
+    onSurface: (EditorSurface) -> Unit = {},
+    draftInput: TextFieldValue? = null,
+    onDraftInput: (TextFieldValue) -> Unit = {},
+    onValidate: () -> Unit = {},
+    onRequest: () -> Unit = {},
+    onWrite: () -> Unit = {},
+    onTerminal: () -> Unit = {},
+) {
+  val file = requireNotNull(evidence.selected)
+  val symbol = requireNotNull(evidence.selectedSymbol)
+  val draft = requireNotNull(evidence.draft)
+  val index =
+      ProjectIndex(
+          "visual-fixture",
+          "fixture-revision",
+          files =
+              listOf(
+                  IndexedFile(file.path, file.contentHash, "Go", false, analysisStatus = "fresh")))
+  val session = requireNotNull(evidence.session)
+  Column(Modifier.fillMaxSize().background(AppBackground)) {
+    MainToolbar(
+        ToolbarState(
+            visualFixtureProject.copy(name = "A long project identity with 日本語 and many segments"),
+            false,
+            "",
+            ConnectionState(connected = true),
+            null),
+        ToolbarActions({}, {}, {}, {}))
+    WorkspaceFrame(
+        rail = { ToolWindowBar(LeftToolWindow.Editor, {}, onOpenTerminal = onTerminal) },
+        panes = {},
+        editorPanes = { width, height ->
+          val resolved = resolveDesktopLayout(layout, width, LocalDensity.current.fontScale)
+          EditorPaneArrangement(
+              resolved,
+              layout,
+              height,
+              left = { modifier ->
+                DockedToolWindow(
+                    "Files",
+                    { pane ->
+                      ExplorerPane(
+                          ExplorerPaneState(index, file.path, "", emptySet(), false),
+                          ExplorerPaneActions({}, {}, {}, {}, {}),
+                          pane)
+                    },
+                    modifier.testTag("f04-files"),
+                    showHeader = false)
+              },
+              canvas = { modifier ->
+                EditorArea(
+                    {
+                      EditorWorkspace(
+                          editorChromeUiState(
+                              file,
+                              symbol,
+                              selectedSurface,
+                              EditorProgressUiState(EditorProgress.Review, ""),
+                              draft),
+                          evidence,
+                          onSurface,
+                          {},
+                          canvas = {
+                            if (selectedSurface == EditorSurface.Review) ReviewDiffCanvas(draft)
+                            else
+                                SourceEditorPane(
+                                    visualFixtureProject,
+                                    file,
+                                    listOf(symbol),
+                                    symbol,
+                                    7,
+                                    emptyList(),
+                                    {})
+                          })
+                    },
+                    modifier.testTag("f04-canvas"))
+              },
+              right = { modifier ->
+                DockedToolWindow(
+                    "Tool windows",
+                    { pane ->
+                      RightToolWindowContainer(
+                          rightTool,
+                          onRightTool,
+                          content = { tab, contentModifier ->
+                            when (tab) {
+                              RightToolWindow.Review ->
+                                  ReviewToolWindow(
+                                      evidence,
+                                      ReviewToolWindowActions(onWrite, onWrite, onWrite),
+                                      DraftApplicationActions(onWrite, onWrite),
+                                      contentModifier)
+                              RightToolWindow.Context ->
+                                  ContextToolWindow(
+                                      contextVisualState(),
+                                      ContextToolWindowActions({}, onRequest, onRequest, {}, {}),
+                                      contentModifier)
+                              RightToolWindow.Assistant ->
+                                  AssistantToolWindow(
+                                      AssistantToolWindowState(
+                                          visualFixtureProject,
+                                          file,
+                                          session,
+                                          draft,
+                                          editableDraft(draft),
+                                          ChatTarget(ChatEditMode.ReplaceSymbol, symbol.name),
+                                          ChatEditMode.ReplaceSymbol,
+                                          "",
+                                          "Change the declaration",
+                                          false,
+                                          ScopedModel(),
+                                          false,
+                                          FocusRequester(),
+                                          FocusRequester(),
+                                          draftInput = draftInput),
+                                      AssistantConversationActions(
+                                          {}, {}, {}, {}, onRequest, onRequest),
+                                      DraftEditorActions(
+                                          {},
+                                          {},
+                                          onValidate,
+                                          updateDeclarationValue = onDraftInput),
+                                      contentModifier)
+                            }
+                          },
+                          modifier = pane)
+                    },
+                    modifier.testTag("f04-tool"),
+                    showHeader = false)
+              },
+              leftDivider = { ResizableDivider({}, {}) },
+              rightDivider = { ResizableDivider({}, {}) },
+              modifier = Modifier.testTag("f04-arrangement"))
+        },
+        terminal = { workspaceHeight ->
+          TerminalDock(
+              layout.copy(bottomCollapsed = false),
+              terminalState,
+              {},
+              {},
+              TerminalTabActions({}, {}, {}),
+              {},
+              {},
+              { modifier -> Box(modifier.background(EditorCanvas)) },
+              effectiveHeight =
+                  resolveTerminalDockHeight(
+                      layout.copy(bottomCollapsed = false),
+                      workspaceHeight,
+                      LocalDensity.current.fontScale),
+              modifier = Modifier.testTag("f04-dock"))
+        },
+        modifier = Modifier.weight(1f))
+    PersistentStatusBar(
+        DesktopStatusBarPresentation(
+            DesktopStatusProviderPresentation("Visual fixture · no backend", false),
+            "Models: unavailable",
             "Visual fixture · no backend"),
         {})
   }

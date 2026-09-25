@@ -899,8 +899,13 @@ internal fun EditorPaneArrangement(
         if (compact) with(density) { viewportHeight.dp.roundToPx() } else constraints.maxHeight
     val gap = with(density) { WORKSPACE_FRAME_INSET.dp.roundToPx() }
     val divider = with(density) { RESIZE_DIVIDER_WIDTH.dp.roundToPx() }
+    // Compact panes scroll as a group; the Editor needs room for chrome and a source/diff viewport.
     val childHeight =
-        if (compact) maxOf(height * 2 / 3, with(density) { 240.dp.roundToPx() }) else height
+        if (compact)
+            maxOf(
+                height * 2 / 3,
+                with(density) { (MIN_WORKSPACE_PANE_HEIGHT * fontScale).dp.roundToPx() })
+        else height
     val positions = mutableListOf<Pair<Int, Int>>()
     val measured = mutableListOf<androidx.compose.ui.layout.Placeable>()
     var index = 0
