@@ -286,6 +286,8 @@ internal fun MiniOrcaApp(
                 filter = filter,
                 collapsedDirectories = collapsedDirectories,
                 loading = appState.loading,
+                projectAvailable = appState.project != null,
+                readError = appState.selection.fileReadError,
             ),
         actions =
             ExplorerPaneActions(
@@ -311,6 +313,7 @@ internal fun MiniOrcaApp(
                   presenter.openFileInEditor(path)
                   onSelected()
                 },
+                openProject = ::importProject,
             ),
         modifier = modifier,
     )
@@ -344,6 +347,7 @@ internal fun MiniOrcaApp(
                 functionRemoteProviderConfirmed = workflow.providerConfirmed(ModelScope.Function),
                 declarationExplanation = workflow.declarationExplanation,
                 creationInProgress = workflow.creationInProgress,
+                fileReadError = appState.selection.fileReadError,
             ),
         actions =
             ContextToolWindowActions(
@@ -361,6 +365,7 @@ internal fun MiniOrcaApp(
                 explainSelected = presenter::explainSelectedDeclaration,
                 cancelExplanation = presenter::cancelDeclarationExplanation,
                 createDeclaration = { requestCreateDeclaration(DeclarationCreationKind.Function) },
+                openFile = { openPalette(PaletteMode.Files) },
             ),
         modifier = modifier,
     )

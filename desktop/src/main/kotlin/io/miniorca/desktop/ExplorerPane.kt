@@ -118,11 +118,32 @@ internal fun ExplorerPane(
                 },
         )
         Spacer(Modifier.height(6.dp))
+        state.readError?.let { error ->
+          SystemStateMessage(
+              "Could not open file",
+              "Reading local file data failed. ${error.ifBlank { "No details available." }}",
+              accent = Error,
+              action =
+                  if (state.index == null && !state.projectAvailable)
+                      actions.openProject?.let { open ->
+                        { MiniOrcaButton(onClick = open) { Text("Open project") } }
+                      }
+                  else null)
+          Spacer(Modifier.height(6.dp))
+        }
         when {
           state.index == null && state.loading -> LoadingRows("Loading indexed files")
-          state.index == null ->
+          state.index == null && state.readError != null -> Unit
+          state.index == null && !state.projectAvailable ->
               SystemStateMessage(
-                  "No project open", "Open a project to browse safe, indexed relative paths.")
+                  "No project open",
+                  "Open a project to browse safe, indexed relative paths.",
+                  action =
+                      actions.openProject?.let { open ->
+                        { MiniOrcaButton(onClick = open) { Text("Open project") } }
+                      })
+          state.index == null ->
+              SystemStateMessage("Indexed files unavailable", "Project file data is not available.")
           rows.isEmpty() ->
               SystemStateMessage(
                   "No matching files", "Change the filter to view indexed relative paths.")
@@ -152,6 +173,8 @@ internal data class ExplorerPaneState(
     val filter: String,
     val collapsedDirectories: Set<String>,
     val loading: Boolean,
+    val projectAvailable: Boolean = index != null,
+    val readError: String? = null,
 )
 
 /** Explorer-only intents, kept separate from project and editor workflow actions. */
@@ -161,6 +184,7 @@ internal data class ExplorerPaneActions(
     val collapseAll: () -> Unit,
     val revealActiveFile: () -> Unit,
     val selectFile: (String) -> Unit,
+    val openProject: (() -> Unit)? = null,
 )
 
 internal enum class ExplorerTreeKey {

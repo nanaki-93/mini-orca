@@ -16,6 +16,35 @@ import kotlin.test.assertTrue
 
 class ContextToolWindowTest {
   @Test
+  fun noSelectionAndFailedLocalFileReadKeepFileNavigationAdjacent() {
+    var selections = 0
+    var analyses = 0
+    val actions =
+        ContextToolWindowActions({}, { analyses++ }, {}, {}, {}, openFile = { selections++ })
+    for (error in listOf(null, "Permission denied", "")) {
+      ComposeVisualFixture(320, 300, 1.5f) {
+            ContextToolWindow(
+                ContextToolWindowState(
+                    null, ScopedModel(), false, null, null, fileReadError = error),
+                actions)
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(
+                fixture.hasText(if (error == null) "No file selected" else "Could not open file"))
+            if (error != null) {
+              assertTrue(
+                  fixture.hasText(
+                      "Reading local file data failed. ${error.ifBlank { "No details available." }} Select a file in Files to try again."))
+            }
+            fixture.clickText("Select a file")
+          }
+    }
+    assertEquals(3, selections)
+    assertEquals(0, analyses)
+  }
+
+  @Test
   fun projectAnalysisActionAndFileResultsHaveSeparateExplicitIntents() {
     var admissions = 0
     var navigations = 0

@@ -9,6 +9,57 @@ import kotlin.test.assertTrue
 
 class ExplorerPaneTest {
   @Test
+  fun localReadFailureStaysAboveIndexedRowsAndEmptyGuidanceDoesNotReplaceIt() {
+    val files = listOf(IndexedFile("main.go", "hash", "Go", false))
+    var opens = 0
+    var selected = 0
+    val actions = ExplorerPaneActions({}, {}, {}, {}, { selected++ }, { opens++ })
+    for (index in listOf(null, ProjectIndex("project", "revision", files = files))) {
+      ComposeVisualFixture(360, 500, 1.5f) {
+            ExplorerPane(
+                ExplorerPaneState(
+                    index,
+                    null,
+                    if (index != null) "no match" else "",
+                    emptySet(),
+                    false,
+                    projectAvailable = index != null,
+                    readError = "Permission denied"),
+                actions,
+                Modifier.fillMaxSize())
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.hasText("Reading local file data failed. Permission denied"))
+            assertTrue(!fixture.hasText("No project open"))
+            if (index == null) {
+              fixture.clickText("Open project")
+              assertEquals(1, opens)
+            } else {
+              assertTrue(fixture.hasText("No matching files"))
+            }
+          }
+    }
+    assertEquals(0, selected)
+  }
+
+  @Test
+  fun noProjectGuidanceOffersTheExistingOpenAction() {
+    var opens = 0
+    ComposeVisualFixture(360, 500) {
+          ExplorerPane(
+              ExplorerPaneState(null, null, "", emptySet(), false),
+              ExplorerPaneActions({}, {}, {}, {}, {}, { opens++ }),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("Open project")
+          assertEquals(1, opens)
+        }
+  }
+
+  @Test
   fun fileTreeKeepsStatusDescriptionsWithCompactDots() {
     val files =
         listOf("fresh", "stale", "failed", "ignored", "missing").map {
