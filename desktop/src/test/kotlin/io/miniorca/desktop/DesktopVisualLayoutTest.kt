@@ -2773,8 +2773,86 @@ class DesktopVisualLayoutTest {
                 state = state.copy(analysisRun = ProjectAnalysisRunState())
                 fixture.render()
                 assertFalse(fixture.hasText("Analysis · Completed"))
+                fixture.assertTextFits("Analysis · Unavailable")
+                fixture.assertTextBefore("Analysis · Unavailable", daemon)
                 fixture.assertTextFits(daemon)
               }
+        }
+  }
+
+  @Test
+  fun toolbarKeepsIdentityAndIndependentStatusesWhenEvidenceChanges() {
+    val longName = "A project name that is much longer than the header control"
+    val longBranch = "feature/a-branch-name-that-exceeds-the-visible-header-space"
+    var project by mutableStateOf(visualFixtureProject.copy(name = longName))
+    var gitStatus by mutableStateOf<GitStatus?>(GitStatus(available = true, branch = longBranch))
+    var connection by mutableStateOf(ConnectionState(label = "Disconnected"))
+    var analysisStatus by mutableStateOf<ToolbarAnalysisStatus?>(null)
+    var searches = 0
+    ComposeVisualFixture(1440, 220) {
+          ToolbarVisualFixture(
+              width = 1440f,
+              project = project,
+              gitStatus = gitStatus,
+              connection = connection,
+              analysisStatus = analysisStatus,
+              actions = ToolbarActions({}, {}, {}, { searches++ }))
+        }
+        .use { fixture ->
+          fixture.render("toolbar-unknown-disconnected")
+          assertTrue(fixture.hasDescription(longName))
+          assertTrue(fixture.hasDescription("Current Git branch: $longBranch"))
+          assertTrue(
+              fixture.hasDescription(
+                  "Daemon disconnected; this is daemon status, not model connectivity"))
+          fixture.assertTextBefore("Analysis · Unavailable", "Daemon disconnected")
+          assertFalse(fixture.hasText("Analysis · Completed"))
+          assertEquals(0, searches)
+          fixture.clickText("Search files, symbols, commands")
+          assertEquals(1, searches)
+
+          gitStatus = GitStatus(available = true, branch = "  \t ")
+          fixture.render()
+          fixture.assertTextFits("Unavailable")
+          assertTrue(fixture.hasDescription("Git branch is unavailable for the selected file."))
+          assertFalse(fixture.hasText("main"))
+          gitStatus = null
+          fixture.render()
+          assertTrue(fixture.hasDescription("Git branch is unavailable for the selected file."))
+
+          val run = analysisRunFixture().copy(status = "failed")
+          val state =
+              DesktopState(
+                  projectState = ProjectWorkspaceState(resultProjectFixture()),
+                  analysisRun = ProjectAnalysisRunState(run = run))
+          analysisStatus = toolbarAnalysisStatus(state)
+          fixture.render("toolbar-failed-disconnected")
+          fixture.assertTextBefore("Analysis · Failed", "Daemon disconnected")
+          assertTrue(fixture.hasDescription("Whole-project analysis · Failed"))
+          assertFalse(fixture.hasText("Daemon connected"))
+          analysisStatus =
+              toolbarAnalysisStatus(
+                  state.copy(
+                      analysisRun =
+                          ProjectAnalysisRunState(
+                              run = run.copy(identity = run.identity.copy(projectId = "other")))))
+          fixture.render("toolbar-foreign-run")
+          fixture.assertTextBefore("Analysis · Unavailable", "Daemon disconnected")
+          assertFalse(fixture.hasText("Analysis · Failed"))
+          analysisStatus =
+              toolbarAnalysisStatus(
+                  state.copy(
+                      projectState =
+                          state.projectState.copy(
+                              project = state.project!!.copy(projectRevision = "next"))))
+          fixture.render("toolbar-stale-run")
+          fixture.assertTextBefore("Analysis · Stale", "Daemon disconnected")
+          assertFalse(fixture.hasText("Analysis · Failed"))
+          analysisStatus = null
+          project = visualFixtureProject
+          connection = ConnectionState(connected = true)
+          fixture.render()
+          fixture.assertTextBefore("Analysis · Unavailable", "Daemon connected")
         }
   }
 
@@ -5207,19 +5285,14 @@ private fun ToolbarVisualFixture(
     width: Float,
     project: ProjectAnalysis? = visualFixtureProject,
     connection: ConnectionState = ConnectionState(connected = true),
+    gitStatus: GitStatus? = GitStatus(available = true, branch = "main"),
     actions: ToolbarActions = ToolbarActions({}, {}, {}, {}),
     paletteFocusRequester: FocusRequester? = null,
     analysisStatus: ToolbarAnalysisStatus? = null,
 ) {
   Column(Modifier.fillMaxSize().background(AppBackground)) {
     MainToolbar(
-        ToolbarState(
-            project,
-            false,
-            "",
-            connection,
-            GitStatus(available = true, branch = "main"),
-            analysisStatus),
+        ToolbarState(project, false, "", connection, gitStatus, analysisStatus),
         actions,
         paletteFocusRequester = paletteFocusRequester)
   }
