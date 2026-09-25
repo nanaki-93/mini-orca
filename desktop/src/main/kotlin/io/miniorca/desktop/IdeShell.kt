@@ -90,7 +90,11 @@ internal fun ToolWindowBar(
     activeToolWindow: LeftToolWindow,
     onSelect: (LeftToolWindow) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenTerminal: () -> Unit,
 ) {
+  var utilityHasFocus by remember { mutableStateOf(false) }
+  val terminalReveal = remember { BringIntoViewRequester() }
+  LaunchedEffect(utilityHasFocus) { if (utilityHasFocus) terminalReveal.bringIntoView() }
   var focusedToolWindow by remember(activeToolWindow) { mutableStateOf(activeToolWindow) }
   var tabGroupHasFocus by remember { mutableStateOf(false) }
   val railWidth = (TOOL_WINDOW_BAR_WIDTH * maxOf(1f, LocalDensity.current.fontScale)).dp
@@ -101,10 +105,11 @@ internal fun ToolWindowBar(
           .background(ActivityRail)
           .padding(vertical = 8.dp)
           .verticalScroll(rememberScrollState())
-          .onFocusChanged { tabGroupHasFocus = it.hasFocus }
+          .onFocusChanged { tabGroupHasFocus = it.isFocused }
           .focusable()
           .onPreviewKeyEvent { event ->
-            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            if (utilityHasFocus || event.type != KeyEventType.KeyDown)
+                return@onPreviewKeyEvent false
             val interaction =
                 tabGroupInteraction(workspaceRailOrder, focusedToolWindow, tabGroupKey(event.key))
                     ?: return@onPreviewKeyEvent false
@@ -121,6 +126,23 @@ internal fun ToolWindowBar(
           tabGroupHasFocus && toolWindow == focusedToolWindow,
           { onSelect(toolWindow) })
     }
+    IdeHorizontalSeparator(Modifier.padding(horizontal = 10.dp, vertical = 8.dp))
+    ChromeButton(
+        onClick = onOpenTerminal,
+        modifier =
+            Modifier.fillMaxWidth()
+                .padding(horizontal = 2.dp, vertical = 2.dp)
+                .onFocusChanged { utilityHasFocus = it.hasFocus }
+                .bringIntoViewRequester(terminalReveal),
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp),
+        accessibleName = "Terminal · Open or focus; may start a local shell",
+        tooltip = "Open or focus Terminal · may start a local shell") {
+          Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            DesktopLineIcon(DesktopIcon.Terminal, "Terminal", iconSize = 20.dp)
+            Spacer(Modifier.height(4.dp))
+            Text("Terminal", style = IdeTypography.action, maxLines = 1, softWrap = false)
+          }
+        }
   }
 }
 

@@ -554,7 +554,8 @@ internal fun DesktopShell(
                 ToolWindowBar(
                     leftToolWindowForWorkspace(workspace),
                     ::selectToolWindow,
-                    Modifier.focusRequester(focusRequesters.leftToolWindow))
+                    Modifier.focusRequester(focusRequesters.leftToolWindow),
+                    onOpenTerminal = ::openTerminal)
               },
               panes = {
                 if (showsEditorChrome && layout.leftToolWindowVisible) {

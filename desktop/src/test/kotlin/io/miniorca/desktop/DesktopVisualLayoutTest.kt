@@ -1788,7 +1788,7 @@ class DesktopVisualLayoutTest {
     val railFocus = FocusRequester()
     ComposeVisualFixture(120, 650, 1.3f) {
           ToolWindowBar(
-              activeToolWindow, { activeToolWindow = it }, Modifier.focusRequester(railFocus))
+              activeToolWindow, { activeToolWindow = it }, Modifier.focusRequester(railFocus), {})
         }
         .use { fixture ->
           fixture.render("rail-keyboard-initial-labeled-1.3")
@@ -5385,7 +5385,7 @@ internal fun RoundedAnalysisVisualFixture(width: Float) {
                     analysisRun = analysis))),
         ToolbarActions({}, {}, {}, {}))
     WorkspaceFrame(
-        rail = { ToolWindowBar(LeftToolWindow.Analysis, {}) },
+        rail = { ToolWindowBar(LeftToolWindow.Analysis, {}, onOpenTerminal = {}) },
         panes = {
           EditorArea(
               {
@@ -5446,7 +5446,7 @@ internal fun RoundedSummaryVisualFixture(width: Float) {
                     analysisRun = ProjectAnalysisRunState(run = overview.analysisRun)))),
         ToolbarActions({}, {}, {}, {}))
     WorkspaceFrame(
-        rail = { ToolWindowBar(LeftToolWindow.Summary, {}) },
+        rail = { ToolWindowBar(LeftToolWindow.Summary, {}, onOpenTerminal = {}) },
         panes = {
           EditorArea(
               { ProjectSummaryPane(overview, visualFixtureProject, {}) }, Modifier.weight(1f))
@@ -5618,7 +5618,7 @@ internal fun EditorVisualFixture(
                 "Analysis · Completed", "Whole-project analysis · Completed", false, false)),
         ToolbarActions({}, {}, {}, {}))
     WorkspaceFrame(
-        rail = { ToolWindowBar(LeftToolWindow.Editor, {}) },
+        rail = { ToolWindowBar(LeftToolWindow.Editor, {}, onOpenTerminal = {}) },
         panes = {
           DockedToolWindow(
               title = "Files",

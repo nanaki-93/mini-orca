@@ -11,6 +11,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
+import java.nio.file.Files
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import javax.swing.SwingUtilities
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -228,6 +232,72 @@ class DesktopKeyboardNavigationTest {
         }
   }
 
+  @Test
+  fun terminalRailOpensExistingDockWithoutStartingOnRenderFocusOrWorkspaceSwitch() {
+    val directory = Files.createTempDirectory("mini-orca-rail-terminal-")
+    val starts = AtomicInteger()
+    val terminal = DesktopTerminalWorkspace { path ->
+      DesktopTerminalSession(
+          path,
+          shell = "/bin/sh",
+          environment = emptyMap(),
+          factory =
+              TerminalProcessFactory {
+                starts.incrementAndGet()
+                throw IllegalStateException("Synthetic launch failure")
+              })
+    }
+    var state by
+        mutableStateOf(shellFocusState(resultProjectFixture().copy(path = directory.toString())))
+    var selections = 0
+    try {
+      ComposeVisualFixture(1_280, 800) {
+            FocusTestShell(
+                state,
+                onState = { state = it },
+                onOperation = { selections++ },
+                terminal = terminal)
+          }
+          .use { fixture ->
+            fixture.render()
+            assertEquals(0, starts.get())
+            assertTrue(
+                fixture.requestDescriptionFocus(
+                    "Terminal · Open or focus; may start a local shell"))
+            fixture.render()
+            assertEquals(0, starts.get())
+            fixture.clickDescription("Analysis tool window, not selected")
+            fixture.render()
+            assertEquals(0, starts.get())
+            assertEquals(Workspace.Analysis, state.app.workspace)
+            assertTrue(state.layout.bottomCollapsed)
+            SwingUtilities.invokeAndWait {
+              fixture.clickDescription("Terminal · Open or focus; may start a local shell")
+            }
+            fixture.render()
+            assertFalse(state.layout.bottomCollapsed)
+            assertEquals(Workspace.Analysis, state.app.workspace)
+            assertEquals(1, terminal.state.value.tabs.size)
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (starts.get() == 0 && System.nanoTime() < deadline) Thread.sleep(5)
+            assertEquals(1, starts.get())
+            val tab = terminal.state.value.activeTabId
+            SwingUtilities.invokeAndWait {
+              fixture.clickDescription("Terminal · Open or focus; may start a local shell")
+            }
+            fixture.render()
+            assertEquals(tab, terminal.state.value.activeTabId)
+            assertEquals(1, terminal.state.value.tabs.size)
+            assertEquals(1, starts.get())
+            assertEquals(Workspace.Analysis, state.app.workspace)
+            assertEquals(0, selections)
+          }
+    } finally {
+      SwingUtilities.invokeAndWait { terminal.close() }
+      Files.deleteIfExists(directory)
+    }
+  }
+
   private fun shellFocusState(project: ProjectAnalysis): DesktopShellState =
       DesktopShellState(
           app = DesktopState(projectState = ProjectWorkspaceState(project)),
@@ -250,6 +320,7 @@ class DesktopKeyboardNavigationTest {
       state: DesktopShellState,
       onState: (DesktopShellState) -> Unit,
       onOperation: () -> Unit,
+      terminal: DesktopTerminalWorkspace? = null,
   ) {
     DesktopShell(
         state = state,
@@ -257,7 +328,7 @@ class DesktopKeyboardNavigationTest {
         projectActions = DesktopShellProjectActions(onOperation, onOperation, onOperation),
         editorActions =
             DesktopShellEditorActions(
-                selectWorkspace = {},
+                selectWorkspace = { onState(state.copy(app = state.app.copy(workspace = it))) },
                 selectEditorSurface = {},
                 focusChat = {},
                 focusDraft = {},
@@ -304,8 +375,9 @@ class DesktopKeyboardNavigationTest {
                 rightToolWindows = { _, _ -> },
                 rightToolWindowBadges = emptyMap(),
                 terminalContent = {},
-                terminalState = TerminalWorkspaceState(),
-                terminalTabActions = TerminalTabActions({}, {}, {})))
+                terminalState = terminal?.state?.value ?: TerminalWorkspaceState(),
+                terminalTabActions = TerminalTabActions({}, {}, {})),
+        terminal = terminal)
   }
 
   @Test
@@ -655,7 +727,8 @@ class DesktopKeyboardNavigationTest {
                         active = it
                         selections++
                       },
-                      Modifier.focusRequester(focus))
+                      Modifier.focusRequester(focus),
+                      onOpenTerminal = {})
                   Box(Modifier.weight(1f))
                 }
               }
@@ -721,7 +794,8 @@ class DesktopKeyboardNavigationTest {
                 active = it
                 selected += it
               },
-              Modifier.focusRequester(focus))
+              Modifier.focusRequester(focus),
+              onOpenTerminal = {})
         }
         .use { fixture ->
           fixture.render()
@@ -739,6 +813,45 @@ class DesktopKeyboardNavigationTest {
           fixture.clickDescription("Editor tool window, not selected, focused")
           fixture.render()
           assertEquals(listOf(LeftToolWindow.Editor), selected)
+        }
+  }
+
+  @Test
+  fun terminalRailActionIsSeparateFromWorkspaceSelectionAndKeyPreview() {
+    var active by mutableStateOf(LeftToolWindow.Summary)
+    var selections = 0
+    var opens = 0
+    ComposeVisualFixture(180, 340) {
+          ToolWindowBar(
+              active,
+              {
+                active = it
+                selections++
+              },
+              onOpenTerminal = { opens++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Terminal"))
+          assertTrue(fixture.hasDescription("Terminal · Open or focus; may start a local shell"))
+          assertEquals(0, opens)
+          assertTrue(
+              fixture.requestDescriptionFocus("Terminal · Open or focus; may start a local shell"))
+          fixture.render()
+          val terminalLabel = fixture.firstVisibleTextBounds("Terminal")
+          assertTrue(terminalLabel.top >= 0 && terminalLabel.bottom <= 340)
+          assertEquals(0, opens)
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals(1, opens)
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals(2, opens)
+          fixture.clickDescription("Terminal · Open or focus; may start a local shell")
+          fixture.render()
+          assertEquals(3, opens)
+          assertEquals(0, selections)
+          assertEquals(LeftToolWindow.Summary, active)
         }
   }
 

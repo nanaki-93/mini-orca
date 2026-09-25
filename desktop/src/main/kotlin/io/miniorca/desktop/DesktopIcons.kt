@@ -27,6 +27,7 @@ internal enum class DesktopIcon(private val path: String) {
   Problems(
       "M8 8h8v9a4 4 0 0 1-8 0Z M9 8V6a3 3 0 0 1 6 0v2 M12 10v5 M12 18v.5 M4 6l3 3 M20 6l-3 3 M3 14h4 M17 14h4"),
   Editor("M3 4h18v16H3Z M3 8h18 M8 11l-3 3 3 3 M16 11l3 3-3 3 M13 10l-2 8"),
+  Terminal("M3 4h18v16H3Z M3 8h18 M7 11l4 3-4 3 M13 17h5"),
   Search("M10 3a7 7 0 1 1 0 14a7 7 0 1 1 0-14 M15 15l6 6"),
   Branch(
       "M6 3a2 2 0 1 1 0 4a2 2 0 1 1 0-4 M6 17a2 2 0 1 1 0 4a2 2 0 1 1 0-4 M18 3a2 2 0 1 1 0 4a2 2 0 1 1 0-4 M6 7v10 M18 7v2c0 4-12 2-12 6"),
