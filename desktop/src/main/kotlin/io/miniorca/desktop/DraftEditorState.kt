@@ -9,14 +9,31 @@ enum class DraftEditorStatus {
   Stale
 }
 
+enum class ValidationAttemptStatus {
+  Running,
+  Failed,
+  Canceled,
+}
+
+data class ValidationAttempt(
+    val requestId: Long,
+    val status: ValidationAttemptStatus,
+    val message: String = "",
+)
+
 data class EditableDraftState(
     val serverDraft: DeclarationDraft,
     val declaration: String = serverDraft.declaration,
     val imports: List<String> = serverDraft.imports,
     val status: DraftEditorStatus = draftEditorStatus(serverDraft),
+    val validationAttempt: ValidationAttempt? = null,
+    val retainedValidation: DeclarationValidation? = null,
 ) {
   val diagnostics: List<DeclarationFinding>
-    get() = serverDraft.validation?.diagnostics.orEmpty()
+    get() = serverDraft.validation?.diagnostics ?: retainedValidation?.diagnostics.orEmpty()
+
+  val diagnosticsAreRetained: Boolean
+    get() = serverDraft.validation == null && retainedValidation != null
 }
 
 fun draftEditorStatus(draft: DeclarationDraft): DraftEditorStatus =
@@ -33,7 +50,11 @@ fun editDraft(
     declaration: String = state.declaration,
     imports: List<String> = state.imports
 ): EditableDraftState =
-    state.copy(declaration = declaration, imports = imports, status = DraftEditorStatus.Dirty)
+    state.copy(
+        declaration = declaration,
+        imports = imports,
+        status = DraftEditorStatus.Dirty,
+        validationAttempt = null)
 
 fun draftEditorMatchesOpenFile(
     editor: EditableDraftState?,

@@ -9,6 +9,20 @@ import kotlin.test.assertTrue
 class ReviewEvidencePaneTest {
 
   @Test
+  fun retainedValidationDiagnosticsAreNotPresentedAsCurrentApproval() {
+    ComposeVisualFixture(420, 280) {
+          DraftValidationDiagnostics(
+              listOf(DeclarationFinding("old", "Prior validation warning")), retained = true)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Previous validation diagnostics"))
+          assertTrue(fixture.hasText("Retained; revalidate for current approval"))
+          assertTrue(fixture.hasText("Prior validation warning"))
+        }
+  }
+
+  @Test
   fun shortReviewKeepsLongApplyScopeAndEvidenceIndependentlyReachable() {
     val path = "internal/" + "long-package/".repeat(16) + "main.go"
     val current = draft().copy(targetPath = path)

@@ -565,7 +565,9 @@ internal fun ReviewToolWindow(
                 checkFailurePreview(state.checks)?.let {
                   Text(it, color = Error, style = IdeTypography.workspaceBody)
                 }
-                DraftValidationDiagnostics(state.editor?.diagnostics.orEmpty())
+                DraftValidationDiagnostics(
+                    state.editor?.diagnostics.orEmpty(),
+                    retained = state.editor?.diagnosticsAreRetained == true)
                 ReviewDetails(state, evidence, nextAction, evidenceActions)
                 ReadOnlyImpactPane(state.impact, state.gitStatus)
                 state.draft?.engineeringInsight?.let { insight ->

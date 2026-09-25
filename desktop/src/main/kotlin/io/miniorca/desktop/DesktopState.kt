@@ -368,7 +368,16 @@ sealed interface DesktopEvent {
   data class DraftEdited(val declaration: String? = null, val imports: List<String>? = null) :
       DesktopEvent
 
-  data object DraftValidationStarted : DesktopEvent
+  data class DraftValidationStarted(val requestId: Long) : DesktopEvent
+
+  data class DraftValidationUpdated(val requestId: Long, val draft: DeclarationDraft) :
+      DesktopEvent
+
+  data class DraftValidationStopped(
+      val requestId: Long,
+      val status: ValidationAttemptStatus,
+      val message: String,
+  ) : DesktopEvent
 
   data object DraftMarkedStale : DesktopEvent
 
@@ -609,7 +618,9 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                         benchmark = review.benchmark.withoutCatalog()),
                 jobs = jobs.copy(loading = false))
           } ?: this
-      DesktopEvent.DraftValidationStarted -> withValidationStarted()
+      is DesktopEvent.DraftValidationStarted,
+      is DesktopEvent.DraftValidationUpdated,
+      is DesktopEvent.DraftValidationStopped -> withValidationEvent(event)
       DesktopEvent.DraftMarkedStale ->
           review.editor?.let { editor ->
             copy(
@@ -654,16 +665,68 @@ private fun DesktopState.withLocalReadFailure(event: DesktopEvent.LocalReadFailu
               jobs = jobs.copy(loading = false, error = event.message))
     }
 
-private fun DesktopState.withValidationStarted(): DesktopState =
+private fun DesktopState.withValidationEvent(event: DesktopEvent): DesktopState =
+    when (event) {
+      is DesktopEvent.DraftValidationStarted -> withValidationStarted(event.requestId)
+      is DesktopEvent.DraftValidationUpdated -> withValidationUpdated(event)
+      is DesktopEvent.DraftValidationStopped -> withValidationStopped(event)
+      else -> this
+    }
+
+private fun DesktopState.withValidationStarted(requestId: Long): DesktopState =
     review.editor?.let { editor ->
       copy(
           review =
               review.copy(
-                  editor = editor.copy(status = DraftEditorStatus.Validating),
+                  draft = editor.serverDraft.copy(validation = null),
+                  editor =
+                      editor.copy(
+                          serverDraft = editor.serverDraft.copy(validation = null),
+                          retainedValidation =
+                              editor.serverDraft.validation ?: editor.retainedValidation,
+                          status = DraftEditorStatus.Validating,
+                          validationAttempt =
+                              ValidationAttempt(requestId, ValidationAttemptStatus.Running)),
                   checks = null,
                   benchmark = review.benchmark.withoutCatalog()),
           jobs = jobs.copy(loading = false))
     } ?: this
+
+private fun DesktopState.withValidationUpdated(
+    event: DesktopEvent.DraftValidationUpdated
+): DesktopState =
+    review.editor
+        ?.takeIf {
+          it.validationAttempt ==
+              ValidationAttempt(event.requestId, ValidationAttemptStatus.Running)
+        }
+        ?.let { editor ->
+          copy(
+              review =
+                  review.copy(
+                      draft = event.draft.copy(validation = null),
+                      editor = editor.copy(serverDraft = event.draft.copy(validation = null))))
+        } ?: this
+
+private fun DesktopState.withValidationStopped(
+    event: DesktopEvent.DraftValidationStopped
+): DesktopState =
+    review.editor
+        ?.takeIf {
+          it.status == DraftEditorStatus.Validating &&
+              it.validationAttempt?.requestId == event.requestId &&
+              it.validationAttempt.status == ValidationAttemptStatus.Running
+        }
+        ?.let { editor ->
+          copy(
+              review =
+                  review.copy(
+                      editor =
+                          editor.copy(
+                              status = DraftEditorStatus.Generated,
+                              validationAttempt =
+                                  ValidationAttempt(event.requestId, event.status, event.message))))
+        } ?: this
 
 private fun BenchmarkEvidenceState.withoutCatalog(): BenchmarkEvidenceState =
     copy(catalog = null, selected = null, running = false)
@@ -750,6 +813,14 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
     if (event is DesktopEvent.SelectedFileUnavailable) fileRequest = null
     if (event == DesktopEvent.DraftDiscarded) {
       chatRequest = 0
+      draftRequest = 0
+    }
+    if (event is DesktopEvent.DraftEdited ||
+        event == DesktopEvent.DraftMarkedStale ||
+        event is DesktopEvent.ChatProposalLoaded ||
+        event is DesktopEvent.DraftLoaded ||
+        event is DesktopEvent.ProjectLoaded ||
+        event is DesktopEvent.FileLoaded) {
       draftRequest = 0
     }
     return state.reduce(event).also { state = it }
@@ -890,6 +961,54 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
 
   fun beginDraftLoad(): Pair<Long, RequestIdentity>? =
       fileRequest?.let { file -> nextId().also { draftRequest = it } to file }
+
+  fun beginDraftValidation(): Pair<Long, RequestIdentity>? {
+    if (state.review.editor?.status == DraftEditorStatus.Validating) return null
+    return beginDraftLoad()?.also { (request, _) ->
+      dispatch(DesktopEvent.DraftValidationStarted(request))
+    }
+  }
+
+  fun draftValidationStopped(
+      requestId: Long,
+      file: RequestIdentity,
+      status: ValidationAttemptStatus,
+      message: String,
+  ): Boolean =
+      if (currentValidation(requestId, file)) {
+        draftRequest = 0
+        accept(DesktopEvent.DraftValidationStopped(requestId, status, message))
+      } else false
+
+  fun draftValidationUpdated(
+      requestId: Long,
+      file: RequestIdentity,
+      draft: DeclarationDraft,
+  ): Boolean =
+      if (currentValidation(requestId, file) &&
+          state.review.editor?.serverDraft?.let {
+            it.id == draft.id &&
+                it.projectId == draft.projectId &&
+                it.projectRevision == draft.projectRevision &&
+                it.targetPath == draft.targetPath &&
+                it.baseFileHash == draft.baseFileHash
+          } == true)
+          accept(DesktopEvent.DraftValidationUpdated(requestId, draft))
+      else false
+
+  fun draftValidated(requestId: Long, file: RequestIdentity, draft: DeclarationDraft): Boolean =
+      if (currentValidation(requestId, file) &&
+          state.review.editor?.serverDraft?.let {
+            it.id == draft.id && draft.revision == it.revision
+          } == true)
+          draftLoaded(requestId, file, draft)
+      else false
+
+  private fun currentValidation(requestId: Long, file: RequestIdentity): Boolean =
+      requestId == draftRequest &&
+          matchesFile(file) &&
+          state.review.editor?.validationAttempt ==
+              ValidationAttempt(requestId, ValidationAttemptStatus.Running)
 
   fun draftLoaded(requestId: Long, file: RequestIdentity, draft: DeclarationDraft): Boolean =
       if (requestId == draftRequest &&
