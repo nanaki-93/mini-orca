@@ -72,6 +72,53 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun modelFooterSeparatesFromShellAndTrailsAtLargerTextAndReducedWidth() {
+    val project = resultProjectFixture()
+    val state = DesktopState(projectState = ProjectWorkspaceState(project))
+    val model = ScopedModel(model = "local-model", providerOrigin = "http://localhost:11434")
+    val available =
+        desktopStatusBarPresentation(state, DesktopShellStatusProviders(model, model, model))
+    val unavailable =
+        desktopStatusBarPresentation(
+            state, DesktopShellStatusProviders(model, model, ScopedModel()))
+    for ((width, height, scale) in
+        listOf(Triple(1440, 900, 1f), Triple(800, 650, 1.5f), Triple(1280, 600, 1.25f))) {
+      for (presentation in listOf(available, unavailable)) {
+        var opens = 0
+        ComposeVisualFixture(width, height, scale) {
+              Column(Modifier.fillMaxSize().background(AppBackground)) {
+                MainToolbar(
+                    ToolbarState(project, false, "", ConnectionState(), null),
+                    ToolbarActions({}, {}, {}, {}))
+                WorkspaceFrame(
+                    rail = { ToolWindowBar(LeftToolWindow.Summary, {}, onOpenTerminal = {}) },
+                    panes = { EditorArea({ Text("Project workspace") }, Modifier.weight(1f)) },
+                    terminal = {
+                      TerminalBar(
+                          TerminalWorkspaceState(), true, {}, TerminalTabActions({}, {}, {}))
+                    },
+                    modifier = Modifier.weight(1f))
+                PersistentStatusBar(presentation, { opens++ })
+              }
+            }
+            .use { fixture ->
+              fixture.render("shell-footer-$width-$scale-${presentation === unavailable}")
+              val footer = fixture.taggedBounds("model-count-footer")
+              val action = fixture.taggedBounds("model-count-action")
+              assertEquals(width.toFloat(), footer.right, 1f)
+              assertEquals(height.toFloat(), footer.bottom, 1f)
+              assertEquals(width - 16f, action.right, 1f)
+              assertTrue(action.top > 0 && action.bottom <= footer.bottom)
+              fixture.assertTextFits(presentation.modelsLabel)
+              fixture.assertTopKeyline("model-count-footer", PaneSeparator)
+              fixture.clickDescription("Configured model details")
+              assertEquals(1, opens)
+            }
+      }
+    }
+  }
+
+  @Test
   fun f02AdmissionAndReviewMatrixKeepsDecisionsAndFailuresReachable() {
     val destination = "https://provider.example/日本語/" + "long-destination/".repeat(3)
     val error = "Destination unavailable. Refresh the preview before starting."
@@ -5215,6 +5262,20 @@ internal class ComposeVisualFixture(
             .toArgb(),
         rendered.getRGB(left + bounds.width.toInt() / 2, top),
         "$tag top keyline must remain visible")
+  }
+
+  fun assertTopKeyline(tag: String, color: Color) {
+    val bounds = taggedBounds(tag)
+    val rendered =
+        surface.makeImageSnapshot().use { snapshot ->
+          requireNotNull(snapshot.encodeToData()).use { data ->
+            javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(data.bytes))
+          }
+        }
+    assertEquals(
+        color.toArgb(),
+        rendered.getRGB(bounds.center.x.toInt(), bounds.top.toInt()),
+        "$tag must separate from the content above")
   }
 
   fun assertColorVisible(color: Color) {

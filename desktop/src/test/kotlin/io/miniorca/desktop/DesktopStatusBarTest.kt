@@ -142,6 +142,38 @@ class DesktopStatusBarTest {
   }
 
   @Test
+  fun footerKeepsUnavailableAndLongModelLabelsReadableAndActionable() {
+    val unavailable =
+        desktopStatusBarPresentation(
+            DesktopState(workspace = Workspace.Editor),
+            providers().copy(functionEdits = ScopedModel(scope = "function")))
+    val longLabel =
+        unavailable.copy(
+            modelsLabel = "Models: " + "123456789 local · 987654321 cloud · ".repeat(4))
+    listOf(unavailable, longLabel).forEach { presentation ->
+      listOf(800 to 1.5f, 320 to 1.5f).forEach { (width, scale) ->
+        var opens = 0
+        ComposeVisualFixture(width, 260, scale) {
+              PersistentStatusBar(presentation, onOpenDetails = { opens++ })
+            }
+            .use { fixture ->
+              fixture.render("footer-${presentation === longLabel}-$width-$scale")
+              fixture.assertTextFits(presentation.modelsLabel, maxLines = 20)
+              val footer = fixture.taggedBounds("model-count-footer")
+              val action = fixture.taggedBounds("model-count-action")
+              val label = fixture.firstVisibleTextBounds(presentation.modelsLabel)
+              assertEquals(width.toFloat(), footer.right, 1f)
+              assertEquals(width - 16f, action.right, 1f)
+              assertTrue(action.left >= footer.left && label.left >= action.left)
+              assertTrue(label.right <= action.right && action.bottom <= footer.bottom)
+              fixture.clickDescription("Configured model details")
+              assertEquals(1, opens)
+            }
+      }
+    }
+  }
+
+  @Test
   fun modelCountsDeduplicateSharedDestinationsAndKeepCloudAndLocalDistinct() {
     val local = ScopedModel(model = "shared", providerOrigin = "http://localhost:11434")
     val cloud = local.copy(providerOrigin = "https://provider.example", remoteProvider = true)
