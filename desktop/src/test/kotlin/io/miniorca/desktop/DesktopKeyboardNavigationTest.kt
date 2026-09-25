@@ -700,6 +700,73 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun openingAndReconnectRecoveryRequireExplicitKeyboardActivation() {
+    var opens = 0
+    var reconnects = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          ProjectLanding(
+              DesktopState(
+                  projectState = ProjectWorkspaceState(openingError = "Local read failed"),
+                  connection = ConnectionState(label = "Disconnected")),
+              DesktopShellProjectActions({ opens++ }, {}, { reconnects++ }),
+              androidx.compose.ui.focus.FocusRequester())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestFocus("Reconnect daemon"))
+          fixture.render()
+          assertEquals(0, opens + reconnects)
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(1, reconnects)
+          assertTrue(fixture.requestFocus("Open project"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          assertEquals(1, opens)
+        }
+  }
+
+  @Test
+  fun savedResultRecoveryRequiresKeyboardActivationAndDoesNotStartAnalysis() {
+    AnalysisResultType.entries.forEach { type ->
+      val page =
+          resultPageFixture(type.category).let {
+            it.copy(section = it.section.copy(error = "saved read failed"))
+          }
+      var retries = 0
+      var navigations = 0
+      val browser = newResultBrowserState(page)
+      browser.query = "no matching result"
+      ComposeVisualFixture(800, 650, 1.5f) {
+            AnalysisResultsPane(
+                page,
+                listOf(
+                    ResultRowPresentation(
+                        "retained", "Retained result", "main.go:1", "Evidence", "high", "", "")),
+                browser,
+                openAnalysis = { navigations++ },
+                retryResults = { retries++ }) {
+                  androidx.compose.material.Text("Retained detail")
+                }
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.revealText("Retry loading results", "result-read-feedback")
+            assertTrue(fixture.requestFocus("Retry loading results"))
+            fixture.render()
+            assertEquals(0, retries + navigations)
+            assertTrue(fixture.pressKey(Key.Enter))
+            assertEquals(1, retries)
+            fixture.revealText("Clear filters", "result-overview")
+            assertTrue(fixture.requestDescriptionFocus("Clear filters"))
+            assertTrue(fixture.pressKey(Key.Spacebar))
+            fixture.render()
+            assertEquals("", browser.query)
+            assertEquals(1, retries)
+            assertEquals(0, navigations)
+          }
+    }
+  }
+
+  @Test
   fun resultNavigationAndFixPreparationStaySeparateFromKeyboardInspection() {
     var destination: Workspace? = null
     var preparations = 0
