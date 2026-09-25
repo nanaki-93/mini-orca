@@ -5,6 +5,8 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.prefs.AbstractPreferences
+import java.util.prefs.BackingStoreException
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -567,7 +569,7 @@ class DesktopWorkflowPresenterTest {
         }
         val state = presenter.snapshot.value.state
         assertEquals("/tmp/project", state.project?.path)
-        assertNull(state.projectState.rememberedPath)
+        assertEquals("/tmp/project", state.projectState.rememberedPath)
         assertNull(state.projectState.preferenceReadWarning)
         assertEquals(listOf("POST" to "/api/projects/import"), calls.filter { it.first == "POST" })
       } finally {
@@ -607,6 +609,161 @@ class DesktopWorkflowPresenterTest {
       assertNull(presenter.snapshot.value.state.projectState.preferenceReadWarning)
       assertNull(presenter.snapshot.value.state.projectState.rememberedPath)
       assertTrue(calls.none { it.first == "POST" })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun acceptedProjectsAreSavedOffThePresentationDispatcherInAcceptanceOrder() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val preferences = InMemoryPreferences()
+    val store = LastProjectStore(preferences)
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io, lastProjectStore = store) {
+            method,
+            path,
+            body ->
+          if (method == "POST") {
+            val returnedPath = if (body.orEmpty().contains("alias")) "/tmp/first" else "/tmp/second"
+            response(projectJson().replace("/tmp/project", returnedPath))
+          } else projectStartupResponse(method, path)
+        }
+    try {
+      presenter.loadProject("/tmp/alias", restore = false)
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals("/tmp/first", presenter.snapshot.value.state.project?.path)
+      assertNull(store.load()) // The accepted first save is still queued on I/O.
+
+      presenter.loadProject("/tmp/second", restore = false)
+      main.runPending()
+      io.runLast() // Complete the newer API response while the older save remains queued.
+      main.runPending()
+      assertEquals("/tmp/second", presenter.snapshot.value.state.project?.path)
+      assertEquals(0, preferences.flushCount)
+      repeat(6) {
+        io.runPending()
+        main.runPending()
+      }
+      assertEquals("/tmp/second", store.load())
+      assertEquals("/tmp/second", presenter.snapshot.value.state.projectState.rememberedPath)
+      assertEquals(2, preferences.flushCount)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun rejectedAndSupersededResponsesNeverWritePreferences() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val preferences = InMemoryPreferences()
+    var mismatch = true
+    val presenter =
+        presenter(
+            parentScope = scope,
+            ioDispatcher = io,
+            lastProjectStore = LastProjectStore(preferences)) { method, path, _ ->
+              when (method to path) {
+                "POST" to "/api/projects/import" -> response(projectJson())
+                "GET" to "/api/projects/current/index" ->
+                    if (mismatch) response(indexJson().replace(":\"revision\"", ":\"wrong\""))
+                    else response(indexJson())
+                else -> projectStartupResponse(method, path)
+              }
+            }
+    try {
+      presenter.loadProject("/tmp/obsolete", restore = false)
+      main.runPending() // Old request is queued on I/O.
+      presenter.loadProject("/tmp/project", restore = false)
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertNull(presenter.snapshot.value.state.project)
+      assertTrue(
+          presenter.snapshot.value.state.projectState.openingError
+              .orEmpty()
+              .contains("do not match"),
+          "Opening state: ${presenter.snapshot.value.state.projectState.openingAttempt}")
+      assertEquals(0, preferences.flushCount)
+      mismatch = false
+      presenter.loadProject("/tmp/project", restore = false)
+      repeat(5) {
+        main.runPending()
+        io.runPending()
+      }
+      assertEquals("/tmp/project", presenter.snapshot.value.state.project?.path)
+      assertEquals(1, preferences.flushCount)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun failedSaveDoesNotUndoAnOpenOrSkipWorkspaceRefresh() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<String>()
+    val preferences =
+        object : AbstractPreferences(null, "") {
+          override fun putSpi(key: String, value: String) = Unit
+
+          override fun getSpi(key: String): String? = null
+
+          override fun removeSpi(key: String) = Unit
+
+          override fun removeNodeSpi() = Unit
+
+          override fun keysSpi(): Array<String> = emptyArray()
+
+          override fun childrenNamesSpi(): Array<String> = emptyArray()
+
+          override fun childSpi(name: String): AbstractPreferences = error("Unexpected child")
+
+          override fun syncSpi() = Unit
+
+          override fun flushSpi(): Unit = throw BackingStoreException("disk denied")
+        }
+    val presenter =
+        presenter(
+            parentScope = scope,
+            ioDispatcher = io,
+            lastProjectStore = LastProjectStore(preferences)) { method, path, _ ->
+              calls += path
+              projectStartupResponse(method, path)
+            }
+    try {
+      presenter.loadProject("/tmp/project", restore = false)
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals("/tmp/project", presenter.snapshot.value.state.project?.path)
+      assertNull(presenter.snapshot.value.state.projectState.preferenceSaveWarning)
+      repeat(6) {
+        io.runPending()
+        main.runPending()
+      }
+      val state = presenter.snapshot.value.state
+      assertEquals(Workspace.Summary, state.workspace)
+      assertEquals("/tmp/project", state.project?.path)
+      assertNull(state.projectState.openingError)
+      assertNull(state.error)
+      assertNull(state.projectState.rememberedPath)
+      assertTrue(state.projectState.preferenceSaveWarning.orEmpty().contains("next launch"))
+      assertTrue(state.projectState.preferenceSaveWarning.orEmpty().contains("disk denied"))
+      assertTrue(calls.any { it.contains("/overview?") })
+      assertTrue(calls.any { it.contains("/findings?") })
     } finally {
       presenter.close()
       scope.cancel()
@@ -2587,6 +2744,10 @@ class DesktopWorkflowPresenterTest {
 
     fun runPending() {
       while (pending.isNotEmpty()) pending.removeFirst().run()
+    }
+
+    fun runLast() {
+      pending.removeLast().run()
     }
   }
 

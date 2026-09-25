@@ -38,6 +38,7 @@ data class ProjectWorkspaceState(
     val openingAttempt: ProjectOpeningAttempt? = null,
     val rememberedPath: String? = null,
     val preferenceReadWarning: String? = null,
+    val preferenceSaveWarning: String? = null,
 ) {
   // Read-only bridge for existing shell/header consumers until they render attempts.
   val openingError: String?
@@ -351,6 +352,10 @@ sealed interface DesktopEvent {
 
   data class RememberedProjectRead(val path: String?, val warning: String? = null) : DesktopEvent
 
+  data class ProjectPreferenceSaved(val path: String) : DesktopEvent
+
+  data class ProjectPreferenceSaveFailed(val message: String) : DesktopEvent
+
   data class IndexRefreshed(val index: ProjectIndex) : DesktopEvent
 
   data class OverviewLoaded(val overview: ProjectOverview) : DesktopEvent
@@ -479,6 +484,8 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       is DesktopEvent.WorkspaceSelected -> copy(workspace = event.workspace)
       is DesktopEvent.ConnectionUpdated -> copy(connection = event.connection)
       is DesktopEvent.RememberedProjectRead,
+      is DesktopEvent.ProjectPreferenceSaved,
+      is DesktopEvent.ProjectPreferenceSaveFailed,
       is DesktopEvent.ProjectOpeningStarted,
       is DesktopEvent.ProjectOpeningCanceled,
       is DesktopEvent.ProjectLoadFailed,
@@ -779,7 +786,8 @@ private fun DesktopState.withLoadedProject(event: DesktopEvent.ProjectLoaded): D
                 index = event.index,
                 overview = null,
                 sourceChangeObserved = false,
-                openingAttempt = null),
+                openingAttempt = null,
+                preferenceSaveWarning = null),
         selection = FileSelectionState(),
         findings = FindingsState(),
         analysisRun = ProjectAnalysisRunState(),
@@ -796,6 +804,10 @@ private fun DesktopState.withProjectOpeningEvent(event: DesktopEvent): DesktopSt
               projectState =
                   projectState.copy(
                       rememberedPath = event.path, preferenceReadWarning = event.warning))
+      is DesktopEvent.ProjectPreferenceSaved ->
+          copy(projectState = projectState.copy(rememberedPath = event.path))
+      is DesktopEvent.ProjectPreferenceSaveFailed ->
+          copy(projectState = projectState.copy(preferenceSaveWarning = event.message))
       is DesktopEvent.ProjectOpeningStarted ->
           copy(projectState = projectState.copy(openingAttempt = event.attempt))
       is DesktopEvent.ProjectLoaded -> withLoadedProject(event)
