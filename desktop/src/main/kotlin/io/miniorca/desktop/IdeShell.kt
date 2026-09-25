@@ -423,7 +423,11 @@ internal fun horizontalSplitterKeyboardDelta(key: Key): Float? =
     }
 
 @Composable
-internal fun ResizableDivider(onDelta: (Float) -> Unit, onCommit: () -> Unit) {
+internal fun ResizableDivider(
+    onDelta: (Float) -> Unit,
+    onCommit: () -> Unit,
+    onFocusChanged: (Boolean) -> Unit = {},
+) {
   val density = LocalDensity.current
   val interaction = remember { MutableInteractionSource() }
   val focused by interaction.collectIsFocusedAsState()
@@ -443,6 +447,7 @@ internal fun ResizableDivider(onDelta: (Float) -> Unit, onCommit: () -> Unit) {
           .pointerHoverIcon(PointerIcon(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR)))
           .semantics { contentDescription = "Resize adjacent panes. Use Left or Right Arrow." }
           .hoverable(interaction)
+          .onFocusChanged { onFocusChanged(it.isFocused) }
           .focusable(interactionSource = interaction)
           .onPreviewKeyEvent { event ->
             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
