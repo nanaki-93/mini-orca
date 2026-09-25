@@ -217,6 +217,28 @@ internal fun resolveDesktopLayout(
       action.toFloat())
 }
 
+// WorkspaceFrame passes the allocation below the toolbar and above the footer, after its
+// vertical insets. Reserve a readable pane above the dock and a bar/tabs/collapse control
+// inside it at larger text. If the allocation cannot fit both, keep the dock chrome first;
+// Compose's weighted pane receives the remaining space. The collapsed bar sizes itself.
+internal const val MIN_WORKSPACE_PANE_HEIGHT = 160f
+internal const val MIN_EXPANDED_DOCK_HEIGHT = 80f
+
+internal fun resolveTerminalDockHeight(
+    preferred: DesktopLayoutState,
+    workspaceHeightDp: Float,
+    fontScale: Float,
+): Float {
+  if (preferred.bottomCollapsed) return 0f
+  val height = workspaceHeightDp.takeIf { it.isFinite() && it > 0f }?.toDouble() ?: 0.0
+  val scale = fontScale.takeIf { it.isFinite() && it > 0f }?.coerceAtLeast(1f)?.toDouble() ?: 1.0
+  val room = (height - WORKSPACE_FRAME_INSET).coerceAtLeast(0.0)
+  val chrome = minOf(room, MIN_EXPANDED_DOCK_HEIGHT * scale)
+  val limit = (room - MIN_WORKSPACE_PANE_HEIGHT * scale).coerceAtLeast(chrome)
+  return minOf(DesktopLayoutState.clampBottomHeight(preferred.bottomHeight).toDouble(), limit, room)
+      .toFloat()
+}
+
 /** Persists visual preferences only; it never stores workflow or authorization state. */
 internal class DesktopLayoutStore(
     private val preferences: Preferences =

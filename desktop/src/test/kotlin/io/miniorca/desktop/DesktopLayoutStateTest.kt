@@ -408,5 +408,40 @@ class DesktopLayoutStateTest {
     assertEquals(Float.POSITIVE_INFINITY, preferred.actionWidth)
   }
 
+  @Test
+  fun dockHeightReservesWorkspaceAndRestoresPreferenceAcrossAllocations() {
+    for (scale in listOf(1f, 1.25f, 1.5f)) {
+      val preferred = DesktopLayoutState(bottomCollapsed = false, bottomHeight = 520f)
+      val short = 400f * scale
+      val expected = short - WORKSPACE_FRAME_INSET - MIN_WORKSPACE_PANE_HEIGHT * scale
+      assertEquals(expected, resolveTerminalDockHeight(preferred, short, scale), 0.001f)
+      assertEquals(520f, resolveTerminalDockHeight(preferred, 1000f * scale, scale))
+      assertEquals(520f, preferred.bottomHeight)
+      assertEquals(0f, resolveTerminalDockHeight(preferred.withBottomCollapsed(true), short, scale))
+      assertEquals(520f, resolveTerminalDockHeight(preferred, 1000f * scale, scale))
+    }
+  }
+
+  @Test
+  fun dockHeightKeepsChromeBeforePaneWhenAllocationIsTooShort() {
+    val preferred = DesktopLayoutState(bottomCollapsed = false, bottomHeight = Float.NaN)
+    for (scale in listOf(1f, 1.25f, 1.5f)) {
+      val chrome = MIN_EXPANDED_DOCK_HEIGHT * scale
+      val tight = chrome + WORKSPACE_FRAME_INSET + 10f
+      assertEquals(chrome, resolveTerminalDockHeight(preferred, tight, scale))
+      assertEquals(10f, tight - WORKSPACE_FRAME_INSET - chrome)
+    }
+    for (height in
+        listOf(Float.NaN, Float.NEGATIVE_INFINITY, Float.POSITIVE_INFINITY, -1f, 0f, 1f)) {
+      for (scale in listOf(Float.NaN, 0f, 1f, 1.5f, Float.MAX_VALUE)) {
+        val dock = resolveTerminalDockHeight(preferred, height, scale)
+        assertTrue(dock.isFinite() && dock >= 0f)
+        if (height.isFinite() && height > 0f) {
+          assertTrue(dock <= (height - WORKSPACE_FRAME_INSET).coerceAtLeast(0f))
+        } else assertEquals(0f, dock)
+      }
+    }
+  }
+
   private fun withPreferences(test: (InMemoryPreferences) -> Unit) = test(InMemoryPreferences())
 }

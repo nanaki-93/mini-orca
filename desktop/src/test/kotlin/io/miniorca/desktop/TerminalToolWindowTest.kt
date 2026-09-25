@@ -1,5 +1,12 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.Text
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import java.io.ByteArrayOutputStream
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
@@ -19,6 +26,94 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class TerminalToolWindowTest {
+  @Test
+  fun measuredDockStaysBetweenPaneAndFooterWithoutChangingSessionOnResize() =
+      withWorkspace { workspace, process, starts, path ->
+        edt { workspace.activate(path) }
+        eventually { workspace.state.value.widget != null }
+        val widget = workspace.state.value.widget
+        val preferred = DesktopLayoutState(bottomCollapsed = false, bottomHeight = 520f)
+        for (scale in listOf(1f, 1.25f, 1.5f)) {
+          ComposeVisualFixture(800, 650, scale) {
+                Column(Modifier.fillMaxSize()) {
+                  Box(Modifier.testTag("toolbar")) { Text("Toolbar") }
+                  WorkspaceFrame(
+                      rail = { Box {} },
+                      panes = { Box(Modifier.weight(1f).fillMaxSize().testTag("workspace-pane")) },
+                      terminal = { height ->
+                        TerminalDock(
+                            layout = preferred,
+                            effectiveHeight = resolveTerminalDockHeight(preferred, height, scale),
+                            state = workspace.state.value,
+                            onOpen = {},
+                            onCollapse = {},
+                            tabActions = TerminalTabActions({}, {}, {}),
+                            onHeightDelta = {},
+                            onHeightCommit = {},
+                            content = { modifier -> Box(modifier.background(EditorCanvas)) },
+                            controlModifier = Modifier.testTag("dock-toggle"),
+                            modifier = Modifier.testTag("dock"))
+                      },
+                      modifier = Modifier.weight(1f))
+                  Box(Modifier.testTag("footer")) { Text("Footer") }
+                }
+              }
+              .use { fixture ->
+                for (height in listOf(650, 480, 900)) {
+                  fixture.resize(800, height)
+                  fixture.render()
+                  val pane = fixture.taggedBounds("workspace-pane")
+                  val dock = fixture.taggedBounds("dock")
+                  val footer = fixture.taggedBounds("footer")
+                  assertTrue(pane.bottom <= dock.top, "$height/$scale: pane overlaps dock")
+                  assertTrue(dock.bottom <= footer.top, "$height/$scale: dock overlaps footer")
+                  assertTrue(dock.height >= MIN_EXPANDED_DOCK_HEIGHT * scale)
+                  if (height == 900) assertEquals(preferred.bottomHeight, dock.height, 1f)
+                  val toggle = fixture.taggedBounds("dock-toggle")
+                  assertTrue(toggle.top >= dock.top && toggle.bottom <= dock.bottom)
+                  assertTrue(fixture.hasDescription("New shell"))
+                  assertSame(widget, workspace.state.value.widget)
+                  assertEquals(1, starts.get())
+                  assertTrue(process.alive)
+                }
+              }
+          ComposeVisualFixture(800, 480, scale) {
+                Column(Modifier.fillMaxSize()) {
+                  WorkspaceFrame(
+                      rail = { Box {} },
+                      panes = { Box(Modifier.weight(1f).testTag("workspace-pane")) },
+                      terminal = { height ->
+                        TerminalDock(
+                            layout = preferred.withBottomCollapsed(true),
+                            effectiveHeight =
+                                resolveTerminalDockHeight(
+                                    preferred.withBottomCollapsed(true), height, scale),
+                            state = workspace.state.value,
+                            onOpen = {},
+                            onCollapse = {},
+                            tabActions = TerminalTabActions({}, {}, {}),
+                            onHeightDelta = {},
+                            onHeightCommit = {},
+                            content = { modifier -> Box(modifier) },
+                            controlModifier = Modifier.testTag("dock-toggle"),
+                            modifier = Modifier.testTag("dock"))
+                      },
+                      modifier = Modifier.weight(1f))
+                  Box(Modifier.testTag("footer")) { Text("Footer") }
+                }
+              }
+              .use { fixture ->
+                fixture.render()
+                val dock = fixture.taggedBounds("dock")
+                assertTrue(dock.height > 0f)
+                assertTrue(dock.bottom <= fixture.taggedBounds("footer").top)
+                assertTrue(fixture.taggedBounds("dock-toggle").bottom <= dock.bottom)
+                assertSame(widget, workspace.state.value.widget)
+                assertEquals(1, starts.get())
+              }
+        }
+      }
+
   @Test
   fun hiddenShellKeepsOneReaderAndBufferAcrossHostChanges() =
       withWorkspace { workspace, process, starts, path ->
