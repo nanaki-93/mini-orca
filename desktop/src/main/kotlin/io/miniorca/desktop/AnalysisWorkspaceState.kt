@@ -236,6 +236,43 @@ internal data class AnalysisResultPageState(
   val coverageLabel: String?
     get() = if (stale) null else analysisCoverageLabel(progress?.coverage)
 
+  /** A matching detail read is not the same as a completed, current result. */
+  private val completedZeroDetails: Boolean
+    get() =
+        reportedCount == 0 &&
+            !section.loading &&
+            section.error == null &&
+            run?.status in setOf("completed", "completed_empty") &&
+            progress?.status in setOf("completed", "completed_empty") &&
+            results?.let {
+              it.progress.status in setOf("completed", "completed_empty") &&
+                  it.progress.findingCount == 0 &&
+                  it.semantic.isEmpty() &&
+                  it.performance.all { report ->
+                    report.status in setOf("completed", "completed_empty") &&
+                        report.findings.isEmpty()
+                  } &&
+                  it.security.all { report ->
+                    report.status in setOf("completed", "completed_empty") &&
+                        report.findings.isEmpty()
+                  }
+            } == true
+
+  fun countLabel(loadedCount: Int): String {
+    val count = reportedCount
+    if (count == loadedCount &&
+        !section.loading &&
+        section.error == null &&
+        !stale &&
+        run?.status in setOf("completed", "completed_empty") &&
+        progress?.status in setOf("completed", "completed_empty") &&
+        results != null &&
+        (loadedCount > 0 || completedZeroDetails))
+        return "$loadedCount ${if (loadedCount == 1) "finding" else "findings"}"
+    val loaded = if (loadedCount > 0) "$loadedCount loaded · " else ""
+    return "$loaded${count?.let { "$it reported" } ?: "— reported (count unavailable)"}"
+  }
+
   val runTimeLabel: String?
     get() =
         run?.takeIf { it.identity.projectId == project?.projectId }
@@ -259,7 +296,9 @@ internal data class AnalysisResultPageState(
             "View analysis to refresh evidence for the current project revision.")
     if (section.error != null)
         return AnalysisResultEmptyPresentation(
-            AnalysisResultAvailability.Error, "Results could not be refreshed.", section.error)
+            AnalysisResultAvailability.Error,
+            "Results could not be refreshed.",
+            section.error.ifBlank { "The saved result read failed without a diagnostic." })
     if (section.loading)
         return AnalysisResultEmptyPresentation(
             AnalysisResultAvailability.Loading, "Loading results…", "")
@@ -289,10 +328,17 @@ internal data class AnalysisResultPageState(
               AnalysisResultEmptyPresentation(
                   AnalysisResultAvailability.PendingDetails,
                   "No results loaded yet.",
-                  "$currentReportedCount findings were reported. View analysis for the current category status.")
+                  "$currentReportedCount findings were reported. Analysis is still in progress; view analysis for the current category status.")
           else
               AnalysisResultEmptyPresentation(
-                  AnalysisResultAvailability.Running, "No findings yet.", coverageLabel.orEmpty())
+                  AnalysisResultAvailability.Running,
+                  "Analysis is in progress.",
+                  listOfNotNull(
+                          currentReportedCount?.let {
+                            "$it findings reported so far; results are not final."
+                          },
+                          coverageLabel)
+                      .joinToString(" · "))
       "paused" ->
           AnalysisResultEmptyPresentation(
               AnalysisResultAvailability.Paused,
@@ -305,9 +351,7 @@ internal data class AnalysisResultPageState(
               "View analysis to resume or start another run.")
       "completed",
       "completed_empty" ->
-          if (currentReportedCount == 0 &&
-              results?.progress?.status in setOf("completed", "completed_empty") &&
-              results?.progress?.findingCount == 0)
+          if (completedZeroDetails)
               AnalysisResultEmptyPresentation(
                   AnalysisResultAvailability.CompletedEmpty,
                   "No findings in the analyzed scope.",
@@ -315,9 +359,9 @@ internal data class AnalysisResultPageState(
           else
               AnalysisResultEmptyPresentation(
                   AnalysisResultAvailability.PendingDetails,
-                  if (currentReportedCount != null && currentReportedCount > 0)
-                      "$currentReportedCount findings were reported."
-                  else "Completed result details are not available yet.",
+                  if (currentReportedCount != null)
+                      "$currentReportedCount findings were reported; completed details are not available yet."
+                  else "Completed result details and reported count are not available yet.",
                   "View analysis for the current category status.")
       "partial" ->
           AnalysisResultEmptyPresentation(

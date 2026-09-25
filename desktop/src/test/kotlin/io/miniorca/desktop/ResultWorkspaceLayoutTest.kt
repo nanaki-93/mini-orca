@@ -244,7 +244,7 @@ class ResultWorkspaceLayoutTest {
     }
 
     listOf(
-            Triple("running", null, "No findings yet."),
+            Triple("running", null, "Analysis is in progress."),
             Triple("completed", 0, "No findings in the analyzed scope."),
             Triple("partial", 0, "Analysis completed partially."),
             Triple("failed", 0, "Analysis failed for this category."))
