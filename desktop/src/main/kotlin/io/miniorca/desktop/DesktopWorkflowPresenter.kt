@@ -687,6 +687,19 @@ class DesktopWorkflowPresenter(
         }
       }
     }
+    val checkAttempt = controller.state.review.checkAttempt
+    val draft = controller.state.review.draft
+    if (checkAttempt?.status == ValidationAttemptStatus.Running && draft != null) {
+      controller.currentFileRequest()?.let { file ->
+        if (controller.draftChecksStopped(
+            checkAttempt.requestId,
+            file,
+            draft,
+            ValidationAttemptStatus.Canceled,
+            "Focused checks canceled. Run them again to continue."))
+            publish()
+      }
+    }
     activeDraft = null
     draftValidationJob?.cancel()
     draftChecksJob?.cancel()
@@ -906,10 +919,11 @@ class DesktopWorkflowPresenter(
       dispatch(DesktopEvent.Failed(eligibility.reason))
       return
     }
-    val (request, fileRequest) = controller.beginDraftLoad() ?: return
+    val (request, fileRequest) = controller.beginDraftChecks(draft) ?: return
     val identity = draft.identity(file.identity(project))
     activeDraft = identity
     draftChecksJob?.cancel()
+    publish()
     dispatch(DesktopEvent.Loading)
     val taskTestName = draft.taskSpec?.goTestCandidate?.name
     dispatch(
@@ -918,6 +932,15 @@ class DesktopWorkflowPresenter(
                 "Running source-only focused checks for ${draft.targetSymbol}…"
             else
                 "Trusting local execution for ${draft.targetSymbol}, then running focused checks…"))
+    fun reportFailure(error: Exception, conflict: Boolean) {
+      val message = error.message?.takeIf(String::isNotBlank) ?: "Focused checks request failed"
+      if (controller.draftChecksStopped(
+          request, fileRequest, draft, ValidationAttemptStatus.Failed, message)) {
+        publish()
+        if (conflict) dispatch(DesktopEvent.DraftMarkedStale)
+        dispatch(DesktopEvent.Failed(message))
+      }
+    }
     draftChecksJob =
         scope.launch {
           try {
@@ -940,16 +963,23 @@ class DesktopWorkflowPresenter(
                   DesktopEvent.Status(
                       if (checks.applicable) "Focused checks passed."
                       else "Focused checks need attention."))
+            } else if (activeDraft == identity) {
+              reportFailure(
+                  IllegalStateException("Focused checks returned a different draft."), false)
             }
-          } catch (_: CancellationException) {
-            throw CancellationException()
+          } catch (canceled: CancellationException) {
+            if (controller.draftChecksStopped(
+                request,
+                fileRequest,
+                draft,
+                ValidationAttemptStatus.Canceled,
+                "Focused checks canceled. Run them again to continue."))
+                publish()
+            throw canceled
           } catch (error: ApiException) {
-            if (activeDraft != identity) return@launch
-            if (error.status == 409) dispatch(DesktopEvent.DraftMarkedStale)
-            dispatch(DesktopEvent.Failed(error.message ?: "Focused checks failed"))
+            reportFailure(error, error.status == 409)
           } catch (error: Exception) {
-            if (activeDraft != identity) return@launch
-            dispatch(DesktopEvent.Failed(error.message ?: "Focused checks failed"))
+            reportFailure(error, false)
           }
         }
   }
@@ -967,7 +997,8 @@ class DesktopWorkflowPresenter(
     val file = state.selectedFile ?: return
     val identity = draft.identity(file.identity(project))
     val eligibility =
-        draftReviewEligibility(state.review.editor, draft, state.checks, file, project)
+        draftReviewEligibility(
+            state.review.editor, draft, state.checks, file, project, state.review.checkAttempt)
     if (!eligibility.eligible) {
       dispatch(DesktopEvent.Failed(eligibility.reason))
       return

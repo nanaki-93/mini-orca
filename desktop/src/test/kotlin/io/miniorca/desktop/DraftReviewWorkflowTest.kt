@@ -81,6 +81,35 @@ class DraftReviewWorkflowTest {
       assertFalse(requests.any { it.startsWith("POST /api/projects/current/apply") })
       val checks = client.checkDraft(validated.id, "revision", validated.revision, validated.hash)
       val checkedState = validatedState.reduce(DesktopEvent.ChecksLoaded(checks))
+      assertTrue(checks.checks.isEmpty())
+      val rerunning = checkedState.reduce(DesktopEvent.ChecksStarted(1, CheckCandidate(validated)))
+      assertFalse(
+          draftReviewEligibility(
+                  rerunning.review.editor,
+                  rerunning.review.draft,
+                  rerunning.review.checks,
+                  file(),
+                  project(),
+                  rerunning.review.checkAttempt)
+              .eligible)
+      val canceled =
+          rerunning.reduce(
+              DesktopEvent.ChecksStopped(1, ValidationAttemptStatus.Canceled, "Canceled by user"))
+      assertFalse(
+          draftReviewEligibility(
+                  canceled.review.editor,
+                  canceled.review.draft,
+                  canceled.review.checks,
+                  file(),
+                  project(),
+                  canceled.review.checkAttempt)
+              .eligible)
+      assertTrue(
+          canceled
+              .reduce(DesktopEvent.ChecksStarted(2, CheckCandidate(validated)))
+              .reduce(DesktopEvent.ChecksCompleted(2, checks))
+              .review
+              .checkAttempt == null)
 
       assertTrue(
           draftReviewEligibility(

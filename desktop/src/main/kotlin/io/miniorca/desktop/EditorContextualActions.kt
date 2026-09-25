@@ -48,7 +48,7 @@ internal fun editorContextualActions(
               editor,
               draft,
               state.review.checks,
-              checksRunning = state.loading,
+              checksRunning = state.review.checkAttempt?.status == ValidationAttemptStatus.Running,
           )
           .canRunChecks
   return EditorContextualActions(

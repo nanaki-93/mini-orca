@@ -182,12 +182,41 @@ data class ChatState(
 
 data class ChatRequestFailure(val target: ChatTarget, val message: String)
 
+data class CheckCandidate(
+    val projectId: String,
+    val projectRevision: String,
+    val path: String,
+    val baseFileHash: String,
+    val draftId: String,
+    val revision: Long,
+    val hash: String,
+) {
+  constructor(
+      draft: DeclarationDraft
+  ) : this(
+      draft.projectId,
+      draft.projectRevision,
+      draft.targetPath,
+      draft.baseFileHash,
+      draft.id,
+      draft.revision,
+      draft.hash)
+}
+
+data class CheckAttempt(
+    val requestId: Long,
+    val candidate: CheckCandidate,
+    val status: ValidationAttemptStatus,
+    val message: String = "",
+)
+
 data class DraftReviewState(
     val checks: DraftCheckReport? = null,
     val draft: DeclarationDraft? = null,
     val editor: EditableDraftState? = null,
     val applied: ApplyResult? = null,
     val benchmark: BenchmarkEvidenceState = BenchmarkEvidenceState(),
+    val checkAttempt: CheckAttempt? = null,
 )
 
 /** Catalog lookups and a completed comparison stay tied to their exact reviewed draft. */
@@ -346,6 +375,16 @@ sealed interface DesktopEvent {
   data class GitStatusLoaded(val gitStatus: GitStatus) : DesktopEvent
 
   data class ChecksLoaded(val checks: DraftCheckReport) : DesktopEvent
+
+  data class ChecksStarted(val requestId: Long, val candidate: CheckCandidate) : DesktopEvent
+
+  data class ChecksCompleted(val requestId: Long, val checks: DraftCheckReport) : DesktopEvent
+
+  data class ChecksStopped(
+      val requestId: Long,
+      val status: ValidationAttemptStatus,
+      val message: String,
+  ) : DesktopEvent
 
   data class GoBenchmarkCatalogLoaded(val catalog: GoBenchmarkCatalog) : DesktopEvent
 
@@ -539,10 +578,10 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       is DesktopEvent.ImpactLoaded -> copy(selection = selection.copy(impact = event.impact))
       is DesktopEvent.GitStatusLoaded ->
           copy(selection = selection.copy(gitStatus = event.gitStatus))
-      is DesktopEvent.ChecksLoaded ->
-          copy(
-              review = review.copy(checks = event.checks),
-              jobs = jobs.copy(loading = false, error = null))
+      is DesktopEvent.ChecksStarted,
+      is DesktopEvent.ChecksCompleted,
+      is DesktopEvent.ChecksStopped,
+      is DesktopEvent.ChecksLoaded -> withCheckEvent(event)
       is DesktopEvent.GoBenchmarkCatalogLoaded ->
           copy(
               review =
@@ -598,6 +637,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                     draft = event.proposal.draft,
                     editor = editableDraft(event.proposal.draft),
                     checks = null,
+                    checkAttempt = null,
                     benchmark = BenchmarkEvidenceState()),
             jobs = jobs.copy(loading = false, error = null),
         )
@@ -615,6 +655,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                         draft = changed.serverDraft.copy(validation = null),
                         editor = changed,
                         checks = null,
+                        checkAttempt = null,
                         benchmark = review.benchmark.withoutCatalog()),
                 jobs = jobs.copy(loading = false))
           } ?: this
@@ -629,6 +670,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                         draft = editor.serverDraft.copy(validation = null),
                         editor = editor.copy(status = DraftEditorStatus.Stale),
                         checks = null,
+                        checkAttempt = null,
                         benchmark = review.benchmark.withoutCatalog()),
                 jobs = jobs.copy(loading = false))
           } ?: this
@@ -639,6 +681,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                       draft = event.draft,
                       editor = editableDraft(event.draft),
                       checks = null,
+                      checkAttempt = null,
                       benchmark = review.benchmark.withoutCatalog()),
               jobs = jobs.copy(loading = false))
       DesktopEvent.DraftDiscarded ->
@@ -652,6 +695,49 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       is DesktopEvent.Failed -> copy(jobs = jobs.copy(loading = false, error = event.message))
       is DesktopEvent.Status -> copy(jobs = jobs.copy(status = event.message))
     }
+
+private fun DesktopState.withCheckEvent(event: DesktopEvent): DesktopState =
+    when (event) {
+      is DesktopEvent.ChecksLoaded ->
+          copy(
+              review = review.copy(checks = event.checks, checkAttempt = null),
+              jobs = jobs.copy(loading = false, error = null))
+      is DesktopEvent.ChecksStarted ->
+          if (review.draft?.let(::CheckCandidate) == event.candidate)
+              copy(
+                  review =
+                      review.copy(
+                          checkAttempt =
+                              CheckAttempt(
+                                  event.requestId,
+                                  event.candidate,
+                                  ValidationAttemptStatus.Running)))
+          else this
+      is DesktopEvent.ChecksCompleted ->
+          if (currentCheckAttempt(event.requestId))
+              copy(
+                  review = review.copy(checks = event.checks, checkAttempt = null),
+                  jobs = jobs.copy(loading = false, error = null))
+          else this
+      is DesktopEvent.ChecksStopped ->
+          if (currentCheckAttempt(event.requestId))
+              copy(
+                  review =
+                      review.copy(
+                          checkAttempt =
+                              review.checkAttempt?.copy(
+                                  status = event.status, message = event.message)),
+                  jobs = jobs.copy(loading = false))
+          else this
+      else -> this
+    }
+
+private fun DesktopState.currentCheckAttempt(requestId: Long): Boolean =
+    review.checkAttempt?.let {
+      it.requestId == requestId &&
+          it.status == ValidationAttemptStatus.Running &&
+          review.draft?.let(::CheckCandidate) == it.candidate
+    } == true
 
 private fun DesktopState.withLocalReadFailure(event: DesktopEvent.LocalReadFailure): DesktopState =
     when (event) {
@@ -688,6 +774,7 @@ private fun DesktopState.withValidationStarted(requestId: Long): DesktopState =
                           validationAttempt =
                               ValidationAttempt(requestId, ValidationAttemptStatus.Running)),
                   checks = null,
+                  checkAttempt = null,
                   benchmark = review.benchmark.withoutCatalog()),
           jobs = jobs.copy(loading = false))
     } ?: this
@@ -1031,8 +1118,39 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
           checks.draftId == draft.id &&
           checks.draftRevision == draft.revision &&
           checks.draftHash == draft.hash)
-          accept(DesktopEvent.ChecksLoaded(checks))
+          currentCheck(requestId, file, draft) &&
+              accept(DesktopEvent.ChecksCompleted(requestId, checks))
       else false
+
+  fun beginDraftChecks(draft: DeclarationDraft): Pair<Long, RequestIdentity>? {
+    if (state.review.checkAttempt?.status == ValidationAttemptStatus.Running) return null
+    return beginDraftLoad()?.also { (request, _) ->
+      dispatch(DesktopEvent.ChecksStarted(request, CheckCandidate(draft)))
+    }
+  }
+
+  fun draftChecksStopped(
+      requestId: Long,
+      file: RequestIdentity,
+      draft: DeclarationDraft,
+      status: ValidationAttemptStatus,
+      message: String,
+  ): Boolean =
+      if (currentCheck(requestId, file, draft)) {
+        draftRequest = 0
+        accept(DesktopEvent.ChecksStopped(requestId, status, message))
+      } else false
+
+  private fun currentCheck(
+      requestId: Long,
+      file: RequestIdentity,
+      draft: DeclarationDraft
+  ): Boolean =
+      requestId == draftRequest &&
+          matchesFile(file) &&
+          state.review.draft?.let(::CheckCandidate) == CheckCandidate(draft) &&
+          state.review.checkAttempt ==
+              CheckAttempt(requestId, CheckCandidate(draft), ValidationAttemptStatus.Running)
 
   fun currentFileRequest(): RequestIdentity? = fileRequest
 
@@ -1127,7 +1245,8 @@ fun draftReviewEligibility(
     draft: DeclarationDraft?,
     checks: DraftCheckReport?,
     selectedFile: ProjectFileInfo?,
-    project: ProjectAnalysis?
+    project: ProjectAnalysis?,
+    checkAttempt: CheckAttempt? = null,
 ): ApplyEligibility {
   if (editor == null || draft == null) return ApplyEligibility(false, "Select a draft first.")
   if (editor.status == DraftEditorStatus.Stale)
@@ -1140,6 +1259,17 @@ fun draftReviewEligibility(
       return ApplyEligibility(false, "Wait for validation to finish.")
   if (!draftEditorMatchesOpenFile(editor, selectedFile, project))
       return ApplyEligibility(false, "The draft no longer matches the open file.")
+  if (checkAttempt?.candidate == CheckCandidate(draft)) {
+    val reason =
+        when (checkAttempt.status) {
+          ValidationAttemptStatus.Running -> "Wait for focused checks to finish."
+          ValidationAttemptStatus.Failed ->
+              "Focused checks failed to run. Run them again before Apply."
+          ValidationAttemptStatus.Canceled ->
+              "Focused checks were canceled. Run them again before Apply."
+        }
+    return ApplyEligibility(false, reason)
+  }
   return draftApplyEligibility(draft, checks, selectedFile)
 }
 
