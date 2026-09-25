@@ -3,6 +3,7 @@ package io.miniorca.desktop
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 
 class ResultBrowserStateTest {
   @Test
@@ -36,6 +37,30 @@ class ResultBrowserStateTest {
     assertEquals("First", resultBrowserSelection("Second", rows.dropLast(1)))
     assertNull(resultBrowserSelection("Second", emptyList()))
     assertEquals("First", nextResultBrowserKey(rows, "Second", 1))
+  }
+
+  @Test
+  fun savedResultReadChangesDoNotReplaceLocalBrowserState() {
+    val page = resultPageFixture("bugs")
+    val store = ResultBrowserStore()
+    val browser = store.stateFor(page)
+    browser.query = "handler"
+    browser.filter = ResultBrowserFilter.Value("high")
+    browser.selectedKey = "semantic:first"
+    val position = browser.listState
+
+    listOf(
+            page.copy(section = page.section.copy(loading = true)),
+            page.copy(section = page.section.copy(error = "read failed")),
+            page.copy(section = page.section.copy(error = "")),
+            page.copy(section = page.section.copy(loading = false, error = null)))
+        .forEach { updated ->
+          assertSame(browser, store.stateFor(updated))
+          assertSame(position, store.stateFor(updated).listState)
+          assertEquals("handler", browser.query)
+          assertEquals(ResultBrowserFilter.Value("high"), browser.filter)
+          assertEquals("semantic:first", browser.selectedKey)
+        }
   }
 
   @Test

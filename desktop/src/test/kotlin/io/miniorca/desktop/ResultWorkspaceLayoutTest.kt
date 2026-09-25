@@ -4,7 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.Text
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.font.FontFamily
@@ -402,6 +404,102 @@ class ResultWorkspaceLayoutTest {
   }
 
   @Test
+  fun savedResultReadFeedbackStaysAboveRetainedAndFilteredEvidenceForEveryCategory() {
+    AnalysisResultType.entries.forEach { type ->
+      val original = resultPageFixture(type.category)
+      val rows = (1..80).map { row(it) }
+      val browser = newResultBrowserState(original)
+      var page by mutableStateOf(original)
+      var navigations = 0
+      ComposeVisualFixture(800, 650, 1.5f) {
+            AnalysisResultsPane(page, rows, browser, openAnalysis = { navigations++ }) { key ->
+              Text("Evidence for $key")
+            }
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.revealText("Finding 20", "result-list")
+            fixture.clickDescription("Inspect Finding 20")
+            browser.query = "Finding"
+            browser.filter = ResultBrowserFilter.Value("high")
+            fixture.render()
+            fixture.scrollBy(480f, "result-list")
+            awaitResultListSettled(fixture, browser)
+            val index = browser.listState.firstVisibleItemIndex
+            val offset = browser.listState.firstVisibleItemScrollOffset
+            assertTrue(index > 0)
+            page = original.copy(section = original.section.copy(loading = true))
+            fixture.render()
+            fixture.assertTextFits("Loading results…")
+            assertTrue(
+                fixture.hasText(
+                    "Reading saved ${type.workspace.name} results. Previously loaded results remain available below."))
+            assertTrue(fixture.hasText("Evidence for finding-20"))
+            assertEquals(index, browser.listState.firstVisibleItemIndex)
+            assertEquals(offset, browser.listState.firstVisibleItemScrollOffset)
+            page = original.copy(section = original.section.copy(error = "refresh failed"))
+            fixture.render()
+            fixture.assertTextFits("${type.workspace.name} · saved result read failed")
+            fixture.assertTextFits("Results could not be refreshed: refresh failed")
+            val feedback = fixture.taggedBounds("result-read-feedback")
+            val list = fixture.taggedBounds("result-list")
+            assertTrue(feedback.bottom <= list.top)
+            assertEquals(index, browser.listState.firstVisibleItemIndex)
+            assertEquals(offset, browser.listState.firstVisibleItemScrollOffset)
+            browser.query = "no matching title"
+            fixture.render()
+            fixture.assertTextFits("No matching results.")
+            fixture.assertTextFits("Results could not be refreshed: refresh failed")
+            assertTrue(
+                fixture.taggedBounds("result-read-feedback").bottom <=
+                    fixture.taggedBounds("result-empty").top)
+            fixture.clickDescription("Clear filters")
+            fixture.render()
+            assertFalse(fixture.hasText("No matching results."))
+            assertEquals(index, browser.listState.firstVisibleItemIndex)
+            assertEquals(offset, browser.listState.firstVisibleItemScrollOffset)
+            fixture.revealText("Finding 20", "result-list")
+            assertTrue(fixture.hasDescription("Inspect Finding 20"))
+            assertEquals(ResultBrowserFilter.All, browser.filter)
+            assertEquals("", browser.query)
+            assertEquals("finding-1", browser.selectedKey)
+            assertEquals(0, navigations)
+          }
+    }
+  }
+
+  @Test
+  fun emptySavedResultReadsKeepFailureSeparateFromSuccessfulEmptiness() {
+    AnalysisResultType.entries.forEach { type ->
+      val original = resultPageFixture(type.category)
+      var page by mutableStateOf(original.copy(section = AnalysisSectionState(loading = true)))
+      val browser = newResultBrowserState(original)
+      ComposeVisualFixture(800, 650, 1.5f) {
+            AnalysisResultsPane(page, emptyList(), browser, openAnalysis = {}) { Text("unused") }
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.assertTextFits("Loading results…")
+            assertTrue(
+                fixture.hasText(
+                    "Reading saved ${type.workspace.name} results; no new analysis is being started."))
+            assertFalse(fixture.hasText("No findings in the analyzed scope."))
+            page = original.copy(section = AnalysisSectionState(error = ""))
+            fixture.render()
+            fixture.assertTextFits("${type.workspace.name} · saved result read failed")
+            assertTrue(
+                fixture.hasText(
+                    "Results could not be refreshed: The saved result read failed without a diagnostic."))
+            fixture.assertTextFits("No result details loaded yet.")
+            assertFalse(fixture.hasText("No findings in the analyzed scope."))
+            assertTrue(
+                fixture.taggedBounds("result-read-feedback").bottom <=
+                    fixture.taggedBounds("result-empty").top)
+          }
+    }
+  }
+
+  @Test
   fun longRefreshErrorsLeaveRetainedFindingsAndDisabledFixReachable() {
     val original = performancePageFixture()
     val refreshError = "The result refresh failed for a long project path. ".repeat(12)
@@ -532,7 +630,7 @@ class ResultWorkspaceLayoutTest {
           assertTrue(fixture.hasText("Preconditions / unknowns"))
           assertTrue(fixture.hasText("Safe verification idea"))
           fixture.assertTextWrapsWithoutClipping(longPreconditions)
-          fixture.revealText("Prepare fix", "result-detail")
+          revealDetailAction(fixture, "Prepare fix")
           fixture.clickText("Prepare fix")
           assertEquals(1, fixes)
           fixture.scrollBy(100_000f, "result-detail")
@@ -582,10 +680,10 @@ class ResultWorkspaceLayoutTest {
         }
         .use { fixture ->
           fixture.render("results-empty-long-error-800-400-150")
-          fixture.scrollBy(100_000f, "result-empty")
-          fixture.render()
-          assertTrue(fixture.verticalScrollValue("result-empty") > 0f)
-          assertTrue(fixture.hasText(refreshError))
+          fixture.assertTextWrapsAndTailIsReachable(
+              "Results could not be refreshed: $refreshError", "result-read-feedback")
+          assertTrue(fixture.verticalScrollValue("result-read-feedback") > 0f)
+          assertTrue(fixture.taggedBounds("result-empty").height > 0f)
           fixture.clickText("View analysis")
           assertEquals(1, openedAnalysis)
         }

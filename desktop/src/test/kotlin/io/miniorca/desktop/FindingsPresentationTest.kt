@@ -97,8 +97,9 @@ class FindingsPresentationTest {
                 fixture.render()
                 fixture.assertTextFits(label)
                 if (state.section.error != null)
-                    fixture.assertTextFits(
-                        "Results could not be refreshed: ${state.section.error.ifBlank { "The saved result read failed without a diagnostic." }}")
+                    assertFalse(
+                        fixture.hasText(
+                            "Results could not be refreshed: ${state.section.error.ifBlank { "The saved result read failed without a diagnostic." }}"))
               }
         }
     val completed =
