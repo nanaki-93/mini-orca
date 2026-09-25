@@ -129,6 +129,29 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun resizingWithPaletteOpenDoesNotStealFocusOrActivateItsOpener() {
+    var operations = 0
+    val initial = shellFocusState(resultProjectFixture())
+    var state by mutableStateOf(initial.copy(app = initial.app.copy(workspace = Workspace.Editor)))
+    ComposeVisualFixture(1600, 800) {
+          FocusTestShell(state, onState = { state = it }, onOperation = { operations++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("Search files, symbols, commands")
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Filter files"))
+          fixture.resize(800, 650)
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Filter files"))
+          assertTrue(fixture.pressKey(Key.Escape))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Search files, symbols, commands"))
+          assertEquals(0, operations)
+        }
+  }
+
+  @Test
   fun shellRestoresStatusOpenerOnCloseAndEscapeWithoutDispatchingWork() {
     var operations = 0
     val project = resultProjectFixture()

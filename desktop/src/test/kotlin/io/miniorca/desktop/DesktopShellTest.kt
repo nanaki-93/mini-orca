@@ -2,12 +2,18 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -30,7 +36,11 @@ class DesktopShellTest {
                     DesktopState(
                         workspace = Workspace.Editor,
                         projectState = ProjectWorkspaceState(resultProjectFixture(), index)),
-                layout = DesktopLayoutState(activeRightToolWindow = RightToolWindow.Review),
+                layout =
+                    DesktopLayoutState(
+                        activeRightToolWindow = RightToolWindow.Review,
+                        explorerWidth = 520f,
+                        actionWidth = 560f),
                 editor =
                     DesktopShellEditorState(
                         EditorProgressUiState(EditorProgress.Inspect, ""),
@@ -168,6 +178,22 @@ class DesktopShellTest {
           fixture.render()
           assertTrue(fixture.hasDescription("Review tool window tab, selected"))
           assertTrue(fixture.taggedBounds("desktop-canvas-focus").width >= MIN_EDITOR_CANVAS_WIDTH)
+          val toolTabs = "Right tool windows. Review selected."
+          assertTrue(fixture.requestDescriptionFocus(toolTabs))
+          fixture.render()
+          assertTrue(fixture.isDescriptionFocused(toolTabs))
+          fixture.resize(800, 650)
+          fixture.render()
+          assertTrue(fixture.isDescriptionFocused(toolTabs))
+          assertTrue(fixture.descriptionBounds(toolTabs).bottom <= 650f)
+          fixture.resize(1600, 800)
+          fixture.render()
+          assertTrue(fixture.isDescriptionFocused(toolTabs))
+          assertTrue(
+              fixture.requestDescriptionFocus("Resize adjacent panes. Use Left or Right Arrow."))
+          fixture.render()
+          assertTrue(
+              fixture.isDescriptionFocused("Resize adjacent panes. Use Left or Right Arrow."))
           fixture.resize(800, 650)
           fixture.render()
           assertEquals(selected, shell.value.app.selectedFile)
@@ -176,6 +202,7 @@ class DesktopShellTest {
           assertEquals(RightToolWindow.Review, shell.value.layout.activeRightToolWindow)
           assertTrue(fixture.hasDescription("Review tool window tab, selected"))
           assertTrue(fixture.taggedBounds("desktop-canvas-focus").width > 0)
+          assertTrue(fixture.isTaggedNodeFocused("desktop-canvas-focus"))
           fixture.scrollBy(100_000f)
           fixture.render()
           fixture.resize(1600, 800)
@@ -205,13 +232,15 @@ class DesktopShellTest {
                   left = { modifier -> Box(modifier.testTag("files")) { Text("Files pane") } },
                   canvas = { modifier -> Box(modifier.testTag("canvas")) { Text("Source pane") } },
                   right = { modifier -> Box(modifier.testTag("tool")) { Text("Tool pane") } },
-                  leftDivider = {},
-                  rightDivider = {})
+                  leftDivider = { ResizableDivider({}, {}) },
+                  rightDivider = { ResizableDivider({}, {}) })
             }
           }
           .use { fixture ->
             fixture.render()
             assertTrue(fixture.taggedBounds("canvas").width > 0)
+            assertEquals(
+                false, fixture.hasDescription("Resize adjacent panes. Use Left or Right Arrow."))
             assertEquals(showFiles, fixture.hasText("Files pane"))
             assertEquals(showTool, fixture.hasText("Tool pane"))
           }
@@ -265,6 +294,118 @@ class DesktopShellTest {
     assertEquals(null, toolbarAnalysisStatus(foreign))
     assertEquals(null, toolbarAnalysisStatus(initial.copy(analysisRun = ProjectAnalysisRunState())))
     assertEquals(null, toolbarAnalysisStatus(DesktopState()))
+  }
+
+  @Test
+  fun wideEditorExposesSplittersAndCompactEditorDoesNot() {
+    val preferred = DesktopLayoutState()
+    var width by mutableStateOf(1600f)
+    ComposeVisualFixture(1600, 650) {
+          androidx.compose.foundation.layout.Box(Modifier.width(width.dp).height(650.dp)) {
+            EditorPaneArrangement(
+                resolveDesktopLayout(preferred, width + 112f, 1f),
+                preferred,
+                650f,
+                left = { Box(it) },
+                canvas = { Box(it) },
+                right = { Box(it) },
+                leftDivider = { ResizableDivider({}, {}) },
+                rightDivider = { ResizableDivider({}, {}) })
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasDescription("Resize adjacent panes. Use Left or Right Arrow."))
+          width = 800f
+          fixture.render()
+          assertTrue(!fixture.hasDescription("Resize adjacent panes. Use Left or Right Arrow."))
+        }
+  }
+
+  @Test
+  fun sideSplitterPointerAndKeyboardCommitsUseDisplayedSizeOncePerGesture() {
+    for (leftSide in listOf(true, false)) {
+      val starting =
+          DesktopLayoutState(
+              leftToolWindowVisible = leftSide,
+              rightToolWindowVisible = !leftSide,
+              explorerWidth = 520f,
+              actionWidth = 560f)
+      var preferred by mutableStateOf(starting)
+      val saved = mutableListOf<Float>()
+      ComposeVisualFixture(800, 650) {
+            EditorPaneArrangement(
+                resolveDesktopLayout(preferred, 912f, 1f),
+                preferred,
+                650f,
+                left = { Box(it) },
+                canvas = { Box(it) },
+                right = { Box(it) },
+                leftDivider = {
+                  ResizableDivider(
+                      {
+                        preferred =
+                            resizeExplorerFromDisplayed(
+                                preferred,
+                                resolveDesktopLayout(preferred, 912f, 1f).explorerWidth,
+                                it)
+                      },
+                      { saved += preferred.explorerWidth })
+                },
+                rightDivider = {
+                  ResizableDivider(
+                      {
+                        preferred =
+                            resizeToolFromDisplayed(
+                                preferred,
+                                resolveDesktopLayout(preferred, 912f, 1f).actionWidth,
+                                it)
+                      },
+                      { saved += preferred.actionWidth })
+                })
+          }
+          .use { fixture ->
+            val displayed = resolveDesktopLayout(starting, 912f, 1f)
+            val original = if (leftSide) displayed.explorerWidth else displayed.actionWidth
+            assertTrue(original < if (leftSide) starting.explorerWidth else starting.actionWidth)
+            fixture.render()
+            val label = "Resize adjacent panes. Use Left or Right Arrow."
+            fixture.dragDescription(label, Offset(if (leftSide) -12f else 12f, 0f))
+            fixture.awaitResizeCommit(saved, 1)
+            val afterPointer = if (leftSide) preferred.explorerWidth else preferred.actionWidth
+            assertEquals(original - 12f, afterPointer, 1f)
+            assertEquals(afterPointer, saved.single())
+            assertTrue(fixture.requestDescriptionFocus(label))
+            fixture.render()
+            assertTrue(fixture.pressKey(if (leftSide) Key.DirectionLeft else Key.DirectionRight))
+            fixture.render()
+            assertEquals(2, saved.size)
+            val afterKey = if (leftSide) preferred.explorerWidth else preferred.actionWidth
+            assertEquals(afterPointer - KEYBOARD_SPLITTER_STEP, afterKey, 1f)
+            assertEquals(afterKey, saved.last())
+          }
+    }
+  }
+
+  @Test
+  fun constrainedSplitterDeltasStartAtDisplayedSizeAndClampExplicitPreferences() {
+    val preferred = DesktopLayoutState(explorerWidth = 520f, actionWidth = 560f)
+    val effective = resolveDesktopLayout(preferred, 1100f, 1f)
+    assertEquals(DesktopLayoutMode.Wide, effective.mode)
+    assertTrue(effective.explorerWidth < preferred.explorerWidth)
+    assertTrue(effective.actionWidth < preferred.actionWidth)
+    assertEquals(
+        effective.explorerWidth + 12f,
+        resizeExplorerFromDisplayed(preferred, effective.explorerWidth, 12f).explorerWidth)
+    assertEquals(
+        effective.actionWidth - 12f,
+        resizeToolFromDisplayed(preferred, effective.actionWidth, 12f).actionWidth)
+    assertEquals(
+        DesktopLayoutState.MIN_EXPLORER_WIDTH,
+        resizeExplorerFromDisplayed(preferred, effective.explorerWidth, -1000f).explorerWidth)
+    assertEquals(
+        DesktopLayoutState.MIN_ACTION_WIDTH,
+        resizeToolFromDisplayed(preferred, effective.actionWidth, 1000f).actionWidth)
   }
 
   @Test

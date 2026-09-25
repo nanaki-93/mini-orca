@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -32,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -70,6 +73,18 @@ internal fun desktopShellMode(appState: DesktopState): DesktopShellMode =
     else DesktopShellMode.ProjectWorkspace
 
 internal fun editorChromeVisible(workspace: Workspace): Boolean = workspace == Workspace.Editor
+
+internal fun resizeExplorerFromDisplayed(
+    preferred: DesktopLayoutState,
+    displayed: Float,
+    delta: Float,
+): DesktopLayoutState = preferred.withExplorerWidth(displayed + delta)
+
+internal fun resizeToolFromDisplayed(
+    preferred: DesktopLayoutState,
+    displayed: Float,
+    delta: Float,
+): DesktopLayoutState = preferred.withActionWidth(displayed - delta)
 
 internal fun fileInspectionWorkspace(): Workspace = Workspace.Editor
 
@@ -381,6 +396,19 @@ internal fun DesktopShell(
   var statusOrigin by remember { mutableStateOf<TransientFocusOrigin?>(null) }
   var contextOrigin by remember { mutableStateOf<TransientFocusOrigin?>(null) }
   var pendingFocus by remember { mutableStateOf<TransientFocusOrigin?>(null) }
+  var focusedSideSplitter by remember { mutableStateOf(false) }
+  var sideResize by remember { mutableStateOf<Pair<Float?, Float?>>(null to null) }
+  var editorMode by remember { mutableStateOf(DesktopLayoutMode.Wide) }
+  RestoreFocusFromRemovedSplitter(
+      editorMode,
+      focusedSideSplitter,
+      palette.visible,
+      statusDetailsVisible,
+      context.visible,
+      terminal?.ownsFocus() == true,
+      focusRequesters.editor) {
+        focusedSideSplitter = false
+      }
   val showsEditorChrome =
       shellMode == DesktopShellMode.ProjectWorkspace && editorChromeVisible(workspace)
   fun selectWorkspace(nextWorkspace: Workspace) {
@@ -622,6 +650,10 @@ internal fun DesktopShell(
                       { width, height ->
                         val resolved =
                             resolveDesktopLayout(layout, width, LocalDensity.current.fontScale)
+                        LaunchedEffect(resolved.mode) {
+                          editorMode = resolved.mode
+                          if (resolved.mode == DesktopLayoutMode.Compact) sideResize = null to null
+                        }
                         EditorPaneArrangement(
                             resolved,
                             layout,
@@ -667,18 +699,48 @@ internal fun DesktopShell(
                             leftDivider = {
                               ResizableDivider(
                                   onDelta = {
-                                    layoutActions.updateLayout(
-                                        layout.withExplorerWidth(layout.explorerWidth + it))
+                                    val next =
+                                        resizeExplorerFromDisplayed(
+                                            layout, sideResize.first ?: resolved.explorerWidth, it)
+                                    sideResize = next.explorerWidth to sideResize.second
+                                    layoutActions.updateLayout(next)
                                   },
-                                  onCommit = { layoutActions.saveLayout(layout) })
+                                  onCommit = {
+                                    sideResize = null to sideResize.second
+                                    layoutActions.saveLayout(layout)
+                                  },
+                                  onFocusChanged = { focused ->
+                                    if (focused) focusedSideSplitter = true
+                                    else
+                                        scope.launch {
+                                          androidx.compose.runtime.withFrameNanos {}
+                                          if (editorMode == DesktopLayoutMode.Wide)
+                                              focusedSideSplitter = false
+                                        }
+                                  })
                             },
                             rightDivider = {
                               ResizableDivider(
                                   onDelta = {
-                                    layoutActions.updateLayout(
-                                        layout.withActionWidth(layout.actionWidth - it))
+                                    val next =
+                                        resizeToolFromDisplayed(
+                                            layout, sideResize.second ?: resolved.actionWidth, it)
+                                    sideResize = sideResize.first to next.actionWidth
+                                    layoutActions.updateLayout(next)
                                   },
-                                  onCommit = { layoutActions.saveLayout(layout) })
+                                  onCommit = {
+                                    sideResize = sideResize.first to null
+                                    layoutActions.saveLayout(layout)
+                                  },
+                                  onFocusChanged = { focused ->
+                                    if (focused) focusedSideSplitter = true
+                                    else
+                                        scope.launch {
+                                          androidx.compose.runtime.withFrameNanos {}
+                                          if (editorMode == DesktopLayoutMode.Wide)
+                                              focusedSideSplitter = false
+                                        }
+                                  })
                             })
                       }
                   else null,
@@ -752,6 +814,26 @@ internal fun DesktopShell(
   }
 }
 
+@Composable
+private fun RestoreFocusFromRemovedSplitter(
+    mode: DesktopLayoutMode,
+    splitterFocused: Boolean,
+    paletteVisible: Boolean,
+    statusVisible: Boolean,
+    contextVisible: Boolean,
+    terminalFocused: Boolean,
+    editorFocus: FocusRequester,
+    clearSplitterFocus: () -> Unit,
+) {
+  LaunchedEffect(mode) {
+    if (mode == DesktopLayoutMode.Compact && splitterFocused) {
+      clearSplitterFocus()
+      if (!paletteVisible && !statusVisible && !contextVisible && !terminalFocused)
+          editorFocus.requestFocus()
+    }
+  }
+}
+
 // A single layout node changes placement without replacing the keyed pane compositions.
 // Compact children receive finite heights even though the outer container scrolls vertically.
 @Composable
@@ -769,16 +851,44 @@ internal fun EditorPaneArrangement(
   val compact = resolved.mode == DesktopLayoutMode.Compact
   val density = LocalDensity.current
   val scroll = rememberScrollState()
+  val filesReveal = remember { BringIntoViewRequester() }
+  val canvasReveal = remember { BringIntoViewRequester() }
+  val toolReveal = remember { BringIntoViewRequester() }
+  var focusedPane by remember { mutableStateOf<String?>(null) }
+  LaunchedEffect(compact, focusedPane) {
+    if (compact) {
+      when (focusedPane) {
+        "files" -> filesReveal.bringIntoView()
+        "canvas" -> canvasReveal.bringIntoView()
+        "tool" -> toolReveal.bringIntoView()
+      }
+    }
+  }
   Layout(
       content = {
         if (preferred.leftToolWindowVisible) {
-          key("files") { left(Modifier) }
+          key("files") {
+            left(
+                Modifier.bringIntoViewRequester(filesReveal).onFocusChanged {
+                  if (it.hasFocus) focusedPane = "files"
+                })
+          }
           if (!compact) key("files-divider") { leftDivider() }
         }
-        key("canvas") { canvas(Modifier) }
+        key("canvas") {
+          canvas(
+              Modifier.bringIntoViewRequester(canvasReveal).onFocusChanged {
+                if (it.hasFocus) focusedPane = "canvas"
+              })
+        }
         if (preferred.rightToolWindowVisible) {
           if (!compact) key("tool-divider") { rightDivider() }
-          key("tool") { right(Modifier) }
+          key("tool") {
+            right(
+                Modifier.bringIntoViewRequester(toolReveal).onFocusChanged {
+                  if (it.hasFocus) focusedPane = "tool"
+                })
+          }
         }
       },
       modifier =
