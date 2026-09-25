@@ -48,6 +48,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -213,6 +214,7 @@ internal data class DesktopShellProjectActions(
     val importProject: () -> Unit,
     val reanalyzeProject: () -> Unit,
     val reconnect: () -> Unit,
+    val retryRestore: () -> Unit = {},
 )
 
 internal data class DesktopShellEditorActions(
@@ -1080,45 +1082,127 @@ internal fun ProjectLanding(
     actions: DesktopShellProjectActions,
     focusRequester: FocusRequester,
 ) {
-  val openError = appState.projectState.openingError
-  Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-    Column(Modifier.widthIn(max = 420.dp).fillMaxWidth().verticalScroll(rememberScrollState())) {
-      MiniOrcaMark()
-      Spacer(Modifier.height(12.dp))
-      Text("Mini-Orca", color = PrimaryText, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-      Spacer(Modifier.height(12.dp))
-      SystemStateMessage(
-          title = if (openError != null) "Could not open project" else "No project open",
-          message =
-              when {
-                openError != null ->
-                    "Opening or reading local project data failed. ${openError.ifBlank { "No details available." }}"
-                appState.loading -> "Opening local project data…"
-                else -> "Open a project to inspect its local files and analysis."
-              },
-          accent = if (openError != null) Error else SecondaryText,
-          action = {
-            MiniOrcaButton(
-                onClick = actions.importProject,
-                enabled = !appState.loading,
-                tone = ActionTone.Primary,
-                modifier = Modifier.focusRequester(focusRequester)) {
-                  Text("Open project")
-                }
-          })
-      if (connectionPresentation(appState.connection).canReconnect) {
-        Spacer(Modifier.height(12.dp))
-        SystemStateMessage(
-            "Daemon disconnected",
-            "Reconnect reads daemon status and model configuration. It does not contact a provider or run project code.",
-            accent = Error,
-            action = {
-              MiniOrcaButton(onClick = actions.reconnect, tone = ActionTone.Neutral) {
-                Text("Reconnect daemon")
-              }
-            })
-      }
-    }
+  val projectState = appState.projectState
+  val attempt = projectState.openingAttempt
+  val opening = attempt?.outcome == ProjectOpeningOutcome.Opening
+  Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+    Column(
+        Modifier.widthIn(max = 520.dp)
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .testTag("project-landing-scroll")) {
+          MiniOrcaMark()
+          Spacer(Modifier.height(12.dp))
+          Text("Mini-Orca", color = PrimaryText, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+          Spacer(Modifier.height(12.dp))
+          SystemStateMessage(
+              title = "No project open",
+              message =
+                  "Open a project to inspect its files and analysis. Import may use the configured Analyze provider and require confirmation.",
+              action = {
+                MiniOrcaButton(
+                    onClick = actions.importProject,
+                    enabled = !opening,
+                    tone = ActionTone.Primary,
+                    modifier = Modifier.focusRequester(focusRequester)) {
+                      Text("Open project")
+                    }
+              })
+          Spacer(Modifier.height(12.dp))
+          val remembered = projectState.rememberedPath
+          if (remembered == null) {
+            SystemStateMessage(
+                "Last project",
+                if (projectState.preferenceReadWarning != null)
+                    "Last project unknown; local preferences could not be read."
+                else "No project remembered on this device.")
+          } else {
+            SystemStateMessage(
+                "Last project · ${projectPathLabel(remembered)}",
+                "Remembered locally; not open yet.",
+                action = { LandingPath("Remembered path", remembered) })
+          }
+          if (attempt != null) {
+            Spacer(Modifier.height(12.dp))
+            val restoring = attempt.kind == ProjectOpeningKind.Restore
+            val failure = attempt.outcome as? ProjectOpeningOutcome.Failed
+            SystemStateMessage(
+                title =
+                    when {
+                      failure != null ->
+                          if (restoring) "Could not restore project" else "Could not import project"
+                      opening -> if (restoring) "Restoring local project…" else "Importing project…"
+                      else -> if (restoring) "Restore canceled" else "Import canceled"
+                    },
+                message =
+                    if (failure != null) "The requested project did not open."
+                    else if (opening && restoring)
+                        "Reading saved local project data; no model request is made."
+                    else if (opening) "Import may use the configured Analyze provider."
+                    else "Open project to choose another folder.",
+                accent = if (failure != null) Error else SecondaryText,
+                action = {
+                  LandingPath("Requested path", attempt.path)
+                  if (failure != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Opening diagnostic",
+                        color = SecondaryText,
+                        style = IdeTypography.resultLabel)
+                    DiagnosticText(failure.message, color = Error)
+                    if (restoring) {
+                      Spacer(Modifier.height(8.dp))
+                      MiniOrcaButton(onClick = actions.retryRestore, tone = ActionTone.Neutral) {
+                        Text("Retry restore")
+                      }
+                    }
+                  }
+                })
+          }
+          if (connectionPresentation(appState.connection).canReconnect) {
+            Spacer(Modifier.height(12.dp))
+            SystemStateMessage(
+                "Daemon disconnected",
+                "Reconnect reads daemon status and model configuration. It does not contact a provider or run project code.",
+                accent = Error,
+                action = {
+                  MiniOrcaButton(onClick = actions.reconnect, tone = ActionTone.Neutral) {
+                    Text("Reconnect daemon")
+                  }
+                })
+          }
+          projectState.preferenceReadWarning?.let { warning ->
+            Spacer(Modifier.height(12.dp))
+            SystemStateMessage(
+                "Could not read last project preference",
+                "Open project is still available. Local preference storage could not be read.",
+                accent = Warning,
+                action = { DiagnosticText(warning, color = Warning) })
+          }
+          projectState.preferenceSaveWarning?.let { warning ->
+            Spacer(Modifier.height(12.dp))
+            SystemStateMessage(
+                "Could not remember project",
+                "The opened project could not be remembered for the next launch.",
+                accent = Warning,
+                action = { DiagnosticText(warning, color = Warning) })
+          }
+        }
+  }
+}
+
+private fun projectPathLabel(path: String): String =
+    path.trimEnd('/', '\\').replace('\\', '/').substringAfterLast('/').ifBlank { path }
+
+@Composable
+private fun LandingPath(label: String, path: String) {
+  Text(label, color = SecondaryText, style = IdeTypography.resultLabel)
+  SelectionContainer {
+    Text(
+        path,
+        color = PrimaryText,
+        fontFamily = FontFamily.Monospace,
+        style = IdeTypography.resultCode)
   }
 }
 
