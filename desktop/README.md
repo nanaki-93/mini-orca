@@ -63,9 +63,12 @@ bug priority counts remain in the Bugs card. Overall tool-reported issues and AI
 suggestions appear separately below the cards, since those totals cannot be
 reliably assigned to individual categories.
 
-In the current layout, Architecture and flat Packages / modules rows occupy the
-left column; Engineering insight and Flows occupy the right. This arrangement
-can change in a redesign.
+At readable local widths, Architecture and flat Packages / modules rows occupy
+the left column; Engineering insight and Flows occupy the right. On a narrower
+Summary pane or with larger text, the category cards and narrative columns stack
+and remain reachable by scrolling. Analysis category panels also stack when their
+local width cannot fit readable columns.
+
 Module names, exact paths and responsibilities remain selectable/readable. Entry
 points and next steps are omitted from Summary.
 
@@ -87,11 +90,27 @@ dependencies, run `npm ci --prefix desktop/mermaid --ignore-scripts` and
 `npm run build --prefix desktop/mermaid`. Commit the lockfile and generated resource
 bundle together; do not edit `src/main/resources/mermaid/renderer.js` manually.
 
-The current app requests a maximized native window at startup and remains
-resizable. Editor currently docks Files and Context/Assistant/Review panes, with
-Terminal beneath the workspace. This describes the shipped layout, not a limit
-on future responsive designs. Source and composed diffs are selectable/read-only;
-only the isolated draft is editable.
+The app requests a maximized native window at startup and remains resizable.
+Editor places visible Files, source/diff canvas and Context/Assistant/Review panes
+side by side when the measured workspace can fit their readable minima at the
+current text scale. Below that boundary they stack in a vertical scroller, with
+bounded inner panes; hidden panes stay hidden. Source and composed diffs remain
+selectable/read-only; only the isolated draft is editable. Tabs, draft actions and
+long file paths remain available through local reflow or scrolling. Results also
+switch from list/detail columns to separately scrollable stacked regions when
+local width or text scale requires it; selection and filters are retained.
+
+Saved Files, right-pane and Terminal dimensions are *preferences*, not fixed
+allocations. The shell resolves effective sizes against available workspace width
+and height without saving temporary clamps; enlarging the window restores sizes
+that fit again. Only explicit splitter input changes the preferred size. Existing
+visual-preference keys and valid values remain compatible: invalid non-finite
+sizes recover to dimension defaults, finite out-of-range sizes clamp to maintained
+bounds, and legacy bottom-tool keys are removed on save. No configuration or data
+migration is needed beyond this compatible visual-preference normalization. Saved
+Terminal dimensions restore with the dock collapsed; layout restore or reflow
+never opens a shell.
+
 **Source** and **Candidate diff** share file/declaration breadcrumbs. A validated
 candidate opens a full-height Current/Candidate comparison with synchronized
 vertical rows and independent horizontal scrolling; diffs default to **Side-by-side**, and **Unified** remains an explicit local choice. The Request → Draft →
@@ -188,6 +207,9 @@ rail action does not create another shell while a tab remains; use the expanded
 dock's **Terminal** control to collapse it. Shell tabs share the Terminal bar: **+** starts another
 shell and **×** closes its tab and process. Selecting tabs, collapsing the dock, changing
 workspaces or resizing preserves each shell's process and in-memory scrollback.
+When expanded, the dock uses an effective height bounded by the measured space
+below the toolbar and above the footer, reserving workspace where possible; a
+short window does not change the saved height or automatically collapse the dock.
 Project switching explicitly closes all active shells; application exit cleans
 up every owned session.
 
@@ -221,7 +243,12 @@ without selecting; Enter/Space activates the focused destination. Tab to the
 separate utility actions; rail focus and workspace switching do not start a shell.
 Use arrows and Enter/Space for other tree/tab/disclosure navigation. The
 [keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md) covers native operation.
-`DesktopVisualLayoutTest` produces component captures, not native-window evidence.
+`DesktopVisualLayoutTest` exercises production Editor, Summary and results at
+several viewports and text scales, with offscreen bounds/reflow assertions. These
+captures are not native-window evidence: focus restoration, selection/copy, popup
+placement, screen-reader output and real PTY resize still require the native
+[keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md). Do not infer native success from
+component tests.
 
 Security entry and selection stay local. Whole-project analysis owns
 passive rules and explicitly admitted advisory review. Prepare fix opens the
