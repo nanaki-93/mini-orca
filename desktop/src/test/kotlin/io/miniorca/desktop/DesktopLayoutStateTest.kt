@@ -412,7 +412,7 @@ class DesktopLayoutStateTest {
   fun dockHeightReservesWorkspaceAndRestoresPreferenceAcrossAllocations() {
     for (scale in listOf(1f, 1.25f, 1.5f)) {
       val preferred = DesktopLayoutState(bottomCollapsed = false, bottomHeight = 520f)
-      val short = 400f * scale
+      val short = 440f * scale
       val expected = short - WORKSPACE_FRAME_INSET - MIN_WORKSPACE_PANE_HEIGHT * scale
       assertEquals(expected, resolveTerminalDockHeight(preferred, short, scale), 0.001f)
       assertEquals(520f, resolveTerminalDockHeight(preferred, 1000f * scale, scale))

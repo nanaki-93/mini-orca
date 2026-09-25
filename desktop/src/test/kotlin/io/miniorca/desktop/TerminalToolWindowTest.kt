@@ -27,6 +27,34 @@ import kotlin.test.assertTrue
 
 class TerminalToolWindowTest {
   @Test
+  fun liveTerminalOwnerSurvivesProductionEditorReflow() =
+      withWorkspace { workspace, process, starts, path ->
+        edt { workspace.activate(path) }
+        eventually { workspace.state.value.widget != null }
+        val running = workspace.state.value
+        val widget = running.widget
+        val tabId = running.activeTabId
+        val preferred = DesktopLayoutState(explorerWidth = 520f, actionWidth = 560f)
+        ComposeVisualFixture(1600, 900, 1.5f) {
+              AdaptiveProductionEditorFixture(preferred, review = true, terminalState = running)
+            }
+            .use { fixture ->
+              for (width in listOf(1600, 800, 1600)) {
+                fixture.resize(width, 900)
+                fixture.render("f04-live-terminal-editor-$width")
+                assertEquals(
+                    if (width == 800) DesktopLayoutMode.Compact else DesktopLayoutMode.Wide,
+                    resolveDesktopLayout(preferred, width.toFloat(), 1.5f).mode)
+                assertTrue(fixture.taggedBounds("f04-dock").height > 0f)
+                assertEquals(tabId, workspace.state.value.activeTabId)
+                assertSame(widget, workspace.state.value.widget)
+                assertEquals(1, starts.get())
+                assertTrue(process.alive)
+              }
+            }
+      }
+
+  @Test
   fun measuredDockStaysBetweenPaneAndFooterWithoutChangingSessionOnResize() =
       withWorkspace { workspace, process, starts, path ->
         edt { workspace.activate(path) }
@@ -59,7 +87,7 @@ class TerminalToolWindowTest {
                 }
               }
               .use { fixture ->
-                for (height in listOf(650, 480, 900)) {
+                for (height in listOf(650, 480, 900, 1200)) {
                   fixture.resize(800, height)
                   fixture.render()
                   val pane = fixture.taggedBounds("workspace-pane")
@@ -68,7 +96,8 @@ class TerminalToolWindowTest {
                   assertTrue(pane.bottom <= dock.top, "$height/$scale: pane overlaps dock")
                   assertTrue(dock.bottom <= footer.top, "$height/$scale: dock overlaps footer")
                   assertTrue(dock.height >= MIN_EXPANDED_DOCK_HEIGHT * scale)
-                  if (height == 900) assertEquals(preferred.bottomHeight, dock.height, 1f)
+                  if (height == 1200) assertEquals(preferred.bottomHeight, dock.height, 1f)
+                  else assertTrue(dock.height <= preferred.bottomHeight)
                   val toggle = fixture.taggedBounds("dock-toggle")
                   assertTrue(toggle.top >= dock.top && toggle.bottom <= dock.bottom)
                   assertTrue(fixture.hasDescription("New shell"))
