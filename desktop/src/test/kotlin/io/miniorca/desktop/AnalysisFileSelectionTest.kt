@@ -50,6 +50,48 @@ class AnalysisFileSelectionTest {
   }
 
   @Test
+  fun failedSaveRefreshReadsConfirmedSelectionWithoutReplayingWrite() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      h.failSave = true
+      h.workflow.save(listOf("main.go"))
+      h.drain()
+      assertEquals(AnalysisSelectionFailure.Save, h.current.failure)
+      assertEquals(emptyList(), h.current.selection!!.excludedPaths)
+      assertEquals("Daemon returned 500", h.current.error)
+      h.workflow.refresh()
+      h.workflow.refresh() // Duplicate activation while loading is ignored.
+      h.drain()
+      assertEquals(listOf("GET", "POST", "GET"), h.methods)
+      assertEquals(emptyList(), h.current.selection!!.excludedPaths)
+      assertNull(h.current.error)
+      assertNull(h.current.failure)
+      assertEquals(emptyList(), h.saved.excludedPaths)
+    }
+  }
+
+  @Test
+  fun failedReadRetainsConfirmedSelectionAndRefreshCanRecover() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      h.failRead = true
+      h.workflow.refresh()
+      h.drain()
+      assertEquals(AnalysisSelectionFailure.Read, h.current.failure)
+      assertEquals("Daemon returned 500", h.current.error)
+      assertEquals(emptyList(), h.current.selection!!.excludedPaths)
+      h.failRead = false
+      h.workflow.refresh()
+      h.drain()
+      assertEquals(listOf("GET", "GET", "GET"), h.methods)
+      assertNull(h.current.error)
+      assertNull(h.current.failure)
+    }
+  }
+
+  @Test
   fun failureRetainsConfirmedSelectionAndProjectSwitchRejectsLateRead() {
     Harness().use { h ->
       h.workflow.refresh()
@@ -71,6 +113,54 @@ class AnalysisFileSelectionTest {
       h.drain()
       assertNull(h.current.selection)
     }
+  }
+
+  @Test
+  fun selectionFailureAndReadOnlyRecoveryRemainReachableWithFilesCollapsed() {
+    val selection = selectionFixture().copy(excludedPaths = listOf("main.go"))
+    val state = mutableStateOf(AnalysisSelectionState(selection))
+    var refreshes = 0
+    var saves = 0
+    var privileged = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          AnalysisFileSelector(
+              ProjectAnalysisRunState(fileSelection = state.value),
+              AnalysisWorkspaceActions(
+                  { _, _ -> privileged++ },
+                  { privileged++ },
+                  { privileged++ },
+                  { privileged++ },
+                  { privileged++ },
+                  { refreshes++ },
+                  { saves++ }))
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Collapse Files")
+          for (failure in AnalysisSelectionFailure.entries) {
+            state.value =
+                AnalysisSelectionState(selection, error = "selection failed", failure = failure)
+            fixture.render()
+            assertTrue(
+                fixture.hasText(
+                    "1 selected · 2 excluded · ${if (failure == AnalysisSelectionFailure.Save) "Save" else "Refresh"} failed"))
+            assertTrue(fixture.hasText("selection failed"))
+            assertTrue(
+                fixture.hasText(
+                    if (failure == AnalysisSelectionFailure.Save) "Could not save file selection"
+                    else "Could not refresh file selection"))
+            fixture.assertTextFits("Refresh files")
+            assertTrue(
+                fixture.hasText(
+                    "The last confirmed selection is still shown. Refresh files reads the saved selection; it does not retry a failed change or start analysis."))
+            assertTrue(fixture.requestFocus("Refresh files"))
+            assertTrue(fixture.pressKey(Key.Enter))
+            assertEquals(0, saves)
+            assertEquals(0, privileged)
+          }
+          assertEquals(2, refreshes)
+          assertEquals(listOf("main.go"), state.value.selection!!.excludedPaths)
+        }
   }
 
   @Test
@@ -537,6 +627,7 @@ class AnalysisFileSelectionTest {
                     analysisProjectFixture(), ProjectIndex("project", "revision")))
     var saved = selectionFixture()
     var failSave = false
+    var failRead = false
     val methods = mutableListOf<String>()
     val current
       get() = state.analysisRun.fileSelection
@@ -553,6 +644,8 @@ class AnalysisFileSelectionTest {
                       ): TransportResponse {
                         assertTrue(path.startsWith("/api/projects/current/analysis/selection"))
                         methods.add(method)
+                        if (method == "GET" && failRead)
+                            return TransportResponse(500, "read failed")
                         if (method == "POST") {
                           if (failSave) return TransportResponse(500, "save failed")
                           val request = Json.decodeFromString<AnalysisSelectionRequest>(body!!)

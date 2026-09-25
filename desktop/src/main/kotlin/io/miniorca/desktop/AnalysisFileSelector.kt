@@ -111,7 +111,12 @@ internal fun AnalysisFileSelector(
                                 state.loading -> "Loading status…"
                                 selection == null -> "Not loaded"
                                 else -> "$selectedCount selected · $excludedCount excluded"
-                              },
+                              } +
+                                  when (state.failure) {
+                                    AnalysisSelectionFailure.Read -> " · Refresh failed"
+                                    AnalysisSelectionFailure.Save -> " · Save failed"
+                                    null -> if (state.error != null) " · Selection error" else ""
+                                  },
                               color = if (state.error == null) SecondaryText else Error,
                               style = IdeTypography.workspaceMetadata)
                         }
@@ -120,7 +125,33 @@ internal fun AnalysisFileSelector(
             if (expanded) AnalysisFileFilters(rows, query, { query = it }, filter, { filter = it })
           }
     }
-    state.error?.let { DiagnosticText(it, color = Error) }
+    state.error?.let { error ->
+      FlowRow(
+          Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+          verticalArrangement = Arrangement.spacedBy(4.dp),
+          itemVerticalAlignment = Alignment.CenterVertically) {
+            Text(
+                when (state.failure) {
+                  AnalysisSelectionFailure.Read -> "Could not refresh file selection"
+                  AnalysisSelectionFailure.Save -> "Could not save file selection"
+                  null -> "File selection unavailable"
+                },
+                color = Error,
+                style = IdeTypography.workspaceMetadata)
+            MiniOrcaButton(
+                onClick = actions.refreshSelection,
+                enabled = !state.loading && !state.saving,
+                tone = ActionTone.Neutral) {
+                  Text("Refresh files")
+                }
+          }
+      Text(
+          "${if (selection == null) "No confirmed selection is loaded." else "The last confirmed selection is still shown."} Refresh files reads the saved selection; it does not retry a failed change or start analysis.",
+          color = SecondaryText,
+          style = IdeTypography.workspaceMetadata)
+      DiagnosticText(error, color = Error)
+    }
     if (locked)
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -195,12 +226,13 @@ internal fun AnalysisFileSelector(
                     "${files.size} of ${rows.size} files match",
                     color = SecondaryText,
                     style = IdeTypography.workspaceMetadata)
-            MiniOrcaButton(
-                onClick = actions.refreshSelection,
-                enabled = !state.loading && !state.saving,
-                tone = ActionTone.Neutral) {
-                  Text("Refresh files")
-                }
+            if (state.error == null)
+                MiniOrcaButton(
+                    onClick = actions.refreshSelection,
+                    enabled = !state.loading && !state.saving,
+                    tone = ActionTone.Neutral) {
+                      Text("Refresh files")
+                    }
             if (!locked) {
               MiniOrcaButton(
                   onClick = {
