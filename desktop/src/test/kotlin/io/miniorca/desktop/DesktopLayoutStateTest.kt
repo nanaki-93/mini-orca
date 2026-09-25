@@ -83,6 +83,122 @@ class DesktopLayoutStateTest {
   }
 
   @Test
+  fun everyDimensionNormalizesDirectUpdatesAndRawStateIdempotently() {
+    val dimensions =
+        listOf(
+            Triple(
+                DesktopLayoutState.DEFAULT_EXPLORER_WIDTH,
+                DesktopLayoutState.DEFAULT_ACTION_WIDTH,
+                DesktopLayoutState.DEFAULT_BOTTOM_HEIGHT),
+            Triple(
+                DesktopLayoutState.MIN_EXPLORER_WIDTH,
+                DesktopLayoutState.MIN_ACTION_WIDTH,
+                DesktopLayoutState.MIN_BOTTOM_HEIGHT),
+            Triple(
+                DesktopLayoutState.MAX_EXPLORER_WIDTH,
+                DesktopLayoutState.MAX_ACTION_WIDTH,
+                DesktopLayoutState.MAX_BOTTOM_HEIGHT))
+    val inputs =
+        listOf(
+            Triple(Float.NaN, Float.NaN, Float.NaN) to dimensions[0],
+            Triple(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY) to
+                dimensions[0],
+            Triple(Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY) to
+                dimensions[0],
+            Triple(-1f, -1f, -1f) to dimensions[1],
+            Triple(10_000f, 10_000f, 10_000f) to dimensions[2],
+            Triple(320f, 440f, 340f) to Triple(320f, 440f, 340f))
+
+    inputs.forEach { (values, expected) ->
+      val (explorer, action, bottom) = values
+      val updated =
+          DesktopLayoutState()
+              .withExplorerWidth(explorer)
+              .withActionWidth(action)
+              .withBottomHeight(bottom)
+      val raw =
+          DesktopLayoutState(explorerWidth = explorer, actionWidth = action, bottomHeight = bottom)
+      assertEquals(
+          expected, Triple(updated.explorerWidth, updated.actionWidth, updated.bottomHeight))
+      assertEquals(updated, raw.normalized())
+      assertEquals(updated, raw.normalized().normalized())
+      assertTrue(updated.explorerWidth.isFinite())
+      assertTrue(updated.actionWidth.isFinite())
+      assertTrue(updated.bottomHeight.isFinite())
+    }
+  }
+
+  @Test
+  fun legacyDimensionsRoundTripWithoutChangingNavigationVisibilityOrFocus() {
+    val cases =
+        listOf(
+            Triple("320", "440", "340") to Triple(320f, 440f, 340f),
+            Triple("-1", "10000", "-1") to
+                Triple(
+                    DesktopLayoutState.MIN_EXPLORER_WIDTH,
+                    DesktopLayoutState.MAX_ACTION_WIDTH,
+                    DesktopLayoutState.MIN_BOTTOM_HEIGHT),
+            Triple("10000", "-1", "10000") to
+                Triple(
+                    DesktopLayoutState.MAX_EXPLORER_WIDTH,
+                    DesktopLayoutState.MIN_ACTION_WIDTH,
+                    DesktopLayoutState.MAX_BOTTOM_HEIGHT),
+            Triple("NaN", "Infinity", "-Infinity") to
+                Triple(
+                    DesktopLayoutState.DEFAULT_EXPLORER_WIDTH,
+                    DesktopLayoutState.DEFAULT_ACTION_WIDTH,
+                    DesktopLayoutState.DEFAULT_BOTTOM_HEIGHT),
+            Triple("Infinity", "-Infinity", "NaN") to
+                Triple(
+                    DesktopLayoutState.DEFAULT_EXPLORER_WIDTH,
+                    DesktopLayoutState.DEFAULT_ACTION_WIDTH,
+                    DesktopLayoutState.DEFAULT_BOTTOM_HEIGHT),
+            Triple("bad", null, "bad") to
+                Triple(
+                    DesktopLayoutState.DEFAULT_EXPLORER_WIDTH,
+                    DesktopLayoutState.DEFAULT_ACTION_WIDTH,
+                    DesktopLayoutState.DEFAULT_BOTTOM_HEIGHT))
+    cases.forEach { (stored, expected) ->
+      withPreferences { preferences ->
+        listOf("explorer-width", "action-width", "ide-bottom-height")
+            .zip(listOf(stored.first, stored.second, stored.third))
+            .forEach { (key, value) -> if (value != null) preferences.put(key, value) }
+        preferences.put("ide-left-tool", "Problems")
+        preferences.put("ide-right-tool", "Review")
+        preferences.put("ide-editor-surface", "Review")
+        preferences.put("ide-focus-region", "BottomToolWindow")
+        preferences.putBoolean("ide-left-visible", false)
+        preferences.putBoolean("ide-right-visible", false)
+        preferences.put("ide-bottom-tool", "Checks")
+        preferences.putBoolean("ide-bottom-visible", true)
+        preferences.putBoolean("ide-bottom-collapsed", false)
+        val store = DesktopLayoutStore(preferences)
+        val loaded = store.load()
+        assertEquals(
+            expected, Triple(loaded.explorerWidth, loaded.actionWidth, loaded.bottomHeight))
+        assertEquals(LeftToolWindow.Problems, loaded.activeLeftToolWindow)
+        assertEquals(RightToolWindow.Review, loaded.activeRightToolWindow)
+        assertEquals(EditorSurface.Review, loaded.editorSurface)
+        assertEquals(DesktopFocusRegion.BottomToolWindow, loaded.lastFocusedRegion)
+        assertFalse(loaded.leftToolWindowVisible)
+        assertFalse(loaded.rightToolWindowVisible)
+        assertTrue(loaded.bottomCollapsed)
+
+        store.save(loaded.openTerminal())
+        assertEquals(loaded, store.load())
+        store.save(store.load())
+        assertEquals(loaded, store.load())
+        assertEquals(expected.first, preferences.getFloat("explorer-width", -1f))
+        assertEquals(expected.second, preferences.getFloat("action-width", -1f))
+        assertEquals(expected.third, preferences.getFloat("ide-bottom-height", -1f))
+        listOf("ide-bottom-tool", "ide-bottom-visible", "ide-bottom-collapsed").forEach {
+          assertEquals(null, preferences.get(it, null))
+        }
+      }
+    }
+  }
+
+  @Test
   fun storeKeepsExistingPanePreferencesAndDefaultsMissingNavigationToEditor() {
     withPreferences { preferences ->
       preferences.putFloat("explorer-width", 320f)
@@ -105,6 +221,8 @@ class DesktopLayoutStateTest {
       preferences.putFloat("action-width", 9_999f)
       preferences.put("ide-bottom-height", "invalid")
       preferences.put("ide-left-tool", "Project")
+      preferences.put("ide-right-tool", "Retired")
+      preferences.put("ide-editor-surface", "Retired")
       preferences.put("ide-focus-region", "Unknown")
 
       val recovered = DesktopLayoutStore(preferences).load()
@@ -113,6 +231,8 @@ class DesktopLayoutStateTest {
       assertEquals(DesktopLayoutState.MAX_ACTION_WIDTH, recovered.actionWidth)
       assertEquals(DesktopLayoutState.DEFAULT_BOTTOM_HEIGHT, recovered.bottomHeight)
       assertEquals(LeftToolWindow.Editor, recovered.activeLeftToolWindow)
+      assertEquals(RightToolWindow.Context, recovered.activeRightToolWindow)
+      assertEquals(EditorSurface.Source, recovered.editorSurface)
       assertEquals(DesktopFocusRegion.Editor, recovered.lastFocusedRegion)
 
       DesktopLayoutStore(preferences).save(recovered)
