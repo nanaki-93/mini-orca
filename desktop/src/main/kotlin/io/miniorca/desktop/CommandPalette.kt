@@ -208,6 +208,7 @@ internal fun CommandPaletteDialog(
   }
   IdeDialog(
       onDismissRequest = onDismiss,
+      focusSafeActionOnOpen = false,
       title = { Text(commandSearchTitle(mode)) },
       content = {
         Column {

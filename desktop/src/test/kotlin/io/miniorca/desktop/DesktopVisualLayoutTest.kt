@@ -4445,9 +4445,9 @@ internal class ComposeVisualFixture(
     layouts.forEach { assertEquals(expected, it.lineCount) }
   }
 
-  fun pressKey(key: Key): Boolean {
-    val keyDown = scene.sendKeyEvent(KeyEvent(key, KeyEventType.KeyDown))
-    val keyUp = scene.sendKeyEvent(KeyEvent(key, KeyEventType.KeyUp))
+  fun pressKey(key: Key, shift: Boolean = false): Boolean {
+    val keyDown = scene.sendKeyEvent(KeyEvent(key, KeyEventType.KeyDown, isShiftPressed = shift))
+    val keyUp = scene.sendKeyEvent(KeyEvent(key, KeyEventType.KeyUp, isShiftPressed = shift))
     return keyDown || keyUp
   }
 
