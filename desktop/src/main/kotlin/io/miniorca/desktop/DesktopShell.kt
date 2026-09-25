@@ -12,15 +12,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -39,10 +41,12 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -64,8 +68,6 @@ internal enum class DesktopShellMode {
 internal fun desktopShellMode(appState: DesktopState): DesktopShellMode =
     if (appState.project == null) DesktopShellMode.ProjectLanding
     else DesktopShellMode.ProjectWorkspace
-
-fun useNarrowLayout(widthDp: Float): Boolean = widthDp < 1000f
 
 internal fun editorChromeVisible(workspace: Workspace): Boolean = workspace == Workspace.Editor
 
@@ -563,7 +565,6 @@ internal fun DesktopShell(
       ProjectLanding(appState, projectActions.importProject, focusRequesters.landing)
     } else {
       BoxWithConstraints {
-        val widthDp = maxWidth.value
         Column {
           MainToolbar(
               state =
@@ -603,58 +604,84 @@ internal fun DesktopShell(
                     modelsFocusRequester = focusRequesters.modelsTrigger)
               },
               panes = {
-                if (showsEditorChrome && layout.leftToolWindowVisible) {
-                  DockedToolWindow(
-                      "Files",
-                      content = { modifier -> panes.explorer(modifier) {} },
-                      modifier = Modifier.requiredWidth(layout.explorerWidth.dp).fillMaxHeight(),
-                      // Explorer owns its Files heading and actions in a docked layout.
-                      showHeader = false)
-                  ResizableDivider(
-                      onDelta = {
-                        layoutActions.updateLayout(
-                            layout.withExplorerWidth(layout.explorerWidth + it))
-                      },
-                      onCommit = { layoutActions.saveLayout(layout) })
-                }
                 DesktopCanvas(
-                    state = state,
-                    resultBrowsers = resultBrowsers,
-                    widthDp = widthDp,
-                    editorActions = editorActions,
-                    analysisActions = analysisActions,
-                    findingActions = findingActions,
-                    onWorkspaceSelected = ::selectWorkspace,
-                    modifier =
-                        Modifier.weight(1f)
-                            .fillMaxHeight()
-                            .focusRequester(focusRequesters.editor)
-                            .focusable()
-                            .testTag("desktop-canvas-focus"),
-                )
-                if (showsEditorChrome && layout.rightToolWindowVisible) {
-                  ResizableDivider(
-                      onDelta = {
-                        layoutActions.updateLayout(layout.withActionWidth(layout.actionWidth - it))
-                      },
-                      onCommit = { layoutActions.saveLayout(layout) })
-                  DockedToolWindow(
-                      "Tool windows",
-                      content = { modifier ->
-                        CompositionLocalProvider(LocalContextCreationActionVisible provides false) {
-                          RightToolWindowContainer(
-                              layout.activeRightToolWindow,
-                              ::selectRightToolWindow,
-                              panes.rightToolWindows,
-                              panes.rightToolWindowBadges,
-                              modifier.focusRequester(focusRequesters.rightToolWindow))
-                        }
-                      },
-                      modifier = Modifier.requiredWidth(layout.actionWidth.dp).fillMaxHeight(),
-                      // The right-window tabs identify their own active content.
-                      showHeader = false)
-                }
+                    state,
+                    resultBrowsers,
+                    editorActions,
+                    analysisActions,
+                    findingActions,
+                    ::selectWorkspace,
+                    Modifier.weight(1f)
+                        .fillMaxHeight()
+                        .focusRequester(focusRequesters.editor)
+                        .focusable()
+                        .testTag("desktop-canvas-focus"))
               },
+              editorPanes =
+                  if (showsEditorChrome)
+                      { width, height ->
+                        val resolved =
+                            resolveDesktopLayout(layout, width, LocalDensity.current.fontScale)
+                        EditorPaneArrangement(
+                            resolved,
+                            layout,
+                            height,
+                            left = { modifier ->
+                              DockedToolWindow(
+                                  "Files",
+                                  { paneModifier -> panes.explorer(paneModifier) {} },
+                                  modifier,
+                                  showHeader = false)
+                            },
+                            canvas = { modifier ->
+                              DesktopCanvas(
+                                  state,
+                                  resultBrowsers,
+                                  editorActions,
+                                  analysisActions,
+                                  findingActions,
+                                  ::selectWorkspace,
+                                  modifier
+                                      .focusRequester(focusRequesters.editor)
+                                      .focusable()
+                                      .testTag("desktop-canvas-focus"))
+                            },
+                            right = { modifier ->
+                              DockedToolWindow(
+                                  "Tool windows",
+                                  content = { paneModifier ->
+                                    CompositionLocalProvider(
+                                        LocalContextCreationActionVisible provides false) {
+                                          RightToolWindowContainer(
+                                              layout.activeRightToolWindow,
+                                              ::selectRightToolWindow,
+                                              panes.rightToolWindows,
+                                              panes.rightToolWindowBadges,
+                                              paneModifier.focusRequester(
+                                                  focusRequesters.rightToolWindow))
+                                        }
+                                  },
+                                  modifier = modifier,
+                                  showHeader = false)
+                            },
+                            leftDivider = {
+                              ResizableDivider(
+                                  onDelta = {
+                                    layoutActions.updateLayout(
+                                        layout.withExplorerWidth(layout.explorerWidth + it))
+                                  },
+                                  onCommit = { layoutActions.saveLayout(layout) })
+                            },
+                            rightDivider = {
+                              ResizableDivider(
+                                  onDelta = {
+                                    layoutActions.updateLayout(
+                                        layout.withActionWidth(layout.actionWidth - it))
+                                  },
+                                  onCommit = { layoutActions.saveLayout(layout) })
+                            })
+                      }
+                  else null,
               terminal = { workspaceHeight ->
                 val effectiveHeight =
                     resolveTerminalDockHeight(
@@ -721,6 +748,88 @@ internal fun DesktopShell(
       if (context.visible)
           ContextInspectorDialog(
               context.manifest ?: ContextManifest(), ::dismissContextAndRestoreFocus)
+    }
+  }
+}
+
+// A single layout node changes placement without replacing the keyed pane compositions.
+// Compact children receive finite heights even though the outer container scrolls vertically.
+@Composable
+internal fun EditorPaneArrangement(
+    resolved: ResolvedDesktopLayout,
+    preferred: DesktopLayoutState,
+    viewportHeight: Float,
+    left: @Composable (Modifier) -> Unit,
+    canvas: @Composable (Modifier) -> Unit,
+    right: @Composable (Modifier) -> Unit,
+    leftDivider: @Composable () -> Unit,
+    rightDivider: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+  val compact = resolved.mode == DesktopLayoutMode.Compact
+  val density = LocalDensity.current
+  val scroll = rememberScrollState()
+  Layout(
+      content = {
+        if (preferred.leftToolWindowVisible) {
+          key("files") { left(Modifier) }
+          if (!compact) key("files-divider") { leftDivider() }
+        }
+        key("canvas") { canvas(Modifier) }
+        if (preferred.rightToolWindowVisible) {
+          if (!compact) key("tool-divider") { rightDivider() }
+          key("tool") { right(Modifier) }
+        }
+      },
+      modifier =
+          modifier.fillMaxSize().then(if (compact) Modifier.verticalScroll(scroll) else Modifier),
+  ) { measurables, constraints ->
+    val width = constraints.maxWidth
+    val height =
+        if (compact) with(density) { viewportHeight.dp.roundToPx() } else constraints.maxHeight
+    val gap = with(density) { WORKSPACE_FRAME_INSET.dp.roundToPx() }
+    val divider = with(density) { RESIZE_DIVIDER_WIDTH.dp.roundToPx() }
+    val childHeight =
+        if (compact) maxOf(height * 2 / 3, with(density) { 240.dp.roundToPx() }) else height
+    val positions = mutableListOf<Pair<Int, Int>>()
+    val measured = mutableListOf<androidx.compose.ui.layout.Placeable>()
+    var index = 0
+    var x = 0
+    var y = 0
+    fun place(widthPx: Int, heightPx: Int) {
+      val placeable =
+          measurables[index++].measure(
+              Constraints.fixed(widthPx.coerceAtLeast(0), heightPx.coerceAtLeast(0)))
+      // Placeables are kept in source order; the mode changes coordinates, not identity.
+      measured += placeable
+      positions += if (compact) 0 to y else x to 0
+      if (compact) y += placeable.height + gap else x += placeable.width
+    }
+    if (preferred.leftToolWindowVisible) {
+      place(
+          if (compact) width else with(density) { resolved.explorerWidth.dp.roundToPx() },
+          if (compact) maxOf(height / 3, with(density) { 180.dp.roundToPx() }) else height)
+      if (!compact) place(divider, height)
+    }
+    val rightWidth =
+        if (preferred.rightToolWindowVisible && !compact)
+            with(density) { resolved.actionWidth.dp.roundToPx() }
+        else 0
+    val canvasWidth =
+        if (compact) width
+        else
+            (width - x - rightWidth - if (preferred.rightToolWindowVisible) divider else 0)
+                .coerceAtLeast(0)
+    place(canvasWidth, childHeight)
+    if (preferred.rightToolWindowVisible) {
+      if (!compact) place(divider, height)
+      place(if (compact) width else rightWidth, childHeight)
+    }
+    layout(width, if (compact) (y - gap).coerceAtLeast(0) else height) {
+      // Measure results are retained by the layout pass, not recomposed across mode changes.
+      measured.forEachIndexed { i, child ->
+        child.placeRelative(positions[i].first, positions[i].second)
+      }
     }
   }
 }
@@ -890,7 +999,6 @@ private fun ProjectLanding(
 private fun DesktopCanvas(
     state: DesktopShellState,
     resultBrowsers: ResultBrowserStore,
-    widthDp: Float,
     editorActions: DesktopShellEditorActions,
     analysisActions: DesktopShellAnalysisActions,
     findingActions: FindingActions,

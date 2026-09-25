@@ -22,8 +22,9 @@ class IdeUiContractBaselineTest {
     assertEquals(DesktopShellMode.ProjectLanding, desktopShellMode(DesktopState()))
     assertTrue(shortcutAvailable(DesktopShellMode.ProjectLanding, DesktopShortcut.OpenProject))
     assertFalse(shortcutAvailable(DesktopShellMode.ProjectLanding, DesktopShortcut.OpenFile))
-    assertFalse(useNarrowLayout(1_000f))
-    assertTrue(useNarrowLayout(999f))
+    val preferred = DesktopLayoutState()
+    assertEquals(DesktopLayoutMode.Compact, resolveDesktopLayout(preferred, 999f, 1.5f).mode)
+    assertEquals(DesktopLayoutMode.Wide, resolveDesktopLayout(preferred, 1_600f, 1f).mode)
   }
 
   @Test

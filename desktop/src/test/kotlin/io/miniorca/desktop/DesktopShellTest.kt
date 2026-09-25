@@ -1,11 +1,223 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.Text
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.testTag
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class DesktopShellTest {
+  @Test
+  fun assembledEditorReflowKeepsSelectedFileAndTabWithoutInvokingOperations() {
+    val selected = analysisFileFixture("another.go").copy(content = "package selectedfile")
+    val index =
+        resultIndexFixture()
+            .copy(
+                files =
+                    listOf(
+                        IndexedFile("main.go", "base", "Go", false),
+                        IndexedFile(selected.path, selected.contentHash, "Go", false)))
+    val shell =
+        mutableStateOf(
+            DesktopShellState(
+                app =
+                    DesktopState(
+                        workspace = Workspace.Editor,
+                        projectState = ProjectWorkspaceState(resultProjectFixture(), index)),
+                layout = DesktopLayoutState(activeRightToolWindow = RightToolWindow.Review),
+                editor =
+                    DesktopShellEditorState(
+                        EditorProgressUiState(EditorProgress.Inspect, ""),
+                        EditorContextualActions(false, false, false, false, false),
+                        analysisInProgress = false,
+                        generating = false),
+                context =
+                    DesktopShellContextState(
+                        false, null, ScopedModel(), false, ScopedModel(), false, false),
+                palette = DesktopShellPaletteState(PaletteMode.Files, "", false),
+                statusProviders =
+                    DesktopShellStatusProviders(ScopedModel(), ScopedModel(), ScopedModel())))
+    val operations = mutableListOf<String>()
+    var layoutSaves = 0
+    var disposedPanes = 0
+    ComposeVisualFixture(1600, 800) {
+          val state = shell.value
+          DesktopShell(
+              state,
+              layoutActions =
+                  DesktopShellLayoutActions(
+                      { shell.value = shell.value.copy(layout = it) }, { layoutSaves++ }),
+              projectActions =
+                  DesktopShellProjectActions(
+                      { operations += "import" },
+                      { operations += "analyze" },
+                      { operations += "reconnect" }),
+              editorActions =
+                  DesktopShellEditorActions(
+                      selectWorkspace = {
+                        shell.value = shell.value.copy(app = state.app.copy(workspace = it))
+                      },
+                      selectEditorSurface = {
+                        shell.value = shell.value.copy(layout = state.layout.withEditorSurface(it))
+                      },
+                      focusChat = { operations += "provider" },
+                      focusDraft = { operations += "edit" },
+                      cancelAnalysis = { operations += "cancel" },
+                      sourceLineSelected = { operations += "source selection" },
+                      validateDraft = { operations += "validate" },
+                      runDraftChecks = { operations += "checks" },
+                      generate = { operations += "provider" },
+                      cancelGeneration = { operations += "cancel generation" },
+                      dismissContext = { operations += "dismiss context" },
+                      createDeclaration = { operations += "create" }),
+              analysisActions =
+                  DesktopShellAnalysisActions(
+                      refreshAnalysisSelection = { operations += "refresh" },
+                      saveAnalysisSelection = { operations += "save analysis" },
+                      startAnalysis = { _, _ -> operations += "provider" },
+                      pauseAnalysis = { operations += "pause" },
+                      resumeAnalysis = { operations += "resume" },
+                      cancelAnalysis = { operations += "cancel" },
+                      startScan = { operations += "checks" },
+                      cancelScan = { operations += "cancel scan" },
+                      preparePerformanceFinding = { _, _ -> operations += "prepare" },
+                      loadGoBenchmarks = { operations += "benchmarks" },
+                      selectGoBenchmark = { operations += "benchmark selection" },
+                      compareSelectedGoBenchmark = { operations += "checks" },
+                      prepareSecurityFinding = { operations += "prepare" }),
+              findingActions =
+                  FindingActions({ operations += "finding" }, { _, _ -> operations += "finding" }),
+              paletteActions =
+                  DesktopShellPaletteActions(
+                      updateQuery = { operations += "query" },
+                      dismiss = { operations += "dismiss palette" },
+                      open = { operations += "open palette" },
+                      switchMode = { operations += "switch palette" },
+                      selectFile = { operations += "palette file" },
+                      selectSymbol = { operations += "palette symbol" },
+                      selectAction = { operations += "palette action" }),
+              panes =
+                  DesktopShellPanes(
+                      explorer = { modifier, _ ->
+                        DisposableEffect(Unit) { onDispose { disposedPanes++ } }
+                        ExplorerPane(
+                            ExplorerPaneState(
+                                state.app.index,
+                                state.app.selectedFile?.path,
+                                "",
+                                emptySet(),
+                                false),
+                            ExplorerPaneActions(
+                                { operations += "filter" },
+                                { operations += "toggle" },
+                                { operations += "collapse" },
+                                { operations += "reveal" },
+                                { path ->
+                                  shell.value =
+                                      shell.value.copy(
+                                          app =
+                                              state.app.copy(
+                                                  selection =
+                                                      FileSelectionState(selectedFile = selected)))
+                                  assertEquals(selected.path, path)
+                                }),
+                            modifier)
+                      },
+                      rightToolWindows = { tab, modifier ->
+                        DisposableEffect(Unit) { onDispose { disposedPanes++ } }
+                        if (tab == RightToolWindow.Review)
+                            ReviewToolWindow(
+                                reviewToolWindowState(state.app),
+                                ReviewToolWindowActions(
+                                    { operations += "checks" },
+                                    { operations += "provider" },
+                                    { operations += "edit" }),
+                                DraftApplicationActions(
+                                    { operations += "source write" },
+                                    { operations += "source write" }),
+                                modifier)
+                        else Box(modifier) { Text(tab.name) }
+                      },
+                      rightToolWindowBadges = emptyMap(),
+                      terminalContent = { Box(it) },
+                      terminalState = TerminalWorkspaceState(),
+                      terminalTabActions =
+                          TerminalTabActions(
+                              { operations += "terminal select" },
+                              { operations += "terminal open" },
+                              { operations += "terminal close" })))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("another.go"), "Explorer should render the indexed file")
+          fixture.clickText("another.go")
+          fixture.render()
+          assertEquals(selected, shell.value.app.selectedFile)
+          assertTrue(fixture.hasDescription("Source file · another.go"))
+          assertTrue(fixture.hasText("package selectedfile"))
+          fixture.clickText("Assistant")
+          fixture.render()
+          assertEquals(RightToolWindow.Assistant, shell.value.layout.activeRightToolWindow)
+          fixture.clickText("Review")
+          fixture.render()
+          assertTrue(fixture.hasDescription("Review tool window tab, selected"))
+          assertTrue(fixture.taggedBounds("desktop-canvas-focus").width >= MIN_EDITOR_CANVAS_WIDTH)
+          fixture.resize(800, 650)
+          fixture.render()
+          assertEquals(selected, shell.value.app.selectedFile)
+          assertTrue(fixture.hasDescription("Source file · another.go"))
+          assertTrue(fixture.hasText("package selectedfile"))
+          assertEquals(RightToolWindow.Review, shell.value.layout.activeRightToolWindow)
+          assertTrue(fixture.hasDescription("Review tool window tab, selected"))
+          assertTrue(fixture.taggedBounds("desktop-canvas-focus").width > 0)
+          fixture.scrollBy(100_000f)
+          fixture.render()
+          fixture.resize(1600, 800)
+          fixture.render()
+          assertEquals(selected, shell.value.app.selectedFile)
+          assertTrue(
+              fixture.hasDescription("Go file another.go at another.go, Not analyzed, selected"))
+          assertTrue(fixture.hasDescription("Review tool window tab, selected"))
+          assertTrue(fixture.taggedBounds("desktop-canvas-focus").width >= MIN_EDITOR_CANVAS_WIDTH)
+          assertEquals(0, disposedPanes)
+          assertEquals(emptyList(), operations)
+          assertEquals(0, layoutSaves)
+        }
+  }
+
+  @Test
+  fun editorArrangementOmitsHiddenPanesWithoutHidingTheCanvas() {
+    for ((showFiles, showTool) in listOf(false to false, true to false, false to true)) {
+      val preferred =
+          DesktopLayoutState(leftToolWindowVisible = showFiles, rightToolWindowVisible = showTool)
+      ComposeVisualFixture(800, 650, 1.5f) {
+            androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+              EditorPaneArrangement(
+                  resolveDesktopLayout(preferred, maxWidth.value + 160f, 1.5f),
+                  preferred,
+                  maxHeight.value,
+                  left = { modifier -> Box(modifier.testTag("files")) { Text("Files pane") } },
+                  canvas = { modifier -> Box(modifier.testTag("canvas")) { Text("Source pane") } },
+                  right = { modifier -> Box(modifier.testTag("tool")) { Text("Tool pane") } },
+                  leftDivider = {},
+                  rightDivider = {})
+            }
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.taggedBounds("canvas").width > 0)
+            assertEquals(showFiles, fixture.hasText("Files pane"))
+            assertEquals(showTool, fixture.hasText("Tool pane"))
+          }
+    }
+  }
+
   @Test
   fun toolbarAnalysisStatusFollowsTheCurrentRunAndRetainsStaleAndErrorStates() {
     val run = analysisRunFixture().copy(status = "running")
