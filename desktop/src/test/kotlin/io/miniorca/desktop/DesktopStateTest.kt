@@ -505,13 +505,22 @@ class DesktopStateTest {
   @Test
   fun projectAndCanceledFileRequestsRejectStaleResponses() {
     val controller = DesktopWorkflowController()
-    val firstProjectRequest = controller.beginProjectLoad()
-    val secondProjectRequest = controller.beginProjectLoad()
+    val firstProjectRequest =
+        controller.beginProjectLoad("/tmp/fixture", ProjectOpeningKind.Restore)
+    val secondProjectRequest =
+        controller.beginProjectLoad("/tmp/fixture", ProjectOpeningKind.Import)
+    assertTrue(secondProjectRequest > firstProjectRequest)
+    assertEquals(
+        ProjectOpeningAttempt(secondProjectRequest, "/tmp/fixture", ProjectOpeningKind.Import),
+        controller.state.projectState.openingAttempt)
     val project = project()
     val index = ProjectIndex("project", "revision")
 
-    assertTrue(!controller.projectLoaded(firstProjectRequest, project, index))
+    assertFalse(controller.projectLoaded(firstProjectRequest, project, index))
+    assertFalse(controller.projectFailed(firstProjectRequest, "Old restore failed"))
     assertTrue(controller.projectLoaded(secondProjectRequest, project, index))
+    assertNull(controller.state.projectState.openingAttempt)
+    assertFalse(controller.projectFailed(secondProjectRequest, "Late import failure"))
     val fileRequest = controller.beginFileLoad("main.go")!!
     assertTrue(controller.cancelFileLoad(fileRequest))
     assertTrue(!controller.fileLoaded(fileRequest, file("main.go", "hash"), emptyList()))
@@ -542,17 +551,66 @@ class DesktopStateTest {
   }
 
   @Test
-  fun projectOpeningErrorBelongsToCurrentProjectAttempt() {
-    val controller = DesktopWorkflowController()
-    val first = controller.beginProjectLoad()
+  fun projectOpeningAttemptKeepsRequestedAndLoadedProjectsDistinct() {
+    val controller = DesktopWorkflowController(projectState())
+    val original = controller.state.project
+    val first = controller.beginProjectLoad("/tmp/other", ProjectOpeningKind.Restore)
+    assertEquals(original, controller.state.project)
+    assertEquals("/tmp/other", controller.state.projectState.openingAttempt?.path)
+    assertEquals(
+        ProjectOpeningOutcome.Opening, controller.state.projectState.openingAttempt?.outcome)
     assertTrue(controller.projectFailed(first, "Restore denied"))
     controller.dispatch(DesktopEvent.Failed("Unrelated failure"))
-    assertEquals("Restore denied", controller.state.projectState.openingError)
-    val second = controller.beginProjectLoad()
-    assertNull(controller.state.projectState.openingError)
-    assertTrue(!controller.projectFailed(first, "Late failure"))
+    assertEquals(
+        ProjectOpeningOutcome.Failed("Restore denied"),
+        controller.state.projectState.openingAttempt?.outcome)
+    assertEquals(original, controller.state.project)
+    val second = controller.beginProjectLoad("/tmp/other", ProjectOpeningKind.Restore)
+    assertEquals(
+        ProjectOpeningOutcome.Opening, controller.state.projectState.openingAttempt?.outcome)
+    assertFalse(controller.projectFailed(first, "Late failure"))
+    assertFalse(controller.projectLoaded(first, project(), ProjectIndex("project", "revision")))
+    assertEquals(second, controller.state.projectState.openingAttempt?.requestId)
     assertTrue(controller.projectLoaded(second, project(), ProjectIndex("project", "revision")))
-    assertNull(controller.state.projectState.openingError)
+    assertNull(controller.state.projectState.openingAttempt)
+    assertEquals(original, controller.state.project)
+  }
+
+  @Test
+  fun currentProjectIndexMismatchFailsWithoutReplacingTheLoadedProject() {
+    for (index in listOf(ProjectIndex("other", "revision"), ProjectIndex("project", "old"))) {
+      val controller = DesktopWorkflowController(projectState())
+      val original = controller.state.project
+      val request = controller.beginProjectLoad("/tmp/other", ProjectOpeningKind.Import)
+      assertFalse(controller.projectLoaded(request, project(), index))
+      assertEquals(original, controller.state.project)
+      assertEquals(ProjectIndex("project", "revision"), controller.state.index)
+      val failed = controller.state.projectState.openingAttempt
+      assertEquals(request, failed?.requestId)
+      assertTrue(failed?.outcome is ProjectOpeningOutcome.Failed)
+      assertFalse(controller.isCurrentProjectRequest(request))
+      assertFalse(controller.projectLoaded(request, project(), ProjectIndex("project", "revision")))
+      assertEquals(failed, controller.state.projectState.openingAttempt)
+    }
+  }
+
+  @Test
+  fun cancellationTerminatesOnlyTheCurrentOpeningAttempt() {
+    val controller = DesktopWorkflowController(projectState())
+    val first = controller.beginProjectLoad("/tmp/fixture", ProjectOpeningKind.Restore)
+    val second = controller.beginProjectLoad("/tmp/fixture", ProjectOpeningKind.Restore)
+    assertFalse(controller.cancelProjectLoad(first))
+    assertTrue(controller.cancelProjectLoad(second))
+    assertEquals(
+        ProjectOpeningOutcome.Canceled, controller.state.projectState.openingAttempt?.outcome)
+    assertFalse(controller.state.loading)
+    assertFalse(controller.projectFailed(second, "Late failure"))
+    assertFalse(controller.projectLoaded(second, project(), ProjectIndex("project", "revision")))
+    val third = controller.beginProjectLoad("/tmp/new", ProjectOpeningKind.Import)
+    assertFalse(controller.cancelProjectLoad(second))
+    assertEquals(third, controller.state.projectState.openingAttempt?.requestId)
+    assertEquals(
+        ProjectOpeningOutcome.Opening, controller.state.projectState.openingAttempt?.outcome)
   }
 
   @Test
