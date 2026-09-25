@@ -229,7 +229,9 @@ class DesktopWorkflowPresenter(
     projectJob?.cancel()
     clearSecurityReviewRemoteConfirmation()
     cancelProjectScopedWork()
-    val request = controller.beginProjectLoad()
+    val request =
+        controller.beginProjectLoad(
+            path, if (restore) ProjectOpeningKind.Restore else ProjectOpeningKind.Import)
     publish()
     dispatch(
         DesktopEvent.Status(
@@ -246,7 +248,10 @@ class DesktopWorkflowPresenter(
                               path, snapshot.value.providerConfirmed(ModelScope.Analyze))
                   loaded to api.index()
                 }
-            if (!controller.projectLoaded(request, project, index)) return@launch
+            if (!controller.projectLoaded(request, project, index)) {
+              if (controller.state.projectState.openingAttempt?.requestId == request) publish()
+              return@launch
+            }
             publish()
             try {
               lastProjectStore.save(project.path)
@@ -257,8 +262,9 @@ class DesktopWorkflowPresenter(
             if (restore) dispatch(DesktopEvent.Status("Reopened ${project.name}"))
             jobCoordinator.projectOpened(project.identity())
             refreshProjectWorkspace(project.identity())
-          } catch (_: CancellationException) {
-            throw CancellationException()
+          } catch (canceled: CancellationException) {
+            if (controller.cancelProjectLoad(request)) publish()
+            throw canceled
           } catch (error: Exception) {
             if (!controller.isCurrentProjectRequest(request)) return@launch
             val message =

@@ -10,13 +10,45 @@ enum class Workspace {
   Editor
 }
 
+enum class ProjectOpeningKind {
+  Import,
+  Restore,
+}
+
+sealed interface ProjectOpeningOutcome {
+  data object Opening : ProjectOpeningOutcome
+
+  data class Failed(val message: String) : ProjectOpeningOutcome
+
+  data object Canceled : ProjectOpeningOutcome
+}
+
+data class ProjectOpeningAttempt(
+    val requestId: Long,
+    val path: String,
+    val kind: ProjectOpeningKind,
+    val outcome: ProjectOpeningOutcome = ProjectOpeningOutcome.Opening,
+)
+
 data class ProjectWorkspaceState(
     val project: ProjectAnalysis? = null,
     val index: ProjectIndex? = null,
     val overview: ProjectOverview? = null,
     val sourceChangeObserved: Boolean = false,
-    val openingError: String? = null,
-)
+    val openingAttempt: ProjectOpeningAttempt? = null,
+) {
+  // Read-only bridge for existing shell/header consumers until they render attempts.
+  val openingError: String?
+    get() = (openingAttempt?.outcome as? ProjectOpeningOutcome.Failed)?.message
+
+  // Existing rendering fixtures still construct an error-only state; migrate them with the UI.
+  constructor(
+      openingError: String
+  ) : this(
+      openingAttempt =
+          ProjectOpeningAttempt(
+              0, "", ProjectOpeningKind.Import, ProjectOpeningOutcome.Failed(openingError)))
+}
 
 data class FileSelectionState(
     val selectedFile: ProjectFileInfo? = null,
@@ -311,6 +343,10 @@ sealed interface DesktopEvent {
 
   data class ProjectLoaded(val project: ProjectAnalysis, val index: ProjectIndex) : DesktopEvent
 
+  data class ProjectOpeningStarted(val attempt: ProjectOpeningAttempt) : DesktopEvent
+
+  data class ProjectOpeningCanceled(val requestId: Long) : DesktopEvent
+
   data class IndexRefreshed(val index: ProjectIndex) : DesktopEvent
 
   data class OverviewLoaded(val overview: ProjectOverview) : DesktopEvent
@@ -346,7 +382,7 @@ sealed interface DesktopEvent {
 
   data class FileLoadFailed(override val message: String) : LocalReadFailure
 
-  data class ProjectLoadFailed(override val message: String) : LocalReadFailure
+  data class ProjectLoadFailed(val requestId: Long, val message: String) : DesktopEvent
 
   data class SelectedFileRefreshed(val file: ProjectFileInfo, val symbols: List<SymbolInfo>) :
       DesktopEvent
@@ -438,20 +474,10 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       DesktopEvent.Loading -> copy(jobs = jobs.copy(loading = true, error = null))
       is DesktopEvent.WorkspaceSelected -> copy(workspace = event.workspace)
       is DesktopEvent.ConnectionUpdated -> copy(connection = event.connection)
-      is DesktopEvent.ProjectLoaded ->
-          copy(
-              workspace = Workspace.Summary,
-              projectState = ProjectWorkspaceState(event.project, event.index),
-              selection = FileSelectionState(),
-              findings = FindingsState(),
-              analysisRun = ProjectAnalysisRunState(),
-              security = SecurityWorkspaceState(),
-              chat = ChatState(),
-              review = DraftReviewState(),
-              jobs =
-                  jobs.copy(
-                      loading = false, status = "Imported ${event.project.name}", error = null),
-          )
+      is DesktopEvent.ProjectOpeningStarted,
+      is DesktopEvent.ProjectOpeningCanceled,
+      is DesktopEvent.ProjectLoadFailed,
+      is DesktopEvent.ProjectLoaded -> withProjectOpeningEvent(event)
       is DesktopEvent.LocalReadFailure -> withLocalReadFailure(event)
       is DesktopEvent.IndexRefreshed -> withRefreshedIndex(event.index)
       is DesktopEvent.OverviewLoaded ->
@@ -739,12 +765,46 @@ private fun DesktopState.currentCheckAttempt(requestId: Long): Boolean =
           review.draft?.let(::CheckCandidate) == it.candidate
     } == true
 
+private fun DesktopState.withLoadedProject(event: DesktopEvent.ProjectLoaded): DesktopState =
+    copy(
+        workspace = Workspace.Summary,
+        projectState = ProjectWorkspaceState(event.project, event.index),
+        selection = FileSelectionState(),
+        findings = FindingsState(),
+        analysisRun = ProjectAnalysisRunState(),
+        security = SecurityWorkspaceState(),
+        chat = ChatState(),
+        review = DraftReviewState(),
+        jobs = jobs.copy(loading = false, status = "Imported ${event.project.name}", error = null),
+    )
+
+private fun DesktopState.withProjectOpeningEvent(event: DesktopEvent): DesktopState =
+    when (event) {
+      is DesktopEvent.ProjectOpeningStarted ->
+          copy(projectState = projectState.copy(openingAttempt = event.attempt))
+      is DesktopEvent.ProjectLoaded -> withLoadedProject(event)
+      is DesktopEvent.ProjectOpeningCanceled ->
+          stopProjectOpening(event.requestId, ProjectOpeningOutcome.Canceled)
+      is DesktopEvent.ProjectLoadFailed ->
+          stopProjectOpening(event.requestId, ProjectOpeningOutcome.Failed(event.message))
+      else -> this
+    }
+
+private fun DesktopState.stopProjectOpening(
+    requestId: Long,
+    outcome: ProjectOpeningOutcome
+): DesktopState {
+  val attempt = projectState.openingAttempt ?: return this
+  if (attempt.requestId != requestId || attempt.outcome != ProjectOpeningOutcome.Opening)
+      return this
+  return copy(
+      projectState = projectState.copy(openingAttempt = attempt.copy(outcome = outcome)),
+      jobs =
+          jobs.copy(loading = false, error = (outcome as? ProjectOpeningOutcome.Failed)?.message))
+}
+
 private fun DesktopState.withLocalReadFailure(event: DesktopEvent.LocalReadFailure): DesktopState =
     when (event) {
-      is DesktopEvent.ProjectLoadFailed ->
-          copy(
-              projectState = projectState.copy(openingError = event.message),
-              jobs = jobs.copy(loading = false, error = event.message))
       is DesktopEvent.FileLoadFailed ->
           copy(
               selection = selection.copy(fileReadError = event.message),
@@ -883,7 +943,6 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
     private set
 
   private var nextRequestId = 0L
-  private var projectRequest: Long = 0
   private var fileRequest: RequestIdentity? = null
   private var analysisRequest: Long = 0
   private var chatRequest: Long = 0
@@ -913,24 +972,38 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
     return state.reduce(event).also { state = it }
   }
 
-  fun beginProjectLoad(): Long =
-      nextId().also {
-        projectRequest = it
+  fun beginProjectLoad(
+      path: String = "",
+      kind: ProjectOpeningKind = ProjectOpeningKind.Import
+  ): Long =
+      nextId().also { requestId ->
         fileRequest = null
-        state = state.copy(projectState = state.projectState.copy(openingError = null))
+        dispatch(DesktopEvent.ProjectOpeningStarted(ProjectOpeningAttempt(requestId, path, kind)))
         dispatch(DesktopEvent.Loading)
       }
 
-  fun projectLoaded(requestId: Long, project: ProjectAnalysis, index: ProjectIndex): Boolean =
-      requestId == projectRequest &&
-          project.projectId == index.projectId &&
-          project.projectRevision == index.projectRevision &&
-          accept(DesktopEvent.ProjectLoaded(project, index))
+  fun projectLoaded(requestId: Long, project: ProjectAnalysis, index: ProjectIndex): Boolean {
+    if (!isCurrentProjectRequest(requestId)) return false
+    if (project.projectId != index.projectId || project.projectRevision != index.projectRevision) {
+      projectFailed(
+          requestId, "Project and index identity do not match. Try opening the project again.")
+      return false
+    }
+    return accept(DesktopEvent.ProjectLoaded(project, index))
+  }
 
-  fun isCurrentProjectRequest(requestId: Long): Boolean = requestId == projectRequest
+  fun isCurrentProjectRequest(requestId: Long): Boolean =
+      state.projectState.openingAttempt?.let {
+        it.requestId == requestId && it.outcome == ProjectOpeningOutcome.Opening
+      } == true
 
   fun projectFailed(requestId: Long, message: String): Boolean =
-      if (isCurrentProjectRequest(requestId)) accept(DesktopEvent.ProjectLoadFailed(message))
+      if (isCurrentProjectRequest(requestId))
+          accept(DesktopEvent.ProjectLoadFailed(requestId, message))
+      else false
+
+  fun cancelProjectLoad(requestId: Long): Boolean =
+      if (isCurrentProjectRequest(requestId)) accept(DesktopEvent.ProjectOpeningCanceled(requestId))
       else false
 
   fun beginFileLoad(path: String): RequestIdentity? {
