@@ -10,6 +10,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -65,7 +66,7 @@ import java.awt.Cursor
 internal fun WorkspaceFrame(
     rail: @Composable () -> Unit,
     panes: @Composable RowScope.() -> Unit,
-    terminal: @Composable () -> Unit,
+    terminal: @Composable (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
   Row(
@@ -78,10 +79,13 @@ internal fun WorkspaceFrame(
               bottom = WORKSPACE_FRAME_INSET.dp)) {
         rail()
         Spacer(Modifier.width(WORKSPACE_FRAME_INSET.dp))
-        Column(Modifier.weight(1f).fillMaxHeight()) {
-          Row(Modifier.weight(1f).fillMaxWidth(), content = panes)
-          Spacer(Modifier.height(WORKSPACE_FRAME_INSET.dp))
-          terminal()
+        BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+          val workspaceHeight = maxHeight.value
+          Column(Modifier.fillMaxHeight()) {
+            Row(Modifier.weight(1f).fillMaxWidth(), content = panes)
+            Spacer(Modifier.height(WORKSPACE_FRAME_INSET.dp))
+            terminal(workspaceHeight)
+          }
         }
       }
 }
@@ -316,11 +320,12 @@ internal fun TerminalDock(
     content: @Composable (Modifier) -> Unit,
     controlModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
+    effectiveHeight: Float = layout.bottomHeight,
 ) {
   Column(
       modifier
           .fillMaxWidth()
-          .then(if (layout.bottomCollapsed) Modifier else Modifier.height(layout.bottomHeight.dp))
+          .then(if (layout.bottomCollapsed) Modifier else Modifier.height(effectiveHeight.dp))
           .clip(MiniOrcaShapes.workspace)
           .background(ToolWindowSurface)) {
         if (!layout.bottomCollapsed) HorizontalResizableDivider(onHeightDelta, onHeightCommit)

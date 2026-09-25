@@ -39,6 +39,7 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -654,15 +655,19 @@ internal fun DesktopShell(
                       showHeader = false)
                 }
               },
-              terminal = {
+              terminal = { workspaceHeight ->
+                val effectiveHeight =
+                    resolveTerminalDockHeight(
+                        layout, workspaceHeight, LocalDensity.current.fontScale)
                 TerminalDock(
                     layout = layout,
+                    effectiveHeight = effectiveHeight,
                     state = panes.terminalState,
                     tabActions = panes.terminalTabActions,
                     onOpen = ::openTerminal,
                     onCollapse = ::collapseTerminal,
                     onHeightDelta = {
-                      layoutActions.updateLayout(layout.withBottomHeight(layout.bottomHeight + it))
+                      layoutActions.updateLayout(layout.withBottomHeight(effectiveHeight + it))
                     },
                     onHeightCommit = { layoutActions.saveLayout(layout) },
                     content = panes.terminalContent,
