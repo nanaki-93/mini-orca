@@ -9,7 +9,10 @@ Launch, restore and resize the native window at 1600×1000, 1440×900, 1024×768
 wrapping and footer alignment. Repeat affected surfaces at 125% and 150% text;
 record viewport, display density and text scale separately. Compare native and
 component observations without treating offscreen captures as proof of OS focus,
-popup placement or spoken screen-reader output.
+popup placement or spoken screen-reader output. The native observations below
+remain pending until performed and recorded on a host; offscreen fixture results
+are not a substitute. Record each tested size/scale, input method and any
+unavailable check separately rather than marking the whole checklist complete.
 
 For changed flows, also apply the [UI review](UI_DESIGN_GUIDELINES.md#verification):
 identify the task, state and next action. Verify that labels, blocked reasons
@@ -34,8 +37,12 @@ with keyboard focus.
    navigation preserves the selected file, draft and loaded results. Merely focusing
    rail entries or switching workspaces must not start a shell or request a model.
 3. In Analysis, Start analysis opens a whole-project preview with file/stage scope,
-   exclusions, cache use and request bounds. Confirm every required remote
-   destination and explicit Security intent. Admission is one operation; starting
+   exclusions, cache use and request bounds. At 800×650 and 1280×600 with 150%
+   text, scroll the preview body to the complete destinations and Security intent;
+   Tab/Shift+Tab to each checkbox, cancellation and start decision. Confirm
+   every required remote destination and explicit Security intent before starting;
+   merely focusing or selecting a checkbox must not start the run. Admission is
+   one operation; starting
    a result page must show the whole category and never launch another analysis.
    The daemon's dispatch bounds remain enforced without Run limits controls.
 4. Verify Analysis contains progress, per-section states, failures and result
@@ -45,21 +52,44 @@ with keyboard focus.
    canceled and completed-empty evidence retain their distinct labels/counts.
 5. In each result page, verify the three category boxes name their destinations,
    mark the current category and navigate with Enter/Space without starting work.
-   Select a result and inspect severity, exact source location and its
-   evidence. Selection
-   remains local and does not prepare or
-   apply a fix. Only **Prepare fix** prefills Assistant, and its disabled reason
+   At a width on each side of the list/detail reflow boundary, filter and scroll
+   the populated list, select a row, then resize across the boundary and back.
+   Check the query, filter, selection and applicable list position survive;
+   keyboard-reveal and scroll both stacked list and detail, including long evidence.
+   Repeat with empty/filtered results and check that unavailable/failed states do
+   not become zero findings. Inspect the selected result's severity, exact source
+   location and evidence. Selection remains local and does not prepare or apply
+   a fix. Only **Prepare fix** prefills Assistant, and its disabled reason
    remains visible when the source identity is ineligible. Performance hypotheses
    never claim measured speedup; Security rule matches and model hypotheses remain
    distinct in their evidence. Bugs keeps separately trusted verified Go scans.
 6. Use Cmd/Ctrl+P to choose a file and Cmd/Ctrl+Shift+O to choose a declaration.
    Source and diff must remain selectable/read-only. Relative paths disambiguate
    equal basenames. Source drag selects text without changing the draft target.
-7. Resize Editor and check access to Files and Context/Assistant/Review in the
-   chosen layout. Activate rail Commands and check that it opens the actions palette;
-   header search opens file search. Close and Escape each palette from its own
-   opener (keyboard and pointer) and verify *native focus* returns to that surviving
-   control, not just its region. Activate rail Models and footer counts separately:
+   At 125% and 150% text, select and copy source and Current/Candidate diff text,
+   try typing to verify neither changes, and horizontally scroll the source and
+   each diff column independently; vertical diff rows should remain synchronized.
+   Resize while scrolled and confirm the selected diff mode and applicable scroll
+   position persist. Copy a long path using its accessible text/local scrolling,
+   without relying on hover.
+7. Resize Editor across the measured wide/compact boundary and back, at 100%,
+   125% and 150% text. Check visible Files, source/diff canvas and
+   Context/Assistant/Review side by side when they fit and in a bounded vertical
+   stack otherwise; hidden panes stay hidden. Keyboard-focus a file, Editor tab,
+   draft action and right-tool tab on both sides: focus should stay on a surviving
+   control, with its stacked pane scrolled into view. Focus a side splitter before
+   stacking; verify focus moves to a surviving Editor control without activating
+   it. Repeat while a dialog is open and while Terminal owns focus: neither should
+   lose focus. Check selected file/right tab and draft text, caret and selection
+   survive wide → compact → wide without a save or unsolicited work. Drag and
+   arrow-resize a constrained splitter: the first delta must start at the displayed
+   width, and only explicit input commits a new preference. Check source/diff
+   viewport and scroll access. Activate rail Commands to open the actions palette;
+   header search opens file search. With the window narrow and near a screen edge,
+   open the file and commands palettes from keyboard and pointer, plus a dialog;
+   inspect native placement, clipping, keyboard focus and Escape dismissal. Close
+   and Escape each palette from its own opener (keyboard and pointer) and verify
+   *native focus* returns to that surviving control, not just its region. Activate rail Models and footer counts separately:
    each opens the same configured model details, even when unavailable, without
    changing workspace or probing a provider. Close/Escape must return native focus
    to the corresponding rail or footer opener. Repeat after switching projects or
@@ -79,8 +109,14 @@ with keyboard focus.
     file and declaration and is unavailable for stale evidence. Edit draft clears
     previous approval evidence. After explicit Apply/Undo, source refreshes and
     Undo is limited to the immediately preceding unchanged Apply.
-    At reduced heights and 150% text, verify scrolling exposes the complete Apply
-    scope and recovery action. Expand Check details and Project context without dispatching a request.
+    At reduced heights and 150% text, with optional help collapsed, scroll both
+    evidence and decision areas: inspect complete target path/declaration, failed
+    diagnostics, required checks, Apply scope and recovery action. Tab to the
+    enabled action and activate it exactly once only with current evidence; with
+    stale evidence, confirm blocked reason and no Apply. Verify confirmation and
+    cancellation remain reachable by keyboard without triggering a check or source
+    write from reflow. Expand Check details and Project context without dispatching
+    a request.
     During a rerun, show Running even when the previous report passed.
 11. Confirm Terminal and its shell tabs share one bottom bar. Explicitly activate
     rail Terminal, collapsed-dock Terminal or Ctrl+Shift+T: each opens/focuses the
@@ -89,8 +125,14 @@ with keyboard focus.
     expanded dock's Terminal control to collapse it; collapse does not close a tab.
     Use + to create independent shells, switch tabs, and × to close one without
     stopping others. Collapse/reopen, workspace changes and resizing preserve each
-    shell's PID, history and scrollback. Resize the terminal and verify real PTY
-    dimensions change without losing content or hiding the canvas.
+    shell's PID, history and scrollback. With an expanded dock, shrink the native
+    window to a short height and back: verify the dock bar, tabs and collapse
+    control remain reachable above the footer, the workspace can still be
+    scrolled, and the preferred height returns when room allows. Resize the dock
+    explicitly and verify real PTY rows/columns change without losing content or
+    hiding the canvas; passive window reflow must not open, close or replace a
+    session. Record session PID and PTY dimensions before/after separately from
+    component-render evidence.
 12. With terminal focus, verify typing, Unicode paste, selection/copy, shell history,
     Ctrl+C, scrolling and a disposable full-screen program. App shortcuts must not
     steal ordinary shell input. Ctrl+Shift+F12 returns to Editor; Cmd/Ctrl+P then
@@ -113,4 +155,7 @@ with keyboard focus.
 Use Escape to dismiss only the top transient surface before canceling a request.
 With no transient surface or active request, Escape leaves source unchanged.
 Record runtime, viewport, text/density scale, input method and actual observations
-when reporting a native check.
+when reporting a native check. Use an enabled screen reader to inspect spoken
+names, focus/selection states and order through stacked panes, dialogs, Review
+and dock controls; do not mark this or popup/focus/real-PTY checks passed based on
+`DesktopVisualLayoutTest` or other offscreen tests.
