@@ -323,6 +323,25 @@ class DesktopShellTest {
   }
 
   @Test
+  fun transientOpenerIdentityOnlySurvivesWithItsProjectAndRegion() {
+    assertEquals(
+        TransientOpener.RailCommands,
+        transientFocusOpener(TransientOpener.RailCommands, true, DesktopFocusRegion.LeftToolWindow))
+    assertEquals(
+        TransientOpener.HeaderSearch,
+        transientFocusOpener(TransientOpener.HeaderSearch, true, DesktopFocusRegion.Toolbar))
+    assertEquals(
+        TransientOpener.FooterModels,
+        transientFocusOpener(TransientOpener.FooterModels, true, DesktopFocusRegion.StatusBar))
+    assertEquals(
+        TransientOpener.Region,
+        transientFocusOpener(TransientOpener.RailCommands, false, DesktopFocusRegion.Toolbar))
+    assertEquals(
+        TransientOpener.Region,
+        transientFocusOpener(TransientOpener.RailCommands, true, DesktopFocusRegion.Editor))
+  }
+
+  @Test
   fun transientDismissalChoosesOnlyAttachedOwnerRegions() {
     assertEquals(
         DesktopFocusRegion.StatusBar,

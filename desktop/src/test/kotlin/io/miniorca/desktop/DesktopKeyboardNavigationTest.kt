@@ -233,6 +233,79 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun commandsRailOpensActionsAndRestoresItsOwnFocusOnCloseAndEscape() {
+    var operations = 0
+    var opens = 0
+    var state by
+        mutableStateOf(
+            shellFocusState(resultProjectFixture()).let {
+              it.copy(editor = it.editor.copy(analysisInProgress = true, generating = true))
+            })
+    ComposeVisualFixture(1_280, 800) {
+          FocusTestShell(
+              state,
+              onState = { state = it },
+              onOperation = { operations++ },
+              onPaletteOpen = { opens++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          repeat(3) { gesture ->
+            assertTrue(fixture.requestDescriptionFocus("Commands · Open actions"))
+            fixture.render()
+            when (gesture) {
+              0 -> fixture.clickDescription("Commands · Open actions")
+              1 -> assertTrue(fixture.pressKey(Key.Enter))
+              else -> assertTrue(fixture.pressKey(Key.Spacebar))
+            }
+            fixture.render()
+            assertEquals(gesture + 1, opens)
+            assertEquals(PaletteMode.Actions, state.palette.mode)
+            assertTrue(fixture.isFocusedControl("Filter commands"))
+            assertEquals(Workspace.Summary, state.app.workspace)
+            if (gesture == 1) assertTrue(fixture.pressKey(Key.Escape))
+            else fixture.clickText("Close")
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Commands · Open actions"))
+          }
+          assertEquals(0, operations)
+        }
+  }
+
+  @Test
+  fun commandsPaletteProjectReplacementFallsBackWithoutFocusingDetachedOpener() {
+    var operations = 0
+    var state by mutableStateOf(shellFocusState(resultProjectFixture()))
+    ComposeVisualFixture(1_280, 800) {
+          FocusTestShell(state, onState = { state = it }, onOperation = { operations++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Commands · Open actions")
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Filter commands"))
+          state =
+              state.copy(
+                  app =
+                      state.app.copy(
+                          projectState =
+                              ProjectWorkspaceState(
+                                  resultProjectFixture().copy(projectId = "other"))))
+          fixture.render()
+          assertFalse(fixture.hasText("Filter commands"))
+          assertTrue(fixture.isFocusedControl("Search files, symbols, commands"))
+          assertFalse(fixture.isFocusedControl("Commands · Open actions"))
+          fixture.clickDescription("Commands · Open actions")
+          fixture.render()
+          state = state.copy(app = DesktopState())
+          fixture.render()
+          assertFalse(fixture.hasText("Filter commands"))
+          assertTrue(fixture.isFocusedControl("Open project"))
+          assertEquals(0, operations)
+        }
+  }
+
+  @Test
   fun terminalRailOpensExistingDockWithoutStartingOnRenderFocusOrWorkspaceSwitch() {
     val directory = Files.createTempDirectory("mini-orca-rail-terminal-")
     val starts = AtomicInteger()
@@ -321,6 +394,7 @@ class DesktopKeyboardNavigationTest {
       onState: (DesktopShellState) -> Unit,
       onOperation: () -> Unit,
       terminal: DesktopTerminalWorkspace? = null,
+      onPaletteOpen: () -> Unit = {},
   ) {
     DesktopShell(
         state = state,
@@ -363,6 +437,7 @@ class DesktopKeyboardNavigationTest {
                 updateQuery = { onState(state.copy(palette = state.palette.copy(query = it))) },
                 dismiss = { onState(state.copy(palette = state.palette.copy(visible = false))) },
                 open = {
+                  onPaletteOpen()
                   onState(state.copy(palette = state.palette.copy(visible = true, mode = it)))
                 },
                 switchMode = { onState(state.copy(palette = state.palette.copy(mode = it))) },
@@ -848,6 +923,43 @@ class DesktopKeyboardNavigationTest {
           fixture.render()
           assertEquals(2, opens)
           fixture.clickDescription("Terminal · Open or focus; may start a local shell")
+          fixture.render()
+          assertEquals(3, opens)
+          assertEquals(0, selections)
+          assertEquals(LeftToolWindow.Summary, active)
+        }
+  }
+
+  @Test
+  fun commandsRailActionIsIndependentOfWorkspaceKeyPreview() {
+    var active by mutableStateOf(LeftToolWindow.Summary)
+    var selections = 0
+    var opens = 0
+    ComposeVisualFixture(180, 340) {
+          ToolWindowBar(
+              active,
+              {
+                active = it
+                selections++
+              },
+              onOpenTerminal = {},
+              onOpenCommands = { opens++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Commands"))
+          assertEquals(0, opens)
+          assertTrue(fixture.requestDescriptionFocus("Commands · Open actions"))
+          fixture.render()
+          val label = fixture.firstVisibleTextBounds("Commands")
+          assertTrue(label.top >= 0 && label.bottom <= 340)
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals(1, opens)
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals(2, opens)
+          fixture.clickDescription("Commands · Open actions")
           fixture.render()
           assertEquals(3, opens)
           assertEquals(0, selections)

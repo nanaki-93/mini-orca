@@ -37,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
@@ -91,10 +93,19 @@ internal fun ToolWindowBar(
     onSelect: (LeftToolWindow) -> Unit,
     modifier: Modifier = Modifier,
     onOpenTerminal: () -> Unit,
+    onOpenCommands: () -> Unit = {},
+    commandsFocusRequester: FocusRequester? = null,
 ) {
   var utilityHasFocus by remember { mutableStateOf(false) }
   val terminalReveal = remember { BringIntoViewRequester() }
-  LaunchedEffect(utilityHasFocus) { if (utilityHasFocus) terminalReveal.bringIntoView() }
+  val commandsReveal = remember { BringIntoViewRequester() }
+  var focusedUtility by remember { mutableStateOf("Terminal") }
+  LaunchedEffect(utilityHasFocus, focusedUtility) {
+    if (utilityHasFocus) {
+      if (focusedUtility == "Commands") commandsReveal.bringIntoView()
+      else terminalReveal.bringIntoView()
+    }
+  }
   var focusedToolWindow by remember(activeToolWindow) { mutableStateOf(activeToolWindow) }
   var tabGroupHasFocus by remember { mutableStateOf(false) }
   val railWidth = (TOOL_WINDOW_BAR_WIDTH * maxOf(1f, LocalDensity.current.fontScale)).dp
@@ -132,7 +143,10 @@ internal fun ToolWindowBar(
         modifier =
             Modifier.fillMaxWidth()
                 .padding(horizontal = 2.dp, vertical = 2.dp)
-                .onFocusChanged { utilityHasFocus = it.hasFocus }
+                .onFocusChanged {
+                  utilityHasFocus = it.hasFocus
+                  if (it.isFocused) focusedUtility = "Terminal"
+                }
                 .bringIntoViewRequester(terminalReveal),
         contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp),
         accessibleName = "Terminal · Open or focus; may start a local shell",
@@ -141,6 +155,26 @@ internal fun ToolWindowBar(
             DesktopLineIcon(DesktopIcon.Terminal, "Terminal", iconSize = 20.dp)
             Spacer(Modifier.height(4.dp))
             Text("Terminal", style = IdeTypography.action, maxLines = 1, softWrap = false)
+          }
+        }
+    ChromeButton(
+        onClick = onOpenCommands,
+        modifier =
+            Modifier.fillMaxWidth()
+                .padding(horizontal = 2.dp, vertical = 2.dp)
+                .then(commandsFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
+                .onFocusChanged {
+                  utilityHasFocus = it.hasFocus
+                  if (it.isFocused) focusedUtility = "Commands"
+                }
+                .bringIntoViewRequester(commandsReveal),
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp),
+        accessibleName = "Commands · Open actions",
+        tooltip = "Open commands") {
+          Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            DesktopLineIcon(DesktopIcon.Search, "Commands", iconSize = 20.dp)
+            Spacer(Modifier.height(4.dp))
+            Text("Commands", style = IdeTypography.action, maxLines = 1, softWrap = false)
           }
         }
   }
