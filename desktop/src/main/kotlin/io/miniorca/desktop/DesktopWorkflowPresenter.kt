@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -120,6 +121,28 @@ class DesktopWorkflowPresenter(
   private var started = false
   private var explicitOpenStarted = false
   private var projectJob: Job? = null
+  private val acceptedProjects = Channel<Pair<Long, String>>(Channel.UNLIMITED)
+  private var latestAcceptedProjectRequest = 0L
+  private val preferenceSaveJob =
+      scope.launch {
+        for ((request, path) in acceptedProjects) {
+          try {
+            require(path.isNotBlank()) { "The opened project has no path to remember." }
+            io { lastProjectStore.save(path) }
+            dispatch(DesktopEvent.ProjectPreferenceSaved(path))
+          } catch (canceled: CancellationException) {
+            throw canceled
+          } catch (error: Exception) {
+            if (request == latestAcceptedProjectRequest) {
+              dispatch(
+                  DesktopEvent.ProjectPreferenceSaveFailed(
+                      "Could not remember this project for the next launch: " +
+                          (error.message?.takeIf(String::isNotBlank)
+                              ?: "local storage unavailable")))
+            }
+          }
+        }
+      }
   private var fileJob: Job? = null
   private var fileFreshnessJob: Job? = null
   private var enrichmentJobs: List<Job> = emptyList()
@@ -281,12 +304,8 @@ class DesktopWorkflowPresenter(
               return@launch
             }
             publish()
-            try {
-              lastProjectStore.save(project.path)
-            } catch (_: Exception) {
-              // Project restore is optional; a persistence failure must not discard the loaded
-              // project.
-            }
+            latestAcceptedProjectRequest = request
+            acceptedProjects.send(request to project.path)
             if (restore) dispatch(DesktopEvent.Status("Reopened ${project.name}"))
             jobCoordinator.projectOpened(project.identity())
             refreshProjectWorkspace(project.identity())
@@ -1184,6 +1203,8 @@ class DesktopWorkflowPresenter(
     connectionJob?.cancel()
     startupJob?.cancel()
     projectJob?.cancel()
+    acceptedProjects.close()
+    preferenceSaveJob.cancel()
     fileFreshnessJob?.cancel()
     fileJob?.cancel()
     enrichmentJobs.forEach(Job::cancel)
