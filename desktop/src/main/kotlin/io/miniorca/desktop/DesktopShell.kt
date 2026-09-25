@@ -40,6 +40,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -255,6 +256,8 @@ private data class ShellFocusRequesters(
     val bottomToolWindow: FocusRequester,
     val statusBar: FocusRequester,
     val paletteTrigger: FocusRequester,
+    val statusDetailsTrigger: FocusRequester,
+    val landing: FocusRequester,
 )
 
 internal fun paletteFocusRestorationRegion(
@@ -270,6 +273,31 @@ internal fun paletteFocusRestorationRegion(
       else -> previous
     }
 
+private data class TransientFocusOrigin(
+    val region: DesktopFocusRegion,
+    val projectId: String?,
+    val toolbarTrigger: Boolean = false,
+    val statusTrigger: Boolean = false,
+)
+
+internal fun transientFocusRegion(
+    previous: DesktopFocusRegion,
+    sameProject: Boolean,
+    workspace: Workspace,
+    rightToolWindowVisible: Boolean,
+    statusBarVisible: Boolean,
+): DesktopFocusRegion? {
+  if (!sameProject) return if (statusBarVisible) DesktopFocusRegion.Toolbar else null
+  return when (previous) {
+    DesktopFocusRegion.StatusBar -> if (statusBarVisible) previous else DesktopFocusRegion.Toolbar
+    else ->
+        paletteFocusRestorationRegion(
+            previous,
+            rightToolWindowVisible = workspace == Workspace.Editor && rightToolWindowVisible,
+            bottomToolWindowVisible = true)
+  }
+}
+
 private fun ShellFocusRequesters.forRegion(region: DesktopFocusRegion): FocusRequester =
     when (region) {
       DesktopFocusRegion.Toolbar -> toolbar
@@ -279,13 +307,6 @@ private fun ShellFocusRequesters.forRegion(region: DesktopFocusRegion): FocusReq
       DesktopFocusRegion.BottomToolWindow -> bottomToolWindow
       DesktopFocusRegion.StatusBar -> statusBar
     }
-
-private fun ShellFocusRequesters.paletteRestorationRequester(
-    openedFromToolbar: Boolean,
-    region: DesktopFocusRegion,
-): FocusRequester =
-    if (openedFromToolbar && region == DesktopFocusRegion.Toolbar) paletteTrigger
-    else forRegion(region)
 
 @Composable
 internal fun DesktopShell(
@@ -321,13 +342,15 @@ internal fun DesktopShell(
         bottomToolWindow = FocusRequester(),
         statusBar = FocusRequester(),
         paletteTrigger = FocusRequester(),
+        statusDetailsTrigger = FocusRequester(),
+        landing = FocusRequester(),
     )
   }
-  var paletteFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
-  var paletteOpenedFromToolbar by remember { mutableStateOf(false) }
+  var paletteOrigin by remember { mutableStateOf<TransientFocusOrigin?>(null) }
   var statusDetailsVisible by remember { mutableStateOf(false) }
-  var statusDetailsFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
-  var contextFocusRestoreTarget by remember { mutableStateOf<DesktopFocusRegion?>(null) }
+  var statusOrigin by remember { mutableStateOf<TransientFocusOrigin?>(null) }
+  var contextOrigin by remember { mutableStateOf<TransientFocusOrigin?>(null) }
+  var pendingFocus by remember { mutableStateOf<TransientFocusOrigin?>(null) }
   val showsEditorChrome =
       shellMode == DesktopShellMode.ProjectWorkspace && editorChromeVisible(workspace)
   fun selectWorkspace(nextWorkspace: Workspace) {
@@ -364,23 +387,59 @@ internal fun DesktopShell(
   }
   LaunchedEffect(Unit) { focusRequesters.fallback.requestFocus() }
   LaunchedEffect(appState.project?.projectId, appState.project?.projectRevision) {
+    if (statusDetailsVisible) pendingFocus = statusOrigin
+    statusOrigin = null
     statusDetailsVisible = false
+    if (paletteOrigin != null && paletteOrigin?.projectId != appState.project?.projectId) {
+      pendingFocus = paletteOrigin
+      paletteOrigin = null
+      paletteActions.dismiss()
+    }
+    if (shellMode == DesktopShellMode.ProjectLanding && contextOrigin != null) {
+      pendingFocus = contextOrigin
+      contextOrigin = null
+      editorActions.dismissContext()
+    }
+  }
+  LaunchedEffect(context.visible, shellMode) {
+    if (context.visible &&
+        shellMode == DesktopShellMode.ProjectWorkspace &&
+        contextOrigin == null) {
+      contextOrigin = TransientFocusOrigin(layout.lastFocusedRegion, appState.project?.projectId)
+    } else if (contextOrigin != null) {
+      pendingFocus = contextOrigin
+      contextOrigin = null
+    }
+  }
+  fun openPalette(mode: PaletteMode, fromToolbar: Boolean = false) {
+    if (!palette.visible)
+        paletteOrigin =
+            TransientFocusOrigin(
+                if (fromToolbar) DesktopFocusRegion.Toolbar else layout.lastFocusedRegion,
+                appState.project?.projectId,
+                toolbarTrigger = fromToolbar)
+    paletteActions.open(mode)
   }
   fun dismissPaletteAndRestoreFocus() {
-    paletteFocusRestoreTarget = layout.lastFocusedRegion
+    pendingFocus = paletteOrigin
+    paletteOrigin = null
     paletteActions.dismiss()
   }
   fun showStatusDetails() {
+    statusOrigin =
+        TransientFocusOrigin(
+            DesktopFocusRegion.StatusBar, appState.project?.projectId, statusTrigger = true)
     layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.StatusBar))
-    statusDetailsFocusRestoreTarget = DesktopFocusRegion.StatusBar
     statusDetailsVisible = true
   }
   fun dismissStatusDetailsAndRestoreFocus() {
-    statusDetailsFocusRestoreTarget = DesktopFocusRegion.StatusBar
+    pendingFocus = statusOrigin
+    statusOrigin = null
     statusDetailsVisible = false
   }
   fun dismissContextAndRestoreFocus() {
-    contextFocusRestoreTarget = layout.lastFocusedRegion
+    pendingFocus = contextOrigin
+    contextOrigin = null
     editorActions.dismissContext()
   }
   fun dismissTopmostTransient(): Boolean =
@@ -403,18 +462,42 @@ internal fun DesktopShell(
         }
         null -> false
       }
-  LaunchedEffect(statusDetailsVisible, statusDetailsFocusRestoreTarget) {
-    if (!statusDetailsVisible && statusDetailsFocusRestoreTarget != null) {
-      focusRequesters.forRegion(statusDetailsFocusRestoreTarget!!).requestFocus()
-      statusDetailsFocusRestoreTarget = null
-    }
-  }
-  LaunchedEffect(context.visible, contextFocusRestoreTarget) {
-    if (!context.visible && contextFocusRestoreTarget != null) {
-      focusRequesters.forRegion(contextFocusRestoreTarget!!).requestFocus()
-      contextFocusRestoreTarget = null
-    }
-  }
+  LaunchedEffect(
+      pendingFocus,
+      palette.visible,
+      statusDetailsVisible,
+      context.visible,
+      appState.project?.projectId,
+      workspace,
+      layout.rightToolWindowVisible) {
+        val origin = pendingFocus
+        if (origin != null &&
+            !palette.visible &&
+            !statusDetailsVisible &&
+            !(context.visible && shellMode == DesktopShellMode.ProjectWorkspace)) {
+          val region =
+              transientFocusRegion(
+                  origin.region,
+                  origin.projectId == appState.project?.projectId,
+                  workspace,
+                  showsEditorChrome && layout.rightToolWindowVisible,
+                  desktopStatusBarVisible(appState.project))
+          val requester =
+              when {
+                region == null ->
+                    if (appState.loading) focusRequesters.fallback else focusRequesters.landing
+                origin.toolbarTrigger &&
+                    region == DesktopFocusRegion.Toolbar &&
+                    origin.projectId == appState.project?.projectId ->
+                    focusRequesters.paletteTrigger
+                origin.statusTrigger && region == DesktopFocusRegion.StatusBar ->
+                    focusRequesters.statusDetailsTrigger
+                else -> focusRequesters.forRegion(region)
+              }
+          requester.requestFocus()
+          pendingFocus = null
+        }
+      }
   Box(
       modifier =
           Modifier.fillMaxSize()
@@ -431,32 +514,17 @@ internal fun DesktopShell(
                     editor = editor,
                     projectActions = projectActions,
                     editorActions = editorActions,
-                    paletteActions = paletteActions,
+                    paletteActions = paletteActions.copy(open = { openPalette(it) }),
                     onDismissTransient = ::dismissTopmostTransient,
                     onWorkspaceSelected = ::selectWorkspace,
                 )
               },
   ) {
     if (shellMode == DesktopShellMode.ProjectLanding) {
-      ProjectLanding(appState, projectActions.importProject)
+      ProjectLanding(appState, projectActions.importProject, focusRequesters.landing)
     } else {
       BoxWithConstraints {
         val widthDp = maxWidth.value
-        val restoredFocusRegion =
-            paletteFocusRestorationRegion(
-                previous = paletteFocusRestoreTarget ?: layout.lastFocusedRegion,
-                rightToolWindowVisible = showsEditorChrome && layout.rightToolWindowVisible,
-                bottomToolWindowVisible = true,
-            )
-        LaunchedEffect(palette.visible, paletteFocusRestoreTarget, restoredFocusRegion) {
-          if (!palette.visible && paletteFocusRestoreTarget != null) {
-            focusRequesters
-                .paletteRestorationRequester(paletteOpenedFromToolbar, restoredFocusRegion)
-                .requestFocus()
-            paletteFocusRestoreTarget = null
-            paletteOpenedFromToolbar = false
-          }
-        }
         Column {
           MainToolbar(
               state =
@@ -475,8 +543,7 @@ internal fun DesktopShell(
                       onReconnect = projectActions.reconnect,
                       onPalette = {
                         layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.Toolbar))
-                        paletteOpenedFromToolbar = true
-                        paletteActions.open(PaletteMode.Files)
+                        openPalette(PaletteMode.Files, fromToolbar = true)
                       },
                   ),
               modifier = Modifier.focusRequester(focusRequesters.toolbar).focusable(),
@@ -516,7 +583,8 @@ internal fun DesktopShell(
                         Modifier.weight(1f)
                             .fillMaxHeight()
                             .focusRequester(focusRequesters.editor)
-                            .focusable(),
+                            .focusable()
+                            .testTag("desktop-canvas-focus"),
                 )
                 if (showsEditorChrome && layout.rightToolWindowVisible) {
                   ResizableDivider(
@@ -563,6 +631,7 @@ internal fun DesktopShell(
                 presentation = statusPresentation,
                 onOpenDetails = ::showStatusDetails,
                 modifier = Modifier.focusRequester(focusRequesters.statusBar).focusable(),
+                detailsFocusRequester = focusRequesters.statusDetailsTrigger,
             )
           }
         }
@@ -577,15 +646,20 @@ internal fun DesktopShell(
               appState.selectedFile != null,
               { path ->
                 paletteActions.selectFile(path)
-                paletteFocusRestoreTarget = DesktopFocusRegion.Editor
+                pendingFocus =
+                    TransientFocusOrigin(DesktopFocusRegion.Editor, appState.project?.projectId)
+                paletteOrigin = null
               },
               { symbol ->
                 paletteActions.selectSymbol(symbol)
-                paletteFocusRestoreTarget = DesktopFocusRegion.Editor
+                pendingFocus =
+                    TransientFocusOrigin(DesktopFocusRegion.Editor, appState.project?.projectId)
+                paletteOrigin = null
               },
               { action ->
                 paletteActions.selectAction(action)
-                paletteFocusRestoreTarget = layout.lastFocusedRegion
+                pendingFocus = paletteOrigin
+                paletteOrigin = null
               },
               ::dismissPaletteAndRestoreFocus,
           )
@@ -725,7 +799,11 @@ private fun handleDesktopShortcut(
 }
 
 @Composable
-private fun ProjectLanding(appState: DesktopState, onOpenProject: () -> Unit) {
+private fun ProjectLanding(
+    appState: DesktopState,
+    onOpenProject: () -> Unit,
+    focusRequester: FocusRequester,
+) {
   Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
       MiniOrcaMark()
@@ -735,7 +813,7 @@ private fun ProjectLanding(appState: DesktopState, onOpenProject: () -> Unit) {
           onClick = onOpenProject,
           enabled = !appState.loading,
           tone = ActionTone.Primary,
-          modifier = Modifier.padding(top = 20.dp),
+          modifier = Modifier.padding(top = 20.dp).focusRequester(focusRequester),
       ) {
         Text("Open project")
       }
