@@ -3,6 +3,7 @@ package io.miniorca.desktop
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +28,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -42,51 +44,77 @@ internal fun MainToolbar(
     paletteFocusRequester: FocusRequester? = null,
 ) {
   val connectionPresentation = connectionPresentation(state.connection)
-  Column(modifier.fillMaxWidth().background(ActivityRail)) {
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-      MiniOrcaMark()
-      Spacer(Modifier.width(12.dp))
-      ProjectActionsMenu(
-          projectType = state.project?.type,
-          projectLabel = projectBreadcrumbLabel(state.project),
-          projectAvailable = state.project != null,
-          reconnectAvailable = connectionPresentation.canReconnect,
-          onImport = actions.onImport,
-          onReanalyze = actions.onReanalyze,
-          onReconnect = actions.onReconnect,
-          modifier = Modifier.width(180.dp))
-      IdeVerticalSeparator(Modifier.height(20.dp))
-      BranchContext(state.gitStatus)
-      Box(Modifier.weight(1f).padding(start = 16.dp), contentAlignment = Alignment.CenterStart) {
-        ChromeButton(
-            onClick = actions.onPalette,
-            background = ToolWindowSurface,
-            modifier =
-                Modifier.widthIn(max = 420.dp)
-                    .fillMaxWidth()
-                    .then(paletteFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
-                    .semantics { contentDescription = "Search files, symbols, commands" }) {
-              DesktopLineIcon(DesktopIcon.Search, "Search", iconSize = 16.dp)
-              Spacer(Modifier.width(8.dp))
-              Text(
-                  "Search files, symbols, commands",
-                  fontSize = 12.sp,
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis,
-                  modifier = Modifier.weight(1f))
-              Text(
-                  "⌘P",
-                  color = FaintText,
-                  fontSize = 11.sp,
-                  modifier = Modifier.padding(start = 8.dp))
+  BoxWithConstraints(modifier.fillMaxWidth().background(ActivityRail)) {
+    val scaledWidth = maxWidth.value / LocalDensity.current.fontScale
+    val compact = maxWidth < 1000.dp
+    val wrapped = scaledWidth < 1400f
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+      Row(
+          Modifier.fillMaxWidth().heightIn(min = 40.dp),
+          verticalAlignment = Alignment.CenterVertically) {
+            MiniOrcaMark()
+            Spacer(Modifier.width(12.dp))
+            ProjectActionsMenu(
+                projectType = state.project?.type,
+                projectLabel = projectBreadcrumbLabel(state.project),
+                projectAvailable = state.project != null,
+                reconnectAvailable = connectionPresentation.canReconnect,
+                onImport = actions.onImport,
+                onReanalyze = actions.onReanalyze,
+                onReconnect = actions.onReconnect,
+                modifier = Modifier.width(180.dp))
+            IdeVerticalSeparator(Modifier.height(20.dp))
+            BranchContext(state.gitStatus)
+            if (!wrapped) {
+              HeaderSearch(
+                  actions.onPalette,
+                  paletteFocusRequester,
+                  Modifier.weight(1f).padding(start = 16.dp))
+              Spacer(Modifier.width(16.dp))
+              ToolbarStatus(state, connectionPresentation)
             }
+          }
+      if (wrapped) {
+        Spacer(Modifier.height(4.dp))
+        if (compact) {
+          HeaderSearch(actions.onPalette, paletteFocusRequester, Modifier.fillMaxWidth())
+          Spacer(Modifier.height(4.dp))
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            ToolbarStatus(state, connectionPresentation)
+          }
+        } else {
+          Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            HeaderSearch(actions.onPalette, paletteFocusRequester, Modifier.weight(1f))
+            Spacer(Modifier.width(16.dp))
+            ToolbarStatus(state, connectionPresentation)
+          }
+        }
       }
-      Spacer(Modifier.width(16.dp))
-      ToolbarStatus(state, connectionPresentation)
     }
+  }
+}
+
+@Composable
+private fun HeaderSearch(onClick: () -> Unit, focusRequester: FocusRequester?, modifier: Modifier) {
+  Box(modifier, contentAlignment = Alignment.CenterStart) {
+    ChromeButton(
+        onClick = onClick,
+        background = ToolWindowSurface,
+        modifier =
+            Modifier.widthIn(max = 420.dp)
+                .fillMaxWidth()
+                .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
+                .semantics { contentDescription = "Search files, symbols, commands" }) {
+          DesktopLineIcon(DesktopIcon.Search, "Search", iconSize = 16.dp)
+          Spacer(Modifier.width(8.dp))
+          Text(
+              "Search files, symbols, commands",
+              fontSize = 12.sp,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+              modifier = Modifier.weight(1f))
+          Text("⌘P", color = FaintText, fontSize = 11.sp, modifier = Modifier.padding(start = 8.dp))
+        }
   }
 }
 
