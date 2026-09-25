@@ -130,11 +130,17 @@ internal data class DesktopLayoutState(
     const val MIN_BOTTOM_HEIGHT = 140f
     const val MAX_BOTTOM_HEIGHT = 520f
 
-    fun clampExplorerWidth(value: Float) = value.coerceIn(MIN_EXPLORER_WIDTH, MAX_EXPLORER_WIDTH)
+    fun clampExplorerWidth(value: Float) =
+        (if (value.isFinite()) value else DEFAULT_EXPLORER_WIDTH).coerceIn(
+            MIN_EXPLORER_WIDTH, MAX_EXPLORER_WIDTH)
 
-    fun clampActionWidth(value: Float) = value.coerceIn(MIN_ACTION_WIDTH, MAX_ACTION_WIDTH)
+    fun clampActionWidth(value: Float) =
+        (if (value.isFinite()) value else DEFAULT_ACTION_WIDTH).coerceIn(
+            MIN_ACTION_WIDTH, MAX_ACTION_WIDTH)
 
-    fun clampBottomHeight(value: Float) = value.coerceIn(MIN_BOTTOM_HEIGHT, MAX_BOTTOM_HEIGHT)
+    fun clampBottomHeight(value: Float) =
+        (if (value.isFinite()) value else DEFAULT_BOTTOM_HEIGHT).coerceIn(
+            MIN_BOTTOM_HEIGHT, MAX_BOTTOM_HEIGHT)
   }
 }
 
