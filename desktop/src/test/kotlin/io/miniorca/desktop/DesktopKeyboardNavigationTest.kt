@@ -470,6 +470,54 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun shellNavigationAndReadOnlyUtilitiesDoNotInvokeWorkflowCallbacks() {
+    var state by mutableStateOf(shellFocusState(resultProjectFixture()))
+    var operations = 0
+    var paletteOpens = 0
+    ComposeVisualFixture(1_280, 800) {
+          FocusTestShell(
+              state,
+              onState = { state = it },
+              onOperation = { operations++ },
+              onPaletteOpen = { paletteOpens++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          listOf(
+                  Workspace.Summary,
+                  Workspace.Analysis,
+                  Workspace.Bugs,
+                  Workspace.Performance,
+                  Workspace.Security,
+                  Workspace.Editor)
+              .forEach { workspace ->
+                val label = leftToolWindowLabel(leftToolWindowForWorkspace(workspace))
+                fixture.clickDescription(
+                    "$label tool window, ${if (state.app.workspace == workspace) "selected" else "not selected"}")
+                fixture.render()
+                assertEquals(workspace, state.app.workspace)
+                assertEquals(0, operations)
+              }
+          fixture.clickDescription("Models · Configured model details")
+          fixture.render()
+          assertTrue(fixture.hasText("Provider details"))
+          fixture.clickText("Close")
+          fixture.render()
+          fixture.clickDescription("Commands · Open actions")
+          fixture.render()
+          assertEquals(PaletteMode.Actions, state.palette.mode)
+          assertEquals(1, paletteOpens)
+          fixture.clickText("Close")
+          fixture.render()
+          assertEquals(Workspace.Editor, state.app.workspace)
+          assertEquals(
+              0,
+              operations,
+              "Passive navigation/inspection cannot scan, check, Apply/Undo or write source")
+        }
+  }
+
+  @Test
   fun terminalRailOpensExistingDockWithoutStartingOnRenderFocusOrWorkspaceSwitch() {
     val directory = Files.createTempDirectory("mini-orca-rail-terminal-")
     val starts = AtomicInteger()
@@ -1052,6 +1100,52 @@ class DesktopKeyboardNavigationTest {
           fixture.clickDescription("Editor tool window, not selected, focused")
           fixture.render()
           assertEquals(listOf(LeftToolWindow.Editor), selected)
+        }
+  }
+
+  @Test
+  fun allNineRailActionsCanBeRevealedByKeyboardWithoutDispatchingWork() {
+    var selected by mutableStateOf(LeftToolWindow.Summary)
+    var selections = 0
+    var utilityActions = 0
+    val railFocus = FocusRequester()
+    ComposeVisualFixture(180, 220, 1.5f) {
+          ToolWindowBar(
+              selected,
+              {
+                selected = it
+                selections++
+              },
+              Modifier.focusRequester(railFocus),
+              onOpenTerminal = { utilityActions++ },
+              onOpenCommands = { utilityActions++ },
+              onOpenModels = { utilityActions++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          railFocus.requestFocus()
+          fixture.render()
+          workspaceRailOrder.forEachIndexed { index, entry ->
+            if (index > 0) {
+              assertTrue(fixture.pressKey(Key.DirectionDown))
+              fixture.render()
+            }
+            val label = leftToolWindowLabel(entry)
+            fixture.awaitVisibleDescription(
+                "$label tool window, ${if (index == 0) "selected" else "not selected"}, focused")
+          }
+          listOf(
+                  "Terminal" to "Terminal · Open or focus; may start a local shell",
+                  "Commands" to "Commands · Open actions",
+                  "Models" to "Models · Configured model details")
+              .forEach { (label, description) ->
+                assertTrue(fixture.requestDescriptionFocus(description))
+                fixture.awaitVisibleDescription(description)
+                assertTrue(fixture.isFocusedControl(description), "$label must retain focus")
+              }
+          assertEquals(0, selections)
+          assertEquals(0, utilityActions)
+          assertEquals(LeftToolWindow.Summary, selected)
         }
   }
 

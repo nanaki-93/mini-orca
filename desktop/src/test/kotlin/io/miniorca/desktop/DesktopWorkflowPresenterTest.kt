@@ -406,6 +406,66 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun sixWorkspaceCycleAndNumberedDestinationsRetainDraftFileAndResultsWithoutRequests() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<Pair<String, String>>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          calls += method to path
+          response("{}")
+        }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      presenter.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() { println(1) }"))
+      val run = analysisRunFixture()
+      val results = analysisResultsFixture(run, "bugs")
+      val analysis =
+          ProjectAnalysisRunState(
+              run = run,
+              sections =
+                  mapOf(AnalysisResultKey("bugs") to AnalysisSectionState(results = results)))
+      presenter.dispatch(DesktopEvent.AnalysisRunUpdated(analysis))
+      val retained = presenter.snapshot.value.state
+      assertEquals("main.go", retained.selectedFile?.path)
+      assertEquals("func Run() { println(1) }", retained.review.editor?.declaration)
+      for (expected in
+          listOf(
+              Workspace.Analysis,
+              Workspace.Performance,
+              Workspace.Bugs,
+              Workspace.Security,
+              Workspace.Editor,
+              Workspace.Summary)) {
+        presenter.dispatch(
+            DesktopEvent.WorkspaceSelected(nextWorkspace(presenter.snapshot.value.state.workspace)))
+        assertEquals(expected, presenter.snapshot.value.state.workspace)
+        assertEquals(retained.selection, presenter.snapshot.value.state.selection)
+        assertEquals(retained.review, presenter.snapshot.value.state.review)
+        assertEquals(analysis, presenter.snapshot.value.state.analysisRun)
+      }
+      assertEquals(
+          listOf(
+              DesktopShortcut.SummaryWorkspace,
+              DesktopShortcut.AnalysisWorkspace,
+              DesktopShortcut.BugsWorkspace,
+              DesktopShortcut.EditorWorkspace),
+          (1..4).map { desktopShortcut(it.toString(), primaryModifier = true) })
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertTrue(
+          calls.isEmpty(),
+          "Navigation must not call providers, scans, checks, Apply/Undo or write source: $calls")
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun everyAnalysisEntryPreviewsTheWholeProjectAndNavigationNeverStartsIt() {
     val calls = mutableListOf<Pair<String, String>>()
     val requests = mutableListOf<AnalysisPreviewRequest>()
