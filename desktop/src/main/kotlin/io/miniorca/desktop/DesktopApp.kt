@@ -265,9 +265,11 @@ internal fun MiniOrcaApp(
   }
 
   fun importProject() {
-    val directory = chooseDirectory() ?: return
-    if (terminal.state.value.requiresClose) pendingTerminalSwitch = directory.absolutePath
-    else loadChosenProject(directory.absolutePath)
+    if (!projectOpenAvailable(appState.projectState.openingAttempt)) return
+    chooseProjectDirectory(::chooseDirectory) { path ->
+      if (terminal.state.value.requiresClose) pendingTerminalSwitch = path
+      else loadChosenProject(path)
+    }
   }
 
   fun openPalette(mode: PaletteMode) {
@@ -789,10 +791,15 @@ internal fun DraftDiscardDialog(
   )
 }
 
+internal fun chooseProjectDirectory(choose: () -> File?, onSelected: (String) -> Unit) {
+  val directory = choose() ?: return
+  onSelected(directory.absolutePath)
+}
+
 private fun chooseDirectory(): File? {
   val chooser =
       JFileChooser().apply {
-        dialogTitle = "Import project"
+        dialogTitle = "Open project"
         fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
         isAcceptAllFileFilterUsed = false
       }

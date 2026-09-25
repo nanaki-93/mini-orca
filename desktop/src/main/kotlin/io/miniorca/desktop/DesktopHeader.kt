@@ -63,6 +63,7 @@ internal fun MainToolbar(
                 projectType = state.project?.type,
                 projectLabel = projectBreadcrumbLabel(state.project),
                 projectAvailable = state.project != null,
+                openAvailable = projectOpenAvailable(state.openingAttempt),
                 reconnectAvailable = connectionPresentation.canReconnect,
                 onImport = actions.onImport,
                 onReanalyze = actions.onReanalyze,
@@ -288,6 +289,7 @@ private fun ProjectActionsMenu(
     projectType: String?,
     projectLabel: String,
     projectAvailable: Boolean,
+    openAvailable: Boolean,
     reconnectAvailable: Boolean,
     onImport: () -> Unit,
     onReanalyze: () -> Unit,
@@ -320,6 +322,7 @@ private fun ProjectActionsMenu(
                 restoreFocus = true
                 onImport()
               },
+              enabled = openAvailable,
               icon = DesktopIcon.Folder)
           IdeDropdownMenuItem(
               label = "Re-index project",
