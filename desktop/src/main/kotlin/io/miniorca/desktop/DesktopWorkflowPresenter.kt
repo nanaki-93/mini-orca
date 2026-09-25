@@ -146,6 +146,10 @@ class DesktopWorkflowPresenter(
       jobCoordinator.projectOpened(event.project.identity())
     }
     controller.dispatch(event)
+    if (event is DesktopEvent.DraftEdited) {
+      draftValidationJob?.cancel()
+      setOperation(validating = false)
+    }
     if (event is DesktopEvent.IndexRefreshed &&
         snapshot.value.state.project?.projectRevision != event.index.projectRevision) {
       controller.state.project?.identity()?.let(jobCoordinator::projectOpened)
@@ -670,6 +674,19 @@ class DesktopWorkflowPresenter(
   }
 
   fun cancelDraftValidation() {
+    val attempt = controller.state.review.editor?.validationAttempt
+    if (attempt?.status == ValidationAttemptStatus.Running) {
+      controller.currentFileRequest()?.let { file ->
+        if (controller.draftValidationStopped(
+            attempt.requestId,
+            file,
+            ValidationAttemptStatus.Canceled,
+            "Draft validation canceled. Validate the draft again to continue.")) {
+          publish()
+          dispatch(DesktopEvent.Status("Draft validation canceled"))
+        }
+      }
+    }
     activeDraft = null
     draftValidationJob?.cancel()
     draftChecksJob?.cancel()
@@ -807,6 +824,7 @@ class DesktopWorkflowPresenter(
   fun validateEditableDraft() {
     val state = snapshot.value.state
     val editor = state.review.editor ?: return
+    if (editor.status == DraftEditorStatus.Validating) return
     val project = state.project ?: return
     val file = state.selectedFile ?: return
     if (!draftEditorMatchesOpenFile(editor, file, project)) {
@@ -815,13 +833,22 @@ class DesktopWorkflowPresenter(
       return
     }
     benchmarkWorkflow.stopComparison()
-    val (request, fileRequest) = controller.beginDraftLoad() ?: return
+    val (request, fileRequest) = controller.beginDraftValidation() ?: return
     val identity = editor.serverDraft.identity(file.identity(project))
     activeDraft = identity
     draftValidationJob?.cancel()
-    dispatch(DesktopEvent.DraftValidationStarted)
+    publish()
     dispatch(DesktopEvent.Status("Validating ${editor.serverDraft.targetSymbol}…"))
     setOperation(validating = true)
+    fun reportFailure(error: Exception, conflict: Boolean) {
+      val message = error.message?.takeIf(String::isNotBlank) ?: "Draft validation request failed"
+      if (controller.draftValidationStopped(
+          request, fileRequest, ValidationAttemptStatus.Failed, message)) {
+        publish()
+        if (conflict) dispatch(DesktopEvent.DraftMarkedStale)
+        dispatch(DesktopEvent.Failed(message))
+      }
+    }
     draftValidationJob =
         scope.launch {
           try {
@@ -833,11 +860,13 @@ class DesktopWorkflowPresenter(
                   editor.declaration,
                   editor.imports)
             }
+            if (!controller.draftValidationUpdated(request, fileRequest, updated)) return@launch
+            publish()
             val validated = io {
               api.validateDraft(updated.id, project.projectRevision, updated.revision)
             }
             if (activeDraft == identity &&
-                controller.draftLoaded(request, fileRequest, validated)) {
+                controller.draftValidated(request, fileRequest, validated)) {
               activeDraft = validated.identity(identity.file)
               publish()
               dispatch(
@@ -845,16 +874,20 @@ class DesktopWorkflowPresenter(
                       if (validated.validation?.applicable == true) "Draft validation passed."
                       else "Draft validation needs attention."))
             }
-          } catch (_: CancellationException) {
-            dispatch(DesktopEvent.Status("Draft validation canceled"))
-            throw CancellationException()
+          } catch (canceled: CancellationException) {
+            if (controller.draftValidationStopped(
+                request,
+                fileRequest,
+                ValidationAttemptStatus.Canceled,
+                "Draft validation canceled. Validate the draft again to continue.")) {
+              publish()
+              dispatch(DesktopEvent.Status("Draft validation canceled"))
+            }
+            throw canceled
           } catch (error: ApiException) {
-            if (activeDraft != identity) return@launch
-            if (error.status == 409) dispatch(DesktopEvent.DraftMarkedStale)
-            dispatch(DesktopEvent.Failed(error.message ?: "Draft validation failed"))
+            reportFailure(error, error.status == 409)
           } catch (error: Exception) {
-            if (activeDraft != identity) return@launch
-            dispatch(DesktopEvent.Failed(error.message ?: "Draft validation failed"))
+            reportFailure(error, false)
           } finally {
             if (draftValidationJob === coroutineContext[Job]) setOperation(validating = false)
           }

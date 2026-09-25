@@ -283,7 +283,7 @@ private fun AssistantDraftEditorSection(
             label = "Required imports",
             modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
       }
-      DraftValidationDiagnostics(editor.diagnostics)
+      DraftValidationDiagnostics(editor.diagnostics, retained = editor.diagnosticsAreRetained)
       Text(
           draftEditorStatusMessage(editor.status),
           color = draftEditorStatusColor(editor.status),
@@ -305,12 +305,17 @@ private fun AssistantDraftEditorSection(
 }
 
 @Composable
-internal fun DraftValidationDiagnostics(diagnostics: List<DeclarationFinding>) {
+internal fun DraftValidationDiagnostics(
+    diagnostics: List<DeclarationFinding>,
+    retained: Boolean = false,
+) {
   if (diagnostics.isEmpty()) return
   IdePaneHeader(
-      title = "Validation diagnostics",
-      stateLabel = "${diagnostics.size} require attention",
-      stateTint = Error)
+      title = if (retained) "Previous validation diagnostics" else "Validation diagnostics",
+      stateLabel =
+          if (retained) "Retained; revalidate for current approval"
+          else "${diagnostics.size} require attention",
+      stateTint = if (retained) Warning else Error)
   SelectionContainer {
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
       diagnostics.forEach { diagnostic ->

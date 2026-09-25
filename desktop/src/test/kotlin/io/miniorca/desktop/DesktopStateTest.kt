@@ -241,7 +241,7 @@ class DesktopStateTest {
             jobs = JobState(loading = true),
         )
 
-    val validating = active.reduce(DesktopEvent.DraftValidationStarted)
+    val validating = active.reduce(DesktopEvent.DraftValidationStarted(1))
     val replaced = active.reduce(DesktopEvent.DraftLoaded(DeclarationDraft(id = "replacement")))
     val discarded = active.reduce(DesktopEvent.DraftDiscarded)
 
@@ -250,6 +250,118 @@ class DesktopStateTest {
       assertNull(it.review.benchmark.catalog)
       assertFalse(it.loading)
     }
+  }
+
+  @Test
+  fun validationFailureAndCancellationKeepTheBufferButNotPreviousApproval() {
+    val approved =
+        DeclarationDraft(
+            id = "draft",
+            declaration = "func Run() {}",
+            validation =
+                DeclarationValidation(
+                    true,
+                    "strict_symbol",
+                    diagnostics = listOf(DeclarationFinding("warning", "Previous diagnostic")),
+                    diff = UnifiedDiff("main.go", "main.go")))
+    val initial =
+        DesktopState(review = DraftReviewState(draft = approved, editor = editableDraft(approved)))
+    for (outcome in listOf(ValidationAttemptStatus.Failed, ValidationAttemptStatus.Canceled)) {
+      val running = initial.reduce(DesktopEvent.DraftValidationStarted(7))
+      assertEquals(DraftEditorStatus.Validating, running.review.editor?.status)
+      assertNull(running.review.draft?.validation)
+      assertNull(running.review.editor?.serverDraft?.validation)
+      assertTrue(running.review.editor?.diagnosticsAreRetained == true)
+      assertEquals("Previous diagnostic", running.review.editor.diagnostics.single().message)
+      val updated =
+          running.reduce(
+              DesktopEvent.DraftValidationUpdated(
+                  7, approved.copy(revision = 2, validation = null)))
+      assertEquals("Previous diagnostic", updated.review.editor!!.diagnostics.single().message)
+      val stopped =
+          updated.reduce(DesktopEvent.DraftValidationStopped(7, outcome, "Connection lost"))
+      assertEquals(DraftEditorStatus.Generated, stopped.review.editor?.status)
+      assertEquals("func Run() {}", stopped.review.editor?.declaration)
+      assertEquals("Connection lost", stopped.review.editor?.validationAttempt?.message)
+      assertEquals(outcome, stopped.review.editor?.validationAttempt?.status)
+      assertTrue(stopped.review.editor?.diagnosticsAreRetained == true)
+      assertEquals("Previous diagnostic", stopped.review.editor.diagnostics.single().message)
+      val previousChecks =
+          DraftCheckReport(
+              "main.go",
+              true,
+              draftId = approved.id,
+              draftRevision = approved.revision,
+              draftHash = approved.hash)
+      assertFalse(
+          draftApplyEligibility(
+                  stopped.review.draft, previousChecks, file("main.go", approved.baseFileHash))
+              .eligible)
+      assertEquals(stopped, stopped.reduce(DesktopEvent.DraftValidationStopped(7, outcome, "late")))
+    }
+  }
+
+  @Test
+  fun predecessorCannotStopAReplacementOrAnEditedDraft() {
+    val draft = DeclarationDraft(id = "draft", declaration = "func Run() {}")
+    val initial =
+        DesktopState(review = DraftReviewState(draft = draft, editor = editableDraft(draft)))
+    val first = initial.reduce(DesktopEvent.DraftValidationStarted(1))
+    val replacement = first.reduce(DesktopEvent.DraftValidationStarted(2))
+    assertEquals(
+        replacement,
+        replacement.reduce(
+            DesktopEvent.DraftValidationStopped(1, ValidationAttemptStatus.Failed, "old")))
+    val edited =
+        replacement.reduce(DesktopEvent.DraftEdited(declaration = "func Run() int { return 1 }"))
+    assertNull(edited.review.editor?.validationAttempt)
+    assertEquals(
+        edited,
+        edited.reduce(
+            DesktopEvent.DraftValidationStopped(2, ValidationAttemptStatus.Canceled, "old")))
+  }
+
+  @Test
+  fun validationResponsesRequireCurrentRequestFileAndUneditedDraft() {
+    val controller = DesktopWorkflowController(projectState())
+    val selected = controller.beginFileLoad("main.go")!!
+    assertTrue(controller.fileLoaded(selected, file("main.go", "base"), emptyList()))
+    val draft =
+        DeclarationDraft(
+            id = "draft",
+            projectId = "project",
+            projectRevision = "revision",
+            targetPath = "main.go",
+            baseFileHash = "base",
+            revision = 1,
+            declaration = "func Run() {}")
+    controller.dispatch(DesktopEvent.DraftLoaded(draft))
+    val (first, fileRequest) = controller.beginDraftValidation()!!
+    assertNull(controller.beginDraftValidation())
+    assertTrue(
+        controller.draftValidationStopped(
+            first, fileRequest, ValidationAttemptStatus.Canceled, "canceled"))
+    val (second, _) = controller.beginDraftValidation()!!
+    assertFalse(
+        controller.draftValidationStopped(
+            first, fileRequest, ValidationAttemptStatus.Canceled, "old"))
+    assertFalse(controller.draftValidated(first, fileRequest, draft))
+    assertEquals(
+        ValidationAttemptStatus.Running, controller.state.review.editor?.validationAttempt?.status)
+    val updated = draft.copy(revision = 2)
+    assertTrue(controller.draftValidationUpdated(second, fileRequest, updated))
+    assertEquals(2, controller.state.review.editor?.serverDraft?.revision)
+    assertEquals("func Run() {}", controller.state.review.editor?.declaration)
+    controller.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() int { return 1 }"))
+    assertFalse(controller.draftValidated(second, fileRequest, updated))
+    assertFalse(
+        controller.draftValidationStopped(
+            second, fileRequest, ValidationAttemptStatus.Failed, "late"))
+    val (third, _) = controller.beginDraftValidation()!!
+    val otherFile = controller.beginFileLoad("other.go")!!
+    assertFalse(controller.draftValidated(third, fileRequest, updated))
+    assertTrue(controller.fileLoaded(otherFile, file("other.go", "other"), emptyList()))
+    assertNull(controller.state.review.editor)
   }
 
   @Test

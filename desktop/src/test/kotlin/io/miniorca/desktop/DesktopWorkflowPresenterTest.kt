@@ -22,6 +22,178 @@ import kotlinx.coroutines.launch
 class DesktopWorkflowPresenterTest {
 
   @Test
+  fun validationTransportFailureAndCancelResolveOnlyTheCurrentDraftAttempt() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var fail = true
+    val calls = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          calls += path
+          when {
+            path.contains("/drafts/draft/validate") ->
+                response(
+                    kotlinx.serialization.json.Json.encodeToString(
+                        DeclarationDraft.serializer(), draft().copy(revision = 2)))
+            path.contains("/drafts/draft") ->
+                if (fail) TransportResponse(503, "")
+                else
+                    response(
+                        kotlinx.serialization.json.Json.encodeToString(
+                            DeclarationDraft.serializer(),
+                            draft().copy(revision = 2, validation = null)))
+            else -> creationFileResponse(path) ?: error("Unexpected $path")
+          }
+        }
+    try {
+      loadProject(presenter)
+      presenter.selectFile("main.go")
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      presenter.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() { println(1) }"))
+      presenter.validateEditableDraft()
+      assertEquals(
+          DraftEditorStatus.Validating, presenter.snapshot.value.state.review.editor?.status)
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      val failed = presenter.snapshot.value.state.review.editor!!
+      assertEquals(DraftEditorStatus.Generated, failed.status)
+      assertEquals(ValidationAttemptStatus.Failed, failed.validationAttempt?.status)
+      assertTrue(failed.validationAttempt?.message?.isNotBlank() == true)
+      assertEquals("func Run() { println(1) }", failed.declaration)
+      assertNull(presenter.snapshot.value.state.review.draft?.validation)
+      assertFalse(presenter.snapshot.value.draftValidationInProgress)
+
+      fail = false
+      presenter.validateEditableDraft()
+      main.runPending()
+      presenter.cancelDraftValidation()
+      assertEquals(
+          ValidationAttemptStatus.Canceled,
+          presenter.snapshot.value.state.review.editor?.validationAttempt?.status)
+      assertEquals(
+          DraftEditorStatus.Generated, presenter.snapshot.value.state.review.editor?.status)
+      presenter.validateEditableDraft()
+      val replacement = presenter.snapshot.value.state.review.editor?.validationAttempt
+      assertEquals(ValidationAttemptStatus.Running, replacement?.status)
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(DraftEditorStatus.Valid, presenter.snapshot.value.state.review.editor?.status)
+      assertEquals(1, calls.count { it.contains("/drafts/draft/validate") })
+
+      presenter.validateEditableDraft()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      presenter.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() int { return 3 }"))
+      io.runPending()
+      main.runPending()
+      assertEquals(DraftEditorStatus.Dirty, presenter.snapshot.value.state.review.editor?.status)
+      assertEquals(
+          "func Run() int { return 3 }", presenter.snapshot.value.state.review.editor?.declaration)
+      assertNull(presenter.snapshot.value.state.review.draft?.validation)
+      assertNull(presenter.snapshot.value.state.review.editor?.validationAttempt)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun validationFailureAfterUpdateRetainsRevisionForExplicitRetry() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var failValidation = true
+    val updates = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, body ->
+          when {
+            method == "PATCH" && path.contains("/drafts/draft") -> {
+              updates += body.orEmpty()
+              val revision = if (updates.size == 1) 2L else 3L
+              response(
+                  kotlinx.serialization.json.Json.encodeToString(
+                      DeclarationDraft.serializer(),
+                      draft().copy(revision = revision, validation = null)))
+            }
+            path.contains("/drafts/draft/validate") ->
+                if (failValidation) TransportResponse(503, "")
+                else
+                    response(
+                        kotlinx.serialization.json.Json.encodeToString(
+                            DeclarationDraft.serializer(), draft().copy(revision = 3)))
+            else -> creationFileResponse(path) ?: error("Unexpected $method $path")
+          }
+        }
+    try {
+      loadProject(presenter)
+      presenter.selectFile("main.go")
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      val prior =
+          draft()
+              .copy(
+                  validation =
+                      DeclarationValidation(
+                          true,
+                          "strict_symbol",
+                          diagnostics =
+                              listOf(DeclarationFinding("old", "Prior validation warning")),
+                          diff = UnifiedDiff("main.go", "main.go")))
+      presenter.dispatch(DesktopEvent.DraftLoaded(prior))
+      presenter.validateEditableDraft()
+      presenter.validateEditableDraft()
+      assertTrue(presenter.snapshot.value.state.review.editor?.diagnosticsAreRetained == true)
+      assertNull(presenter.snapshot.value.state.review.draft?.validation)
+      main.runPending()
+      presenter.validateEditableDraft()
+      io.runPending()
+      main.runPending()
+      presenter.validateEditableDraft()
+      io.runPending()
+      main.runPending()
+      val failed = presenter.snapshot.value.state.review.editor!!
+      assertEquals(1, updates.size)
+      assertEquals("Prior validation warning", failed.diagnostics.single().message)
+      assertTrue(failed.diagnosticsAreRetained)
+      assertEquals(ValidationAttemptStatus.Failed, failed.validationAttempt?.status)
+      assertEquals(2L, failed.serverDraft.revision)
+      assertEquals("func Run() {}", failed.declaration)
+      assertFalse(presenter.snapshot.value.draftValidationInProgress)
+      failValidation = false
+      presenter.validateEditableDraft()
+      main.runPending()
+      presenter.cancelDraftValidation()
+      val canceled = presenter.snapshot.value.state.review.editor!!
+      assertEquals(ValidationAttemptStatus.Canceled, canceled.validationAttempt?.status)
+      assertEquals("Prior validation warning", canceled.diagnostics.single().message)
+      assertNull(presenter.snapshot.value.state.review.draft?.validation)
+      presenter.validateEditableDraft()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertTrue(updates.last().contains("\"expected_revision\":2"))
+      assertEquals(2, updates.size)
+      assertEquals(DraftEditorStatus.Valid, presenter.snapshot.value.state.review.editor?.status)
+      assertFalse(presenter.snapshot.value.state.review.editor!!.diagnosticsAreRetained)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun startupWithoutARememberedProjectOnlyChecksTheConnection() {
     val dispatcher = QueuedDispatcher()
     val scope = CoroutineScope(SupervisorJob() + dispatcher)
