@@ -1,11 +1,128 @@
 package io.miniorca.desktop
 
+import androidx.compose.ui.input.key.Key
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ReviewEvidencePaneTest {
+
+  @Test
+  fun shortReviewKeepsLongApplyScopeAndEvidenceIndependentlyReachable() {
+    val path = "internal/" + "long-package/".repeat(16) + "main.go"
+    val current = draft().copy(targetPath = path)
+    val state =
+        ReviewToolWindowState(
+            project(),
+            file().copy(path = path),
+            null,
+            null,
+            editableDraft(current),
+            current,
+            DraftCheckReport(
+                path,
+                true,
+                draftId = current.id,
+                draftRevision = current.revision,
+                draftHash = current.hash),
+            null,
+            null,
+            null,
+            false)
+    var applies = 0
+    var checks = 0
+    ComposeVisualFixture(360, 320, 1.5f) {
+          ReviewToolWindow(
+              state,
+              ReviewToolWindowActions({ checks++ }, { checks++ }, { checks++ }),
+              DraftApplicationActions({ applies++ }, { applies++ }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(0, applies + checks)
+          val action = fixture.taggedBounds("review-action-scroll")
+          val evidence = fixture.taggedBounds("review-scroll")
+          assertTrue(action.height > 0 && action.bottom <= 320f, "$action")
+          assertTrue(evidence.height > 0 && evidence.bottom <= action.top, "$evidence vs $action")
+          fixture.scrollBy(100_000f, "review-action-scroll")
+          fixture.render()
+          assertTrue(fixture.verticalScrollValue("review-action-scroll") > 0f)
+          fixture.assertTextWrapsWithoutClipping("Updates Run in $path.")
+          assertTrue(
+              fixture.firstVisibleTextBounds("Updates Run in $path.").bottom <= action.bottom)
+          assertTrue(fixture.hasDescription("Apply Run to $path"))
+          fixture.revealText("Apply change", "review-action-scroll")
+          assertTrue(fixture.requestDescriptionFocus("Apply Run to $path"))
+          fixture.render()
+          assertTrue(fixture.isDescriptionFocused("Apply Run to $path"))
+          assertEquals(0, applies + checks)
+          fixture.pressKey(Key.Enter)
+          fixture.render()
+          assertEquals(1, applies)
+          assertEquals(0, checks)
+        }
+  }
+
+  @Test
+  fun shortFailedReviewScrollsToDiagnosticsAndRecoversOnlyOnExplicitAction() {
+    val current = draft()
+    val diagnostic = "failure /very/long/" + "segment/".repeat(24) + "tail"
+    val report =
+        DraftCheckReport(
+            "main.go",
+            true,
+            checks = listOf(DraftCheck("go test", true, "failed", output = diagnostic)),
+            draftId = current.id,
+            draftRevision = current.revision,
+            draftHash = current.hash)
+    var edits = 0
+    var applies = 0
+    ComposeVisualFixture(360, 320, 1.5f) {
+          ReviewToolWindow(
+              ReviewToolWindowState(
+                  project(),
+                  file(),
+                  null,
+                  null,
+                  editableDraft(current),
+                  current,
+                  report,
+                  null,
+                  null,
+                  null,
+                  false),
+              ReviewToolWindowActions({}, {}, { edits++ }),
+              DraftApplicationActions({ applies++ }, { applies++ }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertFalse(fixture.hasText("Apply change"))
+          fixture.clickText("Failed check details")
+          fixture.render()
+          val evidence = fixture.taggedBounds("review-scroll")
+          fixture.assertTextWrapsWithoutClipping(diagnostic)
+          fixture.scrollBy(100_000f, "review-scroll")
+          fixture.render()
+          assertTrue(fixture.verticalScrollValue("review-scroll") > 0f)
+          val diagnosticBounds = fixture.firstVisibleTextBounds(diagnostic)
+          assertTrue(
+              diagnosticBounds.top < evidence.bottom &&
+                  diagnosticBounds.bottom > evidence.top &&
+                  diagnosticBounds.bottom <= evidence.bottom,
+              "Diagnostic tail must be visible inside review-scroll: $diagnosticBounds vs $evidence")
+          assertTrue(evidence.bottom <= fixture.taggedBounds("review-action-scroll").top)
+          fixture.revealText("Edit draft", "review-action-scroll")
+          assertTrue(fixture.requestFocus("Edit draft"))
+          fixture.render()
+          assertTrue(fixture.isFocused("Edit draft"))
+          assertEquals(0, edits + applies)
+          fixture.pressKey(Key.Enter)
+          fixture.render()
+          assertEquals(1, edits)
+          assertEquals(0, applies)
+        }
+  }
 
   @Test
   fun detailedChecksStayReachableForFailedSkippedAndStaleEvidenceWithoutExecuting() {
