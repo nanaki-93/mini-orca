@@ -479,20 +479,37 @@ class DesktopShellTest {
   fun landingKeepsLocalOpenFailureAndDaemonRecoverySeparate() {
     var opens = 0
     var reconnects = 0
-    val actions = DesktopShellProjectActions({ opens++ }, {}, { reconnects++ })
+    var retries = 0
+    val actions = DesktopShellProjectActions({ opens++ }, {}, { reconnects++ }, { retries++ })
     val failed =
         DesktopState(
-            projectState = ProjectWorkspaceState(openingError = "Permission denied"),
+            projectState =
+                ProjectWorkspaceState(
+                    rememberedPath = "/projects/remembered",
+                    openingAttempt =
+                        ProjectOpeningAttempt(
+                            1,
+                            "/projects/remembered",
+                            ProjectOpeningKind.Restore,
+                            ProjectOpeningOutcome.Failed("Permission denied"))),
             connection = ConnectionState(label = "Daemon unavailable"))
     ComposeVisualFixture(800, 650, 1.5f) {
           ProjectLanding(failed, actions, androidx.compose.ui.focus.FocusRequester())
         }
         .use { fixture ->
           fixture.render()
-          fixture.assertTextFits("Could not open project")
-          assertTrue(
-              fixture.hasText("Opening or reading local project data failed. Permission denied"))
+          fixture.assertTextFits("Could not restore project")
+          assertTrue(fixture.hasText("Permission denied"))
+          assertTrue(fixture.hasText("Remembered path"))
+          assertTrue(fixture.hasText("Requested path"))
+          fixture.assertTextFits("Retry restore")
           fixture.assertTextFits("Reconnect daemon")
+          assertEquals(0, opens + reconnects + retries)
+          assertTrue(fixture.requestFocus("Retry restore"))
+          fixture.render()
+          assertEquals(0, opens + reconnects + retries)
+          fixture.clickText("Retry restore")
+          assertEquals(1, retries)
           fixture.clickText("Reconnect daemon")
           assertEquals(1, reconnects)
           assertEquals(0, opens)
@@ -505,9 +522,92 @@ class DesktopShellTest {
         }
         .use { fixture ->
           fixture.render()
-          assertTrue(fixture.hasText("Open a project to inspect its local files and analysis."))
+          assertTrue(fixture.hasText("No project remembered on this device."))
           fixture.assertTextFits("Open project")
+          assertTrue(!fixture.hasText("Retry restore"))
           assertTrue(!fixture.hasText("Reconnect daemon"))
+        }
+  }
+
+  @Test
+  fun landingTreatsUnreadableLastProjectAsUnknown() {
+    var opens = 0
+    val state =
+        DesktopState(projectState = ProjectWorkspaceState(preferenceReadWarning = "Storage denied"))
+    ComposeVisualFixture(320, 500, 1.5f) {
+          ProjectLanding(
+              state,
+              DesktopShellProjectActions({ opens++ }, {}, {}),
+              androidx.compose.ui.focus.FocusRequester())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Last project unknown; local preferences could not be read."))
+          assertTrue(!fixture.hasText("No project remembered on this device."))
+          assertTrue(fixture.hasText("Could not read last project preference"))
+          assertTrue(fixture.hasText("Storage denied"))
+          assertTrue(!fixture.isDisabled("Open project"))
+          assertEquals(0, opens)
+          fixture.clickText("Open project")
+          assertEquals(1, opens)
+        }
+  }
+
+  @Test
+  fun landingOpeningStateIgnoresUnrelatedJobsAndNeverOffersImportAsRestoreRetry() {
+    var opens = 0
+    var retries = 0
+    val actions = DesktopShellProjectActions({ opens++ }, {}, {}, { retries++ })
+    var app by
+        mutableStateOf(
+            DesktopState(
+                jobs = JobState(loading = true, status = "Analyzing", error = "Provider failed")))
+    ComposeVisualFixture(800, 650, 1.5f) {
+          ProjectLanding(app, actions, androidx.compose.ui.focus.FocusRequester())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(!fixture.hasText("Restoring local project…"))
+          assertTrue(!fixture.hasText("Provider failed"))
+          assertTrue(!fixture.isDisabled("Open project"))
+          fixture.clickText("Open project")
+          assertEquals(1, opens)
+          app =
+              app.copy(
+                  projectState =
+                      ProjectWorkspaceState(
+                          openingAttempt =
+                              ProjectOpeningAttempt(
+                                  3,
+                                  "/other/project",
+                                  ProjectOpeningKind.Import,
+                                  ProjectOpeningOutcome.Failed("Import denied"))))
+          fixture.render()
+          assertTrue(fixture.hasText("Could not import project"))
+          assertTrue(fixture.hasText("/other/project"))
+          assertTrue(!fixture.hasText("Retry restore"))
+          app =
+              app.copy(
+                  projectState =
+                      app.projectState.copy(
+                          openingAttempt =
+                              ProjectOpeningAttempt(
+                                  4, "/other/project", ProjectOpeningKind.Restore)))
+          fixture.render()
+          assertTrue(fixture.hasText("Restoring local project…"))
+          assertTrue(fixture.isDisabled("Open project"))
+          assertTrue(!fixture.hasText("Retry restore"))
+          assertEquals(0, retries)
+          app =
+              app.copy(
+                  projectState =
+                      ProjectWorkspaceState(preferenceReadWarning = "Preferences unavailable"))
+          fixture.render()
+          assertTrue(fixture.hasText("Could not read last project preference"))
+          assertTrue(fixture.hasText("Preferences unavailable"))
+          assertTrue(!fixture.isDisabled("Open project"))
+          assertTrue(!fixture.hasText("Retry restore"))
+          assertEquals(1, opens)
         }
   }
 

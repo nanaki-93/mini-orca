@@ -74,6 +74,68 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun projectLandingRendersRememberedOpeningAndRecoveryAcrossViewports() {
+    val path = "/projects/" + "日本語-very-long-directory/".repeat(6) + "workspace"
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        var requests = 0
+        var app by
+            mutableStateOf(
+                DesktopState(projectState = ProjectWorkspaceState(rememberedPath = path)))
+        ComposeVisualFixture(
+                (width * density).toInt(), (height * density).toInt(), scale, density) {
+                  ProjectLanding(
+                      app,
+                      DesktopShellProjectActions(
+                          { requests++ }, {}, { requests++ }, { requests++ }),
+                      FocusRequester())
+                }
+            .use { fixture ->
+              val label = "f06-landing-$width-$height-$scale-${density}x"
+              fixture.render("$label-remembered")
+              fixture.assertTextFits("Open project")
+              fixture.revealText("Remembered path", "project-landing-scroll")
+              assertTrue(fixture.hasText(path))
+              app =
+                  app.copy(
+                      projectState =
+                          app.projectState.copy(
+                              openingAttempt =
+                                  ProjectOpeningAttempt(1, path, ProjectOpeningKind.Restore)))
+              fixture.render("$label-restoring")
+              assertTrue(fixture.hasText("Restoring local project…"))
+              assertFalse(fixture.hasText("Retry restore"))
+              app =
+                  app.copy(
+                      projectState =
+                          app.projectState.copy(
+                              openingAttempt =
+                                  ProjectOpeningAttempt(
+                                      1,
+                                      path,
+                                      ProjectOpeningKind.Restore,
+                                      ProjectOpeningOutcome.Failed("Cannot read saved metadata")),
+                              preferenceReadWarning = "Preferences unavailable"),
+                      connection = ConnectionState(label = "Disconnected"))
+              fixture.render("$label-failed")
+              for (text in
+                  listOf(
+                      "Retry restore",
+                      "Could not read last project preference",
+                      "Reconnect daemon")) {
+                fixture.revealText(text, "project-landing-scroll")
+                fixture.assertTextFits(text)
+              }
+              fixture.revealText("Cannot read saved metadata", "project-landing-scroll")
+              assertTrue(fixture.hasText("Cannot read saved metadata"))
+              assertEquals(0, requests)
+            }
+      }
+    }
+  }
+
+  @Test
   fun assembledShellKeepsRailHeaderFooterAndTerminalSeparateAcrossViewportAndDensity() {
     val project =
         resultProjectFixture().copy(name = "A long project identity with 日本語 and many segments")
@@ -1716,16 +1778,27 @@ class DesktopVisualLayoutTest {
         ComposeVisualFixture(pxWidth, pxHeight, scale, density) {
               ProjectLanding(
                   DesktopState(
-                      projectState = ProjectWorkspaceState(openingError = "Local read failed"),
+                      projectState =
+                          ProjectWorkspaceState(
+                              rememberedPath = "/projects/remembered",
+                              openingAttempt =
+                                  ProjectOpeningAttempt(
+                                      1,
+                                      "/projects/remembered",
+                                      ProjectOpeningKind.Restore,
+                                      ProjectOpeningOutcome.Failed("Local read failed"))),
                       connection = ConnectionState(label = "Disconnected")),
                   landingActions,
                   FocusRequester())
             }
             .use { fixture ->
               fixture.render("$label-landing-opening-and-offline")
-              assertTrue(fixture.hasText("Could not open project"))
+              assertTrue(fixture.hasText("Could not restore project"))
               assertTrue(fixture.hasText("Daemon disconnected"))
               fixture.assertTextFits("Open project")
+              fixture.revealText("Retry restore", "project-landing-scroll")
+              fixture.assertTextFits("Retry restore")
+              fixture.revealText("Reconnect daemon", "project-landing-scroll")
               fixture.assertTextFits("Reconnect daemon")
               assertEquals(0, opens + reconnects)
             }
