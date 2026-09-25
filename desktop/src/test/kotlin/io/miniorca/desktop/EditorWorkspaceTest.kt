@@ -1,5 +1,6 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.Text
@@ -9,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.testTag
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -298,6 +300,80 @@ class EditorWorkspaceTest {
           assertEquals(1, edits)
           assertEquals(0, creations)
         }
+  }
+
+  @Test
+  fun narrowChromeKeepsTabsActionsProgressAndCompletePathLocallyReachable() {
+    val path = "src/module-with-a-very-long-name/feature/runner/run.go"
+    listOf(1.25f, 1.5f).forEach { scale ->
+      val review = editorComparisonReviewFixture()
+      var surface by mutableStateOf(EditorSurface.Source)
+      var selections = 0
+      var creations = 0
+      var edits = 0
+      ComposeVisualFixture(220, 420, scale) {
+            EditorWorkspace(
+                editorChromeUiState(
+                    testFile(path),
+                    symbol(),
+                    surface,
+                    progress(EditorProgress.Review),
+                    validatedDraft()),
+                review,
+                {
+                  surface = it
+                  selections++
+                },
+                { creations++ },
+                canvas = {
+                  Box(Modifier.fillMaxSize().testTag("editor-test-canvas")) {
+                    Text("Source viewport")
+                  }
+                },
+                onEditDraft = { edits++ })
+          }
+          .use { fixture ->
+            fixture.render("editor-narrow-chrome-$scale")
+            val viewport = fixture.taggedBounds("editor-test-canvas")
+            assertTrue(viewport.height > 80f, "Progression must not consume the source viewport")
+            assertTrue(fixture.hasDescription("Project-relative path: $path"))
+            fixture.horizontalScrollBy("editor-path", 10000f)
+            fixture.render()
+            assertTrue(fixture.horizontalScrollValue("editor-path") > 0f)
+            assertTrue(fixture.hasText(path))
+            fixture.horizontalScrollBy("editor-progression", 10000f)
+            fixture.render()
+            assertTrue(fixture.horizontalScrollValue("editor-progression") > 0f)
+            fixture.horizontalScrollBy("editor-tabs", 10000f)
+            fixture.render()
+            assertTrue(fixture.requestFocus("Candidate diff"))
+            fixture.render()
+            val tab = fixture.firstVisibleTextBounds("Candidate diff")
+            assertTrue(tab.right <= 220f && tab.left >= 0f, "Candidate tab must fit: $tab")
+            fixture.pressKey(Key.DirectionRight)
+            fixture.pressKey(Key.Enter)
+            fixture.render()
+            assertEquals(EditorSurface.Review, surface)
+            assertEquals(1, selections)
+            fixture.horizontalScrollBy("editor-draft-actions", 10000f)
+            fixture.render()
+            assertTrue(fixture.requestFocus("Edit draft"))
+            fixture.render()
+            val edit = fixture.firstVisibleTextBounds("Edit draft")
+            assertTrue(edit.right <= 220f && edit.left >= 0f, "Edit action must fit: $edit")
+            fixture.pressKey(Key.Enter)
+            fixture.render()
+            assertEquals(1, edits)
+            fixture.horizontalScrollBy("editor-draft-actions", -10000f)
+            fixture.render()
+            assertTrue(fixture.requestFocus("New function"))
+            fixture.render()
+            fixture.pressKey(Key.Enter)
+            fixture.render()
+            assertEquals(1, creations)
+            assertEquals(1, selections)
+          }
+    }
   }
 
   private fun progress(value: EditorProgress) = EditorProgressUiState(value, "")

@@ -9,8 +9,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,7 +35,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -180,14 +177,14 @@ internal fun EditorWorkspace(
 }
 
 @Composable
-@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 private fun EditorReviewProgression(rows: List<ReviewEvidenceRow>) {
-  FlowRow(
+  Row(
       Modifier.fillMaxWidth()
+          .horizontalScroll(rememberScrollState())
           .padding(horizontal = 12.dp, vertical = 8.dp)
           .testTag("editor-progression"),
       horizontalArrangement = Arrangement.spacedBy(12.dp),
-      verticalArrangement = Arrangement.spacedBy(6.dp),
   ) {
     rows.forEachIndexed { index, row ->
       val label =
@@ -261,48 +258,46 @@ private fun ActiveFileEditorChrome(
       },
   ) {
     Column {
-      Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Row(
-            Modifier.weight(1f)
-                .onFocusChanged { tabGroupHasFocus = it.hasFocus }
-                .focusable()
-                .onPreviewKeyEvent { event ->
-                  if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                  val interaction =
-                      tabGroupInteraction(surfaces, focusedSurface, tabGroupKey(event.key))
-                          ?: return@onPreviewKeyEvent false
-                  focusedSurface = interaction.focused
-                  interaction.activate?.let(onSelectSurface)
-                  true
-                },
-            verticalAlignment = Alignment.CenterVertically) {
-              ChromeTab(
-                  onClick = { onSelectSurface(EditorSurface.Source) },
-                  selected = state.activeSurface == EditorSurface.Source,
-                  focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Source,
-                  modifier =
-                      Modifier.weight(1f, fill = false).semantics {
-                        contentDescription = "Source file · ${state.title}"
-                      },
-              ) {
-                DesktopLineIcon(
-                    DesktopIcon.File, "Source file", tint = SelectionText, iconSize = 16.dp)
-                Spacer(Modifier.width(6.dp))
-                Text("Source", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      Row(
+          Modifier.fillMaxWidth()
+              .horizontalScroll(rememberScrollState())
+              .onFocusChanged { tabGroupHasFocus = it.hasFocus }
+              .focusable()
+              .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val interaction =
+                    tabGroupInteraction(surfaces, focusedSurface, tabGroupKey(event.key))
+                        ?: return@onPreviewKeyEvent false
+                focusedSurface = interaction.focused
+                interaction.activate?.let(onSelectSurface)
+                true
               }
-              if (state.reviewAvailable) {
-                ChromeTab(
-                    onClick = { onSelectSurface(EditorSurface.Review) },
-                    selected = state.activeSurface == EditorSurface.Review,
-                    focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Review) {
-                      DesktopLineIcon(DesktopIcon.Check, "Candidate diff", iconSize = 14.dp)
-                      Spacer(Modifier.width(6.dp))
-                      Text("Candidate diff", fontSize = 12.sp, softWrap = false)
-                    }
-              }
+              .testTag("editor-tabs"),
+          verticalAlignment = Alignment.CenterVertically) {
+            ChromeTab(
+                onClick = { onSelectSurface(EditorSurface.Source) },
+                selected = state.activeSurface == EditorSurface.Source,
+                focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Source,
+                modifier =
+                    Modifier.semantics { contentDescription = "Source file · ${state.title}" },
+            ) {
+              DesktopLineIcon(
+                  DesktopIcon.File, "Source file", tint = SelectionText, iconSize = 16.dp)
+              Spacer(Modifier.width(6.dp))
+              Text("Source", fontSize = 12.sp, maxLines = 1)
             }
-        EditorDraftActions(state, onCreateDeclaration, onEditDraft, Modifier.padding(end = 8.dp))
-      }
+            if (state.reviewAvailable) {
+              ChromeTab(
+                  onClick = { onSelectSurface(EditorSurface.Review) },
+                  selected = state.activeSurface == EditorSurface.Review,
+                  focusHighlight = tabGroupHasFocus && focusedSurface == EditorSurface.Review) {
+                    DesktopLineIcon(DesktopIcon.Check, "Candidate diff", iconSize = 14.dp)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Candidate diff", fontSize = 12.sp, softWrap = false)
+                  }
+            }
+          }
+      EditorDraftActions(state, onCreateDeclaration, onEditDraft)
     }
     state.creationBlockedReason?.let { reason ->
       Text(
@@ -333,10 +328,12 @@ private fun EditorDraftActions(
     state: EditorChromeUiState,
     onCreate: () -> Unit,
     onEdit: (() -> Unit)?,
-    modifier: Modifier
 ) {
   Row(
-      modifier,
+      Modifier.fillMaxWidth()
+          .horizontalScroll(rememberScrollState())
+          .padding(horizontal = 8.dp, vertical = 4.dp)
+          .testTag("editor-draft-actions"),
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalAlignment = Alignment.CenterVertically) {
         NewFunctionButton(state.path, state.creationBlockedReason, onCreate)
@@ -357,9 +354,10 @@ private fun EditorBreadcrumbs(
 ) {
   TooltipArea(tooltip = { IdeControlTooltip(fullPath) }, modifier = modifier) {
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).semantics {
-          contentDescription = "Project-relative path: $fullPath"
-        },
+        Modifier.fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .testTag("editor-path")
+            .semantics { contentDescription = "Project-relative path: $fullPath" },
         verticalAlignment = Alignment.CenterVertically,
     ) {
       segments.forEachIndexed { index, segment ->
@@ -376,6 +374,14 @@ private fun EditorBreadcrumbs(
           Spacer(Modifier.width(4.dp))
         }
         Text(segment.label, color = SecondaryText, fontSize = 12.sp, maxLines = 1)
+      }
+      if (segments.any { it.kind == EditorBreadcrumbKind.Collapsed }) {
+        Text(
+            "›",
+            color = FaintText,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(horizontal = 4.dp))
+        Text(fullPath, color = SecondaryText, fontSize = 12.sp, maxLines = 1)
       }
     }
   }
