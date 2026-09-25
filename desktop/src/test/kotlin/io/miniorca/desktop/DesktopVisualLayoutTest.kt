@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -69,6 +71,139 @@ import org.jetbrains.skia.Surface
 
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
+  @Test
+  fun f02AdmissionAndReviewMatrixKeepsDecisionsAndFailuresReachable() {
+    val destination = "https://provider.example/日本語/" + "long-destination/".repeat(3)
+    val error = "Destination unavailable. Refresh the preview before starting."
+    val preview =
+        analysisPreviewFixture().let { original ->
+          original.copy(
+              providers =
+                  original.providers.map { provider ->
+                    provider.copy(model = provider.model.copy(providerOrigin = destination))
+                  })
+        }
+    val review = editorComparisonReviewFixture()
+    val failedChecks =
+        review.checks!!.copy(
+            checks =
+                listOf(
+                    DraftCheck(
+                        "go test",
+                        true,
+                        "failed",
+                        listOf("go", "test", "./..."),
+                        "Focused checks failed. Fix the test before applying.")))
+    for ((width, height) in
+        listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        var confirmations = 0
+        var starts = 0
+        ComposeVisualFixture(width, height, scale) {
+              Box(Modifier.fillMaxSize().background(Panel), contentAlignment = Alignment.Center) {
+                IdeDialogSurface(
+                    maxHeight = 520.dp,
+                    title = { Text("Analyze whole project") },
+                    content = {
+                      DesktopAnalysisAdmissionContent(
+                          ProjectAnalysisRunState(
+                              admission = AnalysisAdmission(preview), error = error),
+                          { _, _ -> confirmations++ },
+                          { confirmations++ })
+                    },
+                    actions = {
+                      MiniOrcaButton(onClick = {}, tone = ActionTone.Neutral) { Text("Close") }
+                      MiniOrcaButton(
+                          onClick = { starts++ }, enabled = false, tone = ActionTone.Primary) {
+                            Text("Start analysis")
+                          }
+                    })
+              }
+            }
+            .use { fixture ->
+              fixture.render("f02-admission-$width-$height-$scale")
+              fixture.revealText(error, "ide-dialog-body")
+              fixture.assertTextFits("Close")
+              fixture.assertTextFits("Start analysis")
+              fixture.revealText("Remote destination: $destination", "ide-dialog-body")
+              fixture.revealText("Include AI Security review", "ide-dialog-body")
+              fixture.render("f02-admission-consent-$width-$height-$scale")
+              assertTrue(fixture.hasDescription("Include AI Security review"))
+              assertTrue(fixture.isDisabled("Start analysis"))
+              assertEquals(0, confirmations)
+              assertEquals(0, starts)
+            }
+        var operations = 0
+        ComposeVisualFixture(width, height, scale) {
+              ReviewToolWindow(
+                  review.copy(checks = failedChecks),
+                  ReviewToolWindowActions({ operations++ }, { operations++ }, { operations++ }),
+                  DraftApplicationActions({ operations++ }, { operations++ }))
+            }
+            .use { fixture ->
+              fixture.render("f02-review-failed-$width-$height-$scale")
+              assertTrue(fixture.hasText("Failed"))
+              assertTrue(fixture.hasText("Failed check details"))
+              assertFalse(fixture.hasText("Ready to apply"))
+              fixture.clickText("Failed check details")
+              fixture.render("f02-review-failed-detail-$width-$height-$scale")
+              fixture.revealText("Focused checks failed. Fix the test before applying.")
+              fixture.render("f02-review-failed-evidence-$width-$height-$scale")
+              assertEquals(0, operations)
+            }
+      }
+    }
+  }
+
+  @Test
+  fun f02DensityCapturesRetainProductionStateAndExpandedEvidence() {
+    val output = "start\n" + "long diagnostic\n".repeat(330) + "last available line"
+    for (density in listOf(1f, 2f)) {
+      val width = (800 * density).toInt()
+      val height = (650 * density).toInt()
+      var changes = 0
+      ComposeVisualFixture(width, height, 1.5f, densityScale = density) {
+            Column(
+                Modifier.fillMaxSize()
+                    .background(Panel)
+                    .verticalScroll(rememberScrollState())
+                    .padding(12.dp)) {
+                  ChromeTab(onClick = { changes++ }, selected = true, focusHighlight = true) {
+                    Text("Selected analysis tab")
+                  }
+                  IdeCheckbox(
+                      checked = false,
+                      onCheckedChange = { changes++ },
+                      accessibleName = "Confirm remote destination",
+                      label = "Confirm remote destination")
+                  CompactSingleLineField(
+                      value = "invalid path",
+                      onValueChange = { changes++ },
+                      label = "Project path",
+                      errorText = "Choose a valid project path")
+                  DiagnosticText(output)
+                }
+          }
+          .use { fixture ->
+            fixture.render("f02-controls-evidence-${density}x-collapsed")
+            fixture.assertTextFits("Selected analysis tab")
+            fixture.assertColorVisible(FocusAccent)
+            fixture.assertColorVisible(SelectionAccent)
+            fixture.assertTextFits("Choose a valid project path")
+            assertTrue(fixture.hasText("… output truncated"))
+            fixture.revealText("Show full available output")
+            fixture.render("f02-controls-evidence-${density}x-preview-action")
+            fixture.clickDescription("Expand available diagnostic output")
+            fixture.render("f02-controls-evidence-${density}x-expanded")
+            assertTrue(fixture.hasText(output))
+            assertTrue(fixture.taggedBounds("diagnostic-output-scroll").height <= 240f * density)
+            val disclosure = fixture.firstVisibleTextBounds("Show preview")
+            assertTrue(disclosure.bottom <= height, "Expanded disclosure must remain reachable")
+            assertEquals(0, changes)
+          }
+    }
+  }
+
   @Test
   fun admissionKeepsFailureConsentAndDecisionsReachableInBoundedDialog() {
     val error =
