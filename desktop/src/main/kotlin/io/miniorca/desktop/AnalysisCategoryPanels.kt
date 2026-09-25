@@ -28,19 +28,26 @@ internal fun AnalysisCategoryPanels(
 ) {
   val pages =
       AnalysisResultType.entries.map { type ->
-        AnalysisResultPageState(type, state.project, state.analysis.run)
+        AnalysisResultPageState(
+            type,
+            state.project,
+            state.analysis.run,
+            state.analysis.sections[AnalysisResultKey(type.category)] ?: AnalysisSectionState())
       }
+  val metrics = summaryIssueMetrics(state.project, state.analysis.run, state.analysis.sections)
   BoxWithConstraints(Modifier.fillMaxWidth()) {
     if (categoryPanelsStacked(maxWidth, LocalDensity.current.fontScale, 8.dp)) {
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        pages.forEach { page -> AnalysisCategoryPanel(page, openResults, Modifier.fillMaxWidth()) }
+        pages.zip(metrics).forEach { (page, metric) ->
+          AnalysisCategoryPanel(page, metric, openResults, Modifier.fillMaxWidth())
+        }
       }
     } else {
       Row(
           Modifier.fillMaxWidth().height(IntrinsicSize.Max),
           horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            pages.forEach { page ->
-              AnalysisCategoryPanel(page, openResults, Modifier.weight(1f).fillMaxHeight())
+            pages.zip(metrics).forEach { (page, metric) ->
+              AnalysisCategoryPanel(page, metric, openResults, Modifier.weight(1f).fillMaxHeight())
             }
           }
     }
@@ -50,6 +57,7 @@ internal fun AnalysisCategoryPanels(
 @Composable
 private fun AnalysisCategoryPanel(
     page: AnalysisResultPageState,
+    metric: SummaryIssueMetric,
     openResults: (Workspace) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -58,11 +66,18 @@ private fun AnalysisCategoryPanel(
   AnalysisCategoryBox(
       type = page.type,
       count = page.reportedCount,
-      status = status,
+      status = metric.statusCode,
+      statusLabel =
+          if (status == "completed_empty" && metric.statusCode == "completed") metric.status
+          else null,
       tint = tint,
       onClick = { openResults(page.type.workspace) },
       modifier = modifier.testTag("analysis-category-${page.type.category}"),
       details = {
+        if (status == "completed_empty" || page.section.loading || page.section.error != null)
+            metric.detailStatus?.let {
+              Text(it, color = SecondaryText, style = IdeTypography.compactBody)
+            }
         page.coverageLabel?.let {
           Text(it, color = SecondaryText, style = IdeTypography.compactBody)
         }
@@ -89,6 +104,7 @@ internal fun AnalysisCategoryBox(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     details: @Composable () -> Unit = {},
+    statusLabel: String? = null,
 ) {
   val name = type.workspace.name
   IdeActionSurface(
@@ -126,7 +142,7 @@ internal fun AnalysisCategoryBox(
             fontWeight = FontWeight.SemiBold)
         Text(
             if (status == null) "Not analyzed"
-            else analysisCategoryStatusLabel(status) ?: "Status unavailable",
+            else statusLabel ?: analysisCategoryStatusLabel(status) ?: "Status unavailable",
             color = if (status == "completed_empty") SecondaryText else tint,
             style = IdeTypography.compactBody)
         details()

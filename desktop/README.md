@@ -46,7 +46,9 @@ the selected workspace. Commands opens the actions palette; header search opens
 indexed file search. Models opens the same configured model and destination details
 as the footer counts, including when configuration is unavailable. Analysis status
 appears immediately before the separate daemon connectivity status in the header;
-neither is provider health. Editor owns one declaration change. Go, Java and Kotlin
+neither is provider health. **Reconnect** reads daemon status and model
+configuration; it does not contact a provider or execute project code. Editor
+owns one declaration change. Go, Java and Kotlin
 projects show a type icon beside the project name in the top bar.
 
 Summary starts with the project name, purpose and indexed metadata. A segmented
@@ -57,11 +59,14 @@ only opens Analysis. The status retains current run lifecycle and exposes saved
 project-description freshness/failure details on hover or keyboard focus.
 
 Three named Bugs, Performance and Security cards open their result pages with one
-click or keyboard activation. Counts stay distinct from unavailable results; zero
-findings use a neutral surface and do not assert that a project is safe. Supported
-bug priority counts remain in the Bugs card. Overall tool-reported issues and AI
-suggestions appear separately below the cards, since those totals cannot be
-reliably assigned to individual categories.
+click or keyboard activation. Card counts come from run-reported category progress,
+not necessarily loaded details; a dash means the count is unavailable, not zero.
+A reported zero is not labeled as no findings until matching completed details load.
+Detail loading and read failures remain labeled beside the count independently of
+run status. Zero findings use a neutral surface and do not assert that a project
+is safe. Bug priority counts require matching current details. Overall tool-reported
+issues and AI suggestions appear separately below the cards, since those totals
+cannot be reliably assigned to individual categories.
 
 At readable local widths, Architecture and flat Packages / modules rows occupy
 the left column; Engineering insight and Flows occupy the right. On a narrower
@@ -133,7 +138,12 @@ it invalidates validation/check evidence. Review shows target identity, readines
 three compact Validation / Focused checks / Source unchanged rows, and a summary
 of reported required checks. Check details and read-only project context start
 collapsed; failed output and validation diagnostics remain visible without hovering.
-A check rerun shows Running even if the previous report passed.
+A check rerun shows Running even if the previous report passed. Failed or
+canceled validation and focused-check attempts remain labeled beside their
+retained evidence. Edit the draft and explicitly revalidate after a validation
+transport failure; run focused checks again explicitly after a failed or
+canceled check attempt. A prior pass alone cannot enable Apply while a later
+attempt is unresolved.
 
 The bottom action names the exact declaration/file scope. **Apply change** uses
 the existing eligibility checks; a returned receipt alone can enable **Undo this
@@ -177,8 +187,14 @@ summary and exact source location. Optional disclosures retain evidence and
 verification details. The single **Prepare fix** action opens the existing
 Assistant workflow only when the current declaration is eligible; row selection
 does not prepare a fix. An unavailable or failed report is never presented as zero
-findings, and an empty Security result is not assurance. Verified Go scans,
-performance hypotheses, measured benchmarks, source rules and model hypotheses
+findings, and an empty Security result is not assurance. If a saved-result read
+fails, **Retry loading results** beside the result status reads saved data for
+that category and path only; it does not start analysis. Loading and read errors
+remain visible even with retained rows or filters that match nothing. **Clear
+filters** changes only the local view; **View analysis** only navigates. A canceled
+run needs a new admitted start, while a paused or interrupted run can be resumed
+through a fresh preview. Verified Go scans, performance hypotheses, measured
+benchmarks, source rules and model hypotheses
 retain distinct evidence and execution requirements without routine badge labels.
 
 ## New Go functions
@@ -290,10 +306,13 @@ under **Excluded** and do not count as up to date or needing attention. Re-selec
 a file restores its saved analysis status. During active, paused or interrupted
 runs, checkboxes are disabled, bulk selection controls are hidden, and the lock
 reason stays visible even when Files is collapsed. **Refresh files** remains
-available; load/save errors retain the confirmed selection. Bugs, Performance and Security boxes use
-tinted surfaces like Summary, with text states for completion, partial coverage or
-failure independently of finding counts. Changing the selection does not rewrite a
-previous run.
+available; load/save errors retain the confirmed selection. **Refresh files**
+reads the confirmed selection again, not an unsaved failed edit. Bugs,
+Performance and Security boxes use tinted surfaces like Summary, with text states
+for completion, partial coverage or failure independently of finding counts.
+A reported zero on an Analysis card remains unconfirmed until matching saved
+category details load; a failed detail read is labeled separately from run status.
+Changing the selection does not rewrite a previous run.
 
 Summary's overall status and coverage follow the current selected files, including
 selection changes. The saved project description keeps its own freshness in the

@@ -25,6 +25,36 @@ class PerformanceWorkspaceTest {
   }
 
   @Test
+  fun summaryAndPerformanceResultKeepReportedCountWhenSavedDetailsFail() {
+    val page = performancePageFixture()
+    val run =
+        page.run!!.copy(
+            status = "partial",
+            sections =
+                page.run.sections.map {
+                  if (it.category == "performance") it.copy(status = "partial", findingCount = 3)
+                  else it
+                })
+    val section =
+        page.section.copy(
+            results =
+                page.section.results!!.copy(
+                    progress = run.sections.first { it.category == "performance" }),
+            error = "Saved result read failed")
+    val metric =
+        summaryIssueMetrics(page.project, run, mapOf(AnalysisResultKey("performance") to section))[
+            1]
+    val resultPage = page.copy(run = run, section = section)
+
+    assertEquals(3, metric.value)
+    assertEquals("Partial", metric.status)
+    assertEquals("Saved details unavailable · 3 reported", metric.detailStatus)
+    assertEquals(
+        "1 loaded · 3 reported", resultPage.countLabel(performanceResults(resultPage).size))
+    assertEquals("Model suggestion", performanceResults(resultPage).single().row().source)
+  }
+
+  @Test
   fun recommendationAndBenchmarkStatusKeepPotentialAndMeasuredEvidenceSeparate() {
     val comparison = comparison()
     val selectedChoice =

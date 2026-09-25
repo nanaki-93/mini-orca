@@ -33,17 +33,32 @@ internal fun summaryIssueMetrics(
       val section = sections[AnalysisResultKey(type.category)] ?: AnalysisSectionState()
       val page = AnalysisResultPageState(type, project, run, section)
       val priorities = if (type == AnalysisResultType.Bugs) summaryBugPriorities(page) else null
-      val statusCode = if (page.stale && page.run != null) "stale" else page.progress?.status
+      val countDetail = page.reportedCount?.let { "$it reported" } ?: "count unavailable"
+      val completedEmpty =
+          page.reportedCount == 0 &&
+              page.emptyPresentation(0).availability == AnalysisResultAvailability.CompletedEmpty
+      val statusCode =
+          when {
+            page.stale && page.run != null -> "stale"
+            page.progress?.status == "completed_empty" && !completedEmpty -> "completed"
+            else -> page.progress?.status
+          }
       SummaryIssueMetric(
           label = type.workspace.name,
           value = page.reportedCount,
-          status = page.statusLabel,
+          status =
+              if (statusCode == "completed" &&
+                  !completedEmpty &&
+                  page.progress?.status == "completed_empty")
+                  "Completed · details not confirmed"
+              else page.statusLabel,
           statusCode = statusCode,
           detailStatus =
               when {
-                section.loading -> "Loading details"
-                section.error != null -> "Details unavailable"
-                else -> null
+                section.loading -> "Loading saved details · $countDetail"
+                section.error != null -> "Saved details unavailable · $countDetail"
+                page.reportedCount == 0 && !completedEmpty -> "0 reported · details not confirmed"
+                else -> countDetail.replaceFirstChar { it.uppercase() }
               },
           type = type,
           priorities = priorities)
@@ -51,7 +66,11 @@ internal fun summaryIssueMetrics(
 
 private fun summaryBugPriorities(page: AnalysisResultPageState): SummaryBugPriorities? {
   val count = page.reportedCount ?: return null
-  if (count == 0) return SummaryBugPriorities(0, 0, 0, 0)
+  if (count == 0) {
+    return if (page.emptyPresentation(0).availability == AnalysisResultAvailability.CompletedEmpty)
+        SummaryBugPriorities(0, 0, 0, 0)
+    else null
+  }
   val results = page.results ?: return null
   // Progress can arrive before the corresponding findings while a run is updating.
   if (page.section.error != null || results.progress != page.progress) return null

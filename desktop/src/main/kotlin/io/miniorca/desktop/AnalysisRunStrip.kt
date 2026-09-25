@@ -72,8 +72,8 @@ internal fun AnalysisRunStrip(
                 pathsExpanded = !pathsExpanded
               }
         }
+        run?.reason?.takeIf { it.isNotBlank() }?.let { DiagnosticText(it, color = Warning) }
         if (scope == AnalysisRunStripScope.Analysis) {
-          run?.reason?.takeIf { it.isNotBlank() }?.let { DiagnosticText(it, color = Warning) }
           if (run?.plan?.compatibilityStage?.isNotBlank() == true)
               Text(
                   "Saved limited run: ${analysisStageLabel(run.plan.compatibilityStage)}",
@@ -89,11 +89,14 @@ internal fun AnalysisRunStrip(
             .takeIf { it.isNotEmpty() }
             ?.let {
               Text(
-                  "${it.replaceFirstChar { character -> character.uppercase() }}…",
+                  "Analysis: ${it.replaceFirstChar { character -> character.uppercase() }}…",
                   style = IdeTypography.workspaceMetadata,
                   color = SelectionText)
             }
-        state.analysis.error?.let { DiagnosticText(it, color = Error) }
+        state.analysis.error?.let {
+          Text("Analysis action needs attention", color = Error, style = IdeTypography.compactBody)
+          DiagnosticText(it.ifBlank { "No failure details available." }, color = Error)
+        }
       }
 }
 

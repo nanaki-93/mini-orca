@@ -287,16 +287,103 @@ class AnalysisFileStatusTest {
                   val label =
                       when (status) {
                         "completed" -> "Completed"
-                        "completed_empty" -> "No results"
+                        "completed_empty" -> "Completed · details not confirmed"
                         else -> analysisStatusLabel(status)
                       }
                   assertEquals(3, fixture.textCount(label))
-                  fixture.assertTextFits(label)
+                  fixture.assertTextFits(
+                      label, maxLines = if (status == "completed_empty") 3 else 1)
+                  if (status == "completed_empty")
+                      assertEquals(3, fixture.textCount("0 reported · details not confirmed"))
                   if (status != "stale") assertEquals(3, fixture.textCount("0/1 stages covered"))
                   fixture.clickVisibleDescription("View Security results")
                   assertEquals(Workspace.Security, navigations.last())
                 }
           }
+    }
+  }
+
+  @Test
+  fun analysisCategoryShowsSavedReadFailureWithoutReplacingRunStatus() {
+    val run =
+        analysisRunFixture().let { fixture ->
+          fixture.copy(
+              status = "interrupted",
+              sections = fixture.sections.map { it.copy(status = "interrupted", findingCount = 2) })
+        }
+    val project = analysisProjectFixture()
+    ComposeVisualFixture(800, 650, 1.5f) {
+          AnalysisCategoryPanels(
+              AnalysisWorkspacePaneState(
+                  project,
+                  ProjectAnalysisRunState(
+                      run = run,
+                      sections =
+                          mapOf(
+                              AnalysisResultKey("bugs") to
+                                  AnalysisSectionState(error = "Saved read failed")))),
+              {})
+        }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(
+              1,
+              fixture.taggedTextCount(
+                  "analysis-category-content-bugs", "Saved details unavailable · 2 reported"))
+          assertEquals(1, fixture.taggedTextCount("analysis-category-content-bugs", "Interrupted"))
+          assertEquals(0, fixture.textCount("No results"))
+        }
+  }
+
+  @Test
+  fun analysisCategoryRequiresMatchingSavedDetailsBeforeConfirmingEmpty() {
+    val run =
+        analysisRunFixture()
+            .copy(
+                status = "completed_empty",
+                sections =
+                    AnalysisResultType.entries.map {
+                      AnalysisSectionProgress(
+                          it.category, "completed_empty", AnalysisRunCoverage(total = 1), 0)
+                    })
+    val project = analysisProjectFixture()
+    AnalysisResultType.entries.forEach { type ->
+      val progress = run.sections.first { it.category == type.category }
+      val saved = AnalysisSectionResults(run.identity, progress)
+      val key = AnalysisResultKey(type.category)
+      val cases =
+          listOf(
+              AnalysisSectionState() to "0 reported · details not confirmed",
+              AnalysisSectionState(error = "Saved read failed") to
+                  "Saved details unavailable · 0 reported",
+              AnalysisSectionState(results = saved, error = "Saved read failed") to
+                  "Saved details unavailable · 0 reported",
+              AnalysisSectionState(results = saved.copy(path = "main.go")) to
+                  "0 reported · details not confirmed",
+              AnalysisSectionState(results = saved) to "0 reported")
+      cases.forEach { (section, detail) ->
+        ComposeVisualFixture(800, 650, 1.5f) {
+              AnalysisCategoryPanels(
+                  AnalysisWorkspacePaneState(
+                      project,
+                      ProjectAnalysisRunState(run = run, sections = mapOf(key to section))),
+                  {})
+            }
+            .use { fixture ->
+              fixture.render()
+              val tag = "analysis-category-content-${type.category}"
+              assertEquals(1, fixture.taggedTextCount(tag, detail), "${type.category}: $section")
+              assertEquals(
+                  1,
+                  fixture.taggedTextCount(
+                      tag,
+                      if (section.results == saved && section.error == null) "No results"
+                      else "Completed · details not confirmed"))
+              assertEquals(
+                  if (section.results == saved && section.error == null) 1 else 0,
+                  fixture.taggedTextCount(tag, "No results"))
+            }
+      }
     }
   }
 }
