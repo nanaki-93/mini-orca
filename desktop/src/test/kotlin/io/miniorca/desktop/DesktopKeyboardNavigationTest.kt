@@ -80,6 +80,55 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun wrappedToolbarKeepsProjectMenuAndSearchKeyboardReachable() {
+    val name = "Long project identity for keyboard traversal at scaled widths"
+    for ((width, height) in listOf(800 to 650, 1280 to 600)) {
+      for (scale in listOf(1.25f, 1.5f)) {
+        var imports = 0
+        var reindexes = 0
+        var reconnects = 0
+        var searches = 0
+        ComposeVisualFixture(width, height, scale) {
+              MainToolbar(
+                  ToolbarState(
+                      resultProjectFixture().copy(name = name),
+                      false,
+                      "",
+                      ConnectionState(label = "Disconnected"),
+                      GitStatus(available = true, branch = "feature/a-long-branch-name")),
+                  ToolbarActions({ imports++ }, { reindexes++ }, { reconnects++ }, { searches++ }))
+            }
+            .use { fixture ->
+              fixture.render()
+              fixture.awaitVisibleDescription(name)
+              fixture.awaitVisibleDescription("Search files, symbols, commands")
+              assertTrue(fixture.requestDescriptionFocus(name))
+              fixture.render()
+              assertTrue(fixture.isFocusedControl(name))
+              assertTrue(fixture.pressKey(Key.Tab))
+              fixture.render("header-search-focus-$width-$height-$scale")
+              assertTrue(fixture.isFocusedControl("Search files, symbols, commands"))
+              fixture.assertColorVisible(FocusAccent)
+              assertTrue(fixture.pressKey(Key.Enter))
+              assertEquals(1, searches)
+              assertTrue(fixture.requestDescriptionFocus(name))
+              fixture.render()
+              assertTrue(fixture.pressKey(Key.Enter))
+              fixture.render()
+              assertTrue(fixture.hasText("Open project"))
+              assertTrue(fixture.hasText("Re-index project"))
+              assertTrue(fixture.hasText("Reconnect"))
+              fixture.clickText("Re-index project")
+              fixture.render()
+              assertEquals(1, reindexes)
+              assertEquals(0, imports)
+              assertEquals(0, reconnects)
+            }
+      }
+    }
+  }
+
+  @Test
   fun shellRestoresStatusOpenerOnCloseAndEscapeWithoutDispatchingWork() {
     var operations = 0
     val project = resultProjectFixture()

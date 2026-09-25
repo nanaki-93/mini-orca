@@ -2781,6 +2781,59 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun toolbarWrapsLongIdentityWithoutHidingSearchOrIndependentStatuses() {
+    val name = "A very long project name with 日本語 and a full identity beyond the header"
+    val branch = "feature/very-long-branch-with-the-real-revision-name"
+    for ((width, height) in
+        listOf(800 to 650, 999 to 650, 1000 to 650, 1280 to 600, 1399 to 650, 1400 to 650)) {
+      for (scale in if (width >= 1399) listOf(1f, 1.25f, 1.5f) else listOf(1.25f, 1.5f)) {
+        var git by mutableStateOf<GitStatus?>(GitStatus(available = true, branch = branch))
+        var connection by mutableStateOf(ConnectionState(label = "Disconnected"))
+        var analysis by mutableStateOf<ToolbarAnalysisStatus?>(null)
+        ComposeVisualFixture(width, height, scale) {
+              ToolbarVisualFixture(
+                  width.toFloat(),
+                  project = visualFixtureProject.copy(name = name),
+                  gitStatus = git,
+                  connection = connection,
+                  analysisStatus = analysis)
+            }
+            .use { fixture ->
+              fun verify(status: String, daemon: String) {
+                fixture.render("header-wrap-$width-$height-$scale-$status")
+                assertTrue(fixture.hasDescription(name))
+                fixture.awaitVisibleDescription(name)
+                fixture.awaitVisibleDescription("Search files, symbols, commands")
+                fixture.assertTextFits("Search files, symbols, commands")
+                fixture.assertTextFits(status)
+                fixture.assertTextFits(daemon)
+                fixture.assertTextBefore(status, daemon)
+                val search = fixture.firstVisibleTextBounds("Search files, symbols, commands")
+                val branchBounds = fixture.firstVisibleTextBounds(branchPresentation(git).label)
+                val analysisBounds = fixture.firstVisibleTextBounds(status)
+                val daemonBounds = fixture.firstVisibleTextBounds(daemon)
+                assertTrue(branchBounds.bottom <= search.top || branchBounds.right <= search.left)
+                assertTrue(
+                    search.bottom <= analysisBounds.top || search.right <= analysisBounds.left)
+                assertTrue(daemonBounds.right <= width && daemonBounds.bottom <= height)
+              }
+              verify("Analysis · Unavailable", "Daemon disconnected")
+              assertTrue(fixture.hasDescription("Current Git branch: $branch"))
+              analysis =
+                  ToolbarAnalysisStatus(
+                      "Analysis · Failed", "Whole-project analysis · Failed", false, true)
+              verify("Analysis · Failed", "Daemon disconnected")
+              git = GitStatus(available = true, branch = " \t ")
+              connection = ConnectionState(connected = true)
+              verify("Analysis · Failed", "Daemon connected")
+              assertTrue(fixture.hasDescription("Git branch is unavailable for the selected file."))
+              fixture.assertTextFits("Unavailable")
+            }
+      }
+    }
+  }
+
+  @Test
   fun toolbarKeepsIdentityAndIndependentStatusesWhenEvidenceChanges() {
     val longName = "A project name that is much longer than the header control"
     val longBranch = "feature/a-branch-name-that-exceeds-the-visible-header-space"
@@ -4992,7 +5045,9 @@ internal class ComposeVisualFixture(
   fun assertTextBefore(label: String, following: String) {
     val first = textNodes(label).single().boundsInRoot
     val second = textNodes(following).single().boundsInRoot
-    assertTrue(first.right < second.left, "$label must be left of $following")
+    assertTrue(
+        first.right < second.left,
+        "$label must be left of $following at $width/$height/$fontScale: $first $second")
     assertTrue(
         kotlin.math.abs(first.center.y - second.center.y) < 2f,
         "$label and $following must share a row")
