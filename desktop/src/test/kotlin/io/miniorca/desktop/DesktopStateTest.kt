@@ -361,6 +361,44 @@ class DesktopStateTest {
   }
 
   @Test
+  fun fileReadErrorBelongsToCurrentFileAttemptNotTheGlobalJob() {
+    val controller = DesktopWorkflowController(projectState())
+    val first = controller.beginFileLoad("first.go")!!
+    assertTrue(controller.fileFailed(first, "Read denied"))
+    controller.dispatch(DesktopEvent.Failed("Unrelated provider failure"))
+    assertEquals("Read denied", controller.state.selection.fileReadError)
+    assertEquals("Unrelated provider failure", controller.state.error)
+
+    val second = controller.beginFileLoad("second.go")!!
+    assertNull(controller.state.selection.fileReadError)
+    assertTrue(!controller.fileFailed(first, "Late failure"))
+    assertTrue(controller.fileFailed(second, "Second file denied"))
+    assertEquals("Second file denied", controller.state.selection.fileReadError)
+    assertTrue(controller.fileLoaded(second, file("second.go", "hash"), emptyList()))
+    assertNull(controller.state.selection.fileReadError)
+    assertEquals("second.go", controller.state.selectedFile?.path)
+
+    controller.dispatch(DesktopEvent.SelectedFileUnavailable("Source changed"))
+    assertEquals("Source changed", controller.state.selection.fileReadError)
+    controller.dispatch(DesktopEvent.Failed("Another operation failed"))
+    assertEquals("Source changed", controller.state.selection.fileReadError)
+  }
+
+  @Test
+  fun projectOpeningErrorBelongsToCurrentProjectAttempt() {
+    val controller = DesktopWorkflowController()
+    val first = controller.beginProjectLoad()
+    assertTrue(controller.projectFailed(first, "Restore denied"))
+    controller.dispatch(DesktopEvent.Failed("Unrelated failure"))
+    assertEquals("Restore denied", controller.state.projectState.openingError)
+    val second = controller.beginProjectLoad()
+    assertNull(controller.state.projectState.openingError)
+    assertTrue(!controller.projectFailed(first, "Late failure"))
+    assertTrue(controller.projectLoaded(second, project(), ProjectIndex("project", "revision")))
+    assertNull(controller.state.projectState.openingError)
+  }
+
+  @Test
   fun draftEligibilityRequiresMatchingLatestValidationAndChecks() {
     val selected = file("main.go", "base")
     val draft =

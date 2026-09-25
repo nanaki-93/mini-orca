@@ -116,9 +116,44 @@ class DesktopWorkflowPresenterTest {
       assertNull(state.project)
       assertFalse(state.loading)
       assertTrue(state.error.orEmpty().contains("project directory does not exist"))
+      assertEquals(state.error, state.projectState.openingError)
+      presenter.dispatch(DesktopEvent.Failed("Unrelated failure"))
+      assertEquals(
+          state.projectState.openingError, presenter.snapshot.value.state.projectState.openingError)
       assertEquals("/tmp/missing-project", LastProjectStore(preferences).load())
       assertEquals(1, preferences.flushCount)
       assertEquals(listOf("POST" to "/api/projects/restore"), calls.filter { it.first != "GET" })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun failedFileReadRetainsItsOwnErrorAfterAnUnrelatedFailure() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          calls.add(path)
+          TransportResponse(403, """{"message":"File read denied"}""")
+        }
+    try {
+      loadProject(presenter)
+      presenter.selectFile("main.go")
+      repeat(3) {
+        main.runPending()
+        io.runPending()
+      }
+      assertEquals("File read denied", presenter.snapshot.value.state.selection.fileReadError)
+      presenter.dispatch(DesktopEvent.Failed("Unrelated analysis failed"))
+      val state = presenter.snapshot.value.state
+      assertEquals("File read denied", state.selection.fileReadError)
+      assertEquals("Unrelated analysis failed", state.error)
+      assertEquals(1, calls.size)
+      assertTrue(calls.single().contains("files/info?"))
     } finally {
       presenter.close()
       scope.cancel()

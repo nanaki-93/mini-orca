@@ -257,9 +257,11 @@ class DesktopWorkflowPresenter(
             throw CancellationException()
           } catch (error: Exception) {
             if (!controller.isCurrentProjectRequest(request)) return@launch
-            if (restore)
-                dispatch(DesktopEvent.Failed(error.message ?: "Could not reopen the last project"))
-            else modelRequestFailed(error, ModelScope.Analyze, "Import failed")
+            val message =
+                if (restore)
+                    error.message?.takeIf(String::isNotBlank) ?: "Could not reopen the last project"
+                else modelRequestFailureMessage(error, ModelScope.Analyze, "Import failed")
+            if (controller.projectFailed(request, message)) publish()
           }
         }
   }
@@ -339,7 +341,9 @@ class DesktopWorkflowPresenter(
             controller.cancelFileLoad(request)
             publish()
           } catch (error: Exception) {
-            if (controller.fileFailed(request, error.message ?: "File load failed")) publish()
+            if (controller.fileFailed(
+                request, error.message?.takeIf(String::isNotBlank) ?: "File load failed"))
+                publish()
           }
         }
   }
@@ -1262,10 +1266,6 @@ class DesktopWorkflowPresenter(
       isCurrentVerifiedScanAction(request.project, request.generation) &&
           (!request.requiresExpectedScan ||
               snapshot.value.state.findings.scan == request.expectedScan)
-
-  private fun modelRequestFailed(error: Exception, scope: ModelScope, fallback: String) {
-    dispatch(DesktopEvent.Failed(modelRequestFailureMessage(error, scope, fallback)))
-  }
 
   private fun modelRequestFailureMessage(
       error: Exception,

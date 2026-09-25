@@ -443,6 +443,88 @@ class DesktopShellTest {
   }
 
   @Test
+  fun workspaceHeaderSeparatesOpenFailureFromDisconnectedDaemonAndAnalysis() {
+    var opens = 0
+    var reconnects = 0
+    var analyses = 0
+    val failed = DesktopState(projectState = ProjectWorkspaceState(openingError = "Read denied"))
+    ComposeVisualFixture(1024, 768, 1.5f) {
+          MainToolbar(
+              ToolbarState(
+                  project = resultProjectFixture(),
+                  busy = false,
+                  operationStatus = "",
+                  connection = ConnectionState(label = "Daemon unavailable"),
+                  gitStatus = null,
+                  openingError = failed.projectState.openingError),
+              ToolbarActions({ opens++ }, { analyses++ }, { reconnects++ }, {}))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Opening or reading local project data failed. Read denied"))
+          fixture.clickText("Open project")
+          assertEquals(1, opens)
+          fixture.clickText(resultProjectFixture().name)
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "Daemon disconnected. Reconnect reads daemon status and model configuration; it does not contact a provider or run project code."))
+          fixture.clickText("Reconnect")
+          assertEquals(1, reconnects)
+          assertEquals(0, analyses)
+        }
+  }
+
+  @Test
+  fun landingKeepsLocalOpenFailureAndDaemonRecoverySeparate() {
+    var opens = 0
+    var reconnects = 0
+    val actions = DesktopShellProjectActions({ opens++ }, {}, { reconnects++ })
+    val failed =
+        DesktopState(
+            projectState = ProjectWorkspaceState(openingError = "Permission denied"),
+            connection = ConnectionState(label = "Daemon unavailable"))
+    ComposeVisualFixture(800, 650, 1.5f) {
+          ProjectLanding(failed, actions, androidx.compose.ui.focus.FocusRequester())
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.assertTextFits("Could not open project")
+          assertTrue(
+              fixture.hasText("Opening or reading local project data failed. Permission denied"))
+          fixture.assertTextFits("Reconnect daemon")
+          fixture.clickText("Reconnect daemon")
+          assertEquals(1, reconnects)
+          assertEquals(0, opens)
+          fixture.clickText("Open project")
+          assertEquals(1, opens)
+          assertEquals(1, reconnects)
+        }
+    ComposeVisualFixture(320, 500, 1.5f) {
+          ProjectLanding(DesktopState(), actions, androidx.compose.ui.focus.FocusRequester())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Open a project to inspect its local files and analysis."))
+          fixture.assertTextFits("Open project")
+          assertTrue(!fixture.hasText("Reconnect daemon"))
+        }
+  }
+
+  @Test
+  fun fileAndProjectOpeningFeedbackDoesNotFollowUnrelatedGlobalErrors() {
+    val state =
+        DesktopState(
+                projectState = ProjectWorkspaceState(openingError = "Project denied"),
+                selection = FileSelectionState(fileReadError = "File denied"),
+                jobs = JobState(status = "Loading main.go…", error = "File denied"))
+            .reduce(DesktopEvent.Failed("Unrelated provider failure"))
+    assertEquals("Project denied", state.projectState.openingError)
+    assertEquals("File denied", state.selection.fileReadError)
+    assertEquals("Unrelated provider failure", state.error)
+  }
+
+  @Test
   fun shellUsesADedicatedLandingBranchUntilAProjectExists() {
     assertEquals(DesktopShellMode.ProjectLanding, desktopShellMode(DesktopState()))
     val project =

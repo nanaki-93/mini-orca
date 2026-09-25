@@ -15,6 +15,7 @@ data class ProjectWorkspaceState(
     val index: ProjectIndex? = null,
     val overview: ProjectOverview? = null,
     val sourceChangeObserved: Boolean = false,
+    val openingError: String? = null,
 )
 
 data class FileSelectionState(
@@ -28,6 +29,7 @@ data class FileSelectionState(
     val analysis: FileAnalysis? = null,
     val impact: ImpactPreview? = null,
     val gitStatus: GitStatus? = null,
+    val fileReadError: String? = null,
 )
 
 data class JobState(
@@ -309,6 +311,14 @@ sealed interface DesktopEvent {
 
   data class FileLoaded(val file: ProjectFileInfo, val symbols: List<SymbolInfo>) : DesktopEvent
 
+  sealed interface LocalReadFailure : DesktopEvent {
+    val message: String
+  }
+
+  data class FileLoadFailed(override val message: String) : LocalReadFailure
+
+  data class ProjectLoadFailed(override val message: String) : LocalReadFailure
+
   data class SelectedFileRefreshed(val file: ProjectFileInfo, val symbols: List<SymbolInfo>) :
       DesktopEvent
 
@@ -394,6 +404,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                   jobs.copy(
                       loading = false, status = "Imported ${event.project.name}", error = null),
           )
+      is DesktopEvent.LocalReadFailure -> withLocalReadFailure(event)
       is DesktopEvent.IndexRefreshed -> withRefreshedIndex(event.index)
       is DesktopEvent.OverviewLoaded ->
           copy(projectState = projectState.copy(overview = event.overview))
@@ -489,7 +500,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       is DesktopEvent.SelectedFileUnavailable ->
           withObservedSourceChange()
               .copy(
-                  selection = FileSelectionState(),
+                  selection = FileSelectionState(fileReadError = event.message),
                   jobs =
                       jobs.copy(
                           loading = false,
@@ -631,6 +642,18 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       is DesktopEvent.Status -> copy(jobs = jobs.copy(status = event.message))
     }
 
+private fun DesktopState.withLocalReadFailure(event: DesktopEvent.LocalReadFailure): DesktopState =
+    when (event) {
+      is DesktopEvent.ProjectLoadFailed ->
+          copy(
+              projectState = projectState.copy(openingError = event.message),
+              jobs = jobs.copy(loading = false, error = event.message))
+      is DesktopEvent.FileLoadFailed ->
+          copy(
+              selection = selection.copy(fileReadError = event.message),
+              jobs = jobs.copy(loading = false, error = event.message))
+    }
+
 private fun DesktopState.withValidationStarted(): DesktopState =
     review.editor?.let { editor ->
       copy(
@@ -736,6 +759,7 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
       nextId().also {
         projectRequest = it
         fileRequest = null
+        state = state.copy(projectState = state.projectState.copy(openingError = null))
         dispatch(DesktopEvent.Loading)
       }
 
@@ -746,6 +770,10 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
           accept(DesktopEvent.ProjectLoaded(project, index))
 
   fun isCurrentProjectRequest(requestId: Long): Boolean = requestId == projectRequest
+
+  fun projectFailed(requestId: Long, message: String): Boolean =
+      if (isCurrentProjectRequest(requestId)) accept(DesktopEvent.ProjectLoadFailed(message))
+      else false
 
   fun beginFileLoad(path: String): RequestIdentity? {
     val project = state.project ?: return null
@@ -777,7 +805,7 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
 
   fun fileFailed(request: RequestIdentity, message: String): Boolean =
       if (fileRequest?.id == request.id && matchesProject(request))
-          accept(DesktopEvent.Failed(message))
+          accept(DesktopEvent.FileLoadFailed(message))
       else false
 
   fun cancelFileLoad(request: RequestIdentity): Boolean =

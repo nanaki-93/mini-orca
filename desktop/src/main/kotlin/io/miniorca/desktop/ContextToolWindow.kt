@@ -127,7 +127,18 @@ internal fun ContextToolWindow(
 ) {
   val inspector = state.inspector
   if (inspector == null) {
-    SystemStateMessage("Context", "Open a file to inspect its declarations.", modifier = modifier)
+    SystemStateMessage(
+        title = if (state.fileReadError != null) "Could not open file" else "No file selected",
+        message =
+            state.fileReadError?.let {
+              "Reading local file data failed. ${it.ifBlank { "No details available." }} Select a file in Files to try again."
+            } ?: "Select a file in Files to inspect its declarations.",
+        accent = if (state.fileReadError != null) Error else SecondaryText,
+        modifier = modifier,
+        action =
+            actions.openFile?.let { open ->
+              { MiniOrcaButton(onClick = open) { Text("Select a file") } }
+            })
     return
   }
   // File details reset on navigation; selected declarations have one compact view.
@@ -399,6 +410,7 @@ internal data class ContextToolWindowState(
     val declarationExplanation: DeclarationExplanationState = DeclarationExplanationState(),
     val creationInProgress: Boolean = false,
     val analysisRun: ProjectAnalysisRunState = ProjectAnalysisRunState(),
+    val fileReadError: String? = null,
 )
 
 /** File analysis and direct-edit intents available from Context. */
@@ -413,6 +425,7 @@ internal data class ContextToolWindowActions(
     val cancelExplanation: () -> Unit = {},
     val createDeclaration: (() -> Unit)? = null,
     val viewResults: (() -> Unit)? = null,
+    val openFile: (() -> Unit)? = null,
 )
 
 internal fun explanationActionLabel(state: DeclarationExplanationState): String =

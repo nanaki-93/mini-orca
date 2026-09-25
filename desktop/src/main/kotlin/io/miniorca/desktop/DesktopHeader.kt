@@ -74,6 +74,18 @@ internal fun MainToolbar(
               ToolbarStatus(state, connectionPresentation)
             }
           }
+      state.openingError?.let { error ->
+        Spacer(Modifier.height(8.dp))
+        SystemStateMessage(
+            "Could not open project",
+            "Opening or reading local project data failed. ${error.ifBlank { "No details available." }}",
+            accent = Error,
+            action = {
+              MiniOrcaButton(onClick = actions.onImport, tone = ActionTone.Neutral) {
+                Text("Open project")
+              }
+            })
+      }
       if (wrapped) {
         Spacer(Modifier.height(4.dp))
         if (compact) {
@@ -125,6 +137,7 @@ internal data class ToolbarState(
     val connection: ConnectionState,
     val gitStatus: GitStatus?,
     val analysisStatus: ToolbarAnalysisStatus? = null,
+    val openingError: String? = null,
 )
 
 internal data class ToolbarAnalysisStatus(
@@ -256,15 +269,21 @@ private fun ProjectActionsMenu(
               },
               enabled = projectAvailable,
               icon = DesktopIcon.Refresh)
-          if (reconnectAvailable)
-              IdeDropdownMenuItem(
-                  label = "Reconnect",
-                  onClick = {
-                    expanded = false
-                    restoreFocus = true
-                    onReconnect()
-                  },
-                  icon = DesktopIcon.Refresh)
+          if (reconnectAvailable) {
+            Text(
+                "Daemon disconnected. Reconnect reads daemon status and model configuration; it does not contact a provider or run project code.",
+                color = Error,
+                style = IdeTypography.compactBody,
+                modifier = Modifier.widthIn(max = 280.dp).padding(8.dp))
+            IdeDropdownMenuItem(
+                label = "Reconnect",
+                onClick = {
+                  expanded = false
+                  restoreFocus = true
+                  onReconnect()
+                },
+                icon = DesktopIcon.Refresh)
+          }
         }
   }
   LaunchedEffect(restoreFocus) {

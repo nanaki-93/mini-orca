@@ -5,7 +5,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
@@ -591,7 +591,7 @@ internal fun DesktopShell(
               },
   ) {
     if (shellMode == DesktopShellMode.ProjectLanding) {
-      ProjectLanding(appState, projectActions.importProject, focusRequesters.landing)
+      ProjectLanding(appState, projectActions, focusRequesters.landing)
     } else {
       BoxWithConstraints {
         Column {
@@ -604,6 +604,7 @@ internal fun DesktopShell(
                       connection = appState.connection,
                       gitStatus = appState.gitStatus,
                       analysisStatus = toolbarAnalysisStatus(appState),
+                      openingError = appState.projectState.openingError,
                   ),
               actions =
                   ToolbarActions(
@@ -1074,38 +1075,48 @@ private fun handleDesktopShortcut(
 }
 
 @Composable
-private fun ProjectLanding(
+internal fun ProjectLanding(
     appState: DesktopState,
-    onOpenProject: () -> Unit,
+    actions: DesktopShellProjectActions,
     focusRequester: FocusRequester,
 ) {
+  val openError = appState.projectState.openingError
   Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.widthIn(max = 420.dp).fillMaxWidth().verticalScroll(rememberScrollState())) {
       MiniOrcaMark()
       Spacer(Modifier.height(12.dp))
       Text("Mini-Orca", color = PrimaryText, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-      MiniOrcaButton(
-          onClick = onOpenProject,
-          enabled = !appState.loading,
-          tone = ActionTone.Primary,
-          modifier = Modifier.padding(top = 20.dp).focusRequester(focusRequester),
-      ) {
-        Text("Open project")
-      }
-      when {
-        appState.loading -> {
-          Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            IdeBusyIndicator(Modifier.size(16.dp), color = FocusAccent, strokeWidth = 2.dp)
-            Spacer(Modifier.width(8.dp))
-            Text("Opening project…", color = SecondaryText, fontSize = 12.sp)
-          }
-        }
-        appState.error != null ->
-            Text(
-                "Could not open project. ${appState.error}",
-                color = Error,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(top = 12.dp))
+      Spacer(Modifier.height(12.dp))
+      SystemStateMessage(
+          title = if (openError != null) "Could not open project" else "No project open",
+          message =
+              when {
+                openError != null ->
+                    "Opening or reading local project data failed. ${openError.ifBlank { "No details available." }}"
+                appState.loading -> "Opening local project data…"
+                else -> "Open a project to inspect its local files and analysis."
+              },
+          accent = if (openError != null) Error else SecondaryText,
+          action = {
+            MiniOrcaButton(
+                onClick = actions.importProject,
+                enabled = !appState.loading,
+                tone = ActionTone.Primary,
+                modifier = Modifier.focusRequester(focusRequester)) {
+                  Text("Open project")
+                }
+          })
+      if (connectionPresentation(appState.connection).canReconnect) {
+        Spacer(Modifier.height(12.dp))
+        SystemStateMessage(
+            "Daemon disconnected",
+            "Reconnect reads daemon status and model configuration. It does not contact a provider or run project code.",
+            accent = Error,
+            action = {
+              MiniOrcaButton(onClick = actions.reconnect, tone = ActionTone.Neutral) {
+                Text("Reconnect daemon")
+              }
+            })
       }
     }
   }
