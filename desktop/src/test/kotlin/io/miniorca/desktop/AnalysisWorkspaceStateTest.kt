@@ -390,7 +390,11 @@ class AnalysisWorkspaceStateTest {
             .availability)
     assertEquals(
         AnalysisResultAvailability.Running, projected("running").emptyPresentation(0).availability)
-    assertEquals("No findings yet.", projected("running").emptyPresentation(0).message)
+    assertEquals("Analysis is in progress.", projected("running").emptyPresentation(0).message)
+    assertTrue(projected("running").emptyPresentation(0).detail.contains("stages covered"))
+    assertEquals(
+        "0 findings reported so far; results are not final. · 1/1 stages covered",
+        projected("running", reportedCount = 0).emptyPresentation(0).detail)
     assertEquals(
         AnalysisResultAvailability.PendingDetails,
         projected("running", reportedCount = 2).emptyPresentation(0).availability)
@@ -415,6 +419,14 @@ class AnalysisWorkspaceStateTest {
     assertEquals(
         AnalysisResultAvailability.Unavailable,
         projected("unavailable", reportedCount = 2).emptyPresentation(0).availability)
+    listOf("paused", "interrupted", "partial", "failed", "canceled", "cancelled", "unavailable")
+        .forEach { status ->
+          val incomplete = projected(status, reportedCount = 0)
+          assertFalse(
+              incomplete.emptyPresentation(0).availability ==
+                  AnalysisResultAvailability.CompletedEmpty)
+          assertEquals("0 reported", incomplete.countLabel(0))
+        }
   }
 
   @Test
@@ -452,6 +464,10 @@ class AnalysisWorkspaceStateTest {
     assertEquals(
         AnalysisResultAvailability.PendingDetails,
         completedPage(2).emptyPresentation(0).availability)
+    assertEquals("0 findings", completed.countLabel(0))
+    assertEquals("— reported (count unavailable)", completedPage(null).countLabel(0))
+    assertEquals("2 reported", completedPage(2).countLabel(0))
+    assertEquals("0 reported", completed.copy(section = AnalysisSectionState()).countLabel(0))
     assertNull(
         completed
             .copy(
@@ -469,6 +485,97 @@ class AnalysisWorkspaceStateTest {
             .copy(section = AnalysisSectionState(error = "refresh failed"))
             .emptyPresentation(0)
             .availability)
+  }
+
+  @Test
+  fun completedEmptyNeedsMatchingSuccessfulDetailsNotJustAReportedZero() {
+    val original = resultPageFixture("bugs")
+    val progress = original.progress!!.copy(status = "completed_empty", findingCount = 0)
+    val run =
+        original.run!!.copy(
+            status = "completed_empty",
+            sections = original.run.sections.map { if (it.category == "bugs") progress else it })
+    val results = original.results!!.copy(progress = progress, semantic = emptyList())
+    val page = original.copy(run = run, section = AnalysisSectionState(results = results))
+    assertEquals(AnalysisResultAvailability.CompletedEmpty, page.emptyPresentation(0).availability)
+    assertEquals("0 findings", page.countLabel(0))
+    val missingOrMismatched =
+        listOf(
+            page.copy(section = AnalysisSectionState()),
+            page.copy(
+                section =
+                    page.section.copy(
+                        results = results.copy(progress = progress.copy(status = "partial")))),
+            page.copy(
+                section =
+                    page.section.copy(
+                        results = results.copy(progress = progress.copy(findingCount = null)))),
+            page.copy(section = page.section.copy(results = results.copy(path = "main.go"))),
+            page.copy(
+                section =
+                    page.section.copy(
+                        results = results.copy(identity = results.identity.copy(id = "other")))),
+            page.copy(
+                section =
+                    page.section.copy(
+                        results =
+                            results.copy(semantic = requireNotNull(original.results).semantic))),
+            page.copy(section = page.section.copy(loading = true)))
+    missingOrMismatched.forEach { candidate ->
+      assertFalse(
+          candidate.emptyPresentation(0).availability == AnalysisResultAvailability.CompletedEmpty)
+      assertEquals("0 reported", candidate.countLabel(0))
+    }
+    val error = page.copy(section = AnalysisSectionState(error = ""))
+    assertEquals(AnalysisResultAvailability.Error, error.emptyPresentation(0).availability)
+    assertEquals(
+        "The saved result read failed without a diagnostic.", error.emptyPresentation(0).detail)
+    assertEquals("0 reported", error.countLabel(0))
+    assertEquals(
+        "The saved result read failed without a diagnostic.",
+        page
+            .copy(section = AnalysisSectionState(error = ""))
+            .copy(
+                run =
+                    run.copy(
+                        sections =
+                            run.sections.map {
+                              if (it.category == "bugs") it.copy(findingCount = null) else it
+                            }))
+            .emptyPresentation(0)
+            .detail)
+
+    listOf("performance", "security").forEach { category ->
+      val initial = resultPageFixture(category)
+      val zero = initial.progress!!.copy(status = "completed_empty", findingCount = 0)
+      val categoryRun =
+          initial.run!!.copy(
+              status = "completed_empty",
+              sections = initial.run.sections.map { if (it.category == category) zero else it })
+      val initialDetails = requireNotNull(initial.results)
+      val details =
+          initialDetails.copy(
+              progress = zero,
+              performance = initialDetails.performance.map { it.copy(status = "completed_empty") },
+              security =
+                  initialDetails.security.map {
+                    it.copy(status = "completed_empty", findings = emptyList())
+                  })
+      val verified =
+          initial.copy(run = categoryRun, section = AnalysisSectionState(results = details))
+      assertEquals(
+          AnalysisResultAvailability.CompletedEmpty, verified.emptyPresentation(0).availability)
+      val incomplete =
+          details.copy(
+              performance = details.performance.map { it.copy(status = "failed") },
+              security = details.security.map { it.copy(status = "partial") })
+      assertEquals(
+          AnalysisResultAvailability.PendingDetails,
+          verified
+              .copy(section = AnalysisSectionState(results = incomplete))
+              .emptyPresentation(0)
+              .availability)
+    }
   }
 
   @Test

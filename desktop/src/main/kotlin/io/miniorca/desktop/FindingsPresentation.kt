@@ -411,6 +411,12 @@ internal fun ResultSectionHeader(
     openAnalysis: () -> Unit,
 ) {
   val status = if (page.stale && page.run != null) "stale" else page.progress?.status
+  val statusText =
+      if (status == "completed_empty" &&
+          (loadedCount > 0 ||
+              page.emptyPresentation(0).availability != AnalysisResultAvailability.CompletedEmpty))
+          "Completed · details unconfirmed"
+      else analysisResultStatusLabel(status)
   Column(
       Modifier.fillMaxWidth().testTag("result-header"),
       verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -428,21 +434,11 @@ internal fun ResultSectionHeader(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                     itemVerticalAlignment = Alignment.CenterVertically) {
-                      val countLabel =
-                          page.reportedCount?.let { count ->
-                            if (count == loadedCount)
-                                "$loadedCount ${if (loadedCount == 1) "finding" else "findings"}"
-                            else "$loadedCount loaded · $count reported"
-                          }
-                              ?: if (loadedCount > 0) "$loadedCount loaded · — reported"
-                              else "— reported"
                       Text(
-                          countLabel,
+                          page.countLabel(loadedCount),
                           color = SecondaryText,
                           style = IdeTypography.workspaceMetadata)
-                      analysisResultStatusLabel(status)?.let {
-                        IdeLabelBadge(it, analysisStatusTint(status))
-                      }
+                      statusText?.let { IdeLabelBadge(it, analysisStatusTint(status)) }
                       page.coverageLabel?.let {
                         Text(it, color = SecondaryText, style = IdeTypography.workspaceMetadata)
                       }
@@ -457,7 +453,7 @@ internal fun ResultSectionHeader(
             ?.takeIf { loadedCount > 0 }
             ?.let {
               Text(
-                  "Results could not be refreshed: $it",
+                  "Results could not be refreshed: ${it.ifBlank { "The saved result read failed without a diagnostic." }}",
                   color = Error,
                   style = IdeTypography.workspaceMetadata)
             }
