@@ -402,6 +402,193 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun retryRestoresOnlyTheFailedPathOnceWithoutStartingOtherWork() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val store = LastProjectStore(InMemoryPreferences()).also { it.save("/tmp/remembered") }
+    val calls = mutableListOf<Triple<String, String, String?>>()
+    var restoreFails = true
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher, lastProjectStore = store) {
+            method,
+            path,
+            body ->
+          calls += Triple(method, path, body)
+          if (path == "/api/projects/restore" && restoreFails)
+              TransportResponse(404, """{"message":"folder unavailable"}""")
+          else projectStartupResponse(method, path)
+        }
+    try {
+      presenter.retryProjectRestore() // No failed restore exists.
+      presenter.start()
+      dispatcher.runPending()
+      val failed = presenter.snapshot.value.state.projectState.openingAttempt!!
+      assertEquals(ProjectOpeningKind.Restore, failed.kind)
+      assertEquals("/tmp/remembered", failed.path)
+      assertEquals(ProjectOpeningOutcome.Failed("folder unavailable"), failed.outcome)
+      assertEquals("/tmp/remembered", store.load())
+
+      restoreFails = false
+      presenter.retryProjectRestore()
+      val pending = presenter.snapshot.value.state.projectState.openingAttempt!!
+      assertTrue(pending.requestId > failed.requestId)
+      assertEquals(ProjectOpeningOutcome.Opening, pending.outcome)
+      presenter.retryProjectRestore() // The first retry is still pending.
+      dispatcher.runPending()
+      assertEquals("/tmp/project", presenter.snapshot.value.state.project?.path)
+      assertNull(presenter.snapshot.value.state.projectState.openingAttempt)
+      presenter.retryProjectRestore() // Success is not retryable.
+      dispatcher.runPending()
+      assertEquals(2, calls.count { it.first == "POST" && it.second == "/api/projects/restore" })
+      assertTrue(
+          calls.all { (method, path, _) ->
+            method == "GET" || (method == "POST" && path == "/api/projects/restore")
+          },
+          "Restore must not import, generate, start/resume analysis, execute, mutate or start a terminal: $calls")
+      assertEquals(
+          listOf(
+              """{"project_path":"/tmp/remembered"}""", """{"project_path":"/tmp/remembered"}"""),
+          calls.filter { it.second == "/api/projects/restore" }.map { it.third })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun failedImportAndSupersededRestoreCannotBeRetried() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val calls = mutableListOf<Pair<String, String>>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, _ ->
+          calls += method to path
+          when (path) {
+            "/api/projects/restore" -> TransportResponse(404, """{"message":"missing"}""")
+            "/api/projects/import" -> throw IllegalStateException(" ")
+            else -> projectStartupResponse(method, path)
+          }
+        }
+    try {
+      presenter.loadProject("/tmp/old", restore = true)
+      dispatcher.runPending()
+      assertEquals(
+          ProjectOpeningOutcome.Failed("missing"),
+          presenter.snapshot.value.state.projectState.openingAttempt?.outcome)
+      presenter.loadProject("/tmp/new", restore = false)
+      assertEquals(
+          ProjectOpeningOutcome.Opening,
+          presenter.snapshot.value.state.projectState.openingAttempt?.outcome)
+      // Cannot replay the superseded failure while import is pending.
+      presenter.retryProjectRestore()
+      dispatcher.runPending()
+      val failed = presenter.snapshot.value.state.projectState.openingAttempt!!
+      assertEquals(ProjectOpeningKind.Import, failed.kind)
+      assertEquals(ProjectOpeningOutcome.Failed("Import failed"), failed.outcome)
+      presenter.retryProjectRestore()
+      presenter.refreshConnection() // Reconnect is not an implicit retry.
+      dispatcher.runPending()
+      assertEquals(1, calls.count { it == "POST" to "/api/projects/restore" })
+      assertEquals(1, calls.count { it == "POST" to "/api/projects/import" })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun indexReadFailureAndCurrentMismatchRemainRetryableButLateSamePathWorkIsIgnored() {
+    for (failure in listOf("read", "mismatch")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      var indexFails = true
+      val calls = mutableListOf<Pair<String, String>>()
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+            calls += method to path
+            when (path) {
+              "/api/projects/current/index" ->
+                  if (indexFails && failure == "read") throw IllegalStateException("index offline")
+                  else if (indexFails) response(indexJson().replace(":\"revision\"", ":\"other\""))
+                  else response(indexJson())
+              else -> projectStartupResponse(method, path)
+            }
+          }
+      try {
+        presenter.loadProject("/tmp/project", restore = true)
+        main.runPending()
+        io.runPending()
+        main.runPending()
+        val failed = presenter.snapshot.value.state.projectState.openingAttempt!!
+        assertEquals(ProjectOpeningKind.Restore, failed.kind)
+        val outcome = failed.outcome
+        assertTrue(outcome is ProjectOpeningOutcome.Failed)
+        assertTrue(
+            outcome.message.contains(if (failure == "read") "index offline" else "do not match"),
+            "Unexpected $failure outcome: $outcome")
+        assertNull(presenter.snapshot.value.state.project)
+
+        indexFails = false
+        presenter.retryProjectRestore()
+        val retry = presenter.snapshot.value.state.projectState.openingAttempt!!
+        assertTrue(retry.requestId > failed.requestId)
+        main.runPending()
+        io.runPending() // Retry has returned from I/O; its completion is queued on main.
+        presenter.loadProject("/tmp/project", restore = true)
+        val newest = presenter.snapshot.value.state.projectState.openingAttempt!!
+        main.runPending()
+        assertEquals(newest, presenter.snapshot.value.state.projectState.openingAttempt)
+        io.runPending()
+        main.runPending()
+        assertNull(presenter.snapshot.value.state.projectState.openingAttempt)
+        assertEquals("/tmp/project", presenter.snapshot.value.state.project?.path)
+        assertTrue(newest.requestId > retry.requestId)
+        assertEquals(3, calls.count { it == "POST" to "/api/projects/restore" })
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun blankRestoreFailureUsesRestoreFallbackAndCancellationDoesNotBecomeFailure() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    var cancel = false
+    val calls = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { _, path, _ ->
+          calls += path
+          if (path == "/api/projects/restore") {
+            if (cancel) throw kotlinx.coroutines.CancellationException("request canceled")
+            throw IllegalStateException(" ")
+          }
+          projectStartupResponse("GET", path)
+        }
+    try {
+      presenter.loadProject("/tmp/remembered", restore = true)
+      dispatcher.runPending()
+      assertEquals(
+          ProjectOpeningOutcome.Failed("Could not restore project"),
+          presenter.snapshot.value.state.projectState.openingAttempt?.outcome)
+      cancel = true
+      presenter.retryProjectRestore()
+      dispatcher.runPending()
+      assertEquals(
+          ProjectOpeningOutcome.Canceled,
+          presenter.snapshot.value.state.projectState.openingAttempt?.outcome)
+      presenter.retryProjectRestore()
+      dispatcher.runPending()
+      assertEquals(2, calls.count { it == "/api/projects/restore" })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun startupReadsPreferencesOffThePresentationDispatcherAndRestoresOnlyOnce() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()

@@ -276,6 +276,15 @@ class DesktopWorkflowPresenter(
     openProject(path, restore)
   }
 
+  fun retryProjectRestore() {
+    val attempt = controller.state.projectState.openingAttempt ?: return
+    if (attempt.kind != ProjectOpeningKind.Restore ||
+        attempt.outcome !is ProjectOpeningOutcome.Failed)
+        return
+    explicitOpenStarted = true
+    openProject(attempt.path, restore = true)
+  }
+
   private fun openProject(path: String, restore: Boolean) {
     projectJob?.cancel()
     clearSecurityReviewRemoteConfirmation()
@@ -316,7 +325,7 @@ class DesktopWorkflowPresenter(
             if (!controller.isCurrentProjectRequest(request)) return@launch
             val message =
                 if (restore)
-                    error.message?.takeIf(String::isNotBlank) ?: "Could not reopen the last project"
+                    error.message?.takeIf(String::isNotBlank) ?: "Could not restore project"
                 else modelRequestFailureMessage(error, ModelScope.Analyze, "Import failed")
             if (controller.projectFailed(request, message)) publish()
           }
@@ -1394,7 +1403,7 @@ class DesktopWorkflowPresenter(
   ): String {
     val staleConfirmation = staleRemoteConfirmationMessage(error, scope)
     if (staleConfirmation != null) setProviderConfirmation(scope, false)
-    return staleConfirmation ?: error.message ?: fallback
+    return staleConfirmation ?: error.message?.takeIf(String::isNotBlank) ?: fallback
   }
 
   private fun clearSecurityReviewRemoteConfirmation() {
