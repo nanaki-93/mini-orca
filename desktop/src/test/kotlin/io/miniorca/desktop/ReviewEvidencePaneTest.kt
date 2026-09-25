@@ -201,7 +201,10 @@ class ReviewEvidencePaneTest {
     val cases =
         listOf(
             Triple("failed", "At least one focused check failed.", ReviewEvidenceStatus.Failed),
-            Triple("canceled", "At least one focused check failed.", ReviewEvidenceStatus.Failed),
+            Triple(
+                "canceled",
+                "Focused check execution was canceled; run checks again.",
+                ReviewEvidenceStatus.Canceled),
             Triple(
                 "unknown",
                 "Focused check state is unavailable for the latest draft.",
@@ -250,7 +253,9 @@ class ReviewEvidencePaneTest {
           .use { fixture ->
             fixture.render()
             assertTrue(fixture.hasText(detail), "$checkState detail must not require hover")
-            assertTrue(fixture.hasText(decision.reason), "$checkState blocker must be visible")
+            val next = reviewNextActionUiState(evidence, decision, current, checks, null, false)
+            assertTrue(
+                fixture.hasText(next.detail), "$checkState recovery explanation must be visible")
             assertEquals(
                 status.label, fixture.descriptionStateDescription("Focused checks: $detail"))
             assertFalse(fixture.hasText("Ready to apply"))
@@ -339,6 +344,9 @@ class ReviewEvidencePaneTest {
             false,
             checks = listOf(DraftCheck("compile", true, "failed", output = "bad\u0000 token")))
     assertEquals("compile: bad token", checkFailurePreview(failed))
+    assertEquals(
+        null,
+        checkFailurePreview(failed.copy(checks = listOf(DraftCheck("go test", true, "canceled")))))
   }
 
   @Test
@@ -546,6 +554,10 @@ class ReviewEvidencePaneTest {
     val repair = repairMessageForChecks(session, current, checks)
 
     assertTrue(repair?.contains("sanitized focused check evidence") == true)
+    assertEquals(
+        null,
+        repairMessageForChecks(
+            session, current, checks.copy(checks = listOf(DraftCheck("test", true, "canceled")))))
     assertTrue(repair.contains("assertion failed"))
     assertTrue(repair.length < 4096)
     assertEquals(null, repairMessageForChecks(session.copy(repairCount = 3), current, checks))
@@ -634,6 +646,145 @@ class ReviewEvidencePaneTest {
     assertEquals(
         ReviewEvidenceStatus.Missing,
         reviewEvidenceUiState(null, null, null, null, null).identity.status)
+  }
+
+  @Test
+  fun currentCheckAttemptsQualifyEarlierPassAndRecoverBesideCollapsedHelp() {
+    val base = editorComparisonReviewFixture()
+    val current = base.draft!!
+    val message = "execution failed: " + "details ".repeat(700)
+    listOf(
+            ValidationAttemptStatus.Running to "Checks running",
+            ValidationAttemptStatus.Failed to "Checks failed",
+            ValidationAttemptStatus.Canceled to "Checks canceled")
+        .forEach { (status, title) ->
+          val attempt = CheckAttempt(7, CheckCandidate(current), status, message)
+          val state =
+              base.copy(
+                  checkAttempt = attempt, checksRunning = status == ValidationAttemptStatus.Running)
+          val evidence =
+              reviewEvidenceUiState(
+                  state.project,
+                  state.selected,
+                  state.editor,
+                  current,
+                  state.checks,
+                  state.checksRunning,
+                  attempt)
+          val decision =
+              applyDecisionUiState(
+                  state.project, state.selected, state.editor, current, state.checks, null, attempt)
+          assertEquals(false, decision.eligible)
+          assertEquals(title, reviewReadinessTitle(evidence, decision))
+          assertEquals(status != ValidationAttemptStatus.Running, evidence.canRunChecks)
+          assertEquals(
+              if (status == ValidationAttemptStatus.Running) ReviewNextActionKind.Waiting
+              else ReviewNextActionKind.RunChecks,
+              reviewNextActionUiState(
+                      evidence, decision, current, state.checks, state.session, state.checksRunning)
+                  .kind)
+          var checks = 0
+          var repairs = 0
+          var mutations = 0
+          ComposeVisualFixture(360, 500, 1.5f) {
+                ReviewToolWindow(
+                    state,
+                    ReviewToolWindowActions({ checks++ }, { repairs++ }, {}),
+                    DraftApplicationActions({ mutations++ }, { mutations++ }))
+              }
+              .use { fixture ->
+                fixture.render()
+                assertTrue(fixture.hasText(title))
+                assertTrue(
+                    fixture.hasText("Previous check report (retained; not current approval)"))
+                assertFalse(fixture.hasText("Ready to apply"))
+                assertFalse(fixture.hasText("Apply change"))
+                assertFalse(fixture.hasText("Revise with check output"))
+                assertFalse(fixture.hasText("$ go test"))
+                assertEquals(0, checks + repairs + mutations)
+                if (status != ValidationAttemptStatus.Running) {
+                  fixture.revealText("Run focused checks", "review-action-scroll")
+                  assertTrue(fixture.requestFocus("Run focused checks"))
+                  fixture.render()
+                  assertTrue(fixture.isFocused("Run focused checks"))
+                  if (status == ValidationAttemptStatus.Failed) {
+                    fixture.revealText("Show full available output", "review-action-scroll")
+                    fixture.clickDescription("Expand available diagnostic output")
+                    fixture.render()
+                    assertTrue(fixture.hasText(message.trim()))
+                    assertEquals(0, checks + repairs + mutations)
+                  }
+                  fixture.revealText("Run focused checks", "review-action-scroll")
+                  fixture.requestFocus("Run focused checks")
+                  fixture.pressKey(Key.Enter)
+                  fixture.render()
+                  assertEquals(1, checks)
+                  assertEquals(0, repairs + mutations)
+                }
+              }
+        }
+    val predecessor =
+        CheckAttempt(
+            3,
+            CheckCandidate(current.copy(hash = "prior")),
+            ValidationAttemptStatus.Failed,
+            "old failure")
+    val evidence =
+        reviewEvidenceUiState(
+            base.project,
+            base.selected,
+            base.editor,
+            current,
+            base.checks,
+            checkAttempt = predecessor)
+    assertEquals(ReviewEvidenceStatus.Passed, evidence.checks.status)
+  }
+
+  @Test
+  fun validationAttemptFailureStaysVisibleAndEditableWithRetainedDiagnostics() {
+    val base = editorComparisonReviewFixture()
+    val diagnostic = "transport unavailable " + "detail ".repeat(700)
+    val editor =
+        base.editor!!.copy(
+            status = DraftEditorStatus.Generated,
+            validationAttempt = ValidationAttempt(4, ValidationAttemptStatus.Failed, diagnostic))
+    val state = base.copy(editor = editor)
+    val evidence =
+        reviewEvidenceUiState(state.project, state.selected, editor, state.draft, state.checks)
+    assertEquals(ReviewEvidenceStatus.Failed, evidence.validation.status)
+    assertFalse(evidence.canRunChecks)
+    var edits = 0
+    var checks = 0
+    ComposeVisualFixture(360, 500, 1.5f) {
+          ReviewToolWindow(
+              state,
+              ReviewToolWindowActions({ checks++ }, {}, { edits++ }),
+              DraftApplicationActions({}, {}))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Validation failed"))
+          assertFalse(fixture.hasText("Apply change"))
+          assertEquals(0, edits + checks)
+          fixture.revealText("Show full available output", "review-action-scroll")
+          fixture.clickDescription("Expand available diagnostic output")
+          fixture.render()
+          assertTrue(fixture.hasText(diagnostic.trim()))
+          fixture.revealText("Edit draft", "review-action-scroll")
+          fixture.requestFocus("Edit draft")
+          fixture.pressKey(Key.Enter)
+          assertEquals(1, edits)
+          assertEquals(0, checks)
+        }
+    val canceled =
+        reviewEvidenceUiState(
+            state.project,
+            state.selected,
+            editor.copy(validationAttempt = ValidationAttempt(4, ValidationAttemptStatus.Canceled)),
+            state.draft,
+            state.checks)
+    assertEquals(ReviewEvidenceStatus.Canceled, canceled.validation.status)
+    assertTrue(canceled.validation.detail.contains("canceled"))
   }
 
   private fun draft() =

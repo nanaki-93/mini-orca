@@ -197,6 +197,7 @@ private fun EditorReviewProgression(rows: List<ReviewEvidenceRow>) {
           when (row.status) {
             ReviewEvidenceStatus.Passed -> "✓"
             ReviewEvidenceStatus.Failed -> "×"
+            ReviewEvidenceStatus.Canceled -> "–"
             ReviewEvidenceStatus.Stale -> "!"
             ReviewEvidenceStatus.Running -> "…"
             ReviewEvidenceStatus.Skipped -> "–"

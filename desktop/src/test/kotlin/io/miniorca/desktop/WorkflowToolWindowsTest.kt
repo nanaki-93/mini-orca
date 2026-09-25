@@ -45,6 +45,32 @@ class WorkflowToolWindowsTest {
   }
 
   @Test
+  fun reviewBadgePrefersCurrentAttemptOverAnEarlierReadyDecision() {
+    val ready = ApplyDecisionUiState(true, "Apply Run to main.go", "Ready")
+    listOf(
+            ReviewEvidenceStatus.Running to "Checks running",
+            ReviewEvidenceStatus.Failed to "Checks failed",
+            ReviewEvidenceStatus.Canceled to "Checks canceled")
+        .forEach { (status, label) ->
+          assertEquals(
+              label,
+              workflowToolWindowBadges(null, evidence(status), ready)
+                  .getValue(RightToolWindow.Review)
+                  .label)
+        }
+    val failedValidation =
+        evidence(ReviewEvidenceStatus.Passed)
+            .copy(
+                validation =
+                    ReviewEvidenceRow("Validation", "Request failed", ReviewEvidenceStatus.Failed))
+    assertEquals(
+        "Validation failed",
+        workflowToolWindowBadges(null, failedValidation, ready)
+            .getValue(RightToolWindow.Review)
+            .label)
+  }
+
+  @Test
   fun assistantAndReviewScopesPinTheCurrentProjectRelativeFileAndTarget() {
     val file = file()
     val draft = draft()
