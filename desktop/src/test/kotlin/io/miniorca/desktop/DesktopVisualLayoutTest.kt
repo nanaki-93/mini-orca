@@ -72,6 +72,97 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun assembledShellKeepsRailHeaderFooterAndTerminalSeparateAcrossViewportAndDensity() {
+    val project =
+        resultProjectFixture().copy(name = "A long project identity with 日本語 and many segments")
+    val model = ScopedModel(model = "local-model", providerOrigin = "http://localhost:11434")
+    val unavailable =
+        desktopStatusBarPresentation(
+            DesktopState(projectState = ProjectWorkspaceState(project)),
+            DesktopShellStatusProviders(model, model, ScopedModel()))
+    val run = analysisRunFixture()
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    // Density is independent of text scaling: these two captures have the same logical viewport.
+    val captures = sizes.flatMap { (w, h) -> listOf(1f, 1.25f, 1.5f).map { Triple(w, h, it) } }
+    for ((logicalWidth, logicalHeight, scale) in captures) {
+      for (density in if (logicalWidth == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        val width = (logicalWidth * density).toInt()
+        val height = (logicalHeight * density).toInt()
+        for (expanded in listOf(false, true)) {
+          val status = if (expanded) "failed" else "running"
+          val app =
+              DesktopState(
+                  projectState = ProjectWorkspaceState(project),
+                  analysisRun = ProjectAnalysisRunState(run = run.copy(status = status)))
+          val label =
+              "f03-shell-$logicalWidth-$logicalHeight-$scale-${density}x-$status-${if (expanded) "expanded" else "collapsed"}"
+          val railFocus = FocusRequester()
+          ComposeVisualFixture(width, height, scale, densityScale = density) {
+                Column(Modifier.fillMaxSize().background(AppBackground)) {
+                  MainToolbar(
+                      ToolbarState(
+                          project,
+                          false,
+                          "",
+                          ConnectionState(label = "Disconnected"),
+                          GitStatus(available = true, branch = "feature/long-identity-with-日本語"),
+                          toolbarAnalysisStatus(app)),
+                      ToolbarActions({}, {}, {}, {}))
+                  WorkspaceFrame(
+                      rail = {
+                        ToolWindowBar(
+                            LeftToolWindow.Analysis,
+                            {},
+                            Modifier.focusRequester(railFocus),
+                            onOpenTerminal = {})
+                      },
+                      panes = { EditorArea({ Text("Project workspace") }, Modifier.weight(1f)) },
+                      terminal = {
+                        TerminalDock(
+                            DesktopLayoutState(bottomCollapsed = !expanded),
+                            TerminalWorkspaceState(),
+                            {},
+                            {},
+                            TerminalTabActions({}, {}, {}),
+                            {},
+                            {},
+                            { modifier -> Box(modifier.background(EditorCanvas)) },
+                            modifier = Modifier.testTag("f03-terminal"))
+                      },
+                      modifier = Modifier.weight(1f))
+                  PersistentStatusBar(unavailable, {})
+                }
+              }
+              .use { fixture ->
+                fixture.render(label)
+                railFocus.requestFocus()
+                fixture.render("$label-selected-focused")
+                fixture.assertRailLabelFits("Performance")
+                assertTrue(fixture.hasDescription("Analysis tool window, selected, focused"))
+                assertTrue(fixture.hasText("Models: unavailable"))
+                assertTrue(
+                    fixture.hasText("Analysis · ${status.replaceFirstChar { it.uppercase() }}"))
+                assertTrue(fixture.hasText("Daemon disconnected"))
+                val header = fixture.firstVisibleTextBounds("Daemon disconnected")
+                val footer = fixture.taggedBounds("model-count-footer")
+                val terminal = fixture.taggedBounds("f03-terminal")
+                val editor = fixture.descriptionBounds("Editor area")
+                assertTrue(header.bottom <= editor.top, "$label: header overlaps workspace")
+                assertTrue(editor.bottom <= terminal.top, "$label: terminal overlaps workspace")
+                assertTrue(terminal.bottom <= footer.top, "$label: terminal overlaps footer")
+                assertEquals(editor.left, terminal.left, density, "$label: terminal left alignment")
+                assertEquals(
+                    editor.right, terminal.right, density, "$label: terminal right alignment")
+                assertEquals(width.toFloat(), footer.right, density)
+                assertEquals(height.toFloat(), footer.bottom, density)
+                fixture.assertTextFits("Models: unavailable")
+              }
+        }
+      }
+    }
+  }
+
+  @Test
   fun modelFooterSeparatesFromShellAndTrailsAtLargerTextAndReducedWidth() {
     val project = resultProjectFixture()
     val state = DesktopState(projectState = ProjectWorkspaceState(project))
@@ -4691,6 +4782,13 @@ internal class ComposeVisualFixture(
   }
 
   fun taggedBounds(tag: String): Rect = taggedNode(tag).boundsInRoot
+
+  fun descriptionBounds(label: String): Rect =
+      nodes()
+          .single {
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+          }
+          .boundsInRoot
 
   fun tagCount(tag: String): Int =
       nodes().count { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
