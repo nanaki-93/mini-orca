@@ -411,10 +411,16 @@ class ResultWorkspaceLayoutTest {
       val browser = newResultBrowserState(original)
       var page by mutableStateOf(original)
       var navigations = 0
+      var retries = 0
       ComposeVisualFixture(800, 650, 1.5f) {
-            AnalysisResultsPane(page, rows, browser, openAnalysis = { navigations++ }) { key ->
-              Text("Evidence for $key")
-            }
+            AnalysisResultsPane(
+                page,
+                rows,
+                browser,
+                openAnalysis = { navigations++ },
+                retryResults = { retries++ }) { key ->
+                  Text("Evidence for $key")
+                }
           }
           .use { fixture ->
             fixture.render()
@@ -431,6 +437,7 @@ class ResultWorkspaceLayoutTest {
             page = original.copy(section = original.section.copy(loading = true))
             fixture.render()
             fixture.assertTextFits("Loading results…")
+            assertFalse(fixture.hasText("Retry loading results"))
             assertTrue(
                 fixture.hasText(
                     "Reading saved ${type.workspace.name} results. Previously loaded results remain available below."))
@@ -441,6 +448,10 @@ class ResultWorkspaceLayoutTest {
             fixture.render()
             fixture.assertTextFits("${type.workspace.name} · saved result read failed")
             fixture.assertTextFits("Results could not be refreshed: refresh failed")
+            fixture.assertTextFits("Retry loading results")
+            assertTrue(
+                fixture.hasText(
+                    "Reloads saved results for ${type.workspace.name}; does not start analysis."))
             val feedback = fixture.taggedBounds("result-read-feedback")
             val list = fixture.taggedBounds("result-list")
             assertTrue(feedback.bottom <= list.top)
@@ -453,6 +464,9 @@ class ResultWorkspaceLayoutTest {
             assertTrue(
                 fixture.taggedBounds("result-read-feedback").bottom <=
                     fixture.taggedBounds("result-empty").top)
+            fixture.clickText("Retry loading results")
+            assertEquals(1, retries)
+            assertEquals(0, navigations)
             fixture.clickDescription("Clear filters")
             fixture.render()
             assertFalse(fixture.hasText("No matching results."))
@@ -464,6 +478,10 @@ class ResultWorkspaceLayoutTest {
             assertEquals("", browser.query)
             assertEquals("finding-1", browser.selectedKey)
             assertEquals(0, navigations)
+            assertEquals(1, retries)
+            fixture.clickText("View analysis")
+            assertEquals(1, navigations)
+            assertEquals(1, retries)
           }
     }
   }
@@ -474,8 +492,12 @@ class ResultWorkspaceLayoutTest {
       val original = resultPageFixture(type.category)
       var page by mutableStateOf(original.copy(section = AnalysisSectionState(loading = true)))
       val browser = newResultBrowserState(original)
+      var retries = 0
       ComposeVisualFixture(800, 650, 1.5f) {
-            AnalysisResultsPane(page, emptyList(), browser, openAnalysis = {}) { Text("unused") }
+            AnalysisResultsPane(
+                page, emptyList(), browser, openAnalysis = {}, retryResults = { retries++ }) {
+                  Text("unused")
+                }
           }
           .use { fixture ->
             fixture.render()
@@ -491,6 +513,9 @@ class ResultWorkspaceLayoutTest {
                 fixture.hasText(
                     "Results could not be refreshed: The saved result read failed without a diagnostic."))
             fixture.assertTextFits("No result details loaded yet.")
+            fixture.assertTextFits("Retry loading results")
+            fixture.clickText("Retry loading results")
+            assertEquals(1, retries)
             assertFalse(fixture.hasText("No findings in the analyzed scope."))
             assertTrue(
                 fixture.taggedBounds("result-read-feedback").bottom <=

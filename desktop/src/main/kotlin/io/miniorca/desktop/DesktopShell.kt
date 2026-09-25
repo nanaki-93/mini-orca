@@ -233,6 +233,7 @@ internal data class DesktopShellEditorActions(
 internal data class DesktopShellAnalysisActions(
     val refreshAnalysisSelection: () -> Unit,
     val saveAnalysisSelection: (List<String>) -> Unit,
+    val retryResults: (String, String) -> Unit,
     val startAnalysis: (AnalysisRunLimits, Boolean) -> Unit,
     val pauseAnalysis: () -> Unit,
     val resumeAnalysis: () -> Unit,
@@ -1194,6 +1195,7 @@ private fun DesktopCanvas(
                     startScan = analysisActions.startScan,
                     cancelScan = analysisActions.cancelScan,
                     openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
+                    retryResults = { analysisActions.retryResults("bugs", "") },
                 ),
             performanceActions =
                 PerformanceWorkspaceActions(
@@ -1202,12 +1204,14 @@ private fun DesktopCanvas(
                     prepareOptimization = analysisActions.preparePerformanceFinding,
                     loadBenchmarks = analysisActions.loadGoBenchmarks,
                     selectBenchmark = analysisActions.selectGoBenchmark,
-                    runBenchmark = analysisActions.compareSelectedGoBenchmark),
+                    runBenchmark = analysisActions.compareSelectedGoBenchmark,
+                    retryResults = { analysisActions.retryResults("performance", "") }),
             securityActions =
                 SecurityWorkspaceActions(
                     openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
                     semanticActions = findingActions,
-                    prepareFix = analysisActions.prepareSecurityFinding),
+                    prepareFix = analysisActions.prepareSecurityFinding,
+                    retryResults = { analysisActions.retryResults("security", "") }),
             modifier = Modifier.fillMaxSize(),
         )
       },

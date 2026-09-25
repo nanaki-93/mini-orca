@@ -249,6 +249,7 @@ private fun NativeRoundedWorkspace(terminal: DesktopTerminalWorkspace, directory
             DesktopShellAnalysisActions(
                 refreshAnalysisSelection = { record("Refresh selection") },
                 saveAnalysisSelection = { record("Save selection") },
+                retryResults = { category, path -> record("Retry $category $path") },
                 startAnalysis = { _, _ -> record("Start analysis") },
                 pauseAnalysis = { record("Pause") },
                 resumeAnalysis = { record("Resume") },

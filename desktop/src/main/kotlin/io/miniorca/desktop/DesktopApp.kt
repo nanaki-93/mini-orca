@@ -568,6 +568,7 @@ internal fun MiniOrcaApp(
           DesktopShellAnalysisActions(
               refreshAnalysisSelection = presenter::refreshAnalysisSelection,
               saveAnalysisSelection = presenter::saveAnalysisSelection,
+              retryResults = presenter::loadAnalysisResults,
               startAnalysis = { limits, retry ->
                 presenter.previewAnalysis(limits = limits, retryStaleFailed = retry)
               },

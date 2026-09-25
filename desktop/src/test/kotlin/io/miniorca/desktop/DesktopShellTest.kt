@@ -90,6 +90,7 @@ class DesktopShellTest {
                   DesktopShellAnalysisActions(
                       refreshAnalysisSelection = { operations += "refresh" },
                       saveAnalysisSelection = { operations += "save analysis" },
+                      retryResults = { category, path -> operations += "retry $category $path" },
                       startAnalysis = { _, _ -> operations += "provider" },
                       pauseAnalysis = { operations += "pause" },
                       resumeAnalysis = { operations += "resume" },
@@ -215,6 +216,29 @@ class DesktopShellTest {
           assertEquals(0, disposedPanes)
           assertEquals(emptyList(), operations)
           assertEquals(0, layoutSaves)
+          for (type in AnalysisResultType.entries) {
+            val page = resultPageFixture(type.category)
+            shell.value =
+                shell.value.copy(
+                    app =
+                        shell.value.app.copy(
+                            workspace = type.workspace,
+                            analysisRun =
+                                ProjectAnalysisRunState(
+                                    run = page.run,
+                                    sections =
+                                        mapOf(
+                                            AnalysisResultKey(type.category) to
+                                                page.section.copy(error = "read failed")))))
+            fixture.render()
+            fixture.assertTextFits("Retry loading results")
+            fixture.clickText("Retry loading results")
+            assertEquals("retry ${type.category} ", operations.last())
+            fixture.clickText("View analysis")
+            assertEquals(Workspace.Analysis, shell.value.app.workspace)
+            assertEquals("retry ${type.category} ", operations.last())
+          }
+          assertEquals(3, operations.size)
         }
   }
 

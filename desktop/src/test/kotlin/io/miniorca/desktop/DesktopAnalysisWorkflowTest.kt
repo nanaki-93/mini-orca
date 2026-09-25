@@ -248,6 +248,66 @@ class DesktopAnalysisWorkflowTest {
   }
 
   @Test
+  fun explicitResultRetryReadsOnlyTheFailedCategoryAndRejectsDuplicateActivation() {
+    AnalysisResultType.entries.forEach { type ->
+      Harness().use { h ->
+        h.workflow.refresh()
+        h.drain()
+        val key = AnalysisResultKey(type.category)
+        val retained = h.state.analysisRun.sections.getValue(key).results
+        h.failure = "category=${type.category}"
+        h.workflow.retryResults(type.category)
+        h.drain()
+        assertEquals(retained, h.state.analysisRun.sections.getValue(key).results)
+        assertNotNull(h.state.analysisRun.sections.getValue(key).error)
+        h.failure = ""
+        val before = h.calls.size
+        h.workflow.retryResults(type.category)
+        assertTrue(h.state.analysisRun.sections.getValue(key).loading)
+        h.workflow.retryResults(type.category)
+        h.drain()
+        assertEquals(1, h.calls.drop(before).size)
+        assertEquals("GET", h.calls.last().first)
+        assertTrue(h.calls.last().second.endsWith("&category=${type.category}"))
+        assertEquals(null, h.state.analysisRun.sections.getValue(key).error)
+        assertEquals(retained, h.state.analysisRun.sections.getValue(key).results)
+        assertTrue(h.calls.all { it.first == "GET" })
+      }
+    }
+  }
+
+  @Test
+  fun fileScopedRetryAndLatePredecessorCannotReplaceNewRun() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      val path = "main.go"
+      h.failure = "category=security"
+      h.workflow.retryResults("security", path)
+      h.drain()
+      val key = AnalysisResultKey("security", path)
+      assertNotNull(h.state.analysisRun.sections.getValue(key).error)
+      h.failure = ""
+      val before = h.calls.size
+      h.workflow.retryResults("security", path)
+      h.main.runPending()
+      h.io.runPending()
+      h.run = h.run.copy(identity = h.run.identity.copy(generation = "replacement"))
+      h.workflow.refresh()
+      h.drain()
+      assertEquals(
+          1,
+          h.calls.drop(before).count {
+            it.first == "GET" &&
+                it.second.contains("/analysis/results?") &&
+                it.second.endsWith("&category=security&path=main.go")
+          })
+      assertTrue(h.state.analysisRun.sections.values.all { it.results?.identity == h.run.identity })
+      assertTrue(h.calls.all { it.first == "GET" })
+    }
+  }
+
+  @Test
   fun resultScopeMismatchCannotEraseValidEvidenceAndOldGenerationCannotPublish() {
     Harness().use { h ->
       h.workflow.refresh()

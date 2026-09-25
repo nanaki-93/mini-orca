@@ -655,6 +655,7 @@ class DesktopKeyboardNavigationTest {
             DesktopShellAnalysisActions(
                 refreshAnalysisSelection = onOperation,
                 saveAnalysisSelection = {},
+                retryResults = { _, _ -> onOperation() },
                 startAnalysis = { _, _ -> onOperation() },
                 pauseAnalysis = onOperation,
                 resumeAnalysis = onOperation,
