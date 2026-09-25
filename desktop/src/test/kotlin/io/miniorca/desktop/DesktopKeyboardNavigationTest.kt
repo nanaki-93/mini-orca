@@ -18,6 +18,63 @@ import kotlin.test.assertTrue
 
 class DesktopKeyboardNavigationTest {
   @Test
+  fun discardPromptFocusesKeepDraftAndEscapeCannotDiscard() {
+    var visible by mutableStateOf(true)
+    var cancels = 0
+    var discards = 0
+    ComposeVisualFixture(800, 650) {
+          if (visible)
+              DraftDiscardDialog(
+                  CurrentEditIdentity(ChatEditMode.ReplaceSymbol, "main.go", "Run", true),
+                  "edit Run",
+                  onDiscard = { discards++ },
+                  onCancel = {
+                    cancels++
+                    visible = false
+                  })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Keep draft"))
+          assertFalse(fixture.isFocusedControl("Discard draft"))
+          assertTrue(fixture.pressKey(Key.Escape))
+          fixture.render()
+          assertEquals(1, cancels)
+          assertEquals(0, discards)
+        }
+  }
+
+  @Test
+  fun importConsentPromptDismissalCannotConfirmOrImport() {
+    var visible by mutableStateOf(true)
+    var confirmations = 0
+    var imports = 0
+    var cancels = 0
+    ComposeVisualFixture(800, 650) {
+          if (visible)
+              ProjectImportConfirmationDialog(
+                  model = ScopedModel(scope = ModelScope.Analyze.wireValue, remoteProvider = true),
+                  confirmed = false,
+                  onConfirmed = { confirmations++ },
+                  onImport = { imports++ },
+                  onCancel = {
+                    cancels++
+                    visible = false
+                  })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Cancel"))
+          assertFalse(fixture.isFocusedControl("Import project"))
+          assertTrue(fixture.pressKey(Key.Escape))
+          fixture.render()
+          assertEquals(1, cancels)
+          assertEquals(0, confirmations)
+          assertEquals(0, imports)
+        }
+  }
+
+  @Test
   fun paletteShortcutsKeepFilesAndSymbolsDirectWhileCommandKFocusesChat() {
     assertEquals(DesktopShortcut.OpenFile, desktopShortcut("P", primaryModifier = true))
     assertEquals(

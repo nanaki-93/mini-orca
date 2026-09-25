@@ -5,6 +5,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -41,17 +43,30 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -76,6 +91,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** Shared visual policy for all compact controls; Material is not the control implementation. */
 internal data class IdeActionColors(
@@ -608,6 +624,7 @@ internal fun IdeDialog(
     title: @Composable () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
     actions: @Composable RowScope.() -> Unit,
+    focusSafeActionOnOpen: Boolean = true,
 ) {
   // Capture the owner window before entering the separate Desktop dialog window. Its own
   // container size can grow with its content and is not a useful bound for a long body.
@@ -615,23 +632,59 @@ internal fun IdeDialog(
       with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
   val maxHeight = if (windowHeight > 0.dp) (windowHeight - 64.dp).coerceIn(0.dp, 520.dp) else 520.dp
   Dialog(onDismissRequest = onDismissRequest) {
-    IdeDialogSurface(maxHeight, title, content, actions)
+    IdeDialogSurface(maxHeight, title, content, actions, focusSafeActionOnOpen, onDismissRequest)
   }
 }
 
 @Composable
+@OptIn(ExperimentalComposeUiApi::class)
 internal fun IdeDialogSurface(
     maxHeight: Dp,
     title: @Composable () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
     actions: @Composable RowScope.() -> Unit,
+    focusSafeActionOnOpen: Boolean = false,
+    onDismissRequest: (() -> Unit)? = null,
 ) {
+  val safeActionFocus = remember { FocusRequester() }
+  val firstFocus = remember { FocusRequester() }
+  val endFocus = remember { FocusRequester() }
+  val focusManager = LocalFocusManager.current
+  val scope = rememberCoroutineScope()
+  var returningFromStart by remember { mutableStateOf(false) }
   Column(
       Modifier.widthIn(min = 320.dp, max = 640.dp)
           .heightIn(max = maxHeight)
           .clip(MiniOrcaShapes.overlay)
           .background(OverlaySurface)
           .border(BorderStroke(1.dp, PaneSeparator), MiniOrcaShapes.overlay)
+          .onPreviewKeyEvent { event ->
+            if (event.key != Key.Escape || onDismissRequest == null) false
+            else {
+              if (event.type == KeyEventType.KeyDown) onDismissRequest()
+              true
+            }
+          }
+          .focusRequester(firstFocus)
+          .focusProperties {
+            onExit = {
+              when (requestedFocusDirection) {
+                FocusDirection.Next -> {
+                  cancelFocusChange()
+                  scope.launch { firstFocus.requestFocus() }
+                }
+                FocusDirection.Previous -> {
+                  cancelFocusChange()
+                  scope.launch {
+                    returningFromStart = true
+                    if (endFocus.requestFocus()) focusManager.moveFocus(FocusDirection.Previous)
+                    returningFromStart = false
+                  }
+                }
+              }
+            }
+          }
+          .focusGroup()
           .padding(16.dp)) {
         title()
         IdeHorizontalSeparator(Modifier.padding(vertical = 12.dp))
@@ -642,13 +695,24 @@ internal fun IdeDialogSurface(
                 .testTag("ide-dialog-body"),
             content = content)
         FlowRow(
-            Modifier.fillMaxWidth().padding(top = 16.dp),
+            Modifier.fillMaxWidth().focusRequester(safeActionFocus).padding(top = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
           actions(this)
         }
+        // Reverse traversal starts after the actions so it can find the last enabled control.
+        Spacer(
+            Modifier.size(0.dp)
+                .focusRequester(endFocus)
+                .onFocusChanged {
+                  if (it.isFocused && !returningFromStart)
+                      scope.launch { firstFocus.requestFocus() }
+                }
+                .focusable())
       }
+  // Callers put their safe Close/Cancel first. The palette owns its input focus instead.
+  if (focusSafeActionOnOpen) LaunchedEffect(Unit) { safeActionFocus.requestFocus() }
 }
 
 /**

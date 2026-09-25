@@ -643,7 +643,9 @@ internal fun MiniOrcaApp(
   }
   DesktopAnalysisAdmissionOverlay(appState.analysisRun, presenter)
   pendingDraftDiscard?.let { pending ->
-    DraftDiscardDialog(pending, ::discardDraftAndContinue) { pendingDraftDiscard = null }
+    DraftDiscardDialog(pending.currentDraft, pending.nextLabel, ::discardDraftAndContinue) {
+      pendingDraftDiscard = null
+    }
   }
   pendingImportPath?.let { path ->
     ProjectImportConfirmationDialog(
@@ -730,7 +732,7 @@ private fun draftApplicationActions(presenter: DesktopWorkflowPresenter) =
     )
 
 @Composable
-private fun ProjectImportConfirmationDialog(
+internal fun ProjectImportConfirmationDialog(
     model: ScopedModel,
     confirmed: Boolean,
     onConfirmed: (Boolean) -> Unit,
@@ -756,17 +758,18 @@ private fun ProjectImportConfirmationDialog(
 }
 
 @Composable
-private fun DraftDiscardDialog(
-    pending: PendingDraftDiscard,
+internal fun DraftDiscardDialog(
+    currentDraft: CurrentEditIdentity,
+    nextLabel: String,
     onDiscard: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
 ) {
   IdeDialog(
       onDismissRequest = onCancel,
       title = { Text("Discard current draft?") },
       content = {
         Text(
-            "Discard the draft for ${pending.currentDraft.targetSymbol} in ${pending.currentDraft.targetPath} before you ${pending.nextLabel} in ${pending.currentDraft.targetPath}? This only clears the in-memory conversation, draft, and focused checks.")
+            "Discard the draft for ${currentDraft.targetSymbol} in ${currentDraft.targetPath} before you $nextLabel in ${currentDraft.targetPath}? This only clears the in-memory conversation, draft, and focused checks.")
       },
       actions = {
         MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Keep draft") }

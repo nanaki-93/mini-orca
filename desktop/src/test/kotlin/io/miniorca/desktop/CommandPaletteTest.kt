@@ -1,5 +1,8 @@
 package io.miniorca.desktop
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -7,6 +10,45 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class CommandPaletteTest {
+  @Test
+  fun paletteFocusStaysOnInputUntilUserTabsAndEscapeOnlyDismisses() {
+    var query by mutableStateOf("")
+    var visible by mutableStateOf(true)
+    var dismissals = 0
+    var selections = 0
+    ComposeVisualFixture(800, 650) {
+          if (visible)
+              CommandPaletteDialog(
+                  mode = PaletteMode.Actions,
+                  query = query,
+                  onQuery = { query = it },
+                  onMode = {},
+                  files = emptyList(),
+                  symbols = emptyList(),
+                  hasActiveFile = false,
+                  onSelectFile = {},
+                  onSelectSymbol = {},
+                  onSelectAction = { selections++ },
+                  onDismiss = {
+                    dismissals++
+                    visible = false
+                  })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Filter commands"))
+          assertFalse(fixture.isFocusedControl("Close"))
+          fixture.setFocusedText("analysis")
+          fixture.render()
+          assertEquals("analysis", query)
+          assertEquals(0, selections)
+          assertTrue(fixture.pressKey(Key.Escape))
+          fixture.render()
+          assertEquals(1, dismissals)
+          assertEquals(0, selections)
+        }
+  }
+
   @Test
   fun projectActionScopeRemainsReadableAndKeyboardActivationIsExplicit() {
     listOf(800 to 650, 1280 to 600).forEach { (width, height) ->

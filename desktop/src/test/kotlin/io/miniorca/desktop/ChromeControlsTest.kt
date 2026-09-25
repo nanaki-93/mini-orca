@@ -13,6 +13,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
@@ -346,6 +350,105 @@ class ChromeControlsTest {
             assertEquals(1, decisions)
           }
     }
+  }
+
+  @Test
+  fun dialogInitiallyFocusesSafeActionAndContainsTabAndEscape() {
+    var visible by mutableStateOf(true)
+    var dismissals = 0
+    var destructiveActions = 0
+    var underlyingShortcuts = 0
+    var ancestorKeys = 0
+    ComposeVisualFixture(650, 400) {
+          Column(
+              Modifier.fillMaxSize().onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) {
+                  if (event.key == Key.Escape) underlyingShortcuts++ else ancestorKeys++
+                }
+                false
+              }) {
+                MiniOrcaButton(onClick = { destructiveActions++ }) { Text("Underlying action") }
+                if (visible)
+                    IdeDialogSurface(
+                        maxHeight = 300.dp,
+                        title = { Text("Discard current draft?") },
+                        content = {
+                          Text("Your draft will remain until you explicitly discard it.")
+                        },
+                        actions = {
+                          MiniOrcaButton(onClick = { visible = false }, tone = ActionTone.Neutral) {
+                            Text("Keep draft")
+                          }
+                          MiniOrcaButton(
+                              onClick = { destructiveActions++ }, tone = ActionTone.Destructive) {
+                                Text("Discard draft")
+                              }
+                        },
+                        focusSafeActionOnOpen = true,
+                        onDismissRequest = {
+                          dismissals++
+                          visible = false
+                        })
+              }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Keep draft"))
+          assertTrue(!fixture.isFocusedControl("Discard draft"))
+          fixture.pressKey(Key.Tab, shift = true)
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Discard draft"), "Shift+Tab must wrap to last")
+          fixture.pressKey(Key.Tab)
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Keep draft"), "Tab must wrap to first")
+          repeat(4) {
+            fixture.pressKey(Key.Tab)
+            fixture.render()
+            assertTrue(!fixture.isFocusedControl("Underlying action"))
+            assertTrue(
+                fixture.isFocusedControl("Keep draft") || fixture.isFocusedControl("Discard draft"),
+                "Tab must retain focus on a dialog action")
+          }
+          fixture.pressKey(Key.A)
+          assertTrue(ancestorKeys > 0, "Ancestor must receive keys from the dialog")
+          assertTrue(fixture.pressKey(Key.Escape))
+          fixture.render()
+          assertEquals(1, dismissals)
+          assertEquals(0, destructiveActions)
+          assertEquals(0, underlyingShortcuts)
+        }
+  }
+
+  @Test
+  fun dialogTraversalWrapsAcrossInputAndActionsWithoutChangingText() {
+    var query by mutableStateOf("draft")
+    ComposeVisualFixture(650, 400) {
+          IdeDialogSurface(
+              maxHeight = 300.dp,
+              title = { Text("Search") },
+              content = {
+                CompactSingleLineField(
+                    value = query, onValueChange = { query = it }, label = "Filter commands")
+              },
+              actions = {
+                MiniOrcaButton(onClick = {}, tone = ActionTone.Neutral) { Text("Close") }
+              },
+              focusSafeActionOnOpen = true)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Close"))
+          fixture.pressKey(Key.Tab)
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Filter commands"))
+          fixture.pressKey(Key.Tab, shift = true)
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Close"))
+          fixture.pressKey(Key.Tab, shift = true)
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Filter commands"))
+          assertEquals("draft", query)
+        }
   }
 
   @Test
