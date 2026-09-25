@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,9 +32,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,17 +79,9 @@ internal fun MainToolbar(
               ToolbarStatus(state, connectionPresentation)
             }
           }
-      state.openingError?.let { error ->
+      state.openingAttempt?.let { attempt ->
         Spacer(Modifier.height(8.dp))
-        SystemStateMessage(
-            "Could not open project",
-            "Opening or reading local project data failed. ${error.ifBlank { "No details available." }}",
-            accent = Error,
-            action = {
-              MiniOrcaButton(onClick = actions.onImport, tone = ActionTone.Neutral) {
-                Text("Open project")
-              }
-            })
+        ProjectOpeningFeedback(state.project, attempt, actions)
       }
       if (wrapped) {
         Spacer(Modifier.height(4.dp))
@@ -137,8 +134,71 @@ internal data class ToolbarState(
     val connection: ConnectionState,
     val gitStatus: GitStatus?,
     val analysisStatus: ToolbarAnalysisStatus? = null,
-    val openingError: String? = null,
+    val openingAttempt: ProjectOpeningAttempt? = null,
 )
+
+@Composable
+private fun ProjectOpeningFeedback(
+    project: ProjectAnalysis?,
+    attempt: ProjectOpeningAttempt,
+    actions: ToolbarActions,
+) {
+  val restoring = attempt.kind == ProjectOpeningKind.Restore
+  val failure = attempt.outcome as? ProjectOpeningOutcome.Failed
+  SystemStateMessage(
+      title =
+          when {
+            failure != null ->
+                if (restoring) "Could not restore project" else "Could not import project"
+            attempt.outcome == ProjectOpeningOutcome.Opening ->
+                if (restoring) "Restoring local project…" else "Importing project…"
+            else -> if (restoring) "Restore canceled" else "Import canceled"
+          },
+      message =
+          when {
+            failure != null ->
+                "The requested project did not open. The current project is unchanged."
+            attempt.outcome == ProjectOpeningOutcome.Opening && restoring ->
+                "Reading saved local project data; no model request is made. The current project remains open."
+            attempt.outcome == ProjectOpeningOutcome.Opening ->
+                "Import may use the configured Analyze provider and require confirmation. The current project remains open."
+            else -> "The current project remains open. Open project to choose another folder."
+          },
+      accent = if (failure != null) Error else SecondaryText,
+      modifier =
+          Modifier.fillMaxWidth()
+              .heightIn(max = 220.dp)
+              .verticalScroll(rememberScrollState())
+              .testTag("project-opening-scroll"),
+      action = {
+        Text("Current project", color = SecondaryText, style = IdeTypography.resultLabel)
+        Text(projectBreadcrumbLabel(project), color = PrimaryText, style = IdeTypography.resultCode)
+        Spacer(Modifier.height(8.dp))
+        Text("Requested path", color = SecondaryText, style = IdeTypography.resultLabel)
+        SelectionContainer {
+          Text(
+              attempt.path,
+              color = PrimaryText,
+              fontFamily = FontFamily.Monospace,
+              style = IdeTypography.resultCode)
+        }
+        if (failure != null) {
+          Spacer(Modifier.height(8.dp))
+          Text("Opening diagnostic", color = SecondaryText, style = IdeTypography.resultLabel)
+          DiagnosticText(failure.message, color = Error)
+          Spacer(Modifier.height(8.dp))
+          if (restoring) {
+            MiniOrcaButton(onClick = actions.onRetryRestore, tone = ActionTone.Neutral) {
+              Text("Retry restore")
+            }
+            Spacer(Modifier.height(8.dp))
+          }
+          MiniOrcaButton(onClick = actions.onImport, tone = ActionTone.Neutral) {
+            Text("Open project")
+          }
+        }
+      })
+}
 
 internal data class ToolbarAnalysisStatus(
     val label: String,
@@ -220,6 +280,7 @@ internal data class ToolbarActions(
     val onReanalyze: () -> Unit,
     val onReconnect: () -> Unit,
     val onPalette: () -> Unit,
+    val onRetryRestore: () -> Unit = {},
 )
 
 @Composable
