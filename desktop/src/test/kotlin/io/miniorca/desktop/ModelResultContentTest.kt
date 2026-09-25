@@ -112,6 +112,21 @@ class ModelResultContentTest {
   }
 
   @Test
+  fun formattingBoundaryKeepsCompleteLiteralMarkupAtBothLimits() {
+    val sources =
+        listOf(
+            "[link](https://example.com) <img src='https://example.com/a.png'>" +
+                "x".repeat(32_769),
+            "![image](https://example.com/a.png)\n".repeat(512))
+    sources.forEach { source ->
+      val formatted = formatModelResult(source)
+      assertEquals(source, formatted.text)
+      assertTrue(formatted.spanStyles.isEmpty())
+      assertTrue(formatted.getStringAnnotations(0, formatted.length).isEmpty())
+    }
+  }
+
+  @Test
   fun productionContentExpandsByKeyboardAndResetsForANewResponseAtNarrowAndWideSizes() {
     listOf(360 to 1.5f, 720 to 1f).forEach { (width, scale) ->
       var response by

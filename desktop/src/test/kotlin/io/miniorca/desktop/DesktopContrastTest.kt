@@ -15,6 +15,22 @@ import kotlin.test.assertTrue
 
 class DesktopContrastTest {
   @Test
+  fun checkboxAndInvalidFieldIndicatorsContrastOnResolvedSurfaces() {
+    listOf(Panel, OverlaySurface, EditorCanvas, SelectionSurface).forEach { host ->
+      val focusHost = blendOver(ControlHover, host)
+      listOf(host, focusHost).forEach { background ->
+        assertTrue(contrastRatio(FocusAccent, background) >= 3.0, "Checkbox focus on $background")
+        assertTrue(contrastRatio(ControlBorder, EditorCanvas) >= 3.0, "Unchecked indicator")
+        assertTrue(contrastRatio(SelectionAccent, SelectionSurface) >= 3.0, "Checked indicator")
+        assertTrue(contrastRatio(SelectionText, SelectionSurface) >= 4.5, "Checkmark")
+      }
+      assertTrue(contrastRatio(PrimaryText, host) >= 4.5, "Consent label on $host")
+      assertTrue(contrastRatio(FaintText, host) >= 4.5, "Disabled label on $host")
+      assertTrue(contrastRatio(Error, host) >= 4.5, "Invalid field error on $host")
+    }
+  }
+
+  @Test
   fun analysisHeadersRenderDistinctLabeledLifecycleStates() {
     listOf(
             "completed" to Success,
