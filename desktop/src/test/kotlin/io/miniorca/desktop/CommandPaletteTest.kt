@@ -50,6 +50,37 @@ class CommandPaletteTest {
   }
 
   @Test
+  fun openingActionsAndClosingWithoutSelectionDispatchesNothing() {
+    var selections = 0
+    var visible by mutableStateOf(false)
+    ComposeVisualFixture(800, 650) {
+          if (visible)
+              CommandPaletteDialog(
+                  mode = PaletteMode.Actions,
+                  query = "",
+                  onQuery = {},
+                  onMode = {},
+                  files = emptyList(),
+                  symbols = emptyList(),
+                  hasActiveFile = true,
+                  onSelectFile = {},
+                  onSelectSymbol = {},
+                  onSelectAction = { selections++ },
+                  onDismiss = { visible = false })
+        }
+        .use { fixture ->
+          fixture.render()
+          visible = true
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Filter commands"))
+          assertEquals(0, selections)
+          fixture.clickText("Close")
+          fixture.render()
+          assertEquals(0, selections)
+        }
+  }
+
+  @Test
   fun projectActionScopeRemainsReadableAndKeyboardActivationIsExplicit() {
     listOf(800 to 650, 1280 to 600).forEach { (width, height) ->
       val selected = mutableListOf<String>()

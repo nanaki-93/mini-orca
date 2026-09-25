@@ -256,6 +256,7 @@ private data class ShellFocusRequesters(
     val bottomToolWindow: FocusRequester,
     val statusBar: FocusRequester,
     val paletteTrigger: FocusRequester,
+    val commandsTrigger: FocusRequester,
     val statusDetailsTrigger: FocusRequester,
     val landing: FocusRequester,
 )
@@ -273,12 +274,33 @@ internal fun paletteFocusRestorationRegion(
       else -> previous
     }
 
+internal enum class TransientOpener {
+  Region,
+  HeaderSearch,
+  RailCommands,
+  FooterModels,
+}
+
 private data class TransientFocusOrigin(
     val region: DesktopFocusRegion,
     val projectId: String?,
-    val toolbarTrigger: Boolean = false,
-    val statusTrigger: Boolean = false,
+    val opener: TransientOpener = TransientOpener.Region,
 )
+
+internal fun transientFocusOpener(
+    opener: TransientOpener,
+    sameProject: Boolean,
+    region: DesktopFocusRegion?,
+): TransientOpener =
+    if (sameProject &&
+        when (opener) {
+          TransientOpener.HeaderSearch -> region == DesktopFocusRegion.Toolbar
+          TransientOpener.RailCommands -> region == DesktopFocusRegion.LeftToolWindow
+          TransientOpener.FooterModels -> region == DesktopFocusRegion.StatusBar
+          TransientOpener.Region -> false
+        })
+        opener
+    else TransientOpener.Region
 
 internal fun transientFocusRegion(
     previous: DesktopFocusRegion,
@@ -342,6 +364,7 @@ internal fun DesktopShell(
         bottomToolWindow = FocusRequester(),
         statusBar = FocusRequester(),
         paletteTrigger = FocusRequester(),
+        commandsTrigger = FocusRequester(),
         statusDetailsTrigger = FocusRequester(),
         landing = FocusRequester(),
     )
@@ -411,13 +434,17 @@ internal fun DesktopShell(
       contextOrigin = null
     }
   }
-  fun openPalette(mode: PaletteMode, fromToolbar: Boolean = false) {
-    if (!palette.visible)
-        paletteOrigin =
-            TransientFocusOrigin(
-                if (fromToolbar) DesktopFocusRegion.Toolbar else layout.lastFocusedRegion,
-                appState.project?.projectId,
-                toolbarTrigger = fromToolbar)
+  fun openPalette(mode: PaletteMode, opener: TransientOpener = TransientOpener.Region) {
+    if (palette.visible) return
+    paletteOrigin =
+        TransientFocusOrigin(
+            when (opener) {
+              TransientOpener.HeaderSearch -> DesktopFocusRegion.Toolbar
+              TransientOpener.RailCommands -> DesktopFocusRegion.LeftToolWindow
+              else -> layout.lastFocusedRegion
+            },
+            appState.project?.projectId,
+            opener)
     paletteActions.open(mode)
   }
   fun dismissPaletteAndRestoreFocus() {
@@ -428,7 +455,7 @@ internal fun DesktopShell(
   fun showStatusDetails() {
     statusOrigin =
         TransientFocusOrigin(
-            DesktopFocusRegion.StatusBar, appState.project?.projectId, statusTrigger = true)
+            DesktopFocusRegion.StatusBar, appState.project?.projectId, TransientOpener.FooterModels)
     layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.StatusBar))
     statusDetailsVisible = true
   }
@@ -486,13 +513,14 @@ internal fun DesktopShell(
               when {
                 region == null ->
                     if (appState.loading) focusRequesters.fallback else focusRequesters.landing
-                origin.toolbarTrigger &&
-                    region == DesktopFocusRegion.Toolbar &&
-                    origin.projectId == appState.project?.projectId ->
-                    focusRequesters.paletteTrigger
-                origin.statusTrigger && region == DesktopFocusRegion.StatusBar ->
-                    focusRequesters.statusDetailsTrigger
-                else -> focusRequesters.forRegion(region)
+                else ->
+                    when (transientFocusOpener(
+                        origin.opener, origin.projectId == appState.project?.projectId, region)) {
+                      TransientOpener.HeaderSearch -> focusRequesters.paletteTrigger
+                      TransientOpener.RailCommands -> focusRequesters.commandsTrigger
+                      TransientOpener.FooterModels -> focusRequesters.statusDetailsTrigger
+                      TransientOpener.Region -> focusRequesters.forRegion(region)
+                    }
               }
           requester.requestFocus()
           pendingFocus = null
@@ -543,7 +571,7 @@ internal fun DesktopShell(
                       onReconnect = projectActions.reconnect,
                       onPalette = {
                         layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.Toolbar))
-                        openPalette(PaletteMode.Files, fromToolbar = true)
+                        openPalette(PaletteMode.Files, TransientOpener.HeaderSearch)
                       },
                   ),
               modifier = Modifier.focusRequester(focusRequesters.toolbar).focusable(),
@@ -555,7 +583,11 @@ internal fun DesktopShell(
                     leftToolWindowForWorkspace(workspace),
                     ::selectToolWindow,
                     Modifier.focusRequester(focusRequesters.leftToolWindow),
-                    onOpenTerminal = ::openTerminal)
+                    onOpenTerminal = ::openTerminal,
+                    onOpenCommands = {
+                      openPalette(PaletteMode.Actions, TransientOpener.RailCommands)
+                    },
+                    commandsFocusRequester = focusRequesters.commandsTrigger)
               },
               panes = {
                 if (showsEditorChrome && layout.leftToolWindowVisible) {
