@@ -36,8 +36,31 @@ prove OS focus, popup placement or screen-reader behavior.
 
 ## Working in the app
 
-The last successfully opened project is restored from local metadata without
-contacting a model. If restore fails, the landing screen offers Open project/retry.
+On launch, the landing shows the last successfully opened project's remembered
+path (or that no project is remembered) and automatically tries to restore it
+from saved local data. Restore does not request a model or start a terminal. The
+remembered path is not the current project until the restore succeeds; after a
+successful open, Summary shows the current project. While an open is in progress,
+the landing or loaded-project header labels the requested path separately from
+the current project and shows restore or import progress, not analysis progress.
+
+If restore fails, the requested path and diagnostic stay available. **Retry
+restore** retries only that failed restore using saved local data, without a
+model request; **Open project** lets you choose another folder instead. A failed
+import does not offer Retry restore. Daemon connectivity has separate feedback:
+**Reconnect daemon** refreshes daemon status and model configuration but does
+not retry the open. If local preferences cannot be read, the landing reports a
+storage warning and Open project remains available. If saving the last project
+fails, the successfully opened project stays open, but it may not be remembered
+for the next launch; this is a preference warning, not an opening failure.
+
+**Open project** (or Cmd/Ctrl+O) opens the native directory chooser. Canceling it
+leaves the current project, opening error, draft, terminals and remembered path
+unchanged; it sends no request. Choosing a folder explicitly imports it, which
+may invoke the configured Analyze provider and retains the remote-provider
+confirmation when applicable. Unlike restore, import is not guaranteed to be
+model-free.
+
 Summary describes the project. Analysis owns one whole-project run and progress;
 Bugs, Performance and Security own separate results. The scrollable left rail shows
 icons and visible labels in the order Summary, Analysis, Bugs, Performance, Security,
