@@ -3679,6 +3679,7 @@ class DesktopVisualLayoutTest {
               "analysis-page")
           fixture.revealText("Refresh files", "analysis-page")
           fixture.revealText("cmd/server/main.go", "analysis-page")
+          fixture.render()
           val measuredTableHeight = fixture.taggedBounds("analysis-file-table").height
           assertTrue(
               measuredTableHeight > 0f, "The nested file list must receive a measured height")

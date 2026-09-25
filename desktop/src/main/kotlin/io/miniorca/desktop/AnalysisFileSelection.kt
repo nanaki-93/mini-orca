@@ -38,11 +38,17 @@ data class AnalysisSelectionRequest(
     @SerialName("excluded_paths") val excludedPaths: List<String>,
 )
 
+enum class AnalysisSelectionFailure {
+  Read,
+  Save,
+}
+
 data class AnalysisSelectionState(
     val selection: AnalysisFileSelection? = null,
     val loading: Boolean = false,
     val saving: Boolean = false,
     val error: String? = null,
+    val failure: AnalysisSelectionFailure? = null,
 )
 
 internal class DesktopAnalysisSelectionWorkflow(
@@ -64,7 +70,7 @@ internal class DesktopAnalysisSelectionWorkflow(
   }
 
   fun refresh() {
-    if (current.saving) return
+    if (current.loading || current.saving) return
     request(null)
   }
 
@@ -81,7 +87,9 @@ internal class DesktopAnalysisSelectionWorkflow(
     val identity = WorkflowProjectIdentity(project.projectId, project.projectRevision)
     val token = ++generation
     job?.cancel()
-    update(current.copy(loading = request == null, saving = request != null, error = null))
+    update(
+        current.copy(
+            loading = request == null, saving = request != null, error = null, failure = null))
     if (request != null)
         dispatch(DesktopEvent.AnalysisRunUpdated(state().analysisRun.copy(admission = null)))
     job =
@@ -108,7 +116,12 @@ internal class DesktopAnalysisSelectionWorkflow(
                     current.copy(
                         loading = false,
                         saving = false,
-                        error = error.message ?: "Analysis selection could not be saved or loaded"))
+                        error =
+                            error.message?.takeIf { it.isNotBlank() }
+                                ?: "Analysis selection could not be ${if (request == null) "loaded" else "saved"}",
+                        failure =
+                            if (request == null) AnalysisSelectionFailure.Read
+                            else AnalysisSelectionFailure.Save))
           }
         }
   }
