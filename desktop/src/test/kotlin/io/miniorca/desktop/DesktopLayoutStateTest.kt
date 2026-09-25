@@ -296,5 +296,117 @@ class DesktopLayoutStateTest {
     }
   }
 
+  @Test
+  fun wideBoundaryAccountsForVisiblePanesRailInsetsDividersAndTextScale() {
+    for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (left in listOf(false, true)) {
+        for (right in listOf(false, true)) {
+          val preferred =
+              DesktopLayoutState(
+                  leftToolWindowVisible = left,
+                  rightToolWindowVisible = right,
+                  explorerWidth = DesktopLayoutState.MAX_EXPLORER_WIDTH,
+                  actionWidth = DesktopLayoutState.MAX_ACTION_WIDTH)
+          val boundary =
+              TOOL_WINDOW_BAR_WIDTH * scale +
+                  2 * WORKSPACE_FRAME_INSET +
+                  MIN_EDITOR_CANVAS_WIDTH * scale +
+                  (if (left) DesktopLayoutState.MIN_EXPLORER_WIDTH * scale + RESIZE_DIVIDER_WIDTH
+                  else 0f) +
+                  (if (right) DesktopLayoutState.MIN_ACTION_WIDTH * scale + RESIZE_DIVIDER_WIDTH
+                  else 0f)
+          val below = resolveDesktopLayout(preferred, Math.nextDown(boundary), scale)
+          val at = resolveDesktopLayout(preferred, boundary, scale)
+          val above = resolveDesktopLayout(preferred, Math.nextUp(boundary), scale)
+
+          assertEquals(
+              DesktopLayoutMode.Compact, below.mode, "below $boundary at $scale, $left/$right")
+          assertEquals(DesktopLayoutMode.Wide, at.mode, "at $boundary at $scale, $left/$right")
+          assertEquals(
+              DesktopLayoutMode.Wide, above.mode, "above $boundary at $scale, $left/$right")
+          assertTrue(at.canvasWidth >= MIN_EDITOR_CANVAS_WIDTH * scale)
+          assertEquals(
+              if (left) DesktopLayoutState.MIN_EXPLORER_WIDTH * scale else 0f, at.explorerWidth)
+          assertEquals(
+              if (right) DesktopLayoutState.MIN_ACTION_WIDTH * scale else 0f, at.actionWidth)
+          if (!left) assertEquals(0f, below.explorerWidth)
+          if (!right) assertEquals(0f, below.actionWidth)
+          assertEquals(
+              boundary - TOOL_WINDOW_BAR_WIDTH * scale - 2 * WORKSPACE_FRAME_INSET,
+              below.canvasWidth,
+              0.001f)
+        }
+      }
+    }
+  }
+
+  @Test
+  fun wideLayoutPreservesFittingPreferencesAndConstrainedLayoutDoesNotPersistThem() {
+    withPreferences { preferences ->
+      val store = DesktopLayoutStore(preferences)
+      val preferred =
+          DesktopLayoutState(
+              explorerWidth = DesktopLayoutState.MAX_EXPLORER_WIDTH,
+              actionWidth = DesktopLayoutState.MAX_ACTION_WIDTH)
+      store.save(preferred)
+      val restored = store.load()
+      val narrow = resolveDesktopLayout(restored, 900f, 1f)
+      val constrained = resolveDesktopLayout(restored, 950f, 1f)
+      val large = resolveDesktopLayout(restored, 1800f, 1f)
+
+      assertEquals(DesktopLayoutMode.Compact, narrow.mode)
+      assertEquals(DesktopLayoutMode.Wide, constrained.mode)
+      assertTrue(constrained.canvasWidth >= MIN_EDITOR_CANVAS_WIDTH)
+      assertTrue(constrained.explorerWidth < restored.explorerWidth)
+      assertTrue(constrained.actionWidth < restored.actionWidth)
+      assertEquals(DesktopLayoutMode.Wide, large.mode)
+      assertEquals(restored.explorerWidth, large.explorerWidth)
+      assertEquals(restored.actionWidth, large.actionWidth)
+      assertEquals(restored, store.load())
+      assertEquals(large, resolveDesktopLayout(restored, 1800f, 1f))
+    }
+
+    for (scale in listOf(1f, 1.25f, 1.5f)) {
+      val preferred =
+          DesktopLayoutState(
+              explorerWidth = DesktopLayoutState.MIN_EXPLORER_WIDTH,
+              actionWidth = DesktopLayoutState.MIN_ACTION_WIDTH)
+      val wide = resolveDesktopLayout(preferred, 1800f, scale)
+      assertEquals(DesktopLayoutMode.Wide, wide.mode)
+      assertEquals(DesktopLayoutState.MIN_EXPLORER_WIDTH * scale, wide.explorerWidth)
+      assertEquals(DesktopLayoutState.MIN_ACTION_WIDTH * scale, wide.actionWidth)
+      assertEquals(DesktopLayoutState.MIN_EXPLORER_WIDTH, preferred.explorerWidth)
+      assertEquals(DesktopLayoutState.MIN_ACTION_WIDTH, preferred.actionWidth)
+
+      val maximum =
+          DesktopLayoutState(
+              explorerWidth = DesktopLayoutState.MAX_EXPLORER_WIDTH,
+              actionWidth = DesktopLayoutState.MAX_ACTION_WIDTH)
+      val fitting = resolveDesktopLayout(maximum, 1800f, scale)
+      assertEquals(DesktopLayoutMode.Wide, fitting.mode)
+      assertEquals(maximum.explorerWidth, fitting.explorerWidth)
+      assertEquals(maximum.actionWidth, fitting.actionWidth)
+      assertTrue(fitting.canvasWidth >= MIN_EDITOR_CANVAS_WIDTH * scale)
+    }
+  }
+
+  @Test
+  fun invalidAndInsufficientWorkspaceInputsHaveFiniteNonnegativeAllocations() {
+    val preferred =
+        DesktopLayoutState(explorerWidth = Float.NaN, actionWidth = Float.POSITIVE_INFINITY)
+    for (width in
+        listOf(Float.NaN, Float.NEGATIVE_INFINITY, Float.POSITIVE_INFINITY, -20f, 0f, 1f, 120f)) {
+      for (scale in listOf(Float.NaN, Float.NEGATIVE_INFINITY, 0f, -1f, 1.5f, Float.MAX_VALUE)) {
+        val resolved = resolveDesktopLayout(preferred, width, scale)
+        assertEquals(DesktopLayoutMode.Compact, resolved.mode)
+        listOf(resolved.explorerWidth, resolved.canvasWidth, resolved.actionWidth).forEach {
+          assertTrue(it.isFinite() && it >= 0f && it <= resolved.canvasWidth)
+        }
+      }
+    }
+    assertTrue(preferred.explorerWidth.isNaN())
+    assertEquals(Float.POSITIVE_INFINITY, preferred.actionWidth)
+  }
+
   private fun withPreferences(test: (InMemoryPreferences) -> Unit) = test(InMemoryPreferences())
 }

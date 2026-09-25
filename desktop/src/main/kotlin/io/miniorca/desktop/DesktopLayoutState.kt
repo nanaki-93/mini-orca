@@ -149,6 +149,74 @@ internal const val TOOL_WINDOW_BAR_WIDTH = 96f
 internal const val WORKSPACE_FRAME_INSET = 8f
 internal const val RESIZE_DIVIDER_WIDTH = 8f
 
+// Wide Editor reserves this much readable canvas at 100% text. Pane minima are the existing
+// preference minima, scaled with text; the rail scales as ToolWindowBar does. WorkspaceFrame also
+// consumes an end inset and a rail-to-pane gap (both WORKSPACE_FRAME_INSET), plus one divider per
+// visible side pane. The input is WorkspaceFrame's allocation, not the outer window width.
+internal const val MIN_EDITOR_CANVAS_WIDTH = 360f
+
+internal enum class DesktopLayoutMode {
+  Wide,
+  Compact,
+}
+
+/** Effective Editor geometry; never saved in DesktopLayoutStore. Hidden panes have zero width. */
+internal data class ResolvedDesktopLayout(
+    val mode: DesktopLayoutMode,
+    val explorerWidth: Float,
+    val canvasWidth: Float,
+    val actionWidth: Float,
+)
+
+/** Resolve the Editor against its allocated workspace width, leaving preferred sizes unchanged. */
+internal fun resolveDesktopLayout(
+    preferred: DesktopLayoutState,
+    workspaceWidthDp: Float,
+    fontScale: Float,
+): ResolvedDesktopLayout {
+  val width = workspaceWidthDp.takeIf { it.isFinite() && it > 0f }?.toDouble() ?: 0.0
+  val scale = fontScale.takeIf { it.isFinite() && it > 0f }?.coerceAtLeast(1f)?.toDouble() ?: 1.0
+  val railAndInsets = TOOL_WINDOW_BAR_WIDTH * scale + 2 * WORKSPACE_FRAME_INSET
+  val paneWidth = (width - railAndInsets).coerceAtLeast(0.0)
+  val leftVisible = preferred.leftToolWindowVisible
+  val rightVisible = preferred.rightToolWindowVisible
+  val leftMin = if (leftVisible) DesktopLayoutState.MIN_EXPLORER_WIDTH * scale else 0.0
+  val rightMin = if (rightVisible) DesktopLayoutState.MIN_ACTION_WIDTH * scale else 0.0
+  val dividers = (listOf(leftVisible, rightVisible).count { it } * RESIZE_DIVIDER_WIDTH).toDouble()
+  val canvasMin = MIN_EDITOR_CANVAS_WIDTH * scale
+  val leftDesired =
+      if (leftVisible)
+          maxOf(leftMin, DesktopLayoutState.clampExplorerWidth(preferred.explorerWidth).toDouble())
+      else 0.0
+  val rightDesired =
+      if (rightVisible)
+          maxOf(rightMin, DesktopLayoutState.clampActionWidth(preferred.actionWidth).toDouble())
+      else 0.0
+
+  // At the breakpoint all visible minima and dividers fit. Below it, panes stack without
+  // consuming canvas width; even invalid or tiny allocations yield finite, nonnegative sizes.
+  if (paneWidth < canvasMin + leftMin + rightMin + dividers) {
+    return ResolvedDesktopLayout(
+        DesktopLayoutMode.Compact,
+        minOf(leftDesired, paneWidth).toFloat(),
+        paneWidth.toFloat(),
+        minOf(rightDesired, paneWidth).toFloat())
+  }
+
+  val spare = (paneWidth - canvasMin - leftMin - rightMin - dividers).coerceAtLeast(0.0)
+  val leftExtra = leftDesired - leftMin
+  val rightExtra = rightDesired - rightMin
+  val desiredExtra = leftExtra + rightExtra
+  val fraction = if (desiredExtra > 0.0) minOf(1.0, spare / desiredExtra) else 1.0
+  val explorer = leftMin + leftExtra * fraction
+  val action = rightMin + rightExtra * fraction
+  return ResolvedDesktopLayout(
+      DesktopLayoutMode.Wide,
+      explorer.toFloat(),
+      (paneWidth - dividers - explorer - action).toFloat(),
+      action.toFloat())
+}
+
 /** Persists visual preferences only; it never stores workflow or authorization state. */
 internal class DesktopLayoutStore(
     private val preferences: Preferences =
