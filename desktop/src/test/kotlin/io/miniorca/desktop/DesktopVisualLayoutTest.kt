@@ -3561,7 +3561,43 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun summaryLowerCompositionKeepsFullSizeColumnsAtCompactLargeText() {
+  fun summaryLowerCompositionMeasuresRightOnlyContentWithoutAnOrphanGap() {
+    val overview =
+        visualFixtureOverview.copy(
+            analysis =
+                visualFixtureOverview.analysis.copy(
+                    architecture = "",
+                    components = emptyList(),
+                    engineeringInsight =
+                        EngineeringInsight(
+                            mechanism = "Validate requests before persistence.",
+                            whyItMattersHere = "Invalid input stays outside the repository.")))
+    for ((width, height, scale) in listOf(Triple(1440, 900, 1f), Triple(800, 650, 1.5f))) {
+      ComposeVisualFixture(width, height, scale) {
+            ProjectSummaryPane(overview, visualFixtureProject, {})
+          }
+          .use { fixture ->
+            fixture.render("summary-right-only-$width-$scale")
+            fixture.revealText("Flows")
+            fixture.scrollBy(100_000f)
+            fixture.render()
+            assertEquals(0, fixture.tagCount("summary-lower-left"))
+            val item = fixture.taggedBounds("summary-lower-composition")
+            val right = fixture.taggedBounds("summary-lower-right")
+            assertEquals(item.top, right.top, 1f, "Right-only content starts at the item top")
+            assertEquals(item.bottom, right.bottom, 1f, "Item must measure the whole right column")
+            assertEquals(item.width, right.width, 1f)
+            assertTrue(right.bottom <= height, "Flows must be reachable at $width x $height")
+            assertTrue(
+                fixture.taggedBounds("summary-insight").bottom <=
+                    fixture.taggedBounds("summary-flows").top)
+            assertEquals(1, fixture.scrollableContentCount())
+          }
+    }
+  }
+
+  @Test
+  fun summaryLowerCompositionStacksFullWidthAtCompactLargeText() {
     val overview =
         visualFixtureOverview.copy(
             analysis =
@@ -3570,7 +3606,7 @@ class DesktopVisualLayoutTest {
                         EngineeringInsight(
                             mechanism = "Validate requests before persistence.",
                             whyItMattersHere = "Invalid input stays outside the repository.")))
-    ComposeVisualFixture(800, 1_100, 1.5f) {
+    ComposeVisualFixture(800, 2_400, 1.5f) {
           ProjectSummaryPane(overview, visualFixtureProject, {})
         }
         .use { fixture ->
@@ -3579,16 +3615,143 @@ class DesktopVisualLayoutTest {
           val architecture = fixture.taggedBounds("summary-architecture")
           val modules = fixture.taggedBounds("summary-modules")
           assertTrue(architecture.bottom <= modules.top, "Modules must follow Architecture")
-          fixture.scrollBy(100_000f)
-          fixture.render()
           val right = fixture.taggedBounds("summary-lower-right")
           val insight = fixture.taggedBounds("summary-insight")
           val flows = fixture.taggedBounds("summary-flows")
-          assertTrue(left.right <= right.left, "Full-size Summary columns must remain side by side")
+          assertEquals(left.left, right.left, 1f)
+          assertEquals(left.width, right.width, 1f)
+          assertTrue(
+              left.bottom <= right.top, "Narratives must stack in reading order: $left / $right")
           assertTrue(insight.bottom <= flows.top, "Flows must follow Engineering insight")
           assertEquals(
               1, fixture.scrollableContentCount(), "Summary must keep one page scroll owner")
         }
+  }
+
+  @Test
+  fun summaryNarrativeDiagramControlsSurviveWideStackedWideResize() {
+    val source = visualFixtureOverview.analysis.architecture
+    val flow = visualFixtureOverview.analysis.flows.first()
+    var navigations = 0
+    ComposeVisualFixture(1440, 2600) {
+          ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, { navigations++ })
+        }
+        .use { fixture ->
+          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
+          fixture.clickDescription("Show Architecture diagram")
+          fixture.clickDescription("Show Flow 1 diagram")
+          fixture.awaitDescription("Architecture diagram\n$source")
+          fixture.awaitDescription("Flow 1 diagram\n$flow")
+          fixture.clickDescription("Zoom in Architecture")
+          fixture.clickDescription("Mermaid source for Architecture")
+          fixture.render("summary-diagram-state-wide")
+          assertTrue(fixture.hasText("125%"))
+          assertTrue(fixture.hasText("Hide Mermaid"))
+
+          for (width in listOf(800, 1440)) {
+            fixture.resize(width, 2600)
+            fixture.render("summary-diagram-state-$width")
+            val left = fixture.taggedBounds("summary-lower-left")
+            val right = fixture.taggedBounds("summary-lower-right")
+            if (width == 800) assertTrue(left.bottom <= right.top)
+            else assertTrue(left.right <= right.left)
+            fixture.awaitDescription("Hide Architecture diagram", "Expanded")
+            fixture.awaitDescription("Hide Flow 1 diagram", "Expanded")
+            assertTrue(fixture.hasDescription("Architecture diagram\n$source"))
+            assertTrue(fixture.hasDescription("Flow 1 diagram\n$flow"))
+            assertTrue(fixture.hasText("125%"), "Zoom must survive reflow at $width")
+            assertTrue(fixture.hasText("Hide Mermaid"), "Source disclosure must survive at $width")
+          }
+          assertEquals(0, navigations, "Resizing and disclosures must not navigate")
+        }
+  }
+
+  @Test
+  fun categoryAndNarrativeGridsFollowLocalWidthWithoutDispatchingOnReflow() {
+    val overview = visualFixtureOverview
+    val summaryRun = analysisRunFixture().copy(status = "failed")
+    for (scale in listOf(1f, 1.25f, 1.5f)) {
+      val summaryBoundary = (200.dp * 3 * scale + 24.dp).value.toInt()
+      val analysisBoundary = (200.dp * 3 * scale + 16.dp).value.toInt()
+      for (delta in listOf(-1, 0, 1)) {
+        // Summary's page has 24dp gutters on both sides; Analysis cards are tested locally.
+        val width = summaryBoundary + 48 + delta
+        val navigations = mutableListOf<Workspace>()
+        ComposeVisualFixture(width, 2400, scale) {
+              ProjectSummaryPane(overview, visualFixtureProject, navigations::add, run = summaryRun)
+            }
+            .use { fixture ->
+              fixture.render("summary-category-local-$width-$scale")
+              val cards =
+                  AnalysisResultType.entries.map {
+                    fixture.taggedBounds("summary-metric-${it.workspace.name}")
+                  }
+              if (delta < 0) {
+                assertTrue(cards[0].bottom <= cards[1].top)
+                assertTrue(cards[1].bottom <= cards[2].top)
+              } else {
+                assertEquals(cards[0].top, cards[1].top, 1f)
+                assertEquals(cards[1].top, cards[2].top, 1f)
+              }
+              cards.forEach {
+                assertTrue(it.width >= 200 * scale - 2, "Readable category width: $it")
+              }
+              assertEquals(0, navigations.size)
+              AnalysisResultType.entries.forEach { type ->
+                fixture.clickVisibleDescription("View ${type.workspace.name} results")
+              }
+              assertEquals(AnalysisResultType.entries.map { it.workspace }, navigations)
+            }
+        val local = analysisBoundary + delta
+        val analysisNavigation = mutableListOf<Workspace>()
+        ComposeVisualFixture(local, 1000, scale) {
+              AnalysisCategoryPanels(
+                  AnalysisWorkspacePaneState(visualFixtureProject, ProjectAnalysisRunState()),
+                  analysisNavigation::add)
+            }
+            .use { fixture ->
+              fixture.render("analysis-category-local-$local-$scale")
+              val cards =
+                  AnalysisResultType.entries.map {
+                    fixture.taggedBounds("analysis-category-${it.category}")
+                  }
+              if (delta < 0) {
+                assertTrue(cards[0].bottom <= cards[1].top)
+                assertTrue(cards[1].bottom <= cards[2].top)
+              } else {
+                assertEquals(cards[0].top, cards[1].top, 1f)
+                assertEquals(cards[1].top, cards[2].top, 1f)
+              }
+              assertEquals(3, fixture.textCount("—"), "Unknown counts must not become zero")
+              assertEquals(0, analysisNavigation.size)
+              AnalysisResultType.entries.forEach { type ->
+                fixture.clickVisibleDescription("View ${type.workspace.name} results")
+              }
+              assertEquals(AnalysisResultType.entries.map { it.workspace }, analysisNavigation)
+            }
+      }
+      val lowerBoundary = (16.dp + 740.dp * scale).value.toInt()
+      for (delta in listOf(-1, 0, 1)) {
+        ComposeVisualFixture(lowerBoundary + 48 + delta, 2400, scale) {
+              ProjectSummaryPane(overview, visualFixtureProject, {})
+            }
+            .use { fixture ->
+              fixture.render("summary-narratives-local-${lowerBoundary + delta}-$scale")
+              val left = fixture.taggedBounds("summary-lower-left")
+              val right = fixture.taggedBounds("summary-lower-right")
+              if (delta < 0) {
+                assertTrue(left.bottom <= right.top)
+                assertEquals(left.width, right.width, 1f)
+              } else {
+                assertTrue(left.right <= right.left)
+              }
+              listOf("Architecture", "Packages / modules", "Flows").forEach {
+                fixture.revealText(it)
+              }
+            }
+      }
+    }
   }
 
   @Test
@@ -3753,7 +3916,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun summaryCategoriesKeepFullSizeRowAtCompactTextScale() {
+  fun summaryCategoriesStackAtCompactTextScale() {
     ComposeVisualFixture(800, 1_100, 1.5f) {
           ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
         }
@@ -3765,10 +3928,10 @@ class DesktopVisualLayoutTest {
               }
           cards.forEach { card ->
             assertTrue(card.height >= 132f, "Category cards must retain their minimum height")
-            assertTrue(card.width < 300f, "Category cards must retain equal full-size columns")
+            assertTrue(card.width >= 200f * 1.5f, "Stacked categories must remain readable")
           }
           cards.zipWithNext().forEach { (first, next) ->
-            assertTrue(first.right <= next.left, "Category cards must remain in one row")
+            assertTrue(first.bottom <= next.top, "Category cards must stack without overlap")
           }
           val provenance = fixture.taggedBounds("summary-findings-provenance")
           assertTrue(
@@ -3947,6 +4110,7 @@ class DesktopVisualLayoutTest {
           }
           .use { fixture ->
             fixture.render("summary-all-metrics-$width-$scale")
+            fixture.assertSummaryStatusPlacement("Paused")
             listOf(
                     "1 up to date",
                     "1 outdated",
@@ -3967,7 +4131,6 @@ class DesktopVisualLayoutTest {
             fixture.assertTextFits("Partial")
             fixture.revealSummaryStatus("Paused")
             fixture.assertTextFits("Paused")
-            fixture.assertSummaryStatusPlacement("Paused")
           }
     }
   }

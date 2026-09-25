@@ -2,12 +2,29 @@ package io.miniorca.desktop
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ProjectSummaryPaneTest {
+  @Test
+  fun localGridBreakpointsRespectTextScaleAndExactBoundary() {
+    listOf(1f, 1.25f, 1.5f).forEach { scale ->
+      listOf(8.dp, 12.dp).forEach { gap ->
+        val boundary = 200.dp * 3 * scale + gap * 2
+        assertTrue(categoryPanelsStacked(boundary - 1.dp, scale, gap))
+        assertFalse(categoryPanelsStacked(boundary, scale, gap))
+        assertFalse(categoryPanelsStacked(boundary + 1.dp, scale, gap))
+      }
+      val narrativeBoundary = 16.dp + 740.dp * scale
+      assertTrue(summaryNarrativesStacked(narrativeBoundary - 1.dp, scale))
+      assertFalse(summaryNarrativesStacked(narrativeBoundary, scale))
+      assertFalse(summaryNarrativesStacked(narrativeBoundary + 1.dp, scale))
+    }
+  }
+
   @Test
   fun deterministicFactsRemainAvailableWhenModelInterpretationIsMissing() {
     val project =
