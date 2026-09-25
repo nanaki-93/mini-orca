@@ -116,6 +116,9 @@ class DesktopWorkflowPresenter(
           api, scope, ioDispatcher, jobCoordinator, { controller.state }, ::dispatch)
 
   private var connectionJob: Job? = null
+  private var startupJob: Job? = null
+  private var started = false
+  private var explicitOpenStarted = false
   private var projectJob: Job? = null
   private var fileJob: Job? = null
   private var fileFreshnessJob: Job? = null
@@ -132,8 +135,28 @@ class DesktopWorkflowPresenter(
   val snapshot: StateFlow<DesktopWorkflowSnapshot> = mutableSnapshot.asStateFlow()
 
   fun start() {
+    if (started) return
+    started = true
     refreshConnection()
-    lastProjectStore.load()?.let { loadProject(it, restore = true) }
+    startupJob =
+        scope.launch {
+          val remembered =
+              try {
+                DesktopEvent.RememberedProjectRead(io { lastProjectStore.load() })
+              } catch (canceled: CancellationException) {
+                throw canceled
+              } catch (error: Exception) {
+                DesktopEvent.RememberedProjectRead(
+                    null,
+                    "Could not read the last project from local preferences: " +
+                        (error.message?.takeIf(String::isNotBlank) ?: "storage unavailable"))
+              }
+          // A chooser-based open owns the newer intent, even if this read finishes afterward.
+          if (explicitOpenStarted) return@launch
+          controller.dispatch(remembered)
+          publish()
+          remembered.path?.let { openProject(it, restore = true) }
+        }
   }
 
   fun dispatch(event: DesktopEvent) {
@@ -226,6 +249,11 @@ class DesktopWorkflowPresenter(
   }
 
   fun loadProject(path: String, restore: Boolean) {
+    explicitOpenStarted = true
+    openProject(path, restore)
+  }
+
+  private fun openProject(path: String, restore: Boolean) {
     projectJob?.cancel()
     clearSecurityReviewRemoteConfirmation()
     cancelProjectScopedWork()
@@ -1154,6 +1182,7 @@ class DesktopWorkflowPresenter(
   override fun close() {
     cancelAll()
     connectionJob?.cancel()
+    startupJob?.cancel()
     projectJob?.cancel()
     fileFreshnessJob?.cancel()
     fileJob?.cancel()

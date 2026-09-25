@@ -6,7 +6,12 @@ class LastProjectStore(
     private val preferences: Preferences =
         Preferences.userNodeForPackage(LastProjectStore::class.java),
 ) {
-  fun load(): String? = preferences.get(LAST_PROJECT_PATH, null)?.takeIf { it.isNotBlank() }
+  fun load(): String? {
+    // Preferences.get can silently return its default when a backing read fails. Sync first so
+    // storage failures remain distinguishable from an unset last-project preference.
+    preferences.sync()
+    return preferences.get(LAST_PROJECT_PATH, null)?.takeIf { it.isNotBlank() }
+  }
 
   fun save(path: String) {
     if (path.isBlank()) return
