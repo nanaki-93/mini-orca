@@ -635,7 +635,7 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
-  fun iconRailKeepsAccessibleNamesAndKeyboardReachabilityAtEverySupportedSize() {
+  fun labeledRailKeepsVisibleNamesAndKeyboardReachabilityAtEverySupportedSize() {
     listOf(
             Triple(1440, 900, 1f),
             Triple(1000, 760, 1f),
@@ -660,12 +660,13 @@ class DesktopKeyboardNavigationTest {
                 }
               }
               .use { fixture ->
-                fixture.render("navigation-icons-$width-$scale")
+                fixture.render("navigation-labels-$width-$scale")
                 assertFalse(fixture.hasText("Perf."))
-                LeftToolWindow.entries.forEach {
-                  assertFalse(fixture.hasText(leftToolWindowLabel(it)))
+                workspaceRailOrder.forEach {
+                  assertTrue(fixture.hasText(leftToolWindowLabel(it)))
                   assertTrue(fixture.hasDescription(toolWindowSemanticsLabel(it, it == active)))
                 }
+                workspaceRailOrder.forEach { fixture.assertRailLabelFits(leftToolWindowLabel(it)) }
                 listOf(
                         "Project",
                         "Results",
@@ -686,13 +687,58 @@ class DesktopKeyboardNavigationTest {
                 assertEquals(0, selections)
                 assertEquals(LeftToolWindow.Summary, active)
                 assertTrue(fixture.hasDescription("Editor tool window, not selected, focused"))
-                assertFalse(fixture.hasText("Editor"))
-                fixture.pressKey(Key.Enter)
+                assertTrue(fixture.hasText("Editor"))
+                assertTrue(fixture.pressKey(Key.Enter))
                 fixture.render()
                 assertEquals(LeftToolWindow.Editor, active)
                 assertEquals(1, selections)
                 assertTrue(fixture.hasDescription("Editor tool window, selected, focused"))
+                fixture.assertColorVisible(FocusAccent)
+                fixture.assertColorVisible(SelectionAccent)
+                assertTrue(fixture.pressKey(Key.DirectionUp))
+                fixture.render()
+                assertEquals(1, selections)
+                assertTrue(fixture.hasDescription("Security tool window, not selected, focused"))
+                assertTrue(fixture.hasDescription("Editor tool window, selected"))
+                assertTrue(fixture.pressKey(Key.Spacebar))
+                fixture.render()
+                assertEquals(LeftToolWindow.Security, active)
+                assertEquals(2, selections)
+                assertTrue(fixture.hasDescription("Security tool window, selected, focused"))
               }
+        }
+  }
+
+  @Test
+  fun railScrollRevealsFocusedDestinationWithoutSelectingOrStartingWork() {
+    var active by mutableStateOf(LeftToolWindow.Summary)
+    val selected = mutableListOf<LeftToolWindow>()
+    val focus = FocusRequester()
+    ComposeVisualFixture(120, 220, 1.5f) {
+          ToolWindowBar(
+              active,
+              {
+                active = it
+                selected += it
+              },
+              Modifier.focusRequester(focus))
+        }
+        .use { fixture ->
+          fixture.render()
+          focus.requestFocus()
+          fixture.render()
+          repeat(5) {
+            assertTrue(fixture.pressKey(Key.DirectionDown))
+            fixture.render()
+          }
+          assertTrue(fixture.hasDescription("Editor tool window, not selected, focused"))
+          val editor = fixture.firstVisibleTextBounds("Editor")
+          assertTrue(editor.top >= 0 && editor.bottom <= 220, "Focus must reveal the last label")
+          assertEquals(LeftToolWindow.Summary, active)
+          assertTrue(selected.isEmpty())
+          fixture.clickDescription("Editor tool window, not selected, focused")
+          fixture.render()
+          assertEquals(listOf(LeftToolWindow.Editor), selected)
         }
   }
 
@@ -716,7 +762,7 @@ class DesktopKeyboardNavigationTest {
 
   @Test
   fun activityRailCyclesTheSixRetainedWorkspaces() {
-    val entries = LeftToolWindow.entries.toList()
+    val entries = workspaceRailOrder
 
     assertEquals(
         LeftToolWindow.Analysis,
@@ -724,6 +770,12 @@ class DesktopKeyboardNavigationTest {
     assertEquals(
         LeftToolWindow.Editor,
         tabGroupInteraction(entries, LeftToolWindow.Summary, TabGroupKey.Previous)?.focused)
+    assertEquals(
+        LeftToolWindow.Problems,
+        tabGroupInteraction(entries, LeftToolWindow.Analysis, TabGroupKey.Next)?.focused)
+    assertEquals(
+        LeftToolWindow.Performance,
+        tabGroupInteraction(entries, LeftToolWindow.Problems, TabGroupKey.Next)?.focused)
     assertEquals(
         TabGroupInteraction(LeftToolWindow.Editor, LeftToolWindow.Editor),
         tabGroupInteraction(entries, LeftToolWindow.Editor, TabGroupKey.Activate),

@@ -1731,7 +1731,7 @@ class DesktopVisualLayoutTest {
             assertEquals(330f, fixture.taggedBounds("editor-files-dock").width, 1f)
             assertEquals(410f, fixture.taggedBounds("editor-context-dock").width, 1f)
             assertTrue(fixture.hasDescription("Performance tool window, not selected"))
-            assertFalse(fixture.hasText("Performance"))
+            fixture.assertRailLabelFits("Performance")
             fixture.assertTextFits("user.go")
             fixture.assertTextFits("Files")
             if (width >= 999) fixture.assertTextFits("Context")
@@ -1786,19 +1786,19 @@ class DesktopVisualLayoutTest {
   fun keyboardEventsNavigateAndActivateTheProductionRailAndCommandPalette() {
     var activeToolWindow by mutableStateOf(LeftToolWindow.Summary)
     val railFocus = FocusRequester()
-    ComposeVisualFixture(48, 650, 1.3f) {
+    ComposeVisualFixture(120, 650, 1.3f) {
           ToolWindowBar(
               activeToolWindow, { activeToolWindow = it }, Modifier.focusRequester(railFocus))
         }
         .use { fixture ->
-          fixture.render("rail-keyboard-initial-48-1.3")
+          fixture.render("rail-keyboard-initial-labeled-1.3")
           railFocus.requestFocus()
           fixture.render()
           assertTrue(fixture.pressKey(Key.DirectionDown))
-          fixture.render("rail-keyboard-arrow-48-1.3")
+          fixture.render("rail-keyboard-arrow-labeled-1.3")
           assertTrue(fixture.hasDescription("Analysis tool window, not selected, focused"))
           assertTrue(fixture.pressKey(Key.Enter))
-          fixture.render("rail-keyboard-activated-48-1.3")
+          fixture.render("rail-keyboard-activated-labeled-1.3")
           kotlin.test.assertEquals(LeftToolWindow.Analysis, activeToolWindow)
           assertTrue(fixture.hasDescription("Analysis tool window, selected, focused"))
         }
@@ -3191,8 +3191,7 @@ class DesktopVisualLayoutTest {
               assertFalse(fixture.hasEditableText())
               if (width == 1600 && scale == 1f) {
                 fixture.assertReferenceSummaryGeometry()
-                fixture.assertTextBefore("Bugs", "Performance")
-                fixture.assertTextBefore("Performance", "Security")
+                fixture.assertRailLabelsOrdered()
               }
             }
       }
@@ -4047,7 +4046,7 @@ class DesktopVisualLayoutTest {
 internal class ComposeVisualFixture(
     private var width: Int,
     private var height: Int,
-    fontScale: Float = 1f,
+    private val fontScale: Float = 1f,
     densityScale: Float = 1f,
     content: @Composable () -> Unit,
 ) : AutoCloseable {
@@ -4963,6 +4962,43 @@ internal class ComposeVisualFixture(
     }
   }
 
+  fun assertRailLabelFits(label: String) {
+    val entry =
+        nodes()
+            .single {
+              it.config.getOrNull(SemanticsProperties.ContentDescription)?.any { description ->
+                description.startsWith("$label tool window,")
+              } == true
+            }
+            .boundsInRoot
+    val text =
+        textNodes(label).single { node ->
+          generateSequence(node) { it.parent }.any { it.boundsInRoot == entry }
+        }
+    assertTextFits(label)
+    val layouts = mutableListOf<TextLayoutResult>()
+    text.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
+    val layout = layouts.single()
+    val glyphs = label.indices.map(layout::getBoundingBox)
+    val left = text.boundsInRoot.left + glyphs.minOf { it.left }
+    val right = text.boundsInRoot.left + glyphs.maxOf { it.right }
+    assertTrue(
+        left >= entry.left - 1f &&
+            right <= entry.right + 1f &&
+            glyphs.maxOf { it.right } <= layout.size.width + 1f &&
+            layout.multiParagraph.intrinsics.maxIntrinsicWidth <= layout.size.width + 1f,
+        "$label glyphs ($left..$right) must fit in rail entry $entry (text width ${layout.size.width})")
+  }
+
+  fun assertRailLabelsOrdered() {
+    val labels = listOf("Summary", "Analysis", "Bugs", "Performance", "Security", "Editor")
+    val positions =
+        labels.map { label -> textNodes(label).minBy { it.boundsInRoot.left }.boundsInRoot }
+    positions.zipWithNext().forEach { (above, below) ->
+      assertTrue(above.bottom < below.top, "Rail destinations must follow their display order")
+    }
+  }
+
   fun assertWorkspaceFrameGeometry(docked: Boolean) {
     fun bounds(label: String): Rect {
       val bounds =
@@ -4986,7 +5022,11 @@ internal class ComposeVisualFixture(
     val panes =
         if (docked) listOf(bounds("Files tool window"), editor, bounds("Tool windows tool window"))
         else listOf(editor)
-    assertEquals(56f, panes.first().left, 1f, "The rail and outer inset must stay visible")
+    assertEquals(
+        TOOL_WINDOW_BAR_WIDTH * maxOf(1f, fontScale) + WORKSPACE_FRAME_INSET,
+        panes.first().left,
+        1f,
+        "The rail and outer inset must stay visible")
     assertEquals(width - 8f, panes.last().right, 1f, "The trailing frame must stay visible")
     panes.forEach { pane ->
       assertEquals(editor.top, pane.top, 1f)
@@ -5010,10 +5050,15 @@ internal class ComposeVisualFixture(
           EditorCanvas.toArgb(),
           rendered.getRGB(pane.center.x.toInt(), (pane.top - 2).toInt()),
           "Filled children must not escape the pane into the outer inset")
-      assertEquals(
-          paneFill.toArgb(),
-          rendered.getRGB(pane.center.x.toInt(), (pane.top + 2).toInt()),
-          "The top edge must show the actual filled pane")
+      // Focus indicators and header controls may cross the pane midpoint after rail resizing.
+      val topFill =
+          (1..9).count { step ->
+            rendered.getRGB((pane.left + pane.width * step / 10).toInt(), (pane.top + 2).toInt()) ==
+                paneFill.toArgb()
+          }
+      assertTrue(
+          topFill >= 2,
+          "The top edge must show the actual filled pane at $width x $height / $fontScale: $pane ($topFill of 9 samples)")
     }
   }
 

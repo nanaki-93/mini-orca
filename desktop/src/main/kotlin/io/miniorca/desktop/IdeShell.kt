@@ -93,9 +93,10 @@ internal fun ToolWindowBar(
 ) {
   var focusedToolWindow by remember(activeToolWindow) { mutableStateOf(activeToolWindow) }
   var tabGroupHasFocus by remember { mutableStateOf(false) }
+  val railWidth = (TOOL_WINDOW_BAR_WIDTH * maxOf(1f, LocalDensity.current.fontScale)).dp
   Column(
       modifier
-          .width(TOOL_WINDOW_BAR_WIDTH.dp)
+          .width(railWidth)
           .fillMaxHeight()
           .background(ActivityRail)
           .padding(vertical = 8.dp)
@@ -105,8 +106,7 @@ internal fun ToolWindowBar(
           .onPreviewKeyEvent { event ->
             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
             val interaction =
-                tabGroupInteraction(
-                    LeftToolWindow.entries.toList(), focusedToolWindow, tabGroupKey(event.key))
+                tabGroupInteraction(workspaceRailOrder, focusedToolWindow, tabGroupKey(event.key))
                     ?: return@onPreviewKeyEvent false
             focusedToolWindow = interaction.focused
             interaction.activate?.let(onSelect)
@@ -114,7 +114,7 @@ internal fun ToolWindowBar(
           },
       horizontalAlignment = Alignment.CenterHorizontally,
   ) {
-    LeftToolWindow.entries.forEach { toolWindow ->
+    workspaceRailOrder.forEach { toolWindow ->
       WorkspaceNavigationEntry(
           toolWindow,
           activeToolWindow == toolWindow,
@@ -140,8 +140,7 @@ private fun WorkspaceNavigationEntry(
         onClick = onSelect,
         modifier =
             Modifier.fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 2.dp)
-                .height(40.dp)
+                .padding(horizontal = 2.dp, vertical = 2.dp)
                 .bringIntoViewRequester(reveal)
                 .drawWithContent {
                   drawContent()
@@ -157,15 +156,19 @@ private fun WorkspaceNavigationEntry(
                   contentDescription = toolWindowSemanticsLabel(toolWindow, selected, focused)
                   this.selected = selected
                 },
-        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp),
         role = Role.Tab,
         selected = selected,
         focusHighlight = focused) {
-          DesktopLineIcon(
-              leftToolWindowIcon(toolWindow),
-              label,
-              iconSize = 20.dp,
-              tint = if (selected) MiniOrcaPalette.identityAccent else SecondaryText)
+          Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            DesktopLineIcon(
+                leftToolWindowIcon(toolWindow),
+                label,
+                iconSize = 20.dp,
+                tint = if (selected) MiniOrcaPalette.identityAccent else SecondaryText)
+            Spacer(Modifier.height(4.dp))
+            Text(label, style = IdeTypography.action, maxLines = 1, softWrap = false)
+          }
         }
   }
 }

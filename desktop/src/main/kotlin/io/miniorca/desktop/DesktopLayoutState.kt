@@ -11,6 +11,16 @@ internal enum class LeftToolWindow {
   Editor,
 }
 
+// Presentation order is independent of the persisted LeftToolWindow enum names and shortcuts.
+internal val workspaceRailOrder =
+    listOf(
+        LeftToolWindow.Summary,
+        LeftToolWindow.Analysis,
+        LeftToolWindow.Problems,
+        LeftToolWindow.Performance,
+        LeftToolWindow.Security,
+        LeftToolWindow.Editor)
+
 internal enum class RightToolWindow {
   Context,
   Assistant,
@@ -128,7 +138,8 @@ internal data class DesktopLayoutState(
   }
 }
 
-internal const val TOOL_WINDOW_BAR_WIDTH = 48f
+// Native control padding leaves too little room for Performance in the 78dp mock rail.
+internal const val TOOL_WINDOW_BAR_WIDTH = 96f
 internal const val WORKSPACE_FRAME_INSET = 8f
 internal const val RESIZE_DIVIDER_WIDTH = 8f
 
