@@ -556,7 +556,7 @@ class DesktopWorkflowPresenter(
   fun confirmAnalysisSecurity(confirmed: Boolean) = analysisWorkflow.confirmSecurity(confirmed)
 
   fun loadAnalysisResults(category: String, path: String = "") =
-      analysisWorkflow.loadResults(category, path)
+      analysisWorkflow.retryResults(category, path)
 
   fun explainSelectedDeclaration() {
     val state = snapshot.value.state

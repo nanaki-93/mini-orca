@@ -310,6 +310,12 @@ internal class DesktopAnalysisWorkflow(
     return true
   }
 
+  fun retryResults(category: String, path: String = "") {
+    require(category in setOf("bugs", "performance", "security"))
+    if (current.sections[AnalysisResultKey(category, path)]?.loading == true) return
+    loadResults(category, path)
+  }
+
   fun loadResults(category: String, path: String = "") {
     require(category in setOf("bugs", "performance", "security"))
     val project = project() ?: return

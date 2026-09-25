@@ -41,6 +41,7 @@ internal fun PerformanceWorkspacePane(
       browser = state.browser,
       facetLabel = "Impact",
       openAnalysis = actions.openAnalysis,
+      retryResults = actions.retryResults,
       tools = {
         IdeDisclosureHeader(
             "Benchmark evidence",
@@ -389,6 +390,7 @@ internal data class PerformanceWorkspaceActions(
     val loadBenchmarks: () -> Unit = {},
     val selectBenchmark: (GoBenchmarkChoice) -> Unit = {},
     val runBenchmark: () -> Unit = {},
+    val retryResults: (() -> Unit)? = null,
 )
 
 internal data class GoBenchmarkComparisonIdentity(

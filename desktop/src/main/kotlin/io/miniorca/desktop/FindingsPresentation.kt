@@ -465,6 +465,7 @@ internal fun ResultReadFeedback(
     page: AnalysisResultPageState,
     hasRetainedRows: Boolean,
     modifier: Modifier = Modifier,
+    retryResults: (() -> Unit)? = null,
 ) {
   if (!page.section.loading && page.section.error == null) return
   Column(
@@ -496,6 +497,19 @@ internal fun ResultReadFeedback(
                     "Previously loaded results remain available below.",
                     color = SecondaryText,
                     style = IdeTypography.workspaceMetadata)
+            if (retryResults != null &&
+                !page.section.loading &&
+                page.project != null &&
+                page.run?.identity?.projectId == page.project.projectId &&
+                !page.stale) {
+              Text(
+                  "Reloads saved results for ${page.type.workspace.name}; does not start analysis.",
+                  color = SecondaryText,
+                  style = IdeTypography.workspaceMetadata)
+              MiniOrcaButton(onClick = retryResults, tone = ActionTone.Neutral) {
+                Text("Retry loading results")
+              }
+            }
           }
         }
       }

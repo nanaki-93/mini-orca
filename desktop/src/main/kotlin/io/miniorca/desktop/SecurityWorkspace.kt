@@ -23,6 +23,7 @@ internal data class SecurityWorkspaceActions(
     val prepareFix: (SecurityFinding) -> Unit,
     val openAnalysis: () -> Unit,
     val semanticActions: FindingActions,
+    val retryResults: (() -> Unit)? = null,
 )
 
 internal data class SecurityResult(
@@ -180,7 +181,8 @@ internal fun SecurityWorkspacePane(
       page = state.page,
       rows = results.map { it.row() } + semantic.map(::semanticResultRow),
       browser = state.browser,
-      openAnalysis = actions.openAnalysis) { key ->
+      openAnalysis = actions.openAnalysis,
+      retryResults = actions.retryResults) { key ->
         val result = results.firstOrNull { it.row().key == key }
         if (result != null) SecurityFindingDetails(result, state.index, actions)
         else

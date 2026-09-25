@@ -24,6 +24,7 @@ internal fun AnalysisResultsPane(
     browser: ResultBrowserState,
     facetLabel: String = "Severity",
     openAnalysis: () -> Unit,
+    retryResults: (() -> Unit)? = null,
     tools: @Composable () -> Unit = {},
     detail: @Composable (String) -> Unit,
 ) {
@@ -55,7 +56,10 @@ internal fun AnalysisResultsPane(
                 PreviousAnalysisDetails(page.unclassified)
               }
           ResultReadFeedback(
-              page, rows.isNotEmpty(), Modifier.fillMaxWidth().heightIn(max = readFeedbackLimit))
+              page,
+              rows.isNotEmpty(),
+              Modifier.fillMaxWidth().heightIn(max = readFeedbackLimit),
+              retryResults)
           if (visibleRows.isEmpty()) {
             val empty =
                 if (rows.isNotEmpty())
