@@ -10,6 +10,51 @@ import kotlinx.serialization.json.Json
 
 class DesktopStateTest {
   @Test
+  fun checkAttemptsIgnoreUnrelatedLoadingAndLateOutcomes() {
+    val draft =
+        DeclarationDraft(
+            id = "draft",
+            projectId = "project",
+            projectRevision = "rev",
+            targetPath = "main.go",
+            baseFileHash = "base",
+            revision = 1,
+            hash = "hash")
+    val report =
+        DraftCheckReport(
+            draftId = "draft",
+            draftRevision = 1,
+            draftHash = "hash",
+            targetPath = "main.go",
+            applicable = true)
+    val original =
+        DesktopState(
+            review = DraftReviewState(draft = draft, checks = report),
+            jobs = JobState(loading = true))
+    assertNull(original.review.checkAttempt)
+    assertFalse(reviewToolWindowState(original).checksRunning)
+    val running = original.reduce(DesktopEvent.ChecksStarted(1, CheckCandidate(draft)))
+    assertEquals(ValidationAttemptStatus.Running, running.review.checkAttempt?.status)
+    assertEquals(report, running.review.checks)
+    val replaced = running.reduce(DesktopEvent.ChecksStarted(2, CheckCandidate(draft)))
+    assertEquals(
+        replaced,
+        replaced.reduce(
+            DesktopEvent.ChecksStopped(1, ValidationAttemptStatus.Failed, "old failure")))
+    assertEquals(replaced, replaced.reduce(DesktopEvent.ChecksCompleted(1, report)))
+    val canceled =
+        replaced.reduce(DesktopEvent.ChecksStopped(2, ValidationAttemptStatus.Canceled, "canceled"))
+    assertEquals(ValidationAttemptStatus.Canceled, canceled.review.checkAttempt?.status)
+    assertEquals(report, canceled.review.checks)
+    assertEquals(canceled, canceled.reduce(DesktopEvent.ChecksCompleted(2, report)))
+    val edited = canceled.reduce(DesktopEvent.DraftLoaded(draft.copy(hash = "new")))
+    assertNull(edited.review.checkAttempt)
+    assertEquals(
+        edited,
+        edited.reduce(DesktopEvent.ChecksStopped(2, ValidationAttemptStatus.Failed, "late")))
+  }
+
+  @Test
   fun projectLoadClearsPriorSelectionAndDraft() {
     val project =
         ProjectAnalysis(

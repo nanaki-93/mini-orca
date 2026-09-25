@@ -22,6 +22,102 @@ import kotlinx.coroutines.launch
 class DesktopWorkflowPresenterTest {
 
   @Test
+  fun checkRerunUsesItsOwnAttemptAndNeverAppliesAnOlderPass() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var fail = false
+    val calls = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          calls += path
+          when {
+            path.contains("/drafts/draft/checks") ->
+                if (fail) TransportResponse(503, "")
+                else
+                    response(
+                        """{"target_path":"main.go","applicable":true,"draft_id":"draft","draft_revision":1,"draft_hash":"draft-hash","checks":[]}""")
+            else -> creationFileResponse(path) ?: error("Unexpected $path")
+          }
+        }
+    try {
+      loadProject(presenter)
+      presenter.selectFile("main.go")
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      presenter.runDraftChecks()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertNull(presenter.snapshot.value.state.review.checkAttempt)
+      assertTrue(presenter.snapshot.value.state.checks?.applicable == true)
+
+      fail = true
+      presenter.runDraftChecks()
+      presenter.runDraftChecks()
+      var state = presenter.snapshot.value.state
+      assertEquals(ValidationAttemptStatus.Running, state.review.checkAttempt?.status)
+      assertTrue(reviewToolWindowState(state).checksRunning)
+      assertFalse(
+          draftReviewEligibility(
+                  state.review.editor,
+                  state.review.draft,
+                  state.checks,
+                  state.selectedFile,
+                  state.project,
+                  state.review.checkAttempt)
+              .eligible)
+      presenter.applyEditableDraft()
+      assertTrue(calls.none { it.contains("/apply") })
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      state = presenter.snapshot.value.state
+      assertEquals(ValidationAttemptStatus.Failed, state.review.checkAttempt?.status)
+      assertTrue(state.review.checkAttempt?.message?.isNotBlank() == true)
+      assertTrue(state.checks?.applicable == true)
+      assertFalse(reviewToolWindowState(state).checksRunning)
+      assertFalse(
+          draftReviewEligibility(
+                  state.review.editor,
+                  state.review.draft,
+                  state.checks,
+                  state.selectedFile,
+                  state.project,
+                  state.review.checkAttempt)
+              .eligible)
+      presenter.applyEditableDraft()
+      assertTrue(calls.none { it.contains("/apply") })
+      assertEquals(2, calls.count { it.contains("/drafts/draft/checks") })
+
+      presenter.runDraftChecks()
+      presenter.cancelDraftValidation()
+      state = presenter.snapshot.value.state
+      assertEquals(ValidationAttemptStatus.Canceled, state.review.checkAttempt?.status)
+      assertTrue(state.checks?.applicable == true)
+      presenter.applyEditableDraft()
+      assertTrue(calls.none { it.contains("/apply") })
+      presenter.runDraftChecks()
+      val replacement = presenter.snapshot.value.state.review.checkAttempt!!
+      presenter.dispatch(
+          DesktopEvent.ChecksStopped(
+              replacement.requestId - 1, ValidationAttemptStatus.Canceled, "late cancellation"))
+      assertEquals(replacement, presenter.snapshot.value.state.review.checkAttempt)
+      presenter.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() int { return 1 }"))
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertNull(presenter.snapshot.value.state.review.checkAttempt)
+      assertNull(presenter.snapshot.value.state.review.checks)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun validationTransportFailureAndCancelResolveOnlyTheCurrentDraftAttempt() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()
