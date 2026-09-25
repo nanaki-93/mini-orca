@@ -631,11 +631,16 @@ internal fun SystemStateMessage(
     message: String,
     accent: Color = SecondaryText,
     modifier: Modifier = Modifier,
+    action: (@Composable () -> Unit)? = null,
 ) {
   MiniOrcaPanel(modifier = modifier, raised = true) {
     Text(title, color = PrimaryText, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(MiniOrcaSpacing.standard))
     Text(message, color = accent, style = IdeTypography.body)
+    if (action != null) {
+      Spacer(Modifier.height(MiniOrcaSpacing.roomy))
+      action()
+    }
   }
 }
 

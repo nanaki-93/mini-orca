@@ -1,15 +1,75 @@
 package io.miniorca.desktop
 
+import androidx.compose.material.Text
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class DesktopThemeTest {
+  @Test
+  fun stateMessageWithoutActionKeepsItsTitleAndExplanation() {
+    ComposeVisualFixture(320, 260, 1.5f) {
+          SystemStateMessage("No project selected", "Open a project to inspect local data.")
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("No project selected"))
+          assertTrue(fixture.hasText("Open a project to inspect local data."))
+          assertTrue(
+              fixture.firstVisibleTextBounds("No project selected").bottom <
+                  fixture.firstVisibleTextBounds("Open a project to inspect local data.").top)
+          assertFalse(fixture.hasText("Retry loading results"))
+        }
+  }
+
+  @Test
+  fun stateMessagePlacesCallerActionAfterExplanationWithoutDispatchingOnRender() {
+    val title = "Saved results unavailable"
+    val explanation =
+        "Reading saved results for this project failed. Previous findings remain available."
+    for (scale in listOf(1f, 1.25f, 1.5f)) {
+      var retries = 0
+      ComposeVisualFixture(340, 300, scale) {
+            SystemStateMessage(
+                title,
+                explanation,
+                action = {
+                  MiniOrcaButton(onClick = { retries++ }) { Text("Retry loading results") }
+                })
+          }
+          .use { fixture ->
+            fixture.render()
+            assertEquals(0, retries)
+            assertTrue(fixture.hasText(title))
+            assertTrue(fixture.hasText(explanation))
+            assertTrue(fixture.hasText("Retry loading results"))
+            assertTrue(
+                fixture.firstVisibleTextBounds(title).bottom <
+                    fixture.firstVisibleTextBounds(explanation).top)
+            assertTrue(
+                fixture.firstVisibleTextBounds(explanation).bottom <
+                    fixture.firstVisibleTextBounds("Retry loading results").top)
+            fixture.assertTextFits(title, maxLines = 3)
+            fixture.assertTextFits(explanation, maxLines = 5)
+            fixture.assertTextFits("Retry loading results")
+            val actionBounds = fixture.firstVisibleTextBounds("Retry loading results")
+            assertTrue(actionBounds.right <= 340 && actionBounds.bottom <= 300)
+            assertTrue(fixture.requestFocus("Retry loading results"))
+            fixture.render()
+            assertTrue(fixture.isFocused("Retry loading results"))
+            assertTrue(fixture.pressKey(Key.Enter))
+            assertEquals(1, retries)
+          }
+    }
+  }
+
   @Test
   fun semanticPaletteSeparatesIdentityInformationAndLabeledStatusOnResolvedSurfaces() {
     assertNotEquals(ActivityRail, ToolWindowSurface)
