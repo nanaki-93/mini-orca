@@ -334,6 +334,15 @@ class DesktopShellTest {
         TransientOpener.FooterModels,
         transientFocusOpener(TransientOpener.FooterModels, true, DesktopFocusRegion.StatusBar))
     assertEquals(
+        TransientOpener.RailModels,
+        transientFocusOpener(TransientOpener.RailModels, true, DesktopFocusRegion.LeftToolWindow))
+    assertEquals(
+        TransientOpener.Region,
+        transientFocusOpener(TransientOpener.RailModels, false, DesktopFocusRegion.Toolbar))
+    assertEquals(
+        TransientOpener.Region,
+        transientFocusOpener(TransientOpener.RailModels, true, DesktopFocusRegion.StatusBar))
+    assertEquals(
         TransientOpener.Region,
         transientFocusOpener(TransientOpener.RailCommands, false, DesktopFocusRegion.Toolbar))
     assertEquals(
