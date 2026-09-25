@@ -36,6 +36,8 @@ data class ProjectWorkspaceState(
     val overview: ProjectOverview? = null,
     val sourceChangeObserved: Boolean = false,
     val openingAttempt: ProjectOpeningAttempt? = null,
+    val rememberedPath: String? = null,
+    val preferenceReadWarning: String? = null,
 ) {
   // Read-only bridge for existing shell/header consumers until they render attempts.
   val openingError: String?
@@ -347,6 +349,8 @@ sealed interface DesktopEvent {
 
   data class ProjectOpeningCanceled(val requestId: Long) : DesktopEvent
 
+  data class RememberedProjectRead(val path: String?, val warning: String? = null) : DesktopEvent
+
   data class IndexRefreshed(val index: ProjectIndex) : DesktopEvent
 
   data class OverviewLoaded(val overview: ProjectOverview) : DesktopEvent
@@ -474,6 +478,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       DesktopEvent.Loading -> copy(jobs = jobs.copy(loading = true, error = null))
       is DesktopEvent.WorkspaceSelected -> copy(workspace = event.workspace)
       is DesktopEvent.ConnectionUpdated -> copy(connection = event.connection)
+      is DesktopEvent.RememberedProjectRead,
       is DesktopEvent.ProjectOpeningStarted,
       is DesktopEvent.ProjectOpeningCanceled,
       is DesktopEvent.ProjectLoadFailed,
@@ -768,7 +773,13 @@ private fun DesktopState.currentCheckAttempt(requestId: Long): Boolean =
 private fun DesktopState.withLoadedProject(event: DesktopEvent.ProjectLoaded): DesktopState =
     copy(
         workspace = Workspace.Summary,
-        projectState = ProjectWorkspaceState(event.project, event.index),
+        projectState =
+            projectState.copy(
+                project = event.project,
+                index = event.index,
+                overview = null,
+                sourceChangeObserved = false,
+                openingAttempt = null),
         selection = FileSelectionState(),
         findings = FindingsState(),
         analysisRun = ProjectAnalysisRunState(),
@@ -780,6 +791,11 @@ private fun DesktopState.withLoadedProject(event: DesktopEvent.ProjectLoaded): D
 
 private fun DesktopState.withProjectOpeningEvent(event: DesktopEvent): DesktopState =
     when (event) {
+      is DesktopEvent.RememberedProjectRead ->
+          copy(
+              projectState =
+                  projectState.copy(
+                      rememberedPath = event.path, preferenceReadWarning = event.warning))
       is DesktopEvent.ProjectOpeningStarted ->
           copy(projectState = projectState.copy(openingAttempt = event.attempt))
       is DesktopEvent.ProjectLoaded -> withLoadedProject(event)

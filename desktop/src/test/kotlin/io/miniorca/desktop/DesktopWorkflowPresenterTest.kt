@@ -346,6 +346,7 @@ class DesktopWorkflowPresenterTest {
 
       val state = reopened.snapshot.value.state
       assertEquals("/tmp/project", state.project?.path)
+      assertEquals("/tmp/project", state.projectState.rememberedPath)
       assertEquals("project", state.index?.projectId)
       assertEquals("Reopened project", state.status)
       assertFalse(state.loading)
@@ -385,12 +386,227 @@ class DesktopWorkflowPresenterTest {
       assertFalse(state.loading)
       assertTrue(state.error.orEmpty().contains("project directory does not exist"))
       assertEquals(state.error, state.projectState.openingError)
+      assertEquals("/tmp/missing-project", state.projectState.rememberedPath)
       presenter.dispatch(DesktopEvent.Failed("Unrelated failure"))
       assertEquals(
           state.projectState.openingError, presenter.snapshot.value.state.projectState.openingError)
       assertEquals("/tmp/missing-project", LastProjectStore(preferences).load())
       assertEquals(1, preferences.flushCount)
       assertEquals(listOf("POST" to "/api/projects/restore"), calls.filter { it.first != "GET" })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun startupReadsPreferencesOffThePresentationDispatcherAndRestoresOnlyOnce() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var reads = 0
+    val preferences =
+        ControlledProjectPreferences(
+            read = {
+              reads++
+              "/tmp/project"
+            })
+    val calls = mutableListOf<Pair<String, String>>()
+    val presenter =
+        presenter(
+            parentScope = scope,
+            ioDispatcher = io,
+            lastProjectStore = LastProjectStore(preferences)) { method, path, _ ->
+              calls += method to path
+              projectStartupResponse(method, path)
+            }
+    try {
+      presenter.start()
+      presenter.start()
+      assertEquals(0, reads)
+      main.runPending()
+      assertEquals(0, reads)
+      assertNull(presenter.snapshot.value.state.projectState.rememberedPath)
+      io.runPending()
+      assertEquals(1, reads)
+      main.runPending()
+      assertEquals("/tmp/project", presenter.snapshot.value.state.projectState.rememberedPath)
+      assertNull(presenter.snapshot.value.state.projectState.preferenceReadWarning)
+      repeat(5) {
+        io.runPending()
+        main.runPending()
+      }
+      assertEquals("/tmp/project", presenter.snapshot.value.state.project?.path)
+      assertEquals(Workspace.Summary, presenter.snapshot.value.state.workspace)
+      assertEquals(1, calls.count { it == "POST" to "/api/projects/restore" })
+      presenter.start()
+      main.runPending()
+      io.runPending()
+      assertEquals(1, reads)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun blankStartupPreferenceNeverRequestsRestore() {
+    for (value in listOf(null, "  ")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val calls = mutableListOf<Pair<String, String>>()
+      val presenter =
+          presenter(
+              parentScope = scope,
+              ioDispatcher = io,
+              lastProjectStore =
+                  LastProjectStore(ControlledProjectPreferences(read = { value }))) {
+                  method,
+                  path,
+                  _ ->
+                calls += method to path
+                projectStartupResponse(method, path)
+              }
+      try {
+        presenter.start()
+        repeat(3) {
+          main.runPending()
+          io.runPending()
+        }
+        main.runPending()
+        assertNull(presenter.snapshot.value.state.projectState.rememberedPath)
+        assertNull(presenter.snapshot.value.state.projectState.preferenceReadWarning)
+        assertNull(presenter.snapshot.value.state.project)
+        assertTrue(calls.none { it.first == "POST" })
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun preferenceReadFailureIsLocalAndDoesNotPreventExplicitOpen() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<Pair<String, String>>()
+    val presenter =
+        presenter(
+            parentScope = scope,
+            ioDispatcher = io,
+            lastProjectStore =
+                LastProjectStore(
+                    ControlledProjectPreferences({ null }, syncFailure = "storage denied"))) {
+                method,
+                path,
+                _ ->
+              calls += method to path
+              projectStartupResponse(method, path)
+            }
+    try {
+      presenter.start()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      val state = presenter.snapshot.value.state
+      assertNull(state.projectState.rememberedPath)
+      assertTrue(state.projectState.preferenceReadWarning.orEmpty().contains("storage denied"))
+      assertNull(state.error)
+      assertTrue(calls.none { it.first == "POST" })
+      presenter.loadProject("/tmp/project", restore = false)
+      repeat(6) {
+        main.runPending()
+        io.runPending()
+      }
+      assertEquals("/tmp/project", presenter.snapshot.value.state.project?.path)
+      assertEquals(Workspace.Summary, presenter.snapshot.value.state.workspace)
+      assertEquals(
+          state.projectState.preferenceReadWarning,
+          presenter.snapshot.value.state.projectState.preferenceReadWarning)
+      assertEquals(listOf("POST" to "/api/projects/import"), calls.filter { it.first == "POST" })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun delayedStartupReadCannotPublishOrRestoreOverAnExplicitOpen() {
+    for (readFailure in listOf(false, true)) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val calls = mutableListOf<Pair<String, String>>()
+      val presenter =
+          presenter(
+              parentScope = scope,
+              ioDispatcher = io,
+              lastProjectStore =
+                  LastProjectStore(
+                      ControlledProjectPreferences(
+                          { "/tmp/obsolete" },
+                          syncFailure = if (readFailure) "late storage failure" else null))) {
+                  method,
+                  path,
+                  _ ->
+                calls += method to path
+                projectStartupResponse(method, path)
+              }
+      try {
+        presenter.start()
+        main.runPending() // Queue the preference read on I/O.
+        presenter.loadProject("/tmp/project", restore = false)
+        main.runPending()
+        io.runPending() // Complete the preference read after the chooser-based open began.
+        main.runPending()
+        repeat(5) {
+          io.runPending()
+          main.runPending()
+        }
+        val state = presenter.snapshot.value.state
+        assertEquals("/tmp/project", state.project?.path)
+        assertNull(state.projectState.rememberedPath)
+        assertNull(state.projectState.preferenceReadWarning)
+        assertEquals(listOf("POST" to "/api/projects/import"), calls.filter { it.first == "POST" })
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun canceledPreferenceReadDoesNotBecomeAStorageWarningOrRestore() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<Pair<String, String>>()
+    val presenter =
+        presenter(
+            parentScope = scope,
+            ioDispatcher = io,
+            lastProjectStore =
+                LastProjectStore(
+                    ControlledProjectPreferences(
+                        { null },
+                        onSync = { throw kotlinx.coroutines.CancellationException() }))) {
+                method,
+                path,
+                _ ->
+              calls += method to path
+              projectStartupResponse(method, path)
+            }
+    try {
+      presenter.start()
+      repeat(3) {
+        main.runPending()
+        io.runPending()
+      }
+      assertNull(presenter.snapshot.value.state.projectState.preferenceReadWarning)
+      assertNull(presenter.snapshot.value.state.projectState.rememberedPath)
+      assertTrue(calls.none { it.first == "POST" })
     } finally {
       presenter.close()
       scope.cancel()
