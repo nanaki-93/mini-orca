@@ -4304,6 +4304,12 @@ internal class ComposeVisualFixture(
 
   fun isFocusedControl(label: String): Boolean = isDescriptionFocused(label) || isFocused(label)
 
+  fun isTaggedNodeFocused(tag: String): Boolean =
+      nodes()
+          .single { it.config.getOrNull(SemanticsProperties.TestTag) == tag }
+          .config
+          .getOrNull(SemanticsProperties.Focused) == true
+
   fun stateDescription(label: String): String? =
       textNodes(label)
           .asSequence()

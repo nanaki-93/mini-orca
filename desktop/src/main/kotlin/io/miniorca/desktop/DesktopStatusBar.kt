@@ -12,6 +12,8 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -69,6 +71,7 @@ internal fun PersistentStatusBar(
     presentation: DesktopStatusBarPresentation,
     onOpenDetails: () -> Unit,
     modifier: Modifier = Modifier,
+    detailsFocusRequester: FocusRequester? = null,
 ) {
   Column(modifier.fillMaxWidth().background(ActivityRail)) {
     Row(
@@ -78,6 +81,7 @@ internal fun PersistentStatusBar(
     ) {
       ChromeButton(
           onClick = onOpenDetails,
+          modifier = detailsFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier,
           contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
           accessibleName = "Configured model details",
           tooltip = null,

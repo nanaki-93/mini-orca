@@ -323,6 +323,27 @@ class DesktopShellTest {
   }
 
   @Test
+  fun transientDismissalChoosesOnlyAttachedOwnerRegions() {
+    assertEquals(
+        DesktopFocusRegion.StatusBar,
+        transientFocusRegion(DesktopFocusRegion.StatusBar, true, Workspace.Editor, false, true))
+    assertEquals(
+        DesktopFocusRegion.Editor,
+        transientFocusRegion(
+            DesktopFocusRegion.RightToolWindow, true, Workspace.Summary, true, true))
+    assertEquals(
+        DesktopFocusRegion.Editor,
+        transientFocusRegion(
+            DesktopFocusRegion.RightToolWindow, true, Workspace.Editor, false, true))
+    assertEquals(
+        DesktopFocusRegion.Toolbar,
+        transientFocusRegion(DesktopFocusRegion.StatusBar, false, Workspace.Editor, true, true))
+    assertEquals(
+        null,
+        transientFocusRegion(DesktopFocusRegion.Toolbar, false, Workspace.Summary, false, false))
+  }
+
+  @Test
   fun keyboardWorkspaceOrderUsesExplicitStableMappings() {
     assertEquals(Workspace.Analysis, nextWorkspace(Workspace.Summary))
     assertEquals(Workspace.Performance, nextWorkspace(Workspace.Analysis))

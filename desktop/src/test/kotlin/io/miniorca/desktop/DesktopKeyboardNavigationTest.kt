@@ -3,6 +3,7 @@ package io.miniorca.desktop
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -72,6 +73,239 @@ class DesktopKeyboardNavigationTest {
           assertEquals(0, confirmations)
           assertEquals(0, imports)
         }
+  }
+
+  @Test
+  fun shellRestoresStatusOpenerOnCloseAndEscapeWithoutDispatchingWork() {
+    var operations = 0
+    val project = resultProjectFixture()
+    var state by mutableStateOf(shellFocusState(project))
+    ComposeVisualFixture(1_280, 800) {
+          FocusTestShell(state, onState = { state = it }, onOperation = { operations++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          repeat(2) { escape ->
+            assertTrue(fixture.requestDescriptionFocus("Configured model details"))
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Configured model details"))
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
+            assertTrue(fixture.hasText("Provider details"))
+            assertTrue(fixture.isFocusedControl("Close"))
+            if (escape == 0) {
+              fixture.clickText("Close")
+            } else {
+              assertTrue(fixture.pressKey(Key.Escape))
+            }
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Configured model details"))
+          }
+          assertEquals(0, operations)
+        }
+  }
+
+  @Test
+  fun shellUsesLiveOwnerAfterProjectChangesAndDoesNotRefocusOldOpener() {
+    var operations = 0
+    var state by mutableStateOf(shellFocusState(resultProjectFixture()))
+    ComposeVisualFixture(1_280, 800) {
+          FocusTestShell(state, onState = { state = it }, onOperation = { operations++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("Models: unavailable")
+          fixture.render()
+          assertTrue(fixture.hasText("Provider details"))
+          state =
+              state.copy(
+                  app =
+                      state.app.copy(
+                          projectState =
+                              ProjectWorkspaceState(
+                                  resultProjectFixture().copy(projectId = "new"))))
+          fixture.render()
+          assertFalse(fixture.hasText("Provider details"))
+          assertTrue(fixture.isFocusedControl("Search files, symbols, commands"))
+          fixture.clickText("Models: unavailable")
+          fixture.render()
+          state = state.copy(app = DesktopState())
+          fixture.render()
+          assertFalse(fixture.hasText("Provider details"))
+          assertTrue(fixture.isFocusedControl("Open project"))
+          assertEquals(0, operations)
+        }
+  }
+
+  @Test
+  fun paletteClosesOnProjectSwitchAndRestoresTheNewOwnerRegion() {
+    var operations = 0
+    var state by mutableStateOf(shellFocusState(resultProjectFixture()))
+    ComposeVisualFixture(1_280, 800) {
+          FocusTestShell(state, onState = { state = it }, onOperation = { operations++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("Search files, symbols, commands")
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Filter files"))
+          state =
+              state.copy(
+                  app =
+                      state.app.copy(
+                          projectState =
+                              ProjectWorkspaceState(
+                                  resultProjectFixture().copy(projectId = "other"))))
+          fixture.render()
+          assertFalse(fixture.hasText("Filter files"))
+          assertTrue(fixture.isFocusedControl("Search files, symbols, commands"))
+          assertEquals(0, operations)
+        }
+  }
+
+  @Test
+  fun contextDismissalFallsBackToEditorWhenWorkspaceHidesItsOwner() {
+    var operations = 0
+    var state by
+        mutableStateOf(
+            shellFocusState(resultProjectFixture()).let {
+              it.copy(
+                  app = it.app.copy(workspace = Workspace.Editor),
+                  layout = it.layout.copy(lastFocusedRegion = DesktopFocusRegion.RightToolWindow),
+                  context = it.context.copy(manifest = ContextManifest()))
+            })
+    ComposeVisualFixture(1_280, 800) {
+          FocusTestShell(state, onState = { state = it }, onOperation = { operations++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          repeat(2) { escape ->
+            // Focus a live non-canvas control so fallback restoration cannot pass vacuously.
+            assertTrue(fixture.requestDescriptionFocus("Search files, symbols, commands"))
+            fixture.render()
+            assertFalse(fixture.isTaggedNodeFocused("desktop-canvas-focus"))
+            state = state.copy(context = state.context.copy(visible = true))
+            fixture.render()
+            assertTrue(fixture.hasText("Context inspector · read-only"))
+            state = state.copy(app = state.app.copy(workspace = Workspace.Summary))
+            fixture.render()
+            assertFalse(fixture.isTaggedNodeFocused("desktop-canvas-focus"))
+            if (escape == 0) fixture.clickText("Close")
+            else assertTrue(fixture.pressKey(Key.Escape))
+            fixture.render()
+            assertFalse(fixture.hasText("Context inspector · read-only"))
+            assertTrue(
+                fixture.isTaggedNodeFocused("desktop-canvas-focus"),
+                "Summary canvas must own focus after dismissal")
+            assertEquals(0, operations)
+            if (escape == 0) {
+              state = state.copy(app = state.app.copy(workspace = Workspace.Editor))
+              fixture.render()
+            }
+          }
+        }
+  }
+
+  @Test
+  fun shellPaletteCloseAndEscapeReturnToToolbarTriggerWithoutActivatingIt() {
+    var operations = 0
+    var state by mutableStateOf(shellFocusState(resultProjectFixture()))
+    ComposeVisualFixture(1_280, 800) {
+          FocusTestShell(state, onState = { state = it }, onOperation = { operations++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          repeat(2) { escape ->
+            fixture.clickText("Search files, symbols, commands")
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Filter files"))
+            if (escape == 0) fixture.clickText("Close")
+            else assertTrue(fixture.pressKey(Key.Escape))
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Search files, symbols, commands"))
+          }
+          assertEquals(0, operations)
+        }
+  }
+
+  private fun shellFocusState(project: ProjectAnalysis): DesktopShellState =
+      DesktopShellState(
+          app = DesktopState(projectState = ProjectWorkspaceState(project)),
+          layout = DesktopLayoutState(),
+          editor =
+              DesktopShellEditorState(
+                  EditorProgressUiState(EditorProgress.Inspect, ""),
+                  EditorContextualActions(false, false, false, false, false),
+                  analysisInProgress = false,
+                  generating = false),
+          context =
+              DesktopShellContextState(
+                  false, null, ScopedModel(), false, ScopedModel(), false, false),
+          palette = DesktopShellPaletteState(PaletteMode.Files, "", false),
+          statusProviders =
+              DesktopShellStatusProviders(ScopedModel(), ScopedModel(), ScopedModel()))
+
+  @Composable
+  private fun FocusTestShell(
+      state: DesktopShellState,
+      onState: (DesktopShellState) -> Unit,
+      onOperation: () -> Unit,
+  ) {
+    DesktopShell(
+        state = state,
+        layoutActions = DesktopShellLayoutActions({ onState(state.copy(layout = it)) }, {}),
+        projectActions = DesktopShellProjectActions(onOperation, onOperation, onOperation),
+        editorActions =
+            DesktopShellEditorActions(
+                selectWorkspace = {},
+                selectEditorSurface = {},
+                focusChat = {},
+                focusDraft = {},
+                cancelAnalysis = onOperation,
+                sourceLineSelected = {},
+                validateDraft = onOperation,
+                runDraftChecks = onOperation,
+                generate = onOperation,
+                cancelGeneration = onOperation,
+                dismissContext = {
+                  onState(state.copy(context = state.context.copy(visible = false)))
+                },
+                createDeclaration = onOperation),
+        analysisActions =
+            DesktopShellAnalysisActions(
+                refreshAnalysisSelection = onOperation,
+                saveAnalysisSelection = {},
+                startAnalysis = { _, _ -> onOperation() },
+                pauseAnalysis = onOperation,
+                resumeAnalysis = onOperation,
+                cancelAnalysis = onOperation,
+                startScan = onOperation,
+                cancelScan = onOperation,
+                preparePerformanceFinding = { _, _ -> onOperation() },
+                loadGoBenchmarks = onOperation,
+                selectGoBenchmark = {},
+                compareSelectedGoBenchmark = onOperation,
+                prepareSecurityFinding = { onOperation() }),
+        findingActions = FindingActions({ onOperation() }, { _, _ -> onOperation() }),
+        paletteActions =
+            DesktopShellPaletteActions(
+                updateQuery = { onState(state.copy(palette = state.palette.copy(query = it))) },
+                dismiss = { onState(state.copy(palette = state.palette.copy(visible = false))) },
+                open = {
+                  onState(state.copy(palette = state.palette.copy(visible = true, mode = it)))
+                },
+                switchMode = { onState(state.copy(palette = state.palette.copy(mode = it))) },
+                selectFile = {},
+                selectSymbol = {},
+                selectAction = {}),
+        panes =
+            DesktopShellPanes(
+                explorer = { _, _ -> },
+                rightToolWindows = { _, _ -> },
+                rightToolWindowBadges = emptyMap(),
+                terminalContent = {},
+                terminalState = TerminalWorkspaceState(),
+                terminalTabActions = TerminalTabActions({}, {}, {})))
   }
 
   @Test
