@@ -29,6 +29,7 @@ internal fun AnalysisResultsPane(
 ) {
   BoxWithConstraints(Modifier.fillMaxSize().background(EditorCanvas)) {
     val headerLimit = maxHeight * 0.45f
+    val readFeedbackLimit = maxHeight * 0.25f
     val visibleRows = filteredResultRows(rows, browser.filter, browser.query)
     val hasActiveFilter = browser.filter != ResultBrowserFilter.All || browser.query.isNotBlank()
     LaunchedEffect(browser.identity, visibleRows) {
@@ -53,6 +54,8 @@ internal fun AnalysisResultsPane(
                 tools()
                 PreviousAnalysisDetails(page.unclassified)
               }
+          ResultReadFeedback(
+              page, rows.isNotEmpty(), Modifier.fillMaxWidth().heightIn(max = readFeedbackLimit))
           if (visibleRows.isEmpty()) {
             val empty =
                 if (rows.isNotEmpty())
@@ -60,6 +63,13 @@ internal fun AnalysisResultsPane(
                         AnalysisResultAvailability.FilterNoMatch,
                         "No matching results.",
                         "Clear filters to view loaded results.")
+                else if (page.project != null &&
+                    !page.stale &&
+                    (page.section.loading || page.section.error != null))
+                    AnalysisResultEmptyPresentation(
+                        AnalysisResultAvailability.PendingDetails,
+                        "No result details loaded yet.",
+                        "Saved-result read status appears above.")
                 else page.emptyPresentation(loadedRows = 0)
             ResultEmptyState(empty, Modifier.weight(1f).fillMaxWidth())
           } else

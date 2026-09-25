@@ -449,21 +449,55 @@ internal fun ResultSectionHeader(
               }
               ResultAnalysisAction(openAnalysis)
             }
-        page.section.error
-            ?.takeIf { loadedCount > 0 }
-            ?.let {
-              Text(
-                  "Results could not be refreshed: ${it.ifBlank { "The saved result read failed without a diagnostic." }}",
-                  color = Error,
-                  style = IdeTypography.workspaceMetadata)
-            }
-        if (page.section.loading && loadedCount > 0)
-            Text("Loading results…", color = SecondaryText, style = IdeTypography.workspaceMetadata)
         if (page.stale && page.run != null && loadedCount > 0)
             Text(
                 "Retained results are out of date. Start a new analysis for current evidence.",
                 color = Warning,
                 style = IdeTypography.workspaceMetadata)
+      }
+}
+
+/**
+ * Saved-result reads remain visible above the browser, independently of filters and retained rows.
+ */
+@Composable
+internal fun ResultReadFeedback(
+    page: AnalysisResultPageState,
+    hasRetainedRows: Boolean,
+    modifier: Modifier = Modifier,
+) {
+  if (!page.section.loading && page.section.error == null) return
+  Column(
+      modifier.verticalScroll(rememberScrollState()).testTag("result-read-feedback"),
+      verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (page.section.loading)
+            WorkspaceSection {
+              Text("Loading results…", color = PrimaryText, style = IdeTypography.workspaceBody)
+              Text(
+                  if (hasRetainedRows)
+                      "Reading saved ${page.type.workspace.name} results. Previously loaded results remain available below."
+                  else
+                      "Reading saved ${page.type.workspace.name} results; no new analysis is being started.",
+                  color = SecondaryText,
+                  style = IdeTypography.workspaceMetadata)
+            }
+        page.section.error?.let { error ->
+          WorkspaceSection {
+            Text(
+                "${page.type.workspace.name} · saved result read failed",
+                color = Error,
+                style = IdeTypography.workspaceBody)
+            Text(
+                "Results could not be refreshed: ${error.ifBlank { "The saved result read failed without a diagnostic." }}",
+                color = Error,
+                style = IdeTypography.workspaceMetadata)
+            if (hasRetainedRows)
+                Text(
+                    "Previously loaded results remain available below.",
+                    color = SecondaryText,
+                    style = IdeTypography.workspaceMetadata)
+          }
+        }
       }
 }
 
