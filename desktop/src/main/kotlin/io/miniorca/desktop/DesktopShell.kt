@@ -606,13 +606,14 @@ internal fun DesktopShell(
                       connection = appState.connection,
                       gitStatus = appState.gitStatus,
                       analysisStatus = toolbarAnalysisStatus(appState),
-                      openingError = appState.projectState.openingError,
+                      openingAttempt = appState.projectState.openingAttempt,
                   ),
               actions =
                   ToolbarActions(
                       onImport = projectActions.importProject,
                       onReanalyze = projectActions.reanalyzeProject,
                       onReconnect = projectActions.reconnect,
+                      onRetryRestore = projectActions.retryRestore,
                       onPalette = {
                         layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.Toolbar))
                         openPalette(PaletteMode.Files, TransientOpener.HeaderSearch)

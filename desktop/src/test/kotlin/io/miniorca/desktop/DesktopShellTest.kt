@@ -443,28 +443,92 @@ class DesktopShellTest {
   }
 
   @Test
-  fun workspaceHeaderSeparatesOpenFailureFromDisconnectedDaemonAndAnalysis() {
+  fun workspaceHeaderKeepsCurrentProjectWhileAnotherOpensOrFails() {
     var opens = 0
     var reconnects = 0
     var analyses = 0
-    val failed = DesktopState(projectState = ProjectWorkspaceState(openingError = "Read denied"))
+    var retries = 0
+    val project = resultProjectFixture()
+    val target = "/projects/other-workspace"
+    var state by
+        mutableStateOf<ToolbarState>(
+            ToolbarState(
+                project = project,
+                busy = true,
+                operationStatus = "Analyzing",
+                connection = ConnectionState(label = "Daemon unavailable"),
+                gitStatus = null,
+                analysisStatus =
+                    ToolbarAnalysisStatus(
+                        "Analysis · Running", "Whole-project analysis · Running", true, false)))
     ComposeVisualFixture(1024, 768, 1.5f) {
           MainToolbar(
-              ToolbarState(
-                  project = resultProjectFixture(),
-                  busy = false,
-                  operationStatus = "",
-                  connection = ConnectionState(label = "Daemon unavailable"),
-                  gitStatus = null,
-                  openingError = failed.projectState.openingError),
-              ToolbarActions({ opens++ }, { analyses++ }, { reconnects++ }, {}))
+              state,
+              ToolbarActions({ opens++ }, { analyses++ }, { reconnects++ }, {}, { retries++ }))
         }
         .use { fixture ->
           fixture.render()
-          assertTrue(fixture.hasText("Opening or reading local project data failed. Read denied"))
+          assertTrue(fixture.hasText(project.name))
+          assertTrue(fixture.hasText("Analysis · Running"))
+          assertTrue(!fixture.hasText("Restoring local project…"))
+          state =
+              state.copy(
+                  openingAttempt = ProjectOpeningAttempt(1, target, ProjectOpeningKind.Restore))
+          fixture.render()
+          assertTrue(fixture.hasText("Current project"))
+          assertTrue(fixture.hasText(project.name))
+          assertTrue(!fixture.hasText("other-workspace"))
+          assertTrue(fixture.hasText("Requested path"))
+          assertTrue(fixture.hasText(target))
+          assertTrue(fixture.hasText("Restoring local project…"))
+          assertTrue(!fixture.hasText("Retry restore"))
+          state =
+              state.copy(
+                  busy = false,
+                  openingAttempt =
+                      ProjectOpeningAttempt(
+                          1,
+                          target,
+                          ProjectOpeningKind.Restore,
+                          ProjectOpeningOutcome.Failed("Read denied")))
+          fixture.render()
+          assertTrue(fixture.hasText(project.name))
+          assertTrue(fixture.hasText("Could not restore project"))
+          assertTrue(fixture.hasText("Read denied"))
+          assertTrue(fixture.hasText("Requested path"))
+          assertTrue(fixture.hasText(target))
+          assertTrue(fixture.hasText("Daemon disconnected"))
+          assertTrue(fixture.hasText("Analysis · Running"))
+          assertEquals(0, opens + reconnects + analyses + retries)
+          assertTrue(fixture.requestFocus("Retry restore"))
+          fixture.render()
+          assertEquals(0, retries)
+          fixture.clickText("Retry restore")
+          assertEquals(1, retries)
           fixture.clickText("Open project")
           assertEquals(1, opens)
-          fixture.clickText(resultProjectFixture().name)
+          state =
+              state.copy(
+                  openingAttempt =
+                      ProjectOpeningAttempt(
+                          2,
+                          target,
+                          ProjectOpeningKind.Import,
+                          ProjectOpeningOutcome.Failed("Import denied")))
+          fixture.render()
+          assertTrue(fixture.hasText("Could not import project"))
+          assertTrue(fixture.hasText("Import denied"))
+          assertTrue(fixture.hasText(project.name))
+          assertTrue(!fixture.hasText("Retry restore"))
+          state =
+              state.copy(
+                  openingAttempt = ProjectOpeningAttempt(3, target, ProjectOpeningKind.Import))
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "Import may use the configured Analyze provider and require confirmation. The current project remains open."))
+          assertTrue(!fixture.hasText("Retry restore"))
+          fixture.clickText(project.name)
           fixture.render()
           assertTrue(
               fixture.hasText(
