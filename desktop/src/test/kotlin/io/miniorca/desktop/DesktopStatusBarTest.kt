@@ -129,6 +129,16 @@ class DesktopStatusBarTest {
             DesktopShellStatusProviders(ScopedModel(), ScopedModel(), ScopedModel()))
     assertNull(presentation.provider)
     assertEquals("Models: unavailable", presentation.modelsLabel)
+    var opens = 0
+    ComposeVisualFixture(800, 650) {
+          PersistentStatusBar(presentation, onOpenDetails = { opens++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasDescription("Configured model details"))
+          fixture.clickDescription("Configured model details")
+          assertEquals(1, opens)
+        }
   }
 
   @Test

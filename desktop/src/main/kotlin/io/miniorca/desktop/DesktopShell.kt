@@ -257,6 +257,7 @@ private data class ShellFocusRequesters(
     val statusBar: FocusRequester,
     val paletteTrigger: FocusRequester,
     val commandsTrigger: FocusRequester,
+    val modelsTrigger: FocusRequester,
     val statusDetailsTrigger: FocusRequester,
     val landing: FocusRequester,
 )
@@ -278,6 +279,7 @@ internal enum class TransientOpener {
   Region,
   HeaderSearch,
   RailCommands,
+  RailModels,
   FooterModels,
 }
 
@@ -295,7 +297,8 @@ internal fun transientFocusOpener(
     if (sameProject &&
         when (opener) {
           TransientOpener.HeaderSearch -> region == DesktopFocusRegion.Toolbar
-          TransientOpener.RailCommands -> region == DesktopFocusRegion.LeftToolWindow
+          TransientOpener.RailCommands,
+          TransientOpener.RailModels -> region == DesktopFocusRegion.LeftToolWindow
           TransientOpener.FooterModels -> region == DesktopFocusRegion.StatusBar
           TransientOpener.Region -> false
         })
@@ -365,6 +368,7 @@ internal fun DesktopShell(
         statusBar = FocusRequester(),
         paletteTrigger = FocusRequester(),
         commandsTrigger = FocusRequester(),
+        modelsTrigger = FocusRequester(),
         statusDetailsTrigger = FocusRequester(),
         landing = FocusRequester(),
     )
@@ -452,11 +456,16 @@ internal fun DesktopShell(
     paletteOrigin = null
     paletteActions.dismiss()
   }
-  fun showStatusDetails() {
-    statusOrigin =
-        TransientFocusOrigin(
-            DesktopFocusRegion.StatusBar, appState.project?.projectId, TransientOpener.FooterModels)
-    layoutActions.updateLayout(layout.withFocus(DesktopFocusRegion.StatusBar))
+  fun showStatusDetails(opener: TransientOpener) {
+    if (statusDetailsVisible) return
+    val region =
+        when (opener) {
+          TransientOpener.RailModels -> DesktopFocusRegion.LeftToolWindow
+          TransientOpener.FooterModels -> DesktopFocusRegion.StatusBar
+          else -> return
+        }
+    statusOrigin = TransientFocusOrigin(region, appState.project?.projectId, opener)
+    layoutActions.updateLayout(layout.withFocus(region))
     statusDetailsVisible = true
   }
   fun dismissStatusDetailsAndRestoreFocus() {
@@ -518,6 +527,7 @@ internal fun DesktopShell(
                         origin.opener, origin.projectId == appState.project?.projectId, region)) {
                       TransientOpener.HeaderSearch -> focusRequesters.paletteTrigger
                       TransientOpener.RailCommands -> focusRequesters.commandsTrigger
+                      TransientOpener.RailModels -> focusRequesters.modelsTrigger
                       TransientOpener.FooterModels -> focusRequesters.statusDetailsTrigger
                       TransientOpener.Region -> focusRequesters.forRegion(region)
                     }
@@ -587,7 +597,9 @@ internal fun DesktopShell(
                     onOpenCommands = {
                       openPalette(PaletteMode.Actions, TransientOpener.RailCommands)
                     },
-                    commandsFocusRequester = focusRequesters.commandsTrigger)
+                    commandsFocusRequester = focusRequesters.commandsTrigger,
+                    onOpenModels = { showStatusDetails(TransientOpener.RailModels) },
+                    modelsFocusRequester = focusRequesters.modelsTrigger)
               },
               panes = {
                 if (showsEditorChrome && layout.leftToolWindowVisible) {
@@ -662,7 +674,7 @@ internal fun DesktopShell(
           if (desktopStatusBarVisible(appState.project)) {
             PersistentStatusBar(
                 presentation = statusPresentation,
-                onOpenDetails = ::showStatusDetails,
+                onOpenDetails = { showStatusDetails(TransientOpener.FooterModels) },
                 modifier = Modifier.focusRequester(focusRequesters.statusBar).focusable(),
                 detailsFocusRequester = focusRequesters.statusDetailsTrigger,
             )

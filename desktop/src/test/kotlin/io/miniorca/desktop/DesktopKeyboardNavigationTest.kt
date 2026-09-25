@@ -110,6 +110,121 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun railAndFooterModelsShareUnavailableDetailsAndRestoreTheirOwnFocus() {
+    var operations = 0
+    var state by
+        mutableStateOf(
+            shellFocusState(resultProjectFixture()).let {
+              it.copy(editor = it.editor.copy(analysisInProgress = true, generating = true))
+            })
+    ComposeVisualFixture(1_280, 800) {
+          FocusTestShell(state, onState = { state = it }, onOperation = { operations++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          listOf("Models · Configured model details", "Configured model details").forEach { opener
+            ->
+            repeat(2) { attempt ->
+              assertTrue(fixture.requestDescriptionFocus(opener))
+              fixture.render()
+              assertTrue(fixture.pressKey(if (attempt == 0) Key.Enter else Key.Spacebar))
+              fixture.render()
+              assertTrue(fixture.hasText("Provider details"))
+              assertTrue(fixture.hasText("Models: unavailable"))
+              assertTrue(
+                  fixture.hasText(
+                      "Model counts are unavailable until all configured model scopes have been loaded."))
+              assertEquals(Workspace.Summary, state.app.workspace)
+              assertTrue(fixture.isFocusedControl("Close"))
+              if (attempt == 0) fixture.clickText("Close")
+              else assertTrue(fixture.pressKey(Key.Escape))
+              fixture.render()
+              assertFalse(fixture.hasText("Provider details"))
+              assertTrue(fixture.isFocusedControl(opener))
+            }
+          }
+          assertEquals(0, operations)
+        }
+  }
+
+  @Test
+  fun railAndFooterModelsShowTheSameConfiguredDetailsWithoutChangingWorkspace() {
+    var operations = 0
+    val local = ScopedModel(profile = "local", model = "shared", providerOrigin = "loopback")
+    val cloud =
+        ScopedModel(
+            profile = "cloud",
+            model = "cloud-model",
+            providerOrigin = "remote",
+            remoteProvider = true)
+    var state by
+        mutableStateOf(
+            shellFocusState(resultProjectFixture())
+                .copy(statusProviders = DesktopShellStatusProviders(local, cloud, local)))
+    ComposeVisualFixture(1_280, 800) {
+          FocusTestShell(state, onState = { state = it }, onOperation = { operations++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          listOf("Models · Configured model details", "Configured model details").forEach { opener
+            ->
+            fixture.clickDescription(opener)
+            fixture.render()
+            assertTrue(fixture.hasText("Provider details"))
+            assertTrue(fixture.hasText("Models: 1 local · 1 cloud"))
+            assertTrue(
+                fixture.hasText(
+                    "Distinct configured models by destination; shared models are counted once." +
+                        "\nAnalyze: local · shared · local provider · project context stays on this machine" +
+                        "\nBugs: cloud · cloud-model · remote provider · confirmation required before sending project context" +
+                        "\nFunction edits: local · shared · local provider · project context stays on this machine"))
+            assertEquals(Workspace.Summary, state.app.workspace)
+            fixture.clickDescription(opener)
+            fixture.render()
+            assertTrue(fixture.hasText("Provider details"))
+            fixture.clickText("Close")
+            fixture.render()
+            assertFalse(fixture.hasText("Provider details"))
+            assertTrue(fixture.isFocusedControl(opener))
+          }
+          assertEquals(0, operations)
+        }
+  }
+
+  @Test
+  fun railModelsProjectReplacementFallsBackToTheNewProjectOrLanding() {
+    var operations = 0
+    var state by mutableStateOf(shellFocusState(resultProjectFixture()))
+    ComposeVisualFixture(1_280, 800) {
+          FocusTestShell(state, onState = { state = it }, onOperation = { operations++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Models · Configured model details")
+          fixture.render()
+          assertTrue(fixture.hasText("Provider details"))
+          state =
+              state.copy(
+                  app =
+                      state.app.copy(
+                          projectState =
+                              ProjectWorkspaceState(
+                                  resultProjectFixture().copy(projectId = "replacement"))))
+          fixture.render()
+          assertFalse(fixture.hasText("Provider details"))
+          assertTrue(fixture.isFocusedControl("Search files, symbols, commands"))
+          assertFalse(fixture.isFocusedControl("Models · Configured model details"))
+          fixture.clickDescription("Models · Configured model details")
+          fixture.render()
+          state = state.copy(app = DesktopState())
+          fixture.render()
+          assertFalse(fixture.hasText("Provider details"))
+          assertTrue(fixture.isFocusedControl("Open project"))
+          assertEquals(0, operations)
+        }
+  }
+
+  @Test
   fun shellUsesLiveOwnerAfterProjectChangesAndDoesNotRefocusOldOpener() {
     var operations = 0
     var state by mutableStateOf(shellFocusState(resultProjectFixture()))
@@ -960,6 +1075,42 @@ class DesktopKeyboardNavigationTest {
           fixture.render()
           assertEquals(2, opens)
           fixture.clickDescription("Commands · Open actions")
+          fixture.render()
+          assertEquals(3, opens)
+          assertEquals(0, selections)
+          assertEquals(LeftToolWindow.Summary, active)
+        }
+  }
+
+  @Test
+  fun modelsRailActionIsIndependentOfWorkspaceKeyPreview() {
+    var active by mutableStateOf(LeftToolWindow.Summary)
+    var selections = 0
+    var opens = 0
+    ComposeVisualFixture(180, 340) {
+          ToolWindowBar(
+              active,
+              {
+                active = it
+                selections++
+              },
+              onOpenTerminal = {},
+              onOpenModels = { opens++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Models"))
+          assertTrue(fixture.requestDescriptionFocus("Models · Configured model details"))
+          fixture.render()
+          val label = fixture.firstVisibleTextBounds("Models")
+          assertTrue(label.top >= 0 && label.bottom <= 340)
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals(1, opens)
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals(2, opens)
+          fixture.clickDescription("Models · Configured model details")
           fixture.render()
           assertEquals(3, opens)
           assertEquals(0, selections)

@@ -95,15 +95,21 @@ internal fun ToolWindowBar(
     onOpenTerminal: () -> Unit,
     onOpenCommands: () -> Unit = {},
     commandsFocusRequester: FocusRequester? = null,
+    onOpenModels: () -> Unit = {},
+    modelsFocusRequester: FocusRequester? = null,
 ) {
   var utilityHasFocus by remember { mutableStateOf(false) }
   val terminalReveal = remember { BringIntoViewRequester() }
   val commandsReveal = remember { BringIntoViewRequester() }
+  val modelsReveal = remember { BringIntoViewRequester() }
   var focusedUtility by remember { mutableStateOf("Terminal") }
   LaunchedEffect(utilityHasFocus, focusedUtility) {
     if (utilityHasFocus) {
-      if (focusedUtility == "Commands") commandsReveal.bringIntoView()
-      else terminalReveal.bringIntoView()
+      when (focusedUtility) {
+        "Commands" -> commandsReveal.bringIntoView()
+        "Models" -> modelsReveal.bringIntoView()
+        else -> terminalReveal.bringIntoView()
+      }
     }
   }
   var focusedToolWindow by remember(activeToolWindow) { mutableStateOf(activeToolWindow) }
@@ -175,6 +181,26 @@ internal fun ToolWindowBar(
             DesktopLineIcon(DesktopIcon.Search, "Commands", iconSize = 20.dp)
             Spacer(Modifier.height(4.dp))
             Text("Commands", style = IdeTypography.action, maxLines = 1, softWrap = false)
+          }
+        }
+    ChromeButton(
+        onClick = onOpenModels,
+        modifier =
+            Modifier.fillMaxWidth()
+                .padding(horizontal = 2.dp, vertical = 2.dp)
+                .then(modelsFocusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
+                .onFocusChanged {
+                  utilityHasFocus = it.hasFocus
+                  if (it.isFocused) focusedUtility = "Models"
+                }
+                .bringIntoViewRequester(modelsReveal),
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp),
+        accessibleName = "Models · Configured model details",
+        tooltip = "Configured model details") {
+          Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            DesktopLineIcon(DesktopIcon.Document, "Models", iconSize = 20.dp)
+            Spacer(Modifier.height(4.dp))
+            Text("Models", style = IdeTypography.action, maxLines = 1, softWrap = false)
           }
         }
   }
