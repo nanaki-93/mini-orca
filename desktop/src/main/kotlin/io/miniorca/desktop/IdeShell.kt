@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -67,6 +68,7 @@ internal fun WorkspaceFrame(
     rail: @Composable () -> Unit,
     panes: @Composable RowScope.() -> Unit,
     terminal: @Composable (Float) -> Unit,
+    editorPanes: (@Composable (Float, Float) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
   Row(
@@ -82,7 +84,17 @@ internal fun WorkspaceFrame(
         BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
           val workspaceHeight = maxHeight.value
           Column(Modifier.fillMaxHeight()) {
-            Row(Modifier.weight(1f).fillMaxWidth(), content = panes)
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+              if (editorPanes == null) {
+                Row(Modifier.fillMaxSize(), content = panes)
+              } else {
+                // Include the rail, its gap and the frame end inset in the resolver's allocation.
+                val scale = maxOf(1f, LocalDensity.current.fontScale)
+                editorPanes(
+                    maxWidth.value + TOOL_WINDOW_BAR_WIDTH * scale + 2 * WORKSPACE_FRAME_INSET,
+                    maxHeight.value)
+              }
+            }
             Spacer(Modifier.height(WORKSPACE_FRAME_INSET.dp))
             terminal(workspaceHeight)
           }
