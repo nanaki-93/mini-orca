@@ -73,6 +73,9 @@ internal fun desktopShellMode(appState: DesktopState): DesktopShellMode =
     if (appState.project == null) DesktopShellMode.ProjectLanding
     else DesktopShellMode.ProjectWorkspace
 
+internal fun projectOpenAvailable(attempt: ProjectOpeningAttempt?): Boolean =
+    attempt?.outcome != ProjectOpeningOutcome.Opening
+
 internal fun editorChromeVisible(workspace: Workspace): Boolean = workspace == Workspace.Editor
 
 internal fun resizeExplorerFromDisplayed(
@@ -447,6 +450,7 @@ internal fun DesktopShell(
     scope.launch { restoreTerminalEditorFocus(focusManager, focusRequesters.editor) }
   }
   LaunchedEffect(Unit) { focusRequesters.fallback.requestFocus() }
+  RestoreLandingFocusOnProjectOpen(shellMode, focusManager, focusRequesters.paletteTrigger)
   LaunchedEffect(appState.project?.projectId, appState.project?.projectRevision) {
     if (statusDetailsVisible) pendingFocus = statusOrigin
     statusOrigin = null
@@ -555,7 +559,9 @@ internal fun DesktopShell(
           val requester =
               when {
                 region == null ->
-                    if (appState.loading) focusRequesters.fallback else focusRequesters.landing
+                    if (projectOpenAvailable(appState.projectState.openingAttempt))
+                        focusRequesters.landing
+                    else focusRequesters.fallback
                 else ->
                     when (transientFocusOpener(
                         origin.opener, origin.projectId == appState.project?.projectId, region)) {
@@ -954,6 +960,23 @@ internal fun EditorPaneArrangement(
   }
 }
 
+@Composable
+private fun RestoreLandingFocusOnProjectOpen(
+    mode: DesktopShellMode,
+    focusManager: FocusManager,
+    toolbarAction: FocusRequester,
+) {
+  var previous by remember { mutableStateOf(mode) }
+  LaunchedEffect(mode) {
+    if (previous == DesktopShellMode.ProjectLanding && mode == DesktopShellMode.ProjectWorkspace) {
+      androidx.compose.runtime.withFrameNanos {}
+      focusManager.clearFocus(force = true)
+      toolbarAction.requestFocus()
+    }
+    previous = mode
+  }
+}
+
 private suspend fun restoreTerminalEditorFocus(
     focusManager: FocusManager,
     editor: FocusRequester,
@@ -964,7 +987,7 @@ private suspend fun restoreTerminalEditorFocus(
   editor.requestFocus()
 }
 
-private fun handleDesktopShortcut(
+internal fun handleDesktopShortcut(
     event: KeyEvent,
     shellMode: DesktopShellMode,
     appState: DesktopState,
@@ -1009,8 +1032,10 @@ private fun handleDesktopShortcut(
   if (!shortcutAvailable(shellMode, shortcut)) return false
   return when (shortcut) {
     DesktopShortcut.OpenProject -> {
-      if (!appState.loading) projectActions.importProject()
-      true
+      if (projectOpenAvailable(appState.projectState.openingAttempt)) {
+        projectActions.importProject()
+        true
+      } else false
     }
     DesktopShortcut.OpenFile -> {
       paletteActions.open(PaletteMode.Files)
@@ -1086,6 +1111,25 @@ internal fun ProjectLanding(
   val projectState = appState.projectState
   val attempt = projectState.openingAttempt
   val opening = attempt?.outcome == ProjectOpeningOutcome.Opening
+  val statusFocus = remember { FocusRequester() }
+  var focusedRecovery by remember { mutableStateOf(false) }
+  var focusedStatus by remember { mutableStateOf(false) }
+  var focusedOpen by remember { mutableStateOf(false) }
+  LaunchedEffect(opening, attempt?.requestId, attempt?.outcome) {
+    if (focusedOpen && opening) {
+      focusedOpen = false
+      statusFocus.requestFocus()
+    } else if (focusedRecovery &&
+        (attempt?.outcome !is ProjectOpeningOutcome.Failed ||
+            attempt.kind != ProjectOpeningKind.Restore)) {
+      focusedRecovery = false
+      if (projectOpenAvailable(appState.projectState.openingAttempt)) focusRequester.requestFocus()
+      else statusFocus.requestFocus()
+    } else if (focusedStatus && projectOpenAvailable(appState.projectState.openingAttempt)) {
+      focusedStatus = false
+      focusRequester.requestFocus()
+    }
+  }
   Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
     Column(
         Modifier.widthIn(max = 520.dp)
@@ -1103,9 +1147,17 @@ internal fun ProjectLanding(
               action = {
                 MiniOrcaButton(
                     onClick = actions.importProject,
-                    enabled = !opening,
+                    enabled = projectOpenAvailable(appState.projectState.openingAttempt),
                     tone = ActionTone.Primary,
-                    modifier = Modifier.focusRequester(focusRequester)) {
+                    modifier =
+                        Modifier.focusRequester(focusRequester).onFocusChanged {
+                          if (it.isFocused) {
+                            focusedOpen = true
+                            focusedRecovery = false
+                          } else if (!opening) {
+                            focusedOpen = false
+                          }
+                        }) {
                       Text("Open project")
                     }
               })
@@ -1128,6 +1180,14 @@ internal fun ProjectLanding(
             val restoring = attempt.kind == ProjectOpeningKind.Restore
             val failure = attempt.outcome as? ProjectOpeningOutcome.Failed
             SystemStateMessage(
+                modifier =
+                    Modifier.focusRequester(statusFocus)
+                        .onFocusChanged {
+                          focusedStatus = it.isFocused
+                          if (it.isFocused) focusedOpen = false
+                        }
+                        .focusable()
+                        .testTag("project-opening-focus"),
                 title =
                     when {
                       failure != null ->
@@ -1153,9 +1213,15 @@ internal fun ProjectLanding(
                     DiagnosticText(failure.message, color = Error)
                     if (restoring) {
                       Spacer(Modifier.height(8.dp))
-                      MiniOrcaButton(onClick = actions.retryRestore, tone = ActionTone.Neutral) {
-                        Text("Retry restore")
-                      }
+                      MiniOrcaButton(
+                          onClick = actions.retryRestore,
+                          tone = ActionTone.Neutral,
+                          modifier =
+                              Modifier.onFocusChanged {
+                                if (it.isFocused) focusedRecovery = true
+                              }) {
+                            Text("Retry restore")
+                          }
                     }
                   }
                 })

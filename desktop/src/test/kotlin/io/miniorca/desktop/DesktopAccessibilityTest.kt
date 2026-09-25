@@ -372,6 +372,28 @@ class DesktopAccessibilityTest {
   }
 
   @Test
+  fun restoreProgressAndFailureNeverUnlockProjectOnlyShortcuts() {
+    val attempt = ProjectOpeningAttempt(1, "/remembered", ProjectOpeningKind.Restore)
+    listOf(ProjectOpeningOutcome.Opening, ProjectOpeningOutcome.Failed("Missing")).forEach { outcome
+      ->
+      val state =
+          DesktopState(
+              projectState =
+                  ProjectWorkspaceState(openingAttempt = attempt.copy(outcome = outcome)))
+      val mode = desktopShellMode(state)
+      assertEquals(DesktopShellMode.ProjectLanding, mode)
+      assertTrue(shortcutAvailable(mode, DesktopShortcut.OpenProject))
+      listOf(
+              DesktopShortcut.OpenFile,
+              DesktopShortcut.OpenSymbol,
+              DesktopShortcut.SummaryWorkspace,
+              DesktopShortcut.Generate,
+              DesktopShortcut.FocusDraft)
+          .forEach { assertFalse(shortcutAvailable(mode, it)) }
+    }
+  }
+
+  @Test
   fun highlightingLeavesSourceIntactAndStylesRecognizedTokens() {
     val source = "package demo\n// note\nfun run() = \"ok\"\n"
     val highlighted = highlightedCode(source)

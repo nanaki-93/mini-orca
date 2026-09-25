@@ -7,10 +7,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -22,6 +25,182 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DesktopKeyboardNavigationTest {
+  @Test
+  fun canceledDirectoryChooserLeavesTheExistingFailureAndSideEffectsUntouched() {
+    val failure =
+        ProjectOpeningAttempt(
+            8,
+            "/remembered",
+            ProjectOpeningKind.Restore,
+            ProjectOpeningOutcome.Failed("Missing saved analysis"))
+    var state = DesktopState(projectState = ProjectWorkspaceState(openingAttempt = failure))
+    var selections = 0
+    var saves = 0
+    var terminalCloses = 0
+    var draftDiscards = 0
+    chooseProjectDirectory({ null }) {
+      selections++
+      state = DesktopState()
+      saves++
+      terminalCloses++
+      draftDiscards++
+    }
+    assertEquals(0, selections + saves + terminalCloses + draftDiscards)
+    assertEquals(failure, state.projectState.openingAttempt)
+    chooseProjectDirectory({ java.io.File("/chosen") }) {
+      assertEquals("/chosen", it)
+      selections++
+    }
+    assertEquals(1, selections)
+  }
+
+  @OptIn(InternalComposeUiApi::class)
+  @Test
+  fun openShortcutUsesTheSameAttemptAvailabilityAsThePointer() {
+    var opens = 0
+    val actions = DesktopShellProjectActions({ opens++ }, {}, {})
+    val editor =
+        DesktopShellEditorState(
+            EditorProgressUiState(EditorProgress.Inspect, ""),
+            EditorContextualActions(false, false, false, false, false),
+            false,
+            false)
+    fun shortcut(state: DesktopState): Boolean =
+        handleDesktopShortcut(
+            KeyEvent(Key.O, KeyEventType.KeyDown, isCtrlPressed = true),
+            desktopShellMode(state),
+            state,
+            editor,
+            actions,
+            DesktopShellEditorActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}),
+            DesktopShellPaletteActions({}, {}, {}, {}, {}, {}, {}),
+            onDismissTransient = { false },
+            onWorkspaceSelected = {},
+            terminal = null,
+            onTerminalSelected = {})
+    val unrelatedJob = DesktopState(jobs = JobState(loading = true))
+    assertTrue(shortcut(unrelatedJob))
+    assertEquals(1, opens)
+    val opening =
+        unrelatedJob.copy(
+            projectState =
+                ProjectWorkspaceState(
+                    openingAttempt =
+                        ProjectOpeningAttempt(1, "/remembered", ProjectOpeningKind.Restore)))
+    assertFalse(projectOpenAvailable(opening.projectState.openingAttempt))
+    assertFalse(shortcut(opening))
+    assertEquals(1, opens)
+    val failed =
+        opening.copy(
+            projectState =
+                opening.projectState.copy(
+                    openingAttempt =
+                        ProjectOpeningAttempt(
+                            1,
+                            "/remembered",
+                            ProjectOpeningKind.Restore,
+                            ProjectOpeningOutcome.Failed("Missing"))))
+    assertTrue(shortcut(failed))
+    assertEquals(2, opens)
+    assertTrue(
+        shortcut(
+            failed.copy(projectState = failed.projectState.copy(project = resultProjectFixture()))))
+    assertEquals(3, opens)
+    assertFalse(
+        shortcut(
+            opening.copy(
+                projectState =
+                    opening.projectState.copy(
+                        openingAttempt =
+                            opening.projectState.openingAttempt!!.copy(
+                                kind = ProjectOpeningKind.Import)))))
+    assertEquals(3, opens)
+  }
+
+  @Test
+  fun disablingFocusedOpenMovesFocusToOpeningStatusWithoutDispatchingWork() {
+    var opens = 0
+    var retries = 0
+    var state by mutableStateOf(DesktopState())
+    ComposeVisualFixture(800, 650) {
+          ProjectLanding(
+              state,
+              DesktopShellProjectActions({ opens++ }, {}, {}, { retries++ }),
+              FocusRequester())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestFocus("Open project"))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Open project"))
+          state =
+              state.copy(
+                  projectState =
+                      ProjectWorkspaceState(
+                          openingAttempt =
+                              ProjectOpeningAttempt(1, "/remembered", ProjectOpeningKind.Restore)))
+          fixture.render()
+          assertTrue(fixture.isDisabled("Open project"))
+          assertTrue(fixture.isTaggedNodeFocused("project-opening-focus"))
+          assertEquals(0, opens + retries)
+          state =
+              state.copy(
+                  projectState =
+                      state.projectState.copy(
+                          openingAttempt =
+                              state.projectState.openingAttempt!!.copy(
+                                  outcome = ProjectOpeningOutcome.Failed("Missing"))))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Open project"))
+          assertEquals(0, opens + retries)
+        }
+  }
+
+  @Test
+  fun disappearingRetryMovesFocusWithoutDispatchingAnotherOperation() {
+    var retries = 0
+    var opens = 0
+    val failed =
+        ProjectOpeningAttempt(
+            1, "/remembered", ProjectOpeningKind.Restore, ProjectOpeningOutcome.Failed("Missing"))
+    var state by
+        mutableStateOf(DesktopState(projectState = ProjectWorkspaceState(openingAttempt = failed)))
+    ComposeVisualFixture(800, 650) {
+          ProjectLanding(
+              state,
+              DesktopShellProjectActions({ opens++ }, {}, {}, { retries++ }),
+              FocusRequester())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestFocus("Retry restore"))
+          fixture.render()
+          assertEquals(0, retries + opens)
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(1, retries)
+          state =
+              state.copy(
+                  projectState =
+                      state.projectState.copy(
+                          openingAttempt =
+                              failed.copy(requestId = 2, outcome = ProjectOpeningOutcome.Opening)))
+          fixture.render()
+          assertTrue(fixture.isTaggedNodeFocused("project-opening-focus"))
+          assertEquals(1, retries + opens)
+          state =
+              state.copy(
+                  projectState =
+                      state.projectState.copy(
+                          openingAttempt =
+                              failed.copy(
+                                  requestId = 2,
+                                  outcome = ProjectOpeningOutcome.Failed("Still missing"))))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Open project"))
+          assertEquals(1, retries + opens)
+        }
+  }
+
   @Test
   fun discardPromptFocusesKeepDraftAndEscapeCannotDiscard() {
     var visible by mutableStateOf(true)
@@ -147,6 +326,30 @@ class DesktopKeyboardNavigationTest {
           assertTrue(fixture.pressKey(Key.Escape))
           fixture.render()
           assertTrue(fixture.isFocusedControl("Search files, symbols, commands"))
+          assertEquals(0, operations)
+        }
+  }
+
+  @Test
+  fun successfulOpenMovesLandingFocusToSurvivingToolbarActionWithoutWork() {
+    var operations = 0
+    var state by mutableStateOf(shellFocusState(resultProjectFixture()).copy(app = DesktopState()))
+    ComposeVisualFixture(1280, 800) {
+          FocusTestShell(state, onState = { state = it }, onOperation = { operations++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestFocus("Open project"))
+          fixture.render()
+          assertEquals(0, operations)
+          state =
+              state.copy(
+                  app = DesktopState(projectState = ProjectWorkspaceState(resultProjectFixture())))
+          fixture.render()
+          fixture.render()
+          assertTrue(
+              fixture.isFocusedControl("Search files, symbols, commands"),
+              "Toolbar search should own focus after landing is removed")
           assertEquals(0, operations)
         }
   }

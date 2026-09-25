@@ -540,6 +540,38 @@ class DesktopShellTest {
   }
 
   @Test
+  fun loadedHeaderDisablesPointerOpenOnlyDuringProjectOpening() {
+    var opens = 0
+    val project = resultProjectFixture()
+    var state by
+        mutableStateOf(ToolbarState(project, true, "Analysis running", ConnectionState(), null))
+    ComposeVisualFixture(1024, 768) { MainToolbar(state, ToolbarActions({ opens++ }, {}, {}, {})) }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText(project.name)
+          fixture.render()
+          assertTrue(!fixture.isDisabled("Open project"))
+          fixture.clickText("Open project")
+          assertEquals(1, opens)
+          state =
+              state.copy(
+                  openingAttempt = ProjectOpeningAttempt(1, "/next", ProjectOpeningKind.Import))
+          fixture.render()
+          fixture.clickText(project.name)
+          fixture.render()
+          assertTrue(fixture.isDisabled("Open project"))
+          assertEquals(1, opens)
+          state =
+              state.copy(
+                  openingAttempt =
+                      state.openingAttempt!!.copy(
+                          outcome = ProjectOpeningOutcome.Failed("Import failed")))
+          fixture.render()
+          assertTrue(!fixture.isDisabled("Open project"))
+        }
+  }
+
+  @Test
   fun landingKeepsLocalOpenFailureAndDaemonRecoverySeparate() {
     var opens = 0
     var reconnects = 0
