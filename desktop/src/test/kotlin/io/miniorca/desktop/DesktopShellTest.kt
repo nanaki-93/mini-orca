@@ -284,6 +284,12 @@ class DesktopShellTest {
         branchPresentation(GitStatus(available = false, branch = "main")),
     )
     assertEquals("Unavailable", branchPresentation(null).label)
+    assertEquals(
+        BranchPresentation("Unavailable", "Git branch is unavailable for the selected file."),
+        branchPresentation(GitStatus(available = true, branch = " \t\n ")))
+    assertEquals(
+        BranchPresentation("feature/long-name", "Current Git branch: feature/long-name"),
+        branchPresentation(GitStatus(available = true, branch = " feature/long-name ")))
   }
 
   @Test

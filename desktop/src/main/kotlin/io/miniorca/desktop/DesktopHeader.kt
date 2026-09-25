@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -57,7 +58,7 @@ internal fun MainToolbar(
           onReanalyze = actions.onReanalyze,
           onReconnect = actions.onReconnect,
           modifier = Modifier.width(180.dp))
-      Spacer(Modifier.width(8.dp))
+      IdeVerticalSeparator(Modifier.height(20.dp))
       BranchContext(state.gitStatus)
       Box(Modifier.weight(1f).padding(start = 16.dp), contentAlignment = Alignment.CenterStart) {
         ChromeButton(
@@ -147,22 +148,29 @@ private fun ToolbarStatus(
         strokeWidth = 2.dp)
     Spacer(Modifier.width(10.dp))
   }
-  state.analysisStatus?.let { analysis ->
-    val color =
-        if (analysis.attention) Warning else if (analysis.running) Information else SecondaryText
-    Row(
-        Modifier.semantics { contentDescription = analysis.detail }.padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-          if (analysis.running) {
-            IdeBusyIndicator(Modifier.size(12.dp), color = color, strokeWidth = 2.dp)
-          } else {
-            Canvas(Modifier.size(6.dp)) { drawCircle(color) }
-          }
-          Spacer(Modifier.width(6.dp))
-          Text(analysis.label, color = color, fontSize = 11.sp)
+  val analysis =
+      state.analysisStatus
+          ?: ToolbarAnalysisStatus(
+              "Analysis · Unavailable",
+              "Whole-project analysis · Unavailable; no current analysis evidence",
+              running = false,
+              attention = false)
+  val color =
+      if (analysis.attention) Warning else if (analysis.running) Information else SecondaryText
+  Row(
+      Modifier.semantics { contentDescription = analysis.detail }.padding(vertical = 6.dp),
+      verticalAlignment = Alignment.CenterVertically) {
+        if (analysis.running) {
+          IdeBusyIndicator(Modifier.size(12.dp), color = color, strokeWidth = 2.dp)
+        } else {
+          Canvas(Modifier.size(6.dp)) { drawCircle(color) }
         }
-    Spacer(Modifier.width(10.dp))
-  }
+        Spacer(Modifier.width(6.dp))
+        Text(analysis.label, color = color, fontSize = 11.sp)
+      }
+  Spacer(Modifier.width(10.dp))
+  IdeVerticalSeparator(Modifier.height(20.dp))
+  Spacer(Modifier.width(10.dp))
   ConnectionChip(connection)
 }
 
@@ -252,6 +260,7 @@ private fun TopBarButton(
   ChromeButton(
       onClick = onClick,
       modifier = modifier,
+      accessibleName = label,
   ) {
     icon?.let {
       DesktopLineIcon(it, iconDescription, iconSize = 18.dp, tint = iconTint)
@@ -317,7 +326,7 @@ internal data class BranchPresentation(val label: String, val detail: String)
 internal fun branchPresentation(gitStatus: GitStatus?): BranchPresentation =
     gitStatus
         ?.takeIf { it.available && it.branch.isNotBlank() }
-        ?.let { BranchPresentation(it.branch, "Current Git branch: ${it.branch}") }
+        ?.let { BranchPresentation(it.branch.trim(), "Current Git branch: ${it.branch.trim()}") }
         ?: BranchPresentation("Unavailable", "Git branch is unavailable for the selected file.")
 
 @Composable
