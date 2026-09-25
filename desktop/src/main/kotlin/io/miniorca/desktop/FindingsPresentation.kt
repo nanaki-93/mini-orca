@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -38,6 +37,8 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
@@ -229,7 +230,11 @@ internal fun ResultEmptyState(
       }
 }
 
-/** The result list and selected detail remain visible side by side. */
+// Both columns need room for result metadata and evidence at the current text scale.
+internal fun resultDetailStacked(width: androidx.compose.ui.unit.Dp, fontScale: Float): Boolean =
+    width < (280.dp + 340.dp) * fontScale + 8.dp
+
+/** Keep both scroll owners composed while changing only their measured placement. */
 @Composable
 internal fun ResultListDetail(
     rows: List<ResultRowPresentation>,
@@ -251,104 +256,152 @@ internal fun ResultListDetail(
           ?.let { index -> listState.scrollToItem(index) }
     }
   }
-  Row(modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-    LazyColumn(
-        Modifier.weight(0.42f).fillMaxHeight().testTag("result-list"),
-        state = listState,
-        contentPadding = PaddingValues(bottom = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          if (rows.isEmpty())
-              item {
-                WorkspaceSection {
-                  Text(emptyMessage, color = SecondaryText, style = IdeTypography.workspaceBody)
-                }
-              }
-          items(rows, key = { it.key }) { row ->
-            val rowFocusRequester = remember(row.key) { FocusRequester() }
-            IdeActionSurface(
-                onClick = { onSelection(row.key) },
-                colors =
-                    IdeActionColors(
-                        background = Panel,
-                        hoveredBackground = ControlHover,
-                        pressedBackground = SelectionSurface,
-                        selectedBackground = SelectionSurface,
-                        disabledBackground = Panel,
-                        content = PrimaryText,
-                        selectedContent = PrimaryText,
-                        disabledContent = FaintText,
-                        border = if (row.key == selectedKey) SelectionAccent else PaneSeparator),
-                selected = row.key == selectedKey,
-                accessibleName = "Inspect ${row.title}",
-                tooltip = null,
-                shape = MiniOrcaShapes.interactiveCard,
-                minimumHeight = 64.dp,
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                modifier =
-                    Modifier.fillMaxWidth()
-                        .focusRequester(rowFocusRequester)
-                        .onPreviewKeyEvent { event: KeyEvent ->
-                          if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                          val target =
-                              when (event.key) {
-                                Key.DirectionDown -> nextResultBrowserKey(rows, row.key, 1)
-                                Key.DirectionUp -> nextResultBrowserKey(rows, row.key, -1)
-                                else -> null
+  val fontScale = LocalDensity.current.fontScale
+  Layout(
+      modifier = modifier.fillMaxSize(),
+      content = {
+        LazyColumn(
+            Modifier.testTag("result-list"),
+            state = listState,
+            contentPadding = PaddingValues(bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+              if (rows.isEmpty())
+                  item {
+                    WorkspaceSection {
+                      Text(emptyMessage, color = SecondaryText, style = IdeTypography.workspaceBody)
+                    }
+                  }
+              items(rows, key = { it.key }) { row ->
+                val rowFocusRequester = remember(row.key) { FocusRequester() }
+                IdeActionSurface(
+                    onClick = { onSelection(row.key) },
+                    colors =
+                        IdeActionColors(
+                            background = Panel,
+                            hoveredBackground = ControlHover,
+                            pressedBackground = SelectionSurface,
+                            selectedBackground = SelectionSurface,
+                            disabledBackground = Panel,
+                            content = PrimaryText,
+                            selectedContent = PrimaryText,
+                            disabledContent = FaintText,
+                            border =
+                                if (row.key == selectedKey) SelectionAccent else PaneSeparator),
+                    selected = row.key == selectedKey,
+                    accessibleName = "Inspect ${row.title}",
+                    tooltip = null,
+                    shape = MiniOrcaShapes.interactiveCard,
+                    minimumHeight = 64.dp,
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .focusRequester(rowFocusRequester)
+                            .onPreviewKeyEvent { event: KeyEvent ->
+                              if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                              val target =
+                                  when (event.key) {
+                                    Key.DirectionDown -> nextResultBrowserKey(rows, row.key, 1)
+                                    Key.DirectionUp -> nextResultBrowserKey(rows, row.key, -1)
+                                    else -> null
+                                  }
+                              when {
+                                target != null -> {
+                                  keyboardFocusKey = target
+                                  true
+                                }
+                                event.key == Key.Enter || event.key == Key.Spacebar -> {
+                                  onSelection(row.key)
+                                  true
+                                }
+                                else -> false
                               }
-                          when {
-                            target != null -> {
-                              keyboardFocusKey = target
-                              true
                             }
-                            event.key == Key.Enter || event.key == Key.Spacebar -> {
-                              onSelection(row.key)
-                              true
-                            }
-                            else -> false
-                          }
-                        }
-                        .semantics { this.selected = row.key == selectedKey }) {
-                  ResultRowContent(row)
+                            .semantics { this.selected = row.key == selectedKey }) {
+                      ResultRowContent(row)
+                    }
+                if (row.key == keyboardFocusKey)
+                    LaunchedEffect(row.key, keyboardFocusKey) {
+                      rowFocusRequester.requestFocus()
+                      keyboardFocusKey = null
+                    }
+              }
+            }
+        val detailModifier =
+            Modifier.clip(MiniOrcaShapes.interactiveCard)
+                .background(Panel)
+                .border(1.dp, PaneSeparator, MiniOrcaShapes.interactiveCard)
+                .testTag("result-detail")
+        if (selected == null) {
+          Box(detailModifier.padding(24.dp), contentAlignment = Alignment.Center) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                  DesktopLineIcon(
+                      DesktopIcon.Document, "Finding evidence", iconSize = 28.dp, tint = FaintText)
+                  Text(
+                      "Select a result to inspect its evidence.",
+                      color = SecondaryText,
+                      style = IdeTypography.workspaceBody,
+                      textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
-            if (row.key == keyboardFocusKey)
-                LaunchedEffect(row.key, keyboardFocusKey) {
-                  rowFocusRequester.requestFocus()
-                  keyboardFocusKey = null
+          }
+        } else {
+          key(selected.key) {
+            Column(
+                detailModifier.verticalScroll(rememberScrollState()).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                  detail(selected.key)
                 }
           }
         }
-    val detailModifier =
-        Modifier.weight(0.58f)
-            .fillMaxHeight()
-            .clip(MiniOrcaShapes.interactiveCard)
-            .background(Panel)
-            .border(1.dp, PaneSeparator, MiniOrcaShapes.interactiveCard)
-            .testTag("result-detail")
-    if (selected == null) {
-      Box(detailModifier.padding(24.dp), contentAlignment = Alignment.Center) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-              DesktopLineIcon(
-                  DesktopIcon.Document, "Finding evidence", iconSize = 28.dp, tint = FaintText)
-              Text(
-                  "Select a result to inspect its evidence.",
-                  color = SecondaryText,
-                  style = IdeTypography.workspaceBody,
-                  textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+      }) { measurables, constraints ->
+        val width = constraints.maxWidth
+        val height = constraints.maxHeight
+        val gap = 8.dp.roundToPx()
+        val stacked = resultDetailStacked(width.toDp(), fontScale)
+        val (listWidth, listHeight, detailWidth, detailHeight, detailX, detailY) =
+            if (stacked) {
+              val verticalGap = gap.coerceAtMost(height)
+              // Prioritize reading evidence in short windows; the lazy list stays independently
+              // scrollable.
+              val listHeight = ((height - verticalGap) * 0.3f).toInt()
+              ResultRegionSizes(
+                  width,
+                  listHeight,
+                  width,
+                  height - verticalGap - listHeight,
+                  0,
+                  listHeight + verticalGap)
+            } else {
+              val horizontalGap = gap.coerceAtMost(width)
+              val available = width - horizontalGap
+              val minList = (280.dp * fontScale).roundToPx()
+              val minDetail = (340.dp * fontScale).roundToPx()
+              val listWidth = (available * 0.42f).toInt().coerceIn(minList, available - minDetail)
+              ResultRegionSizes(
+                  listWidth, height, available - listWidth, height, listWidth + horizontalGap, 0)
             }
+        val list =
+            measurables[0].measure(
+                androidx.compose.ui.unit.Constraints.fixed(listWidth, listHeight))
+        val selectedDetail =
+            measurables[1].measure(
+                androidx.compose.ui.unit.Constraints.fixed(detailWidth, detailHeight))
+        layout(width, height) {
+          list.placeRelative(0, 0)
+          selectedDetail.placeRelative(detailX, detailY)
+        }
       }
-    } else {
-      key(selected.key) {
-        Column(
-            detailModifier.verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-              detail(selected.key)
-            }
-      }
-    }
-  }
 }
+
+private data class ResultRegionSizes(
+    val listWidth: Int,
+    val listHeight: Int,
+    val detailWidth: Int,
+    val detailHeight: Int,
+    val detailX: Int,
+    val detailY: Int,
+)
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
