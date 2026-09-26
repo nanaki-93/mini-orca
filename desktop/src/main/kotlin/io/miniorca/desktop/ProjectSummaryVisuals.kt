@@ -262,6 +262,13 @@ private fun SummaryCoverageDial(
               "Saved coverage · Coverage, not a health score.",
               color = SecondaryText,
               style = IdeTypography.workspaceMetadata)
+          presentation.runMessage?.let {
+            Text(
+                it,
+                color = SecondaryText,
+                style = IdeTypography.workspaceMetadata,
+                modifier = Modifier.testTag("summary-coverage-run-status"))
+          }
         }
       }
       if (coverageDialStacked(maxWidth, LocalDensity.current.fontScale)) {
@@ -278,6 +285,19 @@ private fun SummaryCoverageDial(
               caption(Modifier.weight(1f))
             }
       }
+    }
+    presentation.selectionNotice?.let { notice ->
+      Column(
+          Modifier.fillMaxWidth().testTag("summary-selection-notice"),
+          verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                if (presentation.selectionError) "File selection needs attention"
+                else "File selection in progress",
+                color = if (presentation.selectionError) Error else SecondaryText,
+                style = IdeTypography.workspaceMetadata)
+            DiagnosticText(
+                notice, color = if (presentation.selectionError) Error else SecondaryText)
+          }
     }
     if (coverage is SummaryCoverageProjection.Known && arcs.isNotEmpty()) {
       FlowRow(

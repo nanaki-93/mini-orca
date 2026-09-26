@@ -5196,6 +5196,44 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun summaryFailureQualificationFitsBesideRetainedSavedCoverageAndRunStatus() {
+    val project = analysisProjectFixture()
+    val selection = selectionFixture().copy(excludedPaths = listOf("main.go"))
+    val run = analysisRunFixture().copy(status = "running")
+    for ((width, scale) in listOf(1440 to 1f, 800 to 1.25f, 430 to 1.5f)) {
+      ComposeVisualFixture(width, 900, scale) {
+            ProjectSummaryPane(
+                null,
+                project,
+                {},
+                run = run,
+                analysisState =
+                    ProjectAnalysisRunState(
+                        run = run,
+                        fileSelection =
+                            AnalysisSelectionState(
+                                selection,
+                                error = "Selection refresh timed out.",
+                                failure = AnalysisSelectionFailure.Read)))
+          }
+          .use { fixture ->
+            fixture.render("summary-retained-failure-$width-$scale")
+            fixture.assertTextFits("1 of 1 selected files are up to date")
+            fixture.assertTextFits("100%")
+            fixture.assertTextFits("File selection needs attention", maxLines = 2)
+            fixture.assertTextFits(
+                "Current analysis run: Running · separate from saved coverage.", maxLines = 4)
+            assertTrue(
+                fixture.hasText(
+                    "File selection load failed · Showing last confirmed selection. Selection refresh timed out."))
+            assertEquals(1, fixture.tagCount("summary-analysis-run-strip"))
+            fixture.revealText("View analysis")
+            fixture.assertTextFits("View analysis")
+          }
+    }
+  }
+
+  @Test
   fun summaryPanelUsesStatusColorsAndPlainStatusLabels() {
     listOf(
             Triple("fresh", "Updated", Success),
