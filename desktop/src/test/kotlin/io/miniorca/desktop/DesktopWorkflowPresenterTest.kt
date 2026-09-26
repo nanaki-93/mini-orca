@@ -1382,6 +1382,143 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun refreshedInventoryKeepsDetailReadFailureSeparateAndSelectionReadVisible() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<String>()
+    var unavailable = true
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          calls += "$method $path"
+          when {
+            path.endsWith("/reindex") -> response(indexJson())
+            path.contains("/analysis/run?") || path.contains("/scan?") -> TransportResponse(204, "")
+            path.contains("/analysis/selection?") ->
+                if (unavailable) TransportResponse(500, "selection unavailable")
+                else response(kotlinx.serialization.json.Json.encodeToString(selectionFixture()))
+            path.contains("/overview?") -> response("{}")
+            path.contains("/findings?") ->
+                if (unavailable) TransportResponse(500, "findings unavailable") else response("{}")
+            else -> error("Unexpected $method $path")
+          }
+        }
+    try {
+      loadProject(presenter)
+      val retained =
+          listOf(
+              UnifiedFinding(
+                  id = "saved",
+                  category = "bugs",
+                  projectId = "project",
+                  projectRevision = "revision",
+                  location = FindingLocation("main.go")))
+      presenter.dispatch(DesktopEvent.FindingsLoaded(retained))
+      presenter.reindexProject()
+      repeat(12) {
+        main.runPending()
+        io.runPending()
+      }
+      main.runPending()
+      val state = presenter.snapshot.value.state
+      assertEquals(
+          ProjectIndexingOutcome.Succeeded("revision"), state.projectState.indexingAttempt?.outcome)
+      assertEquals(ProjectIndex("project", "revision"), state.index)
+      assertEquals(retained, state.findings.findings)
+      assertTrue(state.projectState.detailsOutcome is ProjectDetailsOutcome.Unavailable)
+      assertEquals(AnalysisSelectionFailure.Read, state.analysisRun.fileSelection.failure)
+      assertTrue(state.analysisRun.fileSelection.error?.isNotBlank() == true)
+      assertTrue(calls.any { it.contains("/analysis/selection?") })
+      assertTrue(calls.any { it.contains("/overview?") })
+      assertTrue(calls.any { it.contains("/findings?") })
+      assertTrue(calls.none { it.startsWith("POST") && !it.endsWith("/reindex") })
+      unavailable = false
+      presenter.reindexProject()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(
+          ProjectDetailsOutcome.Refreshing,
+          presenter.snapshot.value.state.projectState.detailsOutcome)
+      repeat(12) {
+        main.runPending()
+        io.runPending()
+      }
+      main.runPending()
+      val recovered = presenter.snapshot.value.state
+      assertEquals(ProjectDetailsOutcome.Available, recovered.projectState.detailsOutcome)
+      assertEquals("project", recovered.analysisRun.fileSelection.selection?.projectId)
+      assertEquals(emptyList(), recovered.analysisRun.fileSelection.selection?.excludedPaths)
+      assertTrue(calls.none { it.startsWith("POST") && !it.endsWith("/reindex") })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun verifiedScanActionSettlesSupersededDetailRefreshAndRejectsLateRead() {
+    for (failRead in listOf(false, true)) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val calls = mutableListOf<String>()
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+            calls += "$method $path"
+            when {
+              path.endsWith("/reindex") -> response(indexJson())
+              path.contains("/analysis/run?") || path.contains("/scan?") ->
+                  TransportResponse(204, "")
+              path.contains("/analysis/selection?") -> response("{}")
+              path.contains("/overview?") -> response("{}")
+              path.contains("/findings?") ->
+                  if (failRead) TransportResponse(503, "read failed") else response("{}")
+              else -> error("Unexpected $method $path")
+            }
+          }
+      try {
+        loadProject(presenter)
+        val retained =
+            listOf(
+                UnifiedFinding(
+                    id = "saved",
+                    category = "bugs",
+                    projectId = "project",
+                    projectRevision = "revision",
+                    location = FindingLocation("main.go")))
+        presenter.dispatch(DesktopEvent.FindingsLoaded(retained))
+        presenter.reindexProject()
+        main.runPending()
+        io.runPending()
+        main.runPending()
+        assertEquals(
+            ProjectDetailsOutcome.Refreshing,
+            presenter.snapshot.value.state.projectState.detailsOutcome)
+        assertTrue(calls.none { it.contains("/findings?") })
+
+        presenter.runVerifiedScan()
+        val interrupted = presenter.snapshot.value.state.projectState.detailsOutcome
+        assertTrue(interrupted is ProjectDetailsOutcome.Unavailable)
+        assertTrue(interrupted.message.contains("Verified scan"))
+        io.runPending()
+        main.runPending()
+        assertEquals(interrupted, presenter.snapshot.value.state.projectState.detailsOutcome)
+        assertEquals(retained, presenter.snapshot.value.state.findings.findings)
+        assertEquals(null, presenter.snapshot.value.state.projectState.overview)
+        assertEquals(
+            ProjectIndexingOutcome.Succeeded("revision"),
+            presenter.snapshot.value.state.projectState.indexingAttempt?.outcome)
+        assertTrue(calls.any { it.contains("/findings?") })
+        assertTrue(calls.none { it.startsWith("POST") && !it.endsWith("/reindex") })
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
   fun reindexOpeningLateResultsAndSameRevisionReplacementCannotPublish() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()

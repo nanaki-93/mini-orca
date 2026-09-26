@@ -123,6 +123,7 @@ class DesktopWorkflowPresenter(
   private var projectJob: Job? = null
   private val acceptedProjects = Channel<Pair<Long, String>>(Channel.UNLIMITED)
   private var latestAcceptedProjectRequest = 0L
+  private var workspaceDetailsGeneration = 0L
   private val preferenceSaveJob =
       scope.launch {
         for ((request, path) in acceptedProjects) {
@@ -288,6 +289,7 @@ class DesktopWorkflowPresenter(
 
   private fun openProject(path: String, restore: Boolean) {
     projectJob?.cancel()
+    supersedeProjectDetailsRefresh("Project opening interrupted the workspace detail refresh.")
     clearSecurityReviewRemoteConfirmation()
     cancelProjectScopedWork()
     val request =
@@ -335,6 +337,7 @@ class DesktopWorkflowPresenter(
 
   fun reindexProject() {
     val attempt = controller.beginProjectIndexing() ?: return
+    supersedeProjectDetailsRefresh("Re-indexing interrupted the workspace detail refresh.")
     publish()
     clearSecurityReviewRemoteConfirmation()
     cancelProjectScopedWork()
@@ -1287,8 +1290,14 @@ class DesktopWorkflowPresenter(
   }
 
   private fun refreshProjectWorkspace(identity: WorkflowProjectIdentity) {
+    dispatch(DesktopEvent.ProjectDetailsUpdated(ProjectDetailsOutcome.Refreshing))
     analysisWorkflow.refresh()
     val workspaceScanGeneration = verifiedScanActionGeneration
+    val detailsGeneration = ++workspaceDetailsGeneration
+    fun currentDetails() =
+        detailsGeneration == workspaceDetailsGeneration &&
+            matchesProject(identity) &&
+            isCurrentVerifiedScanAction(identity, workspaceScanGeneration)
     scope.launch {
       try {
         val details = io {
@@ -1297,19 +1306,21 @@ class DesktopWorkflowPresenter(
               api.findings(identity.revision),
               api.goScan(identity.revision))
         }
-        if (!matchesProject(identity)) return@launch
+        if (!currentDetails()) return@launch
         dispatch(DesktopEvent.OverviewLoaded(details.overview))
-        if (isCurrentVerifiedScanAction(identity, workspaceScanGeneration))
-            dispatch(DesktopEvent.FindingsLoaded(details.findings.findings))
+        dispatch(DesktopEvent.FindingsLoaded(details.findings.findings))
         publishVerifiedScan(
             identity, details.scan, workspaceScanGeneration, refreshSeedTerminal = false)
-      } catch (_: CancellationException) {
-        throw CancellationException()
-      } catch (_: Exception) {
-        if (matchesProject(identity))
+        dispatch(DesktopEvent.ProjectDetailsUpdated(ProjectDetailsOutcome.Available))
+      } catch (canceled: CancellationException) {
+        throw canceled
+      } catch (error: Exception) {
+        if (currentDetails())
             dispatch(
-                DesktopEvent.Status(
-                    "Project facts are available; workspace details could not be refreshed."))
+                DesktopEvent.ProjectDetailsUpdated(
+                    ProjectDetailsOutcome.Unavailable(
+                        "Project inventory is available; workspace details could not be refreshed: " +
+                            (error.message?.takeIf(String::isNotBlank) ?: "read unavailable"))))
       }
     }
   }
@@ -1396,6 +1407,8 @@ class DesktopWorkflowPresenter(
       expectedScan: GoScanReport? = null,
   ): VerifiedScanActionRequest? {
     val identity = snapshot.value.state.project?.identity() ?: return null
+    supersedeProjectDetailsRefresh(
+        "Verified scan action interrupted the workspace detail refresh. Re-index to retry.")
     return VerifiedScanActionRequest(
         identity,
         ++verifiedScanActionGeneration,
@@ -1408,6 +1421,12 @@ class DesktopWorkflowPresenter(
     val scan = snapshot.value.state.findings.scan ?: return
     if (!scan.belongsTo(identity)) return
     publishVerifiedScan(identity, scan, generation)
+  }
+
+  private fun supersedeProjectDetailsRefresh(message: String) {
+    workspaceDetailsGeneration++
+    if (controller.state.projectState.detailsOutcome == ProjectDetailsOutcome.Refreshing)
+        dispatch(DesktopEvent.ProjectDetailsUpdated(ProjectDetailsOutcome.Unavailable(message)))
   }
 
   private fun invalidateJobActions() {
