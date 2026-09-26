@@ -37,6 +37,7 @@ class DesktopProjectSwitchTest {
     var context = approved
     var opening = true
     val completion = CompletableFuture<TerminalWorkspaceState>()
+    var terminal = TerminalWorkspaceState()
     val effects = mutableListOf<String>()
     var error: String? = null
     var timeout: (() -> Unit)? = null
@@ -53,10 +54,12 @@ class DesktopProjectSwitchTest {
           admission,
           { context },
           { opening },
-          {
-            effects += "cleanup"
-            completion
-          },
+          SwitchTerminalCleanup(
+              {
+                effects += "cleanup"
+                completion
+              },
+              { terminal }),
           { effects += "discard" },
           { effects += "import $it" },
           {},
@@ -119,10 +122,12 @@ class DesktopProjectSwitchTest {
         admission,
         { current },
         { true },
-        {
-          calls++
-          CompletableFuture.completedFuture(TerminalWorkspaceState())
-        },
+        SwitchTerminalCleanup(
+            {
+              calls++
+              CompletableFuture.completedFuture(TerminalWorkspaceState())
+            },
+            { TerminalWorkspaceState() }),
         { calls++ },
         { calls++ },
         {},
@@ -195,6 +200,48 @@ class DesktopProjectSwitchTest {
     failed.completion.completeExceptionally(IllegalStateException("shell refused to stop"))
     assertEquals(listOf("cleanup"), failed.effects)
     assertTrue(failed.error.orEmpty().contains("shell refused to stop"))
+  }
+
+  @Test
+  fun cleanupResultCannotAuthorizeImportIfAnotherTabAppearsBeforeUiCompletion() {
+    val switch = CleanupSwitch()
+    switch.commit()
+    switch.terminal = TerminalWorkspaceState(tabs = listOf(TerminalTabState(2, "New shell")))
+    switch.finish()
+    assertEquals(listOf("cleanup"), switch.effects)
+    assertTrue(switch.error.orEmpty().contains("incomplete"))
+    assertEquals(SwitchReviewStage.Committed, switch.admission.pending?.stage)
+  }
+
+  @Test
+  fun cleanupPendingAndSynchronousCleanupFailureKeepDraftAndProject() {
+    val pending = CleanupSwitch()
+    pending.commit()
+    pending.completion.complete(
+        TerminalWorkspaceState(
+            tabs =
+                listOf(TerminalTabState(1, "Shell", TerminalSessionState(cleanupPending = true)))))
+    assertEquals(listOf("cleanup"), pending.effects)
+    assertTrue(pending.error.orEmpty().contains("incomplete"))
+
+    val failed = CleanupSwitch()
+    val request = failed.request
+    commitProjectSwitch(
+        request,
+        failed.admission,
+        { failed.context },
+        { true },
+        SwitchTerminalCleanup(
+            { throw IllegalStateException("cleanup unavailable") }, { TerminalWorkspaceState() }),
+        { failed.effects += "discard" },
+        { failed.effects += "import $it" },
+        {},
+        { failed.error = it },
+        { it() },
+        { {} })
+    assertEquals(emptyList(), failed.effects)
+    assertTrue(failed.error.orEmpty().contains("cleanup unavailable"))
+    assertEquals(SwitchReviewStage.Committed, failed.admission.pending?.stage)
   }
 
   @Test

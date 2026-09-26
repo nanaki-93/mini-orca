@@ -123,6 +123,11 @@ internal data class SwitchCleanupFeedback(
     val outstanding: Boolean = false
 )
 
+internal class SwitchTerminalCleanup(
+    val closeAll: () -> CompletableFuture<TerminalWorkspaceState>,
+    val state: () -> TerminalWorkspaceState,
+)
+
 internal data class PendingProjectSwitch(
     val requestId: Long,
     val path: String,
@@ -440,7 +445,7 @@ internal fun MiniOrcaApp(
           switchAdmission,
           { ProjectSwitchContext(presenter.snapshot.value) },
           { projectOpenAvailable(presenter.snapshot.value.state.projectState.openingAttempt) },
-          terminal::closeAllSessions,
+          SwitchTerminalCleanup(terminal::closeAllSessions) { terminal.state.value },
           presenter::discardDraft,
           { presenter.loadProject(it, restore = false) },
           ::updatePendingSwitch,
@@ -883,7 +888,7 @@ internal fun commitProjectSwitch(
     admission: ProjectSwitchAdmission,
     currentContext: () -> ProjectSwitchContext,
     openingAvailable: () -> Boolean,
-    cleanup: () -> CompletableFuture<TerminalWorkspaceState>,
+    terminal: SwitchTerminalCleanup,
     discardDraft: () -> Unit,
     importProject: (String) -> Unit,
     updatePending: () -> Unit,
@@ -914,7 +919,7 @@ internal fun commitProjectSwitch(
     try {
       // Terminal ownership is on Swing; even exited tabs must be removed before importing.
       admission.cleanupStarted(requestId)
-      cleanup().whenComplete { closed, error ->
+      terminal.closeAll().whenComplete { closed, error ->
         post completion@{
           if (admission.pending != committed) return@completion
           admission.cleanupSettled(requestId)
@@ -924,15 +929,25 @@ internal fun commitProjectSwitch(
                 if (error != null ||
                     closed == null ||
                     closed.cleanupPending ||
-                    closed.tabs.isNotEmpty())
+                    closed.tabs.isNotEmpty() ||
+                    terminal.state().let {
+                      it.cleanupPending || it.tabs.isNotEmpty() || it.closingAll
+                    })
                     "Shell cleanup returned after the timeout but is incomplete. The project has not been switched. Some tabs may still be closing; check the terminal before trying again."
                 else
                     "Shell cleanup has now finished after the timeout. The project has not been switched. Some tabs may already be closed; review the terminal before trying again.")
             return@completion
           }
           resolved = true
+          val current = terminal.state()
           when {
-            error != null || closed == null || closed.cleanupPending || closed.tabs.isNotEmpty() ->
+            error != null ||
+                closed == null ||
+                closed.cleanupPending ||
+                closed.tabs.isNotEmpty() ||
+                current.cleanupPending ||
+                current.tabs.isNotEmpty() ||
+                current.closingAll ->
                 updateError(
                     "Shell cleanup is incomplete. The project has not been switched. Some tabs may already be closed: " +
                         (error?.message?.takeIf(String::isNotBlank)
@@ -1088,7 +1103,8 @@ internal fun ProjectSwitchReviewDialog(
             if (pending.stage == SwitchReviewStage.Final && !model.remoteProvider)
                 Text("This Analyze destination is local; no remote confirmation is required.")
             if (committed) {
-              Text("Shell cleanup has begun. Closed tabs cannot be restored by canceling.")
+              Text(
+                  "Switch commitment has begun. Any closed tabs cannot be restored by dismissing this review.")
               cleanupError?.let { DiagnosticText(it, color = Error) }
               if (cleanupOutstanding)
                   Text(
