@@ -153,6 +153,51 @@ internal fun summaryCoverageProjection(
       saved)
 }
 
+internal sealed interface SummaryFileLedger {
+  val selectionNotice: String?
+
+  data class Selected(
+      val owner: SummaryCoverageOwner,
+      val totalSelected: Int,
+      val rows: List<AnalysisFileStatus>,
+      override val selectionNotice: String?,
+  ) : SummaryFileLedger
+
+  data class Empty(
+      val owner: SummaryCoverageOwner,
+      override val selectionNotice: String?,
+  ) : SummaryFileLedger
+
+  data class AggregateOnly(
+      val totalReported: Int,
+      override val selectionNotice: String?,
+  ) : SummaryFileLedger
+
+  data class Unavailable(override val selectionNotice: String?) : SummaryFileLedger
+}
+
+/** Ledger paths come only from the confirmed selection behind the saved coverage dial. */
+internal fun summaryFileLedger(
+    coverage: SummaryCoverageProjection,
+    selectionNotice: String?,
+): SummaryFileLedger =
+    when (coverage) {
+      is SummaryCoverageProjection.Known ->
+          if (coverage.owner.selectionId == null)
+              SummaryFileLedger.AggregateOnly(coverage.total, selectionNotice)
+          else
+              SummaryFileLedger.Selected(
+                  coverage.owner,
+                  coverage.total,
+                  coverage.buckets
+                      .flatMap { (it.paths as SummaryCoveragePaths.Selected).rows }
+                      .sortedBy { it.file.path }
+                      .take(3),
+                  selectionNotice)
+      is SummaryCoverageProjection.Empty -> SummaryFileLedger.Empty(coverage.owner, selectionNotice)
+      SummaryCoverageProjection.Unavailable -> SummaryFileLedger.Unavailable(selectionNotice)
+    }
+
 internal data class ProjectSummaryPresentation(
     val hasProject: Boolean,
     val projectName: String,
@@ -173,6 +218,7 @@ internal data class ProjectSummaryPresentation(
     val findingMetrics: List<ProjectSummaryMetric>,
     val coverageMetrics: List<ProjectSummaryMetric>,
     val coverage: SummaryCoverageProjection,
+    val fileLedger: SummaryFileLedger,
     val issueMetrics: List<SummaryIssueMetric>,
     val details: List<ProjectSummaryDetail>,
     val engineeringInsight: EngineeringInsight?,
@@ -341,6 +387,7 @@ internal fun projectSummaryPresentation(
                     ProjectSummaryMetric("Unavailable", null, SummaryMetricTone.Failed))
           },
       coverage = coverageProjection,
+      fileLedger = summaryFileLedger(coverageProjection, selectionNotice),
       issueMetrics =
           summaryIssueMetrics(
               project, currentRun, if (currentRun != null) sections else emptyMap()),

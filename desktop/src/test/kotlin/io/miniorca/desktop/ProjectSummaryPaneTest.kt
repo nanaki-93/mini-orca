@@ -955,6 +955,145 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun fileLedgerSortsSavedCoverageAcrossBucketsBeforeBounding() {
+    val project = analysisProjectFixture()
+    val files =
+        listOf(
+            AnalysisSelectableFile("z/last.go", "", selectionStageFixture("fresh", "Current")),
+            AnalysisSelectableFile("B/second.go", "", selectionStageFixture("stale", "Changed")),
+            AnalysisSelectableFile("a/third.go", "", selectionStageFixture("failed", "Failed")),
+            AnalysisSelectableFile("A/first.go", "", selectionStageFixture("missing", "Missing")),
+            AnalysisSelectableFile("c/fourth.go", "", selectionStageFixture("fresh", "Current")),
+            AnalysisSelectableFile("0-excluded.go", "", selectionStageFixture("fresh", "Current")),
+            AnalysisSelectableFile(".env", "Excluded by policy"))
+    val selection =
+        selectionFixture().copy(files = files, excludedPaths = listOf("0-excluded.go", "absent.go"))
+    for (ordered in listOf(files, files.reversed())) {
+      val confirmed = selection.copy(files = ordered)
+      val summary = projectSummaryPresentation(null, project, fileSelection = confirmed)
+      val ledger = summary.fileLedger as SummaryFileLedger.Selected
+      val coverage = summary.coverage as SummaryCoverageProjection.Known
+      assertEquals(coverage.owner, ledger.owner)
+      assertEquals(coverage.total, ledger.totalSelected)
+      assertEquals(5, ledger.totalSelected)
+      assertEquals(
+          listOf("A/first.go", "B/second.go", "a/third.go"), ledger.rows.map { it.file.path })
+      assertEquals(
+          listOf(
+              AnalysisFileSyncStatus.Missing,
+              AnalysisFileSyncStatus.Stale,
+              AnalysisFileSyncStatus.Failed),
+          ledger.rows.map { it.status })
+      ledger.rows.forEach { row ->
+        assertTrue(
+            coverage.buckets.any { bucket ->
+              (bucket.paths as SummaryCoveragePaths.Selected).rows.contains(row)
+            })
+      }
+      assertTrue(ledger.rows[1].explanation.contains("Changed"))
+      assertEquals(null, ledger.selectionNotice)
+    }
+  }
+
+  @Test
+  fun fileLedgerSeparatesAggregateEmptyAndUnavailableSelection() {
+    val project = analysisProjectFixture()
+    val overview =
+        ProjectOverview(
+            "project", "revision", analysisCoverage = AnalysisCoverage(total = 6, fresh = 2))
+    val noSelection = projectSummaryPresentation(overview, project)
+    assertEquals(SummaryFileLedger.AggregateOnly(6, null), noSelection.fileLedger)
+    val readFailure =
+        AnalysisSelectionState(error = "Timed out.", failure = AnalysisSelectionFailure.Read)
+    val aggregateFailure =
+        projectSummaryPresentation(overview, project, selectionState = readFailure)
+    assertEquals(
+        SummaryFileLedger.AggregateOnly(6, aggregateFailure.selectionNotice),
+        aggregateFailure.fileLedger)
+    assertTrue(aggregateFailure.fileLedger.selectionNotice!!.contains("No confirmed selection"))
+    val unavailable = projectSummaryPresentation(null, project, selectionState = readFailure)
+    assertEquals(SummaryFileLedger.Unavailable(unavailable.selectionNotice), unavailable.fileLedger)
+    assertEquals(
+        SummaryFileLedger.Unavailable(null), projectSummaryPresentation(null, project).fileLedger)
+    val excluded =
+        selectionFixture().copy(excludedPaths = listOf("main.go", "helper.go", "absent.go"))
+    val empty = projectSummaryPresentation(overview, project, fileSelection = excluded)
+    assertEquals(
+        SummaryFileLedger.Empty(SummaryCoverageOwner("project", "revision", "selection"), null),
+        empty.fileLedger)
+    assertTrue(empty.coverage is SummaryCoverageProjection.Empty)
+    val retainedEmpty =
+        projectSummaryPresentation(
+            overview, project, selectionState = AnalysisSelectionState(excluded, saving = true))
+    assertEquals(
+        SummaryFileLedger.Empty(
+            SummaryCoverageOwner("project", "revision", "selection"),
+            retainedEmpty.selectionNotice),
+        retainedEmpty.fileLedger)
+    assertTrue(retainedEmpty.fileLedger.selectionNotice!!.contains("last confirmed selection"))
+    val foreign =
+        projectSummaryPresentation(
+            overview, project, fileSelection = excluded.copy(projectRevision = "old"))
+    assertEquals(SummaryFileLedger.AggregateOnly(6, null), foreign.fileLedger)
+  }
+
+  @Test
+  fun fileLedgerRetainsConfirmedRowsAndNoticesWithoutBorrowingPendingEditsOrRunProgress() {
+    val project = analysisProjectFixture()
+    val confirmed = selectionFixture()
+    val pending =
+        confirmed.copy(
+            files =
+                listOf(
+                    AnalysisSelectableFile(
+                        "pending.go", "", selectionStageFixture("fresh", "Current"))))
+    val run =
+        analysisRunFixture()
+            .copy(
+                status = "running",
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "main.go",
+                            "base",
+                            "Go",
+                            listOf(AnalysisStageProgress("semantic", "pending", 0, false)))))
+    assertEquals(AnalysisFileSyncStatus.Pending, analysisFileStatuses(confirmed, run).last().status)
+    val finished =
+        run.copy(
+            files =
+                run.files.map {
+                  it.copy(stages = listOf(AnalysisStageProgress("semantic", "completed", 1, false)))
+                })
+    assertEquals(
+        AnalysisFileSyncStatus.Finished, analysisFileStatuses(confirmed, finished).last().status)
+    val states =
+        listOf(
+            AnalysisSelectionState(confirmed, loading = true),
+            AnalysisSelectionState(confirmed, saving = true),
+            AnalysisSelectionState(
+                confirmed, error = "Read failed.", failure = AnalysisSelectionFailure.Read),
+            AnalysisSelectionState(
+                confirmed, error = "Save failed.", failure = AnalysisSelectionFailure.Save))
+    states.forEach { state ->
+      listOf(run, finished).forEach { overlay ->
+        val summary =
+            projectSummaryPresentation(
+                null, project, overlay, fileSelection = pending, selectionState = state)
+        val ledger = summary.fileLedger as SummaryFileLedger.Selected
+        assertEquals(listOf("helper.go", "main.go"), ledger.rows.map { it.file.path })
+        assertEquals(
+            listOf(AnalysisFileSyncStatus.Updated, AnalysisFileSyncStatus.Missing),
+            ledger.rows.map { it.status })
+        assertEquals(2, ledger.totalSelected)
+        assertEquals(summary.selectionNotice, ledger.selectionNotice)
+        assertTrue(ledger.selectionNotice!!.contains("last confirmed selection"))
+        assertTrue(ledger.rows.none { it.file.path == "pending.go" })
+      }
+    }
+  }
+
+  @Test
   fun coverageArcsUseValidatedDenominatorWithoutGapsOrInflatedSmallBuckets() {
     val project = analysisProjectFixture()
     val unknown = projectSummaryPresentation(null, project)
