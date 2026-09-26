@@ -3696,6 +3696,62 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun summaryIdentityKeepsTypeBesideNameAndFactsWithoutRepeatingType() {
+    val project =
+        visualFixtureProject.copy(
+            name = "Sample workspace",
+            type = "Java",
+            buildFile = "pom.xml",
+            languages = mapOf("Java" to 4, "Kotlin" to 2),
+            aiStatus = "missing")
+    ComposeVisualFixture(1440, 900) { ProjectSummaryPane(null, project, {}) }
+        .use { fixture ->
+          fixture.render("summary-identity-java-wide")
+          fixture.assertTextSharesRowBefore("Sample workspace", "Java project")
+          fixture.assertTextFits("Java project")
+          assertEquals(1, fixture.taggedTextCount("summary-project-type", "Java project"))
+          assertTrue(fixture.hasText("pom.xml · 23 indexed files · 1,800 lines · Kotlin"))
+          assertEquals(1, fixture.textCount("Java project"))
+          assertTrue(fixture.hasText("Project description: unavailable"))
+        }
+  }
+
+  @Test
+  fun summaryIdentityWrapsLongNameAndRealTypeAtCompactLargeText() {
+    val name =
+        "Project migration workspace with multiple integrations and a lengthy identity "
+            .repeat(3)
+            .trim()
+    val customType =
+        "Legacy mixed-language application with custom build metadata ".repeat(3).trim()
+    val project =
+        visualFixtureProject.copy(
+            name = name, type = customType, buildFile = "build.gradle.kts", aiStatus = "missing")
+    ComposeVisualFixture(800, 650, 1.5f) { ProjectSummaryPane(null, project, {}) }
+        .use { fixture ->
+          fixture.render("summary-identity-long-800-150")
+          val label = "Project type: $customType"
+          fixture.assertTextWrapsWithoutClipping(name)
+          fixture.assertTextWrapsWithoutClipping(label)
+          val identity = fixture.taggedBounds("summary-project-identity")
+          val nameBounds = fixture.firstVisibleTextBounds(name)
+          val typeBounds = fixture.taggedBounds("summary-project-type")
+          assertTrue(nameBounds.bottom < typeBounds.top, "Long type must flow below long name")
+          assertTrue(nameBounds.right <= identity.right && typeBounds.right <= identity.right)
+          assertTrue(typeBounds.bottom <= identity.bottom)
+          assertTrue(fixture.hasText("Project description: unavailable"))
+          assertTrue(fixture.hasText("build.gradle.kts · 23 indexed files · 1,800 lines"))
+        }
+    ComposeVisualFixture(800, 650, 1.5f) { ProjectSummaryPane(null, project.copy(type = " "), {}) }
+        .use { fixture ->
+          fixture.render("summary-identity-blank-type-800-150")
+          fixture.assertTextFits("Project")
+          assertEquals(1, fixture.taggedTextCount("summary-project-type", "Project"))
+          assertTrue(fixture.hasText("build.gradle.kts · 23 indexed files · 1,800 lines"))
+        }
+  }
+
+  @Test
   fun baselineCapturesSummaryAndExercisesOnlyTheLiveProjectMenu() {
     ComposeVisualFixture(1440, 900) {
           ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
@@ -3703,7 +3759,8 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render("summary-1440")
           assertEquals(1, fixture.textCount("Summary"))
-          assertTrue(fixture.hasText("Go · go.mod · 23 indexed files · 1,800 lines · Markdown"))
+          fixture.assertTextSharesRowBefore(visualFixtureProject.name, "Go project")
+          assertTrue(fixture.hasText("go.mod · 23 indexed files · 1,800 lines · Markdown"))
           assertTrue(fixture.hasText("Analysis coverage"))
           fixture.assertTextAbove("Summary", visualFixtureProject.name)
           assertFalse(fixture.hasText("Project understanding"))
@@ -4456,7 +4513,8 @@ class DesktopVisualLayoutTest {
                   "Engineering insight",
                   "Validate before storage.")
               .forEach { assertTrue(fixture.hasText(it), it) }
-          assertTrue(fixture.hasText("Go · go.mod · 23 indexed files · 1,800 lines · Markdown"))
+          fixture.assertTextSharesRowBefore(visualFixtureProject.name, "Go project")
+          assertTrue(fixture.hasText("go.mod · 23 indexed files · 1,800 lines · Markdown"))
           assertTrue(
               fixture.hasText("Overall findings · 2 tool-reported issues · 4 AI suggestions"))
           fixture.assertTextAbove("Summary", visualFixtureProject.name)
