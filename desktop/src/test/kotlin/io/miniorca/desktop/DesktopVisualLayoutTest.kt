@@ -4953,6 +4953,8 @@ class DesktopVisualLayoutTest {
             mapOf(AnalysisResultKey("performance") to AnalysisSectionState(loading = true)))
     val overview =
         visualFixtureOverview.copy(
+            projectId = "project",
+            projectRevision = "revision",
             analysis = StructuredProjectAnalysis(status = "fresh", purpose = "Current purpose"),
             analysisCoverage = AnalysisCoverage(total = 3, fresh = 3))
     ComposeVisualFixture(1440, 900) {
@@ -5058,6 +5060,8 @@ class DesktopVisualLayoutTest {
                 })
     val overview =
         visualFixtureOverview.copy(
+            projectId = "project",
+            projectRevision = "revision",
             analysisCoverage =
                 AnalysisCoverage(
                     total = 5, fresh = 1, stale = 1, missing = 1, running = 1, failed = 1))
