@@ -547,7 +547,7 @@ internal fun MiniOrcaApp(
       projectActions =
           DesktopShellProjectActions(
               importProject = ::importProject,
-              reanalyzeProject = presenter::reanalyze,
+              reanalyzeProject = presenter::reindexProject,
               reconnect = presenter::refreshConnection,
               retryRestore = presenter::retryProjectRestore,
           ),

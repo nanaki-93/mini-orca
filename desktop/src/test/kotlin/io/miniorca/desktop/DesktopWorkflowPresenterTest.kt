@@ -1229,7 +1229,7 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun failedReindexRestoresTheProjectRunWithoutStartingAnotherAnalysis() {
+  fun failedReindexRetainsTheProjectRunWithoutStartingAnotherAnalysis() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()
     val scope = CoroutineScope(SupervisorJob() + main)
@@ -1256,16 +1256,279 @@ class DesktopWorkflowPresenterTest {
         }
     try {
       loadProject(presenter)
-      presenter.reanalyze()
+      presenter.dispatch(
+          DesktopEvent.AnalysisRunUpdated(ProjectAnalysisRunState(run = analysisRunFixture())))
+      presenter.reindexProject()
       repeat(8) {
         main.runPending()
         io.runPending()
       }
       main.runPending()
       assertEquals("paused", presenter.snapshot.value.state.analysisRun.run?.status)
-      assertEquals("index unavailable", presenter.snapshot.value.state.error)
+      assertEquals(
+          ProjectIndexingOutcome.Failed("index unavailable"),
+          presenter.snapshot.value.state.projectState.indexingAttempt?.outcome)
+      assertEquals("revision", presenter.snapshot.value.state.project?.projectRevision)
       assertEquals(
           listOf("POST" to "/api/projects/current/reindex"), calls.filter { it.first == "POST" })
+      assertTrue(calls.any { it.first == "GET" && it.second.contains("/analysis/run?") })
+      assertTrue(calls.none { it.first == "POST" && it.second.contains("/analysis/") })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun unsuccessfulReindexResumesPollingTheExistingDaemonRun() {
+    for (result in listOf("failed", "canceled", "mismatched")) {
+      val run = analysisRunFixture().copy(status = "running")
+      val polls = AtomicInteger()
+      val posts = AtomicInteger()
+      val presenter = presenter { method, path, _ ->
+        when {
+          method == "POST" && path.endsWith("/reindex") -> {
+            posts.incrementAndGet()
+            when (result) {
+              "failed" -> TransportResponse(500, """{"message":"index unavailable"}""")
+              "canceled" -> throw kotlinx.coroutines.CancellationException("request canceled")
+              else -> response("""{"project_id":"other","project_revision":"revision"}""")
+            }
+          }
+          path.contains("/analysis/run?") -> {
+            val status = if (polls.incrementAndGet() == 1) "running" else "paused"
+            response(
+                kotlinx.serialization.json.Json.encodeToString(
+                    AnalysisRun.serializer(), run.copy(status = status)))
+          }
+          path.contains("/analysis/results?") -> {
+            val category = path.substringAfter("category=").substringBefore("&")
+            response(
+                kotlinx.serialization.json.Json.encodeToString(
+                    AnalysisSectionResults.serializer(), analysisResultsFixture(run, category)))
+          }
+          path.contains("/analysis/selection?") -> response("{}")
+          else -> error("Unexpected $method $path")
+        }
+      }
+      try {
+        loadProject(presenter)
+        presenter.dispatch(DesktopEvent.AnalysisRunUpdated(ProjectAnalysisRunState(run = run)))
+        presenter.reindexProject()
+        eventually {
+          polls.get() >= 2 && presenter.snapshot.value.state.analysisRun.run?.status == "paused"
+        }
+        assertEquals(1, posts.get(), result)
+        assertEquals("revision", presenter.snapshot.value.state.project?.projectRevision, result)
+        val outcome = presenter.snapshot.value.state.projectState.indexingAttempt?.outcome
+        if (result == "canceled") assertEquals(ProjectIndexingOutcome.Canceled, outcome)
+        else assertTrue(outcome is ProjectIndexingOutcome.Failed, result)
+      } finally {
+        presenter.close()
+      }
+    }
+  }
+
+  @Test
+  fun reindexAdmitsOneRequestWithCapturedRevisionAndOnlyReadsAfterAcceptance() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<Triple<String, String, String?>>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, body ->
+          calls += Triple(method, path, body)
+          when {
+            path.endsWith("/reindex") -> response(indexJson())
+            path.contains("/analysis/run?") || path.contains("/scan?") -> TransportResponse(204, "")
+            path.contains("/analysis/selection?") -> response("{}")
+            path.contains("/overview?") || path.contains("/findings?") -> response("{}")
+            else -> error("Unexpected $method $path")
+          }
+        }
+    try {
+      presenter.reindexProject()
+      assertTrue(calls.isEmpty())
+      loadProject(presenter)
+      presenter.reindexProject()
+      val attempt = presenter.snapshot.value.state.projectState.indexingAttempt!!
+      presenter.reindexProject()
+      assertEquals(attempt, presenter.snapshot.value.state.projectState.indexingAttempt)
+      main.runPending()
+      io.runPending()
+      assertEquals(1, calls.size)
+      assertEquals("POST", calls.single().first)
+      assertEquals("/api/projects/current/reindex", calls.single().second)
+      assertEquals("{\"project_revision\":\"revision\"}", calls.single().third)
+      main.runPending()
+      assertEquals(
+          ProjectIndexingOutcome.Succeeded("revision"),
+          presenter.snapshot.value.state.projectState.indexingAttempt?.outcome)
+      repeat(5) {
+        io.runPending()
+        main.runPending()
+      }
+      assertTrue(calls.drop(1).all { it.first == "GET" })
+      assertTrue(
+          calls.none {
+            it.second.contains("/preview") ||
+                it.second.contains("/execute") ||
+                it.second.contains("/apply")
+          })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun reindexOpeningLateResultsAndSameRevisionReplacementCannotPublish() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<String>()
+    var fail = false
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          calls += "$method $path"
+          if (path.endsWith("/reindex")) {
+            if (fail) throw IllegalStateException(" ")
+            response(indexJson())
+          } else error("Unexpected $method $path")
+        }
+    try {
+      loadProject(presenter)
+      presenter.dispatch(
+          DesktopEvent.ProjectOpeningStarted(
+              ProjectOpeningAttempt(1, "/tmp/other", ProjectOpeningKind.Import)))
+      presenter.reindexProject()
+      assertTrue(calls.isEmpty())
+      presenter.dispatch(DesktopEvent.ProjectOpeningCanceled(1))
+      presenter.reindexProject()
+      val old = presenter.snapshot.value.state.projectState.indexingAttempt!!
+      main.runPending()
+      io.runPending()
+      presenter.dispatch(
+          DesktopEvent.ProjectOpeningStarted(
+              ProjectOpeningAttempt(2, "/tmp/project", ProjectOpeningKind.Import)))
+      presenter.dispatch(DesktopEvent.ProjectLoaded(project(), ProjectIndex("project", "revision")))
+      presenter.reindexProject()
+      val current = presenter.snapshot.value.state.projectState.indexingAttempt!!
+      assertTrue(current.generation != old.generation)
+      // The old response was queued first; it must not complete the new same-revision attempt.
+      main.runNext()
+      assertEquals(
+          ProjectIndexingOutcome.Running,
+          presenter.snapshot.value.state.projectState.indexingAttempt?.outcome)
+      main.runPending()
+      fail = true
+      io.runPending()
+      main.runPending()
+      assertEquals(
+          ProjectIndexingOutcome.Failed("Could not re-index project. Try again."),
+          presenter.snapshot.value.state.projectState.indexingAttempt?.outcome)
+      assertEquals("revision", presenter.snapshot.value.state.project?.projectRevision)
+      assertEquals(2, calls.size)
+      presenter.reindexProject()
+      assertEquals(
+          "revision", presenter.snapshot.value.state.projectState.indexingAttempt?.projectRevision)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun lateFailureCannotFailANewAttemptAfterReturningToTheSameProject() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var fail = true
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          when {
+            method == "POST" && path.endsWith("/reindex") -> {
+              if (fail) throw IllegalStateException("old failure")
+              response(indexJson())
+            }
+            path.contains("/analysis/run?") || path.contains("/scan?") -> TransportResponse(204, "")
+            path.contains("/analysis/selection?") ||
+                path.contains("/overview?") ||
+                path.contains("/findings?") -> response("{}")
+            else -> error("Unexpected $method $path")
+          }
+        }
+    try {
+      loadProject(presenter)
+      presenter.reindexProject()
+      main.runPending()
+      io.runPending()
+      presenter.dispatch(
+          DesktopEvent.ProjectLoaded(project("other"), ProjectIndex("other", "revision")))
+      loadProject(presenter)
+      presenter.reindexProject()
+      val replacement = presenter.snapshot.value.state.projectState.indexingAttempt!!
+      main.runNext()
+      assertEquals(replacement, presenter.snapshot.value.state.projectState.indexingAttempt)
+      main.runPending()
+      fail = false
+      io.runPending()
+      main.runPending()
+      assertEquals(
+          ProjectIndexingOutcome.Succeeded("revision"),
+          presenter.snapshot.value.state.projectState.indexingAttempt?.outcome)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun canceledAndMismatchedReindexNeverRefreshSavedWork() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<String>()
+    var index = indexJson()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          calls += "$method $path"
+          when {
+            path.endsWith("/reindex") -> response(index)
+            path == "/api/projects/import" -> response(projectJson())
+            path == "/api/projects/current/index" -> response(indexJson())
+            path.contains("/analysis/run?") || path.contains("/scan?") -> TransportResponse(204, "")
+            path.contains("/analysis/selection?") ||
+                path.contains("/overview?") ||
+                path.contains("/findings?") -> response("{}")
+            else -> error("Unexpected $method $path")
+          }
+        }
+    try {
+      loadProject(presenter)
+      presenter.reindexProject()
+      main.runPending()
+      io.runPending()
+      presenter.loadProject("/tmp/project", restore = false)
+      assertEquals(
+          ProjectIndexingOutcome.Canceled,
+          presenter.snapshot.value.state.projectState.indexingAttempt?.outcome)
+      main.runPending()
+      assertTrue(calls.none { it.contains("/overview?") || it.contains("/findings?") })
+      repeat(6) {
+        io.runPending()
+        main.runPending()
+      }
+      index = """{"project_id":"other","project_revision":"revision"}"""
+      presenter.reindexProject()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertTrue(
+          presenter.snapshot.value.state.projectState.indexingAttempt?.outcome
+              is ProjectIndexingOutcome.Failed)
+      assertEquals("project", presenter.snapshot.value.state.projectState.index?.projectId)
+      assertEquals("revision", presenter.snapshot.value.state.project?.projectRevision)
     } finally {
       presenter.close()
       scope.cancel()
@@ -1566,7 +1829,7 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun failedReanalysisDoesNotLeaveBenchmarkComparisonRunning() {
+  fun failedReindexDoesNotLeaveBenchmarkComparisonRunning() {
     val presenter = presenter { method, path, _ ->
       if (method == "POST" && path == "/api/projects/current/reindex")
           throw IllegalStateException("reindex failed")
@@ -1578,9 +1841,12 @@ class DesktopWorkflowPresenterTest {
       presenter.dispatch(DesktopEvent.GoBenchmarkComparisonStarted)
       assertTrue(presenter.snapshot.value.state.review.benchmark.running)
 
-      presenter.reanalyze()
+      presenter.reindexProject()
 
-      eventually { presenter.snapshot.value.state.error == "reindex failed" }
+      eventually {
+        presenter.snapshot.value.state.projectState.indexingAttempt?.outcome ==
+            ProjectIndexingOutcome.Failed("reindex failed")
+      }
       assertFalse(presenter.snapshot.value.state.review.benchmark.running)
       assertFalse(presenter.snapshot.value.state.loading)
     } finally {
@@ -2701,7 +2967,7 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun reanalyzeCancelsTheVisibleSecurityAction() {
+  fun reindexCancelsTheVisibleSecurityAction() {
     val scanStarted = CountDownLatch(1)
     val releaseScan = CountDownLatch(1)
     val presenter = presenter { method, path, _ ->
@@ -2720,7 +2986,7 @@ class DesktopWorkflowPresenterTest {
       presenter.scanSecurity()
       assertTrue(scanStarted.await(1, TimeUnit.SECONDS))
 
-      presenter.reanalyze()
+      presenter.reindexProject()
 
       assertTrue(presenter.snapshot.value.state.security.action.isBlank())
       assertEquals(
