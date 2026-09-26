@@ -293,6 +293,107 @@ class ResultWorkspaceLayoutTest {
   }
 
   @Test
+  fun explicitTargetRevealsItsActualPositionAndMissingTargetHasLocalRecovery() {
+    val page = resultPageFixture("bugs")
+    var rows by mutableStateOf((1..320).map { row(it) })
+    val browser = newResultBrowserState(page)
+    val target =
+        SummaryFindingTarget(
+            page.project!!.projectId,
+            page.project.projectRevision,
+            page.run!!.identity,
+            AnalysisResultType.Bugs,
+            SummaryFindingProducer.Semantic("internal/handler.go", "finding-280", "file_analysis"),
+            "finding-280")
+    var navigations = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          AnalysisResultsPane(page, rows, browser, openAnalysis = { navigations++ }) { key ->
+            Text("Evidence for $key")
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          browser.target(ExplicitResultTarget.Resolved(target))
+          fixture.render("result-target-revealed-800-150")
+          fixture.awaitVisibleDescription("Inspect Finding 280")
+          assertTrue(browser.listState.firstVisibleItemIndex > 200)
+          assertEquals("finding-280", browser.selectedKey)
+          assertTrue(fixture.hasText("Evidence for finding-280"))
+          assertFalse(fixture.hasText("Finding unavailable"))
+          assertTrue(fixture.requestDescriptionFocus("Inspect Finding 280"))
+          val revealedIndex = browser.listState.firstVisibleItemIndex
+          rows = rows.map { if (it.key == "finding-1") it.copy(summary = "Refreshed") else it }
+          fixture.render()
+          assertEquals(revealedIndex, browser.listState.firstVisibleItemIndex)
+          assertTrue(fixture.isDescriptionFocused("Inspect Finding 280"))
+
+          rows = rows.filterNot { it.key == target.rowKey }
+          fixture.render("result-target-unavailable-800-150")
+          assertEquals(null, browser.selectedKey)
+          assertTrue(
+              fixture.hasText(
+                  "Finding unavailable · This finding is no longer in the loaded results."))
+          assertFalse(fixture.hasText("Evidence for finding-281"))
+          assertFalse(fixture.hasText("Evidence for finding-1"))
+          assertTrue(
+              fixture.taggedBounds("result-target-unavailable").bottom <=
+                  fixture.taggedBounds("result-list").top)
+          assertTrue(fixture.hasText("View current Bugs results"))
+          rows = (1..320).map { row(it) }
+          fixture.render()
+          assertTrue(browser.explicitTarget is ExplicitResultTarget.Unavailable)
+          assertFalse(fixture.hasText("Evidence for finding-280"))
+          fixture.clickText("View current Bugs results")
+          fixture.render()
+          assertEquals(null, browser.explicitTarget)
+          assertTrue(fixture.hasText("Evidence for finding-1"))
+          assertEquals(0, navigations)
+          fixture.revealText("Finding 20", "result-list")
+          assertTrue(fixture.requestDescriptionFocus("Inspect Finding 20"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals("finding-20", browser.selectedKey)
+          assertTrue(fixture.hasText("Evidence for finding-20"))
+        }
+  }
+
+  @Test
+  fun ambiguousTargetShowsNoSubstituteAndRowSelectionDismissesFeedback() {
+    val page = resultPageFixture("bugs")
+    val rows = listOf(row(1), row(1).copy(title = "Colliding result"), row(2))
+    val browser = newResultBrowserState(page)
+    val target =
+        SummaryFindingTarget(
+            page.project!!.projectId,
+            page.project.projectRevision,
+            page.run!!.identity,
+            AnalysisResultType.Bugs,
+            SummaryFindingProducer.Semantic("internal/handler.go", "finding-1", "file_analysis"),
+            "finding-1")
+    browser.target(ExplicitResultTarget.Resolved(target))
+    ComposeVisualFixture(800, 650) {
+          AnalysisResultsPane(page, rows, browser, openAnalysis = {}) { key ->
+            Text("Evidence for $key")
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "Finding unavailable · Multiple results share this finding identity; select a result from the category list."))
+          assertFalse(fixture.hasText("Evidence for finding-1"))
+          fixture.clickDescription("Inspect Finding 2")
+          fixture.render()
+          assertEquals(null, browser.explicitTarget)
+          assertEquals("finding-2", browser.selectedKey)
+          assertFalse(
+              fixture.hasText(
+                  "Finding unavailable · Multiple results share this finding identity; select a result from the category list."))
+          assertTrue(fixture.hasText("Evidence for finding-2"))
+        }
+  }
+
+  @Test
   fun selectingAnotherFindingStartsItsEvidenceAtTheTop() {
     val rows = (1..2).map { row(it) }
     val browser =

@@ -42,6 +42,23 @@ class ResultBrowserStateTest {
   }
 
   @Test
+  fun explicitSelectionNeverFallsBackToAnUnrelatedRow() {
+    val page = resultPageFixture("bugs")
+    val target = summaryFindingPreview(snapshot(page)).rows.single().target
+    val first = row("high", "First")
+    val matching = row("high", "Matching").copy(key = target.rowKey)
+    val resolved = ExplicitResultTarget.Resolved(target)
+    val unavailable = ExplicitResultTarget.Unavailable(target, "Finding removed")
+
+    assertEquals(
+        target.rowKey, resultBrowserSelection(first.key, listOf(first, matching), resolved))
+    assertNull(resultBrowserSelection(first.key, listOf(first), resolved))
+    assertNull(resultBrowserSelection(first.key, listOf(first, matching, matching), resolved))
+    assertNull(resultBrowserSelection(first.key, listOf(first, matching), unavailable))
+    assertEquals(first.key, resultBrowserSelection(null, listOf(first, matching)))
+  }
+
+  @Test
   fun savedResultReadChangesDoNotReplaceLocalBrowserState() {
     val page = resultPageFixture("bugs")
     val store = ResultBrowserStore()
