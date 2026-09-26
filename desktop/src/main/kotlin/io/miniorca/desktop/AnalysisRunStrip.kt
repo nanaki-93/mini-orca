@@ -85,18 +85,7 @@ internal fun AnalysisRunStrip(
                   color = SecondaryText,
                   style = IdeTypography.workspaceMetadata)
         }
-        state.analysis.action
-            .takeIf { it.isNotEmpty() }
-            ?.let {
-              Text(
-                  "Analysis: ${it.replaceFirstChar { character -> character.uppercase() }}…",
-                  style = IdeTypography.workspaceMetadata,
-                  color = SelectionText)
-            }
-        state.analysis.error?.let {
-          Text("Analysis action needs attention", color = Error, style = IdeTypography.compactBody)
-          DiagnosticText(it.ifBlank { "No failure details available." }, color = Error)
-        }
+        AnalysisActionFeedback(state.analysis)
       }
 }
 
@@ -319,6 +308,25 @@ private fun AnalysisRunProgressTrack(
 }
 
 @Composable
+internal fun AnalysisActionFeedback(analysis: ProjectAnalysisRunState) {
+  analysis.action
+      .takeIf { it.isNotEmpty() }
+      ?.let {
+        Text(
+            "Analysis: ${it.replaceFirstChar { character -> character.uppercase() }}…",
+            style = IdeTypography.workspaceMetadata,
+            color = SelectionText)
+      }
+  analysis.error?.let {
+    Text("Analysis action needs attention", color = Error, style = IdeTypography.compactBody)
+    DiagnosticText(it.ifBlank { "No failure details available." }, color = Error)
+  }
+}
+
+internal fun analysisRunActionEnabled(state: AnalysisWorkspacePaneState): Boolean =
+    state.project != null && state.analysis.action.isBlank() && !state.analysis.fileSelection.saving
+
+@Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun AnalysisRunControls(
     state: AnalysisWorkspacePaneState,
@@ -344,10 +352,7 @@ private fun AnalysisRunControls(
                   AnalysisRunCommand.Cancel -> actions.cancel()
                 }
               },
-              enabled =
-                  state.project != null &&
-                      state.analysis.action.isBlank() &&
-                      !state.analysis.fileSelection.saving,
+              enabled = analysisRunActionEnabled(state),
               tone =
                   when (command) {
                     AnalysisRunCommand.Cancel -> ActionTone.Destructive

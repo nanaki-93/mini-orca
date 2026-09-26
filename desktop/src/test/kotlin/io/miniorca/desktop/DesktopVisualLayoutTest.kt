@@ -1414,6 +1414,42 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun summaryPreviewEntryAndFeedbackWrapAtCompactTextScaleWithoutHidingCoverage() {
+    val project = visualFixtureProject
+    listOf(1440 to 1f, 800 to 1.5f).forEach { (width, scale) ->
+      var state by mutableStateOf(ProjectAnalysisRunState())
+      var previews = 0
+      val actions = AnalysisWorkspaceActions({ _, _ -> previews++ }, {}, {}, {}, {})
+      ComposeVisualFixture(width, 650, scale) {
+            ProjectSummaryPane(
+                visualFixtureOverview,
+                project,
+                {},
+                analysisState = state,
+                analysisActions = actions)
+          }
+          .use { fixture ->
+            fixture.render("summary-preview-ready-$width-$scale")
+            fixture.assertTextFits("Start analysis")
+            fixture.assertTextAbove("Start analysis", "Analysis coverage")
+            fixture.clickText("Start analysis")
+            assertEquals(1, previews)
+            state = state.copy(action = "previewing")
+            fixture.render("summary-preview-pending-$width-$scale")
+            fixture.assertTextFits("Analysis: Previewing…")
+            fixture.assertTextAbove("Start analysis", "Analysis: Previewing…")
+            assertTrue(fixture.isDisabled("Start analysis"))
+            state = state.copy(action = "", error = "Preview failed: connection unavailable.")
+            fixture.render("summary-preview-failed-$width-$scale")
+            fixture.assertTextFits("Preview failed: connection unavailable.")
+            fixture.assertTextAbove("Start analysis", "Preview failed: connection unavailable.")
+            fixture.assertTextFits("Start analysis")
+            assertTrue(fixture.hasText("View analysis"))
+          }
+    }
+  }
+
+  @Test
   fun sharedRunStripWrapsProgressAndUsesCurrentLifecycleControlsInSummary() {
     val paths = listOf("internal/transport/main.go", "internal/storage/repository.go")
     val initialRun =

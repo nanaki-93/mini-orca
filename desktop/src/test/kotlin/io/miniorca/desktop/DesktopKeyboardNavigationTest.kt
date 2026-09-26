@@ -1308,6 +1308,52 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun summaryStartRespondsOnceToEnterAndSpaceWithTheSharedPendingGuard() {
+    val project = analysisProjectFixture()
+    var state by mutableStateOf(ProjectAnalysisRunState())
+    val previews = mutableListOf<Pair<AnalysisRunLimits, Boolean>>()
+    val actions =
+        AnalysisWorkspaceActions(
+            { limits, retry ->
+              previews += limits to retry
+              state = state.copy(action = "previewing")
+            },
+            {},
+            {},
+            {},
+            {})
+    ComposeVisualFixture(800, 650) {
+          ProjectSummaryPane(null, project, {}, analysisState = state, analysisActions = actions)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestFocus("Start analysis"))
+          assertTrue(fixture.isFocusedControl("Start analysis"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals(listOf(defaultAnalysisRunLimits to false), previews)
+          assertTrue(fixture.isDisabled("Start analysis"))
+          fixture.pressKey(Key.Spacebar)
+          assertEquals(1, previews.size)
+          state = state.copy(action = "")
+          fixture.render()
+          assertTrue(fixture.requestFocus("Start analysis"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          assertEquals(
+              listOf(defaultAnalysisRunLimits to false, defaultAnalysisRunLimits to false),
+              previews)
+          state = state.copy(action = "")
+          fixture.render()
+          assertTrue(fixture.requestFocus("Start analysis"))
+          repeat(2) {
+            assertTrue(fixture.pressKey(Key.Tab))
+            fixture.render()
+          }
+          assertTrue(fixture.isFocusedControl("View analysis"))
+        }
+  }
+
+  @Test
   fun summaryKeyboardControlsKeepDisclosuresLocalAndNavigateOnlyToTheirWorkspace() {
     val destinations = mutableListOf<Workspace>()
     val overview =
