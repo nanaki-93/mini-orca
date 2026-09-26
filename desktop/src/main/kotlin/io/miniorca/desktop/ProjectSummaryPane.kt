@@ -18,13 +18,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -404,10 +402,6 @@ private fun SummaryCategories(metrics: List<SummaryIssueMetric>, openResults: (W
   }
 }
 
-// The narrative's right column needs more space than a category card (diagrams and prose).
-internal fun summaryNarrativesStacked(width: Dp, fontScale: Float): Boolean =
-    width < 16.dp + 740.dp * fontScale
-
 @Composable
 private fun SummaryLowerComposition(
     presentation: ProjectSummaryPresentation,
@@ -418,79 +412,29 @@ private fun SummaryLowerComposition(
   val flows = presentation.details.firstOrNull { it.title == "Flows" }
   val insight =
       presentation.engineeringInsight?.let(::engineeringInsightPieces)?.takeIf { it.isNotEmpty() }
-  val hasLeft = architecture != null || modules != null
-  val hasRight = insight != null || flows != null
-  if (!hasLeft && !hasRight) return
+  if (architecture == null && insight == null && modules == null && flows == null) return
 
-  Layout(
-      content = {
-        if (hasLeft) SummaryArchitectureModules(architecture, modules, ownerIdentity)
-        if (hasRight)
-            SummaryInsightFlows(
-                insight, flows, presentation.interpretationStatus == "stale", ownerIdentity)
-      },
-      modifier = Modifier.fillMaxWidth().testTag("summary-lower-composition"),
-  ) { measurables, constraints ->
-    val width = constraints.maxWidth
-    val gap = 16.dp.roundToPx()
-    val stacked = !hasLeft || !hasRight || summaryNarrativesStacked(width.toDp(), fontScale)
-    val stackedGap = if (stacked && hasLeft && hasRight) gap else 0
-    val available = (width - gap).coerceAtLeast(0)
-    val leftWidth = if (stacked) width else (available * 0.62f).toInt()
-    val rightWidth = if (stacked) width else available - leftWidth
-    val left = if (hasLeft) measurables[0].measure(Constraints.fixedWidth(leftWidth)) else null
-    val right =
-        if (hasRight) measurables[if (hasLeft) 1 else 0].measure(Constraints.fixedWidth(rightWidth))
-        else null
-    val height =
-        if (stacked) (left?.height ?: 0) + stackedGap + (right?.height ?: 0)
-        else maxOf(left?.height ?: 0, right?.height ?: 0)
-    layout(width, height) {
-      left?.placeRelative(0, 0)
-      right?.placeRelative(
-          if (stacked) 0 else leftWidth + gap, if (stacked) (left?.height ?: 0) + stackedGap else 0)
-    }
-  }
-}
-
-@Composable
-private fun SummaryArchitectureModules(
-    architecture: ProjectSummaryDetail?,
-    modules: ProjectSummaryDetail?,
-    ownerIdentity: List<String?>,
-    modifier: Modifier = Modifier,
-) {
-  WorkspaceSection(modifier = modifier.testTag("summary-lower-left")) {
-    architecture?.let {
-      Column(Modifier.testTag("summary-architecture")) {
-        MermaidDiagram(
-            it.values.single(),
-            "Architecture",
-            title = "Architecture",
-            ownerIdentity = ownerIdentity + "architecture")
-      }
-    }
-    if (architecture != null && modules != null) IdeHorizontalSeparator()
-    modules?.let {
-      Column(Modifier.testTag("summary-modules")) {
-        Text("Packages / modules", color = ResultAccent, style = IdeTypography.workspaceHeading)
-        SummaryModules(it.values)
-      }
-    }
-  }
-}
-
-@Composable
-private fun SummaryInsightFlows(
-    insight: List<EngineeringInsightPiece>?,
-    flows: ProjectSummaryDetail?,
-    stale: Boolean,
-    ownerIdentity: List<String?>,
-    modifier: Modifier = Modifier,
-) {
   Column(
-      modifier.testTag("summary-lower-right"), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        insight?.let { SummaryEngineeringInsight(it, stale, ownerIdentity) }
+      Modifier.fillMaxWidth().testTag("summary-lower-composition"),
+      verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        architecture?.let {
+          WorkspaceSection(modifier = Modifier.testTag("summary-architecture")) {
+            MermaidDiagram(
+                it.values.single(),
+                "Architecture",
+                title = "Architecture",
+                ownerIdentity = ownerIdentity + "architecture")
+          }
+        }
+        insight?.let {
+          SummaryEngineeringInsight(it, presentation.interpretationStatus == "stale", ownerIdentity)
+        }
+        modules?.let {
+          WorkspaceSection(modifier = Modifier.testTag("summary-modules")) {
+            Text("Packages / modules", color = ResultAccent, style = IdeTypography.workspaceHeading)
+            SummaryModules(it.values)
+          }
+        }
         flows?.let { SummaryFlows(it, ownerIdentity) }
       }
 }

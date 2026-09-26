@@ -18,10 +18,6 @@ class ProjectSummaryPaneTest {
         assertFalse(categoryPanelsStacked(boundary, scale, gap))
         assertFalse(categoryPanelsStacked(boundary + 1.dp, scale, gap))
       }
-      val narrativeBoundary = 16.dp + 740.dp * scale
-      assertTrue(summaryNarrativesStacked(narrativeBoundary - 1.dp, scale))
-      assertFalse(summaryNarrativesStacked(narrativeBoundary, scale))
-      assertFalse(summaryNarrativesStacked(narrativeBoundary + 1.dp, scale))
     }
   }
 
@@ -426,6 +422,67 @@ class ProjectSummaryPaneTest {
           assertTrue(fixture.hasText("100%"))
           assertEquals("Collapsed", fixture.stateDescription("More insight"))
           assertFalse(fixture.hasText("Trade-off or failure mode"))
+        }
+  }
+
+  @Test
+  fun narrativeSectionsOmitMissingArchitectureWithoutLosingSavedContent() {
+    val project = resultProjectFixture()
+    val overview =
+        ProjectOverview(
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            analysis =
+                StructuredProjectAnalysis(
+                    status = "fresh",
+                    components =
+                        listOf(
+                            "internal/api (API): Handles requests.",
+                            "internal/app (Workflow): Coordinates changes."),
+                    flows = listOf("First flow", "Second flow"),
+                    engineeringInsight =
+                        EngineeringInsight(
+                            mechanism = "Keep the boundary explicit.",
+                            whyItMattersHere = "Project changes need review.",
+                            tradeoffOrFailureMode = "Review takes time.")))
+    val presentation = projectSummaryPresentation(overview, project)
+    assertEquals(listOf("Packages / modules", "Flows"), presentation.details.map { it.title })
+    ComposeVisualFixture(1000, 1600) { ProjectSummaryPane(overview, project, {}) }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(0, fixture.tagCount("summary-architecture"))
+          assertEquals(1, fixture.tagCount("summary-insight"))
+          assertEquals(1, fixture.tagCount("summary-modules"))
+          assertEquals(1, fixture.tagCount("summary-flows"))
+          listOf(
+                  "Keep the boundary explicit.",
+                  "Project changes need review.",
+                  "API",
+                  "internal/api",
+                  "Handles requests.",
+                  "Workflow",
+                  "internal/app",
+                  "Coordinates changes.",
+                  "First flow",
+                  "Second flow")
+              .forEach { assertTrue(fixture.hasText(it), it) }
+          assertTrue(fixture.tryClick("Expand More insight"))
+          fixture.render()
+          assertTrue(fixture.hasText("Review takes time."))
+        }
+    ComposeVisualFixture(1000, 1000) {
+          ProjectSummaryPane(
+              overview.copy(
+                  analysis =
+                      overview.analysis.copy(engineeringInsight = null, components = emptyList())),
+              project,
+              {})
+        }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(0, fixture.tagCount("summary-insight"))
+          assertEquals(0, fixture.tagCount("summary-modules"))
+          assertEquals(1, fixture.tagCount("summary-flows"))
         }
   }
 
