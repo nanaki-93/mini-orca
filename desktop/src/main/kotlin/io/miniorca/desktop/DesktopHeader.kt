@@ -66,7 +66,7 @@ internal fun MainToolbar(
                 openAvailable = projectOpenAvailable(state.openingAttempt),
                 reconnectAvailable = connectionPresentation.canReconnect,
                 onImport = actions.onImport,
-                onReanalyze = actions.onReanalyze,
+                onReindex = actions.onReindex,
                 onReconnect = actions.onReconnect,
                 modifier = Modifier.width(180.dp))
             IdeVerticalSeparator(Modifier.height(20.dp))
@@ -289,7 +289,7 @@ private fun ToolbarStatus(
 
 internal data class ToolbarActions(
     val onImport: () -> Unit,
-    val onReanalyze: () -> Unit,
+    val onReindex: () -> Unit,
     val onReconnect: () -> Unit,
     val onPalette: () -> Unit,
     val onRetryRestore: () -> Unit = {},
@@ -303,7 +303,7 @@ private fun ProjectActionsMenu(
     openAvailable: Boolean,
     reconnectAvailable: Boolean,
     onImport: () -> Unit,
-    onReanalyze: () -> Unit,
+    onReindex: () -> Unit,
     onReconnect: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -340,7 +340,7 @@ private fun ProjectActionsMenu(
               onClick = {
                 expanded = false
                 restoreFocus = true
-                onReanalyze()
+                onReindex()
               },
               enabled = projectAvailable,
               icon = DesktopIcon.Refresh)
