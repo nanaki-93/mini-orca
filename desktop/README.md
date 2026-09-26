@@ -155,13 +155,44 @@ is safe. Bug priority counts require matching current details. Overall tool-repo
 issues and AI suggestions appear separately below the cards, since those totals
 cannot be reliably assigned to individual categories.
 
+**File evidence** below the cards shows up to three project-relative paths, sorted
+by path, with their saved analysis states and explanations. Its “Showing N of M
+selected files” label counts the confirmed selection, excluding excluded files;
+active-run progress and pending selection edits do not change these saved rows.
+Loading, saving or a failed selection read/save can retain the last confirmed
+selection with a visible notice. A confirmed empty selection is labeled separately
+from unavailable selection. Aggregate-only saved coverage can show counts in the
+dial but cannot provide file paths, so File evidence says paths are unavailable.
+**All files** opens Analysis for the complete file inventory without changing the
+selection or opening a source-editing target.
+
 Architecture and Engineering insight sit beside each other at readable local
 widths and stack in that order at narrower widths or larger text. A lone available
-panel uses the full width. Packages / modules follow, then the project's saved
-Flows when present; absent narrative sections leave no empty cards. Insight retains
-its lead content and **More insight** disclosure. Module names, exact paths and
-responsibilities remain selectable/readable. Entry points and next steps are
-omitted from Summary. The Summary scroll keeps lower sections reachable.
+panel uses the full width. Packages / modules follow when present; absent
+narrative sections leave no empty cards. Insight retains its lead content and
+**More insight** disclosure. Module names, exact paths and responsibilities
+remain selectable/readable. Entry points and next steps are omitted from Summary.
+**Selected findings** appears after narrative and modules (if present), before
+the project's saved Flows (if present) and the separate Change lifecycle. It
+remains visible without narrative or modules. It shows up to five loaded Bugs,
+Performance and Security results, with category, severity or impact, exact location,
+evidence origin and material state. “Showing N of M loaded findings” is a bounded
+preview of loaded evidence, not the run-reported category counts on the cards.
+The panel labels not-loaded or failed details and retained stale, partial or canceled
+evidence rather than treating missing rows as confirmed zero; only matching
+completed empty results are labeled empty. **All Bugs results**, **All Performance
+results** and **All Security results** open their complete category lists, including
+results beyond the preview.
+
+Activate a preview row to inspect its exact loaded result in the existing category
+page; the destination reveals it even if local filters previously hid it. If that
+result has disappeared or its identity is ambiguous, the page explains why it
+cannot open the old target instead of selecting another result, and offers **View
+current Bugs results** (or the corresponding category) to return to ordinary
+browsing. A project or run change invalidates an old preview click. These rows,
+category routes and **All files** are local inspection/navigation, not analysis,
+scanning, fix preparation, project-code execution or source writes. The Summary
+scroll keeps lower sections reachable.
 
 The separate **Change lifecycle** section describes Mini-Orca's editing workflow,
 not the analyzed project's Flows: Request → Draft → Validate → Checks → Review →
