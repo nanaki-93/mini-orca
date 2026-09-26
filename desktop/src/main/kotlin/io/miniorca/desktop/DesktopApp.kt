@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -15,7 +16,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.text.input.TextFieldValue
 import java.io.File
+import java.util.concurrent.CompletableFuture
 import javax.swing.JFileChooser
+import javax.swing.SwingUtilities
+import javax.swing.Timer
 
 internal enum class PaletteMode {
   Files,
@@ -114,6 +118,11 @@ internal enum class SwitchReviewStage {
   Committed,
 }
 
+internal data class SwitchCleanupFeedback(
+    val error: String? = null,
+    val outstanding: Boolean = false
+)
+
 internal data class PendingProjectSwitch(
     val requestId: Long,
     val path: String,
@@ -130,6 +139,18 @@ internal class ProjectSwitchAdmission {
     private set
 
   private var nextRequestId = 0L
+  var cleanupOutstanding: Boolean = false
+    private set
+
+  fun cleanupStarted(requestId: Long) {
+    if (pending?.requestId == requestId && pending?.stage == SwitchReviewStage.Committed)
+        cleanupOutstanding = true
+  }
+
+  fun cleanupSettled(requestId: Long) {
+    if (pending?.requestId == requestId && pending?.stage == SwitchReviewStage.Committed)
+        cleanupOutstanding = false
+  }
 
   fun choose(path: String, context: ProjectSwitchContext): PendingProjectSwitch? {
     if (path.isBlank() || pending != null) return null
@@ -143,7 +164,9 @@ internal class ProjectSwitchAdmission {
   }
 
   fun finish(requestId: Long) {
-    if (pending?.requestId == requestId && pending?.stage == SwitchReviewStage.Committed)
+    if (pending?.requestId == requestId &&
+        pending?.stage == SwitchReviewStage.Committed &&
+        !cleanupOutstanding)
         pending = null
   }
 
@@ -233,8 +256,9 @@ internal fun MiniOrcaApp(
   var consumedPreparedRequestGeneration by remember { mutableStateOf(0L) }
   var draftFieldKey by remember { mutableStateOf<DraftFieldIdentity?>(null) }
   var draftFieldValue by remember { mutableStateOf(TextFieldValue()) }
-  var pendingTerminalSwitch by remember { mutableStateOf<String?>(null) }
-  var pendingImportPath by remember { mutableStateOf<String?>(null) }
+  val switchAdmission = remember { ProjectSwitchAdmission() }
+  var pendingSwitch by remember { mutableStateOf<PendingProjectSwitch?>(null) }
+  var switchCleanupError by remember { mutableStateOf<String?>(null) }
   var composerRequested by remember { mutableStateOf(false) }
   var pendingComposerFocus by remember { mutableStateOf<ComposerFocusTarget?>(null) }
   var pendingDraftDiscard by remember { mutableStateOf<PendingDraftDiscard?>(null) }
@@ -401,17 +425,34 @@ internal fun MiniOrcaApp(
     }
   }
 
-  fun loadChosenProject(path: String) {
-    if (analyzeModel.remoteProvider && !workflow.providerConfirmed(ModelScope.Analyze))
-        pendingImportPath = path
-    else presenter.loadProject(path, restore = false)
+  fun updatePendingSwitch() {
+    pendingSwitch = switchAdmission.pending
   }
 
+  fun dismissSwitch(requestId: Long) {
+    switchAdmission.dismiss(requestId)
+    updatePendingSwitch()
+  }
+
+  fun commitSwitch(requestId: Long) =
+      commitProjectSwitch(
+          requestId,
+          switchAdmission,
+          { ProjectSwitchContext(presenter.snapshot.value) },
+          { projectOpenAvailable(presenter.snapshot.value.state.projectState.openingAttempt) },
+          terminal::closeAllSessions,
+          presenter::discardDraft,
+          { presenter.loadProject(it, restore = false) },
+          ::updatePendingSwitch,
+          { switchCleanupError = it },
+          { SwingUtilities.invokeLater(it) },
+          ::scheduleSwitchCleanupTimeout)
+
   fun importProject() {
-    if (!projectOpenAvailable(appState.projectState.openingAttempt)) return
+    if (!projectOpenAvailable(appState.projectState.openingAttempt) || pendingSwitch != null) return
     chooseProjectDirectory(::chooseDirectory) { path ->
-      if (terminal.state.value.requiresClose) pendingTerminalSwitch = path
-      else loadChosenProject(path)
+      switchAdmission.choose(path, ProjectSwitchContext(presenter.snapshot.value))
+      updatePendingSwitch()
     }
   }
 
@@ -789,12 +830,37 @@ internal fun MiniOrcaApp(
                   { appState.project?.path?.let { terminal.createShell(it) } },
                   { terminal.closeSession(it) })),
   )
-  TerminalProjectSwitchDialog(pendingTerminalSwitch, terminal, { pendingTerminalSwitch = null }) {
-      path ->
-    if (pendingTerminalSwitch == path) {
-      pendingTerminalSwitch = null
-      loadChosenProject(path)
-    }
+  pendingSwitch?.let { pending ->
+    ProjectSwitchReviewDialog(
+        pending,
+        analyzeModel,
+        workflow.providerConfirmed(ModelScope.Analyze),
+        terminalState,
+        SwitchCleanupFeedback(switchCleanupError, switchAdmission.cleanupOutstanding),
+        onCancel = {
+          if (pending.stage == SwitchReviewStage.Committed) {
+            switchAdmission.finish(pending.requestId)
+            updatePendingSwitch()
+          } else dismissSwitch(pending.requestId)
+        },
+        onDraftApproved = {
+          switchAdmission.approveDraft(
+              pending.requestId, ProjectSwitchContext(presenter.snapshot.value))
+          updatePendingSwitch()
+        },
+        onProviderConfirmed = { presenter.setProviderConfirmation(ModelScope.Analyze, it) },
+        onProviderApproved = {
+          switchAdmission.approveProvider(
+              pending.requestId, ProjectSwitchContext(presenter.snapshot.value))
+          updatePendingSwitch()
+        },
+        onReviewApproved = {
+          switchAdmission.approveReview(
+              pending.requestId, ProjectSwitchContext(presenter.snapshot.value))
+          updatePendingSwitch()
+        },
+        onCommit = { commitSwitch(pending.requestId) },
+    )
   }
   DesktopAnalysisAdmissionOverlay(appState.analysisRun, presenter)
   pendingDraftDiscard?.let { pending ->
@@ -802,17 +868,98 @@ internal fun MiniOrcaApp(
       pendingDraftDiscard = null
     }
   }
-  pendingImportPath?.let { path ->
-    ProjectImportConfirmationDialog(
-        model = analyzeModel,
-        confirmed = workflow.providerConfirmed(ModelScope.Analyze),
-        onConfirmed = { presenter.setProviderConfirmation(ModelScope.Analyze, it) },
-        onImport = {
-          pendingImportPath = null
-          presenter.loadProject(path, restore = false)
-        },
-        onCancel = { pendingImportPath = null },
-    )
+}
+
+private fun scheduleSwitchCleanupTimeout(onTimeout: () -> Unit): () -> Unit {
+  val timer = Timer(15_000) { onTimeout() }
+  timer.isRepeats = false
+  timer.start()
+  return timer::stop
+}
+
+/** All callbacks and the timeout resolve on Swing's event thread; late cleanup cannot import. */
+internal fun commitProjectSwitch(
+    requestId: Long,
+    admission: ProjectSwitchAdmission,
+    currentContext: () -> ProjectSwitchContext,
+    openingAvailable: () -> Boolean,
+    cleanup: () -> CompletableFuture<TerminalWorkspaceState>,
+    discardDraft: () -> Unit,
+    importProject: (String) -> Unit,
+    updatePending: () -> Unit,
+    updateError: (String?) -> Unit,
+    post: (() -> Unit) -> Unit,
+    scheduleTimeout: (() -> Unit) -> (() -> Unit),
+) {
+  if (!openingAvailable()) return
+  val committed = admission.commit(requestId, currentContext())
+  updatePending()
+  if (committed == null) return
+  updateError(null)
+  post {
+    if (admission.pending != committed) return@post
+    if (!openingAvailable() || currentContext() != committed.context) {
+      updateError(
+          "The project, draft or Analyze destination changed before shell cleanup. The project has not been switched. Review the current state before trying again.")
+      return@post
+    }
+    var resolved = false
+    val stopTimeout = scheduleTimeout {
+      if (!resolved && admission.pending == committed) {
+        resolved = true
+        updateError(
+            "Shell cleanup did not finish in 15 seconds. The project has not been switched. Some tabs may already be closed; check the terminal before trying again.")
+      }
+    }
+    try {
+      // Terminal ownership is on Swing; even exited tabs must be removed before importing.
+      admission.cleanupStarted(requestId)
+      cleanup().whenComplete { closed, error ->
+        post completion@{
+          if (admission.pending != committed) return@completion
+          admission.cleanupSettled(requestId)
+          stopTimeout()
+          if (resolved) {
+            updateError(
+                if (error != null ||
+                    closed == null ||
+                    closed.cleanupPending ||
+                    closed.tabs.isNotEmpty())
+                    "Shell cleanup returned after the timeout but is incomplete. The project has not been switched. Some tabs may still be closing; check the terminal before trying again."
+                else
+                    "Shell cleanup has now finished after the timeout. The project has not been switched. Some tabs may already be closed; review the terminal before trying again.")
+            return@completion
+          }
+          resolved = true
+          when {
+            error != null || closed == null || closed.cleanupPending || closed.tabs.isNotEmpty() ->
+                updateError(
+                    "Shell cleanup is incomplete. The project has not been switched. Some tabs may already be closed: " +
+                        (error?.message?.takeIf(String::isNotBlank)
+                            ?: "Check the terminal before trying again."))
+            !openingAvailable() || currentContext() != committed.context ->
+                updateError(
+                    "The project, draft or Analyze destination changed during shell cleanup. The project has not been switched. Review the current state before trying again; closed tabs cannot be restored.")
+            else -> {
+              if (committed.context.draft.hasWork) discardDraft()
+              admission.finish(requestId)
+              updatePending()
+              importProject(committed.path)
+            }
+          }
+        }
+      }
+    } catch (error: Exception) {
+      if (admission.pending == committed) {
+        admission.cleanupSettled(requestId)
+        resolved = true
+        stopTimeout()
+        updateError(
+            "Shell cleanup could not start. The project has not been switched: " +
+                (error.message?.takeIf(String::isNotBlank)
+                    ?: "Check the terminal before trying again."))
+      }
+    }
   }
 }
 
@@ -886,6 +1033,98 @@ private fun draftApplicationActions(presenter: DesktopWorkflowPresenter) =
         apply = presenter::applyEditableDraft,
         undo = presenter::undoAppliedDraft,
     )
+
+@Composable
+internal fun ProjectSwitchReviewDialog(
+    pending: PendingProjectSwitch,
+    model: ScopedModel,
+    confirmed: Boolean,
+    terminal: TerminalWorkspaceState,
+    cleanupFeedback: SwitchCleanupFeedback,
+    onCancel: () -> Unit,
+    onDraftApproved: () -> Unit,
+    onProviderConfirmed: (Boolean) -> Unit,
+    onProviderApproved: () -> Unit,
+    onReviewApproved: () -> Unit,
+    onCommit: () -> Unit,
+) {
+  val committed = pending.stage == SwitchReviewStage.Committed
+  val cleanupError = cleanupFeedback.error
+  val cleanupOutstanding = cleanupFeedback.outstanding
+  IdeDialog(
+      onDismissRequest = {
+        if (!committed || (cleanupError != null && !cleanupOutstanding)) onCancel()
+      },
+      title = {
+        Text(
+            when (pending.stage) {
+              SwitchReviewStage.Draft -> "Review draft before switching"
+              SwitchReviewStage.Provider -> "Confirm project analysis destination"
+              SwitchReviewStage.Review -> "Review changed project switch"
+              SwitchReviewStage.Final -> "Switch project?"
+              SwitchReviewStage.Committed ->
+                  if (cleanupOutstanding) "Closing project shells…" else "Project switch stopped"
+            })
+      },
+      content = {
+        SelectionContainer {
+          Column {
+            Text("Current project: ${pending.context.project?.path ?: "None open"}")
+            Text("Requested project: ${pending.path}")
+            if (pending.context.draft.hasWork) {
+              val target =
+                  pending.context.draft.draft?.targetPath ?: pending.context.draft.session?.openPath
+              Text(
+                  "If you switch, the in-memory conversation, editable draft and focused checks${target?.let { " for $it" } ?: ""} will be discarded. Continuing this review does not discard them yet.")
+            }
+            if (terminal.tabs.isNotEmpty()) {
+              Text(
+                  "Switching will close all ${terminal.tabs.size} project shell tabs and their child processes, including hidden and exited tabs.")
+              terminal.tabs.forEach { Text(it.title) }
+            }
+            if (pending.stage == SwitchReviewStage.Provider) {
+              Text("Import may send the selected project's analysis context to this provider.")
+            }
+            if (pending.stage == SwitchReviewStage.Final && !model.remoteProvider)
+                Text("This Analyze destination is local; no remote confirmation is required.")
+            if (committed) {
+              Text("Shell cleanup has begun. Closed tabs cannot be restored by canceling.")
+              cleanupError?.let { DiagnosticText(it, color = Error) }
+              if (cleanupOutstanding)
+                  Text(
+                      "Waiting for shell cleanup to finish. Another switch cannot start while tabs may still close.")
+            }
+          }
+        }
+        if (pending.stage == SwitchReviewStage.Provider)
+            RemoteProviderConfirmation(ModelScope.Analyze, model, confirmed, onProviderConfirmed)
+      },
+      actions = {
+        if (committed && cleanupError != null && !cleanupOutstanding)
+            MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Close review") }
+        if (!committed) {
+          MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Cancel switch") }
+          when (pending.stage) {
+            SwitchReviewStage.Draft ->
+                MiniOrcaButton(onClick = onDraftApproved, tone = ActionTone.Destructive) {
+                  Text("Approve draft discard for switch")
+                }
+            SwitchReviewStage.Provider ->
+                MiniOrcaButton(onClick = onProviderApproved, enabled = confirmed) {
+                  Text("Continue with provider")
+                }
+            SwitchReviewStage.Review ->
+                MiniOrcaButton(onClick = onReviewApproved) { Text("Continue to switch review") }
+            SwitchReviewStage.Final ->
+                MiniOrcaButton(onClick = onCommit, tone = ActionTone.Destructive) {
+                  Text(if (terminal.tabs.isEmpty()) "Switch project" else "Close shells and switch")
+                }
+            SwitchReviewStage.Committed -> Unit
+          }
+        }
+      },
+  )
+}
 
 @Composable
 internal fun ProjectImportConfirmationDialog(
