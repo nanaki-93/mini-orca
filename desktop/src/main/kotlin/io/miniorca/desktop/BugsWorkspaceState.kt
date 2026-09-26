@@ -154,9 +154,13 @@ internal fun findingEvidenceSummary(finding: UnifiedFinding): String =
 /** Only explicitly classified semantic bugs and tool-reported diagnostics belong on Bugs. */
 internal fun DesktopState.projectBugFindings(): List<UnifiedFinding> {
   val page = analysisResultPage("bugs")
+  val project = page.project ?: return page.semantic
   val verified =
       findings.findings.filter {
-        classifyFinding(it) == FindingClassification.Verified && it.category in setOf("", "bugs")
+        classifyFinding(it) == FindingClassification.Verified &&
+            it.category in setOf("", "bugs") &&
+            it.projectId == project.projectId &&
+            it.projectRevision == project.projectRevision
       }
   return (page.semantic + verified).distinctBy(::findingDisplayKey)
 }

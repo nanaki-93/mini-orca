@@ -52,6 +52,7 @@ class BugsWorkspaceStateTest {
           severity = "warning",
           title = "Unchecked error",
           message = "Check the returned error",
+          projectId = "project",
           projectRevision = "revision",
           location = FindingLocation("main.go", startLine = 7, symbol = "Run"),
           evidence = "err is ignored",
@@ -101,6 +102,73 @@ class BugsWorkspaceStateTest {
     assertEquals(
         listOf(suggested.copy(freshness = "stale")), state.analysisResultPage("bugs").unclassified)
     assertEquals(1, state.analysisResultPage("bugs").reportedCount)
+  }
+
+  @Test
+  fun verifiedFindingsRequireTheCurrentProjectAndRevisionEvenWithoutARun() {
+    val project = resultProjectFixture()
+    val state =
+        DesktopState(
+            projectState = ProjectWorkspaceState(project = project),
+            findings =
+                FindingsState(
+                    findings =
+                        listOf(
+                            verified,
+                            verified.copy(id = "foreign-project", projectId = "other"),
+                            verified.copy(id = "foreign-revision", projectRevision = "old"),
+                            verified.copy(id = "missing-project", projectId = ""),
+                            verified.copy(id = "missing-revision", projectRevision = ""))))
+
+    assertEquals(listOf(verified), state.projectBugFindings())
+    assertTrue(state.copy(projectState = ProjectWorkspaceState()).projectBugFindings().isEmpty())
+    assertTrue(
+        state
+            .copy(
+                projectState =
+                    ProjectWorkspaceState(project = project.copy(projectRevision = "next")))
+            .projectBugFindings()
+            .isEmpty())
+  }
+
+  @Test
+  fun bugsDatasetDeduplicatesMatchingSemanticAndVerifiedWithoutCollapsingDifferentPaths() {
+    val page = resultPageFixture("bugs")
+    val semantic = page.results!!.semantic.single()
+    val sameIdOtherPath = semantic.copy(location = FindingLocation("other.go"))
+    val section =
+        page.section.copy(
+            results =
+                page.results!!.copy(
+                    semantic = listOf(semantic, sameIdOtherPath), unclassified = listOf(suggested)))
+    val state =
+        DesktopState(
+            projectState = ProjectWorkspaceState(project = page.project),
+            analysisRun =
+                ProjectAnalysisRunState(
+                    run = page.run, sections = mapOf(AnalysisResultKey("bugs") to section)),
+            findings =
+                FindingsState(
+                    findings =
+                        listOf(
+                            semantic.copy(confidence = "tool_reported"),
+                            sameIdOtherPath.copy(confidence = "tool_reported"),
+                            verified,
+                            verified.copy(
+                                location =
+                                    FindingLocation("sub/main.go", startLine = 7, symbol = "Run")),
+                            verified.copy(id = "foreign", projectId = "other"))))
+
+    assertEquals(
+        listOf(
+            semantic,
+            sameIdOtherPath,
+            verified,
+            verified.copy(
+                location = FindingLocation("sub/main.go", startLine = 7, symbol = "Run"))),
+        state.projectBugFindings())
+    assertEquals(
+        listOf(suggested.copy(freshness = "stale")), state.analysisResultPage("bugs").unclassified)
   }
 
   @Test
