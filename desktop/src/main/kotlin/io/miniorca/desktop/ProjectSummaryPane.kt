@@ -273,15 +273,22 @@ internal fun ProjectSummaryPane(
         }
         val currentRun = currentProjectRun(run, project)
         val stripState = analysisState ?: ProjectAnalysisRunState(run = run, sections = sections)
+        val runPaneState = AnalysisWorkspacePaneState(project, stripState.copy(run = currentRun))
         if (currentRun?.showsProgressOnSummary() == true)
             item {
               AnalysisRunStrip(
-                  AnalysisWorkspacePaneState(project, stripState.copy(run = currentRun)),
+                  runPaneState,
                   analysisActions,
                   AnalysisRunStripScope.Summary,
                   Modifier.testTag("summary-analysis-run-strip"))
             }
-        item { SummaryIntroduction(presentation) }
+        item {
+          SummaryIntroduction(
+              presentation,
+              runPaneState,
+              analysisActions,
+              showActionFeedback = currentRun?.showsProgressOnSummary() != true)
+        }
         item { SummaryCoverage(presentation) { openResults(Workspace.Analysis) } }
         item {
           Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -310,7 +317,12 @@ internal fun ProjectSummaryPane(
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun SummaryIntroduction(presentation: ProjectSummaryPresentation) {
+private fun SummaryIntroduction(
+    presentation: ProjectSummaryPresentation,
+    runState: AnalysisWorkspacePaneState,
+    actions: AnalysisWorkspaceActions?,
+    showActionFeedback: Boolean,
+) {
   val type = projectTypePresentation(presentation.projectType)
   WorkspaceSection(modifier = Modifier.testTag("summary-introduction")) {
     FlowRow(
@@ -348,6 +360,17 @@ private fun SummaryIntroduction(presentation: ProjectSummaryPresentation) {
               it.isNotBlank() && !it.equals(presentation.projectType, ignoreCase = true)
             }
     Text(facts.joinToString(" · "), color = SecondaryText, style = IdeTypography.workspaceMetadata)
+    if (actions != null &&
+        AnalysisRunCommand.Start in projectRunPresentation(runState.analysis).commands) {
+      MiniOrcaButton(
+          onClick = { actions.start(defaultAnalysisRunLimits, false) },
+          enabled = analysisRunActionEnabled(runState),
+          tone = ActionTone.Primary,
+          modifier = Modifier.testTag("summary-start-analysis")) {
+            Text(AnalysisRunCommand.Start.label, style = IdeTypography.action)
+          }
+    }
+    if (showActionFeedback) AnalysisActionFeedback(runState.analysis)
   }
 }
 

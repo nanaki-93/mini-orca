@@ -569,6 +569,109 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun summaryStartRequestsDefaultFullRunPreviewAndKeepsFirstFailureRetryable() {
+    val project = analysisProjectFixture()
+    var state by androidx.compose.runtime.mutableStateOf(ProjectAnalysisRunState())
+    val previews = mutableListOf<Pair<AnalysisRunLimits, Boolean>>()
+    val destinations = mutableListOf<Workspace>()
+    val actions =
+        AnalysisWorkspaceActions(
+            { limits, retry ->
+              previews += limits to retry
+              state = state.copy(action = "previewing", error = null)
+            },
+            {},
+            {},
+            {},
+            {})
+    ComposeVisualFixture(800, 650) {
+          ProjectSummaryPane(
+              null, project, destinations::add, analysisState = state, analysisActions = actions)
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("Start analysis")
+          fixture.render()
+          assertEquals(listOf(defaultAnalysisRunLimits to false), previews)
+          assertTrue(fixture.isDisabled("Start analysis"))
+          assertTrue(fixture.hasText("Analysis: Previewing…"))
+          assertEquals(0, fixture.tagCount("summary-analysis-run-strip"))
+          fixture.clickText("View analysis")
+          assertEquals(listOf(Workspace.Analysis), destinations)
+          assertEquals(1, previews.size)
+
+          state = state.copy(action = "", error = "Preview timed out. Try again.")
+          fixture.render()
+          assertTrue(fixture.hasText("Analysis action needs attention"))
+          assertTrue(fixture.hasText("Preview timed out. Try again."))
+          assertFalse(fixture.isDisabled("Start analysis"))
+          assertEquals(1, previews.size)
+          fixture.clickText("Start analysis")
+          assertEquals(
+              listOf(defaultAnalysisRunLimits to false, defaultAnalysisRunLimits to false),
+              previews)
+          fixture.render()
+          assertFalse(fixture.hasText("Preview timed out. Try again."))
+
+          state = state.copy(action = "", fileSelection = AnalysisSelectionState(saving = true))
+          fixture.render()
+          assertTrue(fixture.isDisabled("Start analysis"))
+          assertEquals(2, previews.size)
+        }
+  }
+
+  @Test
+  fun startOnlyAppearsForCurrentProjectWithAvailableStartCommandAndAction() {
+    val project = analysisProjectFixture()
+    val actions = AnalysisWorkspaceActions({ _, _ -> error("Unexpected preview") }, {}, {}, {}, {})
+    ComposeVisualFixture(800, 650) { ProjectSummaryPane(null, null, {}, analysisActions = actions) }
+        .use { fixture ->
+          fixture.render()
+          assertFalse(fixture.hasText("Start analysis"))
+          assertTrue(fixture.hasText("No project selected"))
+        }
+    ComposeVisualFixture(800, 650) {
+          ProjectSummaryPane(ProjectOverview(), null, {}, analysisActions = actions)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.isDisabled("Start analysis"))
+        }
+    ComposeVisualFixture(800, 650) { ProjectSummaryPane(null, project, {}) }
+        .use { fixture ->
+          fixture.render()
+          assertFalse(fixture.hasText("Start analysis"))
+        }
+    listOf("queued", "running", "pausing", "paused", "interrupted", "canceling").forEach { status ->
+      val run = analysisRunFixture().copy(status = status)
+      ComposeVisualFixture(800, 650) {
+            ProjectSummaryPane(null, project, {}, run = run, analysisActions = actions)
+          }
+          .use { fixture ->
+            fixture.render()
+            assertFalse(fixture.hasText("Start analysis"), "$status must not offer a new preview")
+            assertTrue(fixture.hasText("View analysis"))
+          }
+    }
+    ComposeVisualFixture(800, 650) {
+          ProjectSummaryPane(
+              null,
+              project,
+              {},
+              run =
+                  analysisRunFixture()
+                      .copy(
+                          status = "running",
+                          identity = analysisRunFixture().identity.copy(projectId = "other")),
+              analysisActions = actions)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Start analysis"))
+        }
+  }
+
+  @Test
   fun coverageNavigationIsLocalAndLiveSelectionUpdatesItsSegments() {
     val navigations = mutableListOf<Workspace>()
     val project = analysisProjectFixture()
