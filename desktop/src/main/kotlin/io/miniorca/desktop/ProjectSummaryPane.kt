@@ -53,6 +53,105 @@ internal data class ProjectSummaryDetail(
     val values: List<String>,
 )
 
+internal data class SummaryCoverageOwner(
+    val projectId: String,
+    val projectRevision: String,
+    val selectionId: String? = null,
+)
+
+internal sealed interface SummaryCoveragePaths {
+  data class Selected(val rows: List<AnalysisFileStatus>) : SummaryCoveragePaths
+
+  data object Unavailable : SummaryCoveragePaths
+}
+
+internal data class SummaryCoverageBucket(
+    val id: AnalysisCoverageBucket,
+    val count: Int,
+    val paths: SummaryCoveragePaths,
+)
+
+internal sealed interface SummaryCoverageProjection {
+  data class Known(
+      val owner: SummaryCoverageOwner,
+      val total: Int,
+      val buckets: List<SummaryCoverageBucket>,
+      val saved: AnalysisCoverage,
+  ) : SummaryCoverageProjection
+
+  data class Empty(val owner: SummaryCoverageOwner) : SummaryCoverageProjection
+
+  data object Unavailable : SummaryCoverageProjection
+}
+
+/** Counts and inspectable paths are projected from the same confirmed owner, never from a run. */
+internal fun summaryCoverageProjection(
+    overview: ProjectOverview?,
+    project: ProjectAnalysis?,
+    fileSelection: AnalysisFileSelection?,
+): SummaryCoverageProjection {
+  val currentOverview =
+      overview?.takeIf {
+        project == null ||
+            it.projectId == project.projectId && it.projectRevision == project.projectRevision
+      }
+  val projectId = project?.projectId ?: currentOverview?.projectId
+  val revision = project?.projectRevision ?: currentOverview?.projectRevision
+  val selection =
+      fileSelection?.takeIf { it.projectId == projectId && it.projectRevision == revision }
+  if (selection != null) {
+    val owner =
+        SummaryCoverageOwner(selection.projectId, selection.projectRevision, selection.selectionId)
+    val rows = analysisSelectionCoverageRows(selection)
+    if (rows.isEmpty()) return SummaryCoverageProjection.Empty(owner)
+    val saved = analysisSelectionCoverage(selection)
+    return SummaryCoverageProjection.Known(
+        owner,
+        saved.total,
+        AnalysisCoverageBucket.entries.mapNotNull { id ->
+          val matching = rows.filter { it.bucket == id }.map { it.saved }
+          matching
+              .takeIf { it.isNotEmpty() }
+              ?.let { SummaryCoverageBucket(id, it.size, SummaryCoveragePaths.Selected(it)) }
+        },
+        saved)
+  }
+  val aggregate = currentOverview?.analysisCoverage ?: return SummaryCoverageProjection.Unavailable
+  val counts =
+      listOf(
+          aggregate.fresh,
+          aggregate.stale,
+          aggregate.missing,
+          aggregate.running,
+          aggregate.failed,
+          aggregate.partial,
+          aggregate.unavailable)
+  val accounted = counts.sumOf { it.toLong() }
+  if (aggregate.total <= 0 || counts.any { it < 0 } || accounted > aggregate.total.toLong())
+      return SummaryCoverageProjection.Unavailable
+  val remainder = aggregate.total.toLong() - accounted
+  // The residual fits in Int because the reported total is a nonnegative Int.
+  val saved = aggregate.copy(unavailable = (aggregate.unavailable.toLong() + remainder).toInt())
+  val bucketCounts =
+      listOf(
+          saved.fresh,
+          saved.stale,
+          saved.missing,
+          saved.running,
+          saved.failed,
+          saved.partial,
+          saved.unavailable)
+  return SummaryCoverageProjection.Known(
+      SummaryCoverageOwner(requireNotNull(projectId), requireNotNull(revision)),
+      saved.total,
+      AnalysisCoverageBucket.entries.zip(bucketCounts).mapNotNull { (id, count) ->
+        count
+            .takeIf { it > 0 }
+            ?.let { SummaryCoverageBucket(id, it, SummaryCoveragePaths.Unavailable) }
+      },
+      saved)
+}
+
 internal data class ProjectSummaryPresentation(
     val hasProject: Boolean,
     val projectName: String,
@@ -69,6 +168,7 @@ internal data class ProjectSummaryPresentation(
     val projectMetrics: List<ProjectSummaryMetric>,
     val findingMetrics: List<ProjectSummaryMetric>,
     val coverageMetrics: List<ProjectSummaryMetric>,
+    val coverage: SummaryCoverageProjection,
     val issueMetrics: List<SummaryIssueMetric>,
     val details: List<ProjectSummaryDetail>,
     val engineeringInsight: EngineeringInsight?,
@@ -109,13 +209,14 @@ internal fun projectSummaryPresentation(
       if (normalizedStatus == "fresh" && analysis?.purpose.isNullOrBlank())
           "Project description: unavailable · no purpose provided"
       else summaryAnalysisMessage(normalizedStatus, analysis?.failure.orEmpty())
-  val selection =
-      fileSelection?.takeIf {
-        it.projectId == (project?.projectId ?: currentOverview?.projectId) &&
-            it.projectRevision == (project?.projectRevision ?: currentOverview?.projectRevision)
+  val coverageProjection = summaryCoverageProjection(currentOverview, project, fileSelection)
+  val coverage =
+      when (coverageProjection) {
+        is SummaryCoverageProjection.Known -> coverageProjection.saved
+        is SummaryCoverageProjection.Empty -> AnalysisCoverage()
+        SummaryCoverageProjection.Unavailable -> null
       }
-  val coverage = selection?.let(::analysisSelectionCoverage) ?: currentOverview?.analysisCoverage
-  val hasCoverage = selection != null || coverage != null && coverage != AnalysisCoverage()
+  val hasCoverage = coverage != null
   val currentRun =
       run?.takeIf {
         it.identity.projectId == project?.projectId &&
@@ -123,10 +224,9 @@ internal fun projectSummaryPresentation(
       }
   val findings = currentOverview?.findingCounts
   val outdated =
-      if (hasCoverage) (coverage?.stale ?: 0) > 0
+      if (coverage != null) coverage.stale > 0
       else
           normalizedStatus == "stale" ||
-              (coverage?.stale ?: 0) > 0 ||
               (currentRun != null &&
                   AnalysisResultPageState(AnalysisResultType.Bugs, project, currentRun).stale)
   return ProjectSummaryPresentation(
@@ -149,9 +249,16 @@ internal fun projectSummaryPresentation(
           },
       analysisMessage =
           listOfNotNull(
-                  if (hasCoverage)
-                      "Selected files: ${analysisStatusLabel(analysisCoverageStatus(requireNotNull(coverage)))}"
-                  else null,
+                  when (coverageProjection) {
+                    is SummaryCoverageProjection.Known -> {
+                      val source =
+                          if (coverageProjection.owner.selectionId != null) "Selected files"
+                          else "Saved aggregate coverage"
+                      "$source: ${analysisStatusLabel(analysisCoverageStatus(coverageProjection.saved))}"
+                    }
+                    is SummaryCoverageProjection.Empty -> "Selected files: Excluded"
+                    SummaryCoverageProjection.Unavailable -> null
+                  },
                   descriptionMessage,
                   if (currentRun?.status == "failed" && normalizedStatus != "failed")
                       "Analysis run failed · ${currentRun.reason.ifBlank { "No failure details available" }}"
@@ -185,32 +292,35 @@ internal fun projectSummaryPresentation(
                   "AI suggestions", findings?.aiSuggestions, SummaryMetricTone.Suggestion),
           ),
       coverageMetrics =
-          listOf(
-                  ProjectSummaryMetric("Up to date", coverage?.fresh, SummaryMetricTone.Ready),
-                  ProjectSummaryMetric("Outdated", coverage?.stale, SummaryMetricTone.Stale),
-                  ProjectSummaryMetric(
-                      "Not analyzed", coverage?.missing, SummaryMetricTone.Missing),
-                  ProjectSummaryMetric("Running", coverage?.running, SummaryMetricTone.Running),
-                  ProjectSummaryMetric("Failed", coverage?.failed, SummaryMetricTone.Failed),
-                  ProjectSummaryMetric("Incomplete", coverage?.partial, SummaryMetricTone.Stale),
-                  ProjectSummaryMetric(
-                      "Unavailable",
-                      coverage?.let {
-                        it.unavailable +
-                            (it.total.toLong() -
-                                    it.fresh -
-                                    it.stale -
-                                    it.missing -
-                                    it.running -
-                                    it.failed -
-                                    it.partial -
-                                    it.unavailable)
-                                .coerceAtLeast(0L)
-                                .toInt()
-                      },
-                      SummaryMetricTone.Failed),
-              )
-              .filter { it.value != 0 },
+          when (coverageProjection) {
+            is SummaryCoverageProjection.Known ->
+                coverageProjection.buckets.map { bucket ->
+                  val (label, tone) =
+                      when (bucket.id) {
+                        AnalysisCoverageBucket.UpToDate -> "Up to date" to SummaryMetricTone.Ready
+                        AnalysisCoverageBucket.Outdated -> "Outdated" to SummaryMetricTone.Stale
+                        AnalysisCoverageBucket.NotAnalyzed ->
+                            "Not analyzed" to SummaryMetricTone.Missing
+                        AnalysisCoverageBucket.Running -> "Running" to SummaryMetricTone.Running
+                        AnalysisCoverageBucket.Failed -> "Failed" to SummaryMetricTone.Failed
+                        AnalysisCoverageBucket.Incomplete -> "Incomplete" to SummaryMetricTone.Stale
+                        AnalysisCoverageBucket.Unavailable ->
+                            "Unavailable" to SummaryMetricTone.Failed
+                      }
+                  ProjectSummaryMetric(label, bucket.count, tone)
+                }
+            is SummaryCoverageProjection.Empty -> emptyList()
+            SummaryCoverageProjection.Unavailable ->
+                listOf(
+                    ProjectSummaryMetric("Up to date", null, SummaryMetricTone.Ready),
+                    ProjectSummaryMetric("Outdated", null, SummaryMetricTone.Stale),
+                    ProjectSummaryMetric("Not analyzed", null, SummaryMetricTone.Missing),
+                    ProjectSummaryMetric("Running", null, SummaryMetricTone.Running),
+                    ProjectSummaryMetric("Failed", null, SummaryMetricTone.Failed),
+                    ProjectSummaryMetric("Incomplete", null, SummaryMetricTone.Stale),
+                    ProjectSummaryMetric("Unavailable", null, SummaryMetricTone.Failed))
+          },
+      coverage = coverageProjection,
       issueMetrics =
           summaryIssueMetrics(
               project, currentRun, if (currentRun != null) sections else emptyMap()),
