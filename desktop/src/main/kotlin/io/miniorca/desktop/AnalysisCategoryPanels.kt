@@ -192,19 +192,23 @@ internal fun SummaryCategoryBox(
             name,
             color = PrimaryText,
             style = IdeTypography.workspaceHeading,
-            modifier = Modifier.testTag("summary-category-name-${type.category}"))
+            modifier = Modifier.weight(1f).testTag("summary-category-name-${type.category}"))
+        Text("↗", color = SecondaryText, modifier = Modifier.clearAndSetSemantics {})
       }
       Text(
           count?.toString() ?: "—",
           color = if (count == null || count == 0) tint else PrimaryText,
-          fontSize = 32.sp,
-          lineHeight = 38.sp,
+          fontSize = 28.sp,
+          lineHeight = 34.sp,
           fontWeight = FontWeight.SemiBold,
           modifier = Modifier.testTag("summary-category-count-${type.category}"))
       Text(
           if (status == null) "Not analyzed"
           else analysisCategoryStatusLabel(status) ?: "Status unavailable",
-          color = if (status == "completed_empty") SecondaryText else tint,
+          color =
+              if (status == null || status == "completed" || status == "completed_empty")
+                  SecondaryText
+              else analysisStatusTint(status),
           style = IdeTypography.compactBody,
           modifier = Modifier.testTag("summary-category-status-${type.category}"))
       details()
