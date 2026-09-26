@@ -1493,6 +1493,33 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun removedFocusedCoverageEntryMovesFocusWithoutActivatingNavigation() {
+    var selection by
+        mutableStateOf(
+            selectionFixture()
+                .copy(files = selectionFixture().files.filter { it.path == "helper.go" }))
+    val destinations = mutableListOf<Workspace>()
+    ComposeVisualFixture(1000, 760) {
+          ProjectSummaryPane(
+              null, analysisProjectFixture(), destinations::add, fileSelection = selection)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestDescriptionFocus("Up to date, 1 file"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals("Inspecting", fixture.descriptionStateDescription("Up to date, 1 file"))
+          selection = selection.copy(files = emptyList())
+          fixture.render()
+          assertEquals(0, fixture.tagCount("summary-coverage-inspection"))
+          assertTrue(fixture.isFocusedControl("View analysis"))
+          assertEquals(emptyList(), destinations)
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(listOf(Workspace.Analysis), destinations)
+        }
+  }
+
+  @Test
   fun terminalInputOwnsInterruptAndOrdinaryAppChordsUntilExplicitFocusReturn() {
     assertFalse(appShortcutAllowed(terminalFocused = true))
     assertTrue(appShortcutAllowed(terminalFocused = false))

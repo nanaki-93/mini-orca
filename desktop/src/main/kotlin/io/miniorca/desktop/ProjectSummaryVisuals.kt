@@ -10,6 +10,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -26,23 +27,29 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 
@@ -129,22 +136,36 @@ internal fun summaryCoveragePercent(current: Int, total: Int): String {
 internal fun SummaryCoverage(
     presentation: ProjectSummaryPresentation,
     inspectedBucket: MutableState<AnalysisCoverageBucket?>,
+    focusedLegend: MutableState<AnalysisCoverageBucket?>,
     openAnalysis: () -> Unit,
 ) {
+  val analysisFocus = remember { FocusRequester() }
   WorkspaceSection(modifier = Modifier.testTag("analysis-summary")) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-      Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            "Analysis coverage",
-            color = ResultAccent,
-            style = IdeTypography.workspaceHeading,
-            modifier = Modifier.weight(1f).semantics { heading() })
-        SummaryAnalysisStatus(presentation)
+      BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val title: @Composable (Modifier) -> Unit = { modifier ->
+          Text(
+              "Analysis coverage",
+              color = ResultAccent,
+              style = IdeTypography.workspaceHeading,
+              modifier = modifier.semantics { heading() })
+        }
+        if (coverageHeadingStacked(maxWidth, LocalDensity.current.fontScale)) {
+          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            title(Modifier.fillMaxWidth())
+            SummaryAnalysisStatus(presentation)
+          }
+        } else {
+          Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            title(Modifier.weight(1f))
+            SummaryAnalysisStatus(presentation)
+          }
+        }
       }
-      SummaryCoverageDial(presentation, inspectedBucket)
+      SummaryCoverageDial(presentation, inspectedBucket, focusedLegend, analysisFocus)
       MiniOrcaButton(
           onClick = openAnalysis,
-          modifier = Modifier.testTag("summary-view-analysis"),
+          modifier = Modifier.testTag("summary-view-analysis").focusRequester(analysisFocus),
           tone = ActionTone.Navigation) {
             Text("View analysis", style = IdeTypography.action)
           }
@@ -152,11 +173,18 @@ internal fun SummaryCoverage(
   }
 }
 
+internal fun coverageHeadingStacked(width: Dp, fontScale: Float): Boolean =
+    width < 300.dp * fontScale
+
+internal fun coverageDialStacked(width: Dp, fontScale: Float): Boolean = width < 320.dp * fontScale
+
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun SummaryCoverageDial(
     presentation: ProjectSummaryPresentation,
     inspectedBucket: MutableState<AnalysisCoverageBucket?>,
+    focusedLegend: MutableState<AnalysisCoverageBucket?>,
+    analysisFocus: FocusRequester,
 ) {
   val coverage = presentation.coverage
   val arcs = summaryCoverageArcs(coverage)
@@ -178,50 +206,79 @@ private fun SummaryCoverageDial(
                 "${it.value} ${it.label.lowercase()}"
               }
       else "Analysis coverage: $readout"
+  val ids = (coverage as? SummaryCoverageProjection.Known)?.buckets?.map { it.id }.orEmpty()
+  val currentIds by rememberUpdatedState(ids)
+  val focusRequesters =
+      remember((coverage as? SummaryCoverageProjection.Known)?.owner) {
+        AnalysisCoverageBucket.entries.associateWith { FocusRequester() }
+      }
+  LaunchedEffect(ids) {
+    val removed = focusedLegend.value?.takeIf { it !in ids }
+    if (removed != null) {
+      val target = ids.minByOrNull { kotlin.math.abs(it.ordinal - removed.ordinal) }
+      if (target != null) focusRequesters.getValue(target).requestFocus()
+      else analysisFocus.requestFocus()
+      focusedLegend.value = target
+    }
+  }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    Row(
-        Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-          Box(
-              Modifier.size(112.dp).testTag("summary-coverage-dial").semantics {
-                contentDescription = description
-              },
-              contentAlignment = Alignment.Center) {
-                Canvas(Modifier.fillMaxSize().padding(8.dp)) {
-                  val stroke = 10.dp.toPx()
-                  val diameter = size.minDimension
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+      val dial: @Composable () -> Unit = {
+        Box(
+            Modifier.size(112.dp).testTag("summary-coverage-dial").semantics {
+              contentDescription = description
+            },
+            contentAlignment = Alignment.Center) {
+              Canvas(Modifier.fillMaxSize().padding(8.dp)) {
+                val stroke = 10.dp.toPx()
+                val diameter = size.minDimension
+                drawArc(
+                    StrongSurface,
+                    startAngle = -90f,
+                    sweepAngle = 360f,
+                    useCenter = false,
+                    topLeft = androidx.compose.ui.geometry.Offset(stroke / 2, stroke / 2),
+                    size = androidx.compose.ui.geometry.Size(diameter - stroke, diameter - stroke),
+                    style = Stroke(stroke, cap = StrokeCap.Butt))
+                arcs.zip(presentation.coverageMetrics).forEach { (arc, metric) ->
                   drawArc(
-                      StrongSurface,
-                      startAngle = -90f,
-                      sweepAngle = 360f,
+                      summaryMetricTint(metric.tone),
+                      startAngle = (-90.0 + arc.start).toFloat(),
+                      sweepAngle = arc.sweep.toFloat(),
                       useCenter = false,
                       topLeft = androidx.compose.ui.geometry.Offset(stroke / 2, stroke / 2),
                       size =
                           androidx.compose.ui.geometry.Size(diameter - stroke, diameter - stroke),
                       style = Stroke(stroke, cap = StrokeCap.Butt))
-                  arcs.zip(presentation.coverageMetrics).forEach { (arc, metric) ->
-                    drawArc(
-                        summaryMetricTint(metric.tone),
-                        startAngle = (-90.0 + arc.start).toFloat(),
-                        sweepAngle = arc.sweep.toFloat(),
-                        useCenter = false,
-                        topLeft = androidx.compose.ui.geometry.Offset(stroke / 2, stroke / 2),
-                        size =
-                            androidx.compose.ui.geometry.Size(diameter - stroke, diameter - stroke),
-                        style = Stroke(stroke, cap = StrokeCap.Butt))
-                  }
                 }
-                Text(percent ?: "—", color = PrimaryText, style = IdeTypography.workspaceHeading)
               }
-          Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(readout, color = PrimaryText, style = IdeTypography.workspaceBody)
-            Text(
-                "Saved coverage · Coverage, not a health score.",
-                color = SecondaryText,
-                style = IdeTypography.workspaceMetadata)
-          }
+              Text(percent ?: "—", color = PrimaryText, style = IdeTypography.workspaceHeading)
+            }
+      }
+      val caption: @Composable (Modifier) -> Unit = { modifier ->
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          Text(readout, color = PrimaryText, style = IdeTypography.workspaceBody)
+          Text(
+              "Saved coverage · Coverage, not a health score.",
+              color = SecondaryText,
+              style = IdeTypography.workspaceMetadata)
         }
+      }
+      if (coverageDialStacked(maxWidth, LocalDensity.current.fontScale)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          dial()
+          caption(Modifier.fillMaxWidth())
+        }
+      } else {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+              dial()
+              caption(Modifier.weight(1f))
+            }
+      }
+    }
     if (coverage is SummaryCoverageProjection.Known && arcs.isNotEmpty()) {
       FlowRow(
           Modifier.testTag("summary-coverage-legend"),
@@ -233,6 +290,12 @@ private fun SummaryCoverageDial(
               val focused by interactions.collectIsFocusedAsState()
               Row(
                   Modifier.testTag("summary-legend-${bucket.id}")
+                      .focusRequester(focusRequesters.getValue(bucket.id))
+                      .onFocusChanged {
+                        if (it.isFocused) focusedLegend.value = bucket.id
+                        else if (focusedLegend.value == bucket.id && bucket.id in currentIds)
+                            focusedLegend.value = null
+                      }
                       .background(
                           if (selected) SelectionSurface else Color.Transparent,
                           MiniOrcaShapes.control)

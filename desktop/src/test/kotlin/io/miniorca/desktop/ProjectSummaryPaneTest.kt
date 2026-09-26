@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
@@ -30,6 +31,18 @@ class ProjectSummaryPaneTest {
       val narrativeBoundary = 840.dp * scale
       assertTrue(narrativePanelsStacked(narrativeBoundary - 1.dp, scale))
       assertFalse(narrativePanelsStacked(narrativeBoundary, scale))
+    }
+  }
+
+  @Test
+  fun coverageControlsStackAtLocalWidthAndTextScale() {
+    listOf(1f, 1.25f, 1.5f).forEach { scale ->
+      val heading = 300.dp * scale
+      val dial = 320.dp * scale
+      assertTrue(coverageHeadingStacked(heading - 1.dp, scale))
+      assertFalse(coverageHeadingStacked(heading, scale))
+      assertTrue(coverageDialStacked(dial - 1.dp, scale))
+      assertFalse(coverageDialStacked(dial, scale))
     }
   }
 
@@ -1207,6 +1220,176 @@ class ProjectSummaryPaneTest {
           assertFalse(fixture.hasText("helper.go"))
           assertEquals(emptyList(), destinations)
         }
+  }
+
+  @Test
+  fun inspectedRowsFollowSameSelectionRefreshAndDisappearWithTheirBucket() {
+    val project = analysisProjectFixture()
+    var selection by mutableStateOf(selectionFixture())
+    val destinations = mutableListOf<Workspace>()
+    var previews = 0
+    var saves = 0
+    val actions =
+        AnalysisWorkspaceActions(
+            { _, _ -> previews++ }, {}, {}, {}, {}, saveSelection = { saves++ })
+    ComposeVisualFixture(1000, 760) {
+          ProjectSummaryPane(
+              null,
+              project,
+              destinations::add,
+              fileSelection = selection,
+              analysisActions = actions)
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickVisibleDescription("Not analyzed, 1 file")
+          fixture.render()
+          selection =
+              selection.copy(
+                  files =
+                      selection.files +
+                          AnalysisSelectableFile(
+                              "src/new.go", "", selectionStageFixture("missing", "New file.")))
+          fixture.render()
+          assertTrue(fixture.hasText("Not analyzed · 2 of 3 selected files"))
+          assertTrue(fixture.hasText("src/new.go"))
+          assertTrue(fixture.hasText("main.go"))
+          fixture.clickVisibleDescription("Up to date, 1 file")
+          fixture.render()
+          // A status refresh removes the focused bucket, not its owner.
+          assertTrue(fixture.requestDescriptionFocus("Up to date, 1 file"))
+          selection =
+              selection.copy(
+                  files =
+                      selection.files.map { file ->
+                        if (file.path == "helper.go")
+                            file.copy(stages = selectionStageFixture("missing", "Needs analysis."))
+                        else file
+                      })
+          fixture.render()
+          assertEquals(0, fixture.tagCount("summary-coverage-inspection"))
+          assertTrue(fixture.isFocusedControl("Not analyzed, 3 files"))
+          fixture.clickVisibleDescription("Not analyzed, 3 files")
+          fixture.render()
+          assertTrue(fixture.hasText("Not analyzed · 3 of 3 selected files"))
+          assertTrue(fixture.hasText("helper.go"))
+          assertEquals(emptyList(), destinations)
+          assertEquals(0, previews)
+          assertEquals(0, saves)
+        }
+  }
+
+  @Test
+  fun inspectionIsOwnedByProjectRevisionAndConfirmedSelectionId() {
+    var project by mutableStateOf(analysisProjectFixture())
+    var selection by mutableStateOf(selectionFixture())
+    ComposeVisualFixture(1000, 760) {
+          ProjectSummaryPane(null, project, {}, fileSelection = selection)
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickVisibleDescription("Up to date, 1 file")
+          fixture.render()
+          assertTrue(fixture.hasText("helper.go"))
+          selection =
+              selection.copy(
+                  selectionId = "replacement",
+                  files =
+                      listOf(
+                          AnalysisSelectableFile(
+                              "replacement.go", "", selectionStageFixture("fresh", "New."))))
+          fixture.render()
+          assertEquals(0, fixture.tagCount("summary-coverage-inspection"))
+          assertFalse(fixture.hasText("helper.go"))
+          fixture.clickVisibleDescription("Up to date, 1 file")
+          fixture.render()
+          assertTrue(fixture.hasText("replacement.go"))
+          project = project.copy(projectRevision = "next")
+          fixture.render()
+          assertEquals(0, fixture.tagCount("summary-coverage-inspection"))
+          assertFalse(fixture.hasText("replacement.go"))
+          selection = selection.copy(projectRevision = "next")
+          fixture.render()
+          assertEquals(0, fixture.tagCount("summary-coverage-inspection"))
+          fixture.clickVisibleDescription("Up to date, 1 file")
+          fixture.render()
+          project = project.copy(projectId = "other")
+          fixture.render()
+          assertEquals(0, fixture.tagCount("summary-coverage-inspection"))
+          assertFalse(fixture.hasText("replacement.go"))
+        }
+  }
+
+  @Test
+  fun inspectionSurvivesResizeAndLazyDisposalWithoutDispatch() {
+    val destinations = mutableListOf<Workspace>()
+    var selection by mutableStateOf(selectionFixture())
+    val overview =
+        ProjectOverview(
+            "project",
+            "revision",
+            analysis =
+                StructuredProjectAnalysis(
+                    status = "fresh", components = (0 until 60).map { "Module $it" }))
+    ComposeVisualFixture(1100, 780) {
+          ProjectSummaryPane(
+              overview, analysisProjectFixture(), destinations::add, fileSelection = selection)
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickVisibleDescription("Up to date, 1 file")
+          fixture.render()
+          fixture.resize(530, 650)
+          fixture.render()
+          assertTrue(fixture.hasText("helper.go"))
+          fixture.revealText("Open Editor")
+          assertTrue(fixture.requestFocus("Open Editor"))
+          fixture.scrollBy(100_000f, "summary-scroll")
+          fixture.render()
+          assertEquals(0, fixture.tagCount("summary-coverage-inspection"))
+          selection =
+              selection.copy(
+                  files =
+                      selection.files +
+                          AnalysisSelectableFile(
+                              "new.go", "", selectionStageFixture("fresh", "Saved.")))
+          fixture.render()
+          fixture.revealText("Analysis coverage")
+          fixture.render()
+          assertTrue(fixture.hasText("Up to date · 2 of 3 selected files"))
+          assertTrue(fixture.hasText("helper.go"))
+          assertTrue(fixture.hasText("new.go"))
+          assertEquals("Inspecting", fixture.descriptionStateDescription("Up to date, 2 files"))
+          assertEquals(emptyList(), destinations)
+        }
+  }
+
+  @Test
+  fun narrowInspectionKeepsTextAndViewAnalysisReachable() {
+    val destinations = mutableListOf<Workspace>()
+    for ((width, scale) in listOf(1440 to 1f, 800 to 1.25f, 430 to 1.5f)) {
+      ComposeVisualFixture(width, 650, scale) {
+            ProjectSummaryPane(
+                null,
+                analysisProjectFixture(),
+                destinations::add,
+                fileSelection = selectionFixture())
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.revealText("Analysis coverage")
+            fixture.clickVisibleDescription("Up to date, 1 file")
+            fixture.render()
+            assertTrue(fixture.hasText("helper.go"))
+            fixture.revealText("View analysis")
+            fixture.assertTextFits("View analysis")
+            val action = fixture.taggedBounds("summary-view-analysis")
+            val panel = fixture.taggedBounds("analysis-summary")
+            assertTrue(action.left >= panel.left && action.right <= panel.right)
+            assertTrue(fixture.requestFocus("View analysis"))
+            assertEquals(emptyList(), destinations)
+          }
+    }
   }
 
   @Test

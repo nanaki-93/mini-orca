@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -390,6 +391,12 @@ internal fun ProjectSummaryPane(
         SummaryCoverageProjection.Unavailable -> null
       }
   val inspectedBucket = remember(coverageOwner) { mutableStateOf<AnalysisCoverageBucket?>(null) }
+  val focusedLegend = remember(coverageOwner) { mutableStateOf<AnalysisCoverageBucket?>(null) }
+  val availableBuckets =
+      (presentation.coverage as? SummaryCoverageProjection.Known)?.buckets?.map { it.id }.orEmpty()
+  LaunchedEffect(coverageOwner, availableBuckets) {
+    if (inspectedBucket.value !in availableBuckets) inspectedBucket.value = null
+  }
   BoxWithConstraints(Modifier.fillMaxSize().background(EditorCanvas)) {
     LazyColumn(
         Modifier.fillMaxSize().testTag("summary-scroll"),
@@ -429,7 +436,7 @@ internal fun ProjectSummaryPane(
             val paired = !coverageResultsStacked(maxWidth, LocalDensity.current.fontScale)
             val coverage: @Composable (Modifier) -> Unit = { modifier ->
               androidx.compose.foundation.layout.Box(modifier.testTag("summary-coverage-column")) {
-                SummaryCoverage(presentation, inspectedBucket) {
+                SummaryCoverage(presentation, inspectedBucket, focusedLegend) {
                   selectWorkspace(Workspace.Analysis)
                 }
               }
