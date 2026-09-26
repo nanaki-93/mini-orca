@@ -942,31 +942,78 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
-  fun coverageSegmentsPreserveUnknownEmptyAndUnaccountedFiles() {
-    val unknown = projectSummaryPresentation(null, resultProjectFixture())
-    assertEquals("unknown", unknown.summaryStatus)
-    assertTrue(summaryCoverageFractions(unknown.coverageMetrics).isEmpty())
+  fun coverageArcsUseValidatedDenominatorWithoutGapsOrInflatedSmallBuckets() {
+    val project = analysisProjectFixture()
+    val unknown = projectSummaryPresentation(null, project)
+    assertTrue(summaryCoverageArcs(unknown.coverage).isEmpty())
     val empty =
         projectSummaryPresentation(
             null,
-            analysisProjectFixture(),
+            project,
             fileSelection = selectionFixture().copy(excludedPaths = listOf("helper.go", "main.go")))
-    assertEquals("excluded", empty.summaryStatus)
-    assertTrue(summaryCoverageFractions(empty.coverageMetrics).isEmpty())
+    assertTrue(summaryCoverageArcs(empty.coverage).isEmpty())
     val partial =
         projectSummaryPresentation(
-            ProjectOverview(analysisCoverage = AnalysisCoverage(total = 4, fresh = 1, failed = 1)),
+            ProjectOverview(
+                "project",
+                "revision",
+                analysisCoverage = AnalysisCoverage(total = 4, fresh = 1, failed = 1)),
+            project)
+    val arcs = summaryCoverageArcs(partial.coverage)
+    assertEquals(
+        listOf(
+            AnalysisCoverageBucket.UpToDate,
+            AnalysisCoverageBucket.Failed,
+            AnalysisCoverageBucket.Unavailable),
+        arcs.map { it.bucket })
+    assertEquals(listOf(0.0, 90.0, 180.0), arcs.map { it.start })
+    assertEquals(listOf(90.0, 90.0, 180.0), arcs.map { it.sweep })
+    val allCurrent =
+        summaryCoverageProjection(
+            ProjectOverview(
+                "project", "revision", analysisCoverage = AnalysisCoverage(total = 23, fresh = 23)),
+            project,
             null)
-    val segments = summaryCoverageFractions(partial.coverageMetrics)
-    assertEquals(listOf("Up to date", "Failed", "Unavailable"), segments.map { it.first.label })
-    assertEquals(listOf(1, 1, 2), segments.map { it.first.value })
-    assertEquals(listOf(.25f, .25f, .5f), segments.map { it.second })
-    val large =
-        summaryCoverageFractions(
-            listOf(
-                ProjectSummaryMetric("Up to date", Int.MAX_VALUE, SummaryMetricTone.Ready),
-                ProjectSummaryMetric("Outdated", Int.MAX_VALUE, SummaryMetricTone.Stale)))
-    assertEquals(listOf(.5f, .5f), large.map { it.second })
+    assertEquals(
+        listOf(SummaryCoverageArc(AnalysisCoverageBucket.UpToDate, 0.0, 360.0)),
+        summaryCoverageArcs(allCurrent))
+    val tiny =
+        summaryCoverageProjection(
+            ProjectOverview(
+                "project",
+                "revision",
+                analysisCoverage =
+                    AnalysisCoverage(total = Int.MAX_VALUE, fresh = Int.MAX_VALUE - 1, failed = 1)),
+            project,
+            null)
+    val tinyArcs = summaryCoverageArcs(tiny)
+    assertEquals(2, tinyArcs.size)
+    assertTrue(tinyArcs.last().sweep > 0.0)
+    assertEquals("99%", summaryCoveragePercent(Int.MAX_VALUE - 1, Int.MAX_VALUE))
+    assertEquals("100%", summaryCoveragePercent(23, 23))
+    assertEquals("0%", summaryCoveragePercent(0, 23))
+    assertEquals("25%", summaryCoveragePercent(1, 4))
+    listOf(partial.coverage, allCurrent, tiny).forEach { coverage ->
+      val boundaries = summaryCoverageArcs(coverage)
+      boundaries.forEach { arc ->
+        assertTrue(arc.start.isFinite() && arc.sweep.isFinite())
+        assertTrue(arc.start >= 0.0 && arc.sweep >= 0.0)
+        assertTrue(arc.start + arc.sweep <= 360.0)
+      }
+      boundaries.zipWithNext().forEach { (a, b) ->
+        assertTrue(a.start + a.sweep <= b.start + 1e-12)
+      }
+    }
+    assertTrue(
+        summaryCoverageArcs(
+                summaryCoverageProjection(
+                    ProjectOverview(
+                        "project",
+                        "revision",
+                        analysisCoverage = AnalysisCoverage(total = 0, fresh = 1)),
+                    project,
+                    null))
+            .isEmpty())
   }
 
   @Test
@@ -1101,7 +1148,7 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
-  fun coverageNavigationIsLocalAndLiveSelectionUpdatesItsSegments() {
+  fun coverageNavigationIsLocalAndLiveSelectionUpdatesItsDial() {
     val navigations = mutableListOf<Workspace>()
     val project = analysisProjectFixture()
     val initial = selectionFixture().copy(excludedPaths = listOf("main.go"))

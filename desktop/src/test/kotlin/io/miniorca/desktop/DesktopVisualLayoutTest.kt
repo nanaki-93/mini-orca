@@ -5090,7 +5090,7 @@ class DesktopVisualLayoutTest {
             assertFalse(fixture.hasText("File counts unavailable"))
             assertTrue(
                 fixture.hasDescription(
-                    "Analysis coverage: 16 up to date · 4 outdated · 3 not analyzed"))
+                    "Analysis coverage: 16 of 23 selected files are up to date · 70% · 16 up to date · 4 outdated · 3 not analyzed"))
             if (status != "fresh")
                 fixture.assertTextFits(
                     projectSummaryPresentation(overview, null).interpretationMessage, maxLines = 3)
@@ -5112,6 +5112,8 @@ class DesktopVisualLayoutTest {
           fixture.render()
           assertFalse(fixture.hasText("0 up to date"))
           assertTrue(fixture.hasText("File counts unavailable"))
+          assertTrue(fixture.hasDescription("Analysis coverage: File counts unavailable"))
+          assertFalse(fixture.hasText("100%"))
           fixture.assertSummaryStatusPlacement("Coverage unavailable")
           assertTrue(
               fixture.hasText("Overall findings · 2 tool-reported issues · 4 AI suggestions"))
@@ -5146,9 +5148,45 @@ class DesktopVisualLayoutTest {
           fixture.render("summary-no-selection-1440")
           fixture.assertSummaryStatusPlacement("No files selected")
           assertTrue(fixture.hasText("0 selected files"))
-          assertTrue(fixture.hasDescription("Analysis coverage: No files selected"))
+          assertTrue(fixture.hasDescription("Analysis coverage: 0 selected files"))
+          assertFalse(fixture.hasText("100%"))
           assertFalse(fixture.hasText("0 up to date"))
           assertFalse(fixture.hasText("File counts unavailable"))
+        }
+  }
+
+  @Test
+  fun dialDistinguishesAllCurrentZeroCurrentAndInvalidAggregate() {
+    val project = visualFixtureProject
+    listOf(
+            AnalysisCoverage(total = 23, fresh = 23) to
+                "Analysis coverage: 23 of 23 selected files are up to date · 100% · 23 up to date",
+            AnalysisCoverage(total = 23, missing = 23) to
+                "Analysis coverage: 0 of 23 selected files are up to date · 0% · 23 not analyzed",
+            AnalysisCoverage(total = 23, unavailable = 23) to
+                "Analysis coverage: 0 of 23 selected files are up to date · 0% · 23 unavailable")
+        .forEach { (counts, description) ->
+          ComposeVisualFixture(1024, 768) {
+                ProjectSummaryPane(
+                    visualFixtureOverview.copy(analysisCoverage = counts), project, {})
+              }
+              .use { fixture ->
+                fixture.render()
+                assertTrue(fixture.hasDescription(description))
+                assertTrue(fixture.hasText(if (counts.fresh == 23) "100%" else "0%"))
+                assertTrue(fixture.hasText("Saved coverage · Coverage, not a health score."))
+              }
+        }
+    ComposeVisualFixture(1024, 768) {
+          ProjectSummaryPane(
+              visualFixtureOverview.copy(analysisCoverage = AnalysisCoverage(total = 1, fresh = 2)),
+              project,
+              {})
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasDescription("Analysis coverage: File counts unavailable"))
+          assertFalse(fixture.hasText("100%"))
         }
   }
 
@@ -5203,7 +5241,7 @@ class DesktopVisualLayoutTest {
 
   @Test
   fun summaryCategoriesStackAtCompactTextScale() {
-    ComposeVisualFixture(800, 1_100, 1.5f) {
+    ComposeVisualFixture(800, 1_600, 1.5f) {
           ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
         }
         .use { fixture ->
@@ -6416,7 +6454,7 @@ internal class ComposeVisualFixture(
     val heading = bounds("summary-page-heading")
     val introduction = bounds("summary-introduction")
     val coverage = bounds("analysis-summary")
-    val track = bounds("summary-coverage-track")
+    val dial = bounds("summary-coverage-dial")
     assertTrue(heading.bottom <= introduction.top, "Summary heading must lead the page")
     assertTrue(introduction.bottom <= coverage.top, "Coverage must follow the introduction")
     val region = bounds("summary-coverage-results")
@@ -6429,7 +6467,7 @@ internal class ComposeVisualFixture(
       assertTrue(coverage.right <= results.left)
       assertTrue(results.right <= region.right)
     }
-    assertTrue(track.width > 0f, "Coverage track must remain visible")
+    assertTrue(dial.width > 0f && dial.height > 0f, "Coverage dial must remain visible")
   }
 
   fun assertNarrativeSectionOrder(withInsight: Boolean = false) {
@@ -6468,16 +6506,14 @@ internal class ComposeVisualFixture(
     assertTrue(
         status.top < heading.bottom && status.bottom > heading.top,
         "Coverage status must share the heading row")
-    val track = taggedBounds("summary-coverage-track")
+    val dial = taggedBounds("summary-coverage-dial")
     val legend = taggedBounds("summary-coverage-legend")
     val action = taggedBounds("summary-view-analysis")
-    assertTrue(track.left >= coverage.left && track.right <= coverage.right)
+    assertTrue(dial.left >= coverage.left && dial.right <= coverage.right)
     assertTrue(legend.left >= coverage.left && legend.right <= coverage.right)
     assertTrue(action.left >= coverage.left && action.right <= coverage.right)
-    assertTrue(track.top < legend.top, "Coverage legend must follow the track")
-    assertTrue(legend.top >= track.top, "Coverage legend must follow the track")
-    assertTrue(action.left >= track.right, "View analysis must trail coverage at reduced widths")
-    assertTrue(action.top < legend.bottom, "View analysis must stay beside coverage")
+    assertTrue(dial.bottom <= legend.top, "Coverage legend must follow the dial")
+    assertTrue(legend.bottom <= action.top, "View analysis must follow the legend")
   }
 
   fun assertSummaryCategoryBoxesFit() {
@@ -6573,12 +6609,12 @@ internal class ComposeVisualFixture(
 
   fun assertWideSummaryCoverageLayout() {
     val section = taggedBounds("analysis-summary")
-    val track = taggedBounds("summary-coverage-track")
+    val dial = taggedBounds("summary-coverage-dial")
     val legend = taggedBounds("summary-coverage-legend")
     val action = taggedBounds("summary-view-analysis")
-    assertTrue(track.width >= section.width * 0.6f, "Coverage track must be broad")
-    assertTrue(track.top < legend.top, "Coverage legend must follow the track")
-    assertTrue(action.left >= track.right, "View analysis must trail coverage on wide layouts")
+    assertTrue(dial.width > 0f && dial.height > 0f)
+    assertTrue(dial.top < legend.top, "Coverage legend must follow the dial")
+    assertTrue(legend.bottom <= action.top, "View analysis must follow the legend")
     assertTrue(action.right <= section.right, "View analysis must stay inside coverage")
   }
 
