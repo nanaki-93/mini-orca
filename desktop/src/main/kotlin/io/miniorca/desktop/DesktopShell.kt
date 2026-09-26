@@ -629,6 +629,7 @@ internal fun DesktopShell(
                       analysisStatus = toolbarAnalysisStatus(appState),
                       openingAttempt = appState.projectState.openingAttempt,
                       indexingAttempt = appState.projectState.indexingAttempt,
+                      detailsOutcome = appState.projectState.detailsOutcome,
                       switchPending = state.switchPending,
                       preferenceReadWarning = appState.projectState.preferenceReadWarning,
                       preferenceSaveWarning = appState.projectState.preferenceSaveWarning,

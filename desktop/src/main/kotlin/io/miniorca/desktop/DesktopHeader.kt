@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
@@ -89,6 +90,15 @@ internal fun MainToolbar(
         Spacer(Modifier.height(8.dp))
         ProjectOpeningFeedback(state.project, attempt, actions, state.switchPending)
       }
+      state.indexingAttempt
+          ?.takeIf { attempt ->
+            state.project?.let { it.projectId == attempt.projectId && it.path == attempt.path } ==
+                true
+          }
+          ?.let { attempt ->
+            Spacer(Modifier.height(8.dp))
+            ProjectIndexingFeedback(state, attempt, actions)
+          }
       if (state.preferenceReadWarning != null || state.preferenceSaveWarning != null) {
         Column(
             Modifier.fillMaxWidth()
@@ -151,6 +161,7 @@ internal data class ToolbarState(
     val analysisStatus: ToolbarAnalysisStatus? = null,
     val openingAttempt: ProjectOpeningAttempt? = null,
     val indexingAttempt: ProjectIndexingAttempt? = null,
+    val detailsOutcome: ProjectDetailsOutcome? = null,
     val switchPending: Boolean = false,
     val preferenceReadWarning: String? = null,
     val preferenceSaveWarning: String? = null,
@@ -220,6 +231,124 @@ private fun ProjectOpeningFeedback(
               onClick = actions.onImport, enabled = !switchPending, tone = ActionTone.Neutral) {
                 Text(if (project == null) "Open project…" else "Switch project…")
               }
+        }
+      })
+}
+
+@Composable
+private fun ProjectIndexingFeedback(
+    state: ToolbarState,
+    attempt: ProjectIndexingAttempt,
+    actions: ToolbarActions,
+) {
+  val failure = attempt.outcome as? ProjectIndexingOutcome.Failed
+  val success = attempt.outcome as? ProjectIndexingOutcome.Succeeded
+  val running = attempt.outcome == ProjectIndexingOutcome.Running
+  val retryAvailable =
+      projectActionAvailability(
+              state.project, state.openingAttempt, state.indexingAttempt, state.switchPending)
+          .reindex
+  var helpExpanded by remember(attempt.generation) { mutableStateOf(false) }
+  SystemStateMessage(
+      title =
+          when {
+            running -> "Re-indexing project…"
+            failure != null -> "Could not re-index project"
+            success != null -> "Project inventory refreshed"
+            else -> "Re-index canceled"
+          },
+      message =
+          when {
+            running ->
+                "Refreshing local inventory and freshness. No progress estimate is available."
+            failure != null ->
+                "Previous inventory and saved evidence remain available with their existing freshness labels."
+            success != null -> "Inventory revision accepted. This does not refresh model findings."
+            else ->
+                "Previous inventory and saved evidence remain available with their existing freshness labels."
+          },
+      accent = if (failure != null) Error else SecondaryText,
+      modifier =
+          Modifier.fillMaxWidth()
+              .heightIn(max = 220.dp)
+              .verticalScroll(rememberScrollState())
+              .testTag("project-indexing-scroll"),
+      action = {
+        if (running) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            IdeBusyIndicator(
+                Modifier.size(14.dp).semantics { contentDescription = "Re-index in progress" },
+                color = Information,
+                strokeWidth = 2.dp)
+            Spacer(Modifier.width(8.dp))
+            Text("Indexing in progress · no percentage available", color = Information)
+          }
+          Spacer(Modifier.height(8.dp))
+        }
+        if (failure != null || attempt.outcome == ProjectIndexingOutcome.Canceled) {
+          MiniOrcaButton(
+              onClick = actions.onReindex, enabled = retryAvailable, tone = ActionTone.Neutral) {
+                Text("Retry re-index")
+              }
+          if (!retryAvailable) {
+            Text(
+                "Retry unavailable while project opening or switching is in progress.",
+                color = SecondaryText)
+          }
+          Spacer(Modifier.height(8.dp))
+        }
+        Text("Project", color = SecondaryText, style = IdeTypography.resultLabel)
+        Text(
+            projectBreadcrumbLabel(state.project),
+            color = PrimaryText,
+            style = IdeTypography.resultCode)
+        if (success != null) {
+          Spacer(Modifier.height(8.dp))
+          Text(
+              "Accepted inventory revision",
+              color = SecondaryText,
+              style = IdeTypography.resultLabel)
+          SelectionContainer {
+            Text(success.revision, color = PrimaryText, style = IdeTypography.resultCode)
+          }
+          when (val details = state.detailsOutcome) {
+            is ProjectDetailsOutcome.Unavailable -> {
+              Text(
+                  "Workspace details unavailable; retained findings keep their existing freshness labels.",
+                  color = Warning)
+              DiagnosticText(details.message, color = Warning)
+            }
+            ProjectDetailsOutcome.Refreshing ->
+                Text(
+                    "Workspace details are still loading; findings have not been refreshed.",
+                    color = SecondaryText)
+            else -> Unit
+          }
+        }
+        Text("Project path", color = SecondaryText, style = IdeTypography.resultLabel)
+        SelectionContainer {
+          Text(attempt.path, color = PrimaryText, style = IdeTypography.resultCode)
+        }
+        if (failure != null) {
+          Spacer(Modifier.height(8.dp))
+          Text("Re-index diagnostic", color = SecondaryText, style = IdeTypography.resultLabel)
+          DiagnosticText(failure.message, color = Error)
+        }
+        Spacer(Modifier.height(8.dp))
+        ChromeButton(
+            onClick = { helpExpanded = !helpExpanded },
+            accessibleName = "About Re-index project",
+            modifier =
+                Modifier.semantics {
+                  stateDescription = if (helpExpanded) "Expanded" else "Collapsed"
+                }) {
+              Text(if (helpExpanded) "Hide re-index help" else "About Re-index project")
+            }
+        if (helpExpanded) {
+          Text(
+              "Re-index refreshes project inventory and freshness without a model request or project-code execution. It does not run analysis or refresh findings.",
+              color = SecondaryText,
+              style = IdeTypography.body)
         }
       })
 }
