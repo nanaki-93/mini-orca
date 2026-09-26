@@ -307,24 +307,40 @@ internal fun ProjectSummaryPane(
               showActionFeedback = currentRun?.showsProgressOnSummary() != true)
         }
         item {
-          Column(
-              Modifier.fillMaxWidth().testTag("summary-coverage-results"),
-              verticalArrangement = Arrangement.spacedBy(16.dp)) {
+          BoxWithConstraints(Modifier.fillMaxWidth().testTag("summary-coverage-results")) {
+            val paired = !coverageResultsStacked(maxWidth, LocalDensity.current.fontScale)
+            val coverage: @Composable (Modifier) -> Unit = { modifier ->
+              androidx.compose.foundation.layout.Box(modifier.testTag("summary-coverage-column")) {
                 SummaryCoverage(presentation) { selectWorkspace(Workspace.Analysis) }
-                Column(
-                    Modifier.fillMaxWidth().testTag("summary-results"),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                      SummaryCategories(presentation.issueMetrics, selectWorkspace)
-                      Text(
-                          "Overall findings · " +
-                              presentation.findingMetrics.joinToString(" · ") {
-                                "${it.value ?: "—"} ${if (it.label == "AI suggestions") it.label else it.label.lowercase()}"
-                              },
-                          color = SecondaryText,
-                          style = IdeTypography.workspaceMetadata,
-                          modifier = Modifier.testTag("summary-findings-provenance"))
-                    }
               }
+            }
+            val results: @Composable (Modifier) -> Unit = { modifier ->
+              Column(
+                  modifier.testTag("summary-results"),
+                  verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SummaryCategories(presentation.issueMetrics, selectWorkspace)
+                    Text(
+                        "Overall findings · " +
+                            presentation.findingMetrics.joinToString(" · ") {
+                              "${it.value ?: "—"} ${if (it.label == "AI suggestions") it.label else it.label.lowercase()}"
+                            },
+                        color = SecondaryText,
+                        style = IdeTypography.workspaceMetadata,
+                        modifier = Modifier.testTag("summary-findings-provenance"))
+                  }
+            }
+            if (paired) {
+              Row(horizontalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.section)) {
+                coverage(Modifier.weight(2f))
+                results(Modifier.weight(3f))
+              }
+            } else {
+              Column(verticalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.section)) {
+                coverage(Modifier.fillMaxWidth())
+                results(Modifier.fillMaxWidth())
+              }
+            }
+          }
         }
         if (presentation.details.isNotEmpty() ||
             presentation.engineeringInsight?.let(::engineeringInsightPieces)?.isNotEmpty() ==
@@ -399,6 +415,14 @@ private fun SummaryIntroduction(
   }
 }
 
+// Reserve room for the coverage controls and three readable result cards in the paired row.
+internal fun coverageResultsStacked(width: Dp, fontScale: Float): Boolean =
+    width < 1080.dp * fontScale
+
+// Two narrative panels need room for selectable prose and diagram controls.
+internal fun narrativePanelsStacked(width: Dp, fontScale: Float): Boolean =
+    width < 840.dp * fontScale
+
 // Three category cards need room for their labels, counts and status at the current text scale.
 internal fun categoryPanelsStacked(width: Dp, fontScale: Float, gap: Dp): Boolean =
     width < 200.dp * 3 * fontScale + gap * 2
@@ -439,19 +463,46 @@ private fun SummaryLowerComposition(
   Column(
       Modifier.fillMaxWidth().testTag("summary-lower-composition"),
       verticalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.section)) {
-        architecture?.let {
-          WorkspaceSection(modifier = Modifier.testTag("summary-architecture")) {
-            MermaidDiagram(
-                it.values.single(),
-                "Architecture",
-                title = "Architecture",
-                ownerIdentity = ownerIdentity + "architecture",
-                viewState = architectureView)
+        if (architecture != null || insight != null) {
+          BoxWithConstraints(Modifier.fillMaxWidth().testTag("summary-narrative-row")) {
+            val paired =
+                architecture != null &&
+                    insight != null &&
+                    !narrativePanelsStacked(maxWidth, LocalDensity.current.fontScale)
+            val architecturePanel: @Composable (Modifier) -> Unit = { modifier ->
+              architecture?.let {
+                WorkspaceSection(modifier = modifier.testTag("summary-architecture")) {
+                  MermaidDiagram(
+                      it.values.single(),
+                      "Architecture",
+                      title = "Architecture",
+                      ownerIdentity = ownerIdentity + "architecture",
+                      viewState = architectureView)
+                }
+              }
+            }
+            val insightPanel: @Composable (Modifier) -> Unit = { modifier ->
+              insight?.let {
+                SummaryEngineeringInsight(
+                    it,
+                    presentation.interpretationStatus == "stale",
+                    ownerIdentity,
+                    insightExpansion,
+                    modifier)
+              }
+            }
+            if (paired) {
+              Row(horizontalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.section)) {
+                architecturePanel(Modifier.weight(1f))
+                insightPanel(Modifier.weight(1f))
+              }
+            } else {
+              Column(verticalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.section)) {
+                architecturePanel(Modifier.fillMaxWidth())
+                insightPanel(Modifier.fillMaxWidth())
+              }
+            }
           }
-        }
-        insight?.let {
-          SummaryEngineeringInsight(
-              it, presentation.interpretationStatus == "stale", ownerIdentity, insightExpansion)
         }
         modules?.let {
           WorkspaceSection(modifier = Modifier.testTag("summary-modules")) {

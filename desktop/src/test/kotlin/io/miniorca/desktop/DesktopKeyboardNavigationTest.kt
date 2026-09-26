@@ -1435,8 +1435,8 @@ class DesktopKeyboardNavigationTest {
           fixture.render()
           assertEquals(1, fixture.tagCount("summary-coverage-results"))
           assertTrue(
-              fixture.taggedBounds("analysis-summary").bottom <=
-                  fixture.taggedBounds("summary-results").top)
+              fixture.taggedBounds("analysis-summary").right <=
+                  fixture.taggedBounds("summary-results").left)
           repeat(2) {
             assertTrue(fixture.pressKey(Key.Tab), "Tab must advance through the coverage status")
             fixture.render()
