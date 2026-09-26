@@ -4587,6 +4587,7 @@ class DesktopVisualLayoutTest {
           fixture.assertSummaryStatusPlacement("Outdated")
           fixture.assertWideSummaryCoverageLayout()
           fixture.assertReferenceSummaryGeometry()
+          fixture.assertNarrativeSectionOrder(withInsight = true)
           listOf("Bugs", "Performance", "Security").forEach {
             assertTrue(fixture.hasDescription("View $it results"))
             assertTrue(fixture.hasText(it))
@@ -4630,12 +4631,14 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(1440, 900) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
           fixture.render("summary-lower-one-sided-1440")
-          val lower = fixture.taggedBounds("summary-lower-left")
           val introduction = fixture.taggedBounds("summary-introduction")
-          assertEquals(introduction.width, lower.width, 1f)
-          assertEquals(0, fixture.tagCount("summary-lower-right"))
-          assertTrue(fixture.tagCount("summary-architecture") == 1)
-          assertTrue(fixture.tagCount("summary-modules") == 1)
+          val architecture = fixture.taggedBounds("summary-architecture")
+          val modules = fixture.taggedBounds("summary-modules")
+          assertEquals(introduction.width, architecture.width, 1f)
+          assertEquals(introduction.width, modules.width, 1f)
+          assertEquals(0, fixture.tagCount("summary-insight"))
+          assertEquals(0, fixture.tagCount("summary-flows"))
+          assertTrue(architecture.bottom <= modules.top)
         }
   }
 
@@ -4660,13 +4663,16 @@ class DesktopVisualLayoutTest {
             fixture.revealText("Flows")
             fixture.scrollBy(100_000f)
             fixture.render()
-            assertEquals(0, fixture.tagCount("summary-lower-left"))
+            assertEquals(0, fixture.tagCount("summary-architecture"))
+            assertEquals(0, fixture.tagCount("summary-modules"))
             val item = fixture.taggedBounds("summary-lower-composition")
-            val right = fixture.taggedBounds("summary-lower-right")
-            assertEquals(item.top, right.top, 1f, "Right-only content starts at the item top")
-            assertEquals(item.bottom, right.bottom, 1f, "Item must measure the whole right column")
-            assertEquals(item.width, right.width, 1f)
-            assertTrue(right.bottom <= height, "Flows must be reachable at $width x $height")
+            val insight = fixture.taggedBounds("summary-insight")
+            val flows = fixture.taggedBounds("summary-flows")
+            assertEquals(item.top, insight.top, 1f, "Insight starts at the item top")
+            assertEquals(item.bottom, flows.bottom, 1f, "Flows end the narrative")
+            assertEquals(item.width, insight.width, 1f)
+            assertEquals(item.width, flows.width, 1f)
+            assertTrue(flows.bottom <= height, "Flows must be reachable at $width x $height")
             assertTrue(
                 fixture.taggedBounds("summary-insight").bottom <=
                     fixture.taggedBounds("summary-flows").top)
@@ -4690,18 +4696,7 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("summary-lower-compact-800-150")
-          val left = fixture.taggedBounds("summary-lower-left")
-          val architecture = fixture.taggedBounds("summary-architecture")
-          val modules = fixture.taggedBounds("summary-modules")
-          assertTrue(architecture.bottom <= modules.top, "Modules must follow Architecture")
-          val right = fixture.taggedBounds("summary-lower-right")
-          val insight = fixture.taggedBounds("summary-insight")
-          val flows = fixture.taggedBounds("summary-flows")
-          assertEquals(left.left, right.left, 1f)
-          assertEquals(left.width, right.width, 1f)
-          assertTrue(
-              left.bottom <= right.top, "Narratives must stack in reading order: $left / $right")
-          assertTrue(insight.bottom <= flows.top, "Flows must follow Engineering insight")
+          fixture.assertNarrativeSectionOrder(withInsight = true)
           assertEquals(
               1, fixture.scrollableContentCount(), "Summary must keep one page scroll owner")
         }
@@ -4731,10 +4726,7 @@ class DesktopVisualLayoutTest {
           for (width in listOf(800, 1440)) {
             fixture.resize(width, 2600)
             fixture.render("summary-diagram-state-$width")
-            val left = fixture.taggedBounds("summary-lower-left")
-            val right = fixture.taggedBounds("summary-lower-right")
-            if (width == 800) assertTrue(left.bottom <= right.top)
-            else assertTrue(left.right <= right.left)
+            fixture.assertNarrativeSectionOrder()
             fixture.awaitDescription("Hide Architecture diagram", "Expanded")
             fixture.awaitDescription("Hide Flow 1 diagram", "Expanded")
             assertTrue(fixture.hasDescription("Architecture diagram\n$source"))
@@ -4810,24 +4802,13 @@ class DesktopVisualLayoutTest {
               assertEquals(AnalysisResultType.entries.map { it.workspace }, analysisNavigation)
             }
       }
-      val lowerBoundary = (16.dp + 740.dp * scale).value.toInt()
-      for (delta in listOf(-1, 0, 1)) {
-        ComposeVisualFixture(lowerBoundary + 48 + delta, 2400, scale) {
+      for (width in listOf(800, 1440)) {
+        ComposeVisualFixture(width, 2400, scale) {
               ProjectSummaryPane(overview, visualFixtureProject, {})
             }
             .use { fixture ->
-              fixture.render("summary-narratives-local-${lowerBoundary + delta}-$scale")
-              val left = fixture.taggedBounds("summary-lower-left")
-              val right = fixture.taggedBounds("summary-lower-right")
-              if (delta < 0) {
-                assertTrue(left.bottom <= right.top)
-                assertEquals(left.width, right.width, 1f)
-              } else {
-                assertTrue(left.right <= right.left)
-              }
-              listOf("Architecture", "Packages / modules", "Flows").forEach {
-                fixture.revealText(it)
-              }
+              fixture.render("summary-narratives-single-column-$width-$scale")
+              fixture.assertNarrativeSectionOrder()
             }
       }
     }
@@ -6210,38 +6191,27 @@ internal class ComposeVisualFixture(
     val introduction = bounds("summary-introduction")
     val coverage = bounds("analysis-summary")
     val track = bounds("summary-coverage-track")
-    val left = bounds("summary-lower-left")
-    val right = bounds("summary-lower-right")
-    val architecture = bounds("summary-architecture")
-    val modules = bounds("summary-modules")
-    val insight = bounds("summary-insight")
-    val flows = bounds("summary-flows")
-    val lowerWidth = left.width + right.width
-
     assertTrue(heading.bottom <= introduction.top, "Summary heading must lead the page")
     assertTrue(introduction.bottom <= coverage.top, "Coverage must follow the introduction")
     assertEquals(introduction.width, coverage.width, 1f, "Coverage must use the Summary width")
     assertTrue(track.width >= coverage.width * 0.6f, "Coverage track must be broad")
-    assertEquals(0.62f, left.width / lowerWidth, 0.03f, "Left summary region must be wider")
-    assertTrue(left.right < right.left, "Lower summary regions must not overlap")
-    assertEquals(left.top, right.top, 1f, "Lower summary regions must align at the top")
-    assertTrue(architecture.left >= left.left && architecture.right <= left.right)
-    assertTrue(modules.left >= left.left && modules.right <= left.right)
-    assertTrue(
-        generateSequence(
-                nodes().single {
-                  it.config.getOrNull(SemanticsProperties.TestTag) == "summary-architecture"
-                }) {
-                  it.parent
-                }
-            .any { it.config.getOrNull(SemanticsProperties.TestTag) == "summary-lower-left" },
-        "Architecture and modules must share the bounded left surface")
-    assertTrue(
-        architecture.bottom <= modules.top,
-        "Modules must follow Architecture in the shared surface")
-    assertTrue(insight.left >= right.left && insight.right <= right.right)
-    assertTrue(flows.left >= right.left && flows.right <= right.right)
-    assertTrue(insight.bottom <= flows.top, "Flows must follow Engineering insight")
+  }
+
+  fun assertNarrativeSectionOrder(withInsight: Boolean = false) {
+    val narrative = taggedBounds("summary-lower-composition")
+    val tags =
+        listOfNotNull(
+            "summary-architecture",
+            "summary-insight".takeIf { withInsight },
+            "summary-modules",
+            "summary-flows")
+    val sections = tags.map(::taggedBounds)
+    assertEquals(narrative.top, sections.first().top, 1f)
+    assertEquals(narrative.bottom, sections.last().bottom, 1f)
+    sections.forEach { assertEquals(narrative.width, it.width, 1f) }
+    sections.zipWithNext().forEach { (first, second) ->
+      assertTrue(first.bottom <= second.top, "Narrative sections must follow reading order")
+    }
   }
 
   fun assertTextFits(label: String, maxLines: Int = 1) {
