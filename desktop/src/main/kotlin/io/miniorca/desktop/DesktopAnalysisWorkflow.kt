@@ -147,6 +147,13 @@ internal class DesktopAnalysisWorkflow(
   fun admit() {
     val project = project() ?: return
     val admission = current.admission ?: return
+    if (admission.preview.files.isEmpty()) {
+      update(
+          current.copy(
+              error =
+                  "No eligible files to analyze. Request a new preview after changing the selection."))
+      return
+    }
     if (!admission.isConfirmed()) {
       update(
           current.copy(
