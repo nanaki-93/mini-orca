@@ -382,6 +382,14 @@ internal fun ProjectSummaryPane(
         key(index) { remember(ownerIdentity, value) { DiagramViewState() } }
       }
   val insightExpansion = remember(ownerIdentity, pieces) { mutableStateOf(false) }
+  // Inspection is local to the confirmed coverage owner, outside the lazy item lifecycle.
+  val coverageOwner =
+      when (val coverage = presentation.coverage) {
+        is SummaryCoverageProjection.Known -> coverage.owner
+        is SummaryCoverageProjection.Empty -> coverage.owner
+        SummaryCoverageProjection.Unavailable -> null
+      }
+  val inspectedBucket = remember(coverageOwner) { mutableStateOf<AnalysisCoverageBucket?>(null) }
   BoxWithConstraints(Modifier.fillMaxSize().background(EditorCanvas)) {
     LazyColumn(
         Modifier.fillMaxSize().testTag("summary-scroll"),
@@ -421,7 +429,9 @@ internal fun ProjectSummaryPane(
             val paired = !coverageResultsStacked(maxWidth, LocalDensity.current.fontScale)
             val coverage: @Composable (Modifier) -> Unit = { modifier ->
               androidx.compose.foundation.layout.Box(modifier.testTag("summary-coverage-column")) {
-                SummaryCoverage(presentation) { selectWorkspace(Workspace.Analysis) }
+                SummaryCoverage(presentation, inspectedBucket) {
+                  selectWorkspace(Workspace.Analysis)
+                }
               }
             }
             val results: @Composable (Modifier) -> Unit = { modifier ->

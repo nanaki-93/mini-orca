@@ -1665,7 +1665,12 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.isTaggedNodeFocused("summary-analysis-status"))
           assertTrue(fixture.pressKey(Key.Tab))
           fixture.render()
-          assertTrue(fixture.isFocused("View analysis"), "Coverage navigation follows its status")
+          assertTrue(fixture.isFocusedControl("Up to date, 16 files"))
+          repeat(3) {
+            assertTrue(fixture.pressKey(Key.Tab))
+            fixture.render()
+          }
+          assertTrue(fixture.isFocused("View analysis"), "Coverage navigation follows the legend")
         }
   }
 

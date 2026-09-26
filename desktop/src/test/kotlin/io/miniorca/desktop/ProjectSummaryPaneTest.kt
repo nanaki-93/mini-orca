@@ -1148,6 +1148,140 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun legendInspectionTogglesSavedRowsLocallyAndAggregateHasNoPaths() {
+    val destinations = mutableListOf<Workspace>()
+    var previews = 0
+    var saves = 0
+    val actions =
+        AnalysisWorkspaceActions(
+            { _, _ -> previews++ }, {}, {}, {}, {}, saveSelection = { saves++ })
+    val selection = selectionFixture()
+    ComposeVisualFixture(1000, 760) {
+          ProjectSummaryPane(
+              null,
+              analysisProjectFixture(),
+              destinations::add,
+              fileSelection = selection,
+              analysisActions = actions)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(0, fixture.tagCount("summary-coverage-inspection"))
+          fixture.clickVisibleDescription("Up to date, 1 file")
+          fixture.render()
+          assertEquals("Inspecting", fixture.descriptionStateDescription("Up to date, 1 file"))
+          assertTrue(fixture.isDescriptionSelected("Up to date, 1 file"))
+          assertTrue(fixture.hasText("Up to date · 1 of 2 selected files"))
+          assertTrue(fixture.hasText("helper.go"))
+          assertTrue(fixture.hasText("Up to date · All applicable stages have current analysis."))
+          assertFalse(fixture.hasEditableText(withinTag = "summary-inspection-paths"))
+          fixture.clickVisibleDescription("Not analyzed, 1 file")
+          fixture.render()
+          assertEquals("Not inspecting", fixture.descriptionStateDescription("Up to date, 1 file"))
+          assertFalse(fixture.isDescriptionSelected("Up to date, 1 file"))
+          assertTrue(fixture.hasText("main.go"))
+          assertTrue(
+              fixture.hasText(
+                  "Not analyzed · ${analysisFileStatus(selection.files.last()).explanation}"))
+          fixture.clickVisibleDescription("Not analyzed, 1 file")
+          fixture.render()
+          assertEquals(0, fixture.tagCount("summary-coverage-inspection"))
+          assertEquals(emptyList(), destinations)
+          assertEquals(0, previews)
+          assertEquals(0, saves)
+        }
+    val aggregate =
+        ProjectOverview(
+            "project", "revision", analysisCoverage = AnalysisCoverage(total = 2, failed = 1))
+    ComposeVisualFixture(1000, 760) {
+          ProjectSummaryPane(aggregate, analysisProjectFixture(), destinations::add)
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickVisibleDescription("Failed, 1 file")
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "File paths are unavailable for aggregate coverage. View analysis for file scope."))
+          assertTrue(fixture.hasText("View analysis"))
+          assertFalse(fixture.hasText("helper.go"))
+          assertEquals(emptyList(), destinations)
+        }
+  }
+
+  @Test
+  fun longSavedExplanationIsSelectableAndFullyReachableWithoutStartingWork() {
+    val reason = "Changed: " + "detail ".repeat(700) + "end of saved explanation"
+    val file = AnalysisSelectableFile("src/long.go", "", selectionStageFixture("stale", reason))
+    val selection = selectionFixture().copy(files = listOf(file))
+    val explanation = "Outdated · ${analysisFileStatus(file).explanation}"
+    var previews = 0
+    var saves = 0
+    val destinations = mutableListOf<Workspace>()
+    val actions =
+        AnalysisWorkspaceActions(
+            { _, _ -> previews++ }, {}, {}, {}, {}, saveSelection = { saves++ })
+    ComposeVisualFixture(1000, 760) {
+          ProjectSummaryPane(
+              null,
+              analysisProjectFixture(),
+              destinations::add,
+              fileSelection = selection,
+              analysisActions = actions)
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickVisibleDescription("Outdated, 1 file")
+          fixture.render()
+          assertTrue(fixture.hasText("src/long.go"))
+          assertFalse(fixture.hasText(explanation))
+          assertTrue(fixture.hasText("Show full available output"))
+          fixture.clickDescription("Expand available diagnostic output")
+          fixture.render()
+          assertTrue(fixture.hasText(explanation))
+          assertFalse(fixture.hasEditableText(withinTag = "summary-inspection-paths"))
+          fixture.scrollBy(100_000f, "diagnostic-output-scroll")
+          fixture.render()
+          assertTrue(fixture.verticalScrollValue("diagnostic-output-scroll") > 0f)
+          assertEquals(emptyList(), destinations)
+          assertEquals(0, previews)
+          assertEquals(0, saves)
+        }
+  }
+
+  @Test
+  fun inspectionScrollKeepsEveryPathReachableWithoutStartingWork() {
+    val files =
+        (0 until 40).map { index ->
+          AnalysisSelectableFile(
+              "src/file-%02d.go".format(index), "", selectionStageFixture("stale", "Changed."))
+        }
+    val selection = selectionFixture().copy(files = files.reversed())
+    val destinations = mutableListOf<Workspace>()
+    ComposeVisualFixture(1000, 760) {
+          ProjectSummaryPane(
+              null, analysisProjectFixture(), destinations::add, fileSelection = selection)
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickVisibleDescription("Outdated, 40 files")
+          fixture.render()
+          assertEquals(
+              40,
+              (summaryCoverageProjection(null, analysisProjectFixture(), selection)
+                      as SummaryCoverageProjection.Known)
+                  .buckets
+                  .single()
+                  .count)
+          files.forEach { assertTrue(fixture.hasText(it.path), "Missing ${it.path}") }
+          fixture.scrollBy(10_000f, "summary-inspection-paths")
+          fixture.render()
+          assertEquals(emptyList(), destinations)
+          assertTrue(fixture.hasText("View analysis"))
+        }
+  }
+
+  @Test
   fun coverageNavigationIsLocalAndLiveSelectionUpdatesItsDial() {
     val navigations = mutableListOf<Workspace>()
     val project = analysisProjectFixture()
