@@ -1,5 +1,8 @@
 package io.miniorca.desktop
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.state.ToggleableState
 import kotlin.test.Test
@@ -9,6 +12,203 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DesktopAccessibilityTest {
+  @Test
+  fun switchReviewsKeepSafeFocusAndEscapeOnlyDismissesTheActiveReview() {
+    val draft = DeclarationDraft(id = "draft", targetPath = "cmd/main.go")
+    val model = ScopedModel(scope = "analyze", remoteProvider = true, model = "remote-model")
+    val context =
+        ProjectSwitchContext(
+            SwitchProjectIdentity(resultProjectFixture()),
+            SwitchDraftIdentity(null, draft, editableDraft(draft)),
+            SwitchAnalyzeDestination(model),
+            false)
+    val admission = ProjectSwitchAdmission()
+    var pending by mutableStateOf(admission.choose("/next/a very long project path", context))
+    var confirmed by mutableStateOf(false)
+    var cancels = 0
+    var imports = 0
+    val shells =
+        TerminalWorkspaceState(
+            tabs = listOf(TerminalTabState(1, "Shell 1"), TerminalTabState(2, "Shell 2")))
+    ComposeVisualFixture(800, 650, 1.5f) {
+          pending?.let { current ->
+            ProjectSwitchReviewDialog(
+                current,
+                model,
+                confirmed,
+                shells,
+                SwitchCleanupFeedback(),
+                onCancel = {
+                  cancels++
+                  admission.dismiss(current.requestId)
+                  pending = admission.pending
+                },
+                onDraftApproved = {
+                  admission.approveDraft(current.requestId, context)
+                  pending = admission.pending
+                },
+                onProviderConfirmed = { confirmed = it },
+                onProviderApproved = {
+                  admission.approveProvider(
+                      current.requestId, context.copy(analyzeConfirmed = confirmed))
+                  pending = admission.pending
+                },
+                onReviewApproved = {},
+                onCommit = { imports++ },
+            )
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Cancel switch"))
+          assertTrue(fixture.hasText("Requested project: /next/a very long project path"))
+          assertTrue(fixture.hasText("Shell 2"))
+          assertTrue(fixture.hasText("Approve draft discard for switch"))
+          fixture.clickText("Approve draft discard for switch")
+          fixture.render()
+          assertEquals(SwitchReviewStage.Provider, pending?.stage)
+          assertEquals(draft, pending?.context?.draft?.draft)
+          assertTrue(fixture.isFocusedControl("Cancel switch"))
+          assertTrue(fixture.hasText("Confirm remote destination"))
+          assertFalse(fixture.isFocusedControl("Continue with provider"))
+          assertTrue(fixture.pressKey(Key.Escape))
+          fixture.render()
+          assertNull(pending)
+          assertEquals(1, cancels)
+          assertEquals(0, imports)
+          assertEquals(2, shells.tabs.size)
+
+          pending = admission.choose("/next/a very long project path", context)
+          fixture.render()
+          fixture.clickText("Approve draft discard for switch")
+          fixture.render()
+          fixture.clickText("Confirm remote destination")
+          fixture.render()
+          assertTrue(confirmed)
+          assertEquals(SwitchReviewStage.Provider, pending?.stage)
+          assertEquals(0, imports)
+          fixture.clickText("Continue with provider")
+          fixture.render()
+          assertEquals(SwitchReviewStage.Final, pending?.stage)
+          assertEquals(draft, pending?.context?.draft?.draft)
+          assertTrue(fixture.isFocusedControl("Cancel switch"))
+          assertTrue(fixture.pressKey(Key.Escape))
+          fixture.render()
+          assertNull(pending)
+          assertEquals(2, cancels)
+          assertEquals(0, imports)
+          assertEquals(2, shells.tabs.size)
+        }
+  }
+
+  @Test
+  fun localSwitchFinalReviewNeedsNoRemoteConsentAndEscapeKeepsTheProject() {
+    val model = ScopedModel(scope = "analyze")
+    val context =
+        ProjectSwitchContext(
+            SwitchProjectIdentity(resultProjectFixture()),
+            SwitchDraftIdentity(null, null, null),
+            SwitchAnalyzeDestination(model),
+            false)
+    val admission = ProjectSwitchAdmission()
+    var pending by mutableStateOf(admission.choose("/next/local", context))
+    var cancels = 0
+    var confirmations = 0
+    var imports = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          pending?.let { current ->
+            ProjectSwitchReviewDialog(
+                current,
+                model,
+                false,
+                TerminalWorkspaceState(),
+                SwitchCleanupFeedback(),
+                onCancel = {
+                  cancels++
+                  admission.dismiss(current.requestId)
+                  pending = admission.pending
+                },
+                onDraftApproved = {},
+                onProviderConfirmed = { confirmations++ },
+                onProviderApproved = {},
+                onReviewApproved = {},
+                onCommit = { imports++ },
+            )
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(SwitchReviewStage.Final, pending?.stage)
+          assertTrue(fixture.hasText("Current project: ${context.project?.path}"))
+          assertTrue(fixture.hasText("Requested project: /next/local"))
+          assertTrue(
+              fixture.hasText(
+                  "This Analyze destination is local; no remote confirmation is required."))
+          assertFalse(fixture.hasText("Confirm remote destination"))
+          assertTrue(fixture.isFocusedControl("Cancel switch"))
+          assertTrue(fixture.pressKey(Key.Escape))
+          fixture.render()
+          assertNull(pending)
+          assertEquals(1, cancels)
+          assertEquals(0, confirmations)
+          assertEquals(0, imports)
+        }
+  }
+
+  @Test
+  fun committedCleanupFailureOffersAnExplicitExitWithoutCallingSwitchAgain() {
+    val model = ScopedModel(scope = "analyze")
+    val context =
+        ProjectSwitchContext(
+            SwitchProjectIdentity(resultProjectFixture()),
+            SwitchDraftIdentity(null, null, null),
+            SwitchAnalyzeDestination(model),
+            false)
+    val admission = ProjectSwitchAdmission()
+    val request = admission.choose("/next", context)!!.requestId
+    admission.commit(request, context)
+    var closes = 0
+    var imports = 0
+    var outstanding by mutableStateOf(true)
+    admission.cleanupStarted(request)
+    ComposeVisualFixture(800, 650, 1.5f) {
+          ProjectSwitchReviewDialog(
+              admission.pending!!,
+              model,
+              false,
+              TerminalWorkspaceState(),
+              SwitchCleanupFeedback(
+                  "Shell cleanup did not finish in 15 seconds. The project has not been switched.",
+                  outstanding),
+              onCancel = {
+                admission.finish(request)
+                closes++
+              },
+              onDraftApproved = {},
+              onProviderConfirmed = {},
+              onProviderApproved = {},
+              onReviewApproved = {},
+              onCommit = { imports++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Closing project shells…"))
+          assertFalse(fixture.hasText("Close review"))
+          assertFalse(fixture.hasText("Cancel switch"))
+          fixture.pressKey(Key.Escape)
+          assertEquals(0, closes)
+          admission.cleanupSettled(request)
+          outstanding = false
+          fixture.render()
+          assertTrue(fixture.hasText("Project switch stopped"))
+          assertTrue(fixture.hasText("Close review"))
+          fixture.clickText("Close review")
+          assertEquals(1, closes)
+          assertNull(admission.pending)
+          assertEquals(0, imports)
+        }
+  }
+
   @Test
   fun savedReadFailureNamesRecoveryAndKeepsFilteredFailureAccessible() {
     AnalysisResultType.entries.forEach { type ->

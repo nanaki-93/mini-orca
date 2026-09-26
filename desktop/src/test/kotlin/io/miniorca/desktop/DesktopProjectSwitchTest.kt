@@ -1,9 +1,11 @@
 package io.miniorca.desktop
 
 import java.io.File
+import java.util.concurrent.CompletableFuture
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class DesktopProjectSwitchTest {
   private val project = resultProjectFixture()
@@ -23,6 +25,177 @@ class DesktopProjectSwitchTest {
           SwitchDraftIdentity(null, draft, editor),
           SwitchAnalyzeDestination(model),
           confirmed)
+
+  private class CleanupSwitch {
+    val admission = ProjectSwitchAdmission()
+    val approved =
+        ProjectSwitchContext(
+            SwitchProjectIdentity(resultProjectFixture()),
+            SwitchDraftIdentity(null, DeclarationDraft(id = "draft"), null),
+            SwitchAnalyzeDestination(ScopedModel(scope = "analyze", remoteProvider = true)),
+            true)
+    var context = approved
+    var opening = true
+    val completion = CompletableFuture<TerminalWorkspaceState>()
+    val effects = mutableListOf<String>()
+    var error: String? = null
+    var timeout: (() -> Unit)? = null
+    var stopped = false
+    val request = admission.choose("/next", approved)!!.requestId
+
+    init {
+      admission.approveDraft(request, approved)
+    }
+
+    fun commit() {
+      commitProjectSwitch(
+          request,
+          admission,
+          { context },
+          { opening },
+          {
+            effects += "cleanup"
+            completion
+          },
+          { effects += "discard" },
+          { effects += "import $it" },
+          {},
+          { error = it },
+          { it() },
+          { callback ->
+            timeout = callback
+            { stopped = true }
+          })
+    }
+
+    fun finish() = completion.complete(TerminalWorkspaceState())
+  }
+
+  @Test
+  fun cleanupCompletionMustRevalidateProjectDraftDestinationAndOpeningBeforeDiscard() {
+    val changes =
+        listOf<(CleanupSwitch) -> Unit>(
+            { it.context = it.context.copy(project = null) },
+            {
+              it.context =
+                  it.context.copy(
+                      draft = it.context.draft.copy(draft = DeclarationDraft(id = "edited")))
+            },
+            {
+              it.context =
+                  it.context.copy(destination = it.context.destination.copy(model = "new-model"))
+            },
+            { it.context = it.context.copy(analyzeConfirmed = false) },
+            { it.opening = false })
+    changes.forEach { change ->
+      val switch = CleanupSwitch()
+      switch.commit()
+      change(switch)
+      switch.finish()
+      assertEquals(listOf("cleanup"), switch.effects)
+      assertTrue(switch.error.orEmpty().contains("has not been switched"))
+      assertEquals(SwitchReviewStage.Committed, switch.admission.pending?.stage)
+      assertTrue(!switch.admission.cleanupOutstanding)
+      assertTrue(switch.stopped)
+    }
+  }
+
+  @Test
+  fun identityChangedBeforeQueuedCleanupDoesNotCloseNewProjectsShells() {
+    val admission = ProjectSwitchAdmission()
+    val context =
+        ProjectSwitchContext(
+            SwitchProjectIdentity(resultProjectFixture()),
+            SwitchDraftIdentity(null, null, null),
+            SwitchAnalyzeDestination(ScopedModel(scope = "analyze")),
+            false)
+    var current = context
+    val request = admission.choose("/next", context)!!.requestId
+    var posted: (() -> Unit)? = null
+    var calls = 0
+    var error: String? = null
+    commitProjectSwitch(
+        request,
+        admission,
+        { current },
+        { true },
+        {
+          calls++
+          CompletableFuture.completedFuture(TerminalWorkspaceState())
+        },
+        { calls++ },
+        { calls++ },
+        {},
+        { error = it },
+        { posted = it },
+        { {} })
+    current = current.copy(project = null)
+    posted!!()
+    assertEquals(0, calls)
+    assertTrue(error.orEmpty().contains("before shell cleanup"))
+  }
+
+  @Test
+  fun cleanupTimeoutIsVisibleAndLateSuccessCannotDiscardOrImport() {
+    val switch = CleanupSwitch()
+    switch.commit()
+    switch.timeout!!()
+    assertTrue(switch.error.orEmpty().contains("15 seconds"))
+    assertEquals(listOf("cleanup"), switch.effects)
+    switch.finish()
+    assertEquals(listOf("cleanup"), switch.effects)
+    assertEquals(SwitchReviewStage.Committed, switch.admission.pending?.stage)
+    assertTrue(switch.error.orEmpty().contains("now finished"))
+    assertTrue(!switch.admission.cleanupOutstanding)
+    switch.admission.finish(switch.request)
+    assertNull(switch.admission.pending)
+  }
+
+  @Test
+  fun timedOutCleanupKeepsAdmissionUntilLateClosureSoCancelingNextReviewPreservesTabs() {
+    val switch = CleanupSwitch()
+    switch.commit()
+    switch.timeout!!()
+    assertTrue(switch.admission.cleanupOutstanding)
+    // Attempting to close the timed-out review cannot relinquish terminal ownership.
+    switch.admission.finish(switch.request)
+    assertEquals(SwitchReviewStage.Committed, switch.admission.pending?.stage)
+    assertNull(switch.admission.choose("/another", switch.context))
+    assertEquals(listOf("cleanup"), switch.effects)
+
+    // Even a delayed cleanup result cannot dispatch the original import.
+    switch.finish()
+    assertEquals(listOf("cleanup"), switch.effects)
+    assertTrue(!switch.admission.cleanupOutstanding)
+    switch.admission.finish(switch.request)
+    val next = switch.admission.choose("/another", switch.context)!!
+    switch.admission.dismiss(next.requestId)
+    assertNull(switch.admission.pending)
+    assertEquals(listOf("cleanup"), switch.effects)
+  }
+
+  @Test
+  fun verifiedCleanupImportsOnceButIncompleteOrExceptionalCleanupDoesNot() {
+    val success = CleanupSwitch()
+    success.commit()
+    success.commit()
+    success.finish()
+    assertEquals(listOf("cleanup", "discard", "import /next"), success.effects)
+    assertNull(success.admission.pending)
+    assertTrue(success.stopped)
+
+    val pending = CleanupSwitch()
+    pending.commit()
+    pending.completion.complete(TerminalWorkspaceState(tabs = listOf(TerminalTabState(1, "Shell"))))
+    assertEquals(listOf("cleanup"), pending.effects)
+    assertTrue(pending.error.orEmpty().contains("incomplete"))
+
+    val failed = CleanupSwitch()
+    failed.commit()
+    failed.completion.completeExceptionally(IllegalStateException("shell refused to stop"))
+    assertEquals(listOf("cleanup"), failed.effects)
+    assertTrue(failed.error.orEmpty().contains("shell refused to stop"))
+  }
 
   @Test
   fun chooserCancellationAndEveryReviewDismissalHaveNoPrivilegedEffects() {
