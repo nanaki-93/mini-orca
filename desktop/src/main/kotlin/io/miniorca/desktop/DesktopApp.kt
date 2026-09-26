@@ -1140,64 +1140,108 @@ internal fun ProjectSwitchReviewDialog(
             })
       },
       content = {
-        SelectionContainer {
-          Column {
-            Text("Current project: ${pending.context.project?.path ?: "None open"}")
-            Text("Requested project: ${pending.path}")
-            if (pending.context.draft.hasWork) {
-              val target =
-                  pending.context.draft.draft?.targetPath ?: pending.context.draft.session?.openPath
-              Text(
-                  "If you switch, the in-memory conversation, editable draft and focused checks${target?.let { " for $it" } ?: ""} will be discarded. Continuing this review does not discard them yet.")
-            }
-            if (terminal.tabs.isNotEmpty()) {
-              Text(
-                  "Switching will close all ${terminal.tabs.size} project shell tabs and their child processes, including hidden and exited tabs.")
-              terminal.tabs.forEach { Text(it.title) }
-            }
-            if (pending.stage == SwitchReviewStage.Provider) {
-              Text("Import may send the selected project's analysis context to this provider.")
-            }
-            if (pending.stage == SwitchReviewStage.Final && !model.remoteProvider)
-                Text("This Analyze destination is local; no remote confirmation is required.")
-            if (committed) {
-              Text(
-                  "Switch commitment has begun. Any closed tabs cannot be restored by dismissing this review.")
-              cleanupError?.let { DiagnosticText(it, color = Error) }
-              if (cleanupOutstanding)
-                  Text(
-                      "Waiting for shell cleanup to finish. Another switch cannot start while tabs may still close.")
-            }
-          }
-        }
-        if (pending.stage == SwitchReviewStage.Provider)
-            RemoteProviderConfirmation(ModelScope.Analyze, model, confirmed, onProviderConfirmed)
+        ProjectSwitchReviewBody(
+            pending, model, confirmed, terminal, cleanupFeedback, onProviderConfirmed)
       },
       actions = {
-        if (committed && cleanupError != null && !cleanupOutstanding)
-            MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Close review") }
-        if (!committed) {
-          MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Cancel switch") }
-          when (pending.stage) {
-            SwitchReviewStage.Draft ->
-                MiniOrcaButton(onClick = onDraftApproved, tone = ActionTone.Destructive) {
-                  Text("Approve draft discard for switch")
-                }
-            SwitchReviewStage.Provider ->
-                MiniOrcaButton(onClick = onProviderApproved, enabled = confirmed) {
-                  Text("Continue with provider")
-                }
-            SwitchReviewStage.Review ->
-                MiniOrcaButton(onClick = onReviewApproved) { Text("Continue to switch review") }
-            SwitchReviewStage.Final ->
-                MiniOrcaButton(onClick = onCommit, tone = ActionTone.Destructive) {
-                  Text(if (terminal.tabs.isEmpty()) "Switch project" else "Close shells and switch")
-                }
-            SwitchReviewStage.Committed -> Unit
-          }
-        }
+        ProjectSwitchReviewActions(
+            pending,
+            confirmed,
+            terminal,
+            cleanupFeedback,
+            onCancel,
+            onDraftApproved,
+            onProviderApproved,
+            onReviewApproved,
+            onCommit)
       },
   )
+}
+
+@Composable
+internal fun ProjectSwitchReviewBody(
+    pending: PendingProjectSwitch,
+    model: ScopedModel,
+    confirmed: Boolean,
+    terminal: TerminalWorkspaceState,
+    cleanupFeedback: SwitchCleanupFeedback,
+    onProviderConfirmed: (Boolean) -> Unit,
+) {
+  val committed = pending.stage == SwitchReviewStage.Committed
+  val cleanupError = cleanupFeedback.error
+  val cleanupOutstanding = cleanupFeedback.outstanding
+  SelectionContainer {
+    Column {
+      Text("Current project: ${pending.context.project?.path ?: "None open"}")
+      Text("Requested project: ${pending.path}")
+      if (pending.context.draft.hasWork) {
+        val target =
+            pending.context.draft.draft?.targetPath?.takeIf(String::isNotBlank)
+                ?: pending.context.draft.session?.openPath?.takeIf(String::isNotBlank)
+        Text(
+            "If you switch, the in-memory conversation, editable draft and focused checks${target?.let { " for $it" } ?: ""} will be discarded. Continuing this review does not discard them yet.")
+      }
+      if (terminal.tabs.isNotEmpty()) {
+        Text(
+            "Switching will close all ${terminal.tabs.size} project shell tabs and their child processes, including hidden and exited tabs.")
+        terminal.tabs.forEach { Text(it.title) }
+      }
+      if (pending.stage == SwitchReviewStage.Provider) {
+        Text("Import may send the selected project's analysis context to this provider.")
+      }
+      if (pending.stage == SwitchReviewStage.Final && !model.remoteProvider)
+          Text("This Analyze destination is local; no remote confirmation is required.")
+      if (committed) {
+        Text(
+            "Switch commitment has begun. Any closed tabs cannot be restored by dismissing this review.")
+        cleanupError?.let { DiagnosticText(it, color = Error) }
+        if (cleanupOutstanding)
+            Text(
+                "Waiting for shell cleanup to finish. Another switch cannot start while tabs may still close.")
+      }
+    }
+  }
+  if (pending.stage == SwitchReviewStage.Provider)
+      RemoteProviderConfirmation(ModelScope.Analyze, model, confirmed, onProviderConfirmed)
+}
+
+@Composable
+internal fun ProjectSwitchReviewActions(
+    pending: PendingProjectSwitch,
+    confirmed: Boolean,
+    terminal: TerminalWorkspaceState,
+    cleanupFeedback: SwitchCleanupFeedback,
+    onCancel: () -> Unit,
+    onDraftApproved: () -> Unit,
+    onProviderApproved: () -> Unit,
+    onReviewApproved: () -> Unit,
+    onCommit: () -> Unit,
+) {
+  val committed = pending.stage == SwitchReviewStage.Committed
+  val cleanupError = cleanupFeedback.error
+  val cleanupOutstanding = cleanupFeedback.outstanding
+  if (committed && cleanupError != null && !cleanupOutstanding)
+      MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Close review") }
+  if (!committed) {
+    MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Cancel switch") }
+    when (pending.stage) {
+      SwitchReviewStage.Draft ->
+          MiniOrcaButton(onClick = onDraftApproved, tone = ActionTone.Destructive) {
+            Text("Approve draft discard for switch")
+          }
+      SwitchReviewStage.Provider ->
+          MiniOrcaButton(onClick = onProviderApproved, enabled = confirmed) {
+            Text("Continue with provider")
+          }
+      SwitchReviewStage.Review ->
+          MiniOrcaButton(onClick = onReviewApproved) { Text("Continue to switch review") }
+      SwitchReviewStage.Final ->
+          MiniOrcaButton(onClick = onCommit, tone = ActionTone.Destructive) {
+            Text(if (terminal.tabs.isEmpty()) "Switch project" else "Close shells and switch")
+          }
+      SwitchReviewStage.Committed -> Unit
+    }
+  }
 }
 
 @Composable
