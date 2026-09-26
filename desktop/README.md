@@ -125,15 +125,25 @@ failures remain visible; retry after failure is explicit. Active runs retain
 Summary progress and their applicable Pause/Resume/Cancel controls instead of
 offering a fresh Start.
 
-Coverage and results share a region: a segmented coverage bar for the current
-selected files sits beside the Bugs, Performance and Security cards at readable
-local widths, or above them when space or text scale requires stacking. The bar
-shows up to date, outdated, not analyzed, running, failed, incomplete and
-unavailable states; zero-size segments are omitted. Unavailable coverage and an
-empty selection have separate labels. **View analysis** only opens Analysis; the
-coverage status also exposes run and description details on hover or keyboard focus.
-Analysis category panels also stack when their local width cannot fit readable
-columns.
+Coverage and results share a region: a continuous-arc dial for saved selected-file
+coverage sits beside the Bugs, Performance and Security cards at readable local
+widths, or above them when space or text scale requires stacking. The percentage
+is saved up-to-date files divided by selected files, with the count and denominator
+shown in text; excluded files are not selected files. Coverage is not a health
+score: even 100% does not mean the project is safe or free of findings. Positive
+counts appear as proportional arcs and focusable legend toggles for up to date,
+outdated, not analyzed, running, failed, incomplete and unavailable saved states.
+Activating a legend entry opens a local, read-only inspection with its count,
+meaning and, when a matching confirmed file selection is available, selectable
+project-relative paths and specific saved-state explanations. Activate it again
+to close it or choose another status to switch; inspection does not start analysis,
+save selection or navigate away. Aggregate-only saved coverage can show counts
+but not file paths; inspection says paths are unavailable. Unavailable coverage
+and a confirmed empty selection have separate labels without a percentage. Run
+status and applicable controls remain independent of saved coverage, including
+during a rerun; the coverage status also exposes run and description details on
+hover or keyboard focus. **View analysis** only opens Analysis. Analysis category
+panels also stack when their local width cannot fit readable columns.
 
 Three named Bugs, Performance and Security cards open their result pages with one
 click or keyboard activation. Card counts come from run-reported category progress,
