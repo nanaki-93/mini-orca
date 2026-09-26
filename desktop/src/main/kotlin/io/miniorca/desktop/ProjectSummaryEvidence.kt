@@ -60,6 +60,19 @@ internal data class SummaryFindingPreview(
     val categories: List<SummaryFindingCategoryState>,
 )
 
+internal fun summaryFindingEmptyMessage(
+    state: DesktopState,
+    preview: SummaryFindingPreview
+): String {
+  if (preview.loadedCount > 0) return ""
+  val pages = AnalysisResultType.entries.map { state.analysisResultPage(it.category) }
+  if (pages.all {
+    it.emptyPresentation(0).availability == AnalysisResultAvailability.CompletedEmpty
+  })
+      return "No findings in the completed analyzed scopes."
+  return "No findings loaded for this selection. Reported counts are separate from loaded evidence."
+}
+
 /** Uses the same accepted rows as each destination; reported totals are not loaded row counts. */
 internal fun summaryFindingPreview(state: DesktopState): SummaryFindingPreview {
   val pages = AnalysisResultType.entries.associateWith { state.analysisResultPage(it.category) }
