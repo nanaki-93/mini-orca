@@ -216,7 +216,7 @@ class ProjectSummaryPaneTest {
                     entryPoints = listOf("cmd/main.go"),
                     nextSteps = listOf("Add validation."),
                     risks = listOf(ProjectAnalysisRisk("medium", "Validate inputs."))),
-            analysisCoverage = AnalysisCoverage(fresh = 1, stale = 1, failed = 1),
+            analysisCoverage = AnalysisCoverage(total = 3, fresh = 1, stale = 1, failed = 1),
             findingCounts = FindingCounts(verified = 2, aiSuggestions = 3),
         )
 
@@ -256,7 +256,8 @@ class ProjectSummaryPaneTest {
     assertTrue(zeroes.hasProject)
     assertEquals(listOf(0, 0), zeroes.projectMetrics.map { it.value })
     assertEquals(listOf(0, 0), zeroes.findingMetrics.map { it.value })
-    assertTrue(zeroes.coverageMetrics.isEmpty())
+    assertEquals(SummaryCoverageProjection.Unavailable, zeroes.coverage)
+    assertTrue(zeroes.coverageMetrics.all { it.value == null })
   }
 
   @Test
@@ -731,11 +732,11 @@ class ProjectSummaryPaneTest {
     assertEquals(SecondaryText, summaryAnalysisTint(updated.summaryStatus))
     val outdated =
         projectSummaryPresentation(
-            overview.copy(analysisCoverage = AnalysisCoverage(stale = 1)), project)
+            overview.copy(analysisCoverage = AnalysisCoverage(total = 1, stale = 1)), project)
     assertEquals(Warning, summaryAnalysisTint(outdated.summaryStatus))
     val failed =
         projectSummaryPresentation(
-            overview.copy(analysisCoverage = AnalysisCoverage(stale = 1, failed = 1)),
+            overview.copy(analysisCoverage = AnalysisCoverage(total = 2, stale = 1, failed = 1)),
             project,
             analysisRunFixture()
                 .copy(status = "failed", reason = "Run interrupted by a storage failure."))
@@ -817,6 +818,127 @@ class ProjectSummaryPaneTest {
         projectSummaryPresentation(
             overview, project, fileSelection = selection.copy(projectId = "other"))
     assertEquals("stale", otherProject.summaryStatus)
+  }
+
+  @Test
+  fun coverageProjectionDistinguishesDefaultOverviewEmptySelectionAndZeroCurrent() {
+    val project = analysisProjectFixture()
+    val default = projectSummaryPresentation(ProjectOverview(), null)
+    assertEquals(SummaryCoverageProjection.Unavailable, default.coverage)
+    assertEquals("unknown", default.summaryStatus)
+    val empty =
+        projectSummaryPresentation(
+            null,
+            project,
+            fileSelection = selectionFixture().copy(excludedPaths = listOf("helper.go", "main.go")))
+    assertEquals(
+        SummaryCoverageProjection.Empty(SummaryCoverageOwner("project", "revision", "selection")),
+        empty.coverage)
+    assertEquals("excluded", empty.summaryStatus)
+    val missing =
+        projectSummaryPresentation(
+            null,
+            project,
+            fileSelection =
+                selectionFixture().copy(files = listOf(selectionFixture().files.last())))
+    val known = missing.coverage as SummaryCoverageProjection.Known
+    assertEquals(1, known.total)
+    assertEquals(0, known.saved.fresh)
+    assertEquals(AnalysisCoverageBucket.NotAnalyzed, known.buckets.single().id)
+    assertEquals("missing", missing.summaryStatus)
+  }
+
+  @Test
+  fun aggregateCoveragePreservesDenominatorAndNeverBorrowsSelectionPaths() {
+    val project = analysisProjectFixture()
+    val overview =
+        ProjectOverview(
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            analysisCoverage = AnalysisCoverage(total = 7, fresh = 2, failed = 1))
+    val foreign = selectionFixture().copy(projectRevision = "old")
+    val summary = projectSummaryPresentation(overview, project, fileSelection = foreign)
+    val known = summary.coverage as SummaryCoverageProjection.Known
+    assertEquals(SummaryCoverageOwner("project", "revision"), known.owner)
+    assertEquals(7, known.total)
+    assertEquals(listOf(2, 1, 4), known.buckets.map { it.count })
+    assertEquals(
+        listOf("Up to date", "Failed", "Unavailable"), summary.coverageMetrics.map { it.label })
+    assertTrue(known.buckets.all { it.paths == SummaryCoveragePaths.Unavailable })
+    assertEquals(4, known.saved.unavailable)
+    assertFalse(summary.analysisMessage.contains("Selected files: Up to date"))
+    val matching = projectSummaryPresentation(overview, project, fileSelection = selectionFixture())
+    assertEquals(2, (matching.coverage as SummaryCoverageProjection.Known).total)
+    assertTrue(matching.coverage.buckets.all { it.paths is SummaryCoveragePaths.Selected })
+  }
+
+  @Test
+  fun invalidAggregatesDoNotInventDenominatorsOrRows() {
+    val project = analysisProjectFixture()
+    val invalid =
+        listOf(
+            AnalysisCoverage(total = 0, fresh = 1),
+            AnalysisCoverage(total = -1),
+            AnalysisCoverage(total = 2, fresh = -1, stale = 2),
+            AnalysisCoverage(total = 1, failed = 2),
+            AnalysisCoverage(total = Int.MAX_VALUE, fresh = Int.MAX_VALUE, stale = Int.MAX_VALUE))
+    invalid.forEach { counts ->
+      val summary =
+          projectSummaryPresentation(
+              ProjectOverview("project", "revision", analysisCoverage = counts),
+              project,
+              fileSelection = selectionFixture().copy(projectId = "other"))
+      assertEquals(SummaryCoverageProjection.Unavailable, summary.coverage, "$counts")
+      assertEquals("unknown", summary.summaryStatus, "$counts")
+      assertTrue(summary.coverageMetrics.all { it.value == null }, "$counts")
+      assertFalse(summary.analysisMessage.contains("Selected files:"), "$counts")
+    }
+    val large =
+        summaryCoverageProjection(
+            ProjectOverview(
+                "project",
+                "revision",
+                analysisCoverage =
+                    AnalysisCoverage(total = Int.MAX_VALUE, fresh = Int.MAX_VALUE - 1)),
+            project,
+            null)
+            as SummaryCoverageProjection.Known
+    assertEquals(Int.MAX_VALUE, large.total)
+    assertEquals(1, large.saved.unavailable)
+    assertEquals(listOf(Int.MAX_VALUE - 1, 1), large.buckets.map { it.count })
+  }
+
+  @Test
+  fun selectionProjectionKeepsSavedRowsAndReinclusionStatusTogether() {
+    val project = analysisProjectFixture()
+    val stale =
+        selectionFixture()
+            .files
+            .last()
+            .copy(stages = selectionStageFixture("stale", "Source changed."))
+    val selection =
+        selectionFixture()
+            .copy(
+                files = listOf(selectionFixture().files[1], stale),
+                excludedPaths = listOf("main.go", "absent.go"))
+    val before =
+        summaryCoverageProjection(null, project, selection) as SummaryCoverageProjection.Known
+    assertEquals(1, before.total)
+    val included =
+        summaryCoverageProjection(null, project, selection.copy(excludedPaths = emptyList()))
+            as SummaryCoverageProjection.Known
+    assertEquals(2, included.total)
+    assertEquals(
+        listOf(AnalysisCoverageBucket.UpToDate, AnalysisCoverageBucket.Outdated),
+        included.buckets.map { it.id })
+    included.buckets.forEach { bucket ->
+      val rows = (bucket.paths as SummaryCoveragePaths.Selected).rows
+      assertEquals(bucket.count, rows.size)
+    }
+    val outdated = (included.buckets.last().paths as SummaryCoveragePaths.Selected).rows.single()
+    assertEquals("main.go", outdated.file.path)
+    assertEquals(AnalysisFileSyncStatus.Stale, outdated.status)
+    assertTrue(outdated.explanation.contains("Source changed."))
   }
 
   @Test
@@ -1022,7 +1144,7 @@ class ProjectSummaryPaneTest {
             .outdated)
     assertTrue(
         projectSummaryPresentation(
-                overview.copy(analysisCoverage = AnalysisCoverage(stale = 1)), project)
+                overview.copy(analysisCoverage = AnalysisCoverage(total = 1, stale = 1)), project)
             .outdated)
     assertTrue(
         projectSummaryPresentation(overview, project, analysisRunFixture().copy(status = "stale"))
