@@ -1489,6 +1489,105 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun f08ProductionSummaryMatrixKeepsIdentityActionsAndLowerContentReachable() {
+    val longName = "go-shop-accounting-reconciliation-and-order-processing-service-2026"
+    val project = visualFixtureProject.copy(name = longName)
+    val overview =
+        visualFixtureOverview.copy(
+            analysis =
+                visualFixtureOverview.analysis.copy(
+                    purpose = "A local service for orders and reconciliation. ".repeat(6),
+                    engineeringInsight =
+                        EngineeringInsight(
+                            mechanism = "Validate at the boundary.",
+                            whyItMattersHere = "Orders must be consistent.",
+                            tradeoffOrFailureMode = "Validation can reject legacy input.")))
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+          val label = "f08-summary-$width-$height-$scale-${density}x"
+          ComposeVisualFixture(
+                  (width * density).toInt(), (height * density).toInt(), scale, density) {
+                    ProjectSummaryPane(
+                        overview,
+                        project,
+                        {},
+                        analysisActions = AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+                  }
+              .use { fixture ->
+                fixture.render("$label-introduction")
+                fixture.assertTextFits(longName, 4)
+                fixture.assertTextFits("Go project")
+                fixture.assertTextFits("Start analysis")
+                fixture.revealText("Analysis coverage")
+                fixture.render("$label-coverage")
+                fixture.revealText("Engineering insight")
+                fixture.render("$label-narrative")
+                fixture.revealText("Open Editor")
+                fixture.assertTextFits("Open Editor")
+                fixture.render("$label-lifecycle")
+                assertTrue(fixture.hasText("Change lifecycle"), label)
+              }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun f08ProductionSummaryStateCapturesKeepDiagnosticsAndDisclosuresAvailable() {
+    val project = visualFixtureProject
+    val base = visualFixtureOverview
+    val states: List<Pair<String, ProjectOverview?>> =
+        listOf(
+            "missing" to base.copy(analysis = base.analysis.copy(status = "missing", purpose = "")),
+            "stale" to base.copy(analysis = base.analysis.copy(status = "stale")),
+            "failed" to
+                base.copy(
+                    analysis =
+                        base.analysis.copy(
+                            status = "failed", purpose = "", failure = "Provider unavailable")),
+            "unknown" to null)
+    for ((name, overview) in states) {
+      ComposeVisualFixture(800, 650, 1.5f) { ProjectSummaryPane(overview, project, {}) }
+          .use { fixture ->
+            fixture.render("f08-summary-$name-800-650-1.5")
+            fixture.assertTextFits("Go project")
+            fixture.revealText("Analysis coverage")
+            fixture.render("f08-summary-$name-coverage-800-650-1.5")
+            fixture.revealText("Open Editor")
+            fixture.render("f08-summary-$name-lifecycle-800-650-1.5")
+            if (name == "failed") {
+              fixture.revealText("Project description: failed · Provider unavailable")
+              fixture.assertTextFits("Project description: failed · Provider unavailable", 2)
+            }
+            if (name == "unknown")
+                assertTrue(
+                    fixture.hasText("Overall findings · — tool-reported issues · — AI suggestions"))
+          }
+    }
+    val insightOverview =
+        base.copy(
+            analysis =
+                base.analysis.copy(
+                    engineeringInsight =
+                        EngineeringInsight(
+                            mechanism = "Validate first.",
+                            whyItMattersHere = "Keep records consistent.",
+                            tradeoffOrFailureMode = "Legacy input may fail.")))
+    ComposeVisualFixture(1440, 900) { ProjectSummaryPane(insightOverview, project, {}) }
+        .use { fixture ->
+          fixture.render()
+          fixture.revealText("Engineering insight")
+          fixture.render("f08-summary-disclosures-collapsed-1440")
+          fixture.clickDescription("Show Architecture diagram")
+          assertTrue(fixture.tryClick("Expand More insight"))
+          fixture.render("f08-summary-disclosures-expanded-1440")
+          assertTrue(fixture.hasText("Legacy input may fail."))
+        }
+  }
+
+  @Test
   fun summaryPreviewEntryAndFeedbackWrapAtCompactTextScaleWithoutHidingCoverage() {
     val project = visualFixtureProject
     listOf(1440 to 1f, 800 to 1.5f).forEach { (width, scale) ->
@@ -1506,6 +1605,9 @@ class DesktopVisualLayoutTest {
           .use { fixture ->
             fixture.render("summary-preview-ready-$width-$scale")
             fixture.assertTextFits("Start analysis")
+            assertTrue(fixture.requestFocus("Start analysis"))
+            fixture.render("summary-preview-focused-$width-$scale")
+            assertTrue(fixture.isFocused("Start analysis"))
             fixture.assertTextAbove("Start analysis", "Analysis coverage")
             fixture.clickText("Start analysis")
             assertEquals(1, previews)
@@ -1522,6 +1624,49 @@ class DesktopVisualLayoutTest {
             assertTrue(fixture.hasText("View analysis"))
           }
     }
+  }
+
+  @Test
+  fun activeSummaryReadsIntroductionBeforeRunAndTabsFromRunToCoverage() {
+    val project = visualFixtureProject
+    val run =
+        analysisRunFixture()
+            .copy(
+                status = "running",
+                identity =
+                    analysisRunFixture()
+                        .identity
+                        .copy(
+                            projectId = project.projectId,
+                            projectRevision = project.projectRevision),
+                files = emptyList())
+    ComposeVisualFixture(1440, 1100) {
+          ProjectSummaryPane(
+              visualFixtureOverview,
+              project,
+              {},
+              run = run,
+              analysisActions = AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+        }
+        .use { fixture ->
+          fixture.render("f08-summary-active-introduction-first")
+          val introduction = fixture.taggedBounds("summary-introduction")
+          val strip = fixture.taggedBounds("summary-analysis-run-strip")
+          val coverage = fixture.taggedBounds("summary-coverage-results")
+          assertTrue(introduction.bottom < strip.top, "Introduction must precede active run")
+          assertTrue(strip.bottom < coverage.top, "Active run must precede coverage")
+          assertTrue(fixture.requestFocus("Pause"))
+          fixture.render()
+          assertTrue(fixture.pressKey(Key.Tab))
+          fixture.render()
+          assertTrue(fixture.isFocused("Cancel"), "Run controls must tab in reading order")
+          assertTrue(fixture.pressKey(Key.Tab))
+          fixture.render()
+          assertTrue(fixture.isTaggedNodeFocused("summary-analysis-status"))
+          assertTrue(fixture.pressKey(Key.Tab))
+          fixture.render()
+          assertTrue(fixture.isFocused("View analysis"), "Coverage navigation follows its status")
+        }
   }
 
   @Test
@@ -3821,7 +3966,7 @@ class DesktopVisualLayoutTest {
           fixture.assertTextSharesRowBefore("Sample workspace", "Java project")
           fixture.assertTextFits("Java project")
           assertEquals(1, fixture.taggedTextCount("summary-project-type", "Java project"))
-          assertTrue(fixture.hasText("pom.xml · 23 indexed files · 1,800 lines · Kotlin"))
+          assertTrue(fixture.hasText("pom.xml · 23 indexed files · 1,800 lines · Java · Kotlin"))
           assertEquals(1, fixture.textCount("Java project"))
           assertTrue(fixture.hasText("Project description: unavailable"))
         }
@@ -3871,7 +4016,7 @@ class DesktopVisualLayoutTest {
           fixture.render("summary-1440")
           assertEquals(1, fixture.textCount("Summary"))
           fixture.assertTextSharesRowBefore(visualFixtureProject.name, "Go project")
-          assertTrue(fixture.hasText("go.mod · 23 indexed files · 1,800 lines · Markdown"))
+          assertTrue(fixture.hasText("go.mod · 23 indexed files · 1,800 lines · Go · Markdown"))
           assertTrue(fixture.hasText("Analysis coverage"))
           fixture.assertTextAbove("Summary", visualFixtureProject.name)
           assertFalse(fixture.hasText("Project understanding"))
@@ -4660,7 +4805,7 @@ class DesktopVisualLayoutTest {
                   "Validate before storage.")
               .forEach { assertTrue(fixture.hasText(it), it) }
           fixture.assertTextSharesRowBefore(visualFixtureProject.name, "Go project")
-          assertTrue(fixture.hasText("go.mod · 23 indexed files · 1,800 lines · Markdown"))
+          assertTrue(fixture.hasText("go.mod · 23 indexed files · 1,800 lines · Go · Markdown"))
           assertTrue(
               fixture.hasText("Overall findings · 2 tool-reported issues · 4 AI suggestions"))
           fixture.assertTextAbove("Summary", visualFixtureProject.name)
