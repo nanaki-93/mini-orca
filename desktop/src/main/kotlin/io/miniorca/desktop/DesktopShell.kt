@@ -76,6 +76,19 @@ internal fun desktopShellMode(appState: DesktopState): DesktopShellMode =
 internal fun projectOpenAvailable(attempt: ProjectOpeningAttempt?): Boolean =
     attempt?.outcome != ProjectOpeningOutcome.Opening
 
+internal data class ProjectActionAvailability(val open: Boolean, val reindex: Boolean)
+
+internal fun projectActionAvailability(
+    project: ProjectAnalysis?,
+    openingAttempt: ProjectOpeningAttempt?,
+    indexingAttempt: ProjectIndexingAttempt?,
+    switchPending: Boolean,
+): ProjectActionAvailability {
+  val open = projectOpenAvailable(openingAttempt) && !switchPending
+  return ProjectActionAvailability(
+      open, open && project != null && indexingAttempt?.outcome != ProjectIndexingOutcome.Running)
+}
+
 internal fun editorChromeVisible(workspace: Workspace): Boolean = workspace == Workspace.Editor
 
 internal fun resizeExplorerFromDisplayed(
@@ -164,6 +177,7 @@ internal data class DesktopShellState(
     val context: DesktopShellContextState,
     val palette: DesktopShellPaletteState,
     val statusProviders: DesktopShellStatusProviders,
+    val switchPending: Boolean = false,
 )
 
 internal data class DesktopShellStatusProviders(
@@ -591,6 +605,7 @@ internal fun DesktopShell(
                     appState = appState,
                     editor = editor,
                     projectActions = projectActions,
+                    switchPending = state.switchPending,
                     editorActions = editorActions,
                     paletteActions = paletteActions.copy(open = { openPalette(it) }),
                     onDismissTransient = ::dismissTopmostTransient,
@@ -599,7 +614,7 @@ internal fun DesktopShell(
               },
   ) {
     if (shellMode == DesktopShellMode.ProjectLanding) {
-      ProjectLanding(appState, projectActions, focusRequesters.landing)
+      ProjectLanding(appState, projectActions, focusRequesters.landing, state.switchPending)
     } else {
       BoxWithConstraints {
         Column {
@@ -613,6 +628,8 @@ internal fun DesktopShell(
                       gitStatus = appState.gitStatus,
                       analysisStatus = toolbarAnalysisStatus(appState),
                       openingAttempt = appState.projectState.openingAttempt,
+                      indexingAttempt = appState.projectState.indexingAttempt,
+                      switchPending = state.switchPending,
                       preferenceReadWarning = appState.projectState.preferenceReadWarning,
                       preferenceSaveWarning = appState.projectState.preferenceSaveWarning,
                   ),
@@ -995,6 +1012,7 @@ internal fun handleDesktopShortcut(
     appState: DesktopState,
     editor: DesktopShellEditorState,
     projectActions: DesktopShellProjectActions,
+    switchPending: Boolean = false,
     editorActions: DesktopShellEditorActions,
     paletteActions: DesktopShellPaletteActions,
     onDismissTransient: () -> Boolean,
@@ -1034,7 +1052,12 @@ internal fun handleDesktopShortcut(
   if (!shortcutAvailable(shellMode, shortcut)) return false
   return when (shortcut) {
     DesktopShortcut.OpenProject -> {
-      if (projectOpenAvailable(appState.projectState.openingAttempt)) {
+      if (projectActionAvailability(
+              appState.project,
+              appState.projectState.openingAttempt,
+              appState.projectState.indexingAttempt,
+              switchPending)
+          .open) {
         projectActions.importProject()
         true
       } else false
@@ -1109,25 +1132,35 @@ internal fun ProjectLanding(
     appState: DesktopState,
     actions: DesktopShellProjectActions,
     focusRequester: FocusRequester,
+    switchPending: Boolean = false,
 ) {
   val projectState = appState.projectState
   val attempt = projectState.openingAttempt
   val opening = attempt?.outcome == ProjectOpeningOutcome.Opening
+  val openAvailable =
+      projectActionAvailability(
+              appState.project, attempt, projectState.indexingAttempt, switchPending)
+          .open
   val statusFocus = remember { FocusRequester() }
   var focusedRecovery by remember { mutableStateOf(false) }
   var focusedStatus by remember { mutableStateOf(false) }
   var focusedOpen by remember { mutableStateOf(false) }
-  LaunchedEffect(opening, attempt?.requestId, attempt?.outcome) {
-    if (focusedOpen && opening) {
+  var restoreOpenAfterReview by remember { mutableStateOf(false) }
+  LaunchedEffect(openAvailable, attempt?.requestId, attempt?.outcome, restoreOpenAfterReview) {
+    if (focusedOpen && !openAvailable) {
       focusedOpen = false
-      statusFocus.requestFocus()
+      if (attempt != null) statusFocus.requestFocus() else restoreOpenAfterReview = true
+    } else if (attempt != null && restoreOpenAfterReview) {
+      restoreOpenAfterReview = false
+    } else if (openAvailable && restoreOpenAfterReview) {
+      restoreOpenAfterReview = false
+      focusRequester.requestFocus()
     } else if (focusedRecovery &&
         (attempt?.outcome !is ProjectOpeningOutcome.Failed ||
             attempt.kind != ProjectOpeningKind.Restore)) {
       focusedRecovery = false
-      if (projectOpenAvailable(appState.projectState.openingAttempt)) focusRequester.requestFocus()
-      else statusFocus.requestFocus()
-    } else if (focusedStatus && projectOpenAvailable(appState.projectState.openingAttempt)) {
+      if (openAvailable) focusRequester.requestFocus() else statusFocus.requestFocus()
+    } else if (focusedStatus && openAvailable) {
       focusedStatus = false
       focusRequester.requestFocus()
     }
@@ -1148,19 +1181,24 @@ internal fun ProjectLanding(
                   "Open a project to inspect its files and analysis. Import may use the configured Analyze provider and require confirmation.",
               action = {
                 MiniOrcaButton(
-                    onClick = actions.importProject,
-                    enabled = projectOpenAvailable(appState.projectState.openingAttempt),
+                    onClick = {
+                      restoreOpenAfterReview = true
+                      actions.importProject()
+                    },
+                    enabled = openAvailable,
                     tone = ActionTone.Primary,
                     modifier =
                         Modifier.focusRequester(focusRequester).onFocusChanged {
                           if (it.isFocused) {
                             focusedOpen = true
                             focusedRecovery = false
-                          } else if (!opening) {
+                          } else if (openAvailable) {
                             focusedOpen = false
+                          } else if (attempt == null && focusedOpen) {
+                            restoreOpenAfterReview = true
                           }
                         }) {
-                      Text("Open project")
+                      Text("Open project…")
                     }
               })
           Spacer(Modifier.height(12.dp))
@@ -1202,7 +1240,7 @@ internal fun ProjectLanding(
                     else if (opening && restoring)
                         "Reading saved local project data; no model request is made."
                     else if (opening) "Import may use the configured Analyze provider."
-                    else "Open project to choose another folder.",
+                    else "Open project… to choose another folder.",
                 accent = if (failure != null) Error else SecondaryText,
                 action = {
                   LandingPath("Requested path", attempt.path)
@@ -1217,6 +1255,7 @@ internal fun ProjectLanding(
                       Spacer(Modifier.height(8.dp))
                       MiniOrcaButton(
                           onClick = actions.retryRestore,
+                          enabled = !switchPending,
                           tone = ActionTone.Neutral,
                           modifier =
                               Modifier.onFocusChanged {
@@ -1252,7 +1291,7 @@ internal fun ProjectPreferenceWarnings(readWarning: String?, saveWarning: String
     Spacer(Modifier.height(12.dp))
     SystemStateMessage(
         "Could not read last project preference",
-        "Open project is still available. Local preference storage could not be read.",
+        "Open project… is still available. Local preference storage could not be read.",
         accent = Warning,
         action = { DiagnosticText(warning, color = Warning) })
   }

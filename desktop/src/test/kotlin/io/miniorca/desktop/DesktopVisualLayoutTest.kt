@@ -92,12 +92,12 @@ class DesktopVisualLayoutTest {
             .use { fixture ->
               val label = "f06-landing-$width-$height-$scale-${density}x"
               fixture.render("$label-empty")
-              fixture.assertTextFits("Open project")
+              fixture.assertTextFits("Open project…")
               assertTrue(fixture.hasText("No project remembered on this device."))
               assertFalse(fixture.hasText("Retry restore"))
               app = app.copy(projectState = app.projectState.copy(rememberedPath = path))
               fixture.render("$label-remembered")
-              fixture.assertTextFits("Open project")
+              fixture.assertTextFits("Open project…")
               fixture.revealText("Remembered path", "project-landing-scroll")
               assertTrue(fixture.hasText(path))
               app =
@@ -1878,7 +1878,7 @@ class DesktopVisualLayoutTest {
               fixture.render("$label-landing-opening-and-offline")
               assertTrue(fixture.hasText("Could not restore project"))
               assertTrue(fixture.hasText("Daemon disconnected"))
-              fixture.assertTextFits("Open project")
+              fixture.assertTextFits("Open project…")
               fixture.revealText("Retry restore", "project-landing-scroll")
               fixture.assertTextFits("Retry restore")
               fixture.revealText("Reconnect daemon", "project-landing-scroll")
@@ -3504,7 +3504,7 @@ class DesktopVisualLayoutTest {
           fixture.render()
           fixture.clickText("go-shop · fixture")
           fixture.render("project-menu-open")
-          assertTrue(fixture.hasText("Open project"))
+          assertTrue(fixture.hasText("Switch project…"))
           assertTrue(fixture.hasText("Re-index project"))
         }
   }
@@ -3535,7 +3535,7 @@ class DesktopVisualLayoutTest {
             fixture.render()
             fixture.clickDescription("Go project")
             fixture.render()
-            assertTrue(fixture.hasText("Open project"))
+            assertTrue(fixture.hasText("Switch project…"))
             assertTrue(fixture.hasText("Re-index project"))
             fixture.dismissPopup()
             project = null
@@ -3569,10 +3569,10 @@ class DesktopVisualLayoutTest {
           fixture.render()
           fixture.clickText("No project open")
           fixture.render()
-          assertTrue(fixture.hasText("Open project"))
+          assertTrue(fixture.hasText("Open project…"))
           assertTrue(fixture.isDisabled("Re-index project"))
           assertTrue(fixture.hasText("Reconnect"))
-          fixture.clickText("Open project")
+          fixture.clickText("Open project…")
           kotlin.test.assertEquals(1, imports)
           kotlin.test.assertEquals(0, reindexes)
           kotlin.test.assertEquals(0, reconnects)

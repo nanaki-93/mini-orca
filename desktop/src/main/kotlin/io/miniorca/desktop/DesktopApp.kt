@@ -263,6 +263,7 @@ internal fun MiniOrcaApp(
   var draftFieldValue by remember { mutableStateOf(TextFieldValue()) }
   val switchAdmission = remember { ProjectSwitchAdmission() }
   var pendingSwitch by remember { mutableStateOf<PendingProjectSwitch?>(null) }
+  var chooserOpen by remember { mutableStateOf(false) }
   var switchCleanupError by remember { mutableStateOf<String?>(null) }
   var composerRequested by remember { mutableStateOf(false) }
   var pendingComposerFocus by remember { mutableStateOf<ComposerFocusTarget?>(null) }
@@ -453,12 +454,31 @@ internal fun MiniOrcaApp(
           { SwingUtilities.invokeLater(it) },
           ::scheduleSwitchCleanupTimeout)
 
-  fun importProject() {
-    if (!projectOpenAvailable(appState.projectState.openingAttempt) || pendingSwitch != null) return
-    chooseProjectDirectory(::chooseDirectory) { path ->
-      switchAdmission.choose(path, ProjectSwitchContext(presenter.snapshot.value))
-      updatePendingSwitch()
-    }
+  fun importProject() =
+      admitProjectChooser(
+          presenter.snapshot.value.state,
+          projectSwitchPending(chooserOpen, switchAdmission.pending),
+          setChooserOpen = { chooserOpen = it },
+          choose = { switching -> chooseDirectory(switching) },
+          current = { presenter.snapshot.value },
+          admission = switchAdmission,
+          updatePending = ::updatePendingSwitch)
+
+  fun retryRestore() =
+      dispatchProjectAction(
+          !projectSwitchPending(chooserOpen, switchAdmission.pending),
+          presenter::retryProjectRestore)
+
+  fun reindexProject() {
+    val current = presenter.snapshot.value.state
+    dispatchProjectAction(
+        projectActionAvailability(
+                current.project,
+                current.projectState.openingAttempt,
+                current.projectState.indexingAttempt,
+                projectSwitchPending(chooserOpen, switchAdmission.pending))
+            .reindex,
+        presenter::reindexProject)
   }
 
   fun openPalette(mode: PaletteMode) {
@@ -727,6 +747,7 @@ internal fun MiniOrcaApp(
                       bugs = bugModel,
                       functionEdits = functionModel,
                   ),
+              switchPending = projectSwitchPending(chooserOpen, pendingSwitch),
           ),
       layoutActions =
           DesktopShellLayoutActions(
@@ -736,9 +757,9 @@ internal fun MiniOrcaApp(
       projectActions =
           DesktopShellProjectActions(
               importProject = ::importProject,
-              reindexProject = presenter::reindexProject,
+              reindexProject = ::reindexProject,
               reconnect = presenter::refreshConnection,
-              retryRestore = presenter::retryProjectRestore,
+              retryRestore = ::retryRestore,
           ),
       editorActions =
           DesktopShellEditorActions(
@@ -872,6 +893,43 @@ internal fun MiniOrcaApp(
     DraftDiscardDialog(pending.currentDraft, pending.nextLabel, ::discardDraftAndContinue) {
       pendingDraftDiscard = null
     }
+  }
+}
+
+private fun projectSwitchPending(chooserOpen: Boolean, pending: PendingProjectSwitch?): Boolean =
+    chooserOpen || pending != null
+
+private fun dispatchProjectAction(available: Boolean, action: () -> Unit) {
+  if (available) action()
+}
+
+private fun admitProjectChooser(
+    state: DesktopState,
+    pending: Boolean,
+    setChooserOpen: (Boolean) -> Unit,
+    choose: (Boolean) -> File?,
+    current: () -> DesktopWorkflowSnapshot,
+    admission: ProjectSwitchAdmission,
+    updatePending: () -> Unit,
+) {
+  if (!projectActionAvailability(
+          state.project,
+          state.projectState.openingAttempt,
+          state.projectState.indexingAttempt,
+          pending)
+      .open)
+      return
+  setChooserOpen(true)
+  try {
+    chooseProjectDirectory({ choose(state.project != null) }) { path ->
+      val latest = current()
+      if (projectOpenAvailable(latest.state.projectState.openingAttempt)) {
+        admission.choose(path, ProjectSwitchContext(latest))
+        updatePending()
+      }
+    }
+  } finally {
+    setChooserOpen(false)
   }
 }
 
@@ -1194,10 +1252,10 @@ internal fun chooseProjectDirectory(choose: () -> File?, onSelected: (String) ->
   onSelected(directory.absolutePath)
 }
 
-private fun chooseDirectory(): File? {
+private fun chooseDirectory(switching: Boolean): File? {
   val chooser =
       JFileChooser().apply {
-        dialogTitle = "Open project"
+        dialogTitle = if (switching) "Switch project…" else "Open project…"
         fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
         isAcceptAllFileFilterUsed = false
       }

@@ -65,13 +65,14 @@ class DesktopKeyboardNavigationTest {
             EditorContextualActions(false, false, false, false, false),
             false,
             false)
-    fun shortcut(state: DesktopState): Boolean =
+    fun shortcut(state: DesktopState, switchPending: Boolean = false): Boolean =
         handleDesktopShortcut(
             KeyEvent(Key.O, KeyEventType.KeyDown, isCtrlPressed = true),
             desktopShellMode(state),
             state,
             editor,
             actions,
+            switchPending,
             DesktopShellEditorActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}),
             DesktopShellPaletteActions({}, {}, {}, {}, {}, {}, {}),
             onDismissTransient = { false },
@@ -106,6 +107,19 @@ class DesktopKeyboardNavigationTest {
         shortcut(
             failed.copy(projectState = failed.projectState.copy(project = resultProjectFixture()))))
     assertEquals(3, opens)
+    assertFalse(shortcut(failed, switchPending = true))
+    assertEquals(3, opens)
+    val project = resultProjectFixture()
+    val indexing =
+        failed.copy(
+            projectState =
+                failed.projectState.copy(
+                    project = project,
+                    indexingAttempt =
+                        ProjectIndexingAttempt(
+                            1, project.projectId, project.projectRevision, project.path)))
+    assertTrue(shortcut(indexing), "Indexing does not start a switch; opening may invalidate it")
+    assertEquals(4, opens)
     assertFalse(
         shortcut(
             opening.copy(
@@ -114,7 +128,7 @@ class DesktopKeyboardNavigationTest {
                         openingAttempt =
                             opening.projectState.openingAttempt!!.copy(
                                 kind = ProjectOpeningKind.Import)))))
-    assertEquals(3, opens)
+    assertEquals(4, opens)
   }
 
   @Test
@@ -130,9 +144,9 @@ class DesktopKeyboardNavigationTest {
         }
         .use { fixture ->
           fixture.render()
-          assertTrue(fixture.requestFocus("Open project"))
+          assertTrue(fixture.requestFocus("Open project…"))
           fixture.render()
-          assertTrue(fixture.isFocusedControl("Open project"))
+          assertTrue(fixture.isFocusedControl("Open project…"))
           state =
               state.copy(
                   projectState =
@@ -140,7 +154,7 @@ class DesktopKeyboardNavigationTest {
                           openingAttempt =
                               ProjectOpeningAttempt(1, "/remembered", ProjectOpeningKind.Restore)))
           fixture.render()
-          assertTrue(fixture.isDisabled("Open project"))
+          assertTrue(fixture.isDisabled("Open project…"))
           assertTrue(fixture.isTaggedNodeFocused("project-opening-focus"))
           assertEquals(0, opens + retries)
           state =
@@ -151,8 +165,82 @@ class DesktopKeyboardNavigationTest {
                               state.projectState.openingAttempt!!.copy(
                                   outcome = ProjectOpeningOutcome.Failed("Missing"))))
           fixture.render()
-          assertTrue(fixture.isFocusedControl("Open project"))
+          assertTrue(fixture.isFocusedControl("Open project…"))
           assertEquals(0, opens + retries)
+        }
+  }
+
+  @Test
+  fun cancelingChooserOrSwitchReviewRestoresLandingOpenFocusWithoutOpeningProject() {
+    var pending by mutableStateOf(false)
+    var reviewing by mutableStateOf(false)
+    var requests = 0
+    var imports = 0
+    val review =
+        PendingProjectSwitch(
+            1,
+            "/next",
+            ProjectSwitchContext(
+                null,
+                SwitchDraftIdentity(null, null, null),
+                SwitchAnalyzeDestination(ScopedModel(scope = ModelScope.Analyze.wireValue)),
+                false),
+            SwitchReviewStage.Final)
+    ComposeVisualFixture(800, 650) {
+          Box {
+            ProjectLanding(
+                DesktopState(),
+                DesktopShellProjectActions(
+                    importProject = {
+                      requests++
+                      pending = true
+                    },
+                    reindexProject = {},
+                    reconnect = {}),
+                FocusRequester(),
+                switchPending = pending)
+            if (reviewing) {
+              ProjectSwitchReviewDialog(
+                  review,
+                  ScopedModel(scope = ModelScope.Analyze.wireValue),
+                  false,
+                  TerminalWorkspaceState(),
+                  SwitchCleanupFeedback(),
+                  onCancel = {
+                    reviewing = false
+                    pending = false
+                  },
+                  onDraftApproved = {},
+                  onProviderConfirmed = {},
+                  onProviderApproved = {},
+                  onReviewApproved = {},
+                  onCommit = { imports++ })
+            }
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestFocus("Open project…"))
+          fixture.render()
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertTrue(fixture.isDisabled("Open project…"))
+          pending = false // Native chooser canceled without creating an opening attempt.
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Open project…"))
+          assertEquals(1, requests)
+          assertEquals(0, imports)
+
+          assertTrue(fixture.pressKey(Key.Enter))
+          reviewing = true
+          fixture.render()
+          assertTrue(fixture.isDisabled("Open project…"))
+          assertTrue(fixture.isFocusedControl("Cancel switch"))
+          assertTrue(fixture.pressKey(Key.Escape))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Open project…"))
+          assertEquals(2, requests)
+          assertEquals(0, imports)
         }
   }
 
@@ -196,7 +284,7 @@ class DesktopKeyboardNavigationTest {
                                   requestId = 2,
                                   outcome = ProjectOpeningOutcome.Failed("Still missing"))))
           fixture.render()
-          assertTrue(fixture.isFocusedControl("Open project"))
+          assertTrue(fixture.isFocusedControl("Open project…"))
           assertEquals(1, retries + opens)
         }
   }
@@ -294,7 +382,7 @@ class DesktopKeyboardNavigationTest {
               fixture.render()
               assertTrue(fixture.pressKey(Key.Enter))
               fixture.render()
-              assertTrue(fixture.hasText("Open project"))
+              assertTrue(fixture.hasText("Switch project…"))
               assertTrue(fixture.hasText("Re-index project"))
               assertTrue(fixture.hasText("Reconnect"))
               fixture.clickText("Re-index project")
@@ -339,7 +427,7 @@ class DesktopKeyboardNavigationTest {
         }
         .use { fixture ->
           fixture.render()
-          assertTrue(fixture.requestFocus("Open project"))
+          assertTrue(fixture.requestFocus("Open project…"))
           fixture.render()
           assertEquals(0, operations)
           state =
@@ -494,7 +582,7 @@ class DesktopKeyboardNavigationTest {
           state = state.copy(app = DesktopState())
           fixture.render()
           assertFalse(fixture.hasText("Provider details"))
-          assertTrue(fixture.isFocusedControl("Open project"))
+          assertTrue(fixture.isFocusedControl("Open project…"))
           assertEquals(0, operations)
         }
   }
@@ -526,7 +614,7 @@ class DesktopKeyboardNavigationTest {
           state = state.copy(app = DesktopState())
           fixture.render()
           assertFalse(fixture.hasText("Provider details"))
-          assertTrue(fixture.isFocusedControl("Open project"))
+          assertTrue(fixture.isFocusedControl("Open project…"))
           assertEquals(0, operations)
         }
   }
@@ -690,7 +778,7 @@ class DesktopKeyboardNavigationTest {
           state = state.copy(app = DesktopState())
           fixture.render()
           assertFalse(fixture.hasText("Filter commands"))
-          assertTrue(fixture.isFocusedControl("Open project"))
+          assertTrue(fixture.isFocusedControl("Open project…"))
           assertEquals(0, operations)
         }
   }
@@ -921,7 +1009,7 @@ class DesktopKeyboardNavigationTest {
           assertEquals(0, opens + reconnects)
           assertTrue(fixture.pressKey(Key.Enter))
           assertEquals(1, reconnects)
-          assertTrue(fixture.requestFocus("Open project"))
+          assertTrue(fixture.requestFocus("Open project…"))
           assertTrue(fixture.pressKey(Key.Spacebar))
           assertEquals(1, opens)
         }
