@@ -858,11 +858,16 @@ private fun SummarySelectedFindings(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
               Text(row.title, color = PrimaryText, style = IdeTypography.workspaceBody)
               SelectionContainer {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                   Text(
-                      "${row.target.category.workspace.name} · ${row.severity.ifBlank { "Impact unavailable" }} · ${row.location}",
+                      "${row.target.category.workspace.name} · ${row.severity.ifBlank { "Impact unavailable" }}",
                       color = SecondaryText,
                       style = IdeTypography.workspaceMetadata)
+                  Text(
+                      row.location,
+                      color = PrimaryText,
+                      style = IdeTypography.resultCode,
+                      modifier = Modifier.fillMaxWidth().testTag("summary-finding-location-$index"))
                   Text(
                       "${row.origin} · ${row.materialState.ifBlank { "Material state unavailable" }}",
                       color = SecondaryText,

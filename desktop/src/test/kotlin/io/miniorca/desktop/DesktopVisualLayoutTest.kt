@@ -1562,9 +1562,12 @@ class DesktopVisualLayoutTest {
               fixture.revealText("Project description: failed · Provider unavailable")
               fixture.assertTextFits("Project description: failed · Provider unavailable", 2)
             }
-            if (name == "unknown")
-                assertTrue(
-                    fixture.hasText("Overall findings · — tool-reported issues · — AI suggestions"))
+            if (name == "unknown") {
+              fixture.revealText(
+                  "Overall findings · — tool-reported issues · — AI suggestions", "summary-scroll")
+              assertTrue(
+                  fixture.hasText("Overall findings · — tool-reported issues · — AI suggestions"))
+            }
           }
     }
     val insightOverview =
@@ -4892,22 +4895,23 @@ class DesktopVisualLayoutTest {
           }
           .use { fixture ->
             fixture.render("summary-right-only-$width-$scale")
-            fixture.revealText("Flows")
-            fixture.scrollBy(100_000f)
+            fixture.revealText("Engineering insight")
             fixture.render()
             assertEquals(0, fixture.tagCount("summary-architecture"))
             assertEquals(0, fixture.tagCount("summary-modules"))
             val item = fixture.taggedBounds("summary-lower-composition")
             val insight = fixture.taggedBounds("summary-insight")
-            val flows = fixture.taggedBounds("summary-flows")
             assertEquals(item.top, insight.top, 1f, "Insight starts at the item top")
-            assertEquals(item.bottom, flows.bottom, 1f, "Flows end the narrative")
             assertEquals(item.width, insight.width, 1f)
+            fixture.revealText("Selected findings")
+            fixture.render()
+            assertEquals(item.width, fixture.taggedBounds("summary-selected-findings").width, 1f)
+            fixture.revealText("Flows")
+            fixture.scrollBy(100_000f)
+            fixture.render()
+            val flows = fixture.taggedBounds("summary-flows")
             assertEquals(item.width, flows.width, 1f)
             assertTrue(flows.bottom <= height, "Flows must be reachable at $width x $height")
-            assertTrue(
-                fixture.taggedBounds("summary-insight").bottom <=
-                    fixture.taggedBounds("summary-flows").top)
             assertEquals(1, fixture.scrollableContentCount())
           }
     }
@@ -5290,6 +5294,197 @@ class DesktopVisualLayoutTest {
             assertTrue(action.left >= panel.left && action.right <= panel.right)
             assertTrue(action.bottom <= panel.bottom)
           }
+    }
+  }
+
+  @Test
+  fun f10SummaryEvidenceStatesReflowWithLongTextAndReachableLowerActions() {
+    val project = resultProjectFixture()
+    val path = "src/" + "日本語-long-directory/".repeat(8) + "handler.go"
+    val title = "A retained finding about a long project path and its source identity ".repeat(3)
+    val page = resultPageFixture("bugs")
+    val finding =
+        page.semantic
+            .single()
+            .copy(title = title, location = FindingLocation(path, startLine = 118))
+    val section = page.section.copy(results = page.results!!.copy(semantic = listOf(finding)))
+    val run = requireNotNull(page.run)
+    val selection =
+        selectionFixture()
+            .copy(
+                files =
+                    listOf(
+                        AnalysisSelectableFile(
+                            path, "", selectionStageFixture("stale", "Source changed.")),
+                        AnalysisSelectableFile(
+                            "a.go", "", selectionStageFixture("fresh", "Current"))))
+    val app =
+        DesktopState(
+            projectState = ProjectWorkspaceState(project),
+            analysisRun =
+                ProjectAnalysisRunState(
+                    run = run, sections = mapOf(AnalysisResultKey("bugs") to section)))
+    val preview = summaryFindingPreview(app)
+    val row = preview.rows.single()
+    assertEquals(title, row.title)
+    val states =
+        listOf(
+            "populated" to AnalysisSelectionState(selection = selection),
+            "aggregate-only" to AnalysisSelectionState(),
+            "confirmed-empty" to
+                AnalysisSelectionState(selection = selection.copy(files = emptyList())),
+            "failed-retained" to
+                AnalysisSelectionState(
+                    selection = selection,
+                    error = "Saved selection read failed",
+                    failure = AnalysisSelectionFailure.Read))
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        val label = "f10-summary-$width-$height-$scale-${density}x"
+        var destination: Workspace? = null
+        var selected: SummaryFindingTarget? = null
+        ComposeVisualFixture(
+                (width * density).toInt(), (height * density).toInt(), scale, density) {
+                  ProjectSummaryPane(
+                      ProjectOverview(
+                          project.projectId,
+                          project.projectRevision,
+                          analysisCoverage = AnalysisCoverage(total = 2, fresh = 1, stale = 1)),
+                      project,
+                      { destination = it },
+                      run = run,
+                      sections = app.analysisRun.sections,
+                      analysisState =
+                          ProjectAnalysisRunState(fileSelection = states.first().second),
+                      findingState = app,
+                      onFindingSelected = { selected = it })
+                }
+            .use { fixture ->
+              fixture.render("$label-populated")
+              fixture.revealText("File evidence", "summary-scroll")
+              fixture.render("$label-ledger")
+              assertTrue(fixture.hasText(path), label)
+              assertTrue(fixture.hasText("Showing 2 of 2 selected files · saved status"), label)
+              if (width == 800 && scale == 1.5f) {
+                fixture.revealText(path, "summary-scroll")
+                assertTrue(
+                    fixture.copyTextByDragging(path).isNotBlank(),
+                    "Ledger path must remain selectable")
+              }
+              fixture.revealText("All files", "summary-scroll")
+              fixture.assertTextFits("All files")
+              fixture.revealText("Selected findings", "summary-scroll")
+              fixture.revealText(title, "summary-scroll")
+              fixture.assertTextFits(title, 12)
+              fixture.revealText(row.location, "summary-scroll")
+              fixture.render("$label-findings")
+              fixture.assertTextFits(row.location, 12)
+              fixture.revealText("All Security results", "summary-scroll")
+              fixture.assertTextFits("All Security results")
+              fixture.revealText("Open Editor", "summary-scroll")
+              fixture.assertTextFits("Open Editor")
+              assertTrue(fixture.requestFocus("Open Editor"))
+              fixture.render("$label-lower-focused")
+              fixture.assertColorVisible(FocusAccent)
+              assertEquals(null, destination)
+              assertEquals(null, selected)
+            }
+      }
+    }
+    // Use the same production pane for state captures; each state has its own honest ledger.
+    for ((name, state) in states) {
+      val findingsState =
+          if (name == "failed-retained")
+              app.copy(
+                  analysisRun =
+                      app.analysisRun.copy(
+                          sections =
+                              mapOf(
+                                  AnalysisResultKey("bugs") to
+                                      section.copy(error = "Saved detail read failed"))))
+          else app
+      ComposeVisualFixture(800, 650, 1.5f) {
+            ProjectSummaryPane(
+                ProjectOverview(
+                    project.projectId,
+                    project.projectRevision,
+                    analysisCoverage = AnalysisCoverage(total = 2, fresh = 1, stale = 1)),
+                project,
+                {},
+                analysisState = ProjectAnalysisRunState(fileSelection = state),
+                findingState = findingsState,
+                onFindingSelected = {})
+          }
+          .use { fixture ->
+            fixture.render("f10-summary-$name-800-650-150")
+            fixture.revealText("File evidence", "summary-scroll")
+            fixture.render("f10-summary-$name-ledger-800-650-150")
+            when (name) {
+              "aggregate-only" ->
+                  assertTrue(
+                      fixture.hasText(
+                          "File paths unavailable · 2 files in saved aggregate coverage. Load a confirmed selection to inspect file evidence."))
+              "confirmed-empty" ->
+                  assertTrue(fixture.hasText("No files selected in the confirmed selection."))
+              "failed-retained" -> {
+                assertTrue(fixture.hasText(path))
+                assertTrue(
+                    fixture.hasText(
+                        "File selection load failed · Showing last confirmed selection. Saved selection read failed"))
+              }
+              else -> assertTrue(fixture.hasText(path))
+            }
+            fixture.revealText("All files", "summary-scroll")
+            fixture.render("f10-summary-$name-ledger-action-800-650-150")
+            fixture.assertTextFits("All files")
+            if (name == "failed-retained") {
+              fixture.revealText(
+                  "Bugs · Partial · 1 loaded · Saved details unavailable · Saved detail read failed",
+                  "summary-scroll")
+              fixture.revealText(title, "summary-scroll")
+              fixture.render("f10-summary-failed-retained-finding-800-650-150")
+              assertTrue(fixture.hasText(title))
+              assertTrue(
+                  fixture.hasText(
+                      "Evidence origin unavailable · Saved details unavailable · Partial"))
+            }
+          }
+    }
+  }
+
+  @Test
+  fun f10LedgerAndCategoriesReflowAtLocalBreakpoints() {
+    val project = resultProjectFixture()
+    val selection = selectionFixture()
+    for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (width in
+          listOf(
+              (1080 * scale).toInt() - 60,
+              (1080 * scale).toInt() + 60,
+              (624 * scale).toInt() - 60,
+              (624 * scale).toInt() + 60)) {
+        ComposeVisualFixture(width, 1800, scale) {
+              ProjectSummaryPane(null, project, {}, fileSelection = selection)
+            }
+            .use { fixture ->
+              fixture.render("f10-boundary-$width-$scale")
+              val coverage = fixture.taggedBounds("summary-coverage-column")
+              val results = fixture.taggedBounds("summary-results")
+              val ledger = fixture.taggedBounds("summary-file-evidence")
+              assertTrue(ledger.left >= results.left && ledger.right <= results.right + 1f)
+              if (coverageResultsStacked(
+                  fixture.taggedBounds("summary-coverage-results").width.dp, scale)) {
+                assertTrue(coverage.bottom <= results.top)
+              } else {
+                assertTrue(coverage.right <= results.left)
+              }
+              fixture.revealText("All files", "summary-scroll")
+              fixture.assertTextFits("All files")
+              fixture.revealText("All Security results", "summary-scroll")
+              fixture.assertTextFits("All Security results")
+            }
+      }
     }
   }
 
@@ -6675,24 +6870,25 @@ internal class ComposeVisualFixture(
     val narrative = taggedBounds("summary-lower-composition")
     val tags =
         listOfNotNull(
-            "summary-architecture",
-            "summary-insight".takeIf { withInsight },
-            "summary-modules",
-            "summary-flows")
+            "summary-architecture", "summary-insight".takeIf { withInsight }, "summary-modules")
     val sections = tags.map(::taggedBounds)
     assertEquals(narrative.top, sections.first().top, 1f)
     assertEquals(narrative.bottom, sections.last().bottom, 1f)
     val architecture = taggedBounds("summary-architecture")
     val modules = taggedBounds("summary-modules")
+    val findings = taggedBounds("summary-selected-findings")
     val flows = taggedBounds("summary-flows")
     assertEquals(narrative.width, modules.width, 1f)
+    assertEquals(narrative.width, findings.width, 1f)
     assertEquals(narrative.width, flows.width, 1f)
+    assertEquals(modules.bottom + MiniOrcaSpacing.section.value, findings.top, 1f)
+    assertEquals(findings.bottom + MiniOrcaSpacing.section.value, flows.top, 1f)
     if (withInsight) {
       val insight = taggedBounds("summary-insight")
       assertTrue(architecture.right <= insight.left || architecture.bottom <= insight.top)
       assertTrue(maxOf(architecture.bottom, insight.bottom) <= modules.top)
     } else assertTrue(architecture.bottom <= modules.top)
-    assertTrue(modules.bottom <= flows.top)
+    assertTrue(modules.bottom <= findings.top)
   }
 
   fun assertTextFits(label: String, maxLines: Int = 1) {

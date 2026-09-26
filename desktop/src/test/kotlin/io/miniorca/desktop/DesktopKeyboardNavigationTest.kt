@@ -898,6 +898,117 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun summaryEvidenceFocusAndRoutesRemainInOrderAtLargeText() {
+    val page = resultPageFixture("bugs")
+    val project = requireNotNull(page.project)
+    val state =
+        DesktopState(
+            projectState = ProjectWorkspaceState(project),
+            analysisRun =
+                ProjectAnalysisRunState(
+                    run = page.run, sections = mapOf(AnalysisResultKey("bugs") to page.section)))
+    val row = summaryFindingPreview(state).rows.single()
+    val destinations = mutableListOf<Workspace>()
+    var selected: SummaryFindingTarget? = null
+    for (density in listOf(1f, 2f)) {
+      ComposeVisualFixture((800 * density).toInt(), (650 * density).toInt(), 1.5f, density) {
+            ProjectSummaryPane(
+                null,
+                project,
+                destinations::add,
+                findingState = state,
+                onFindingSelected = { selected = it })
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.revealText("All files", "summary-scroll")
+            assertTrue(fixture.requestFocus("All files"))
+            fixture.render("f10-keyboard-ledger-${density}x")
+            assertTrue(fixture.isFocusedControl("All files"))
+            fixture.assertColorVisible(FocusAccent)
+            fixture.revealText("Selected findings", "summary-scroll")
+            val inspect = "Inspect ${row.title} in Bugs results at ${row.location}"
+            assertTrue(fixture.requestDescriptionFocus(inspect))
+            fixture.render("f10-keyboard-finding-${density}x")
+            assertTrue(fixture.isFocusedControl(inspect))
+            fixture.assertColorVisible(FocusAccent)
+            repeat(3) {
+              if (!fixture.isFocusedControl("All Bugs results")) {
+                assertTrue(fixture.pressKey(Key.Tab))
+                fixture.render()
+              }
+            }
+            assertTrue(
+                fixture.isFocusedControl("All Bugs results"),
+                "Finding must lead to category routes")
+            assertTrue(fixture.pressKey(Key.Tab))
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("All Performance results"))
+            assertTrue(fixture.pressKey(Key.Tab))
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("All Security results"))
+            assertTrue(fixture.pressKey(Key.Tab))
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Open Editor"))
+            assertEquals(null, selected)
+            assertTrue(fixture.pressKey(Key.Enter))
+            assertEquals(Workspace.Editor, destinations.last())
+          }
+    }
+  }
+
+  @Test
+  fun summaryUnavailableTargetKeepsExplanationAndRecoveryKeyboardReachable() {
+    val page = resultPageFixture("bugs")
+    val row =
+        summaryFindingPreview(
+                DesktopState(
+                    projectState = ProjectWorkspaceState(page.project),
+                    analysisRun =
+                        ProjectAnalysisRunState(
+                            run = page.run,
+                            sections = mapOf(AnalysisResultKey("bugs") to page.section))))
+            .rows
+            .single()
+    val browser = newResultBrowserState(page)
+    browser.target(
+        ExplicitResultTarget.Unavailable(
+            row.target, "This finding is no longer in the loaded results."))
+    for ((width, height, scale) in listOf(Triple(800, 650, 1.5f), Triple(1440, 900, 1f))) {
+      var navigations = 0
+      ComposeVisualFixture(width, height, scale) {
+            AnalysisResultsPane(
+                page,
+                listOf(semanticResultRow(page.semantic.single())),
+                browser,
+                openAnalysis = { navigations++ }) {
+                  androidx.compose.material.Text("Unrelated detail")
+                }
+          }
+          .use { fixture ->
+            fixture.render("f10-target-unavailable-$width-$scale")
+            fixture.revealText(
+                "Finding unavailable · This finding is no longer in the loaded results.",
+                "result-target-unavailable")
+            assertTrue(
+                fixture.hasText(
+                    "Finding unavailable · This finding is no longer in the loaded results."))
+            assertFalse(fixture.hasText("Unrelated detail"))
+            assertTrue(fixture.requestFocus("View current Bugs results"))
+            fixture.render("f10-target-unavailable-focused-$width-$scale")
+            fixture.assertColorVisible(FocusAccent)
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
+            assertEquals(null, browser.explicitTarget)
+            assertEquals(0, navigations)
+          }
+      browser.target(
+          ExplicitResultTarget.Unavailable(
+              row.target, "This finding is no longer in the loaded results."))
+    }
+  }
+
+  @Test
   fun summaryEditorEntryNavigatesByPointerAndKeyboardWithoutWorkflowActions() {
     val project = resultProjectFixture()
     val draft =
