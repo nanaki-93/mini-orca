@@ -1370,6 +1370,10 @@ class DesktopKeyboardNavigationTest {
         }
         .use { fixture ->
           fixture.render()
+          assertEquals(1, fixture.tagCount("summary-coverage-results"))
+          assertTrue(
+              fixture.taggedBounds("analysis-summary").bottom <=
+                  fixture.taggedBounds("summary-results").top)
           repeat(2) {
             assertTrue(fixture.pressKey(Key.Tab), "Tab must advance through the coverage status")
             fixture.render()
@@ -1402,6 +1406,8 @@ class DesktopKeyboardNavigationTest {
           assertTrue(fixture.tryClick("Expand More insight"))
           fixture.render()
           assertEquals("Expanded", fixture.descriptionStateDescription("Collapse More insight"))
+          fixture.revealText("Architecture")
+          fixture.awaitVisibleDescription("Show Architecture diagram")
           fixture.awaitDescription("Show Architecture diagram", "Collapsed")
           assertTrue(fixture.tryClick("Show Architecture diagram"))
           fixture.awaitDescription("Hide Architecture diagram", "Expanded")

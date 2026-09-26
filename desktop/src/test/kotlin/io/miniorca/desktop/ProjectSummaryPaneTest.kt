@@ -252,6 +252,34 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun groupedResultsKeepUnknownAndZeroProvenanceDistinct() {
+    val project = resultProjectFixture()
+    ComposeVisualFixture(800, 1100) { ProjectSummaryPane(null, project, {}) }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(1, fixture.tagCount("summary-coverage-results"))
+          assertTrue(fixture.hasText("File counts unavailable"))
+          assertTrue(
+              fixture.hasText("Overall findings · — tool-reported issues · — AI suggestions"))
+          listOf("Bugs", "Performance", "Security").forEach {
+            assertTrue(fixture.hasDescription("View $it results"))
+          }
+        }
+    val zeroOverview =
+        ProjectOverview(
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            findingCounts = FindingCounts(verified = 0, aiSuggestions = 0))
+    ComposeVisualFixture(800, 1100) { ProjectSummaryPane(zeroOverview, project, {}) }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(
+              fixture.hasText("Overall findings · 0 tool-reported issues · 0 AI suggestions"))
+          assertFalse(fixture.hasText("Safe"))
+        }
+  }
+
+  @Test
   fun missingRunningAndFailedInterpretationStatesKeepFailureMeaning() {
     val running =
         projectSummaryPresentation(
