@@ -2,7 +2,9 @@ package io.miniorca.desktop
 
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DraftReviewWorkflowTest {
@@ -127,6 +129,101 @@ class DraftReviewWorkflowTest {
       assertTrue(requests.any { it.startsWith("POST /api/projects/current/apply") })
       assertTrue(requests.any { it.startsWith("POST /api/projects/current/undo") })
     }
+  }
+
+  @Test
+  fun revisionChangingIndexRetainsEditableBufferAndFindingsButRevokesDraftAuthority() {
+    val validated =
+        draft(
+            2,
+            "validated",
+            DeclarationValidation(
+                true,
+                "symbol_plus_imports",
+                diagnostics = listOf(DeclarationFinding("warning", "Prior diagnostic")),
+                diff = UnifiedDiff("main.go", "main.go")),
+            "replace_symbol")
+    val checks =
+        DraftCheckReport(
+            "main.go",
+            true,
+            draftId = validated.id,
+            draftRevision = validated.revision,
+            draftHash = validated.hash)
+    val finding =
+        UnifiedFinding(projectId = "project", projectRevision = "revision", freshness = "fresh")
+    val overview = ProjectOverview(projectId = "project", projectRevision = "revision")
+    val index = ProjectIndex("project", "revision")
+    val attempt = ProjectIndexingAttempt(1, "project", "revision", "/tmp/project")
+    val original =
+        DesktopState(
+            projectState =
+                ProjectWorkspaceState(
+                    project = project(),
+                    index = index,
+                    overview = overview,
+                    sourceChangeObserved = true),
+            selection = FileSelectionState(selectedFile = file()),
+            findings = FindingsState(findings = listOf(finding)),
+            review =
+                DraftReviewState(
+                    draft = validated,
+                    editor =
+                        editableDraft(validated)
+                            .copy(declaration = "func Run() error { return nil }"),
+                    checks = checks),
+            jobs = JobState(status = "Previous work"))
+    assertTrue(
+        draftReviewEligibility(original.review.editor, validated, checks, file(), project())
+            .eligible)
+
+    val running = original.reduce(DesktopEvent.ProjectIndexingStarted(attempt))
+    val failed =
+        running.reduce(
+            DesktopEvent.ProjectIndexingStopped(
+                attempt, ProjectIndexingOutcome.Failed("Index unavailable")))
+    assertEquals(original.review, failed.review)
+    assertEquals(index, failed.index)
+    assertEquals(overview, failed.overview)
+    assertEquals(listOf(finding), failed.findings.findings)
+
+    val unchanged = running.reduce(DesktopEvent.ProjectIndexingCompleted(attempt, index))
+    assertEquals(original.review, unchanged.review)
+    assertEquals(overview, unchanged.overview)
+    assertEquals(listOf(finding), unchanged.findings.findings)
+    assertEquals("Project inventory refreshed", unchanged.status)
+    assertTrue(
+        draftReviewEligibility(
+                unchanged.review.editor,
+                unchanged.review.draft,
+                unchanged.review.checks,
+                file(),
+                unchanged.project)
+            .eligible)
+
+    val changed =
+        running.reduce(
+            DesktopEvent.ProjectIndexingCompleted(attempt, ProjectIndex("project", "next")))
+    assertEquals("next", changed.project?.projectRevision)
+    assertEquals(DraftEditorStatus.Stale, changed.review.editor?.status)
+    assertEquals("func Run() error { return nil }", changed.review.editor?.declaration)
+    assertEquals(validated.id, changed.review.draft?.id)
+    assertNull(changed.review.draft?.validation)
+    assertNull(changed.review.editor?.serverDraft?.validation)
+    assertNull(changed.review.editor?.validationAttempt)
+    assertTrue(changed.review.editor?.diagnosticsAreRetained == true)
+    assertEquals(
+        "Prior diagnostic", requireNotNull(changed.review.editor).diagnostics.single().message)
+    assertNull(changed.review.checks)
+    assertNull(changed.review.checkAttempt)
+    assertFalse(
+        draftReviewEligibility(
+                changed.review.editor, changed.review.draft, checks, file(), changed.project)
+            .eligible)
+    assertFalse(draftApplyEligibility(changed.review.draft, changed.review.checks, file()).eligible)
+    assertEquals(overview, changed.overview)
+    assertEquals(listOf(finding), changed.findings.findings)
+    assertFalse(changed.projectState.sourceChangeObserved)
   }
 
   private fun draft(
