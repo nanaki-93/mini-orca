@@ -110,12 +110,30 @@ configuration; it does not contact a provider or execute project code. Editor
 owns one declaration change. Go, Java and Kotlin
 projects show a type icon beside the project name in the top bar.
 
-Summary starts with the project name, purpose and indexed metadata. A segmented
-coverage bar shows the current selected files: up to date, outdated, not analyzed,
-running, failed, incomplete and unavailable. Zero-size segments are omitted;
-unavailable coverage and an empty selection keep separate labels. **View analysis**
-only opens Analysis. The status retains current run lifecycle and exposes saved
-project-description freshness/failure details on hover or keyboard focus.
+Summary introduces the project name with its metadata-derived type beside it (Go,
+Java, Kotlin or a generic/unknown label), followed by available purpose, build
+metadata, indexed files, lines and languages. The description is visibly qualified:
+current AI-generated interpretation, stale saved interpretation, or an unavailable,
+running or failed description with its failure details. A current description with
+no purpose is labeled unavailable; a re-indexed project's old overview does not
+supply current facts. File coverage does not determine description freshness.
+When starting is eligible, **Start analysis** in the introduction requests a scope
+preview using the default full-run policy; it does not start a run or grant consent.
+Review the preview and any required destination/Security confirmations in the
+existing admission dialog, then explicitly start there. Preview progress and
+failures remain visible; retry after failure is explicit. Active runs retain
+Summary progress and their applicable Pause/Resume/Cancel controls instead of
+offering a fresh Start.
+
+Coverage and results share a region: a segmented coverage bar for the current
+selected files sits beside the Bugs, Performance and Security cards at readable
+local widths, or above them when space or text scale requires stacking. The bar
+shows up to date, outdated, not analyzed, running, failed, incomplete and
+unavailable states; zero-size segments are omitted. Unavailable coverage and an
+empty selection have separate labels. **View analysis** only opens Analysis; the
+coverage status also exposes run and description details on hover or keyboard focus.
+Analysis category panels also stack when their local width cannot fit readable
+columns.
 
 Three named Bugs, Performance and Security cards open their result pages with one
 click or keyboard activation. Card counts come from run-reported category progress,
@@ -127,14 +145,20 @@ is safe. Bug priority counts require matching current details. Overall tool-repo
 issues and AI suggestions appear separately below the cards, since those totals
 cannot be reliably assigned to individual categories.
 
-At readable local widths, Architecture and flat Packages / modules rows occupy
-the left column; Engineering insight and Flows occupy the right. On a narrower
-Summary pane or with larger text, the category cards and narrative columns stack
-and remain reachable by scrolling. Analysis category panels also stack when their
-local width cannot fit readable columns.
+Architecture and Engineering insight sit beside each other at readable local
+widths and stack in that order at narrower widths or larger text. A lone available
+panel uses the full width. Packages / modules follow, then the project's saved
+Flows when present; absent narrative sections leave no empty cards. Insight retains
+its lead content and **More insight** disclosure. Module names, exact paths and
+responsibilities remain selectable/readable. Entry points and next steps are
+omitted from Summary. The Summary scroll keeps lower sections reachable.
 
-Module names, exact paths and responsibilities remain selectable/readable. Entry
-points and next steps are omitted from Summary.
+The separate **Change lifecycle** section describes Mini-Orca's editing workflow,
+not the analyzed project's Flows: Request → Draft → Validate → Checks → Review →
+Apply. Only the isolated declaration/import draft is editable; Apply explicitly
+changes one file under guards, and Undo is available only while its guards hold.
+The stages are information, not actions or readiness indicators. **Open Editor**
+only navigates to Editor; it does not change the draft or run any editing step.
 
 Architecture and Flows place **Show diagram** beside the section heading. Diagrams
 start collapsed, with the button disabled when a diagram is unavailable. Mermaid
