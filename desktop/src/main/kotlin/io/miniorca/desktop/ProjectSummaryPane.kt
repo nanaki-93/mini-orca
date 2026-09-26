@@ -162,6 +162,9 @@ internal data class ProjectSummaryPresentation(
     val analysisStatus: String,
     val summaryStatus: String,
     val analysisMessage: String,
+    val selectionNotice: String?,
+    val selectionError: Boolean,
+    val runMessage: String?,
     val interpretationStatus: String,
     val interpretationMessage: String,
     val outdated: Boolean,
@@ -181,6 +184,7 @@ internal fun projectSummaryPresentation(
     run: AnalysisRun? = overview?.analysisRun,
     sections: Map<AnalysisResultKey, AnalysisSectionState> = emptyMap(),
     fileSelection: AnalysisFileSelection? = null,
+    selectionState: AnalysisSelectionState = AnalysisSelectionState(selection = fileSelection),
 ): ProjectSummaryPresentation {
   val currentOverview =
       overview?.takeIf {
@@ -210,7 +214,16 @@ internal fun projectSummaryPresentation(
       if (normalizedStatus == "fresh" && analysis?.purpose.isNullOrBlank())
           "Project description: unavailable · no purpose provided"
       else summaryAnalysisMessage(normalizedStatus, analysis?.failure.orEmpty())
-  val coverageProjection = summaryCoverageProjection(currentOverview, project, fileSelection)
+  val currentSelectionState =
+      selectionState.takeIf { state ->
+        state.selection?.let {
+          it.projectId == (project?.projectId ?: currentOverview?.projectId) &&
+              it.projectRevision == (project?.projectRevision ?: currentOverview?.projectRevision)
+        } != false
+      } ?: AnalysisSelectionState()
+  val coverageProjection =
+      summaryCoverageProjection(currentOverview, project, currentSelectionState.selection)
+  val selectionNotice = summarySelectionNotice(currentSelectionState, coverageProjection)
   val coverage =
       when (coverageProjection) {
         is SummaryCoverageProjection.Known -> coverageProjection.saved
@@ -247,6 +260,12 @@ internal fun projectSummaryPresentation(
             outdated -> "stale"
             normalizedStatus == "running" -> "running"
             else -> "unknown"
+          },
+      selectionNotice = selectionNotice,
+      selectionError = currentSelectionState.error != null,
+      runMessage =
+          currentRun?.let {
+            "${if (it.isActive()) "Current" else "Last"} analysis run: ${analysisStatusLabel(it.status)} · separate from saved coverage."
           },
       analysisMessage =
           listOfNotNull(
@@ -330,6 +349,34 @@ internal fun projectSummaryPresentation(
   )
 }
 
+private fun summarySelectionNotice(
+    state: AnalysisSelectionState,
+    coverage: SummaryCoverageProjection,
+): String? {
+  val confirmed =
+      (coverage as? SummaryCoverageProjection.Known)?.owner?.selectionId != null ||
+          coverage is SummaryCoverageProjection.Empty
+  return when {
+    state.error != null -> {
+      val operation =
+          when (state.failure) {
+            AnalysisSelectionFailure.Read -> "load"
+            AnalysisSelectionFailure.Save -> "save"
+            null -> "update"
+          }
+      "File selection $operation failed · ${if (confirmed) "Showing last confirmed selection." else "No confirmed selection available."} ${state.error}"
+    }
+    state.saving ->
+        if (confirmed)
+            "Saving file selection · showing last confirmed selection until the save succeeds."
+        else "Saving file selection · no confirmed selection available."
+    state.loading ->
+        if (confirmed) "Loading file selection · showing last confirmed selection."
+        else "Loading file selection · no confirmed selection available."
+    else -> null
+  }
+}
+
 private fun summaryAnalysisMessage(status: String, failure: String): String =
     when (status) {
       "fresh" -> "Project description: current · AI-generated"
@@ -367,7 +414,11 @@ internal fun ProjectSummaryPane(
     analysisState: ProjectAnalysisRunState? = null,
     analysisActions: AnalysisWorkspaceActions? = null,
 ) {
-  val presentation = projectSummaryPresentation(overview, project, run, sections, fileSelection)
+  val selectionState =
+      analysisState?.fileSelection ?: AnalysisSelectionState(selection = fileSelection)
+  val presentation =
+      projectSummaryPresentation(
+          overview, project, run, sections, selectionState.selection, selectionState)
   val ownerIdentity =
       listOf(
           project?.projectId ?: overview?.projectId,

@@ -1058,6 +1058,171 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun retainedSelectionIsQualifiedThroughLoadSaveAndFailureWithoutOptimisticCoverage() {
+    val project = analysisProjectFixture()
+    val selection = selectionFixture()
+    val destinations = mutableListOf<Workspace>()
+    var state by
+        mutableStateOf(ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selection)))
+    ComposeVisualFixture(1000, 760) {
+          ProjectSummaryPane(null, project, destinations::add, analysisState = state)
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickVisibleDescription("Up to date, 1 file")
+          fixture.render()
+          assertTrue(fixture.hasText("helper.go"))
+          for (pending in
+              listOf(
+                  AnalysisSelectionState(selection, loading = true),
+                  AnalysisSelectionState(selection, saving = true),
+                  AnalysisSelectionState(
+                      selection,
+                      error = "Refresh timed out.",
+                      failure = AnalysisSelectionFailure.Read),
+                  AnalysisSelectionState(
+                      selection,
+                      error = "Save rejected.",
+                      failure = AnalysisSelectionFailure.Save))) {
+            state = state.copy(fileSelection = pending)
+            fixture.render()
+            assertTrue(fixture.hasText("1 of 2 selected files are up to date"))
+            assertTrue(fixture.hasText("50%"))
+            assertTrue(fixture.hasText("helper.go"))
+            assertTrue(fixture.hasText("Up to date · 1 of 2 selected files"))
+            val notice =
+                when {
+                  pending.loading -> "Loading file selection · showing last confirmed selection."
+                  pending.saving ->
+                      "Saving file selection · showing last confirmed selection until the save succeeds."
+                  pending.failure == AnalysisSelectionFailure.Read ->
+                      "File selection load failed · Showing last confirmed selection. Refresh timed out."
+                  else ->
+                      "File selection save failed · Showing last confirmed selection. Save rejected."
+                }
+            assertTrue(fixture.hasText(notice))
+          }
+          assertEquals(emptyList(), destinations)
+          state = state.copy(fileSelection = AnalysisSelectionState(selection))
+          fixture.render()
+          assertEquals(0, fixture.tagCount("summary-selection-notice"))
+        }
+  }
+
+  @Test
+  fun selectionFailureWithoutDataIsNotEmptySuccessAndKeepsRecoveryRoute() {
+    val project = analysisProjectFixture()
+    val destinations = mutableListOf<Workspace>()
+    var selection by mutableStateOf(AnalysisSelectionState(loading = true))
+    ComposeVisualFixture(800, 650) {
+          ProjectSummaryPane(
+              null,
+              project,
+              destinations::add,
+              fileSelection = selectionFixture(),
+              analysisState = ProjectAnalysisRunState(fileSelection = selection))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("File counts unavailable"))
+          assertTrue(fixture.hasText("Loading file selection · no confirmed selection available."))
+          selection =
+              AnalysisSelectionState(
+                  error = "Selection endpoint unavailable.",
+                  failure = AnalysisSelectionFailure.Read)
+          fixture.render()
+          assertTrue(fixture.hasText("File counts unavailable"))
+          assertTrue(
+              fixture.hasText(
+                  "File selection load failed · No confirmed selection available. Selection endpoint unavailable."))
+          assertFalse(fixture.hasText("0 selected files"))
+          assertFalse(fixture.hasText("helper.go"))
+          fixture.clickText("View analysis")
+          assertEquals(listOf(Workspace.Analysis), destinations)
+        }
+    val aggregate =
+        ProjectOverview(
+            project.projectId,
+            project.projectRevision,
+            analysisCoverage = AnalysisCoverage(total = 2, stale = 2))
+    ComposeVisualFixture(800, 650) {
+          ProjectSummaryPane(
+              aggregate,
+              project,
+              {},
+              analysisState = ProjectAnalysisRunState(fileSelection = selection))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("0 of 2 selected files are up to date"))
+          assertTrue(
+              fixture.hasText(
+                  "File selection load failed · No confirmed selection available. Selection endpoint unavailable."))
+          fixture.clickVisibleDescription("Outdated, 2 files")
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "File paths are unavailable for aggregate coverage. View analysis for file scope."))
+          assertFalse(fixture.hasText("helper.go"))
+        }
+  }
+
+  @Test
+  fun runLifecycleIsSeparateFromSavedCoverageAndForeignEvidenceCannotLeak() {
+    val project = analysisProjectFixture()
+    val allCurrent = selectionFixture().copy(excludedPaths = listOf("main.go"))
+    var state by
+        mutableStateOf(ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(allCurrent)))
+    ComposeVisualFixture(1000, 760) {
+          ProjectSummaryPane(null, project, {}, run = state.run, analysisState = state)
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickVisibleDescription("Up to date, 1 file")
+          for (status in listOf("queued", "running", "completed")) {
+            val run = analysisRunFixture().copy(status = status)
+            state = state.copy(run = run)
+            fixture.render()
+            assertTrue(fixture.hasText("100%"))
+            assertTrue(fixture.hasText("1 of 1 selected files are up to date"))
+            assertTrue(fixture.hasText("helper.go"))
+            assertTrue(
+                fixture.hasText(
+                    "${if (status == "completed") "Last" else "Current"} analysis run: ${analysisStatusLabel(status)} · separate from saved coverage."))
+            assertEquals(
+                if (status == "completed") 0 else 1, fixture.tagCount("summary-analysis-run-strip"))
+          }
+          state = state.copy(fileSelection = AnalysisSelectionState(selectionFixture()))
+          for (status in listOf("queued", "running", "completed")) {
+            state = state.copy(run = analysisRunFixture().copy(status = status))
+            fixture.render()
+            assertTrue(fixture.hasText("1 of 2 selected files are up to date"))
+            assertTrue(fixture.hasText("50%"))
+            assertTrue(fixture.hasText("helper.go"))
+          }
+          state =
+              state.copy(
+                  run =
+                      analysisRunFixture()
+                          .copy(
+                              identity =
+                                  analysisRunFixture().identity.copy(projectRevision = "other")),
+                  fileSelection =
+                      AnalysisSelectionState(
+                          selectionFixture().copy(projectId = "other"),
+                          error = "Other selection failed.",
+                          failure = AnalysisSelectionFailure.Read))
+          fixture.render()
+          assertTrue(fixture.hasText("File counts unavailable"))
+          assertFalse(fixture.hasText("helper.go"))
+          assertEquals(0, fixture.tagCount("summary-coverage-inspection"))
+          assertEquals(0, fixture.tagCount("summary-coverage-run-status"))
+          assertEquals(0, fixture.tagCount("summary-analysis-run-strip"))
+          assertFalse(fixture.hasText("Other selection failed."))
+        }
+  }
+
+  @Test
   fun summaryStartRequestsDefaultFullRunPreviewAndKeepsFirstFailureRetryable() {
     val project = analysisProjectFixture()
     var state by androidx.compose.runtime.mutableStateOf(ProjectAnalysisRunState())
