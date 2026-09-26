@@ -204,6 +204,51 @@ private fun analysisIncompleteFileStatus(
   }
 }
 
+internal enum class AnalysisCoverageBucket {
+  UpToDate,
+  Outdated,
+  NotAnalyzed,
+  Running,
+  Failed,
+  Incomplete,
+  Unavailable,
+}
+
+internal data class AnalysisCoverageFileRow(
+    val bucket: AnalysisCoverageBucket,
+    val saved: AnalysisFileStatus,
+)
+
+/** Only confirmed saved file evidence contributes paths or counts; run overlays are separate. */
+internal fun analysisSelectionCoverageRows(
+    selection: AnalysisFileSelection
+): List<AnalysisCoverageFileRow> {
+  val excluded = selection.excludedPaths.toSet()
+  return selection.files.mapNotNull { file ->
+    val saved = analysisFileStatus(file, file.path in excluded)
+    saved.status.coverageBucket?.let { AnalysisCoverageFileRow(it, saved) }
+  }
+}
+
+private val AnalysisFileSyncStatus.coverageBucket: AnalysisCoverageBucket?
+  get() =
+      when (this) {
+        AnalysisFileSyncStatus.Updated -> AnalysisCoverageBucket.UpToDate
+        AnalysisFileSyncStatus.Stale -> AnalysisCoverageBucket.Outdated
+        AnalysisFileSyncStatus.Missing -> AnalysisCoverageBucket.NotAnalyzed
+        AnalysisFileSyncStatus.Running,
+        AnalysisFileSyncStatus.Pending -> AnalysisCoverageBucket.Running
+        AnalysisFileSyncStatus.Failed -> AnalysisCoverageBucket.Failed
+        AnalysisFileSyncStatus.Partial,
+        AnalysisFileSyncStatus.Paused,
+        AnalysisFileSyncStatus.Interrupted,
+        AnalysisFileSyncStatus.Canceled -> AnalysisCoverageBucket.Incomplete
+        AnalysisFileSyncStatus.Unavailable,
+        AnalysisFileSyncStatus.Unknown,
+        AnalysisFileSyncStatus.Finished -> AnalysisCoverageBucket.Unavailable
+        AnalysisFileSyncStatus.Excluded -> null
+      }
+
 internal enum class AnalysisFileFilter(val label: String) {
   All("All"),
   Attention("Needs attention"),
@@ -234,31 +279,17 @@ internal fun analysisFileFilterCounts(
     AnalysisFileFilter.entries.associateWith { filteredAnalysisFiles(files, query, it).size }
 
 internal fun analysisSelectionCoverage(selection: AnalysisFileSelection): AnalysisCoverage {
-  val excluded = selection.excludedPaths.toSet()
-  val statuses = selection.files.map { analysisFileStatus(it, it.path in excluded).status }
+  val rows = analysisSelectionCoverageRows(selection)
+  val counts = rows.groupingBy { it.bucket }.eachCount()
   return AnalysisCoverage(
-      total = statuses.count { it != AnalysisFileSyncStatus.Excluded },
-      fresh = statuses.count { it == AnalysisFileSyncStatus.Updated },
-      stale = statuses.count { it == AnalysisFileSyncStatus.Stale },
-      missing = statuses.count { it == AnalysisFileSyncStatus.Missing },
-      failed = statuses.count { it == AnalysisFileSyncStatus.Failed },
-      running =
-          statuses.count {
-            it in setOf(AnalysisFileSyncStatus.Running, AnalysisFileSyncStatus.Pending)
-          },
-      partial =
-          statuses.count {
-            it in
-                setOf(
-                    AnalysisFileSyncStatus.Partial,
-                    AnalysisFileSyncStatus.Paused,
-                    AnalysisFileSyncStatus.Interrupted,
-                    AnalysisFileSyncStatus.Canceled)
-          },
-      unavailable =
-          statuses.count {
-            it in setOf(AnalysisFileSyncStatus.Unavailable, AnalysisFileSyncStatus.Unknown)
-          })
+      total = rows.size,
+      fresh = counts[AnalysisCoverageBucket.UpToDate] ?: 0,
+      stale = counts[AnalysisCoverageBucket.Outdated] ?: 0,
+      missing = counts[AnalysisCoverageBucket.NotAnalyzed] ?: 0,
+      failed = counts[AnalysisCoverageBucket.Failed] ?: 0,
+      running = counts[AnalysisCoverageBucket.Running] ?: 0,
+      partial = counts[AnalysisCoverageBucket.Incomplete] ?: 0,
+      unavailable = counts[AnalysisCoverageBucket.Unavailable] ?: 0)
 }
 
 internal fun analysisCoverageStatus(coverage: AnalysisCoverage): String =
