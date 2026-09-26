@@ -3,6 +3,7 @@ package io.miniorca.desktop
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class ProjectSummaryEvidenceTest {
@@ -72,8 +73,8 @@ class ProjectSummaryEvidenceTest {
     assertEquals(listOf(5, 1, 2), first.categories.map { it.loadedCount })
     assertEquals(5, first.rows.map { it.target.rowKey }.distinct().size)
     assertTrue(first.rows[2].target.producer is SummaryFindingProducer.Verified)
-    assertEquals(null, first.rows[2].target.run)
-    assertEquals(bugs.run!!.identity, first.rows.first().target.run)
+    assertEquals(bugs.run!!.identity, first.rows[2].target.run)
+    assertEquals(bugs.run.identity, first.rows.first().target.run)
     assertEquals("project", first.rows.first().target.projectId)
   }
 
@@ -189,7 +190,7 @@ class ProjectSummaryEvidenceTest {
       val toolRow = preview.rows.single { it.target.producer is SummaryFindingProducer.Verified }
       val semanticRow =
           preview.rows.single { it.target.producer is SummaryFindingProducer.Semantic }
-      assertEquals(null, toolRow.target.run)
+      assertEquals(page.run!!.identity, toolRow.target.run)
       assertEquals("", toolRow.materialState, "verified finding with $runStatus run")
       assertTrue("Saved details unavailable" in semanticRow.materialState)
       assertTrue("Partial" in semanticRow.materialState)
@@ -273,6 +274,71 @@ class ProjectSummaryEvidenceTest {
         setOf("ai", "deterministic"),
         securityRows.map { (it.target.producer as SummaryFindingProducer.Security).source }.toSet())
     assertTrue(securityRows.all { "Partial" in it.materialState && "Canceled" in it.materialState })
+  }
+
+  @Test
+  fun verifiedFindingTargetIsBoundToTheOriginatingRunEvenWhenTheFindingPersists() {
+    val bugs = resultPageFixture("bugs")
+    val verified =
+        UnifiedFinding(
+            id = "tool-bug",
+            projectId = "project",
+            projectRevision = "revision",
+            category = "bugs",
+            confidence = "tool_reported",
+            source = "vet",
+            location = FindingLocation("tool.go"))
+    val original = state(bugs, verified = listOf(verified))
+    val target =
+        summaryFindingPreview(original)
+            .rows
+            .single { it.target.producer is SummaryFindingProducer.Verified }
+            .target
+    assertEquals(bugs.run!!.identity, target.run)
+    assertIs<ExplicitResultTarget.Resolved>(resolveSummaryTarget(target, original))
+    val replaced =
+        bugs.copy(run = bugs.run.copy(identity = bugs.run.identity.copy(generation = "new")))
+    val newState = state(replaced, verified = listOf(verified))
+    assertTrue(summaryFindingPreview(newState).rows.any { it.target.rowKey == target.rowKey })
+    assertIs<ExplicitResultTarget.Unavailable>(resolveSummaryTarget(target, newState))
+  }
+
+  @Test
+  fun resolutionRejectsChangedReportsAndAmbiguousKeysWithoutGuessing() {
+    val bugs = resultPageFixture("bugs")
+    val performance = performancePageFixture()
+    val security = securityPageFixture()
+    val original = state(bugs, performance, security)
+    val target =
+        summaryFindingPreview(original)
+            .rows
+            .single { it.target.producer is SummaryFindingProducer.Performance }
+            .target
+    assertIs<ExplicitResultTarget.Resolved>(resolveSummaryTarget(target, original))
+    val details = requireNotNull(performance.results)
+    val report = details.performance.single()
+    val changed =
+        performance.copy(
+            section =
+                performance.section.copy(
+                    results = details.copy(performance = listOf(report.copy(model = "changed")))))
+    assertIs<ExplicitResultTarget.Unavailable>(
+        resolveSummaryTarget(target, state(bugs, changed, security)))
+    val duplicated =
+        performance.copy(
+            section =
+                performance.section.copy(
+                    results = details.copy(performance = listOf(report, report))))
+    val ambiguous = resolveSummaryTarget(target, state(bugs, duplicated, security))
+    assertIs<ExplicitResultTarget.Unavailable>(ambiguous)
+    assertTrue("Multiple" in ambiguous.reason)
+    val removed =
+        performance.copy(
+            section = performance.section.copy(results = details.copy(performance = emptyList())))
+    assertIs<ExplicitResultTarget.Unavailable>(
+        resolveSummaryTarget(target, state(bugs, removed, security)))
+    assertIs<ExplicitResultTarget.Unavailable>(
+        resolveSummaryTarget(target.copy(projectRevision = "old"), original))
   }
 
   @Test

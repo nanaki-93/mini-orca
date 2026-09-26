@@ -2,8 +2,10 @@ package io.miniorca.desktop
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class ResultBrowserStateTest {
   @Test
@@ -105,6 +107,116 @@ class ResultBrowserStateTest {
     assertNull(afterAbsentPage.selectedKey)
     assertEquals(0, afterAbsentPage.listState.firstVisibleItemIndex)
     assertEquals(0, afterAbsentPage.listState.firstVisibleItemScrollOffset)
+  }
+
+  private fun snapshot(
+      page: AnalysisResultPageState,
+      verified: List<UnifiedFinding> = emptyList(),
+  ): DesktopState =
+      DesktopState(
+          projectState = ProjectWorkspaceState(project = page.project),
+          analysisRun =
+              ProjectAnalysisRunState(
+                  run = page.run,
+                  sections = mapOf(AnalysisResultKey(page.category) to page.section)),
+          findings = FindingsState(findings = verified))
+
+  @Test
+  fun explicitActivationRevealsOnlyDestinationAndPreservesOtherBrowser() {
+    val page = resultPageFixture("bugs")
+    val state = snapshot(page)
+    val target = summaryFindingPreview(state).rows.single().target
+    val store = ResultBrowserStore()
+    val browser = store.stateFor(page)
+    val other = store.stateFor(page.copy(type = AnalysisResultType.Security))
+    other.query = "keep"
+    other.selectedKey = "security:keep"
+    browser.query = "no matching title"
+    browser.filter = ResultBrowserFilter.Value("critical")
+    assertIs<ExplicitResultTarget.Resolved>(store.activate(target, state))
+    assertEquals("", browser.query)
+    assertEquals(ResultBrowserFilter.All, browser.filter)
+    assertEquals(target.rowKey, browser.selectedKey)
+    assertEquals("keep", other.query)
+    assertEquals("security:keep", other.selectedKey)
+    assertSame(other, store.stateFor(page.copy(type = AnalysisResultType.Security)))
+
+    val replaced =
+        page.copy(run = page.run!!.copy(identity = page.run.identity.copy(generation = "new")))
+    store.resetFor(replaced.project, replaced.run)
+    assertNull(store.activate(target, snapshot(replaced)))
+    assertNull(store.stateFor(replaced).explicitTarget)
+  }
+
+  @Test
+  fun replacedRunRejectsQueuedVerifiedClickAndLateReconciliation() {
+    val page = resultPageFixture("bugs")
+    val verified =
+        UnifiedFinding(
+            id = "tool-bug",
+            projectId = "project",
+            projectRevision = "revision",
+            category = "bugs",
+            confidence = "tool_reported",
+            source = "vet",
+            location = FindingLocation("tool.go"))
+    val previous = snapshot(page, listOf(verified))
+    val target =
+        summaryFindingPreview(previous)
+            .rows
+            .single { it.target.producer is SummaryFindingProducer.Verified }
+            .target
+    val store = ResultBrowserStore()
+    store.stateFor(page)
+    assertIs<ExplicitResultTarget.Resolved>(store.activate(target, previous))
+
+    val replaced =
+        page.copy(run = page.run!!.copy(identity = page.run.identity.copy(generation = "new")))
+    val current = snapshot(replaced, listOf(verified))
+    store.resetFor(replaced.project, replaced.run)
+    val browser = store.stateFor(replaced)
+    val currentTarget =
+        summaryFindingPreview(current)
+            .rows
+            .single { it.target.producer is SummaryFindingProducer.Verified }
+            .target
+    assertIs<ExplicitResultTarget.Resolved>(store.activate(currentTarget, current))
+    browser.query = "keep"
+    val other = store.stateFor(replaced.copy(type = AnalysisResultType.Security))
+    other.filter = ResultBrowserFilter.Value("high")
+
+    assertNull(store.activate(target, current))
+    store.reconcileTarget(page, previous)
+    store.reconcileTarget(page, current)
+    assertSame(browser, store.stateFor(replaced))
+    assertSame(other, store.stateFor(replaced.copy(type = AnalysisResultType.Security)))
+    assertEquals("keep", browser.query)
+    assertEquals(currentTarget.rowKey, browser.selectedKey)
+    assertEquals(ExplicitResultTarget.Resolved(currentTarget), browser.explicitTarget)
+    assertEquals(ResultBrowserFilter.Value("high"), other.filter)
+  }
+
+  @Test
+  fun vanishedTargetsRemainUnavailableUntilDismissedOrChosen() {
+    val page = resultPageFixture("bugs")
+    val state = snapshot(page)
+    val target = summaryFindingPreview(state).rows.single().target
+    val store = ResultBrowserStore()
+    val browser = store.stateFor(page)
+    store.activate(target, state)
+    val missing = page.copy(section = page.section.copy(results = null))
+    val changed = snapshot(missing)
+    store.reconcileTarget(missing, changed)
+    val unavailable = assertIs<ExplicitResultTarget.Unavailable>(browser.explicitTarget)
+    assertTrue("no longer" in unavailable.reason)
+    assertNull(browser.selectedKey)
+    assertSame(unavailable, store.activate(target, state))
+    browser.choose("another")
+    assertNull(browser.explicitTarget)
+    assertEquals("another", browser.selectedKey)
+    store.activate(target, changed)
+    browser.dismissTarget()
+    assertNull(browser.explicitTarget)
   }
 
   private fun row(severity: String, title: String) =

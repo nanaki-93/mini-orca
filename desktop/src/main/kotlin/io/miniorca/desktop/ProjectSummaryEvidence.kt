@@ -63,6 +63,34 @@ internal data class SummaryFindingPreview(
 /** Uses the same accepted rows as each destination; reported totals are not loaded row counts. */
 internal fun summaryFindingPreview(state: DesktopState): SummaryFindingPreview {
   val pages = AnalysisResultType.entries.associateWith { state.analysisResultPage(it.category) }
+  val sorted = summaryLoadedFindingRows(state, pages)
+  return SummaryFindingPreview(
+      sorted.take(5),
+      sorted.size,
+      AnalysisResultType.entries.map { type ->
+        val page = pages.getValue(type)
+        SummaryFindingCategoryState(
+            type,
+            page.statusLabel,
+            when {
+              page.section.error != null -> "Saved details unavailable · ${page.section.error}"
+              page.section.loading -> "Loading saved details"
+              page.results == null -> "Saved details not loaded"
+              else -> null
+            },
+            sorted.count { it.target.category == type })
+      })
+}
+
+/** Unbounded accepted rows, shared by the preview and activation against the latest snapshot. */
+internal fun summaryLoadedFindingRows(state: DesktopState): List<SummaryFindingPreviewRow> =
+    summaryLoadedFindingRows(
+        state, AnalysisResultType.entries.associateWith { state.analysisResultPage(it.category) })
+
+private fun summaryLoadedFindingRows(
+    state: DesktopState,
+    pages: Map<AnalysisResultType, AnalysisResultPageState>,
+): List<SummaryFindingPreviewRow> {
   val bugs = pages.getValue(AnalysisResultType.Bugs)
   val rows = buildList {
     if (bugs.project != null) {
@@ -146,22 +174,7 @@ internal fun summaryFindingPreview(state: DesktopState): SummaryFindingPreview {
               .thenBy { it.severity }
               .thenBy { it.origin }
               .thenBy { it.materialState })
-  return SummaryFindingPreview(
-      sorted.take(5),
-      sorted.size,
-      AnalysisResultType.entries.map { type ->
-        val page = pages.getValue(type)
-        SummaryFindingCategoryState(
-            type,
-            page.statusLabel,
-            when {
-              page.section.error != null -> "Saved details unavailable · ${page.section.error}"
-              page.section.loading -> "Loading saved details"
-              page.results == null -> "Saved details not loaded"
-              else -> null
-            },
-            sorted.count { it.target.category == type })
-      })
+  return sorted
 }
 
 private fun previewRow(
@@ -176,7 +189,7 @@ private fun previewRow(
         SummaryFindingTarget(
             requireNotNull(page.project).projectId,
             page.project.projectRevision,
-            page.run?.identity.takeUnless { producer is SummaryFindingProducer.Verified },
+            page.run?.identity,
             page.type,
             producer,
             row.key),
