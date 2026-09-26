@@ -46,7 +46,8 @@ class ProjectSummaryPaneTest {
     val summary = projectSummaryPresentation(null, project)
 
     assertTrue(summary.hasProject)
-    assertEquals("go · go.mod", "${summary.projectType} · ${summary.buildMetadata}")
+    assertEquals("Go project", projectTypePresentation(summary.projectType).description)
+    assertEquals("go.mod", summary.buildMetadata)
     assertEquals("Go", summary.languages)
     assertEquals(listOf(4, 120), summary.projectMetrics.map { it.value })
     assertTrue(summary.findingMetrics.all { it.value == null })
@@ -55,6 +56,31 @@ class ProjectSummaryPaneTest {
     assertEquals("missing", summary.interpretationStatus)
     assertEquals("Project description: unavailable", summary.interpretationMessage)
     assertEquals("Project description: unavailable", summary.analysisMessage)
+  }
+
+  @Test
+  fun typeLabelUsesCurrentMetricsAndFallsBackToProjectMetadata() {
+    val project = resultProjectFixture().copy(type = "Go", buildFile = "go.mod")
+    listOf("Go" to "Go project", "Java" to "Java project", "Kotlin" to "Kotlin project").forEach {
+        (type, label) ->
+      val overview =
+          ProjectOverview(
+              projectId = project.projectId,
+              projectRevision = project.projectRevision,
+              metrics = ProjectMetrics(type = type, buildFile = "build.gradle.kts"))
+      val summary = projectSummaryPresentation(overview, project)
+      assertEquals(label, projectTypePresentation(summary.projectType).description)
+      assertEquals("build.gradle.kts", summary.buildMetadata)
+    }
+    val unknown = projectSummaryPresentation(null, project.copy(type = "  "))
+    assertEquals("Project", projectTypePresentation(unknown.projectType).description)
+    assertEquals("go.mod", unknown.buildMetadata)
+    val custom = projectSummaryPresentation(null, project.copy(type = "Scala / JVM"))
+    assertEquals(
+        "Project type: Scala / JVM", projectTypePresentation(custom.projectType).description)
+    assertEquals(
+        "Project",
+        projectTypePresentation(projectSummaryPresentation(null, null).projectType).description)
   }
 
   @Test
@@ -82,7 +108,7 @@ class ProjectSummaryPaneTest {
             analysisCoverage = AnalysisCoverage(total = 1, fresh = 1),
             findingCounts = FindingCounts(verified = 8, aiSuggestions = 4))
     val summary = projectSummaryPresentation(old, project)
-    assertEquals("Go", summary.projectType)
+    assertEquals("Go project", projectTypePresentation(summary.projectType).description)
     assertEquals("go.mod", summary.buildMetadata)
     assertEquals("Go", summary.languages)
     assertEquals(listOf(7, 150), summary.projectMetrics.map { it.value })

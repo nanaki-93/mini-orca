@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
@@ -127,7 +130,7 @@ internal fun projectSummaryPresentation(
   return ProjectSummaryPresentation(
       hasProject = hasProject,
       projectName = project?.name?.takeIf { it.isNotBlank() } ?: "Project",
-      projectType = metrics?.type?.ifBlank { "Unknown project type" } ?: "Unavailable",
+      projectType = metrics?.type.orEmpty(),
       buildMetadata = metrics?.buildFile?.ifBlank { "No build metadata" } ?: "Unavailable",
       languages = metrics?.languages?.keys?.sorted()?.joinToString(" · ").orEmpty(),
       analysisStatus = normalizedStatus,
@@ -306,15 +309,28 @@ internal fun ProjectSummaryPane(
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun SummaryIntroduction(presentation: ProjectSummaryPresentation) {
+  val type = projectTypePresentation(presentation.projectType)
   WorkspaceSection(modifier = Modifier.testTag("summary-introduction")) {
-    Text(
-        presentation.projectName,
-        color = PrimaryText,
-        fontSize = 24.sp,
-        lineHeight = 30.sp,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.semantics { heading() })
+    FlowRow(
+        Modifier.fillMaxWidth().testTag("summary-project-identity"),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically) {
+          Text(
+              presentation.projectName,
+              color = PrimaryText,
+              fontSize = 24.sp,
+              lineHeight = 30.sp,
+              fontWeight = FontWeight.SemiBold,
+              modifier = Modifier.semantics { heading() })
+          Text(
+              type.description,
+              color = type.tint,
+              style = IdeTypography.workspaceMetadata,
+              modifier = Modifier.testTag("summary-project-type"))
+        }
     presentation.purpose?.let {
       ModelResultContent(it, preview = false, style = IdeTypography.workspaceBody)
     }
@@ -324,7 +340,7 @@ private fun SummaryIntroduction(presentation: ProjectSummaryPresentation) {
         style = IdeTypography.workspaceMetadata,
         modifier = Modifier.testTag("summary-interpretation-status"))
     val facts =
-        listOf(presentation.projectType, presentation.buildMetadata) +
+        listOf(presentation.buildMetadata) +
             presentation.projectMetrics.map { metric ->
               "${metric.value?.let { "%,d".format(java.util.Locale.ROOT, it) } ?: "—"} ${if (metric.label == "Total lines") "lines" else metric.label.lowercase()}"
             } +
