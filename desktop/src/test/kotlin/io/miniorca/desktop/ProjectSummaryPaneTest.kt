@@ -31,6 +31,9 @@ class ProjectSummaryPaneTest {
       val narrativeBoundary = 840.dp * scale
       assertTrue(narrativePanelsStacked(narrativeBoundary - 1.dp, scale))
       assertFalse(narrativePanelsStacked(narrativeBoundary, scale))
+      val evidenceBoundary = 960.dp * scale
+      assertTrue(summaryEvidencePanelsStacked(evidenceBoundary - 1.dp, scale))
+      assertFalse(summaryEvidencePanelsStacked(evidenceBoundary, scale))
     }
   }
 

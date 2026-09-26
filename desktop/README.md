@@ -168,15 +168,17 @@ selection or opening a source-editing target.
 
 Architecture and Engineering insight sit beside each other at readable local
 widths and stack in that order at narrower widths or larger text. A lone available
-panel uses the full width. Packages / modules follow when present; absent
+panel uses the full width. Packages / modules and Selected findings sit beside
+each other where both columns are readable, stacking in that order at narrow
+widths or larger text. Without modules, findings use the full width; absent
 narrative sections leave no empty cards. Insight retains its lead content and
 **More insight** disclosure. Module names, exact paths and responsibilities
 remain selectable/readable. Entry points and next steps are omitted from Summary.
-**Selected findings** appears after narrative and modules (if present), before
-the project's saved Flows (if present) and the separate Change lifecycle. It
-remains visible without narrative or modules. It shows up to five loaded Bugs,
-Performance and Security results, with category, severity or impact, exact location,
-evidence origin and material state. “Showing N of M loaded findings” is a bounded
+**Selected findings** appears after narrative, beside or below modules (if
+present), before the project's saved Flows (if present) and the separate
+Change lifecycle. It remains visible without narrative or modules. It shows
+up to five loaded Bugs, Performance and Security results, with category,
+severity or impact, exact location, evidence origin and material state. “Showing N of M loaded findings” is a bounded
 preview of loaded evidence, not the run-reported category counts on the cards.
 The panel labels not-loaded or failed details and retained stale, partial or canceled
 evidence rather than treating missing rows as confirmed zero; only matching
