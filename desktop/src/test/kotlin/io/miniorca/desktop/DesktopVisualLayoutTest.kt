@@ -1414,6 +1414,81 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun summaryPairsOnlyAtReadableLocalWidthAndKeepsOptionalNarrativeFullWidth() {
+    val project = visualFixtureProject
+    val overview =
+        visualFixtureOverview.copy(
+            analysis =
+                StructuredProjectAnalysis(
+                    status = "fresh",
+                    purpose = "Long project interpretation. ".repeat(40),
+                    architecture = "Architecture description. ".repeat(30),
+                    engineeringInsight =
+                        EngineeringInsight(
+                            mechanism = "The mechanism remains readable. ".repeat(12),
+                            whyItMattersHere = "Local context.",
+                            tradeoffOrFailureMode = "A longer trade-off.")))
+    listOf(
+            Triple(1160, 1f, true),
+            Triple(1100, 1f, false),
+            Triple(920, 1f, false),
+            Triple(880, 1f, false),
+            Triple(1440, 1.5f, false),
+            Triple(800, 1.5f, false))
+        .forEach { (width, scale, pairResults) ->
+          ComposeVisualFixture(width, 2400, scale) { ProjectSummaryPane(overview, project, {}) }
+              .use { fixture ->
+                fixture.render()
+                val coverage = fixture.taggedBounds("summary-coverage-column")
+                val results = fixture.taggedBounds("summary-results")
+                if (pairResults)
+                    assertTrue(
+                        coverage.right <= results.left,
+                        "paired results at $width/$scale: $coverage / $results")
+                else
+                    assertTrue(
+                        coverage.bottom <= results.top,
+                        "stacked results at $width/$scale: $coverage / $results")
+                fixture.revealText("Engineering insight")
+                val architecture = fixture.taggedBounds("summary-architecture")
+                val insight = fixture.taggedBounds("summary-insight")
+                if (width - 48 >= 840 * scale)
+                    assertTrue(
+                        architecture.right <= insight.left,
+                        "paired narrative at $width/$scale: $architecture / $insight")
+                else
+                    assertTrue(
+                        architecture.bottom <= insight.top,
+                        "stacked narrative at $width/$scale: $architecture / $insight")
+                fixture.revealText("Open Editor")
+                assertTrue(fixture.hasText("Change lifecycle"))
+              }
+        }
+    val insightOnly = overview.copy(analysis = overview.analysis.copy(architecture = ""))
+    ComposeVisualFixture(1440, 900) { ProjectSummaryPane(insightOnly, project, {}) }
+        .use { fixture ->
+          fixture.render()
+          fixture.revealText("Engineering insight")
+          assertEquals(0, fixture.tagCount("summary-architecture"))
+          val row = fixture.taggedBounds("summary-narrative-row")
+          val insight = fixture.taggedBounds("summary-insight")
+          assertEquals(row.width, insight.width, 1f)
+        }
+    val architectureOnly =
+        overview.copy(analysis = overview.analysis.copy(engineeringInsight = null))
+    ComposeVisualFixture(1440, 900) { ProjectSummaryPane(architectureOnly, project, {}) }
+        .use { fixture ->
+          fixture.render()
+          fixture.revealText("Architecture")
+          assertEquals(0, fixture.tagCount("summary-insight"))
+          assertEquals(
+              fixture.taggedBounds("summary-narrative-row").width,
+              fixture.taggedBounds("summary-architecture").width,
+              1f)
+        }
+  }
+
+  @Test
   fun summaryPreviewEntryAndFeedbackWrapAtCompactTextScaleWithoutHidingCoverage() {
     val project = visualFixtureProject
     listOf(1440 to 1f, 800 to 1.5f).forEach { (width, scale) ->
@@ -4517,7 +4592,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun summaryCoverageAndResultsShareOneStackedRegionAtWideAndCompactWidths() {
+  fun summaryCoverageAndResultsShareOneRegionAtWideAndCompactWidths() {
     for ((width, scale) in listOf(1440 to 1f, 800 to 1.5f)) {
       ComposeVisualFixture(width, 1600, scale) {
             ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
@@ -4530,10 +4605,16 @@ class DesktopVisualLayoutTest {
             val provenance = fixture.taggedBounds("summary-findings-provenance")
             assertEquals(1, fixture.tagCount("summary-coverage-results"))
             assertEquals(region.left, coverage.left, 1f)
-            assertEquals(region.left, results.left, 1f)
-            assertEquals(region.width, coverage.width, 1f)
-            assertEquals(region.width, results.width, 1f)
-            assertTrue(coverage.top >= region.top && coverage.bottom < results.top)
+            assertTrue(coverage.top >= region.top)
+            if (width == 1440) {
+              assertTrue(coverage.right <= results.left)
+              assertTrue(results.right <= region.right)
+            } else {
+              assertEquals(region.left, results.left, 1f)
+              assertEquals(region.width, coverage.width, 1f)
+              assertEquals(region.width, results.width, 1f)
+              assertTrue(coverage.bottom < results.top)
+            }
             assertTrue(results.bottom <= region.bottom)
             assertTrue(provenance.top >= results.top && provenance.bottom <= results.bottom)
             listOf("Bugs", "Performance", "Security").forEach {
@@ -6193,8 +6274,17 @@ internal class ComposeVisualFixture(
     val track = bounds("summary-coverage-track")
     assertTrue(heading.bottom <= introduction.top, "Summary heading must lead the page")
     assertTrue(introduction.bottom <= coverage.top, "Coverage must follow the introduction")
-    assertEquals(introduction.width, coverage.width, 1f, "Coverage must use the Summary width")
-    assertTrue(track.width >= coverage.width * 0.6f, "Coverage track must be broad")
+    val region = bounds("summary-coverage-results")
+    val results = bounds("summary-results")
+    assertEquals(region.left, coverage.left, 1f)
+    if (coverageResultsStacked(region.width.dp, 1f)) {
+      assertEquals(region.width, coverage.width, 1f)
+      assertTrue(coverage.bottom <= results.top)
+    } else {
+      assertTrue(coverage.right <= results.left)
+      assertTrue(results.right <= region.right)
+    }
+    assertTrue(track.width > 0f, "Coverage track must remain visible")
   }
 
   fun assertNarrativeSectionOrder(withInsight: Boolean = false) {
@@ -6208,10 +6298,17 @@ internal class ComposeVisualFixture(
     val sections = tags.map(::taggedBounds)
     assertEquals(narrative.top, sections.first().top, 1f)
     assertEquals(narrative.bottom, sections.last().bottom, 1f)
-    sections.forEach { assertEquals(narrative.width, it.width, 1f) }
-    sections.zipWithNext().forEach { (first, second) ->
-      assertTrue(first.bottom <= second.top, "Narrative sections must follow reading order")
-    }
+    val architecture = taggedBounds("summary-architecture")
+    val modules = taggedBounds("summary-modules")
+    val flows = taggedBounds("summary-flows")
+    assertEquals(narrative.width, modules.width, 1f)
+    assertEquals(narrative.width, flows.width, 1f)
+    if (withInsight) {
+      val insight = taggedBounds("summary-insight")
+      assertTrue(architecture.right <= insight.left || architecture.bottom <= insight.top)
+      assertTrue(maxOf(architecture.bottom, insight.bottom) <= modules.top)
+    } else assertTrue(architecture.bottom <= modules.top)
+    assertTrue(modules.bottom <= flows.top)
   }
 
   fun assertTextFits(label: String, maxLines: Int = 1) {
@@ -6292,7 +6389,7 @@ internal class ComposeVisualFixture(
     val reference = cards.first().boundsInRoot
     cards.forEach { card ->
       val bounds = card.boundsInRoot
-      assertEquals(reference.width, bounds.width, "Summary card widths must match")
+      assertEquals(reference.width, bounds.width, 1f, "Summary card widths must match")
       assertEquals(reference.height, bounds.height, "Summary card heights must match")
       assertTrue(
           bounds.left >= 0 && bounds.top >= 0 && bounds.right <= width && bounds.bottom <= height,

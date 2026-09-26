@@ -22,6 +22,18 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun pairedRegionsRequireReadableLocalWidthAtEachTextScale() {
+    listOf(1f, 1.25f, 1.5f).forEach { scale ->
+      val resultsBoundary = 1080.dp * scale
+      assertTrue(coverageResultsStacked(resultsBoundary - 1.dp, scale))
+      assertFalse(coverageResultsStacked(resultsBoundary, scale))
+      val narrativeBoundary = 840.dp * scale
+      assertTrue(narrativePanelsStacked(narrativeBoundary - 1.dp, scale))
+      assertFalse(narrativePanelsStacked(narrativeBoundary, scale))
+    }
+  }
+
+  @Test
   fun deterministicFactsRemainAvailableWhenModelInterpretationIsMissing() {
     val project =
         ProjectAnalysis(
@@ -534,6 +546,47 @@ class ProjectSummaryPaneTest {
           fixture.awaitDescription("Show Architecture diagram", "Collapsed")
           assertEquals("Collapsed", fixture.stateDescription("More insight"))
           assertTrue(navigations.isEmpty())
+        }
+  }
+
+  @Test
+  fun resizingAcrossNarrativeBreakpointRetainsDisclosureAndLocalNavigation() {
+    val project = resultProjectFixture()
+    val overview =
+        ProjectOverview(
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            analysis =
+                StructuredProjectAnalysis(
+                    status = "fresh",
+                    architecture = "flowchart TD\n A[Client] --> B[Service]",
+                    engineeringInsight =
+                        EngineeringInsight(
+                            mechanism = "Mechanism",
+                            whyItMattersHere = "Local reason",
+                            tradeoffOrFailureMode = "Trade-off")))
+    val navigations = mutableListOf<Workspace>()
+    ComposeVisualFixture(1440, 900, 1.5f) {
+          ProjectSummaryPane(overview, project, navigations::add)
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Show Architecture diagram")
+          assertTrue(fixture.tryClick("Expand More insight"))
+          fixture.render()
+          assertEquals("Expanded", fixture.stateDescription("More insight"))
+          fixture.resize(800, 650)
+          fixture.render()
+          fixture.revealText("More insight")
+          assertEquals("Expanded", fixture.stateDescription("More insight"))
+          assertTrue(fixture.hasText("Trade-off"))
+          fixture.revealText("Open Editor")
+          fixture.clickText("Open Editor")
+          assertEquals(listOf(Workspace.Editor), navigations)
+          fixture.resize(1440, 900)
+          fixture.render()
+          fixture.revealText("More insight")
+          assertEquals("Expanded", fixture.stateDescription("More insight"))
         }
   }
 

@@ -318,7 +318,8 @@ class DesktopAccessibilityTest {
                   "Architecture",
                   "Engineering insight",
                   "More insight",
-                  "Flows"),
+                  "Flows",
+                  "Change lifecycle"),
               fixture.semanticHeadingTexts(),
               "Summary headings must expose the page and its sections in reading order")
           assertTrue(fixture.hasText("Project description: stale · source may have changed"))
