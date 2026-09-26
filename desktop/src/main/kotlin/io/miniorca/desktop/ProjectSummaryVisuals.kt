@@ -1,5 +1,6 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
@@ -11,8 +12,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -24,9 +25,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -83,12 +85,34 @@ internal fun SummaryAnalysisStatus(presentation: ProjectSummaryPresentation) {
   }
 }
 
-internal fun summaryCoverageFractions(
-    metrics: List<ProjectSummaryMetric>
-): List<Pair<ProjectSummaryMetric, Float>> {
-  val known = metrics.filter { (it.value ?: 0) > 0 }
-  val total = known.sumOf { requireNotNull(it.value).toLong() }
-  return known.map { it to (requireNotNull(it.value).toDouble() / total).toFloat() }
+internal data class SummaryCoverageArc(
+    val bucket: AnalysisCoverageBucket,
+    val start: Double,
+    val sweep: Double,
+)
+
+/** Consecutive boundaries avoid per-bucket gaps, rounding drift, and tiny-category inflation. */
+internal fun summaryCoverageArcs(coverage: SummaryCoverageProjection): List<SummaryCoverageArc> {
+  if (coverage !is SummaryCoverageProjection.Known || coverage.total <= 0) return emptyList()
+  val total = coverage.total.toLong()
+  if (coverage.buckets.any { it.count <= 0 } ||
+      coverage.buckets.sumOf { it.count.toLong() } != total)
+      return emptyList()
+  var used = 0L
+  return coverage.buckets.map { bucket ->
+    val start = 360.0 * used.toDouble() / total.toDouble()
+    used += bucket.count.toLong()
+    val end = 360.0 * used.toDouble() / total.toDouble()
+    SummaryCoverageArc(bucket.id, start, end - start)
+  }
+}
+
+internal fun summaryCoveragePercent(current: Int, total: Int): String {
+  require(total > 0 && current in 0..total)
+  if (current == total) return "100%"
+  // Whole percentages are readable, but an incomplete selection must never round to 100%.
+  val rounded = (current.toLong() * 100L + total / 2L) / total
+  return "${rounded.coerceAtMost(99)}%"
 }
 
 @Composable
@@ -103,17 +127,12 @@ internal fun SummaryCoverage(presentation: ProjectSummaryPresentation, openAnaly
             modifier = Modifier.weight(1f).semantics { heading() })
         SummaryAnalysisStatus(presentation)
       }
-      Row(
-          Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(16.dp),
-          verticalAlignment = Alignment.CenterVertically) {
-            SummaryCoverageBar(presentation, Modifier.weight(1f))
-            MiniOrcaButton(
-                onClick = openAnalysis,
-                modifier = Modifier.testTag("summary-view-analysis"),
-                tone = ActionTone.Navigation) {
-                  Text("View analysis", style = IdeTypography.action)
-                }
+      SummaryCoverageDial(presentation)
+      MiniOrcaButton(
+          onClick = openAnalysis,
+          modifier = Modifier.testTag("summary-view-analysis"),
+          tone = ActionTone.Navigation) {
+            Text("View analysis", style = IdeTypography.action)
           }
     }
   }
@@ -121,44 +140,77 @@ internal fun SummaryCoverage(presentation: ProjectSummaryPresentation, openAnaly
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun SummaryCoverageBar(
-    presentation: ProjectSummaryPresentation,
-    modifier: Modifier = Modifier
-) {
-  val segments = summaryCoverageFractions(presentation.coverageMetrics)
+private fun SummaryCoverageDial(presentation: ProjectSummaryPresentation) {
+  val coverage = presentation.coverage
+  val arcs = summaryCoverageArcs(coverage)
+  val readout =
+      when (coverage) {
+        is SummaryCoverageProjection.Known ->
+            "${coverage.saved.fresh} of ${coverage.total} selected files are up to date"
+        is SummaryCoverageProjection.Empty -> "0 selected files"
+        SummaryCoverageProjection.Unavailable -> "File counts unavailable"
+      }
+  val percent =
+      (coverage as? SummaryCoverageProjection.Known)?.let {
+        summaryCoveragePercent(it.saved.fresh, it.total)
+      }
   val description =
-      if (segments.isEmpty()) {
-        if (presentation.summaryStatus == "excluded") "No files selected"
-        else "Coverage unavailable"
-      } else
-          segments.joinToString(" · ") { (metric, _) ->
-            "${metric.value} ${metric.label.lowercase()}"
-          }
-  Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+      if (coverage is SummaryCoverageProjection.Known)
+          "Analysis coverage: $readout · $percent · " +
+              presentation.coverageMetrics.joinToString(" · ") {
+                "${it.value} ${it.label.lowercase()}"
+              }
+      else "Analysis coverage: $readout"
+  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     Row(
-        Modifier.fillMaxWidth()
-            .testTag("summary-coverage-track")
-            .height(12.dp)
-            .clip(MiniOrcaShapes.pill)
-            .background(StrongSurface)
-            .semantics { contentDescription = "Analysis coverage: $description" },
-        horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-          segments.forEach { (metric, fraction) ->
-            Box(Modifier.weight(fraction).height(12.dp).background(summaryMetricTint(metric.tone)))
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+          Box(
+              Modifier.size(112.dp).testTag("summary-coverage-dial").semantics {
+                contentDescription = description
+              },
+              contentAlignment = Alignment.Center) {
+                Canvas(Modifier.fillMaxSize().padding(8.dp)) {
+                  val stroke = 10.dp.toPx()
+                  val diameter = size.minDimension
+                  drawArc(
+                      StrongSurface,
+                      startAngle = -90f,
+                      sweepAngle = 360f,
+                      useCenter = false,
+                      topLeft = androidx.compose.ui.geometry.Offset(stroke / 2, stroke / 2),
+                      size =
+                          androidx.compose.ui.geometry.Size(diameter - stroke, diameter - stroke),
+                      style = Stroke(stroke, cap = StrokeCap.Butt))
+                  arcs.zip(presentation.coverageMetrics).forEach { (arc, metric) ->
+                    drawArc(
+                        summaryMetricTint(metric.tone),
+                        startAngle = (-90.0 + arc.start).toFloat(),
+                        sweepAngle = arc.sweep.toFloat(),
+                        useCenter = false,
+                        topLeft = androidx.compose.ui.geometry.Offset(stroke / 2, stroke / 2),
+                        size =
+                            androidx.compose.ui.geometry.Size(diameter - stroke, diameter - stroke),
+                        style = Stroke(stroke, cap = StrokeCap.Butt))
+                  }
+                }
+                Text(percent ?: "—", color = PrimaryText, style = IdeTypography.workspaceHeading)
+              }
+          Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(readout, color = PrimaryText, style = IdeTypography.workspaceBody)
+            Text(
+                "Saved coverage · Coverage, not a health score.",
+                color = SecondaryText,
+                style = IdeTypography.workspaceMetadata)
           }
         }
-    if (segments.isEmpty()) {
-      Text(
-          if (presentation.summaryStatus == "excluded") "0 selected files"
-          else "File counts unavailable",
-          color = SecondaryText,
-          style = IdeTypography.workspaceMetadata)
-    } else {
+    if (arcs.isNotEmpty()) {
       FlowRow(
           Modifier.testTag("summary-coverage-legend"),
           horizontalArrangement = Arrangement.spacedBy(16.dp),
           verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            segments.forEach { (metric, _) ->
+            presentation.coverageMetrics.forEach { metric ->
               Row(
                   verticalAlignment = Alignment.CenterVertically,
                   horizontalArrangement = Arrangement.spacedBy(6.dp)) {
