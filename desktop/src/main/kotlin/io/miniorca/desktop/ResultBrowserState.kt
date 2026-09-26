@@ -27,11 +27,37 @@ internal sealed class ResultBrowserFilter {
 
 internal data class ResultBrowserFacet(val value: String, val label: String, val count: Int)
 
+internal sealed interface ExplicitResultTarget {
+  val target: SummaryFindingTarget
+
+  data class Resolved(override val target: SummaryFindingTarget) : ExplicitResultTarget
+
+  data class Unavailable(override val target: SummaryFindingTarget, val reason: String) :
+      ExplicitResultTarget
+}
+
 internal class ResultBrowserState internal constructor(val identity: ResultBrowserIdentity) {
   var filter: ResultBrowserFilter by mutableStateOf(ResultBrowserFilter.All)
   var query: String by mutableStateOf("")
   var selectedKey: String? by mutableStateOf(null)
+  var explicitTarget: ExplicitResultTarget? by mutableStateOf(null)
+    private set
+
   val listState = LazyListState()
+
+  fun choose(key: String) {
+    explicitTarget = null
+    selectedKey = key
+  }
+
+  fun dismissTarget() {
+    explicitTarget = null
+  }
+
+  internal fun target(result: ExplicitResultTarget) {
+    explicitTarget = result
+    selectedKey = (result as? ExplicitResultTarget.Resolved)?.target?.rowKey
+  }
 }
 
 /** The shell owns these states so local navigation survives page composition changes. */
@@ -45,6 +71,48 @@ internal class ResultBrowserStore {
     return states.getOrPut(identity) { ResultBrowserState(identity) }
   }
 
+  /** Revalidate a click against the latest snapshot, not the bounded Summary rows. */
+  fun activate(target: SummaryFindingTarget, state: DesktopState): ExplicitResultTarget? {
+    val page = state.analysisResultPage(target.category.category)
+    val project = page.project ?: return null
+    val scope = ResultBrowserScope(project.projectId, project.projectRevision, page.run?.identity)
+    // A queued click from an older project or run must not reset or mutate current browsers.
+    if (scope != activeScope ||
+        target.projectId != scope.projectId ||
+        target.projectRevision != scope.projectRevision ||
+        target.run != scope.run)
+        return null
+    val browser = stateFor(page)
+    val existing = browser.explicitTarget
+    if (existing is ExplicitResultTarget.Unavailable && existing.target == target) return existing
+    val result = resolveSummaryTarget(target, state)
+    if (result is ExplicitResultTarget.Resolved) {
+      val row = summaryLoadedFindingRows(state).single { it.target == target }
+      if (browser.query.isNotBlank() &&
+          !row.title.contains(browser.query.trim(), ignoreCase = true) &&
+          !row.location.contains(browser.query.trim(), ignoreCase = true))
+          browser.query = ""
+      if (browser.filter != ResultBrowserFilter.All &&
+          (browser.filter as? ResultBrowserFilter.Value)?.value != resultFacetValue(row.severity))
+          browser.filter = ResultBrowserFilter.All
+    }
+    browser.target(result)
+    return result
+  }
+
+  /** A resolved target can disappear during a same-run refresh; never fall back to another row. */
+  fun reconcileTarget(page: AnalysisResultPageState, state: DesktopState) {
+    val identity = resultBrowserIdentity(page)
+    val scope = ResultBrowserScope(identity.projectId, identity.projectRevision, identity.run)
+    // Late refreshes must not reset the active store or reconcile against a newer snapshot.
+    if (scope != activeScope ||
+        resultBrowserIdentity(state.analysisResultPage(page.category)) != identity)
+        return
+    val browser = states[identity] ?: return
+    val target = (browser.explicitTarget as? ExplicitResultTarget.Resolved)?.target ?: return
+    browser.target(resolveSummaryTarget(target, state))
+  }
+
   fun resetFor(project: ProjectAnalysis?, run: AnalysisRun?) =
       resetFor(ResultBrowserScope(project?.projectId, project?.projectRevision, run?.identity))
 
@@ -52,6 +120,29 @@ internal class ResultBrowserStore {
     if (scope == activeScope) return
     states.clear()
     activeScope = scope
+  }
+}
+
+internal fun resolveSummaryTarget(
+    target: SummaryFindingTarget,
+    state: DesktopState,
+): ExplicitResultTarget {
+  val page = state.analysisResultPage(target.category.category)
+  if (page.project?.projectId != target.projectId ||
+      page.project.projectRevision != target.projectRevision ||
+      page.run?.identity != target.run)
+      return ExplicitResultTarget.Unavailable(
+          target, "This finding belongs to a different project or run.")
+  val rows = summaryLoadedFindingRows(state).filter { it.target.category == target.category }
+  val matches = rows.filter { it.target == target }
+  return when {
+    matches.isEmpty() ->
+        ExplicitResultTarget.Unavailable(target, "This finding is no longer in the loaded results.")
+    matches.size != 1 || rows.count { it.target.rowKey == target.rowKey } != 1 ->
+        ExplicitResultTarget.Unavailable(
+            target,
+            "Multiple results share this finding identity; select a result from the category list.")
+    else -> ExplicitResultTarget.Resolved(target)
   }
 }
 
