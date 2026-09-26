@@ -287,6 +287,79 @@ class TerminalToolWindowTest {
       }
 
   @Test
+  fun committedSwitchClosesHiddenAndExitedTabsBeforeDiscardAndOneImport() =
+      withWorkspace { workspace, first, starts, path ->
+        edt { workspace.activate(path) }
+        eventually { workspace.state.value.widget != null }
+        val firstWidget = workspace.state.value.widget!!
+        edt { workspace.createShell(path) }
+        eventually { workspace.state.value.tabs.size == 2 && workspace.state.value.widget != null }
+        first.finish(0)
+        eventually {
+          workspace.state.value.tabs.first().session.phase == TerminalSessionPhase.Exited
+        }
+        assertFalse(workspace.state.value.tabs.first().requiresClose)
+        assertTrue(workspace.state.value.requiresClose)
+        val context =
+            ProjectSwitchContext(
+                SwitchProjectIdentity(resultProjectFixture()),
+                SwitchDraftIdentity(null, DeclarationDraft(id = "draft"), null),
+                SwitchAnalyzeDestination(ScopedModel(scope = "analyze")),
+                false)
+        val admission = ProjectSwitchAdmission()
+        val request = admission.choose("/next", context)!!.requestId
+        admission.approveDraft(request, context)
+        val effects = mutableListOf<String>()
+        val imported = CompletableFuture<String>()
+        edt {
+          commitProjectSwitch(
+              request,
+              admission,
+              { context },
+              { true },
+              SwitchTerminalCleanup(
+                  {
+                    effects += "cleanup"
+                    workspace.closeAllSessions()
+                  },
+                  { workspace.state.value }),
+              {
+                assertTrue(workspace.state.value.tabs.isEmpty())
+                effects += "discard"
+              },
+              {
+                assertTrue(workspace.state.value.tabs.isEmpty())
+                effects += "import"
+                imported.complete(it)
+              },
+              {},
+              { if (it != null) imported.completeExceptionally(AssertionError(it)) },
+              { SwingUtilities.invokeLater(it) },
+              { {} })
+        }
+        assertEquals("/next", imported.get(5, TimeUnit.SECONDS))
+        assertEquals(listOf("cleanup", "discard", "import"), effects)
+        assertTrue(workspace.state.value.tabs.isEmpty())
+        assertNull(workspace.state.value.widget)
+        assertFalse(firstWidget.ttyConnector.isConnected)
+        assertEquals(2, starts.get())
+      }
+
+  @Test
+  fun exitedOnlyTabsAreClosedOnConfirmedSwitchWithoutStartingANewShell() =
+      withWorkspace { workspace, process, starts, path ->
+        edt { workspace.activate(path) }
+        eventually { workspace.state.value.widget != null }
+        process.finish(0)
+        eventually { workspace.state.value.session.phase == TerminalSessionPhase.Exited }
+        assertFalse(workspace.state.value.requiresClose)
+        val closed = edt { workspace.closeAllSessions() }.get(5, TimeUnit.SECONDS)
+        assertTrue(closed.tabs.isEmpty())
+        assertTrue(workspace.state.value.tabs.isEmpty())
+        assertEquals(1, starts.get())
+      }
+
+  @Test
   fun closeAllWaitsForLateStartupAndPreventsAReplacement() {
     val directory = Files.createTempDirectory("mini-orca-tabs-start-")
     val entered = CountDownLatch(1)

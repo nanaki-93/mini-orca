@@ -101,40 +101,6 @@ internal fun TerminalToolWindow(
 }
 
 @Composable
-internal fun TerminalProjectSwitchDialog(
-    pendingProjectPath: String?,
-    terminal: DesktopTerminalWorkspace,
-    onCancel: () -> Unit,
-    onSwitch: (String) -> Unit,
-) {
-  val path = pendingProjectPath ?: return
-  val state by terminal.state.collectAsState()
-  IdeDialog(
-      onDismissRequest = onCancel,
-      title = { Text("Close the project shells?") },
-      content = {
-        Column {
-          Text(
-              "The shells belong to ${state.projectPath}. Close them and their child processes before switching projects.")
-          state.errors.forEach { Text(it, color = Error) }
-          if (state.cleanupPending) Text("Waiting for the shells to stop…", color = Warning)
-        }
-      },
-      actions = {
-        MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Cancel switch") }
-        MiniOrcaButton(
-            onClick = {
-              terminal.closeAllSessions().thenAccept { if (!it.cleanupPending) onSwitch(path) }
-            },
-            enabled = !state.cleanupPending,
-            tone = ActionTone.Destructive) {
-              Text("Close shells and switch")
-            }
-      },
-  )
-}
-
-@Composable
 internal fun TerminalFocusReturnEffect(terminal: DesktopTerminalWorkspace?, onReturn: () -> Unit) {
   val currentReturn by rememberUpdatedState(onReturn)
   DisposableEffect(terminal) {
