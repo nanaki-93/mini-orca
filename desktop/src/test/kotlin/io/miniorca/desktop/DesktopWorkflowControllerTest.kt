@@ -88,6 +88,92 @@ class DesktopWorkflowControllerTest {
   }
 
   @Test
+  fun indexingIsSingleFlightAndCapturesProjectIdentity() {
+    val controller = loadedController()
+    val first = controller.beginProjectIndexing()!!
+    assertEquals("project", first.projectId)
+    assertEquals("revision", first.projectRevision)
+    assertEquals("/tmp/project", first.path)
+    assertNull(controller.beginProjectIndexing())
+    assertTrue(controller.projectIndexingCompleted(first, index("project", "new-revision")))
+    assertEquals(
+        ProjectIndexingOutcome.Succeeded("new-revision"),
+        controller.state.projectState.indexingAttempt?.outcome)
+    assertEquals("new-revision", controller.state.index?.projectRevision)
+    assertFalse(controller.projectIndexingFailed(first, "late"))
+    assertFalse(controller.projectIndexingCompleted(first, index("project", "older")))
+    val second = controller.beginProjectIndexing()!!
+    assertEquals("new-revision", second.projectRevision)
+    assertFalse(controller.projectIndexingFailed(first, "late"))
+    assertTrue(controller.cancelProjectIndexing(second))
+    assertEquals(
+        ProjectIndexingOutcome.Canceled, controller.state.projectState.indexingAttempt?.outcome)
+    assertFalse(controller.projectIndexingCompleted(second, index("project", "late")))
+  }
+
+  @Test
+  fun openingInvalidatesRunningIndexEvenIfItsJobCompletes() {
+    val controller = loadedController()
+    val first = controller.beginProjectIndexing()!!
+    val opening = controller.beginProjectLoad("/tmp/next")
+    assertEquals(
+        ProjectIndexingOutcome.Canceled, controller.state.projectState.indexingAttempt?.outcome)
+    assertNull(controller.beginProjectIndexing())
+    assertFalse(controller.projectIndexingCompleted(first, index("project", "late")))
+    assertFalse(controller.projectIndexingFailed(first, "late failure"))
+    assertTrue(
+        controller.projectLoaded(opening, project("next", "revision"), index("next", "revision")))
+    assertNull(controller.state.projectState.indexingAttempt)
+    assertEquals("next", controller.state.index?.projectId)
+  }
+
+  @Test
+  fun oldResultsCannotPublishAfterReturningToSameProject() {
+    val controller = loadedController()
+    val old = controller.beginProjectIndexing()!!
+    val toB = controller.beginProjectLoad()
+    assertTrue(controller.projectLoaded(toB, project("b", "revision"), index("b", "revision")))
+    val toA = controller.beginProjectLoad()
+    assertTrue(
+        controller.projectLoaded(toA, project("project", "revision"), index("project", "revision")))
+    val current = controller.beginProjectIndexing()!!
+    assertFalse(controller.projectIndexingCompleted(old, index("project", "old")))
+    assertFalse(controller.projectIndexingFailed(old, "old failure"))
+    assertEquals(
+        ProjectIndexingOutcome.Running, controller.state.projectState.indexingAttempt?.outcome)
+    assertTrue(controller.projectIndexingFailed(current, "cannot index"))
+    assertEquals(
+        ProjectIndexingOutcome.Failed("cannot index"),
+        controller.state.projectState.indexingAttempt?.outcome)
+    assertEquals("revision", controller.state.index?.projectRevision)
+  }
+
+  @Test
+  fun mismatchedIndexEndsCurrentAttemptWithoutReplacingInventory() {
+    val controller = loadedController()
+    val wrong = controller.beginProjectIndexing()!!
+    assertFalse(controller.projectIndexingCompleted(wrong, index("other", "new")))
+    assertTrue(
+        controller.state.projectState.indexingAttempt?.outcome is ProjectIndexingOutcome.Failed)
+    assertEquals("revision", controller.state.index?.projectRevision)
+    val blank = controller.beginProjectIndexing()!!
+    assertFalse(controller.projectIndexingCompleted(blank, index("project", "  ")))
+    assertTrue(
+        controller.state.projectState.indexingAttempt?.outcome is ProjectIndexingOutcome.Failed)
+    assertEquals("revision", controller.state.index?.projectRevision)
+    assertTrue(controller.projectIndexingFailed(controller.beginProjectIndexing()!!, ""))
+    assertTrue(
+        (controller.state.projectState.indexingAttempt?.outcome as ProjectIndexingOutcome.Failed)
+            .message
+            .isNotBlank())
+  }
+
+  @Test
+  fun indexingRejectsMissingProject() {
+    assertNull(DesktopWorkflowController().beginProjectIndexing())
+  }
+
+  @Test
   fun applyEligibilityRequiresTheLatestValidatedAndCheckedDraft() {
     val selected = file("main.go", "main-hash")
     val draft = draft()
