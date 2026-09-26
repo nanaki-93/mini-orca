@@ -1445,7 +1445,7 @@ private fun ContentPane(
           ProjectSummaryPane(
               state.overview,
               state.project,
-              openResults = navigation.selectWorkspace,
+              selectWorkspace = navigation.selectWorkspace,
               run = state.analysis.analysis.run,
               sections = state.analysis.analysis.sections,
               fileSelection = state.analysis.analysis.fileSelection.selection,

@@ -245,7 +245,7 @@ private fun projectSummaryDetails(
 internal fun ProjectSummaryPane(
     overview: ProjectOverview?,
     project: ProjectAnalysis?,
-    openResults: (Workspace) -> Unit,
+    selectWorkspace: (Workspace) -> Unit,
     run: AnalysisRun? = overview?.analysisRun,
     sections: Map<AnalysisResultKey, AnalysisSectionState> = emptyMap(),
     fileSelection: AnalysisFileSelection? = null,
@@ -255,9 +255,9 @@ internal fun ProjectSummaryPane(
   val presentation = projectSummaryPresentation(overview, project, run, sections, fileSelection)
   BoxWithConstraints(Modifier.fillMaxSize().background(EditorCanvas)) {
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag("summary-scroll"),
         contentPadding = workspacePagePadding(vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.section),
     ) {
       if (!presentation.hasProject) {
         item { SystemStateMessage("No project selected", "", modifier = Modifier.fillMaxWidth()) }
@@ -291,11 +291,11 @@ internal fun ProjectSummaryPane(
           Column(
               Modifier.fillMaxWidth().testTag("summary-coverage-results"),
               verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                SummaryCoverage(presentation) { openResults(Workspace.Analysis) }
+                SummaryCoverage(presentation) { selectWorkspace(Workspace.Analysis) }
                 Column(
                     Modifier.fillMaxWidth().testTag("summary-results"),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                      SummaryCategories(presentation.issueMetrics, openResults)
+                      SummaryCategories(presentation.issueMetrics, selectWorkspace)
                       Text(
                           "Overall findings · " +
                               presentation.findingMetrics.joinToString(" · ") {
@@ -307,13 +307,18 @@ internal fun ProjectSummaryPane(
                     }
               }
         }
-        item {
-          SummaryLowerComposition(
-              presentation,
-              listOf(
-                  project?.projectId ?: overview?.projectId,
-                  project?.projectRevision ?: overview?.projectRevision))
+        if (presentation.details.isNotEmpty() ||
+            presentation.engineeringInsight?.let(::engineeringInsightPieces)?.isNotEmpty() ==
+                true) {
+          item {
+            SummaryLowerComposition(
+                presentation,
+                listOf(
+                    project?.projectId ?: overview?.projectId,
+                    project?.projectRevision ?: overview?.projectRevision))
+          }
         }
+        item { SummaryChangeLifecycle { selectWorkspace(Workspace.Editor) } }
       }
     }
   }
@@ -412,11 +417,9 @@ private fun SummaryLowerComposition(
   val flows = presentation.details.firstOrNull { it.title == "Flows" }
   val insight =
       presentation.engineeringInsight?.let(::engineeringInsightPieces)?.takeIf { it.isNotEmpty() }
-  if (architecture == null && insight == null && modules == null && flows == null) return
-
   Column(
       Modifier.fillMaxWidth().testTag("summary-lower-composition"),
-      verticalArrangement = Arrangement.spacedBy(16.dp)) {
+      verticalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.section)) {
         architecture?.let {
           WorkspaceSection(modifier = Modifier.testTag("summary-architecture")) {
             MermaidDiagram(
@@ -437,6 +440,31 @@ private fun SummaryLowerComposition(
         }
         flows?.let { SummaryFlows(it, ownerIdentity) }
       }
+}
+
+@Composable
+private fun SummaryChangeLifecycle(onOpenEditor: () -> Unit) {
+  WorkspaceSection("Change lifecycle", Modifier.testTag("summary-change-lifecycle")) {
+    Text(
+        "Mini-Orca editing workflow (not a project Flow)",
+        color = SecondaryText,
+        style = IdeTypography.workspaceBody)
+    Text(
+        "Request → Draft → Validate → Checks → Review → Apply",
+        color = PrimaryText,
+        style = IdeTypography.workspaceMetadata,
+        modifier = Modifier.testTag("summary-change-stages"))
+    Text(
+        "Edit only an isolated declaration/import draft. Apply is an explicit, guarded one-file source change; Undo is guarded and available only when the change is still eligible.",
+        color = SecondaryText,
+        style = IdeTypography.workspaceBody)
+    MiniOrcaButton(
+        onClick = onOpenEditor,
+        tone = ActionTone.Navigation,
+        modifier = Modifier.testTag("summary-open-editor")) {
+          Text("Open Editor", style = IdeTypography.action)
+        }
+  }
 }
 
 @Composable

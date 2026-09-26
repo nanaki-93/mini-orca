@@ -487,6 +487,63 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun changeLifecycleFollowsSavedProjectFlowsWithSharedSectionGap() {
+    val project = resultProjectFixture()
+    val overview =
+        ProjectOverview(
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            analysis =
+                StructuredProjectAnalysis(status = "fresh", flows = listOf("Saved project flow")))
+    val navigations = mutableListOf<Workspace>()
+    ComposeVisualFixture(1000, 1800) { ProjectSummaryPane(overview, project, navigations::add) }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(1, fixture.tagCount("summary-flows"))
+          assertEquals(1, fixture.tagCount("summary-change-lifecycle"))
+          assertTrue(fixture.hasText("Saved project flow"))
+          assertTrue(fixture.hasText("Change lifecycle"))
+          assertTrue(fixture.hasText("Mini-Orca editing workflow (not a project Flow)"))
+          assertTrue(fixture.hasText("Request → Draft → Validate → Checks → Review → Apply"))
+          assertTrue(
+              fixture.hasText(
+                  "Edit only an isolated declaration/import draft. Apply is an explicit, guarded one-file source change; Undo is guarded and available only when the change is still eligible."))
+          val flows = fixture.taggedBounds("summary-flows")
+          val lifecycle = fixture.taggedBounds("summary-change-lifecycle")
+          assertEquals(MiniOrcaSpacing.section.value, lifecycle.top - flows.bottom, 1f)
+          assertFalse(fixture.requestFocus("Request → Draft → Validate → Checks → Review → Apply"))
+          fixture.clickText("Open Editor")
+          assertEquals(listOf(Workspace.Editor), navigations)
+        }
+  }
+
+  @Test
+  fun changeLifecycleRemainsReachableWithoutOptionalProjectNarrative() {
+    val destinations = mutableListOf<Workspace>()
+    val project = resultProjectFixture()
+    ComposeVisualFixture(1000, 1800) { ProjectSummaryPane(null, project, destinations::add) }
+        .use { fixture ->
+          fixture.render()
+          val coverage = fixture.taggedBounds("summary-coverage-results")
+          val lifecycle = fixture.taggedBounds("summary-change-lifecycle")
+          assertEquals(MiniOrcaSpacing.section.value, lifecycle.top - coverage.bottom, 1f)
+          assertEquals(0, fixture.tagCount("summary-lower-composition"))
+        }
+    ComposeVisualFixture(800, 650, 1.5f) { ProjectSummaryPane(null, project, destinations::add) }
+        .use { fixture ->
+          fixture.render()
+          listOf("summary-architecture", "summary-insight", "summary-modules", "summary-flows")
+              .forEach { assertEquals(0, fixture.tagCount(it)) }
+          fixture.revealText("Open Editor")
+          fixture.render()
+          assertEquals(1, fixture.tagCount("summary-change-lifecycle"))
+          assertTrue(fixture.hasText("Change lifecycle"))
+          fixture.clickText("Open Editor")
+          assertEquals(listOf(Workspace.Editor), destinations)
+        }
+  }
+
+  @Test
   fun moduleNamesComeBeforeTheirPathsWithoutLosingDescriptions() {
     assertEquals(
         SummaryModule("Workflow orchestration", "internal/app", "Coordinates changes."),

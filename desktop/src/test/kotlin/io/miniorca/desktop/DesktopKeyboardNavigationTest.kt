@@ -832,6 +832,69 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun summaryEditorEntryNavigatesByPointerAndKeyboardWithoutWorkflowActions() {
+    val project = resultProjectFixture()
+    val draft =
+        DeclarationDraft(
+            id = "retained-draft",
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            targetPath = "main.go",
+            targetSymbol = "Run",
+            declaration = "func Run() {}")
+    var state by
+        mutableStateOf(
+            shellFocusState(project).let {
+              it.copy(
+                  app =
+                      it.app.copy(
+                          review =
+                              DraftReviewState(
+                                  draft = draft,
+                                  editor =
+                                      EditableDraftState(
+                                          draft, declaration = "func Run() { /* local edit */ }"))))
+            })
+    val initial = state
+    var operations = 0
+    ComposeVisualFixture(1_280, 800) {
+          FocusTestShell(state, onState = { state = it }, onOperation = { operations++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          repeat(3) { gesture ->
+            fixture.revealText("Open Editor", "summary-scroll")
+            fixture.render()
+            assertEquals(0, operations)
+            when (gesture) {
+              0 -> fixture.clickText("Open Editor")
+              1 -> {
+                assertTrue(fixture.requestFocus("Open Editor"))
+                fixture.render()
+                assertTrue(fixture.pressKey(Key.Enter))
+              }
+              else -> {
+                assertTrue(fixture.requestFocus("Open Editor"))
+                fixture.render()
+                assertTrue(fixture.pressKey(Key.Spacebar))
+              }
+            }
+            fixture.render()
+            assertEquals(Workspace.Editor, state.app.workspace)
+            assertEquals(initial.app.projectState, state.app.projectState)
+            assertEquals(initial.app.review, state.app.review)
+            assertEquals(initial.editor, state.editor)
+            assertEquals(0, operations, "Editor entry cannot generate, validate, check or Apply")
+            if (gesture < 2) {
+              fixture.clickDescription("Summary tool window, not selected")
+              fixture.render()
+              assertEquals(Workspace.Summary, state.app.workspace)
+            }
+          }
+        }
+  }
+
+  @Test
   fun terminalRailOpensExistingDockWithoutStartingOnRenderFocusOrWorkspaceSwitch() {
     val directory = Files.createTempDirectory("mini-orca-rail-terminal-")
     val starts = AtomicInteger()
