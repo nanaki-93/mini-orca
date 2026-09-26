@@ -291,6 +291,13 @@ internal fun ProjectSummaryPane(
         val currentRun = currentProjectRun(run, project)
         val stripState = analysisState ?: ProjectAnalysisRunState(run = run, sections = sections)
         val runPaneState = AnalysisWorkspacePaneState(project, stripState.copy(run = currentRun))
+        item {
+          SummaryIntroduction(
+              presentation,
+              runPaneState,
+              analysisActions,
+              showActionFeedback = currentRun?.showsProgressOnSummary() != true)
+        }
         if (currentRun?.showsProgressOnSummary() == true)
             item {
               AnalysisRunStrip(
@@ -299,13 +306,6 @@ internal fun ProjectSummaryPane(
                   AnalysisRunStripScope.Summary,
                   Modifier.testTag("summary-analysis-run-strip"))
             }
-        item {
-          SummaryIntroduction(
-              presentation,
-              runPaneState,
-              analysisActions,
-              showActionFeedback = currentRun?.showsProgressOnSummary() != true)
-        }
         item {
           BoxWithConstraints(Modifier.fillMaxWidth().testTag("summary-coverage-results")) {
             val paired = !coverageResultsStacked(maxWidth, LocalDensity.current.fontScale)
@@ -397,9 +397,7 @@ private fun SummaryIntroduction(
             presentation.projectMetrics.map { metric ->
               "${metric.value?.let { "%,d".format(java.util.Locale.ROOT, it) } ?: "—"} ${if (metric.label == "Total lines") "lines" else metric.label.lowercase()}"
             } +
-            presentation.languages.split(" · ").filter {
-              it.isNotBlank() && !it.equals(presentation.projectType, ignoreCase = true)
-            }
+            presentation.languages.split(" · ").filter { it.isNotBlank() }
     Text(facts.joinToString(" · "), color = SecondaryText, style = IdeTypography.workspaceMetadata)
     if (actions != null &&
         AnalysisRunCommand.Start in projectRunPresentation(runState.analysis).commands) {
