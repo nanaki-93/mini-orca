@@ -562,6 +562,103 @@ class DesktopShellTest {
   }
 
   @Test
+  fun indexingFeedbackKeepsRecoveryDistinctFromOpeningAnalysisAndDaemonStatus() {
+    val project = resultProjectFixture()
+    val path = "/projects/日本語/" + "long-segment/".repeat(9)
+    val attempt = ProjectIndexingAttempt(1, project.projectId, project.projectRevision, path)
+    var retries = 0
+    var state by
+        mutableStateOf(
+            ToolbarState(
+                project = project.copy(path = path),
+                busy = false,
+                operationStatus = "",
+                connection = ConnectionState(label = "Disconnected"),
+                gitStatus = null,
+                analysisStatus =
+                    ToolbarAnalysisStatus(
+                        "Analysis · Running", "Whole-project analysis · Running", true, false),
+                indexingAttempt = attempt))
+    ComposeVisualFixture(800, 650, 1.5f) {
+          MainToolbar(state, ToolbarActions({}, { retries++ }, {}, {}))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Re-indexing project…"))
+          assertTrue(fixture.hasDescription("Re-index in progress"))
+          assertTrue(fixture.hasText("Indexing in progress · no percentage available"))
+          assertTrue(fixture.hasText("Analysis · Running"))
+          assertTrue(fixture.hasText("Daemon disconnected"))
+          assertTrue(!fixture.hasText("Retry re-index"))
+          assertTrue(
+              !fixture.hasText(
+                  "Re-index refreshes project inventory and freshness without a model request or project-code execution. It does not run analysis or refresh findings."))
+          fixture.revealText("About Re-index project", "project-indexing-scroll")
+          fixture.clickText("About Re-index project")
+          fixture.render()
+          fixture.revealText(
+              "Re-index refreshes project inventory and freshness without a model request or project-code execution. It does not run analysis or refresh findings.",
+              "project-indexing-scroll")
+          assertEquals(0, retries)
+          state =
+              state.copy(
+                  indexingAttempt =
+                      attempt.copy(outcome = ProjectIndexingOutcome.Failed("Index denied")))
+          fixture.render()
+          fixture.revealText("Retry re-index", "project-indexing-scroll")
+          assertTrue(fixture.hasText("Could not re-index project"))
+          assertTrue(fixture.hasText("Index denied"))
+          assertTrue(fixture.requestFocus("Retry re-index"))
+          fixture.render()
+          assertEquals(0, retries)
+          fixture.clickText("Retry re-index")
+          assertEquals(1, retries)
+          state = state.copy(switchPending = true)
+          fixture.render()
+          fixture.revealText("Retry re-index", "project-indexing-scroll")
+          assertTrue(fixture.isDisabled("Retry re-index"))
+          state =
+              state.copy(
+                  switchPending = false,
+                  indexingAttempt = attempt.copy(outcome = ProjectIndexingOutcome.Canceled))
+          fixture.render()
+          assertTrue(fixture.hasText("Re-index canceled"))
+          fixture.revealText("Retry re-index", "project-indexing-scroll")
+          assertTrue(!fixture.isDisabled("Retry re-index"))
+          state =
+              state.copy(
+                  openingAttempt = ProjectOpeningAttempt(2, "/new", ProjectOpeningKind.Restore))
+          fixture.render()
+          assertTrue(fixture.hasText("Restoring local project…"))
+          fixture.revealText("Retry re-index", "project-indexing-scroll")
+          assertTrue(fixture.isDisabled("Retry re-index"))
+          state =
+              state.copy(
+                  openingAttempt = null,
+                  indexingAttempt =
+                      attempt.copy(outcome = ProjectIndexingOutcome.Succeeded("accepted-revision")),
+                  detailsOutcome = ProjectDetailsOutcome.Unavailable("Details read denied"))
+          fixture.render()
+          fixture.revealText("Accepted inventory revision", "project-indexing-scroll")
+          assertTrue(fixture.hasText("accepted-revision"))
+          fixture.revealText("Details read denied", "project-indexing-scroll")
+          assertTrue(
+              fixture.hasText(
+                  "Workspace details unavailable; retained findings keep their existing freshness labels."))
+          assertTrue(!fixture.hasText("Retry re-index"))
+          state = state.copy(detailsOutcome = ProjectDetailsOutcome.Refreshing)
+          fixture.render()
+          fixture.revealText(
+              "Workspace details are still loading; findings have not been refreshed.",
+              "project-indexing-scroll")
+          assertTrue(
+              fixture.hasText(
+                  "Workspace details are still loading; findings have not been refreshed."))
+          assertEquals(1, retries)
+        }
+  }
+
+  @Test
   fun summaryHeaderShowsLocalPreferenceWarningWithoutAnOpeningAttempt() {
     val project = resultProjectFixture()
     ComposeVisualFixture(800, 650, 1.5f) {

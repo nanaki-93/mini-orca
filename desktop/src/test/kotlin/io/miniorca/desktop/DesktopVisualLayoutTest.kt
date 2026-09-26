@@ -219,6 +219,93 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun productionIndexingFeedbackKeepsLongEvidenceAndRecoveryReachable() {
+    val path = "/projects/" + "日本語-very-long-directory/".repeat(8) + "workspace"
+    val diagnostic = "Cannot read inventory: " + "日本語-long-diagnostic/".repeat(18)
+    val project =
+        resultProjectFixture()
+            .copy(path = path, name = "A long project identity with 日本語 and many segments")
+    val attempt = ProjectIndexingAttempt(4, project.projectId, project.projectRevision, path)
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        var calls = 0
+        var state by
+            mutableStateOf(
+                ToolbarState(
+                    project,
+                    false,
+                    "",
+                    ConnectionState(label = "Disconnected"),
+                    null,
+                    ToolbarAnalysisStatus(
+                        "Analysis · Running", "Whole-project analysis · Running", true, false),
+                    indexingAttempt = attempt))
+        ComposeVisualFixture(
+                (width * density).toInt(), (height * density).toInt(), scale, density) {
+                  Column(Modifier.fillMaxSize().background(AppBackground)) {
+                    MainToolbar(
+                        state, ToolbarActions({ calls++ }, { calls++ }, { calls++ }, { calls++ }))
+                    Box(Modifier.weight(1f)) { Text("Project workspace") }
+                  }
+                }
+            .use { fixture ->
+              val label = "f07-index-$width-$height-$scale-${density}x"
+              fixture.render("$label-running")
+              fixture.assertTextFits("Re-indexing project…")
+              assertTrue(fixture.hasDescription("Re-index in progress"))
+              assertTrue(fixture.hasText("Analysis · Running"))
+              assertTrue(fixture.hasText("Daemon disconnected"))
+              state =
+                  state.copy(
+                      indexingAttempt =
+                          attempt.copy(outcome = ProjectIndexingOutcome.Failed(diagnostic)))
+              fixture.render("$label-failed")
+              fixture.assertTextFits("Retry re-index")
+              fixture.revealText("Retry re-index", "project-indexing-scroll")
+              fixture.assertTextFits("Retry re-index")
+              assertTrue(fixture.requestFocus("Retry re-index"))
+              fixture.render("$label-retry-focused")
+              assertTrue(fixture.isFocusedControl("Retry re-index"))
+              fixture.revealText("Project path", "project-indexing-scroll")
+              assertTrue(fixture.hasText(project.name))
+              assertTrue(fixture.hasText(path))
+              fixture.revealText("Re-index diagnostic", "project-indexing-scroll")
+              assertTrue(fixture.hasText(diagnostic))
+              assertTrue(
+                  fixture.taggedBounds("project-indexing-scroll").height <= 220f * density + 2f)
+              state = state.copy(switchPending = true)
+              fixture.render("$label-disabled")
+              fixture.revealText("Retry re-index", "project-indexing-scroll")
+              assertTrue(fixture.isDisabled("Retry re-index"))
+              state =
+                  state.copy(
+                      switchPending = false,
+                      indexingAttempt = attempt.copy(outcome = ProjectIndexingOutcome.Canceled))
+              fixture.render("$label-canceled")
+              fixture.revealText("Retry re-index", "project-indexing-scroll")
+              fixture.assertTextFits("Retry re-index")
+              state =
+                  state.copy(
+                      indexingAttempt =
+                          attempt.copy(
+                              outcome = ProjectIndexingOutcome.Succeeded("inventory-next")),
+                      detailsOutcome =
+                          ProjectDetailsOutcome.Unavailable("Saved details unavailable"))
+              fixture.render("$label-details-unavailable")
+              fixture.revealText("Saved details unavailable", "project-indexing-scroll")
+              assertTrue(fixture.hasText("inventory-next"))
+              assertTrue(
+                  fixture.hasText(
+                      "Workspace details unavailable; retained findings keep their existing freshness labels."))
+              assertFalse(fixture.hasText("Retry re-index"))
+              assertEquals(0, calls)
+            }
+      }
+    }
+  }
+
+  @Test
   fun assembledShellKeepsRailHeaderFooterAndTerminalSeparateAcrossViewportAndDensity() {
     val project =
         resultProjectFixture().copy(name = "A long project identity with 日本語 and many segments")
