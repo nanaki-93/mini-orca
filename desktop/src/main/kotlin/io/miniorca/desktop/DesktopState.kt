@@ -30,12 +30,31 @@ data class ProjectOpeningAttempt(
     val outcome: ProjectOpeningOutcome = ProjectOpeningOutcome.Opening,
 )
 
+sealed interface ProjectIndexingOutcome {
+  data object Running : ProjectIndexingOutcome
+
+  data class Succeeded(val revision: String) : ProjectIndexingOutcome
+
+  data class Failed(val message: String) : ProjectIndexingOutcome
+
+  data object Canceled : ProjectIndexingOutcome
+}
+
+data class ProjectIndexingAttempt(
+    val generation: Long,
+    val projectId: String,
+    val projectRevision: String,
+    val path: String,
+    val outcome: ProjectIndexingOutcome = ProjectIndexingOutcome.Running,
+)
+
 data class ProjectWorkspaceState(
     val project: ProjectAnalysis? = null,
     val index: ProjectIndex? = null,
     val overview: ProjectOverview? = null,
     val sourceChangeObserved: Boolean = false,
     val openingAttempt: ProjectOpeningAttempt? = null,
+    val indexingAttempt: ProjectIndexingAttempt? = null,
     val rememberedPath: String? = null,
     val preferenceReadWarning: String? = null,
     val preferenceSaveWarning: String? = null,
@@ -358,6 +377,18 @@ sealed interface DesktopEvent {
 
   data class IndexRefreshed(val index: ProjectIndex) : DesktopEvent
 
+  data class ProjectIndexingStarted(val attempt: ProjectIndexingAttempt) : DesktopEvent
+
+  data class ProjectIndexingCompleted(
+      val attempt: ProjectIndexingAttempt,
+      val index: ProjectIndex
+  ) : DesktopEvent
+
+  data class ProjectIndexingStopped(
+      val attempt: ProjectIndexingAttempt,
+      val outcome: ProjectIndexingOutcome,
+  ) : DesktopEvent
+
   data class OverviewLoaded(val overview: ProjectOverview) : DesktopEvent
 
   data class FindingsLoaded(val findings: List<UnifiedFinding>) : DesktopEvent
@@ -489,7 +520,10 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       is DesktopEvent.ProjectOpeningStarted,
       is DesktopEvent.ProjectOpeningCanceled,
       is DesktopEvent.ProjectLoadFailed,
-      is DesktopEvent.ProjectLoaded -> withProjectOpeningEvent(event)
+      is DesktopEvent.ProjectLoaded,
+      is DesktopEvent.ProjectIndexingStarted,
+      is DesktopEvent.ProjectIndexingCompleted,
+      is DesktopEvent.ProjectIndexingStopped -> withProjectWorkspaceEvent(event)
       is DesktopEvent.LocalReadFailure -> withLocalReadFailure(event)
       is DesktopEvent.IndexRefreshed -> withRefreshedIndex(event.index)
       is DesktopEvent.OverviewLoaded ->
@@ -787,6 +821,7 @@ private fun DesktopState.withLoadedProject(event: DesktopEvent.ProjectLoaded): D
                 overview = null,
                 sourceChangeObserved = false,
                 openingAttempt = null,
+                indexingAttempt = null,
                 preferenceSaveWarning = null),
         selection = FileSelectionState(),
         findings = FindingsState(),
@@ -797,7 +832,7 @@ private fun DesktopState.withLoadedProject(event: DesktopEvent.ProjectLoaded): D
         jobs = jobs.copy(loading = false, status = "Imported ${event.project.name}", error = null),
     )
 
-private fun DesktopState.withProjectOpeningEvent(event: DesktopEvent): DesktopState =
+private fun DesktopState.withProjectWorkspaceEvent(event: DesktopEvent): DesktopState =
     when (event) {
       is DesktopEvent.RememberedProjectRead ->
           copy(
@@ -809,12 +844,24 @@ private fun DesktopState.withProjectOpeningEvent(event: DesktopEvent): DesktopSt
       is DesktopEvent.ProjectPreferenceSaveFailed ->
           copy(projectState = projectState.copy(preferenceSaveWarning = event.message))
       is DesktopEvent.ProjectOpeningStarted ->
-          copy(projectState = projectState.copy(openingAttempt = event.attempt))
+          copy(
+              projectState =
+                  projectState.copy(
+                      openingAttempt = event.attempt,
+                      indexingAttempt =
+                          projectState.indexingAttempt?.let { attempt ->
+                            if (attempt.outcome == ProjectIndexingOutcome.Running)
+                                attempt.copy(outcome = ProjectIndexingOutcome.Canceled)
+                            else attempt
+                          }))
       is DesktopEvent.ProjectLoaded -> withLoadedProject(event)
       is DesktopEvent.ProjectOpeningCanceled ->
           stopProjectOpening(event.requestId, ProjectOpeningOutcome.Canceled)
       is DesktopEvent.ProjectLoadFailed ->
           stopProjectOpening(event.requestId, ProjectOpeningOutcome.Failed(event.message))
+      is DesktopEvent.ProjectIndexingStarted,
+      is DesktopEvent.ProjectIndexingCompleted,
+      is DesktopEvent.ProjectIndexingStopped -> withProjectIndexingEvent(event)
       else -> this
     }
 
@@ -905,6 +952,59 @@ private fun DesktopState.withValidationStopped(
 
 private fun BenchmarkEvidenceState.withoutCatalog(): BenchmarkEvidenceState =
     copy(catalog = null, selected = null, running = false)
+
+private fun DesktopState.withProjectIndexingEvent(event: DesktopEvent): DesktopState =
+    when (event) {
+      is DesktopEvent.ProjectIndexingStarted ->
+          copy(projectState = projectState.copy(indexingAttempt = event.attempt))
+      is DesktopEvent.ProjectIndexingCompleted -> withCompletedIndexing(event)
+      is DesktopEvent.ProjectIndexingStopped -> withStoppedIndexing(event)
+      else -> this
+    }
+
+private fun DesktopState.matchesIndexing(attempt: ProjectIndexingAttempt): Boolean =
+    projectState.indexingAttempt == attempt &&
+        attempt.outcome == ProjectIndexingOutcome.Running &&
+        projectState.openingAttempt?.outcome != ProjectOpeningOutcome.Opening &&
+        project?.let {
+          it.projectId == attempt.projectId &&
+              it.projectRevision == attempt.projectRevision &&
+              it.path == attempt.path
+        } == true
+
+private fun DesktopState.withCompletedIndexing(
+    event: DesktopEvent.ProjectIndexingCompleted
+): DesktopState {
+  if (!matchesIndexing(event.attempt)) return this
+  if (event.index.projectId != event.attempt.projectId || event.index.projectRevision.isBlank())
+      return withStoppedIndexing(
+          DesktopEvent.ProjectIndexingStopped(
+              event.attempt,
+              ProjectIndexingOutcome.Failed(
+                  "Re-index returned a mismatched project or revision. Try re-indexing again.")))
+  val refreshed = withRefreshedIndex(event.index)
+  return refreshed.copy(
+      projectState =
+          refreshed.projectState.copy(
+              indexingAttempt =
+                  event.attempt.copy(
+                      outcome = ProjectIndexingOutcome.Succeeded(event.index.projectRevision))))
+}
+
+private fun DesktopState.withStoppedIndexing(
+    event: DesktopEvent.ProjectIndexingStopped
+): DesktopState {
+  if (!matchesIndexing(event.attempt) ||
+      event.outcome is ProjectIndexingOutcome.Succeeded ||
+      event.outcome == ProjectIndexingOutcome.Running)
+      return this
+  val outcome =
+      if (event.outcome is ProjectIndexingOutcome.Failed && event.outcome.message.isBlank())
+          ProjectIndexingOutcome.Failed("Could not re-index project. Try again.")
+      else event.outcome
+  return copy(
+      projectState = projectState.copy(indexingAttempt = event.attempt.copy(outcome = outcome)))
+}
 
 private fun DesktopState.withRefreshedIndex(index: ProjectIndex): DesktopState {
   val revisionChanged = project?.projectRevision != index.projectRevision
@@ -1009,6 +1109,33 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
         dispatch(DesktopEvent.ProjectOpeningStarted(ProjectOpeningAttempt(requestId, path, kind)))
         dispatch(DesktopEvent.Loading)
       }
+
+  fun beginProjectIndexing(): ProjectIndexingAttempt? {
+    val project = state.project ?: return null
+    if (state.projectState.openingAttempt?.outcome == ProjectOpeningOutcome.Opening ||
+        state.projectState.indexingAttempt?.outcome == ProjectIndexingOutcome.Running)
+        return null
+    return ProjectIndexingAttempt(
+            nextId(), project.projectId, project.projectRevision, project.path)
+        .also { dispatch(DesktopEvent.ProjectIndexingStarted(it)) }
+  }
+
+  fun projectIndexingCompleted(attempt: ProjectIndexingAttempt, index: ProjectIndex): Boolean {
+    if (!state.matchesIndexing(attempt)) return false
+    dispatch(DesktopEvent.ProjectIndexingCompleted(attempt, index))
+    return state.projectState.indexingAttempt?.outcome is ProjectIndexingOutcome.Succeeded
+  }
+
+  fun projectIndexingFailed(attempt: ProjectIndexingAttempt, message: String): Boolean =
+      if (state.matchesIndexing(attempt))
+          accept(
+              DesktopEvent.ProjectIndexingStopped(attempt, ProjectIndexingOutcome.Failed(message)))
+      else false
+
+  fun cancelProjectIndexing(attempt: ProjectIndexingAttempt): Boolean =
+      if (state.matchesIndexing(attempt))
+          accept(DesktopEvent.ProjectIndexingStopped(attempt, ProjectIndexingOutcome.Canceled))
+      else false
 
   fun projectLoaded(requestId: Long, project: ProjectAnalysis, index: ProjectIndex): Boolean {
     if (!isCurrentProjectRequest(requestId)) return false

@@ -181,6 +181,49 @@ class DesktopStateTest {
   }
 
   @Test
+  fun indexingReductionRejectsLateEventsAndKeepsPreviousInventoryOnFailure() {
+    val project =
+        ProjectAnalysis(
+            "id",
+            "revision",
+            "fixture",
+            "/tmp/fixture",
+            "go",
+            fileCount = 1,
+            sourceFileCount = 1,
+            totalLines = 2,
+            summary = "",
+            aiStatus = "missing",
+            analyzedAt = "")
+    val previous = ProjectIndex("id", "revision")
+    val attempt = ProjectIndexingAttempt(4, "id", "revision", "/tmp/fixture")
+    val running =
+        DesktopState(projectState = ProjectWorkspaceState(project = project, index = previous))
+            .reduce(DesktopEvent.ProjectIndexingStarted(attempt))
+    val failed =
+        running.reduce(DesktopEvent.ProjectIndexingCompleted(attempt, ProjectIndex("wrong", "new")))
+    assertEquals(previous, failed.index)
+    assertTrue(failed.projectState.indexingAttempt?.outcome is ProjectIndexingOutcome.Failed)
+    assertEquals(
+        failed,
+        failed.reduce(DesktopEvent.ProjectIndexingCompleted(attempt, ProjectIndex("id", "new"))))
+    assertEquals(
+        failed,
+        failed.reduce(
+            DesktopEvent.ProjectIndexingStopped(attempt, ProjectIndexingOutcome.Failed("late"))))
+
+    val opening =
+        running.reduce(
+            DesktopEvent.ProjectOpeningStarted(
+                ProjectOpeningAttempt(5, "/tmp/other", ProjectOpeningKind.Import)))
+    assertEquals(ProjectIndexingOutcome.Canceled, opening.projectState.indexingAttempt?.outcome)
+    assertEquals(
+        opening,
+        opening.reduce(DesktopEvent.ProjectIndexingCompleted(attempt, ProjectIndex("id", "new"))))
+    assertEquals(previous, opening.index)
+  }
+
+  @Test
   fun draftEditsRetainBenchmarkEvidenceButInvalidateItsCatalogAndCurrentIdentity() {
     val draft =
         DeclarationDraft(
