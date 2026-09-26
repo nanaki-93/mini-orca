@@ -578,15 +578,14 @@ internal fun ProjectSummaryPane(
             }
           }
         }
-        if (presentation.details.isNotEmpty() ||
-            presentation.engineeringInsight?.let(::engineeringInsightPieces)?.isNotEmpty() ==
-                true) {
+        if (architecture != null || pieces.isNotEmpty()) {
           item {
             SummaryLowerComposition(presentation, ownerIdentity, architectureView, insightExpansion)
           }
         }
         item {
-          SummarySelectedFindings(
+          SummaryModulesAndFindings(
+              presentation.details.firstOrNull { it.title == "Packages / modules" },
               findingPreview,
               summaryFindingEmptyMessage(findingState, findingPreview),
               selectWorkspace,
@@ -670,6 +669,10 @@ internal fun coverageResultsStacked(width: Dp, fontScale: Float): Boolean =
 // Two narrative panels need room for selectable prose and diagram controls.
 internal fun narrativePanelsStacked(width: Dp, fontScale: Float): Boolean =
     width < 840.dp * fontScale
+
+// Module descriptions and finding evidence each need a readable column.
+internal fun summaryEvidencePanelsStacked(width: Dp, fontScale: Float): Boolean =
+    width < 960.dp * fontScale
 
 // Three category cards need room for their labels, counts and status at the current text scale.
 internal fun categoryPanelsStacked(width: Dp, fontScale: Float, gap: Dp): Boolean =
@@ -758,7 +761,6 @@ private fun SummaryLowerComposition(
     insightExpansion: MutableState<Boolean>,
 ) {
   val architecture = presentation.details.firstOrNull { it.title == "Architecture" }
-  val modules = presentation.details.firstOrNull { it.title == "Packages / modules" }
   val insight =
       presentation.engineeringInsight?.let(::engineeringInsightPieces)?.takeIf { it.isNotEmpty() }
   Column(
@@ -805,13 +807,42 @@ private fun SummaryLowerComposition(
             }
           }
         }
-        modules?.let {
-          WorkspaceSection(modifier = Modifier.testTag("summary-modules")) {
-            Text("Packages / modules", color = ResultAccent, style = IdeTypography.workspaceHeading)
-            SummaryModules(it.values)
-          }
+      }
+}
+
+@Composable
+private fun SummaryModulesAndFindings(
+    modules: ProjectSummaryDetail?,
+    preview: SummaryFindingPreview,
+    emptyMessage: String,
+    openResults: (Workspace) -> Unit,
+    onFindingSelected: ((SummaryFindingTarget) -> Unit)?,
+) {
+  BoxWithConstraints(Modifier.fillMaxWidth().testTag("summary-evidence-row")) {
+    val modulePanel: @Composable (Modifier) -> Unit = { modifier ->
+      modules?.let {
+        WorkspaceSection(modifier = modifier.testTag("summary-modules")) {
+          Text("Packages / modules", color = ResultAccent, style = IdeTypography.workspaceHeading)
+          SummaryModules(it.values)
         }
       }
+    }
+    val findingPanel: @Composable (Modifier) -> Unit = { modifier ->
+      SummarySelectedFindings(preview, emptyMessage, openResults, onFindingSelected, modifier)
+    }
+    if (modules != null &&
+        !summaryEvidencePanelsStacked(maxWidth, LocalDensity.current.fontScale)) {
+      Row(horizontalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.section)) {
+        modulePanel(Modifier.weight(1f))
+        findingPanel(Modifier.weight(1f))
+      }
+    } else {
+      Column(verticalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.section)) {
+        modulePanel(Modifier.fillMaxWidth())
+        findingPanel(Modifier.fillMaxWidth())
+      }
+    }
+  }
 }
 
 @Composable
@@ -820,8 +851,9 @@ private fun SummarySelectedFindings(
     emptyMessage: String,
     openResults: (Workspace) -> Unit,
     onFindingSelected: ((SummaryFindingTarget) -> Unit)?,
+    modifier: Modifier,
 ) {
-  WorkspaceSection("Selected findings", Modifier.testTag("summary-selected-findings")) {
+  WorkspaceSection("Selected findings", modifier.testTag("summary-selected-findings")) {
     Text(
         "Showing ${preview.rows.size} of ${preview.loadedCount} loaded findings · not category totals",
         color = SecondaryText,

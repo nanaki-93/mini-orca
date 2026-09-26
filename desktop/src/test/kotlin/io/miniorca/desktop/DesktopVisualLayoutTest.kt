@@ -4870,7 +4870,9 @@ class DesktopVisualLayoutTest {
           val architecture = fixture.taggedBounds("summary-architecture")
           val modules = fixture.taggedBounds("summary-modules")
           assertEquals(introduction.width, architecture.width, 1f)
-          assertEquals(introduction.width, modules.width, 1f)
+          val findings = fixture.taggedBounds("summary-selected-findings")
+          assertTrue(modules.right <= findings.left)
+          assertEquals(modules.top, findings.top, 1f)
           assertEquals(0, fixture.tagCount("summary-insight"))
           assertEquals(0, fixture.tagCount("summary-flows"))
           assertTrue(architecture.bottom <= modules.top)
@@ -5450,6 +5452,77 @@ class DesktopVisualLayoutTest {
                       "Evidence origin unavailable · Saved details unavailable · Partial"))
             }
           }
+    }
+  }
+
+  @Test
+  fun f10ModulesAndLoadedFindingsPairOnlyWhenBothColumnsAreReadable() {
+    val page = resultPageFixture("bugs")
+    val title = "Loaded finding in the selected project"
+    val section =
+        page.section.copy(
+            results =
+                page.results!!.copy(semantic = listOf(page.semantic.single().copy(title = title))))
+    val project = requireNotNull(page.project)
+    val overview =
+        visualFixtureOverview.copy(
+            projectId = project.projectId, projectRevision = project.projectRevision)
+    val app =
+        DesktopState(
+            projectState = ProjectWorkspaceState(project),
+            analysisRun =
+                ProjectAnalysisRunState(
+                    run = page.run, sections = mapOf(AnalysisResultKey("bugs") to section)))
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        ComposeVisualFixture(
+                (width * density).toInt(), (height * density).toInt(), scale, density) {
+                  ProjectSummaryPane(overview, project, {}, findingState = app)
+                }
+            .use { fixture ->
+              fixture.render()
+              fixture.revealText(title, "summary-scroll")
+              val label = "f10-modules-findings-$width-$height-$scale-${density}x"
+              fixture.render(label)
+              assertTrue(fixture.hasText(title), label)
+              val row = fixture.taggedBounds("summary-evidence-row")
+              val modules = fixture.taggedBounds("summary-modules")
+              val findings = fixture.taggedBounds("summary-selected-findings")
+              if (summaryEvidencePanelsStacked(row.width.dp / density, scale)) {
+                assertEquals(row.width, modules.width, 2f, label)
+                assertEquals(row.width, findings.width, 2f, label)
+                assertTrue(modules.bottom <= findings.top, label)
+              } else {
+                assertEquals(modules.top, findings.top, 2f, label)
+                assertTrue(modules.right <= findings.left, label)
+                assertTrue(modules.width > 0 && findings.width > 0, label)
+              }
+              fixture.revealText("All Security results", "summary-scroll")
+              fixture.assertTextFits("All Security results")
+            }
+      }
+    }
+    for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (delta in listOf(-1, 0, 1)) {
+        val width = (960 * scale).toInt() + 48 + delta
+        ComposeVisualFixture(width, 1800, scale) {
+              ProjectSummaryPane(overview, project, {}, findingState = app)
+            }
+            .use { fixture ->
+              fixture.render()
+              fixture.revealText("Selected findings", "summary-scroll")
+              fixture.render("f10-modules-findings-boundary-$width-$scale")
+              val row = fixture.taggedBounds("summary-evidence-row")
+              val modules = fixture.taggedBounds("summary-modules")
+              val findings = fixture.taggedBounds("summary-selected-findings")
+              if (summaryEvidencePanelsStacked(row.width.dp, scale)) {
+                assertTrue(modules.bottom <= findings.top)
+              } else {
+                assertTrue(modules.right <= findings.left)
+              }
+            }
+      }
     }
   }
 
@@ -6868,27 +6941,31 @@ internal class ComposeVisualFixture(
 
   fun assertNarrativeSectionOrder(withInsight: Boolean = false) {
     val narrative = taggedBounds("summary-lower-composition")
-    val tags =
-        listOfNotNull(
-            "summary-architecture", "summary-insight".takeIf { withInsight }, "summary-modules")
+    val tags = listOfNotNull("summary-architecture", "summary-insight".takeIf { withInsight })
     val sections = tags.map(::taggedBounds)
     assertEquals(narrative.top, sections.first().top, 1f)
-    assertEquals(narrative.bottom, sections.last().bottom, 1f)
+    assertEquals(narrative.bottom, sections.maxOf { it.bottom }, 1f)
     val architecture = taggedBounds("summary-architecture")
+    val evidence = taggedBounds("summary-evidence-row")
     val modules = taggedBounds("summary-modules")
     val findings = taggedBounds("summary-selected-findings")
     val flows = taggedBounds("summary-flows")
-    assertEquals(narrative.width, modules.width, 1f)
-    assertEquals(narrative.width, findings.width, 1f)
+    assertEquals(narrative.width, evidence.width, 1f)
     assertEquals(narrative.width, flows.width, 1f)
-    assertEquals(modules.bottom + MiniOrcaSpacing.section.value, findings.top, 1f)
-    assertEquals(findings.bottom + MiniOrcaSpacing.section.value, flows.top, 1f)
+    assertEquals(evidence.bottom + MiniOrcaSpacing.section.value, flows.top, 1f)
     if (withInsight) {
       val insight = taggedBounds("summary-insight")
       assertTrue(architecture.right <= insight.left || architecture.bottom <= insight.top)
-      assertTrue(maxOf(architecture.bottom, insight.bottom) <= modules.top)
-    } else assertTrue(architecture.bottom <= modules.top)
-    assertTrue(modules.bottom <= findings.top)
+    }
+    assertTrue(narrative.bottom <= evidence.top)
+    if (modules.width >= evidence.width - 1f) {
+      assertEquals(evidence.width, modules.width, 1f)
+      assertEquals(evidence.width, findings.width, 1f)
+      assertTrue(modules.bottom <= findings.top)
+    } else {
+      assertTrue(modules.right <= findings.left)
+      assertEquals(modules.top, findings.top, 1f)
+    }
   }
 
   fun assertTextFits(label: String, maxLines: Int = 1) {

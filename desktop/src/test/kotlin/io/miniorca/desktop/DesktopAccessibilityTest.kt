@@ -319,18 +319,19 @@ class DesktopAccessibilityTest {
                   "Architecture",
                   "Engineering insight",
                   "More insight",
-                  "Flows",
-                  "Change lifecycle"),
+                  "Selected findings"),
               fixture.semanticHeadingTexts(),
-              "Summary headings must expose the page and its sections in reading order")
+              "Visible Summary headings must follow the page's reading order")
           assertTrue(fixture.hasText("Project description: stale · source may have changed"))
           assertTrue(fixture.hasText("Outdated"))
           assertTrue(fixture.hasText("View analysis"))
           fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          fixture.revealText("Flows", "summary-scroll")
           fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
           assertEquals("Collapsed", fixture.descriptionStateDescription("Expand More insight"))
           fixture.revealText("Change lifecycle", "summary-scroll")
-          assertTrue(fixture.semanticHeadingTexts().contains("Change lifecycle"))
+          assertEquals(
+              listOf("Flows", "Change lifecycle"), fixture.semanticHeadingTexts().takeLast(2))
         }
   }
 
