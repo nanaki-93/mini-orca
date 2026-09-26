@@ -14,12 +14,19 @@ internal data class SummaryBugPriorities(
     val other: Int
 )
 
+internal enum class SummaryDetailState {
+  Available,
+  Loading,
+  Unavailable,
+}
+
 internal data class SummaryIssueMetric(
     val label: String,
     val value: Int?,
     val status: String,
     val statusCode: String?,
     val detailStatus: String?,
+    val detailState: SummaryDetailState,
     val type: AnalysisResultType,
     val priorities: SummaryBugPriorities? = null,
 )
@@ -59,6 +66,12 @@ internal fun summaryIssueMetrics(
                 section.error != null -> "Saved details unavailable · $countDetail"
                 page.reportedCount == 0 && !completedEmpty -> "0 reported · details not confirmed"
                 else -> countDetail.replaceFirstChar { it.uppercase() }
+              },
+          detailState =
+              when {
+                section.loading -> SummaryDetailState.Loading
+                section.error != null -> SummaryDetailState.Unavailable
+                else -> SummaryDetailState.Available
               },
           type = type,
           priorities = priorities)
@@ -114,7 +127,12 @@ internal fun SummaryIssue(
         metric.detailStatus?.let {
           Text(
               it,
-              color = SecondaryText,
+              color =
+                  when (metric.detailState) {
+                    SummaryDetailState.Loading -> Information
+                    SummaryDetailState.Unavailable -> Error
+                    SummaryDetailState.Available -> SecondaryText
+                  },
               style = IdeTypography.compactBody,
               modifier = Modifier.testTag("summary-category-detail-${metric.type.category}"))
         }

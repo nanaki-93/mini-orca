@@ -2,7 +2,9 @@ package io.miniorca.desktop
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class ProjectSummaryIssuesTest {
   @Test
@@ -22,6 +24,46 @@ class ProjectSummaryIssuesTest {
     assertEquals(
         listOf(FaintText, FaintText, FaintText),
         summaryIssueMetrics(resultProjectFixture(), null, emptyMap()).map(::summaryIssueTint))
+  }
+
+  @Test
+  fun cardsKeepUnknownReportedZeroConfirmedEmptyAndReadFailureVisible() {
+    val project = resultProjectFixture()
+    val (baseRun, _) = summaryBugFixture(emptyList())
+    val run =
+        baseRun.copy(
+            status = "completed",
+            sections =
+                baseRun.sections.map {
+                  if (it.category == "bugs") it.copy(status = "completed_empty") else it
+                })
+    val details =
+        AnalysisSectionState(
+            results =
+                AnalysisSectionResults(run.identity, run.sections.first { it.category == "bugs" }))
+    val destinations = mutableListOf<Workspace>()
+    val cases =
+        listOf(
+            Triple(null, emptyMap(), "Count unavailable"),
+            Triple(run, emptyMap(), "0 reported · details not confirmed"),
+            Triple(run, bugSections(details), "No results"),
+            Triple(
+                run,
+                bugSections(details.copy(error = "Read failed")),
+                "Saved details unavailable · 0 reported"))
+    cases.forEachIndexed { index, (currentRun, sections, expected) ->
+      val metric = summaryIssueMetrics(project, currentRun, sections).first()
+      if (index == 2) assertEquals("completed_empty", metric.statusCode)
+      ComposeVisualFixture(340, 270) { SummaryIssue(metric, { destinations.add(Workspace.Bugs) }) }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.hasText(expected), "case $index: $expected")
+            assertFalse(fixture.hasText("Safe"))
+            assertTrue(fixture.hasDescription("View Bugs results"))
+            fixture.clickDescription("View Bugs results")
+          }
+    }
+    assertEquals(List(cases.size) { Workspace.Bugs }, destinations)
   }
 
   @Test
