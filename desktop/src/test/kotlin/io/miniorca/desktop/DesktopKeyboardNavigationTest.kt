@@ -1443,6 +1443,9 @@ class DesktopKeyboardNavigationTest {
           }
           val traversal =
               listOf(
+                  "Up to date, 16 files",
+                  "Outdated, 4 files",
+                  "Not analyzed, 3 files",
                   "View analysis",
                   "View Bugs results",
                   "View Performance results",
@@ -1454,6 +1457,17 @@ class DesktopKeyboardNavigationTest {
                 fixture.isFocusedControl(control),
                 "Tab position $index must focus $control in Summary visual order")
             when (control) {
+              "Up to date, 16 files",
+              "Outdated, 4 files",
+              "Not analyzed, 3 files" -> {
+                assertTrue(fixture.pressKey(Key.Enter))
+                fixture.render()
+                assertEquals("Inspecting", fixture.descriptionStateDescription(control))
+                assertTrue(fixture.isFocusedControl(control))
+                assertTrue(fixture.pressKey(Key.Spacebar))
+                fixture.render()
+                assertEquals("Not inspecting", fixture.descriptionStateDescription(control))
+              }
               "View analysis" -> assertTrue(fixture.pressKey(Key.Enter))
               "View Bugs results",
               "View Performance results",

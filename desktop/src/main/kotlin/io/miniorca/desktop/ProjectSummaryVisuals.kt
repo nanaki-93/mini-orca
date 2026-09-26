@@ -6,6 +6,8 @@ import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,11 +16,17 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,9 +38,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 
@@ -116,7 +126,11 @@ internal fun summaryCoveragePercent(current: Int, total: Int): String {
 }
 
 @Composable
-internal fun SummaryCoverage(presentation: ProjectSummaryPresentation, openAnalysis: () -> Unit) {
+internal fun SummaryCoverage(
+    presentation: ProjectSummaryPresentation,
+    inspectedBucket: MutableState<AnalysisCoverageBucket?>,
+    openAnalysis: () -> Unit,
+) {
   WorkspaceSection(modifier = Modifier.testTag("analysis-summary")) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
       Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -127,7 +141,7 @@ internal fun SummaryCoverage(presentation: ProjectSummaryPresentation, openAnaly
             modifier = Modifier.weight(1f).semantics { heading() })
         SummaryAnalysisStatus(presentation)
       }
-      SummaryCoverageDial(presentation)
+      SummaryCoverageDial(presentation, inspectedBucket)
       MiniOrcaButton(
           onClick = openAnalysis,
           modifier = Modifier.testTag("summary-view-analysis"),
@@ -140,7 +154,10 @@ internal fun SummaryCoverage(presentation: ProjectSummaryPresentation, openAnaly
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun SummaryCoverageDial(presentation: ProjectSummaryPresentation) {
+private fun SummaryCoverageDial(
+    presentation: ProjectSummaryPresentation,
+    inspectedBucket: MutableState<AnalysisCoverageBucket?>,
+) {
   val coverage = presentation.coverage
   val arcs = summaryCoverageArcs(coverage)
   val readout =
@@ -205,27 +222,123 @@ private fun SummaryCoverageDial(presentation: ProjectSummaryPresentation) {
                 style = IdeTypography.workspaceMetadata)
           }
         }
-    if (arcs.isNotEmpty()) {
+    if (coverage is SummaryCoverageProjection.Known && arcs.isNotEmpty()) {
       FlowRow(
           Modifier.testTag("summary-coverage-legend"),
           horizontalArrangement = Arrangement.spacedBy(16.dp),
           verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            presentation.coverageMetrics.forEach { metric ->
+            coverage.buckets.zip(presentation.coverageMetrics).forEach { (bucket, metric) ->
+              val selected = inspectedBucket.value == bucket.id
+              val interactions = remember(bucket.id) { MutableInteractionSource() }
+              val focused by interactions.collectIsFocusedAsState()
               Row(
+                  Modifier.testTag("summary-legend-${bucket.id}")
+                      .background(
+                          if (selected) SelectionSurface else Color.Transparent,
+                          MiniOrcaShapes.control)
+                      .border(
+                          1.dp,
+                          if (focused) FocusAccent else Color.Transparent,
+                          MiniOrcaShapes.control)
+                      .semantics {
+                        contentDescription =
+                            "${metric.label}, ${bucket.count} ${if (bucket.count == 1) "file" else "files"}"
+                        stateDescription = if (selected) "Inspecting" else "Not inspecting"
+                      }
+                      .selectable(
+                          selected = selected,
+                          role = Role.Tab,
+                          interactionSource = interactions,
+                          indication = null,
+                          onClick = { inspectedBucket.value = if (selected) null else bucket.id })
+                      .padding(horizontal = 8.dp, vertical = 6.dp),
                   verticalAlignment = Alignment.CenterVertically,
                   horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Box(
                         Modifier.size(10.dp)
                             .background(summaryMetricTint(metric.tone), MiniOrcaShapes.pill))
                     Text(
-                        "${metric.value} ${metric.label.lowercase()}",
+                        "${bucket.count} ${metric.label.lowercase()}",
                         color = summaryMetricTint(metric.tone),
                         style = IdeTypography.workspaceMetadata)
                   }
             }
           }
+      coverage.buckets
+          .firstOrNull { it.id == inspectedBucket.value }
+          ?.let { bucket ->
+            SummaryCoverageInspection(
+                bucket,
+                coverage.total,
+                presentation.coverageMetrics[coverage.buckets.indexOf(bucket)].label)
+          }
     }
   }
+}
+
+private fun summaryBucketMeaning(id: AnalysisCoverageBucket): String =
+    when (id) {
+      AnalysisCoverageBucket.UpToDate -> "Saved analysis is current for all applicable stages."
+      AnalysisCoverageBucket.Outdated -> "Saved analysis is outdated."
+      AnalysisCoverageBucket.NotAnalyzed -> "No saved analysis is available yet."
+      AnalysisCoverageBucket.Running ->
+          "Saved stages report running or pending; this is not run progress."
+      AnalysisCoverageBucket.Failed -> "A saved analysis stage failed."
+      AnalysisCoverageBucket.Incomplete -> "Saved analysis is incomplete."
+      AnalysisCoverageBucket.Unavailable -> "Saved analysis status is unavailable."
+    }
+
+@Composable
+private fun SummaryCoverageInspection(bucket: SummaryCoverageBucket, total: Int, label: String) {
+  Column(
+      Modifier.fillMaxWidth()
+          .testTag("summary-coverage-inspection")
+          .background(StrongSurface)
+          .padding(12.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "$label · ${bucket.count} of $total selected files",
+            color = PrimaryText,
+            style = IdeTypography.workspaceBody)
+        Text(
+            summaryBucketMeaning(bucket.id),
+            color = SecondaryText,
+            style = IdeTypography.workspaceMetadata)
+        Text(
+            "Local inspection only · no analysis starts.",
+            color = SecondaryText,
+            style = IdeTypography.workspaceMetadata)
+        when (val paths = bucket.paths) {
+          SummaryCoveragePaths.Unavailable ->
+              Text(
+                  "File paths are unavailable for aggregate coverage. View analysis for file scope.",
+                  color = SecondaryText,
+                  style = IdeTypography.workspaceBody)
+          is SummaryCoveragePaths.Selected -> {
+            SelectionContainer {
+              Column(
+                  Modifier.fillMaxWidth()
+                      .heightIn(max = 240.dp)
+                      .verticalScroll(rememberScrollState())
+                      .testTag("summary-inspection-paths"),
+                  verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    paths.rows
+                        .sortedBy { it.file.path }
+                        .forEach { row ->
+                          Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                row.file.path,
+                                color = PrimaryText,
+                                style = IdeTypography.resultCode)
+                            DiagnosticText(
+                                "${row.status.label} · ${row.explanation}", color = SecondaryText)
+                          }
+                        }
+                  }
+            }
+          }
+        }
+      }
 }
 
 @Composable
