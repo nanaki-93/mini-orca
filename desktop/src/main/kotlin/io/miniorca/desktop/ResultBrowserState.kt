@@ -198,8 +198,16 @@ internal fun filteredResultRows(
 internal fun resultBrowserSelection(
     current: String?,
     visibleRows: List<ResultRowPresentation>,
+    explicitTarget: ExplicitResultTarget? = null,
 ): String? =
-    current?.takeIf { key -> visibleRows.any { it.key == key } } ?: visibleRows.firstOrNull()?.key
+    when (explicitTarget) {
+      is ExplicitResultTarget.Unavailable -> null
+      is ExplicitResultTarget.Resolved ->
+          explicitTarget.target.rowKey.takeIf { key -> visibleRows.count { it.key == key } == 1 }
+      null ->
+          current?.takeIf { key -> visibleRows.any { it.key == key } }
+              ?: visibleRows.firstOrNull()?.key
+    }
 
 internal fun nextResultBrowserKey(
     rows: List<ResultRowPresentation>,

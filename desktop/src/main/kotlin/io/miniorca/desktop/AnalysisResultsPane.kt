@@ -33,8 +33,21 @@ internal fun AnalysisResultsPane(
     val readFeedbackLimit = maxHeight * 0.25f
     val visibleRows = filteredResultRows(rows, browser.filter, browser.query)
     val hasActiveFilter = browser.filter != ResultBrowserFilter.All || browser.query.isNotBlank()
-    LaunchedEffect(browser.identity, visibleRows) {
-      browser.selectedKey = resultBrowserSelection(browser.selectedKey, visibleRows)
+    val explicitTarget = browser.explicitTarget
+    LaunchedEffect(browser.identity, rows, visibleRows, explicitTarget) {
+      if (explicitTarget is ExplicitResultTarget.Resolved) {
+        val matches = rows.count { it.key == explicitTarget.target.rowKey }
+        if (matches != 1) {
+          browser.target(
+              ExplicitResultTarget.Unavailable(
+                  explicitTarget.target,
+                  if (matches == 0) "This finding is no longer in the loaded results."
+                  else
+                      "Multiple results share this finding identity; select a result from the category list."))
+          return@LaunchedEffect
+        }
+      }
+      browser.selectedKey = resultBrowserSelection(browser.selectedKey, visibleRows, explicitTarget)
     }
     Column(
         Modifier.fillMaxSize().padding(workspacePagePadding(vertical = 16.dp)),
@@ -60,6 +73,25 @@ internal fun AnalysisResultsPane(
               rows.isNotEmpty(),
               Modifier.fillMaxWidth().heightIn(max = readFeedbackLimit),
               retryResults)
+          (browser.explicitTarget as? ExplicitResultTarget.Unavailable)?.let { unavailable ->
+            WorkspaceSection(
+                modifier =
+                    Modifier.fillMaxWidth()
+                        .heightIn(max = readFeedbackLimit)
+                        .verticalScroll(rememberScrollState())
+                        .testTag("result-target-unavailable")) {
+                  androidx.compose.material.Text(
+                      "Finding unavailable · ${unavailable.reason}",
+                      color = Error,
+                      style = IdeTypography.workspaceBody)
+                  MiniOrcaButton(
+                      onClick = { browser.dismissTarget() }, tone = ActionTone.Navigation) {
+                        androidx.compose.material.Text(
+                            "View current ${page.type.workspace.name} results",
+                            style = IdeTypography.action)
+                      }
+                }
+          }
           if (visibleRows.isEmpty()) {
             val empty =
                 if (rows.isNotEmpty())
@@ -80,7 +112,7 @@ internal fun AnalysisResultsPane(
               ResultListDetail(
                   visibleRows,
                   browser,
-                  { browser.selectedKey = it },
+                  { key -> key?.let(browser::choose) },
                   "",
                   Modifier.weight(1f).fillMaxWidth(),
                   detail = detail)

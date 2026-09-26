@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
@@ -244,9 +244,16 @@ internal fun ResultListDetail(
     modifier: Modifier = Modifier,
     detail: @Composable (String) -> Unit,
 ) {
-  val selectedKey = browser.selectedKey
+  val selectedKey = resultBrowserSelection(browser.selectedKey, rows, browser.explicitTarget)
   val selected = rows.firstOrNull { it.key == selectedKey }
+  val duplicateKeys = rows.groupingBy { it.key }.eachCount().filterValues { it > 1 }.keys
   val listState = browser.listState
+  LaunchedEffect(browser.explicitTarget) {
+    val target = browser.explicitTarget as? ExplicitResultTarget.Resolved ?: return@LaunchedEffect
+    val index = rows.indexOfFirst { it.key == target.target.rowKey }
+    if (index >= 0 && rows.count { it.key == target.target.rowKey } == 1)
+        listState.scrollToItem(index)
+  }
   var keyboardFocusKey by remember(browser) { mutableStateOf<String?>(null) }
   LaunchedEffect(keyboardFocusKey, rows) {
     keyboardFocusKey?.let { key ->
@@ -271,60 +278,64 @@ internal fun ResultListDetail(
                       Text(emptyMessage, color = SecondaryText, style = IdeTypography.workspaceBody)
                     }
                   }
-              items(rows, key = { it.key }) { row ->
-                val rowFocusRequester = remember(row.key) { FocusRequester() }
-                IdeActionSurface(
-                    onClick = { onSelection(row.key) },
-                    colors =
-                        IdeActionColors(
-                            background = Panel,
-                            hoveredBackground = ControlHover,
-                            pressedBackground = SelectionSurface,
-                            selectedBackground = SelectionSurface,
-                            disabledBackground = Panel,
-                            content = PrimaryText,
-                            selectedContent = PrimaryText,
-                            disabledContent = FaintText,
-                            border =
-                                if (row.key == selectedKey) SelectionAccent else PaneSeparator),
-                    selected = row.key == selectedKey,
-                    accessibleName = "Inspect ${row.title}",
-                    tooltip = null,
-                    shape = MiniOrcaShapes.interactiveCard,
-                    minimumHeight = 64.dp,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                    modifier =
-                        Modifier.fillMaxWidth()
-                            .focusRequester(rowFocusRequester)
-                            .onPreviewKeyEvent { event: KeyEvent ->
-                              if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                              val target =
-                                  when (event.key) {
-                                    Key.DirectionDown -> nextResultBrowserKey(rows, row.key, 1)
-                                    Key.DirectionUp -> nextResultBrowserKey(rows, row.key, -1)
-                                    else -> null
+              itemsIndexed(
+                  rows, key = { index, row -> if (row.key in duplicateKeys) index else row.key }) {
+                      _,
+                      row ->
+                    val rowFocusRequester = remember(row.key) { FocusRequester() }
+                    IdeActionSurface(
+                        onClick = { onSelection(row.key) },
+                        colors =
+                            IdeActionColors(
+                                background = Panel,
+                                hoveredBackground = ControlHover,
+                                pressedBackground = SelectionSurface,
+                                selectedBackground = SelectionSurface,
+                                disabledBackground = Panel,
+                                content = PrimaryText,
+                                selectedContent = PrimaryText,
+                                disabledContent = FaintText,
+                                border =
+                                    if (row.key == selectedKey) SelectionAccent else PaneSeparator),
+                        selected = row.key == selectedKey,
+                        accessibleName = "Inspect ${row.title}",
+                        tooltip = null,
+                        shape = MiniOrcaShapes.interactiveCard,
+                        minimumHeight = 64.dp,
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                        modifier =
+                            Modifier.fillMaxWidth()
+                                .focusRequester(rowFocusRequester)
+                                .onPreviewKeyEvent { event: KeyEvent ->
+                                  if (event.type != KeyEventType.KeyDown)
+                                      return@onPreviewKeyEvent false
+                                  val target =
+                                      when (event.key) {
+                                        Key.DirectionDown -> nextResultBrowserKey(rows, row.key, 1)
+                                        Key.DirectionUp -> nextResultBrowserKey(rows, row.key, -1)
+                                        else -> null
+                                      }
+                                  when {
+                                    target != null -> {
+                                      keyboardFocusKey = target
+                                      true
+                                    }
+                                    event.key == Key.Enter || event.key == Key.Spacebar -> {
+                                      onSelection(row.key)
+                                      true
+                                    }
+                                    else -> false
                                   }
-                              when {
-                                target != null -> {
-                                  keyboardFocusKey = target
-                                  true
                                 }
-                                event.key == Key.Enter || event.key == Key.Spacebar -> {
-                                  onSelection(row.key)
-                                  true
-                                }
-                                else -> false
-                              }
-                            }
-                            .semantics { this.selected = row.key == selectedKey }) {
-                      ResultRowContent(row)
-                    }
-                if (row.key == keyboardFocusKey)
-                    LaunchedEffect(row.key, keyboardFocusKey) {
-                      rowFocusRequester.requestFocus()
-                      keyboardFocusKey = null
-                    }
-              }
+                                .semantics { this.selected = row.key == selectedKey }) {
+                          ResultRowContent(row)
+                        }
+                    if (row.key == keyboardFocusKey)
+                        LaunchedEffect(row.key, keyboardFocusKey) {
+                          rowFocusRequester.requestFocus()
+                          keyboardFocusKey = null
+                        }
+                  }
             }
         val detailModifier =
             Modifier.clip(MiniOrcaShapes.interactiveCard)
