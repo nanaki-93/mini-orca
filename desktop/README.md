@@ -46,20 +46,56 @@ the current project and shows restore or import progress, not analysis progress.
 
 If restore fails, the requested path and diagnostic stay available. **Retry
 restore** retries only that failed restore using saved local data, without a
-model request; **Open project** lets you choose another folder instead. A failed
+model request; **Open project…** lets you choose another folder instead. A failed
 import does not offer Retry restore. Daemon connectivity has separate feedback:
 **Reconnect daemon** refreshes daemon status and model configuration but does
 not retry the open. If local preferences cannot be read, the landing reports a
-storage warning and Open project remains available. If saving the last project
+storage warning and **Open project…** remains available. If saving the last project
 fails, the successfully opened project stays open, but it may not be remembered
 for the next launch; this is a preference warning, not an opening failure.
 
-**Open project** (or Cmd/Ctrl+O) opens the native directory chooser. Canceling it
-leaves the current project, opening error, draft, terminals and remembered path
-unchanged; it sends no request. Choosing a folder explicitly imports it, which
-may invoke the configured Analyze provider and retains the remote-provider
-confirmation when applicable. Unlike restore, import is not guaranteed to be
-model-free.
+The project menu shows **Open project…** without a loaded project and **Switch
+project…** with one. Cmd/Ctrl+O uses the same native directory chooser. Opening
+or an unfinished switch disables another chooser; Re-index is also unavailable
+while opening or switching. Canceling the chooser leaves the current project,
+opening error, draft, terminals and remembered path unchanged; it sends no
+request. After choosing a folder, review the current project and requested full
+path before importing. If a draft exists, **Approve draft discard for switch**
+records intent without discarding it. If the Analyze destination needs remote
+confirmation, confirm it and select **Continue with provider**; a local destination
+needs no remote confirmation. **Cancel switch** at any pre-commit review stage
+preserves the draft, current project and terminal tabs, without importing. If the project,
+draft or Analyze destination changes during review, approval must be reviewed
+again. The final **Switch project** (or **Close shells and switch** when tabs exist)
+commits the switch. Choosing a folder alone does not cancel project work, discard
+the draft or close shells.
+
+After commitment, the app closes *all* old-project terminal tabs, including
+hidden, starting, exited and failed tabs, and waits for verified cleanup before
+discarding an approved draft and dispatching one import. Closed tabs cannot be
+restored by dismissing the committed review. If cleanup fails or takes too long,
+the current project and draft remain, import is blocked, and the review reports
+that some tabs may already be closed; check Terminal before trying a new switch.
+If import fails after successful cleanup, the attempted path and error remain
+visible, but the discarded draft and closed tabs are not rolled back. Explicit
+import may invoke the configured Analyze provider; unlike restore, it is not
+guaranteed to be model-free.
+
+With a project loaded, use **Re-index project** in the project menu to refresh its
+local inventory and freshness after file changes. Re-index does not request a
+model, run analysis, execute project code or refresh model findings. It is
+unavailable during opening, switching or another re-index attempt. The header
+shows indeterminate indexing progress (not a percentage), the accepted inventory
+revision on success, or a re-index-specific diagnostic on failure. Prior inventory
+and saved evidence remain available on failure with their existing freshness
+labels; if follow-up workspace details cannot load after success, the header
+reports them unavailable rather than claiming refreshed findings. A changed
+revision makes an editable draft stale: its text remains recoverable, but old
+validation, checks and Apply authority are lost. Use **Retry re-index** beside a
+failed or canceled attempt, or activate **Re-index project** again explicitly;
+neither reconnecting nor navigating retries it automatically. The Analysis
+**Files** selection remains project-specific, including exclusions for
+transiently absent paths; newly eligible files follow the daemon defaults.
 
 Summary describes the project. Analysis owns one whole-project run and progress;
 Bugs, Performance and Security own separate results. The scrollable left rail shows
@@ -249,8 +285,8 @@ workspaces or resizing preserves each shell's process and in-memory scrollback.
 When expanded, the dock uses an effective height bounded by the measured space
 below the toolbar and above the footer, reserving workspace where possible; a
 short window does not change the saved height or automatically collapse the dock.
-Project switching explicitly closes all active shells; application exit cleans
-up every owned session.
+Confirmed project switching closes every owned terminal tab after review;
+application exit cleans up every owned session.
 
 Terminal owns ordinary shell keystrokes, including Ctrl+C. Use **Ctrl+Shift+F12**
 to restore app focus. Returning to source/Review rechecks file content and marks
@@ -263,7 +299,7 @@ See [terminal support and reproduction](TERMINAL.md).
 
 | Shortcut | Context/action |
 | --- | --- |
-| Cmd/Ctrl+O | Open project |
+| Cmd/Ctrl+O | Open project… / Switch project… |
 | Cmd/Ctrl+1–4 | Summary, Analysis, Bugs, Editor |
 | Cmd/Ctrl+Tab | Cycle all workspaces, including Performance and Security |
 | Cmd/Ctrl+P | Indexed file search |
