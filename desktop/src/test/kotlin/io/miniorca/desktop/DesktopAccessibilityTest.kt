@@ -315,6 +315,7 @@ class DesktopAccessibilityTest {
                   "Summary",
                   "go-shop · fixture",
                   "Analysis coverage",
+                  "File evidence",
                   "Architecture",
                   "Engineering insight",
                   "More insight",

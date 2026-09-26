@@ -596,6 +596,7 @@ class DesktopVisualLayoutTest {
               assertTrue(fixture.hasDescription("View Bugs results"))
               assertTrue(fixture.hasDescription("View Security results"))
               if (width == 800 && scale == 1.5f && density == 1f) {
+                fixture.revealText("Show diagram")
                 fixture.clickText("Show diagram")
                 fixture.render("f04-summary-help-expanded-800-650-1.5-1x")
                 assertTrue(fixture.hasText("Hide diagram"))
@@ -5249,6 +5250,47 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.hasText("File counts unavailable"))
           assertTrue(fixture.hasText("—"))
         }
+  }
+
+  @Test
+  fun summaryFileEvidenceRendersSavedRowsAndRouteAtReadableWidths() {
+    val path = "src/" + "日本語-long-directory/".repeat(9) + "handler.go"
+    val selection =
+        selectionFixture()
+            .copy(
+                files =
+                    listOf(
+                        AnalysisSelectableFile(
+                            path, "", selectionStageFixture("stale", "Source changed.")),
+                        AnalysisSelectableFile(
+                            "a.go", "", selectionStageFixture("fresh", "Current"))))
+    for ((width, height, scale) in
+        listOf(
+            Triple(1600, 1000, 1f),
+            Triple(1440, 900, 1.25f),
+            Triple(1024, 768, 1f),
+            Triple(800, 650, 1.5f),
+            Triple(1280, 600, 1.25f))) {
+      ComposeVisualFixture(width, height, scale) {
+            ProjectSummaryPane(null, analysisProjectFixture(), {}, fileSelection = selection)
+          }
+          .use { fixture ->
+            fixture.render("summary-file-evidence-$width-$height-$scale")
+            fixture.revealText("File evidence")
+            fixture.render("summary-file-evidence-revealed-$width-$height-$scale")
+            assertTrue(fixture.hasText(path))
+            assertTrue(fixture.hasText("Showing 2 of 2 selected files · saved status"))
+            assertTrue(
+                fixture.hasText(
+                    "Outdated · ${analysisFileStatus(selection.files.first()).explanation}"))
+            fixture.revealText("All files")
+            fixture.assertTextFits("All files")
+            val panel = fixture.taggedBounds("summary-file-evidence")
+            val action = fixture.taggedBounds("summary-all-files")
+            assertTrue(action.left >= panel.left && action.right <= panel.right)
+            assertTrue(action.bottom <= panel.bottom)
+          }
+    }
   }
 
   @Test

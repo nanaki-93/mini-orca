@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -544,6 +545,9 @@ internal fun ProjectSummaryPane(
                   modifier.testTag("summary-results"),
                   verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SummaryCategories(presentation.issueMetrics, selectWorkspace)
+                    SummaryFileEvidence(presentation.fileLedger) {
+                      selectWorkspace(Workspace.Analysis)
+                    }
                     Text(
                         "Overall findings · " +
                             presentation.findingMetrics.joinToString(" · ") {
@@ -667,6 +671,61 @@ private fun SummaryCategories(metrics: List<SummaryIssueMetric>, openResults: (W
         }
       }
     }
+  }
+}
+
+@Composable
+private fun SummaryFileEvidence(ledger: SummaryFileLedger, onOpenAnalysis: () -> Unit) {
+  WorkspaceSection("File evidence", Modifier.testTag("summary-file-evidence")) {
+    ledger.selectionNotice?.let {
+      Text(
+          it,
+          color = SecondaryText,
+          style = IdeTypography.workspaceMetadata,
+          modifier = Modifier.testTag("summary-file-selection-notice"))
+    }
+    when (ledger) {
+      is SummaryFileLedger.Selected -> {
+        Text(
+            "Showing ${ledger.rows.size} of ${ledger.totalSelected} selected files · saved status",
+            color = SecondaryText,
+            style = IdeTypography.workspaceMetadata)
+        SelectionContainer {
+          Column(
+              Modifier.fillMaxWidth().testTag("summary-file-paths"),
+              verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ledger.rows.forEach { row ->
+                  Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(row.file.path, color = PrimaryText, style = IdeTypography.resultCode)
+                    DiagnosticText(
+                        "${row.status.label} · ${row.explanation}", color = SecondaryText)
+                  }
+                }
+              }
+        }
+      }
+      is SummaryFileLedger.Empty ->
+          Text(
+              "No files selected in the confirmed selection.",
+              color = SecondaryText,
+              style = IdeTypography.workspaceBody)
+      is SummaryFileLedger.AggregateOnly ->
+          Text(
+              "File paths unavailable · ${ledger.totalReported} files in saved aggregate coverage. Load a confirmed selection to inspect file evidence.",
+              color = SecondaryText,
+              style = IdeTypography.workspaceBody)
+      is SummaryFileLedger.Unavailable ->
+          Text(
+              "File evidence unavailable · no confirmed file selection or saved file paths.",
+              color = SecondaryText,
+              style = IdeTypography.workspaceBody)
+    }
+    MiniOrcaButton(
+        onClick = onOpenAnalysis,
+        tone = ActionTone.Navigation,
+        modifier = Modifier.testTag("summary-all-files")) {
+          Text("All files", style = IdeTypography.action)
+        }
   }
 }
 
