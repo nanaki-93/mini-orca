@@ -76,8 +76,13 @@ internal fun projectSummaryPresentation(
     sections: Map<AnalysisResultKey, AnalysisSectionState> = emptyMap(),
     fileSelection: AnalysisFileSelection? = null,
 ): ProjectSummaryPresentation {
+  val currentOverview =
+      overview?.takeIf {
+        project == null ||
+            (it.projectId == project.projectId && it.projectRevision == project.projectRevision)
+      }
   val metrics =
-      overview?.metrics
+      currentOverview?.metrics
           ?: project?.let {
             ProjectMetrics(
                 type = it.type,
@@ -87,33 +92,38 @@ internal fun projectSummaryPresentation(
                 totalLines = it.totalLines,
                 languages = it.languages)
           }
-  val hasProject = overview != null || project != null
-  val analysis = overview?.analysis
+  val hasProject = currentOverview != null || project != null
+  val analysis = currentOverview?.analysis
   val analysisStatus =
       analysis?.status?.takeIf { it.isNotBlank() }
           ?: project?.aiStatus?.takeIf { it.isNotBlank() }
           ?: "missing"
   val normalizedStatus = analysisStatus.lowercase()
   val interpretationAvailable = normalizedStatus in setOf("fresh", "stale")
+  val descriptionMessage =
+      if (normalizedStatus == "fresh" && analysis?.purpose.isNullOrBlank())
+          "Project description: unavailable · no purpose provided"
+      else summaryAnalysisMessage(normalizedStatus, analysis?.failure.orEmpty())
   val selection =
       fileSelection?.takeIf {
-        it.projectId == (project?.projectId ?: overview?.projectId) &&
-            it.projectRevision == (project?.projectRevision ?: overview?.projectRevision)
+        it.projectId == (project?.projectId ?: currentOverview?.projectId) &&
+            it.projectRevision == (project?.projectRevision ?: currentOverview?.projectRevision)
       }
-  val coverage = selection?.let(::analysisSelectionCoverage) ?: overview?.analysisCoverage
+  val coverage = selection?.let(::analysisSelectionCoverage) ?: currentOverview?.analysisCoverage
   val hasCoverage = selection != null || coverage != null && coverage != AnalysisCoverage()
   val currentRun =
       run?.takeIf {
         it.identity.projectId == project?.projectId &&
             it.identity.projectRevision == project.projectRevision
       }
-  val findings = overview?.findingCounts
+  val findings = currentOverview?.findingCounts
   val outdated =
       if (hasCoverage) (coverage?.stale ?: 0) > 0
       else
           normalizedStatus == "stale" ||
               (coverage?.stale ?: 0) > 0 ||
-              (run != null && AnalysisResultPageState(AnalysisResultType.Bugs, project, run).stale)
+              (currentRun != null &&
+                  AnalysisResultPageState(AnalysisResultType.Bugs, project, currentRun).stale)
   return ProjectSummaryPresentation(
       hasProject = hasProject,
       projectName = project?.name?.takeIf { it.isNotBlank() } ?: "Project",
@@ -137,7 +147,7 @@ internal fun projectSummaryPresentation(
                   if (hasCoverage)
                       "Selected files: ${analysisStatusLabel(analysisCoverageStatus(requireNotNull(coverage)))}"
                   else null,
-                  summaryAnalysisMessage(normalizedStatus, analysis?.failure.orEmpty()),
+                  descriptionMessage,
                   if (currentRun?.status == "failed" && normalizedStatus != "failed")
                       "Analysis run failed · ${currentRun.reason.ifBlank { "No failure details available" }}"
                   else null,
@@ -154,7 +164,7 @@ internal fun projectSummaryPresentation(
                   else null)
               .joinToString("\n"),
       interpretationStatus = normalizedStatus,
-      interpretationMessage = summaryAnalysisMessage(normalizedStatus, analysis?.failure.orEmpty()),
+      interpretationMessage = descriptionMessage,
       outdated = outdated,
       purpose = analysis?.purpose?.takeIf { interpretationAvailable && it.isNotBlank() },
       projectMetrics =
@@ -196,7 +206,9 @@ internal fun projectSummaryPresentation(
                       SummaryMetricTone.Failed),
               )
               .filter { it.value != 0 },
-      issueMetrics = summaryIssueMetrics(project, run, sections),
+      issueMetrics =
+          summaryIssueMetrics(
+              project, currentRun, if (currentRun != null) sections else emptyMap()),
       details = if (interpretationAvailable) projectSummaryDetails(analysis) else emptyList(),
       engineeringInsight = analysis?.engineeringInsight.takeIf { interpretationAvailable },
   )
@@ -306,15 +318,11 @@ private fun SummaryIntroduction(presentation: ProjectSummaryPresentation) {
     presentation.purpose?.let {
       ModelResultContent(it, preview = false, style = IdeTypography.workspaceBody)
     }
-    if (presentation.interpretationStatus != "fresh") {
-      Text(
-          presentation.interpretationMessage,
-          color = if (presentation.interpretationStatus == "failed") Error else SecondaryText,
-          style = IdeTypography.workspaceMetadata,
-          modifier = Modifier.testTag("summary-interpretation-status"))
-    } else if (presentation.purpose == null) {
-      Text("Project description unavailable", color = SecondaryText, style = IdeTypography.body)
-    }
+    Text(
+        presentation.interpretationMessage,
+        color = if (presentation.interpretationStatus == "failed") Error else SecondaryText,
+        style = IdeTypography.workspaceMetadata,
+        modifier = Modifier.testTag("summary-interpretation-status"))
     val facts =
         listOf(presentation.projectType, presentation.buildMetadata) +
             presentation.projectMetrics.map { metric ->

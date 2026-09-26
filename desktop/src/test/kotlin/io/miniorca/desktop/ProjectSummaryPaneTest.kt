@@ -58,6 +58,114 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun obsoleteOverviewCannotSupplyFactsOrDescriptionAfterReindex() {
+    val project =
+        resultProjectFixture()
+            .copy(
+                projectRevision = "new",
+                type = "Go",
+                buildFile = "go.mod",
+                fileCount = 7,
+                totalLines = 150,
+                languages = mapOf("Go" to 7),
+                aiStatus = "missing")
+    val old =
+        ProjectOverview(
+            projectId = project.projectId,
+            projectRevision = "old",
+            metrics =
+                ProjectMetrics(
+                    type = "Java", buildFile = "pom.xml", fileCount = 99, totalLines = 900),
+            analysis =
+                StructuredProjectAnalysis(
+                    status = "fresh", purpose = "Old purpose", components = listOf("Old module")),
+            analysisCoverage = AnalysisCoverage(total = 1, fresh = 1),
+            findingCounts = FindingCounts(verified = 8, aiSuggestions = 4))
+    val summary = projectSummaryPresentation(old, project)
+    assertEquals("Go", summary.projectType)
+    assertEquals("go.mod", summary.buildMetadata)
+    assertEquals("Go", summary.languages)
+    assertEquals(listOf(7, 150), summary.projectMetrics.map { it.value })
+    assertTrue(summary.findingMetrics.all { it.value == null })
+    assertTrue(summary.coverageMetrics.all { it.value == null })
+    assertEquals("unknown", summary.summaryStatus)
+    assertEquals("missing", summary.interpretationStatus)
+    assertEquals(null, summary.purpose)
+    assertTrue(summary.details.isEmpty())
+    assertTrue(summary.issueMetrics.all { it.value == null })
+    assertEquals("Project description: unavailable", summary.interpretationMessage)
+    val otherProject =
+        projectSummaryPresentation(old.copy(projectId = "other", projectRevision = "new"), project)
+    assertEquals(summary.projectMetrics, otherProject.projectMetrics)
+    assertEquals(summary.findingMetrics, otherProject.findingMetrics)
+    assertEquals(summary.interpretationMessage, otherProject.interpretationMessage)
+    // A matching selected-file snapshot can be current even when the saved overview is not.
+    val currentSelection = selectionFixture().copy(projectRevision = "new")
+    val selected = projectSummaryPresentation(old, project, fileSelection = currentSelection)
+    assertTrue(selected.analysisMessage.contains("Selected files:"))
+    assertTrue(selected.analysisMessage.contains("Project description: unavailable"))
+    assertTrue(selected.findingMetrics.all { it.value == null })
+  }
+
+  @Test
+  fun freshPurposeAndBlankPurposeHaveDifferentVisibleQualifications() {
+    val overview =
+        ProjectOverview(
+            analysis =
+                StructuredProjectAnalysis(status = "fresh", purpose = "Model interpretation"))
+    val described = projectSummaryPresentation(overview, null)
+    assertEquals("Model interpretation", described.purpose)
+    assertEquals("Project description: current · AI-generated", described.interpretationMessage)
+    val blank =
+        projectSummaryPresentation(
+            overview.copy(analysis = overview.analysis.copy(purpose = "  ")), null)
+    assertEquals(null, blank.purpose)
+    assertEquals(
+        "Project description: unavailable · no purpose provided", blank.interpretationMessage)
+    assertTrue(blank.analysisMessage.contains(blank.interpretationMessage))
+    ComposeVisualFixture(800, 650) { ProjectSummaryPane(overview, null, {}) }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText(described.interpretationMessage))
+        }
+    ComposeVisualFixture(800, 650) {
+          ProjectSummaryPane(
+              overview.copy(analysis = overview.analysis.copy(purpose = "")), null, {})
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText(blank.interpretationMessage))
+          assertFalse(fixture.hasText("Model interpretation"))
+        }
+  }
+
+  @Test
+  fun failedDescriptionKeepsDiagnosticBesideFreshSelectedFiles() {
+    val project = analysisProjectFixture()
+    val overview =
+        ProjectOverview(
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            analysis =
+                StructuredProjectAnalysis(
+                    status = "failed", failure = "Model timed out.", purpose = "Old text"),
+            analysisCoverage = AnalysisCoverage(stale = 2))
+    val selection = selectionFixture().copy(excludedPaths = listOf("main.go"))
+    val summary = projectSummaryPresentation(overview, project, fileSelection = selection)
+    assertEquals("fresh", summary.summaryStatus)
+    assertEquals("Project description: failed · Model timed out.", summary.interpretationMessage)
+    assertEquals(null, summary.purpose)
+    assertTrue(summary.analysisMessage.contains(summary.interpretationMessage))
+    ComposeVisualFixture(800, 650) {
+          ProjectSummaryPane(overview, project, {}, fileSelection = selection)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText(summary.interpretationMessage))
+        }
+  }
+
+  @Test
   fun interpretationDetailsAndFindingSourcesStayExplicit() {
     val overview =
         ProjectOverview(
@@ -280,7 +388,11 @@ class ProjectSummaryPaneTest {
   @Test
   fun analysisFailureTakesPrecedenceOverOutdatedAndUpdatedColors() {
     val project = resultProjectFixture()
-    val overview = ProjectOverview(analysis = StructuredProjectAnalysis(status = "fresh"))
+    val overview =
+        ProjectOverview(
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            analysis = StructuredProjectAnalysis(status = "fresh", purpose = "Saved purpose"))
     val updated = projectSummaryPresentation(overview, project)
     assertEquals("unknown", updated.summaryStatus)
     assertEquals(SecondaryText, summaryAnalysisTint(updated.summaryStatus))
@@ -405,7 +517,11 @@ class ProjectSummaryPaneTest {
   @Test
   fun currentRunLifecycleRemainsVisibleAndForeignRunsCannotOverrideCoverage() {
     val project = resultProjectFixture()
-    val overview = ProjectOverview(analysisCoverage = AnalysisCoverage(total = 1, fresh = 1))
+    val overview =
+        ProjectOverview(
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            analysisCoverage = AnalysisCoverage(total = 1, fresh = 1))
     listOf("paused", "interrupted", "canceled", "partial", "failed").forEach { status ->
       assertEquals(
           status,
@@ -458,7 +574,11 @@ class ProjectSummaryPaneTest {
   @Test
   fun outdatedSummaryIncludesStaleFilesAndMismatchedRuns() {
     val project = resultProjectFixture()
-    val overview = ProjectOverview(analysis = StructuredProjectAnalysis(status = "fresh"))
+    val overview =
+        ProjectOverview(
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            analysis = StructuredProjectAnalysis(status = "fresh", purpose = "Saved purpose"))
     assertFalse(projectSummaryPresentation(overview, project).outdated)
     assertTrue(
         projectSummaryPresentation(
@@ -471,7 +591,7 @@ class ProjectSummaryPaneTest {
     assertTrue(
         projectSummaryPresentation(overview, project, analysisRunFixture().copy(status = "stale"))
             .outdated)
-    assertTrue(
+    assertFalse(
         projectSummaryPresentation(
                 overview,
                 project,
