@@ -306,6 +306,129 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun projectSwitchReviewKeepsConsentAndCleanupErrorsReachableAcrossViewports() {
+    val path = "/projects/" + "日本語-very-long-directory/".repeat(8) + "next"
+    val model =
+        ScopedModel(
+            scope = "analyze",
+            profile = "remote",
+            model = "example-model",
+            providerOrigin = "https://provider.example/" + "long-destination/".repeat(6),
+            remoteProvider = true)
+    val context =
+        ProjectSwitchContext(
+            SwitchProjectIdentity(resultProjectFixture()),
+            SwitchDraftIdentity(null, DeclarationDraft(id = "draft"), null),
+            SwitchAnalyzeDestination(model),
+            false)
+    val terminal =
+        TerminalWorkspaceState(
+            tabs = listOf(TerminalTabState(1, "Hidden shell"), TerminalTabState(2, "Exited shell")))
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        var pending by
+            mutableStateOf(PendingProjectSwitch(1, path, context, SwitchReviewStage.Draft))
+        var feedback by mutableStateOf(SwitchCleanupFeedback())
+        var calls = 0
+        ComposeVisualFixture(
+                (width * density).toInt(), (height * density).toInt(), scale, density) {
+                  Box(
+                      Modifier.fillMaxSize().background(AppBackground),
+                      contentAlignment = Alignment.Center) {
+                        IdeDialogSurface(
+                            maxHeight = (height - 64).coerceAtMost(520).dp,
+                            title = { Text("Switch project?") },
+                            content = {
+                              ProjectSwitchReviewBody(pending, model, false, terminal, feedback) {
+                                calls++
+                              }
+                            },
+                            actions = {
+                              ProjectSwitchReviewActions(
+                                  pending,
+                                  false,
+                                  terminal,
+                                  feedback,
+                                  { calls++ },
+                                  { calls++ },
+                                  { calls++ },
+                                  { calls++ },
+                                  { calls++ })
+                            })
+                      }
+                }
+            .use { fixture ->
+              val label = "f07-switch-$width-$height-$scale-${density}x"
+              fixture.render("$label-draft")
+              fixture.assertTextFits("Cancel switch")
+              fixture.assertTextFits("Approve draft discard for switch")
+              assertTrue(
+                  fixture.hasText(
+                      "If you switch, the in-memory conversation, editable draft and focused checks will be discarded. Continuing this review does not discard them yet."))
+              fixture.revealText("Requested project: $path", "ide-dialog-body")
+              assertTrue(fixture.hasText("Hidden shell"))
+              pending = pending.copy(stage = SwitchReviewStage.Provider)
+              fixture.render("$label-provider")
+              fixture.assertTextFits("Cancel switch")
+              assertTrue(fixture.isDisabled("Continue with provider"))
+              pending = pending.copy(stage = SwitchReviewStage.Final)
+              fixture.render("$label-final")
+              fixture.assertTextFits("Close shells and switch")
+              assertTrue(fixture.requestFocus("Cancel switch"))
+              fixture.render("$label-safe-focus")
+              assertTrue(fixture.isFocusedControl("Cancel switch"))
+              pending = pending.copy(stage = SwitchReviewStage.Committed)
+              feedback = SwitchCleanupFeedback(outstanding = true)
+              fixture.render("$label-cleanup-pending")
+              assertFalse(fixture.hasText("Cancel switch"))
+              assertFalse(fixture.hasText("Close shells and switch"))
+              feedback =
+                  SwitchCleanupFeedback(error = "Cleanup failed: " + "diagnostic/".repeat(20))
+              fixture.render("$label-cleanup-error")
+              fixture.assertTextFits("Close review")
+              fixture.revealText(feedback.error!!, "ide-dialog-body")
+              assertEquals(0, calls)
+            }
+      }
+    }
+  }
+
+  @Test
+  fun projectMenuKeepsOpenSwitchAndReindexAvailabilityAcrossViewports() {
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        var project by mutableStateOf<ProjectAnalysis?>(null)
+        var calls = 0
+        ComposeVisualFixture(
+                (width * density).toInt(), (height * density).toInt(), scale, density) {
+                  ToolbarVisualFixture(
+                      width.toFloat(),
+                      project = project,
+                      actions = ToolbarActions({ calls++ }, { calls++ }, { calls++ }, { calls++ }))
+                }
+            .use { fixture ->
+              val label = "f07-menu-$width-$height-$scale-${density}x"
+              fixture.render()
+              fixture.clickText("No project open")
+              fixture.render("$label-no-project")
+              fixture.assertTextFits("Open project…")
+              assertTrue(fixture.isDisabled("Re-index project"))
+              fixture.dismissPopup()
+              project = visualFixtureProject
+              fixture.render()
+              fixture.clickText("go-shop · fixture")
+              fixture.render("$label-loaded")
+              fixture.assertTextFits("Switch project…")
+              fixture.assertTextFits("Re-index project")
+              assertEquals(0, calls)
+            }
+      }
+    }
+  }
+
+  @Test
   fun assembledShellKeepsRailHeaderFooterAndTerminalSeparateAcrossViewportAndDensity() {
     val project =
         resultProjectFixture().copy(name = "A long project identity with 日本語 and many segments")
