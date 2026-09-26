@@ -4517,6 +4517,35 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun summaryCoverageAndResultsShareOneStackedRegionAtWideAndCompactWidths() {
+    for ((width, scale) in listOf(1440 to 1f, 800 to 1.5f)) {
+      ComposeVisualFixture(width, 1600, scale) {
+            ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
+          }
+          .use { fixture ->
+            fixture.render("summary-coverage-results-$width-$scale")
+            val region = fixture.taggedBounds("summary-coverage-results")
+            val coverage = fixture.taggedBounds("analysis-summary")
+            val results = fixture.taggedBounds("summary-results")
+            val provenance = fixture.taggedBounds("summary-findings-provenance")
+            assertEquals(1, fixture.tagCount("summary-coverage-results"))
+            assertEquals(region.left, coverage.left, 1f)
+            assertEquals(region.left, results.left, 1f)
+            assertEquals(region.width, coverage.width, 1f)
+            assertEquals(region.width, results.width, 1f)
+            assertTrue(coverage.top >= region.top && coverage.bottom < results.top)
+            assertTrue(results.bottom <= region.bottom)
+            assertTrue(provenance.top >= results.top && provenance.bottom <= results.bottom)
+            listOf("Bugs", "Performance", "Security").forEach {
+              assertTrue(fixture.hasDescription("View $it results"))
+            }
+            assertTrue(
+                fixture.hasText("Overall findings · 2 tool-reported issues · 4 AI suggestions"))
+          }
+    }
+  }
+
+  @Test
   fun summaryDashboardShowsGroupedInterpretationWithDiagramDisclosures() {
     val overview =
         visualFixtureOverview.copy(

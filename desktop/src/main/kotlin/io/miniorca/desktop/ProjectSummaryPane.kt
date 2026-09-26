@@ -289,19 +289,25 @@ internal fun ProjectSummaryPane(
               analysisActions,
               showActionFeedback = currentRun?.showsProgressOnSummary() != true)
         }
-        item { SummaryCoverage(presentation) { openResults(Workspace.Analysis) } }
         item {
-          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            SummaryCategories(presentation.issueMetrics, openResults)
-            Text(
-                "Overall findings · " +
-                    presentation.findingMetrics.joinToString(" · ") {
-                      "${it.value ?: "—"} ${if (it.label == "AI suggestions") it.label else it.label.lowercase()}"
-                    },
-                color = SecondaryText,
-                style = IdeTypography.workspaceMetadata,
-                modifier = Modifier.testTag("summary-findings-provenance"))
-          }
+          Column(
+              Modifier.fillMaxWidth().testTag("summary-coverage-results"),
+              verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                SummaryCoverage(presentation) { openResults(Workspace.Analysis) }
+                Column(
+                    Modifier.fillMaxWidth().testTag("summary-results"),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                      SummaryCategories(presentation.issueMetrics, openResults)
+                      Text(
+                          "Overall findings · " +
+                              presentation.findingMetrics.joinToString(" · ") {
+                                "${it.value ?: "—"} ${if (it.label == "AI suggestions") it.label else it.label.lowercase()}"
+                              },
+                          color = SecondaryText,
+                          style = IdeTypography.workspaceMetadata,
+                          modifier = Modifier.testTag("summary-findings-provenance"))
+                    }
+              }
         }
         item {
           SummaryLowerComposition(
