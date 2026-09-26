@@ -1094,6 +1094,112 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun fileEvidenceRendersBoundedSavedRowsAndAllFilesOnlyNavigates() {
+    val project = analysisProjectFixture()
+    val longPath = "src/" + "日本語/long-directory/".repeat(8) + "last.go"
+    val files =
+        listOf(
+            AnalysisSelectableFile("z.go", "", selectionStageFixture("fresh", "Current")),
+            AnalysisSelectableFile("b.go", "", selectionStageFixture("stale", "Changed")),
+            AnalysisSelectableFile(longPath, "", selectionStageFixture("failed", "Failed read")),
+            AnalysisSelectableFile("a.go", "", selectionStageFixture("missing", "Not started")),
+            AnalysisSelectableFile("excluded.go", "", selectionStageFixture("fresh", "Current")))
+    val selection = selectionFixture().copy(files = files, excludedPaths = listOf("excluded.go"))
+    val state =
+        ProjectAnalysisRunState(
+            fileSelection =
+                AnalysisSelectionState(
+                    selection, error = "Disk unavailable", failure = AnalysisSelectionFailure.Read))
+    val destinations = mutableListOf<Workspace>()
+    var requests = 0
+    val actions =
+        AnalysisWorkspaceActions(
+            { _, _ -> requests++ },
+            { requests++ },
+            { requests++ },
+            { requests++ },
+            { requests++ },
+            saveSelection = { requests++ })
+    ComposeVisualFixture(1440, 1100) {
+          ProjectSummaryPane(
+              null, project, destinations::add, analysisState = state, analysisActions = actions)
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.revealText("File evidence")
+          assertTrue(fixture.hasText("Showing 3 of 4 selected files · saved status"))
+          assertTrue(
+              fixture.hasText(
+                  "File selection load failed · Showing last confirmed selection. Disk unavailable"))
+          for (path in listOf("a.go", "b.go", longPath)) assertTrue(fixture.hasText(path))
+          assertFalse(fixture.hasText("z.go"))
+          assertFalse(fixture.hasText("excluded.go"))
+          for (row in
+              (projectSummaryPresentation(null, project, selectionState = state.fileSelection)
+                      .fileLedger as SummaryFileLedger.Selected)
+                  .rows) {
+            assertTrue(fixture.hasText("${row.status.label} · ${row.explanation}"))
+          }
+          assertFalse(fixture.hasEditableText(withinTag = "summary-file-paths"))
+          fixture.revealText("All files")
+          fixture.clickText("All files")
+          assertEquals(listOf(Workspace.Analysis), destinations)
+          assertEquals(0, requests)
+          assertEquals(selection, state.fileSelection.selection)
+          assertTrue(fixture.requestFocus("All files"))
+          fixture.pressKey(androidx.compose.ui.input.key.Key.Enter)
+          assertEquals(listOf(Workspace.Analysis, Workspace.Analysis), destinations)
+        }
+  }
+
+  @Test
+  fun fileEvidenceSeparatesAggregateEmptyUnavailableAndFailedRead() {
+    val project = analysisProjectFixture()
+    val aggregate =
+        ProjectOverview(
+            "project", "revision", analysisCoverage = AnalysisCoverage(total = 6, fresh = 2))
+    val empty = selectionFixture().copy(excludedPaths = listOf("helper.go", "main.go"))
+    val scenarios =
+        listOf(
+            Triple(
+                aggregate,
+                AnalysisSelectionState(),
+                "File paths unavailable · 6 files in saved aggregate coverage. Load a confirmed selection to inspect file evidence."),
+            Triple(
+                null,
+                AnalysisSelectionState(empty),
+                "No files selected in the confirmed selection."),
+            Triple(
+                null,
+                AnalysisSelectionState(),
+                "File evidence unavailable · no confirmed file selection or saved file paths."),
+            Triple(
+                null,
+                AnalysisSelectionState(
+                    error = "Read denied", failure = AnalysisSelectionFailure.Read),
+                "File selection load failed · No confirmed selection available. Read denied"))
+    scenarios.forEach { (overview, selection, expected) ->
+      ComposeVisualFixture(800, 650) {
+            ProjectSummaryPane(
+                overview,
+                project,
+                {},
+                analysisState = ProjectAnalysisRunState(fileSelection = selection))
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.revealText("File evidence")
+            assertTrue(fixture.hasText(expected), expected)
+            if (selection.error != null)
+                assertTrue(
+                    fixture.hasText(
+                        "File evidence unavailable · no confirmed file selection or saved file paths."))
+            assertTrue(fixture.hasText("All files"))
+          }
+    }
+  }
+
+  @Test
   fun coverageArcsUseValidatedDenominatorWithoutGapsOrInflatedSmallBuckets() {
     val project = analysisProjectFixture()
     val unknown = projectSummaryPresentation(null, project)
