@@ -31,6 +31,12 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 
+internal class DiagramViewState {
+  var showDiagram by mutableStateOf(false)
+  var showSource by mutableStateOf(false)
+  var zoom by mutableStateOf(1f)
+}
+
 internal data class SummaryDiagramInput(val source: String?, val prose: String)
 
 internal fun summaryDiagramInput(value: String): SummaryDiagramInput {
@@ -70,19 +76,28 @@ internal fun MermaidDiagram(
     label: String,
     title: String? = null,
     ownerIdentity: Any = Unit,
+    viewState: DiagramViewState? = null,
 ) {
   val input = remember(value) { summaryDiagramInput(value) }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
     if (title == null && input.prose.isNotBlank()) ModelResultContent(input.prose, preview = false)
     key(ownerIdentity, input.source) {
-      MermaidDiagramSource(input.source, label, title, input.prose.takeIf { title != null })
+      val localView = remember { DiagramViewState() }
+      MermaidDiagramSource(
+          input.source, label, title, input.prose.takeIf { title != null }, viewState ?: localView)
     }
   }
 }
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun MermaidDiagramSource(source: String?, label: String, title: String?, prose: String?) {
+private fun MermaidDiagramSource(
+    source: String?,
+    label: String,
+    title: String?,
+    prose: String?,
+    view: DiagramViewState
+) {
   val state by
       produceState<DiagramState>(
           if (source == null) DiagramState.Unavailable else DiagramState.Loading, source) {
@@ -97,9 +112,9 @@ private fun MermaidDiagramSource(source: String?, label: String, title: String?,
                           exception.message?.take(240) ?: "Unable to render diagram")
                 }
           }
-  var showDiagram by remember { mutableStateOf(false) }
-  var showSource by remember { mutableStateOf(false) }
-  var zoom by remember { mutableStateOf(1f) }
+  var showDiagram by view::showDiagram
+  var showSource by view::showSource
+  var zoom by view::zoom
   Row(
       Modifier.fillMaxWidth(),
       horizontalArrangement = Arrangement.End,

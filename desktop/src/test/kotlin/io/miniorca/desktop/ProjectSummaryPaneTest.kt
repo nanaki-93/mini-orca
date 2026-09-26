@@ -426,6 +426,118 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun summaryNarrativeDisclosuresSurviveLazyScrollAndResetOnlyForTheirOwners() {
+    val source = "flowchart TD\n A[Client] --> B[Service]"
+    val insight =
+        EngineeringInsight(
+            mechanism = "Mechanism one.",
+            whyItMattersHere = "Local evidence.",
+            tradeoffOrFailureMode = "Trade-off one.",
+            transferableLesson = "Lesson one.")
+    var project by
+        androidx.compose.runtime.mutableStateOf(
+            resultProjectFixture().copy(projectId = "first", projectRevision = "one"))
+    var overview by
+        androidx.compose.runtime.mutableStateOf(
+            ProjectOverview(
+                projectId = "first",
+                projectRevision = "one",
+                analysis =
+                    StructuredProjectAnalysis(
+                        status = "fresh",
+                        purpose = "Project context. ".repeat(400),
+                        architecture = source,
+                        engineeringInsight = insight)))
+    var unrelated by androidx.compose.runtime.mutableStateOf(0)
+    val navigations = mutableListOf<Workspace>()
+    val actions =
+        AnalysisWorkspaceActions(
+            { _, _ -> error("Inspection requested analysis preview") },
+            { error("Inspection requested run control") },
+            { error("Inspection requested run control") },
+            { error("Inspection requested run control") },
+            { error("Inspection requested run control") })
+    ComposeVisualFixture(1000, 650) {
+          unrelated // Force recomposition without changing the narrative owner.
+          ProjectSummaryPane(overview, project, navigations::add, analysisActions = actions)
+        }
+        .use { fixture ->
+          fun reveal() {
+            fixture.revealText("More insight")
+            fixture.render()
+          }
+          fun expand() {
+            reveal()
+            fixture.clickDescription("Show Architecture diagram")
+            fixture.awaitDescription("Architecture diagram\n$source")
+            fixture.clickDescription("Zoom in Architecture")
+            fixture.clickText("Mermaid source")
+            assertTrue(fixture.tryClick("Expand More insight"))
+            fixture.render()
+            assertTrue(fixture.hasText("Trade-off one."))
+          }
+          fixture.render()
+          expand()
+          unrelated++
+          fixture.render()
+          assertEquals("Expanded", fixture.stateDescription("More insight"))
+          fixture.scrollBy(-100_000f, "summary-scroll")
+          fixture.render()
+          assertEquals(0, fixture.tagCount("summary-lower-composition"))
+          reveal()
+          assertEquals("Expanded", fixture.stateDescription("More insight"))
+          assertTrue(fixture.hasText("Trade-off one."))
+          assertTrue(fixture.hasText("Lesson one."))
+          assertTrue(fixture.hasText("Hide Mermaid"))
+          assertTrue(fixture.hasText("125%"))
+          assertTrue(navigations.isEmpty())
+
+          overview =
+              overview.copy(
+                  analysis =
+                      overview.analysis.copy(
+                          engineeringInsight =
+                              insight.copy(tradeoffOrFailureMode = "Trade-off two.")))
+          fixture.render()
+          assertEquals("Collapsed", fixture.stateDescription("More insight"))
+          assertTrue(fixture.hasText("Mechanism one."))
+          assertTrue(fixture.hasText("Local evidence."))
+          assertTrue(fixture.hasText("125%")) // Changing insight does not reset architecture.
+          assertTrue(fixture.tryClick("Expand More insight"))
+          fixture.render()
+          assertTrue(fixture.hasText("Trade-off two."))
+          assertTrue(fixture.hasText("Lesson one."))
+
+          overview =
+              overview.copy(
+                  analysis =
+                      overview.analysis.copy(architecture = source.replace("Service", "Store")))
+          fixture.render()
+          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          assertEquals("Expanded", fixture.stateDescription("More insight"))
+          fixture.clickDescription("Show Architecture diagram")
+          fixture.awaitDescription("Architecture diagram\n${source.replace("Service", "Store")}")
+          project = project.copy(projectRevision = "two")
+          overview = overview.copy(projectRevision = "two")
+          fixture.render()
+          reveal()
+          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          assertEquals("Collapsed", fixture.stateDescription("More insight"))
+          fixture.clickDescription("Show Architecture diagram")
+          fixture.awaitDescription("Architecture diagram\n${source.replace("Service", "Store")}")
+          assertTrue(fixture.tryClick("Expand More insight"))
+          fixture.render()
+          project = project.copy(projectId = "second")
+          overview = overview.copy(projectId = "second")
+          fixture.render()
+          reveal()
+          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          assertEquals("Collapsed", fixture.stateDescription("More insight"))
+          assertTrue(navigations.isEmpty())
+        }
+  }
+
+  @Test
   fun narrativeSectionsOmitMissingArchitectureWithoutLosingSavedContent() {
     val project = resultProjectFixture()
     val overview =

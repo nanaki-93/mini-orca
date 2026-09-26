@@ -15,6 +15,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -253,6 +257,21 @@ internal fun ProjectSummaryPane(
     analysisActions: AnalysisWorkspaceActions? = null,
 ) {
   val presentation = projectSummaryPresentation(overview, project, run, sections, fileSelection)
+  val ownerIdentity =
+      listOf(
+          project?.projectId ?: overview?.projectId,
+          project?.projectRevision ?: overview?.projectRevision)
+  val architecture =
+      presentation.details.firstOrNull { it.title == "Architecture" }?.values?.single()
+  val flows = presentation.details.firstOrNull { it.title == "Flows" }?.values.orEmpty()
+  val pieces = presentation.engineeringInsight?.let(::engineeringInsightPieces).orEmpty()
+  // Own local disclosure state above the lazy item so scrolling it away does not discard it.
+  val architectureView = remember(ownerIdentity, architecture) { DiagramViewState() }
+  val flowViews =
+      flows.mapIndexed { index, value ->
+        key(index) { remember(ownerIdentity, value) { DiagramViewState() } }
+      }
+  val insightExpansion = remember(ownerIdentity, pieces) { mutableStateOf(false) }
   BoxWithConstraints(Modifier.fillMaxSize().background(EditorCanvas)) {
     LazyColumn(
         Modifier.fillMaxSize().testTag("summary-scroll"),
@@ -312,10 +331,7 @@ internal fun ProjectSummaryPane(
                 true) {
           item {
             SummaryLowerComposition(
-                presentation,
-                listOf(
-                    project?.projectId ?: overview?.projectId,
-                    project?.projectRevision ?: overview?.projectRevision))
+                presentation, ownerIdentity, architectureView, flowViews, insightExpansion)
           }
         }
         item { SummaryChangeLifecycle { selectWorkspace(Workspace.Editor) } }
@@ -411,6 +427,9 @@ private fun SummaryCategories(metrics: List<SummaryIssueMetric>, openResults: (W
 private fun SummaryLowerComposition(
     presentation: ProjectSummaryPresentation,
     ownerIdentity: List<String?>,
+    architectureView: DiagramViewState,
+    flowViews: List<DiagramViewState>,
+    insightExpansion: MutableState<Boolean>,
 ) {
   val architecture = presentation.details.firstOrNull { it.title == "Architecture" }
   val modules = presentation.details.firstOrNull { it.title == "Packages / modules" }
@@ -426,11 +445,13 @@ private fun SummaryLowerComposition(
                 it.values.single(),
                 "Architecture",
                 title = "Architecture",
-                ownerIdentity = ownerIdentity + "architecture")
+                ownerIdentity = ownerIdentity + "architecture",
+                viewState = architectureView)
           }
         }
         insight?.let {
-          SummaryEngineeringInsight(it, presentation.interpretationStatus == "stale", ownerIdentity)
+          SummaryEngineeringInsight(
+              it, presentation.interpretationStatus == "stale", ownerIdentity, insightExpansion)
         }
         modules?.let {
           WorkspaceSection(modifier = Modifier.testTag("summary-modules")) {
@@ -438,7 +459,7 @@ private fun SummaryLowerComposition(
             SummaryModules(it.values)
           }
         }
-        flows?.let { SummaryFlows(it, ownerIdentity) }
+        flows?.let { SummaryFlows(it, ownerIdentity, flowViews) }
       }
 }
 
@@ -471,6 +492,7 @@ private fun SummaryChangeLifecycle(onOpenEditor: () -> Unit) {
 private fun SummaryFlows(
     flows: ProjectSummaryDetail,
     ownerIdentity: List<String?>,
+    viewStates: List<DiagramViewState>,
     modifier: Modifier = Modifier,
 ) {
   WorkspaceSection(modifier = modifier.testTag("summary-flows")) {
@@ -480,7 +502,8 @@ private fun SummaryFlows(
           value,
           "Flow ${index + 1}",
           title = if (flows.values.size == 1) "Flows" else "Flow ${index + 1}",
-          ownerIdentity = ownerIdentity + "flow-$index")
+          ownerIdentity = ownerIdentity + "flow-$index",
+          viewState = viewStates[index])
     }
   }
 }
@@ -490,6 +513,7 @@ private fun SummaryEngineeringInsight(
     pieces: List<EngineeringInsightPiece>,
     stale: Boolean,
     ownerIdentity: List<String?>,
+    expansion: MutableState<Boolean>,
     modifier: Modifier = Modifier,
 ) {
   WorkspaceSection("Engineering insight", modifier.testTag("summary-insight")) {
@@ -497,6 +521,7 @@ private fun SummaryEngineeringInsight(
         pieces = pieces,
         stale = stale,
         ownerIdentity = ownerIdentity + pieces,
+        expansion = expansion,
     )
   }
 }
