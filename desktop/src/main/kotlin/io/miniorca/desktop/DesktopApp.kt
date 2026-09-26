@@ -60,6 +60,149 @@ private sealed interface PendingDraftDiscard {
   }
 }
 
+internal data class SwitchProjectIdentity(val id: String, val revision: String, val path: String) {
+  constructor(
+      project: ProjectAnalysis
+  ) : this(project.projectId, project.projectRevision, project.path)
+}
+
+/**
+ * The editor buffer is part of the identity: editing without a new server draft revokes approval.
+ */
+internal data class SwitchDraftIdentity(
+    val session: ChatSession?,
+    val draft: DeclarationDraft?,
+    val editor: EditableDraftState?,
+) {
+  val hasWork: Boolean
+    get() = session != null || draft != null || editor != null
+}
+
+internal data class SwitchAnalyzeDestination(
+    val scope: String,
+    val profile: String,
+    val model: String,
+    val providerOrigin: String,
+    val remote: Boolean,
+) {
+  constructor(
+      model: ScopedModel
+  ) : this(model.scope, model.profile, model.model, model.providerOrigin, model.remoteProvider)
+}
+
+internal data class ProjectSwitchContext(
+    val project: SwitchProjectIdentity?,
+    val draft: SwitchDraftIdentity,
+    val destination: SwitchAnalyzeDestination,
+    val analyzeConfirmed: Boolean,
+) {
+  constructor(
+      workflow: DesktopWorkflowSnapshot
+  ) : this(
+      workflow.state.project?.let(::SwitchProjectIdentity),
+      SwitchDraftIdentity(
+          workflow.state.chat.session, workflow.state.review.draft, workflow.state.review.editor),
+      SwitchAnalyzeDestination(workflow.model(ModelScope.Analyze)),
+      workflow.providerConfirmed(ModelScope.Analyze))
+}
+
+internal enum class SwitchReviewStage {
+  Draft,
+  Provider,
+  Review,
+  Final,
+  Committed,
+}
+
+internal data class PendingProjectSwitch(
+    val requestId: Long,
+    val path: String,
+    val context: ProjectSwitchContext,
+    val stage: SwitchReviewStage,
+)
+
+/**
+ * Admission records intent only. The caller owns the Analyze confirmation and performs cleanup
+ * later.
+ */
+internal class ProjectSwitchAdmission {
+  var pending: PendingProjectSwitch? = null
+    private set
+
+  private var nextRequestId = 0L
+
+  fun choose(path: String, context: ProjectSwitchContext): PendingProjectSwitch? {
+    if (path.isBlank() || pending != null) return null
+    pending = PendingProjectSwitch(++nextRequestId, path, context, firstStage(context))
+    return pending
+  }
+
+  fun dismiss(requestId: Long) {
+    if (pending?.requestId == requestId && pending?.stage != SwitchReviewStage.Committed)
+        pending = null
+  }
+
+  fun finish(requestId: Long) {
+    if (pending?.requestId == requestId && pending?.stage == SwitchReviewStage.Committed)
+        pending = null
+  }
+
+  fun approveDraft(requestId: Long, context: ProjectSwitchContext) {
+    val current = review(requestId, context) ?: return
+    if (current.stage == SwitchReviewStage.Draft) pending = current.copy(stage = nextStage(context))
+  }
+
+  fun approveProvider(requestId: Long, context: ProjectSwitchContext) {
+    val current = review(requestId, context) ?: return
+    if (current.stage == SwitchReviewStage.Provider &&
+        (!context.destination.remote || context.analyzeConfirmed))
+        pending = current.copy(stage = SwitchReviewStage.Final)
+  }
+
+  /** A changed identity without draft or provider steps still needs a fresh, explicit review. */
+  fun approveReview(requestId: Long, context: ProjectSwitchContext) {
+    val current = review(requestId, context) ?: return
+    if (current.stage == SwitchReviewStage.Review)
+        pending = current.copy(stage = SwitchReviewStage.Final)
+  }
+
+  /** Returns the committed request once; no side effects are performed by admission. */
+  fun commit(requestId: Long, context: ProjectSwitchContext): PendingProjectSwitch? {
+    val current = review(requestId, context) ?: return null
+    if (current.stage != SwitchReviewStage.Final ||
+        (context.destination.remote && !context.analyzeConfirmed))
+        return null
+    pending = current.copy(stage = SwitchReviewStage.Committed)
+    return pending
+  }
+
+  private fun review(requestId: Long, context: ProjectSwitchContext): PendingProjectSwitch? {
+    val current = pending ?: return null
+    if (current.requestId != requestId || current.stage == SwitchReviewStage.Committed) return null
+    if (current.context != context &&
+        !(current.stage == SwitchReviewStage.Provider &&
+            !current.context.analyzeConfirmed &&
+            context.analyzeConfirmed &&
+            current.context.copy(analyzeConfirmed = true) == context)) {
+      val stage = firstStage(context)
+      pending =
+          current.copy(
+              context = context,
+              stage = if (stage == SwitchReviewStage.Final) SwitchReviewStage.Review else stage)
+      return null
+    }
+    if (current.context != context) pending = current.copy(context = context)
+    return pending
+  }
+
+  private fun firstStage(context: ProjectSwitchContext): SwitchReviewStage =
+      if (context.draft.hasWork) SwitchReviewStage.Draft else nextStage(context)
+
+  private fun nextStage(context: ProjectSwitchContext): SwitchReviewStage =
+      if (context.destination.remote && !context.analyzeConfirmed) SwitchReviewStage.Provider
+      else SwitchReviewStage.Final
+}
+
 @Composable
 internal fun MiniOrcaApp(
     terminal: DesktopTerminalWorkspace = remember { DesktopTerminalWorkspace() },
@@ -547,7 +690,7 @@ internal fun MiniOrcaApp(
       projectActions =
           DesktopShellProjectActions(
               importProject = ::importProject,
-              reanalyzeProject = presenter::reindexProject,
+              reindexProject = presenter::reindexProject,
               reconnect = presenter::refreshConnection,
               retryRestore = presenter::retryProjectRestore,
           ),

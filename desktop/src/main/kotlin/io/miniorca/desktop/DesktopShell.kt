@@ -215,7 +215,7 @@ internal data class DesktopShellLayoutActions(
 
 internal data class DesktopShellProjectActions(
     val importProject: () -> Unit,
-    val reanalyzeProject: () -> Unit,
+    val reindexProject: () -> Unit,
     val reconnect: () -> Unit,
     val retryRestore: () -> Unit = {},
 )
@@ -619,7 +619,7 @@ internal fun DesktopShell(
               actions =
                   ToolbarActions(
                       onImport = projectActions.importProject,
-                      onReanalyze = projectActions.reanalyzeProject,
+                      onReindex = projectActions.reindexProject,
                       onReconnect = projectActions.reconnect,
                       onRetryRestore = projectActions.retryRestore,
                       onPalette = {

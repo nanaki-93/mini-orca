@@ -1857,7 +1857,7 @@ class DesktopVisualLayoutTest {
         var reconnects = 0
         val landingActions =
             DesktopShellProjectActions(
-                importProject = { opens++ }, reanalyzeProject = {}, reconnect = { reconnects++ })
+                importProject = { opens++ }, reindexProject = {}, reconnect = { reconnects++ })
         ComposeVisualFixture(pxWidth, pxHeight, scale, density) {
               ProjectLanding(
                   DesktopState(
@@ -3554,7 +3554,7 @@ class DesktopVisualLayoutTest {
     val actions =
         ToolbarActions(
             onImport = { imports++ },
-            onReanalyze = { reindexes++ },
+            onReindex = { reindexes++ },
             onReconnect = { reconnects++ },
             onPalette = {},
         )
