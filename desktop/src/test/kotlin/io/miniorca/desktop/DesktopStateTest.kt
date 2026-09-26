@@ -170,6 +170,10 @@ class DesktopStateTest {
     val refreshed = ProjectIndex("id", "new-revision")
     val state =
         DesktopState(
+                projectState =
+                    ProjectWorkspaceState(
+                        project = project().copy(projectId = "id"),
+                        index = ProjectIndex("id", "revision")),
                 selection = FileSelectionState(selectedFile = selected),
                 review = DraftReviewState(benchmark = BenchmarkEvidenceState(running = true)),
                 jobs = JobState(loading = true))
@@ -178,6 +182,18 @@ class DesktopStateTest {
     assertEquals(refreshed, state.index)
     assertFalse(state.review.benchmark.running)
     assertFalse(state.loading)
+    assertEquals("Project inventory refreshed", state.status)
+  }
+
+  @Test
+  fun refreshedIndexRequiresTheLoadedProjectAndAUsableRevision() {
+    val original = projectState()
+    listOf(ProjectIndex("other", "next"), ProjectIndex("project", " ")).forEach { index ->
+      assertEquals(original, original.reduce(DesktopEvent.IndexRefreshed(index)))
+    }
+    assertEquals(
+        DesktopState(),
+        DesktopState().reduce(DesktopEvent.IndexRefreshed(ProjectIndex("project", "next"))))
   }
 
   @Test
@@ -211,6 +227,16 @@ class DesktopStateTest {
         failed,
         failed.reduce(
             DesktopEvent.ProjectIndexingStopped(attempt, ProjectIndexingOutcome.Failed("late"))))
+
+    val transportFailure =
+        running.reduce(
+            DesktopEvent.ProjectIndexingStopped(
+                attempt, ProjectIndexingOutcome.Failed("Connection lost")))
+    assertEquals(previous, transportFailure.index)
+    assertEquals(project, transportFailure.project)
+    assertEquals(
+        ProjectIndexingOutcome.Failed("Connection lost"),
+        transportFailure.projectState.indexingAttempt?.outcome)
 
     val opening =
         running.reduce(

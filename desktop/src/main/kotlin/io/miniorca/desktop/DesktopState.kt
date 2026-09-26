@@ -734,18 +734,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       is DesktopEvent.DraftValidationStarted,
       is DesktopEvent.DraftValidationUpdated,
       is DesktopEvent.DraftValidationStopped -> withValidationEvent(event)
-      DesktopEvent.DraftMarkedStale ->
-          review.editor?.let { editor ->
-            copy(
-                review =
-                    review.copy(
-                        draft = editor.serverDraft.copy(validation = null),
-                        editor = editor.copy(status = DraftEditorStatus.Stale),
-                        checks = null,
-                        checkAttempt = null,
-                        benchmark = review.benchmark.withoutCatalog()),
-                jobs = jobs.copy(loading = false))
-          } ?: this
+      DesktopEvent.DraftMarkedStale -> withStaleDraft()
       is DesktopEvent.DraftLoaded ->
           copy(
               review =
@@ -767,6 +756,25 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       is DesktopEvent.Failed -> copy(jobs = jobs.copy(loading = false, error = event.message))
       is DesktopEvent.Status -> copy(jobs = jobs.copy(status = event.message))
     }
+
+private fun DesktopState.withStaleDraft(): DesktopState =
+    review.editor?.let { editor ->
+      copy(
+          review =
+              review.copy(
+                  draft = editor.serverDraft.copy(validation = null),
+                  editor =
+                      editor.copy(
+                          serverDraft = editor.serverDraft.copy(validation = null),
+                          retainedValidation =
+                              editor.serverDraft.validation ?: editor.retainedValidation,
+                          status = DraftEditorStatus.Stale,
+                          validationAttempt = null),
+                  checks = null,
+                  checkAttempt = null,
+                  benchmark = review.benchmark.withoutCatalog()),
+          jobs = jobs.copy(loading = false))
+    } ?: this
 
 private fun DesktopState.withCheckEvent(event: DesktopEvent): DesktopState =
     when (event) {
@@ -1007,17 +1015,27 @@ private fun DesktopState.withStoppedIndexing(
 }
 
 private fun DesktopState.withRefreshedIndex(index: ProjectIndex): DesktopState {
-  val revisionChanged = project?.projectRevision != index.projectRevision
-  return copy(
+  val loaded = project ?: return this
+  if (loaded.projectId != index.projectId || index.projectRevision.isBlank()) return this
+  val revisionChanged = loaded.projectRevision != index.projectRevision
+  val current = if (revisionChanged) reduce(DesktopEvent.DraftMarkedStale) else this
+  return current.copy(
       projectState =
           projectState.copy(
-              project = project?.copy(projectRevision = index.projectRevision),
+              project = loaded.copy(projectRevision = index.projectRevision),
               index = index,
               sourceChangeObserved = false),
       analysisRun = analysisRun.afterRevisionChange(revisionChanged),
       chat = if (revisionChanged) ChatState() else chat,
-      review = if (revisionChanged) DraftReviewState(applied = review.applied) else review,
-      jobs = jobs.copy(loading = false, status = "Re-analyzed project index", error = null),
+      review =
+          if (revisionChanged)
+              current.review.copy(
+                  draft = if (current.review.editor == null) null else current.review.draft,
+                  checks = null,
+                  checkAttempt = null,
+                  benchmark = current.review.benchmark.withoutCatalog())
+          else review,
+      jobs = jobs.copy(loading = false, status = "Project inventory refreshed", error = null),
   )
 }
 
