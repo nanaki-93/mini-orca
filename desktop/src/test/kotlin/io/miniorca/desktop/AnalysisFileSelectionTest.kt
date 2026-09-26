@@ -116,6 +116,55 @@ class AnalysisFileSelectionTest {
   }
 
   @Test
+  fun projectBoundReloadPreservesAbsentExclusionsAndDaemonDefaultsWithoutWriting() {
+    Harness().use { h ->
+      h.saved =
+          selectionFixture()
+              .copy(
+                  excludedPaths = listOf("temporarily-absent.go"),
+                  files = listOf(AnalysisSelectableFile("new.go", "")))
+      h.workflow.refresh()
+      h.drain()
+      assertEquals(listOf("temporarily-absent.go"), h.current.selection!!.excludedPaths)
+      assertEquals("new.go", h.current.selection!!.files.single().path)
+      assertFalse("new.go" in h.current.selection!!.excludedPaths)
+
+      h.workflow.detach()
+      h.state =
+          h.state.reduce(
+              DesktopEvent.ProjectLoaded(
+                  analysisProjectFixture("other"), ProjectIndex("other", "revision")))
+      h.saved = selectionFixture().copy(projectId = "other", excludedPaths = listOf("other.go"))
+      h.workflow.refresh()
+      h.drain()
+      assertEquals("other", h.current.selection!!.projectId)
+      assertEquals(listOf("other.go"), h.current.selection!!.excludedPaths)
+
+      h.workflow.detach()
+      h.state =
+          h.state.reduce(
+              DesktopEvent.ProjectLoaded(
+                  analysisProjectFixture(), ProjectIndex("project", "revision")))
+      h.saved =
+          selectionFixture()
+              .copy(
+                  excludedPaths = listOf("temporarily-absent.go"),
+                  files = listOf(AnalysisSelectableFile("new.go", "")))
+      h.failRead = true
+      h.workflow.refresh()
+      h.drain()
+      assertNull(h.current.selection)
+      assertEquals(AnalysisSelectionFailure.Read, h.current.failure)
+      h.failRead = false
+      h.workflow.refresh()
+      h.drain()
+      assertEquals(listOf("temporarily-absent.go"), h.current.selection!!.excludedPaths)
+      assertEquals("project", h.current.selection!!.projectId)
+      assertEquals(listOf("GET", "GET", "GET", "GET"), h.methods)
+    }
+  }
+
+  @Test
   fun selectionFailureAndReadOnlyRecoveryRemainReachableWithFilesCollapsed() {
     val selection = selectionFixture().copy(excludedPaths = listOf("main.go"))
     val state = mutableStateOf(AnalysisSelectionState(selection))

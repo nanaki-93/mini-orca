@@ -48,10 +48,19 @@ data class ProjectIndexingAttempt(
     val outcome: ProjectIndexingOutcome = ProjectIndexingOutcome.Running,
 )
 
+sealed interface ProjectDetailsOutcome {
+  data object Refreshing : ProjectDetailsOutcome
+
+  data object Available : ProjectDetailsOutcome
+
+  data class Unavailable(val message: String) : ProjectDetailsOutcome
+}
+
 data class ProjectWorkspaceState(
     val project: ProjectAnalysis? = null,
     val index: ProjectIndex? = null,
     val overview: ProjectOverview? = null,
+    val detailsOutcome: ProjectDetailsOutcome? = null,
     val sourceChangeObserved: Boolean = false,
     val openingAttempt: ProjectOpeningAttempt? = null,
     val indexingAttempt: ProjectIndexingAttempt? = null,
@@ -391,6 +400,8 @@ sealed interface DesktopEvent {
 
   data class OverviewLoaded(val overview: ProjectOverview) : DesktopEvent
 
+  data class ProjectDetailsUpdated(val outcome: ProjectDetailsOutcome) : DesktopEvent
+
   data class FindingsLoaded(val findings: List<UnifiedFinding>) : DesktopEvent
 
   data class FindingStatusUpdated(val findingId: String, val status: String) : DesktopEvent
@@ -528,6 +539,8 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       is DesktopEvent.IndexRefreshed -> withRefreshedIndex(event.index)
       is DesktopEvent.OverviewLoaded ->
           copy(projectState = projectState.copy(overview = event.overview))
+      is DesktopEvent.ProjectDetailsUpdated ->
+          copy(projectState = projectState.copy(detailsOutcome = event.outcome))
       is DesktopEvent.FindingsLoaded -> copy(findings = findings.copy(findings = event.findings))
       is DesktopEvent.FindingStatusUpdated -> withFindingStatus(event)
       is DesktopEvent.AnalysisRunUpdated ->
@@ -827,6 +840,7 @@ private fun DesktopState.withLoadedProject(event: DesktopEvent.ProjectLoaded): D
                 project = event.project,
                 index = event.index,
                 overview = null,
+                detailsOutcome = null,
                 sourceChangeObserved = false,
                 openingAttempt = null,
                 indexingAttempt = null,
