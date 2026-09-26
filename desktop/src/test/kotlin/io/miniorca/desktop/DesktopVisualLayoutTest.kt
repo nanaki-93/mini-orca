@@ -5046,6 +5046,122 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun f09SummaryCoverageProductionRenderMatrix() {
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    val selected =
+        selectionFixture()
+            .copy(
+                projectId = visualFixtureProject.projectId,
+                projectRevision = visualFixtureProject.projectRevision,
+                files =
+                    (0 until 40).map { index ->
+                      AnalysisSelectableFile(
+                          "src/deeply/nested/long/package/file-%02d.go".format(index),
+                          "",
+                          selectionStageFixture(
+                              if (index == 0) "fresh" else "stale", "Saved evidence."))
+                    })
+    val states =
+        listOf(
+            "mixed" to (visualFixtureOverview to AnalysisSelectionState(selection = selected)),
+            "current" to
+                (visualFixtureOverview.copy(
+                    analysisCoverage = AnalysisCoverage(total = 23, fresh = 23)) to
+                    AnalysisSelectionState()),
+            "unavailable" to
+                (visualFixtureOverview.copy(analysisCoverage = AnalysisCoverage()) to
+                    AnalysisSelectionState()),
+            "empty" to
+                (visualFixtureOverview to
+                    AnalysisSelectionState(selection = selected.copy(files = emptyList()))),
+            "failed" to
+                (visualFixtureOverview to
+                    AnalysisSelectionState(
+                        selection = selected,
+                        error = "Selection refresh timed out.",
+                        failure = AnalysisSelectionFailure.Read)))
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        // Every state is captured at every size; density and text scale vary independently.
+        for ((state, data) in states) {
+          val label = "f09-summary-$state-$width-$height-$scale-${density}x"
+          val overview = data.first
+          val selectionState = data.second
+          ComposeVisualFixture(
+                  (width * density).toInt(), (height * density).toInt(), scale, density) {
+                    ProjectSummaryPane(
+                        overview,
+                        visualFixtureProject,
+                        {},
+                        analysisState = ProjectAnalysisRunState(fileSelection = selectionState))
+                  }
+              .use { fixture ->
+                fixture.render("$label-closed")
+                assertTrue(fixture.hasText("Analysis coverage"), label)
+                assertTrue(fixture.hasText("Saved coverage · Coverage, not a health score."), label)
+                when (state) {
+                  "mixed",
+                  "failed" -> {
+                    fixture.revealText("Analysis coverage")
+                    fixture.clickVisibleDescription("Outdated, 39 files")
+                    fixture.render("$label-inspected")
+                    assertTrue(fixture.hasText("Outdated · 39 of 40 selected files"), label)
+                    assertTrue(fixture.hasText("src/deeply/nested/long/package/file-01.go"), label)
+                    fixture.scrollBy(240f * density, "summary-inspection-paths")
+                    fixture.render()
+                    assertTrue(fixture.verticalScrollValue("summary-inspection-paths") > 0f, label)
+                    fixture.assertTextContrast("Outdated · 39 of 40 selected files", StrongSurface)
+                    fixture.revealText("View analysis")
+                    fixture.assertTextFits("View analysis")
+                    fixture.revealText("Analysis coverage")
+                    assertTrue(fixture.requestDescriptionFocus("Outdated, 39 files"), label)
+                    fixture.render("$label-focused")
+                    assertTrue(fixture.isFocusedControl("Outdated, 39 files"), label)
+                  }
+                  "current" -> assertTrue(fixture.hasText("100%"), label)
+                  "unavailable" -> assertTrue(fixture.hasText("File counts unavailable"), label)
+                  "empty" -> assertTrue(fixture.hasText("0 selected files"), label)
+                }
+                if (state == "failed")
+                    assertTrue(fixture.hasText("File selection needs attention"), label)
+                fixture.revealText("Open Editor")
+                fixture.render("$label-lower")
+                fixture.assertTextFits("Open Editor")
+                assertTrue(fixture.hasText("Change lifecycle"), label)
+              }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun f09CoverageReflowsOnBothSidesOfLocalBreakpoints() {
+    // Summary page gutter is 48 dp; coverage panel padding is another 32 dp.
+    for (width in listOf(379, 381, 399, 401, 1127, 1129)) {
+      ComposeVisualFixture(width, 900) {
+            ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, {})
+          }
+          .use { fixture ->
+            fixture.render("f09-boundary-$width")
+            val heading = fixture.firstVisibleTextBounds("Analysis coverage")
+            val status = fixture.taggedBounds("summary-analysis-status")
+            val dial = fixture.taggedBounds("summary-coverage-dial")
+            val readout = fixture.firstVisibleTextBounds("16 of 23 selected files are up to date")
+            val coverage = fixture.taggedBounds("analysis-summary")
+            val results = fixture.taggedBounds("summary-results")
+            if (width < 380) assertTrue(heading.bottom <= status.top)
+            else assertTrue(heading.right <= status.left)
+            if (width < 400) assertTrue(dial.bottom <= readout.top)
+            else assertTrue(dial.right <= readout.left)
+            if (width < 1128) assertTrue(coverage.bottom <= results.top)
+            else assertTrue(coverage.right <= results.left)
+            fixture.revealText("View analysis")
+            fixture.assertTextFits("View analysis")
+          }
+    }
+  }
+
+  @Test
   fun summaryDashboardShowsCompleteLongProseInThePage() {
     val longPurpose = "This purpose remains readable directly in the dashboard. ".repeat(60)
     val overview =
