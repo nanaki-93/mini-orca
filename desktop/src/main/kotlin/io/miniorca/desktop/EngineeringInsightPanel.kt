@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -83,11 +84,13 @@ internal fun SummaryEngineeringInsightPanel(
     stale: Boolean,
     ownerIdentity: Any,
     modifier: Modifier = Modifier,
+    expansion: MutableState<Boolean>? = null,
 ) {
   if (pieces.isEmpty()) return
   key(ownerIdentity, pieces) {
     val presentation = summaryEngineeringInsightPieces(pieces)
-    var expanded by remember { mutableStateOf(false) }
+    val expandedState = expansion ?: remember { mutableStateOf(false) }
+    var expanded by expandedState
     val detailsFocus = remember { FocusRequester() }
     var restoreDetailsFocus by remember { mutableStateOf(false) }
     fun toggle() {

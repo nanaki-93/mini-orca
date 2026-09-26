@@ -158,6 +158,28 @@ class EngineeringInsightPanelTest {
         }
   }
 
+  @Test
+  fun summaryInsightCollapseRestoresDisclosureFocusAndKeepsLeadVisible() {
+    ComposeVisualFixture(600, 650) {
+          SummaryEngineeringInsightPanel(
+              summaryInsightPieces(), stale = false, ownerIdentity = "one")
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.tryClick("Expand More insight"))
+          fixture.render()
+          assertTrue(fixture.hasText("Trade-off."))
+          assertTrue(fixture.requestDescriptionFocus("Collapse More insight"))
+          assertTrue(fixture.tryClick("Collapse More insight"))
+          fixture.render()
+          assertEquals("Collapsed", fixture.stateDescription("More insight"))
+          assertTrue(fixture.isDescriptionFocused("Expand More insight"))
+          assertFalse(fixture.hasText("Trade-off."))
+          assertTrue(fixture.hasText("Mechanism."))
+          assertTrue(fixture.hasText("Local impact."))
+        }
+  }
+
   private fun summaryInsightPieces(): List<EngineeringInsightPiece> =
       engineeringInsightPieces(
           EngineeringInsight(
