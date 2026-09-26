@@ -327,6 +327,8 @@ class DesktopAccessibilityTest {
           fixture.awaitDescription("Show Architecture diagram", "Collapsed")
           fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
           assertEquals("Collapsed", fixture.descriptionStateDescription("Expand More insight"))
+          fixture.revealText("Change lifecycle", "summary-scroll")
+          assertTrue(fixture.semanticHeadingTexts().contains("Change lifecycle"))
         }
   }
 
