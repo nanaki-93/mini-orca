@@ -39,6 +39,104 @@ class DesktopAnalysisWorkflowTest {
   }
 
   @Test
+  fun summaryPreviewDismissalAndEmptyScopeNeverAdmitWork() {
+    for (emptyScope in listOf(false, true)) {
+      Harness().use { h ->
+        h.emptyPreview = emptyScope
+        // Summary's Start callback delegates to this preview with the default full-run policy.
+        h.workflow.preview(defaultAnalysisRunLimits, resume = false)
+        h.drain()
+        val request = Json.decodeFromString<AnalysisPreviewRequest>(h.bodies.single())
+        assertEquals(defaultAnalysisRunLimits, request.limits)
+        assertTrue(request.refresh)
+        assertFalse(request.retryStaleFailed)
+        assertNull(request.resumeRun)
+        val admission = assertNotNull(h.state.analysisRun.admission)
+        assertFalse(admission.isConfirmed())
+        assertEquals(emptyScope, admission.preview.files.isEmpty())
+        h.workflow.admit()
+        h.drain()
+        h.assertPreviewOnly()
+        if (emptyScope) {
+          h.confirm()
+          assertTrue(h.state.analysisRun.admission!!.isConfirmed())
+          h.workflow.admit()
+          h.drain()
+          assertTrue(h.state.analysisRun.error!!.contains("No eligible files"))
+          h.assertPreviewOnly()
+        }
+        h.workflow.dismissAdmission()
+        h.workflow.admit()
+        h.drain()
+        assertNull(h.state.analysisRun.admission)
+        h.assertPreviewOnly()
+      }
+    }
+  }
+
+  @Test
+  fun failedSummaryPreviewRetainsProjectEvidenceAndRequiresExplicitRetry() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      val project = h.state.project
+      val sections = h.state.analysisRun.sections
+      val run = h.state.analysisRun.run
+      val summary = projectSummaryPresentation(null, project, run, sections)
+      h.calls.clear()
+      h.bodies.clear()
+      h.failure = "/analysis/preview"
+      h.workflow.preview(defaultAnalysisRunLimits, resume = false)
+      h.drain()
+      assertNull(h.state.analysisRun.admission)
+      assertTrue(h.state.analysisRun.error!!.contains("unavailable"))
+      assertEquals(project, h.state.project)
+      assertEquals(sections, h.state.analysisRun.sections)
+      assertEquals(
+          summary,
+          projectSummaryPresentation(
+              null, h.state.project, h.state.analysisRun.run, h.state.analysisRun.sections))
+      h.assertPreviewOnly()
+      h.drain()
+      assertEquals(1, h.calls.count { it.first == "POST" })
+      h.failure = ""
+      h.workflow.preview(defaultAnalysisRunLimits, resume = false)
+      h.drain()
+      assertNotNull(h.state.analysisRun.admission)
+      assertNull(h.state.analysisRun.error)
+      assertEquals(2, h.calls.count { it.first == "POST" })
+      h.assertPreviewOnly()
+    }
+  }
+
+  @Test
+  fun pendingSummaryPreviewCannotAttachAfterProjectOrRevisionChange() {
+    for (change in listOf("project", "revision")) {
+      Harness().use { h ->
+        h.workflow.preview(defaultAnalysisRunLimits, resume = false)
+        h.main.runPending()
+        h.io.runPending() // The old response is queued for delivery on the main dispatcher.
+        when (change) {
+          "project" ->
+              h.dispatch(
+                  DesktopEvent.ProjectLoaded(
+                      analysisProjectFixture("other"), ProjectIndex("other", "revision")))
+          else -> h.dispatch(DesktopEvent.IndexRefreshed(ProjectIndex("project", "new")))
+        }
+        h.drain()
+        assertNull(h.state.analysisRun.admission, change)
+        assertEquals("", h.state.analysisRun.action, change)
+        assertEquals(if (change == "project") "other" else "project", h.state.project?.projectId)
+        assertEquals(
+            if (change == "project") "revision" else "new", h.state.project?.projectRevision)
+        h.workflow.admit()
+        h.drain()
+        h.assertPreviewOnly()
+      }
+    }
+  }
+
+  @Test
   fun staleFailedSelectionTravelsThroughPreviewStartAndResume() {
     Harness().use { h ->
       h.run = h.run.copy(plan = h.run.plan.copy(retryStaleFailed = true))
@@ -478,6 +576,7 @@ class DesktopAnalysisWorkflowTest {
     var failure = ""
     var wrongResult = false
     var wrongRetryPreview = false
+    var emptyPreview = false
     val workflow =
         DesktopAnalysisWorkflow(
             ApiClient(
@@ -499,7 +598,10 @@ class DesktopAnalysisWorkflowTest {
                                               refresh = request.refresh,
                                               limits = request.limits,
                                               retryStaleFailed =
-                                                  request.retryStaleFailed && !wrongRetryPreview)))
+                                                  request.retryStaleFailed && !wrongRetryPreview,
+                                              files =
+                                                  if (emptyPreview) emptyList()
+                                                  else analysisPreviewFixture().files)))
                             }
                             path.endsWith("/control") -> {
                               val request = Json.decodeFromString<AnalysisRunControlRequest>(body!!)
@@ -558,6 +660,12 @@ class DesktopAnalysisWorkflowTest {
       if (event is DesktopEvent.ProjectLoaded)
           coordinator.projectOpened(
               WorkflowProjectIdentity(event.project.projectId, event.project.projectRevision))
+    }
+
+    fun assertPreviewOnly() {
+      assertEquals(
+          listOf("POST" to "/api/projects/current/analysis/preview"),
+          calls.filter { it.first != "GET" }.distinct())
     }
 
     fun confirm() {
