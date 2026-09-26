@@ -63,7 +63,12 @@ internal fun MainToolbar(
                 projectType = state.project?.type,
                 projectLabel = projectBreadcrumbLabel(state.project),
                 projectAvailable = state.project != null,
-                openAvailable = projectOpenAvailable(state.openingAttempt),
+                availability =
+                    projectActionAvailability(
+                        state.project,
+                        state.openingAttempt,
+                        state.indexingAttempt,
+                        state.switchPending),
                 reconnectAvailable = connectionPresentation.canReconnect,
                 onImport = actions.onImport,
                 onReindex = actions.onReindex,
@@ -82,7 +87,7 @@ internal fun MainToolbar(
           }
       state.openingAttempt?.let { attempt ->
         Spacer(Modifier.height(8.dp))
-        ProjectOpeningFeedback(state.project, attempt, actions)
+        ProjectOpeningFeedback(state.project, attempt, actions, state.switchPending)
       }
       if (state.preferenceReadWarning != null || state.preferenceSaveWarning != null) {
         Column(
@@ -145,6 +150,8 @@ internal data class ToolbarState(
     val gitStatus: GitStatus?,
     val analysisStatus: ToolbarAnalysisStatus? = null,
     val openingAttempt: ProjectOpeningAttempt? = null,
+    val indexingAttempt: ProjectIndexingAttempt? = null,
+    val switchPending: Boolean = false,
     val preferenceReadWarning: String? = null,
     val preferenceSaveWarning: String? = null,
 )
@@ -154,6 +161,7 @@ private fun ProjectOpeningFeedback(
     project: ProjectAnalysis?,
     attempt: ProjectOpeningAttempt,
     actions: ToolbarActions,
+    switchPending: Boolean,
 ) {
   val restoring = attempt.kind == ProjectOpeningKind.Restore
   val failure = attempt.outcome as? ProjectOpeningOutcome.Failed
@@ -174,7 +182,7 @@ private fun ProjectOpeningFeedback(
                 "Reading saved local project data; no model request is made. The current project remains open."
             attempt.outcome == ProjectOpeningOutcome.Opening ->
                 "Import may use the configured Analyze provider and require confirmation. The current project remains open."
-            else -> "The current project remains open. Open project to choose another folder."
+            else -> "The current project remains open. Switch project… to choose another folder."
           },
       accent = if (failure != null) Error else SecondaryText,
       modifier =
@@ -200,14 +208,18 @@ private fun ProjectOpeningFeedback(
           DiagnosticText(failure.message, color = Error)
           Spacer(Modifier.height(8.dp))
           if (restoring) {
-            MiniOrcaButton(onClick = actions.onRetryRestore, tone = ActionTone.Neutral) {
-              Text("Retry restore")
-            }
+            MiniOrcaButton(
+                onClick = actions.onRetryRestore,
+                enabled = !switchPending,
+                tone = ActionTone.Neutral) {
+                  Text("Retry restore")
+                }
             Spacer(Modifier.height(8.dp))
           }
-          MiniOrcaButton(onClick = actions.onImport, tone = ActionTone.Neutral) {
-            Text("Open project")
-          }
+          MiniOrcaButton(
+              onClick = actions.onImport, enabled = !switchPending, tone = ActionTone.Neutral) {
+                Text(if (project == null) "Open project…" else "Switch project…")
+              }
         }
       })
 }
@@ -300,7 +312,7 @@ private fun ProjectActionsMenu(
     projectType: String?,
     projectLabel: String,
     projectAvailable: Boolean,
-    openAvailable: Boolean,
+    availability: ProjectActionAvailability,
     reconnectAvailable: Boolean,
     onImport: () -> Unit,
     onReindex: () -> Unit,
@@ -327,13 +339,13 @@ private fun ProjectActionsMenu(
           restoreFocus = true
         }) {
           IdeDropdownMenuItem(
-              label = "Open project",
+              label = if (projectAvailable) "Switch project…" else "Open project…",
               onClick = {
                 expanded = false
                 restoreFocus = true
                 onImport()
               },
-              enabled = openAvailable,
+              enabled = availability.open,
               icon = DesktopIcon.Folder)
           IdeDropdownMenuItem(
               label = "Re-index project",
@@ -342,7 +354,7 @@ private fun ProjectActionsMenu(
                 restoreFocus = true
                 onReindex()
               },
-              enabled = projectAvailable,
+              enabled = availability.reindex,
               icon = DesktopIcon.Refresh)
           if (reconnectAvailable) {
             Text(

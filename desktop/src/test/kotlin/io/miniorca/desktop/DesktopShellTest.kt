@@ -527,7 +527,7 @@ class DesktopShellTest {
           assertEquals(0, retries)
           fixture.clickText("Retry restore")
           assertEquals(1, retries)
-          fixture.clickText("Open project")
+          fixture.clickText("Switch project…")
           assertEquals(1, opens)
           state =
               state.copy(
@@ -597,8 +597,8 @@ class DesktopShellTest {
           fixture.render()
           fixture.clickText(project.name)
           fixture.render()
-          assertTrue(!fixture.isDisabled("Open project"))
-          fixture.clickText("Open project")
+          assertTrue(!fixture.isDisabled("Switch project…"))
+          fixture.clickText("Switch project…")
           assertEquals(1, opens)
           state =
               state.copy(
@@ -606,7 +606,7 @@ class DesktopShellTest {
           fixture.render()
           fixture.clickText(project.name)
           fixture.render()
-          assertTrue(fixture.isDisabled("Open project"))
+          assertTrue(fixture.isDisabled("Switch project…"))
           assertEquals(1, opens)
           state =
               state.copy(
@@ -614,7 +614,62 @@ class DesktopShellTest {
                       state.openingAttempt!!.copy(
                           outcome = ProjectOpeningOutcome.Failed("Import failed")))
           fixture.render()
-          assertTrue(!fixture.isDisabled("Open project"))
+          assertTrue(!fixture.isDisabled("Switch project…"))
+        }
+  }
+
+  @Test
+  fun projectMenuActionsTrackOpeningSwitchAndIndexingWithoutDispatchOnFocusOrDismissal() {
+    val project = resultProjectFixture()
+    val indexAttempt =
+        ProjectIndexingAttempt(1, project.projectId, project.projectRevision, project.path)
+    var opens = 0
+    var reindexes = 0
+    var state by mutableStateOf(ToolbarState(project, false, "", ConnectionState(), null))
+    ComposeVisualFixture(1024, 768) {
+          MainToolbar(state, ToolbarActions({ opens++ }, { reindexes++ }, {}, {}))
+        }
+        .use { fixture ->
+          fun menu() {
+            fixture.clickText(project.name)
+            fixture.render()
+          }
+          fixture.render()
+          assertTrue(fixture.requestFocus(project.name))
+          assertTrue(fixture.pressKey(androidx.compose.ui.input.key.Key.Enter))
+          fixture.render()
+          assertTrue(fixture.hasText("Switch project…"))
+          assertTrue(!fixture.isDisabled("Switch project…"))
+          assertTrue(!fixture.isDisabled("Re-index project"))
+          assertEquals(0, opens + reindexes)
+          fixture.pressKey(androidx.compose.ui.input.key.Key.Escape)
+          fixture.render()
+          assertTrue(fixture.isFocusedControl(project.name))
+          assertEquals(0, opens + reindexes)
+
+          state = state.copy(indexingAttempt = indexAttempt)
+          fixture.render()
+          menu()
+          assertTrue(fixture.isDisabled("Re-index project"))
+          assertTrue(!fixture.isDisabled("Switch project…"))
+          assertEquals(0, opens + reindexes)
+          state = state.copy(indexingAttempt = null, switchPending = true)
+          fixture.render()
+          assertTrue(fixture.isDisabled("Re-index project"))
+          assertTrue(fixture.isDisabled("Switch project…"))
+          state =
+              state.copy(
+                  switchPending = false,
+                  openingAttempt = ProjectOpeningAttempt(1, "/next", ProjectOpeningKind.Import))
+          fixture.render()
+          assertTrue(fixture.isDisabled("Re-index project"))
+          assertTrue(fixture.isDisabled("Switch project…"))
+          state = state.copy(openingAttempt = null)
+          fixture.render()
+          assertTrue(!fixture.isDisabled("Re-index project"))
+          fixture.clickText("Re-index project")
+          assertEquals(1, reindexes)
+          assertEquals(0, opens)
         }
   }
 
@@ -656,7 +711,7 @@ class DesktopShellTest {
           fixture.clickText("Reconnect daemon")
           assertEquals(1, reconnects)
           assertEquals(0, opens)
-          fixture.clickText("Open project")
+          fixture.clickText("Open project…")
           assertEquals(1, opens)
           assertEquals(1, reconnects)
         }
@@ -666,7 +721,7 @@ class DesktopShellTest {
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("No project remembered on this device."))
-          fixture.assertTextFits("Open project")
+          fixture.assertTextFits("Open project…")
           assertTrue(!fixture.hasText("Retry restore"))
           assertTrue(!fixture.hasText("Reconnect daemon"))
         }
@@ -689,9 +744,9 @@ class DesktopShellTest {
           assertTrue(!fixture.hasText("No project remembered on this device."))
           assertTrue(fixture.hasText("Could not read last project preference"))
           assertTrue(fixture.hasText("Storage denied"))
-          assertTrue(!fixture.isDisabled("Open project"))
+          assertTrue(!fixture.isDisabled("Open project…"))
           assertEquals(0, opens)
-          fixture.clickText("Open project")
+          fixture.clickText("Open project…")
           assertEquals(1, opens)
         }
   }
@@ -712,8 +767,8 @@ class DesktopShellTest {
           fixture.render()
           assertTrue(!fixture.hasText("Restoring local project…"))
           assertTrue(!fixture.hasText("Provider failed"))
-          assertTrue(!fixture.isDisabled("Open project"))
-          fixture.clickText("Open project")
+          assertTrue(!fixture.isDisabled("Open project…"))
+          fixture.clickText("Open project…")
           assertEquals(1, opens)
           app =
               app.copy(
@@ -738,7 +793,7 @@ class DesktopShellTest {
                                   4, "/other/project", ProjectOpeningKind.Restore)))
           fixture.render()
           assertTrue(fixture.hasText("Restoring local project…"))
-          assertTrue(fixture.isDisabled("Open project"))
+          assertTrue(fixture.isDisabled("Open project…"))
           assertTrue(!fixture.hasText("Retry restore"))
           assertEquals(0, retries)
           app =
@@ -748,7 +803,7 @@ class DesktopShellTest {
           fixture.render()
           assertTrue(fixture.hasText("Could not read last project preference"))
           assertTrue(fixture.hasText("Preferences unavailable"))
-          assertTrue(!fixture.isDisabled("Open project"))
+          assertTrue(!fixture.isDisabled("Open project…"))
           assertTrue(!fixture.hasText("Retry restore"))
           assertEquals(1, opens)
         }
