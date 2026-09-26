@@ -95,6 +95,114 @@ class AnalysisFileStatusTest {
   }
 
   @Test
+  fun savedCoverageCountsMatchInspectableRowsAndExcludeEveryKindOfExclusion() {
+    val states =
+        listOf(
+            "fresh" to AnalysisCoverageBucket.UpToDate,
+            "stale" to AnalysisCoverageBucket.Outdated,
+            "missing" to AnalysisCoverageBucket.NotAnalyzed,
+            "running" to AnalysisCoverageBucket.Running,
+            "pending" to AnalysisCoverageBucket.Running,
+            "failed" to AnalysisCoverageBucket.Failed,
+            "partial" to AnalysisCoverageBucket.Incomplete,
+            "paused" to AnalysisCoverageBucket.Incomplete,
+            "interrupted" to AnalysisCoverageBucket.Incomplete,
+            "canceled" to AnalysisCoverageBucket.Incomplete,
+            "unavailable" to AnalysisCoverageBucket.Unavailable,
+            "future_status" to AnalysisCoverageBucket.Unavailable)
+    val files =
+        states.mapIndexed { index, (status, _) ->
+          AnalysisSelectableFile(
+              "src/$index.go",
+              "",
+              listOf(AnalysisFileStageStatus("semantic", status, "Cause: $status")))
+        } +
+            listOf(
+                AnalysisSelectableFile("no-stages.go", ""),
+                AnalysisSelectableFile(
+                    "policy.go", "Excluded by policy", selectionStageFixture("fresh", "Current")),
+                AnalysisSelectableFile(
+                    "skipped.go", "", selectionStageFixture("skipped", "Not applicable")),
+                AnalysisSelectableFile("user.go", "", selectionStageFixture("fresh", "Current")))
+    val selection =
+        selectionFixture()
+            .copy(files = files, excludedPaths = listOf("user.go", "absent-from-inventory.go"))
+    val rows = analysisSelectionCoverageRows(selection)
+    assertEquals(
+        states.map { it.second } + AnalysisCoverageBucket.Unavailable, rows.map { it.bucket })
+    assertEquals(files.size - 3, rows.size)
+    states.forEachIndexed { index, (status, _) ->
+      assertEquals("src/$index.go", rows[index].saved.file.path)
+      if (status !in setOf("fresh", "future_status"))
+          assertTrue(rows[index].saved.explanation.contains("Cause: $status"))
+    }
+    assertEquals(AnalysisFileSyncStatus.Unknown, rows[11].saved.status)
+    assertEquals(AnalysisFileSyncStatus.Unknown, rows.last().saved.status)
+    assertTrue(rows.last().saved.explanation.contains("No analysis status is available"))
+    assertEquals(
+        AnalysisCoverage(
+            total = 13,
+            fresh = 1,
+            stale = 1,
+            missing = 1,
+            running = 2,
+            failed = 1,
+            partial = 4,
+            unavailable = 3),
+        analysisSelectionCoverage(selection))
+    val restored = selection.copy(excludedPaths = listOf("absent-from-inventory.go"))
+    assertEquals(
+        AnalysisFileSyncStatus.Updated, analysisSelectionCoverageRows(restored).last().saved.status)
+    assertEquals(2, analysisSelectionCoverage(restored).fresh)
+    assertEquals(14, analysisSelectionCoverage(restored).total)
+  }
+
+  @Test
+  fun fullyExcludedSelectionHasNoSavedCoverageRows() {
+    val selection =
+        selectionFixture()
+            .copy(
+                excludedPaths = listOf("helper.go", "main.go", "absent.go"),
+                files =
+                    selectionFixture().files +
+                        AnalysisSelectableFile(
+                            "skipped.go", "", selectionStageFixture("skipped", "Not applicable")))
+    assertTrue(analysisSelectionCoverageRows(selection).isEmpty())
+    assertEquals(AnalysisCoverage(), analysisSelectionCoverage(selection))
+  }
+
+  @Test
+  fun runProgressCannotUpgradeSavedCoverageOrInspectableReasons() {
+    val selection = selectionFixture()
+    val run =
+        analysisRunFixture()
+            .copy(
+                status = "running",
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "main.go",
+                            "base",
+                            "Go",
+                            listOf(AnalysisStageProgress("semantic", "pending", 0, false)))))
+    val savedRows = analysisSelectionCoverageRows(selection)
+    assertEquals(AnalysisFileSyncStatus.Pending, analysisFileStatuses(selection, run).last().status)
+    assertEquals(AnalysisFileSyncStatus.Missing, savedRows.last().saved.status)
+    assertTrue(savedRows.last().saved.explanation.contains("No saved analysis exists"))
+    val finished =
+        run.copy(
+            files =
+                run.files.map {
+                  it.copy(stages = it.stages.map { stage -> stage.copy(status = "completed") })
+                })
+    assertEquals(
+        AnalysisFileSyncStatus.Finished, analysisFileStatuses(selection, finished).last().status)
+    assertEquals(savedRows, analysisSelectionCoverageRows(selection))
+    assertEquals(
+        AnalysisCoverage(total = 2, fresh = 1, missing = 1), analysisSelectionCoverage(selection))
+  }
+
+  @Test
   fun liveRunRowsKeepSavedFreshnessAndRequireMatchingAdmission() {
     val selection = selectionFixture()
     val initial =
