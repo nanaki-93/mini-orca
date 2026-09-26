@@ -333,31 +333,58 @@ class DesktopWorkflowPresenter(
         }
   }
 
-  fun reanalyze() {
-    val project = snapshot.value.state.project ?: return
+  fun reindexProject() {
+    val attempt = controller.beginProjectIndexing() ?: return
+    publish()
     clearSecurityReviewRemoteConfirmation()
     cancelProjectScopedWork()
-    dispatch(DesktopEvent.Loading)
-    dispatch(DesktopEvent.Status("Refreshing deterministic project facts…"))
     projectJob =
         scope.launch {
           try {
-            val index = io { api.reindex(project.projectRevision) }
-            if (!matchesProject(project.identity())) return@launch
-            dispatch(DesktopEvent.IndexRefreshed(index))
-            val refreshed = snapshot.value.state.project?.identity() ?: return@launch
+            val index = io { api.reindex(attempt.projectRevision) }
+            if (!controller.projectIndexingCompleted(attempt, index)) {
+              publish()
+              restoreProjectObservationAfterIndexing(attempt)
+              return@launch
+            }
+            publish()
+            val refreshed = controller.state.project?.identity() ?: return@launch
             jobCoordinator.projectOpened(refreshed)
             refreshProjectWorkspace(refreshed)
-          } catch (_: CancellationException) {
-            throw CancellationException()
+          } catch (canceled: CancellationException) {
+            if (controller.cancelProjectIndexing(attempt)) {
+              publish()
+              restoreProjectObservationAfterIndexing(attempt)
+            }
+            throw canceled
           } catch (error: Exception) {
-            if (matchesProject(project.identity())) {
-              jobCoordinator.projectOpened(project.identity())
-              analysisWorkflow.refresh()
-              dispatch(DesktopEvent.Failed(error.message ?: "Re-analysis failed"))
+            if (controller.projectIndexingFailed(
+                attempt,
+                error.message?.takeIf(String::isNotBlank)
+                    ?: "Could not re-index project. Try again.")) {
+              publish()
+              restoreProjectObservationAfterIndexing(attempt)
             }
           }
         }
+  }
+
+  private fun restoreProjectObservationAfterIndexing(attempt: ProjectIndexingAttempt) {
+    val state = controller.state
+    val outcome = state.projectState.indexingAttempt
+    if (outcome?.generation != attempt.generation ||
+        outcome.outcome !is ProjectIndexingOutcome.Failed &&
+            outcome.outcome != ProjectIndexingOutcome.Canceled ||
+        state.projectState.openingAttempt?.outcome == ProjectOpeningOutcome.Opening ||
+        state.project?.let {
+          it.projectId == attempt.projectId &&
+              it.projectRevision == attempt.projectRevision &&
+              it.path == attempt.path
+        } != true)
+        return
+    jobCoordinator.projectOpened(
+        WorkflowProjectIdentity(attempt.projectId, attempt.projectRevision))
+    analysisWorkflow.refresh()
   }
 
   fun selectFile(
