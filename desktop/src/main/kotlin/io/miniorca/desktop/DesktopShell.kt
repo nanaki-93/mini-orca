@@ -28,6 +28,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -394,6 +395,12 @@ internal fun DesktopShell(
   val scope = rememberCoroutineScope()
   val resultBrowsers = remember { ResultBrowserStore() }
   resultBrowsers.resetFor(appState.project, appState.analysisRun.run)
+  LaunchedEffect(appState) {
+    AnalysisResultType.entries.forEach { type ->
+      resultBrowsers.reconcileTarget(appState.analysisResultPage(type.category), appState)
+    }
+  }
+  val latestApp by rememberUpdatedState(appState)
   val focusManager = LocalFocusManager.current
   val focusRequesters = remember {
     ShellFocusRequesters(
@@ -670,6 +677,9 @@ internal fun DesktopShell(
                     analysisActions,
                     findingActions,
                     ::selectWorkspace,
+                    { target ->
+                      openSummaryFinding(target, latestApp, resultBrowsers, ::selectWorkspace)
+                    },
                     Modifier.weight(1f)
                         .fillMaxHeight()
                         .focusRequester(focusRequesters.editor)
@@ -704,6 +714,10 @@ internal fun DesktopShell(
                                   analysisActions,
                                   findingActions,
                                   ::selectWorkspace,
+                                  { target ->
+                                    openSummaryFinding(
+                                        target, latestApp, resultBrowsers, ::selectWorkspace)
+                                  },
                                   modifier
                                       .focusRequester(focusRequesters.editor)
                                       .focusable()
@@ -863,6 +877,15 @@ private fun RestoreFocusFromRemovedSplitter(
           editorFocus.requestFocus()
     }
   }
+}
+
+internal fun openSummaryFinding(
+    target: SummaryFindingTarget,
+    current: DesktopState,
+    browsers: ResultBrowserStore,
+    navigate: (Workspace) -> Unit,
+) {
+  if (browsers.activate(target, current) != null) navigate(target.category.workspace)
 }
 
 // A single layout node changes placement without replacing the keyed pane compositions.
@@ -1329,6 +1352,7 @@ private fun DesktopCanvas(
     analysisActions: DesktopShellAnalysisActions,
     findingActions: FindingActions,
     onWorkspaceSelected: (Workspace) -> Unit,
+    onFindingSelected: (SummaryFindingTarget) -> Unit,
     modifier: Modifier,
 ) {
   val appState = state.app
@@ -1343,6 +1367,7 @@ private fun DesktopCanvas(
                 ContentPaneState(
                     project = appState.project,
                     overview = appState.overview,
+                    findingState = appState,
                     selected = appState.selectedFile,
                     symbols = appState.symbols,
                     selectedSymbol = appState.selectedSymbol,
@@ -1391,6 +1416,7 @@ private fun DesktopCanvas(
             navigation =
                 ContentPaneNavigationActions(
                     selectWorkspace = onWorkspaceSelected,
+                    selectFinding = onFindingSelected,
                     selectEditorSurface = editorActions.selectEditorSurface,
                     createDeclaration = editorActions.createDeclaration,
                     editDraft = editorActions.focusDraft,
@@ -1450,7 +1476,9 @@ private fun ContentPane(
               sections = state.analysis.analysis.sections,
               fileSelection = state.analysis.analysis.fileSelection.selection,
               analysisState = state.analysis.analysis,
-              analysisActions = analysisActions)
+              analysisActions = analysisActions,
+              findingState = state.findingState,
+              onFindingSelected = navigation.selectFinding)
       Workspace.Editor ->
           EditorWorkspace(
               chrome = state.editorChrome,
@@ -1496,11 +1524,13 @@ private data class ContentPaneState(
     val bugs: BugsWorkspacePaneState,
     val performance: PerformanceWorkspacePaneState,
     val security: SecurityWorkspacePaneState,
+    val findingState: DesktopState,
 )
 
 private data class ContentPaneNavigationActions(
     val editDraft: () -> Unit,
     val selectWorkspace: (Workspace) -> Unit,
+    val selectFinding: (SummaryFindingTarget) -> Unit,
     val selectEditorSurface: (EditorSurface) -> Unit,
     val sourceLineSelected: (SourceLineSelection) -> Unit,
     val createDeclaration: () -> Unit,

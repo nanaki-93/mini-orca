@@ -832,6 +832,72 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun summaryPreviewOpensExactLoadedDetailsByPointerEnterAndSpaceWithoutPrivilegedWork() {
+    val pages = listOf(resultPageFixture("bugs"), performancePageFixture(), securityPageFixture())
+    val run = pages.first().run
+    val project = resultProjectFixture()
+    val draft =
+        DeclarationDraft(
+            id = "retained-draft",
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            targetPath = "main.go",
+            targetSymbol = "Run",
+            declaration = "func Run() {}")
+    val initial =
+        shellFocusState(project).let { shell ->
+          shell.copy(
+              app =
+                  shell.app.copy(
+                      selection = FileSelectionState(selectedFile = analysisFileFixture()),
+                      review = DraftReviewState(draft = draft),
+                      analysisRun =
+                          ProjectAnalysisRunState(
+                              run = run,
+                              sections =
+                                  pages.associate {
+                                    AnalysisResultKey(it.category) to it.section
+                                  })))
+        }
+    val original = initial.app
+    val rows = summaryFindingPreview(original).rows
+    assertTrue(rows.any { it.target.category == AnalysisResultType.Bugs })
+    assertTrue(rows.any { it.target.category == AnalysisResultType.Performance })
+    assertTrue(rows.any { it.target.category == AnalysisResultType.Security })
+    rows.forEachIndexed { index, row ->
+      var state by mutableStateOf(initial)
+      var privileged = 0
+      ComposeVisualFixture(1280, 800) {
+            FocusTestShell(state, onState = { state = it }, onOperation = { privileged++ })
+          }
+          .use { fixture ->
+            fixture.render()
+            val label =
+                "Inspect ${row.title} in ${row.target.category.workspace.name} results at ${row.location}"
+            fixture.revealText("Selected findings", "summary-scroll")
+            fixture.render()
+            when (index % 3) {
+              0 -> fixture.clickDescription(label)
+              1 -> {
+                assertTrue(fixture.requestDescriptionFocus(label))
+                assertTrue(fixture.pressKey(Key.Enter))
+              }
+              else -> {
+                assertTrue(fixture.requestDescriptionFocus(label))
+                assertTrue(fixture.pressKey(Key.Spacebar))
+              }
+            }
+            fixture.render()
+            assertEquals(row.target.category.workspace, state.app.workspace)
+            assertTrue(fixture.hasText(row.title), "Expected exact destination detail for $label")
+            assertEquals(original.selection, state.app.selection)
+            assertEquals(original.review, state.app.review)
+            assertEquals(0, privileged)
+          }
+    }
+  }
+
+  @Test
   fun summaryEditorEntryNavigatesByPointerAndKeyboardWithoutWorkflowActions() {
     val project = resultProjectFixture()
     val draft =

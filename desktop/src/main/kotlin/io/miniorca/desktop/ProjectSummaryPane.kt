@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -461,7 +462,13 @@ internal fun ProjectSummaryPane(
     fileSelection: AnalysisFileSelection? = null,
     analysisState: ProjectAnalysisRunState? = null,
     analysisActions: AnalysisWorkspaceActions? = null,
+    findingState: DesktopState =
+        DesktopState(
+            projectState = ProjectWorkspaceState(project = project),
+            analysisRun = ProjectAnalysisRunState(run = run, sections = sections)),
+    onFindingSelected: ((SummaryFindingTarget) -> Unit)? = null,
 ) {
+  val findingPreview = summaryFindingPreview(findingState)
   val selectionState =
       analysisState?.fileSelection ?: AnalysisSelectionState(selection = fileSelection)
   val presentation =
@@ -575,8 +582,22 @@ internal fun ProjectSummaryPane(
             presentation.engineeringInsight?.let(::engineeringInsightPieces)?.isNotEmpty() ==
                 true) {
           item {
-            SummaryLowerComposition(
-                presentation, ownerIdentity, architectureView, flowViews, insightExpansion)
+            SummaryLowerComposition(presentation, ownerIdentity, architectureView, insightExpansion)
+          }
+        }
+        item {
+          SummarySelectedFindings(
+              findingPreview,
+              summaryFindingEmptyMessage(findingState, findingPreview),
+              selectWorkspace,
+              onFindingSelected)
+        }
+        if (flows.isNotEmpty()) {
+          item {
+            SummaryFlows(
+                requireNotNull(presentation.details.firstOrNull { it.title == "Flows" }),
+                ownerIdentity,
+                flowViews)
           }
         }
         item { SummaryChangeLifecycle { selectWorkspace(Workspace.Editor) } }
@@ -734,12 +755,10 @@ private fun SummaryLowerComposition(
     presentation: ProjectSummaryPresentation,
     ownerIdentity: List<String?>,
     architectureView: DiagramViewState,
-    flowViews: List<DiagramViewState>,
     insightExpansion: MutableState<Boolean>,
 ) {
   val architecture = presentation.details.firstOrNull { it.title == "Architecture" }
   val modules = presentation.details.firstOrNull { it.title == "Packages / modules" }
-  val flows = presentation.details.firstOrNull { it.title == "Flows" }
   val insight =
       presentation.engineeringInsight?.let(::engineeringInsightPieces)?.takeIf { it.isNotEmpty() }
   Column(
@@ -792,8 +811,76 @@ private fun SummaryLowerComposition(
             SummaryModules(it.values)
           }
         }
-        flows?.let { SummaryFlows(it, ownerIdentity, flowViews) }
       }
+}
+
+@Composable
+private fun SummarySelectedFindings(
+    preview: SummaryFindingPreview,
+    emptyMessage: String,
+    openResults: (Workspace) -> Unit,
+    onFindingSelected: ((SummaryFindingTarget) -> Unit)?,
+) {
+  WorkspaceSection("Selected findings", Modifier.testTag("summary-selected-findings")) {
+    Text(
+        "Showing ${preview.rows.size} of ${preview.loadedCount} loaded findings · not category totals",
+        color = SecondaryText,
+        style = IdeTypography.workspaceMetadata)
+    if (preview.rows.isEmpty())
+        Text(emptyMessage, color = SecondaryText, style = IdeTypography.workspaceBody)
+    preview.categories.forEach { category ->
+      Text(
+          "${category.category.workspace.name} · ${category.status} · ${category.loadedCount} loaded" +
+              (category.detail?.let { " · $it" } ?: ""),
+          color = SecondaryText,
+          style = IdeTypography.workspaceMetadata)
+    }
+    preview.rows.forEachIndexed { index, row ->
+      IdeActionSurface(
+          onClick = { onFindingSelected?.invoke(row.target) },
+          enabled = onFindingSelected != null,
+          colors =
+              IdeActionColors(
+                  background = Panel,
+                  hoveredBackground = ControlHover,
+                  pressedBackground = SelectionSurface,
+                  selectedBackground = SelectionSurface,
+                  disabledBackground = Panel,
+                  content = PrimaryText,
+                  selectedContent = PrimaryText,
+                  disabledContent = SecondaryText,
+                  border = PaneSeparator),
+          accessibleName =
+              "Inspect ${row.title} in ${row.target.category.workspace.name} results at ${row.location}",
+          shape = MiniOrcaShapes.interactiveCard,
+          contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+          modifier = Modifier.fillMaxWidth().testTag("summary-finding-$index")) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+              Text(row.title, color = PrimaryText, style = IdeTypography.workspaceBody)
+              SelectionContainer {
+                Column {
+                  Text(
+                      "${row.target.category.workspace.name} · ${row.severity.ifBlank { "Impact unavailable" }} · ${row.location}",
+                      color = SecondaryText,
+                      style = IdeTypography.workspaceMetadata)
+                  Text(
+                      "${row.origin} · ${row.materialState.ifBlank { "Material state unavailable" }}",
+                      color = SecondaryText,
+                      style = IdeTypography.workspaceMetadata)
+                }
+              }
+            }
+          }
+    }
+    AnalysisResultType.entries.forEach { type ->
+      MiniOrcaButton(
+          onClick = { openResults(type.workspace) },
+          tone = ActionTone.Navigation,
+          modifier = Modifier.testTag("summary-all-${type.category}")) {
+            Text("All ${type.workspace.name} results", style = IdeTypography.action)
+          }
+    }
+  }
 }
 
 @Composable

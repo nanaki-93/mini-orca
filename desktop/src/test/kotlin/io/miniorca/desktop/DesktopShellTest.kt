@@ -20,6 +20,50 @@ import kotlin.test.assertTrue
 
 class DesktopShellTest {
   @Test
+  fun summaryActivationRevalidatesBeforeNavigationAndLeavesOtherBrowserPreferencesAlone() {
+    val page = resultPageFixture("bugs")
+    val app =
+        DesktopState(
+            projectState = ProjectWorkspaceState(page.project),
+            analysisRun =
+                ProjectAnalysisRunState(
+                    run = page.run, sections = mapOf(AnalysisResultKey("bugs") to page.section)))
+    val target = summaryFindingPreview(app).rows.single().target
+    val store = ResultBrowserStore()
+    store.resetFor(app.project, app.analysisRun.run)
+    val bugs = store.stateFor(app.analysisResultPage("bugs"))
+    val security = store.stateFor(app.analysisResultPage("security"))
+    bugs.query = "different title"
+    bugs.filter = ResultBrowserFilter.Value("high")
+    security.query = "retained query"
+    val destinations = mutableListOf<Workspace>()
+    openSummaryFinding(target, app, store, destinations::add)
+    assertEquals(listOf(Workspace.Bugs), destinations)
+    assertEquals(target.rowKey, bugs.selectedKey)
+    assertEquals("", bugs.query)
+    assertEquals(ResultBrowserFilter.All, bugs.filter)
+    assertEquals("retained query", security.query)
+
+    val removed = requireNotNull(page.results).copy(semantic = emptyList())
+    val refreshed =
+        app.copy(
+            analysisRun =
+                app.analysisRun.copy(
+                    sections =
+                        mapOf(AnalysisResultKey("bugs") to page.section.copy(results = removed))))
+    openSummaryFinding(target, refreshed, store, destinations::add)
+    assertEquals(listOf(Workspace.Bugs, Workspace.Bugs), destinations)
+    assertTrue(bugs.explicitTarget is ExplicitResultTarget.Unavailable)
+    assertEquals(null, bugs.selectedKey)
+    val replacement =
+        refreshed.copy(
+            projectState = ProjectWorkspaceState(page.project!!.copy(projectRevision = "other")))
+    store.resetFor(replacement.project, replacement.analysisRun.run)
+    openSummaryFinding(target, replacement, store, destinations::add)
+    assertEquals(2, destinations.size, "Old-project clicks cannot navigate")
+  }
+
+  @Test
   fun assembledEditorReflowKeepsSelectedFileAndTabWithoutInvokingOperations() {
     val selected = analysisFileFixture("another.go").copy(content = "package selectedfile")
     val index =

@@ -626,7 +626,7 @@ class ProjectSummaryPaneTest {
                             tradeoffOrFailureMode = "Review takes time.")))
     val presentation = projectSummaryPresentation(overview, project)
     assertEquals(listOf("Packages / modules", "Flows"), presentation.details.map { it.title })
-    ComposeVisualFixture(1000, 1600) { ProjectSummaryPane(overview, project, {}) }
+    ComposeVisualFixture(1000, 2400) { ProjectSummaryPane(overview, project, {}) }
         .use { fixture ->
           fixture.render()
           assertEquals(0, fixture.tagCount("summary-architecture"))
@@ -649,7 +649,7 @@ class ProjectSummaryPaneTest {
           fixture.render()
           assertTrue(fixture.hasText("Review takes time."))
         }
-    ComposeVisualFixture(1000, 1000) {
+    ComposeVisualFixture(1000, 1800) {
           ProjectSummaryPane(
               overview.copy(
                   analysis =
@@ -704,8 +704,10 @@ class ProjectSummaryPaneTest {
         .use { fixture ->
           fixture.render()
           val coverage = fixture.taggedBounds("summary-coverage-results")
+          val findings = fixture.taggedBounds("summary-selected-findings")
           val lifecycle = fixture.taggedBounds("summary-change-lifecycle")
-          assertEquals(MiniOrcaSpacing.section.value, lifecycle.top - coverage.bottom, 1f)
+          assertEquals(MiniOrcaSpacing.section.value, findings.top - coverage.bottom, 1f)
+          assertEquals(MiniOrcaSpacing.section.value, lifecycle.top - findings.bottom, 1f)
           assertEquals(0, fixture.tagCount("summary-lower-composition"))
         }
     ComposeVisualFixture(800, 650, 1.5f) { ProjectSummaryPane(null, project, destinations::add) }
@@ -720,6 +722,56 @@ class ProjectSummaryPaneTest {
           fixture.clickText("Open Editor")
           assertEquals(listOf(Workspace.Editor), destinations)
         }
+  }
+
+  @Test
+  fun selectedFindingsRendersWithoutNarrativeAndKeepsLoadedScopeAndLocalRoutes() {
+    val page = resultPageFixture("bugs")
+    val app =
+        DesktopState(
+            projectState = ProjectWorkspaceState(page.project),
+            analysisRun =
+                ProjectAnalysisRunState(
+                    run = page.run, sections = mapOf(AnalysisResultKey("bugs") to page.section)))
+    val preview = summaryFindingPreview(app)
+    val navigations = mutableListOf<Workspace>()
+    val activations = mutableListOf<SummaryFindingTarget>()
+    ComposeVisualFixture(1000, 1600) {
+          ProjectSummaryPane(
+              null,
+              page.project,
+              navigations::add,
+              findingState = app,
+              onFindingSelected = activations::add)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(0, fixture.tagCount("summary-lower-composition"))
+          assertEquals(1, fixture.tagCount("summary-selected-findings"))
+          assertTrue(
+              fixture.hasText(
+                  "Showing ${preview.rows.size} of ${preview.loadedCount} loaded findings · not category totals"))
+          val row = preview.rows.first()
+          assertTrue(fixture.hasText(row.title))
+          assertTrue(
+              fixture.hasText(
+                  row.origin + " · " + row.materialState.ifBlank { "Material state unavailable" }))
+          val label = "Inspect ${row.title} in Bugs results at ${row.location}"
+          fixture.clickDescription(label)
+          assertEquals(listOf(row.target), activations)
+          listOf(Workspace.Bugs, Workspace.Performance, Workspace.Security).forEach { type ->
+            fixture.clickText("All ${type.name} results")
+          }
+          assertEquals(
+              listOf(Workspace.Bugs, Workspace.Performance, Workspace.Security), navigations)
+        }
+    val empty =
+        summaryFindingPreview(DesktopState(projectState = ProjectWorkspaceState(page.project)))
+    assertEquals(0, empty.loadedCount)
+    assertTrue(
+        summaryFindingEmptyMessage(
+                DesktopState(projectState = ProjectWorkspaceState(page.project)), empty)
+            .contains("No findings loaded"))
   }
 
   @Test
