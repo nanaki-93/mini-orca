@@ -121,8 +121,19 @@ application. Resizing the dock updates the real PTY dimensions; terminal text
 follows the source palette and
 application text scale.
 
-Opening another project while any shell is active requires **Cancel switch** or
-**Close shells and switch**. Confirming closes every tab, including hidden shells.
+**Switch project…** (or Cmd/Ctrl+O with a project open) starts with a directory
+chooser, then review of the current project and requested path. A draft requires
+**Approve draft discard for switch**; a remote Analyze destination requires its
+confirmation and **Continue with provider**. Those steps record intent only.
+**Cancel switch** at any pre-commit review stage preserves the project, draft and
+every tab. The final **Close shells and switch** (or **Switch project** if no tabs
+are shown) commits the switch and closes *all* tabs before import, including
+hidden, starting, exited and failed tabs. No replacement shell starts automatically.
+After commitment, closing the review cannot restore tabs already closed. Cleanup
+that fails, remains pending or times out blocks import and leaves the current
+project and draft in place, but some tabs may already be gone; check the terminal
+before attempting a new switch. After successful cleanup the approved draft is
+discarded and import starts; an import failure does not restore it or the tabs.
 Closing the application also waits for all terminal sessions to clean up; a shell
 that cannot stop keeps the window open with the failure visible. A running shell
 is never silently moved to another project's directory.
