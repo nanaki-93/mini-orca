@@ -394,6 +394,10 @@ internal fun DesktopShell(
   val shellMode = desktopShellMode(appState)
   val scope = rememberCoroutineScope()
   val resultBrowsers = remember { ResultBrowserStore() }
+  val analysisFilesView =
+      remember(appState.project?.projectId, appState.project?.projectRevision) {
+        AnalysisFilesViewState()
+      }
   resultBrowsers.resetFor(appState.project, appState.analysisRun.run)
   LaunchedEffect(appState) {
     AnalysisResultType.entries.forEach { type ->
@@ -676,6 +680,7 @@ internal fun DesktopShell(
                     editorActions,
                     analysisActions,
                     findingActions,
+                    analysisFilesView,
                     ::selectWorkspace,
                     { target ->
                       openSummaryFinding(target, latestApp, resultBrowsers, ::selectWorkspace)
@@ -713,6 +718,7 @@ internal fun DesktopShell(
                                   editorActions,
                                   analysisActions,
                                   findingActions,
+                                  analysisFilesView,
                                   ::selectWorkspace,
                                   { target ->
                                     openSummaryFinding(
@@ -1351,6 +1357,7 @@ private fun DesktopCanvas(
     editorActions: DesktopShellEditorActions,
     analysisActions: DesktopShellAnalysisActions,
     findingActions: FindingActions,
+    filesView: AnalysisFilesViewState,
     onWorkspaceSelected: (Workspace) -> Unit,
     onFindingSelected: (SummaryFindingTarget) -> Unit,
     modifier: Modifier,
@@ -1425,6 +1432,7 @@ private fun DesktopCanvas(
                     },
                 ),
             analysisActions = analysisActions.toWorkspaceActions(onWorkspaceSelected),
+            filesView = filesView,
             bugsActions =
                 BugsWorkspaceActions(
                     findingActions = findingActions,
@@ -1460,6 +1468,7 @@ private fun ContentPane(
     state: ContentPaneState,
     navigation: ContentPaneNavigationActions,
     analysisActions: AnalysisWorkspaceActions,
+    filesView: AnalysisFilesViewState,
     bugsActions: BugsWorkspaceActions,
     performanceActions: PerformanceWorkspaceActions,
     securityActions: SecurityWorkspaceActions,
@@ -1500,7 +1509,7 @@ private fun ContentPane(
                       navigation.sourceLineSelected)
                 }
               })
-      Workspace.Analysis -> AnalysisWorkspacePane(state.analysis, analysisActions)
+      Workspace.Analysis -> AnalysisWorkspacePane(state.analysis, analysisActions, filesView)
       Workspace.Performance -> PerformanceWorkspacePane(state.performance, performanceActions)
       Workspace.Bugs -> BugsWorkspacePane(state.bugs, bugsActions)
       Workspace.Security -> SecurityWorkspacePane(state.security, securityActions)

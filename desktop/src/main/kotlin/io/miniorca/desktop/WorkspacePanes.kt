@@ -50,7 +50,11 @@ internal fun analysisFileTableHeight(availableHeight: Dp, occupiedHeight: Dp?): 
 @Composable
 internal fun AnalysisWorkspacePane(
     state: AnalysisWorkspacePaneState,
-    actions: AnalysisWorkspaceActions
+    actions: AnalysisWorkspaceActions,
+    filesView: AnalysisFilesViewState =
+        remember(state.project?.projectId, state.project?.projectRevision) {
+          AnalysisFilesViewState()
+        },
 ) {
   val analysis = state.analysis
   val presentation = projectRunPresentation(analysis)
@@ -82,9 +86,12 @@ internal fun AnalysisWorkspacePane(
             }
           }
           item {
-            AnalysisFileSelector(analysis, actions, fileTableHeight) { height ->
-              fileChromeHeight = height
-            }
+            AnalysisFileSelector(
+                analysis,
+                actions,
+                fileTableHeight,
+                { height -> fileChromeHeight = height },
+                filesView)
           }
           items(presentation.failures) { failure -> AnalysisFailureDetails(failure) }
         }
