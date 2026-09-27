@@ -620,6 +620,17 @@ internal fun ProjectSummaryPane(
         item { SummaryChangeLifecycle { selectWorkspace(Workspace.Editor) } }
       }
     }
+    if (architecture != null && architectureView.showDiagram)
+        MermaidDiagramViewer(
+            summaryDiagramInput(architecture), "Architecture", "Architecture", architectureView)
+    flows.forEachIndexed { index, value ->
+      if (flowViews[index].showDiagram)
+          MermaidDiagramViewer(
+              summaryDiagramInput(value),
+              "Flow ${index + 1}",
+              if (flows.size == 1) "Flows · Flow 1" else "Flow ${index + 1}",
+              flowViews[index])
+    }
   }
 }
 

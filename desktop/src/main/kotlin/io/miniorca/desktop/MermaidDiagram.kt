@@ -169,6 +169,8 @@ internal fun MermaidDiagram(
           viewState ?: localView,
           renderScope ?: localScope,
           render)
+      if (viewState == null && localView.showDiagram)
+          MermaidDiagramViewer(input, label, title, localView)
     }
   }
 }
@@ -187,9 +189,7 @@ private fun MermaidDiagramSource(
   val source = input.source
   LaunchedEffect(view, source) { view.start(renderScope, source, render) }
   val state = view.renderState
-  var showDiagram by view::showDiagram
-  var showSource by view::showSource
-  var zoom by view::zoom
+  val showDiagram = view.showDiagram
   Row(
       Modifier.fillMaxWidth(),
       horizontalArrangement = Arrangement.End,
@@ -202,9 +202,9 @@ private fun MermaidDiagramSource(
               modifier = Modifier.weight(1f).semantics { heading() })
         }
         ChromeButton(
-            onClick = { showDiagram = !showDiagram },
+            onClick = { view.showDiagram = true },
             enabled = source != null,
-            accessibleName = "${if (showDiagram) "Hide" else "Expand"} $label diagram",
+            accessibleName = "Expand $label diagram",
             modifier =
                 Modifier.semantics {
                   stateDescription =
@@ -215,39 +215,13 @@ private fun MermaidDiagramSource(
                         is DiagramState.Ready -> if (showDiagram) "Expanded" else "Preview"
                       }
                 }) {
-              DesktopLineIcon(
-                  if (showDiagram) DesktopIcon.ChevronDown else DesktopIcon.ChevronRight,
-                  "",
-                  iconSize = 16.dp)
-              Text(if (showDiagram) "Hide diagram" else "Expand diagram")
+              DesktopLineIcon(DesktopIcon.ChevronRight, "", iconSize = 16.dp)
+              Text("Expand diagram")
             }
       }
   prose
       ?.takeIf { it.isNotBlank() }
       ?.let { ModelResultContent(it, preview = false, style = IdeTypography.workspaceBody) }
-  if (showDiagram) {
-    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-      ChromeButton(
-          onClick = { zoom = (zoom - 0.25f).coerceAtLeast(0.75f) },
-          enabled = zoom > 0.75f,
-          accessibleName = "Zoom out $label") {
-            Text("−")
-          }
-      ChromeButton(onClick = { zoom = 1f }, accessibleName = "Reset zoom $label") {
-        Text("${(zoom * 100).toInt()}%")
-      }
-      ChromeButton(
-          onClick = { zoom = (zoom + 0.25f).coerceAtMost(2f) },
-          enabled = zoom < 2f,
-          accessibleName = "Zoom in $label") {
-            Text("+")
-          }
-      ChromeButton(
-          onClick = { showSource = !showSource }, accessibleName = "Mermaid source for $label") {
-            Text(if (showSource) "Hide Mermaid" else "Mermaid source")
-          }
-    }
-  }
   if (source != null || input.original.isNotBlank()) {
     Box(
         Modifier.fillMaxWidth()
@@ -280,31 +254,89 @@ private fun MermaidDiagramSource(
         }
   }
   if (state is DiagramState.Failed) ModelResultContent(input.original, preview = false)
-  if (showDiagram && state is DiagramState.Ready) {
-    val scale = LocalDensity.current.fontScale * zoom
-    Box(
-        Modifier.fillMaxWidth()
-            .clip(MiniOrcaShapes.control)
-            .background(EditorCanvas)
-            .horizontalScroll(rememberScrollState())
-            .padding(8.dp),
-        contentAlignment = Alignment.Center) {
-          Image(
-              state.image.bitmap,
-              "$label diagram\n$source",
-              modifier =
-                  Modifier.size((state.image.width * scale).dp, (state.image.height * scale).dp))
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+internal fun MermaidDiagramViewer(
+    input: SummaryDiagramInput,
+    label: String,
+    title: String?,
+    view: DiagramViewState,
+) {
+  var showSource by view::showSource
+  var zoom by view::zoom
+  val source = input.source
+  IdeDialog(
+      onDismissRequest = { view.showDiagram = false },
+      title = {
+        Text(
+            "${title ?: label} diagram",
+            style = IdeTypography.workspaceHeading,
+            modifier = Modifier.semantics { heading() })
+      },
+      content = {
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+          ChromeButton(
+              onClick = { zoom = (zoom - 0.25f).coerceAtLeast(0.75f) },
+              enabled = zoom > 0.75f,
+              accessibleName = "Zoom out $label") {
+                Text("−")
+              }
+          ChromeButton(onClick = { zoom = 1f }, accessibleName = "Reset zoom $label") {
+            Text("${(zoom * 100).toInt()}%")
+          }
+          ChromeButton(
+              onClick = { zoom = (zoom + 0.25f).coerceAtMost(2f) },
+              enabled = zoom < 2f,
+              accessibleName = "Zoom in $label") {
+                Text("+")
+              }
+          ChromeButton(
+              onClick = { showSource = !showSource },
+              accessibleName = "Mermaid source for $label") {
+                Text(if (showSource) "Hide Mermaid" else "Mermaid source")
+              }
         }
-  }
-  if (showDiagram && showSource) {
-    Text(
-        if (input.generatedFromArrowChain) "Original saved arrow chain"
-        else "Saved diagram content",
-        style = IdeTypography.compactBody)
-    ModelResultContent(input.original, preview = false)
-    if (input.generatedFromArrowChain) {
-      Text("Generated Mermaid for rendering", style = IdeTypography.compactBody)
-      ModelResultContent("```mermaid\n$source\n```", preview = false)
-    }
-  }
+        when (val state = view.renderState) {
+          DiagramState.Unavailable -> Text("No diagram in saved content")
+          DiagramState.Loading -> Text("Rendering diagram…")
+          is DiagramState.Failed -> Text("Diagram unavailable: ${state.message}", color = Warning)
+          is DiagramState.Ready -> {
+            val scale = LocalDensity.current.fontScale * zoom
+            Box(
+                Modifier.fillMaxWidth()
+                    .height(300.dp)
+                    .clip(MiniOrcaShapes.control)
+                    .background(EditorCanvas)
+                    .horizontalScroll(rememberScrollState())
+                    .padding(8.dp),
+                contentAlignment = Alignment.Center) {
+                  Image(
+                      state.image.bitmap,
+                      "$label diagram\n$source",
+                      modifier =
+                          Modifier.size(
+                              (state.image.width * scale).dp, (state.image.height * scale).dp))
+                }
+          }
+        }
+        if (showSource) {
+          Text(
+              if (input.generatedFromArrowChain) "Original saved arrow chain"
+              else "Saved diagram content",
+              style = IdeTypography.compactBody)
+          ModelResultContent(input.original, preview = false)
+          if (input.generatedFromArrowChain) {
+            Text("Generated Mermaid for rendering", style = IdeTypography.compactBody)
+            ModelResultContent("```mermaid\n$source\n```", preview = false)
+          }
+        }
+      },
+      actions = {
+        ChromeButton(
+            onClick = { view.showDiagram = false }, accessibleName = "Close $label diagram") {
+              Text("Close")
+            }
+      })
 }

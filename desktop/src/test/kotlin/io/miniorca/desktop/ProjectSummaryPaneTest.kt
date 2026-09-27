@@ -537,7 +537,7 @@ class ProjectSummaryPaneTest {
           assertTrue(fixture.hasText("Rendering diagram…"))
           assertEquals(1, fixture.tagCount("diagram-preview"))
           fixture.clickDescription("Expand Architecture diagram")
-          fixture.awaitDescription("Hide Architecture diagram", "Rendering diagram")
+          fixture.awaitDescription("Close Architecture diagram")
           assertEquals(1, renders)
           gate.complete(MermaidImage(ImageBitmap(16, 16), 16f, 16f))
           fixture.awaitDescription("Architecture diagram preview\n$source")
@@ -634,11 +634,59 @@ class ProjectSummaryPaneTest {
           assertTrue(fixture.hasText("Legacy prose flow"))
           assertTrue(fixture.hasText("Change lifecycle"))
           fixture.clickDescription("Expand Architecture diagram")
-          fixture.clickDescription("Expand Flow 1 diagram")
           fixture.awaitDescription("Architecture diagram\n$architecture")
+          fixture.clickDescription("Close Architecture diagram")
+          fixture.clickDescription("Expand Flow 1 diagram")
           fixture.awaitDescription("Flow 1 diagram\n$flow")
           assertEquals(2, renders)
           assertTrue(navigations.isEmpty())
+        }
+  }
+
+  @Test
+  fun expandedOwnerClosesOnReplacementAndReopensWithoutLosingLocalSettings() {
+    val project = resultProjectFixture()
+    val original = "flowchart LR\n A --> B"
+    val replacement = "flowchart LR\n C --> D"
+    var overview by
+        androidx.compose.runtime.mutableStateOf(
+            ProjectOverview(
+                projectId = project.projectId,
+                projectRevision = project.projectRevision,
+                analysis = StructuredProjectAnalysis(status = "fresh", architecture = original)))
+    val renders = mutableListOf<String>()
+    ComposeVisualFixture(1000, 1400) {
+          ProjectSummaryPane(
+              overview,
+              project,
+              {},
+              diagramRender = { source ->
+                renders += source
+                MermaidImage(ImageBitmap(12, 12), 12f, 12f)
+              })
+        }
+        .use { fixture ->
+          fixture.awaitDescription("Architecture diagram preview\n$original")
+          fixture.clickDescription("Expand Architecture diagram")
+          fixture.awaitDescription("Architecture diagram\n$original")
+          fixture.clickDescription("Zoom in Architecture")
+          fixture.clickDescription("Mermaid source for Architecture")
+          fixture.clickDescription("Close Architecture diagram")
+          fixture.awaitDescription("Expand Architecture diagram", "Preview")
+          fixture.clickDescription("Expand Architecture diagram")
+          fixture.render()
+          assertTrue(fixture.hasText("125%"))
+          assertTrue(fixture.hasText("Hide Mermaid"))
+          assertEquals(listOf(original), renders)
+          overview = overview.copy(analysis = overview.analysis.copy(architecture = replacement))
+          fixture.awaitDescription("Expand Architecture diagram", "Preview")
+          assertFalse(fixture.hasDescription("Close Architecture diagram"))
+          assertFalse(fixture.hasDescription("Architecture diagram\n$original"))
+          fixture.clickDescription("Expand Architecture diagram")
+          fixture.awaitDescription("Architecture diagram\n$replacement")
+          assertTrue(fixture.hasText("100%"))
+          assertFalse(fixture.hasText("Hide Mermaid"))
+          assertEquals(listOf(original, replacement), renders)
         }
   }
 
@@ -686,13 +734,13 @@ class ProjectSummaryPaneTest {
           assertEquals(0, fixture.tagCount("summary-lower-composition"))
           overview = overview.copy(findingCounts = FindingCounts(verified = 2))
           fixture.resize(800, 650)
-          fixture.revealText("Hide diagram", "summary-scroll")
+          fixture.awaitDescription("Close Architecture diagram")
           fixture.awaitDescription("Architecture diagram\n$source")
           assertTrue(fixture.hasText("125%"))
           assertEquals(1, renders)
           fixture.resize(1440, 650)
           fixture.render()
-          fixture.revealText("Hide diagram", "summary-scroll")
+          fixture.awaitDescription("Close Architecture diagram")
           fixture.awaitDescription("Architecture diagram\n$source")
           assertEquals(1, renders)
         }
