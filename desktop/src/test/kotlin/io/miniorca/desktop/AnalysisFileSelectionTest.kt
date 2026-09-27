@@ -266,7 +266,7 @@ class AnalysisFileSelectionTest {
           for (failure in AnalysisSelectionFailure.entries) {
             state.value =
                 AnalysisSelectionState(selection, error = "selection failed", failure = failure)
-            fixture.render()
+            fixture.render("f12-files-${failure.name.lowercase()}-failure-collapsed")
             assertTrue(
                 fixture.hasText(
                     "1 selected · 2 excluded · ${if (failure == AnalysisSelectionFailure.Save) "Save" else "Refresh"} failed"))
@@ -853,21 +853,21 @@ class AnalysisFileSelectionTest {
               ProjectAnalysisRunState(fileSelection = selectionState.value), actions)
         }
         .use { fixture ->
-          fixture.render()
+          fixture.render("f12-files-loading")
           assertFalse(fixture.hasText("No matching files."))
           assertFalse(fixture.hasText("No files are available for analysis."))
           assertTrue(fixture.hasText("Loading file selection…"))
           assertFalse(fixture.hasText("0 of 0 files match"))
 
           selectionState.value = AnalysisSelectionState(error = "Unable to load files")
-          fixture.render()
+          fixture.render("f12-files-initial-read-failure")
           assertTrue(fixture.hasText("Unable to load files"))
           assertFalse(fixture.hasText("0 of 0 files match"))
           assertTrue(fixture.hasText("File status is not loaded. Refresh files to try again."))
 
           selectionState.value =
               AnalysisSelectionState(selection = selectionFixture().copy(files = emptyList()))
-          fixture.render()
+          fixture.render("f12-files-empty")
           assertTrue(fixture.hasText("No files are available for analysis."))
           assertTrue(fixture.hasText("0 of 0 files match"))
           assertFalse(fixture.hasText("No matching files."))
@@ -875,13 +875,13 @@ class AnalysisFileSelectionTest {
           selectionState.value = AnalysisSelectionState(selection = selectionFixture())
           fixture.render()
           fixture.setText("not-a-project-file")
-          fixture.render()
+          fixture.render("f12-files-no-match")
           assertTrue(fixture.hasText("No matching files."))
           assertTrue(fixture.hasText("0 of 3 files match"))
 
           selectionState.value =
               AnalysisSelectionState(selection = selectionFixture().copy(editable = false))
-          fixture.render()
+          fixture.render("f12-files-daemon-locked")
           assertTrue(fixture.hasText("Selection changes unavailable."))
           assertFalse(
               fixture.hasText(
