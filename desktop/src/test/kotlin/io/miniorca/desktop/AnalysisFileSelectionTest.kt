@@ -50,6 +50,80 @@ class AnalysisFileSelectionTest {
   }
 
   @Test
+  fun directSaveRejectsRunLocksWithoutSendingOrInvalidatingAdmission() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      val admission = AnalysisAdmission(analysisPreviewFixture())
+      val confirmed = h.current.selection!!
+      assertTrue(confirmed.editable)
+      for (status in listOf("queued", "running", "pausing", "canceling", "paused", "interrupted")) {
+        h.state =
+            h.state.reduce(
+                DesktopEvent.AnalysisRunUpdated(
+                    h.state.analysisRun.copy(
+                        run = analysisRunFixture().copy(status = status), admission = admission)))
+        h.workflow.save(listOf("main.go"))
+        h.drain()
+        assertEquals(admission, h.state.analysisRun.admission, status)
+        assertEquals(confirmed, h.current.selection, status)
+        assertFalse(h.current.saving, status)
+        assertEquals(listOf("GET"), h.methods, status)
+      }
+      h.state =
+          h.state.reduce(
+              DesktopEvent.AnalysisRunUpdated(
+                  h.state.analysisRun.copy(
+                      run = null,
+                      fileSelection =
+                          h.current.copy(selection = confirmed.copy(editable = false)))))
+      h.workflow.save(listOf("main.go"))
+      h.drain()
+      assertEquals(admission, h.state.analysisRun.admission)
+      assertEquals(listOf("GET"), h.methods)
+    }
+  }
+
+  @Test
+  fun directSaveRespectsPendingActionsAndSelectionIoThenAcceptsOneUnlockedWrite() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      val admission = AnalysisAdmission(analysisPreviewFixture())
+      for (blocked in
+          listOf(
+              h.state.analysisRun.copy(action = "preview", admission = admission),
+              h.state.analysisRun.copy(
+                  fileSelection = h.current.copy(loading = true), admission = admission),
+              h.state.analysisRun.copy(
+                  fileSelection = h.current.copy(saving = true), admission = admission))) {
+        h.state = h.state.reduce(DesktopEvent.AnalysisRunUpdated(blocked))
+        h.workflow.save(listOf("main.go"))
+        h.drain()
+        assertEquals(admission, h.state.analysisRun.admission)
+        assertEquals(listOf("GET"), h.methods)
+      }
+      h.state =
+          h.state.reduce(
+              DesktopEvent.AnalysisRunUpdated(
+                  h.state.analysisRun.copy(
+                      action = "",
+                      run = analysisRunFixture().copy(status = "completed"),
+                      fileSelection = AnalysisSelectionState(h.saved),
+                      admission = admission)))
+      h.workflow.save(listOf("main.go"))
+      h.workflow.save(listOf("helper.go")) // No second write while the first is outstanding.
+      assertNull(h.state.analysisRun.admission)
+      assertTrue(h.current.saving)
+      assertEquals(emptyList(), h.current.selection!!.excludedPaths)
+      h.drain()
+      assertEquals(listOf("GET", "POST"), h.methods)
+      assertEquals(listOf("main.go"), h.current.selection!!.excludedPaths)
+      assertEquals(h.saved, h.current.selection)
+    }
+  }
+
+  @Test
   fun failedSaveRefreshReadsConfirmedSelectionWithoutReplayingWrite() {
     Harness().use { h ->
       h.workflow.refresh()

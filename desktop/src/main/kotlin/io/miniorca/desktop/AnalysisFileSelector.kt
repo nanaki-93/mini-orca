@@ -67,15 +67,9 @@ internal fun AnalysisFileSelector(
         selection?.let { analysisFileStatuses(it, analysis.run) }.orEmpty()
       }
   val eligible = selection?.files.orEmpty().filter { it.reason.isBlank() }
-  val lockedByRun =
-      analysis.run?.let { it.isActive() || it.status in setOf("paused", "interrupted") } == true
+  val lockedByRun = analysis.run?.showsProgressOnSummary() == true
   val locked = selection?.editable == false || lockedByRun
-  val editable =
-      selection?.editable == true &&
-          !state.loading &&
-          !state.saving &&
-          analysis.action.isBlank() &&
-          !locked
+  val editable = canEditAnalysisSelection(analysis)
   val selectedCount = eligible.count { it.path !in ignored }
   val excludedCount = rows.count { it.status == AnalysisFileSyncStatus.Excluded }
   val files = filteredAnalysisFiles(rows, query, filter)

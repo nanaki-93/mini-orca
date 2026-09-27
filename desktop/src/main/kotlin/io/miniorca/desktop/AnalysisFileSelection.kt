@@ -51,6 +51,15 @@ data class AnalysisSelectionState(
     val failure: AnalysisSelectionFailure? = null,
 )
 
+internal fun canEditAnalysisSelection(analysis: ProjectAnalysisRunState): Boolean =
+    analysis.fileSelection.let { selection ->
+      selection.selection?.editable == true &&
+          !selection.loading &&
+          !selection.saving &&
+          analysis.action.isBlank() &&
+          analysis.run?.showsProgressOnSummary() != true
+    }
+
 internal class DesktopAnalysisSelectionWorkflow(
     private val api: ApiClient,
     private val scope: CoroutineScope,
@@ -75,8 +84,9 @@ internal class DesktopAnalysisSelectionWorkflow(
   }
 
   fun save(excludedPaths: List<String>) {
-    val selection = current.selection ?: return
-    if (current.loading || current.saving || !selection.editable) return
+    val snapshot = state().analysisRun
+    if (!canEditAnalysisSelection(snapshot)) return
+    val selection = snapshot.fileSelection.selection ?: return
     request(
         AnalysisSelectionRequest(
             selection.projectId, selection.projectRevision, selection.selectionId, excludedPaths))
