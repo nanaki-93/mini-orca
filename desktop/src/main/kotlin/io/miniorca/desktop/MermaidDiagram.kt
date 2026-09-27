@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -14,7 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -44,6 +45,9 @@ internal class DiagramViewState {
   var showDiagram by mutableStateOf(false)
   var showSource by mutableStateOf(false)
   var zoom by mutableStateOf(1f)
+  // Keep inspection position with the diagram owner, not the transient dialog composition.
+  val horizontalScroll = ScrollState(0)
+  val verticalScroll = ScrollState(0)
   internal var renderState by mutableStateOf<DiagramState>(DiagramState.Unavailable)
     private set
 
@@ -283,9 +287,13 @@ internal fun MermaidDiagramViewer(
               accessibleName = "Zoom out $label") {
                 Text("−")
               }
-          ChromeButton(onClick = { zoom = 1f }, accessibleName = "Reset zoom $label") {
-            Text("${(zoom * 100).toInt()}%")
-          }
+          ChromeButton(
+              onClick = { zoom = 1f },
+              accessibleName = "Reset zoom $label",
+              modifier =
+                  Modifier.semantics { stateDescription = "Zoom ${(zoom * 100).toInt()}%" }) {
+                Text("${(zoom * 100).toInt()}%")
+              }
           ChromeButton(
               onClick = { zoom = (zoom + 0.25f).coerceAtMost(2f) },
               enabled = zoom < 2f,
@@ -309,15 +317,25 @@ internal fun MermaidDiagramViewer(
                     .height(300.dp)
                     .clip(MiniOrcaShapes.control)
                     .background(EditorCanvas)
-                    .horizontalScroll(rememberScrollState())
-                    .padding(8.dp),
-                contentAlignment = Alignment.Center) {
-                  Image(
-                      state.image.bitmap,
-                      "$label diagram\n$source",
-                      modifier =
-                          Modifier.size(
-                              (state.image.width * scale).dp, (state.image.height * scale).dp))
+                    .testTag("diagram-canvas")) {
+                  Box(
+                      Modifier.fillMaxSize()
+                          .verticalScroll(view.verticalScroll)
+                          .testTag("diagram-vertical-scroll")) {
+                        Box(
+                            Modifier.fillMaxWidth()
+                                .horizontalScroll(view.horizontalScroll)
+                                .testTag("diagram-horizontal-scroll")
+                                .padding(8.dp)) {
+                              Image(
+                                  state.image.bitmap,
+                                  "$label diagram\n$source",
+                                  modifier =
+                                      Modifier.size(
+                                          (state.image.width * scale).dp,
+                                          (state.image.height * scale).dp))
+                            }
+                      }
                 }
           }
         }

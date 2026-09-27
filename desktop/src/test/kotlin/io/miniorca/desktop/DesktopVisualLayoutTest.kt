@@ -6037,6 +6037,46 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun expandedDiagramNavigatesBothAxesWithinABoundedCanvas() {
+    val source = "flowchart LR\n A --> B"
+    for ((width, height) in listOf(1200 to 900, 900 to 1200)) {
+      for (density in listOf(1f, 2f)) {
+        var renders = 0
+        val image = MermaidImage(ImageBitmap(width, height), width.toFloat(), height.toFloat())
+        ComposeVisualFixture((800 * density).toInt(), (650 * density).toInt(), 1.5f, density) {
+              MermaidDiagram(
+                  source,
+                  "Architecture",
+                  render = {
+                    renders++
+                    image
+                  })
+            }
+            .use { fixture ->
+              fixture.awaitDescription("Architecture diagram preview\n$source")
+              fixture.clickDescription("Expand Architecture diagram")
+              fixture.awaitDescription("Architecture diagram\n$source")
+              val canvas = fixture.taggedBounds("diagram-canvas")
+              assertTrue(canvas.width <= 640f * density, "Canvas width at ${density}x")
+              assertTrue(canvas.height <= 300f * density, "Canvas height at ${density}x")
+              assertTrue(fixture.scrollMaximum("diagram-horizontal-scroll", horizontal = true) > 0f)
+              assertTrue(fixture.scrollMaximum("diagram-vertical-scroll", horizontal = false) > 0f)
+              fixture.scrollTagged(
+                  "diagram-horizontal-scroll", horizontal = true, pixels = 100_000f)
+              fixture.scrollTagged("diagram-vertical-scroll", horizontal = false, pixels = 100_000f)
+              assertEquals(
+                  fixture.scrollMaximum("diagram-horizontal-scroll", horizontal = true),
+                  fixture.scrollPosition("diagram-horizontal-scroll", horizontal = true))
+              assertEquals(
+                  fixture.scrollMaximum("diagram-vertical-scroll", horizontal = false),
+                  fixture.scrollPosition("diagram-vertical-scroll", horizontal = false))
+              assertEquals(1, renders)
+            }
+      }
+    }
+  }
+
+  @Test
   fun validDiagramDisclosureAcceptsTheFirstClickWhileRenderingStarts() {
     val source = "flowchart TD\n A[Client] --> B[Server]"
     ComposeVisualFixture(800, 650, 1.5f) {
@@ -6727,6 +6767,15 @@ internal class ComposeVisualFixture(
           .mapNotNull { it.config.getOrNull(SemanticsProperties.StateDescription) }
           .firstOrNull()
 
+  fun descriptionState(label: String): String? =
+      nodes()
+          .asSequence()
+          .filter {
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+          }
+          .mapNotNull { it.config.getOrNull(SemanticsProperties.StateDescription) }
+          .firstOrNull()
+
   fun requestFocus(label: String): Boolean =
       textNodes(label)
           .asSequence()
@@ -6786,6 +6835,28 @@ internal class ComposeVisualFixture(
             }
             .firstNotNullOfOrNull { it.config.getOrNull(SemanticsActions.ScrollBy)?.action }
     assertTrue(requireNotNull(scroll).invoke(0f, pixels))
+  }
+
+  fun scrollMaximum(tag: String, horizontal: Boolean): Float =
+      scrollAxis(tag, horizontal).maxValue()
+
+  fun scrollPosition(tag: String, horizontal: Boolean): Float = scrollAxis(tag, horizontal).value()
+
+  private fun scrollAxis(tag: String, horizontal: Boolean) =
+      requireNotNull(
+          taggedNode(tag)
+              .config
+              .getOrNull(
+                  if (horizontal) SemanticsProperties.HorizontalScrollAxisRange
+                  else SemanticsProperties.VerticalScrollAxisRange))
+
+  fun scrollTagged(tag: String, horizontal: Boolean, pixels: Float) {
+    assertTrue(scrollMaximum(tag, horizontal) > 0f)
+    val scroll = taggedNode(tag).config.getOrNull(SemanticsActions.ScrollBy)?.action
+    assertTrue(
+        requireNotNull(scroll)
+            .invoke(if (horizontal) pixels else 0f, if (horizontal) 0f else pixels))
+    render()
   }
 
   fun taggedBounds(tag: String): Rect = taggedNode(tag).boundsInRoot

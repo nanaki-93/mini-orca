@@ -662,7 +662,7 @@ class ProjectSummaryPaneTest {
               {},
               diagramRender = { source ->
                 renders += source
-                MermaidImage(ImageBitmap(12, 12), 12f, 12f)
+                MermaidImage(ImageBitmap(1200, 1200), 1200f, 1200f)
               })
         }
         .use { fixture ->
@@ -670,13 +670,39 @@ class ProjectSummaryPaneTest {
           fixture.clickDescription("Expand Architecture diagram")
           fixture.awaitDescription("Architecture diagram\n$original")
           fixture.clickDescription("Zoom in Architecture")
+          fixture.render()
+          assertEquals("Zoom 125%", fixture.descriptionState("Reset zoom Architecture"))
+          fixture.scrollTagged("diagram-horizontal-scroll", horizontal = true, pixels = 150f)
+          fixture.scrollTagged("diagram-vertical-scroll", horizontal = false, pixels = 120f)
+          val x = fixture.scrollPosition("diagram-horizontal-scroll", horizontal = true)
+          val y = fixture.scrollPosition("diagram-vertical-scroll", horizontal = false)
+          assertTrue(x > 0f && y > 0f)
           fixture.clickDescription("Mermaid source for Architecture")
           fixture.clickDescription("Close Architecture diagram")
           fixture.awaitDescription("Expand Architecture diagram", "Preview")
           fixture.clickDescription("Expand Architecture diagram")
           fixture.render()
           assertTrue(fixture.hasText("125%"))
+          assertTrue(fixture.scrollPosition("diagram-horizontal-scroll", horizontal = true) >= x)
+          assertTrue(fixture.scrollPosition("diagram-vertical-scroll", horizontal = false) >= y)
           assertTrue(fixture.hasText("Hide Mermaid"))
+          repeat(3) {
+            fixture.clickDescription("Zoom in Architecture")
+            fixture.render()
+          }
+          assertTrue(fixture.hasText("200%"))
+          assertTrue(fixture.isDisabled("+"))
+          assertEquals("Zoom 200%", fixture.descriptionState("Reset zoom Architecture"))
+          repeat(5) {
+            fixture.clickDescription("Zoom out Architecture")
+            fixture.render()
+          }
+          assertTrue(fixture.hasText("75%"))
+          assertTrue(fixture.isDisabled("−"))
+          fixture.clickDescription("Reset zoom Architecture")
+          fixture.render()
+          assertTrue(fixture.hasText("100%"))
+          assertEquals("Zoom 100%", fixture.descriptionState("Reset zoom Architecture"))
           assertEquals(listOf(original), renders)
           overview = overview.copy(analysis = overview.analysis.copy(architecture = replacement))
           fixture.awaitDescription("Expand Architecture diagram", "Preview")
