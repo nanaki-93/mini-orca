@@ -6008,6 +6008,67 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  @OptIn(ExperimentalComposeUiApi::class)
+  fun diagramSourceIsLiteralScrollableAndCopiesTheEntireSavedReport() {
+    val saved =
+        "Before **literal** <img src='remote'> [link](https://example.org)\r\n" +
+            "```mermaid\nflowchart LR\n A --> B\n```\n" +
+            (1..300).joinToString("\n") { "line $it -> `not a command`" } +
+            "\n```mermaid\nsequenceDiagram\n A->>B: Extra\n```\nAfter\n" +
+            "very-long-".repeat(180)
+    var renders = 0
+    val clipboard =
+        object : Clipboard {
+          override val nativeClipboard = java.awt.datatransfer.Clipboard("diagram-source-test")
+          var fail = false
+
+          override suspend fun getClipEntry(): ClipEntry? =
+              nativeClipboard.getContents(null)?.let(::ClipEntry)
+
+          override suspend fun setClipEntry(clipEntry: ClipEntry?) {
+            if (fail) throw IllegalStateException("Clipboard unavailable")
+            nativeClipboard.setContents(clipEntry?.asAwtTransferable, null)
+          }
+        }
+    ComposeVisualFixture(800, 650) {
+          CompositionLocalProvider(LocalClipboard provides clipboard) {
+            MermaidDiagram(
+                saved,
+                "Architecture",
+                render = {
+                  renders++
+                  MermaidImage(ImageBitmap(16, 16), 16f, 16f)
+                })
+          }
+        }
+        .use { fixture ->
+          fixture.awaitDescription("Expand Architecture diagram", "Preview")
+          fixture.clickDescription("Expand Architecture diagram")
+          fixture.awaitDescription("Close Architecture diagram")
+          fixture.clickText("Mermaid source")
+          fixture.render()
+          assertEquals(1, fixture.taggedTextCount("diagram-source-scroll", saved))
+          assertFalse(fixture.hasEditableText(withinTag = "diagram-source-scroll"))
+          assertTrue(fixture.scrollMaximum("diagram-source-scroll", horizontal = false) > 0f)
+          assertTrue(
+              fixture.scrollMaximum("diagram-source-horizontal-scroll", horizontal = true) > 0f)
+          assertFalse(fixture.hasText("Saved content copied"))
+          clipboard.fail = true
+          fixture.clickDescription("Copy saved content for Architecture")
+          fixture.render()
+          assertTrue(fixture.hasText("Could not copy saved content: Clipboard unavailable"))
+          assertEquals(1, fixture.taggedTextCount("diagram-source-scroll", saved))
+          clipboard.fail = false
+          fixture.clickDescription("Copy saved content for Architecture")
+          fixture.render()
+          assertTrue(fixture.hasText("Saved content copied"))
+          assertFalse(fixture.hasText("Could not copy saved content: Clipboard unavailable"))
+          assertEquals(saved, clipboard.nativeClipboard.getData(DataFlavor.stringFlavor))
+          assertEquals(1, renders)
+        }
+  }
+
+  @Test
   fun largeSavedDiagramsRemainBoundedBeforeExpansion() {
     for ((width, height) in listOf(1200 to 80, 80 to 1200)) {
       val source = "flowchart LR\n A --> B"
