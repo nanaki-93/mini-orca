@@ -9,11 +9,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.platform.LocalFocusManager
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -23,8 +26,241 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CompletableDeferred
 
 class DesktopKeyboardNavigationTest {
+  @Test
+  fun diagramViewerTrapsFocusAndRestoresTheOpenerAfterCloseAndEscape() {
+    val source = "flowchart LR\n A --> B"
+    for (attempt in 0..1) {
+      val view = DiagramViewState()
+      var renders = 0
+      ComposeVisualFixture(800, 650, 1.5f) {
+            MermaidDiagram(
+                source,
+                "Flow 1",
+                viewState = view,
+                render = {
+                  renders++
+                  MermaidImage(ImageBitmap(1200, 900), 1200f, 900f)
+                })
+            RestoreDiagramFocus(view)
+            if (view.showDiagram)
+                MermaidDiagramViewer(summaryDiagramInput(source), "Flow 1", "Flow 1", view)
+          }
+          .use { fixture ->
+            fixture.awaitDescription("Expand Flow 1 diagram", "Preview")
+            assertTrue(fixture.requestDescriptionFocus("Expand Flow 1 diagram"))
+            assertTrue(fixture.pressKey(if (attempt == 0) Key.Enter else Key.Spacebar))
+            fixture.awaitDescription("Close Flow 1 diagram")
+            assertTrue(fixture.isFocusedControl("Close Flow 1 diagram"))
+            fixture.pressKey(Key.Tab)
+            fixture.render()
+            assertTrue(
+                fixture.isFocusedControl("Zoom out Flow 1"), "Tab from Close should wrap to zoom")
+            fixture.pressKey(Key.Tab)
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Reset zoom Flow 1"))
+            fixture.pressKey(Key.Tab, shift = true)
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Zoom out Flow 1"))
+            assertTrue(fixture.requestDescriptionFocus("Close Flow 1 diagram"))
+            if (attempt == 0) assertTrue(fixture.pressKey(Key.Escape))
+            else assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
+            assertFalse(fixture.hasDescription("Close Flow 1 diagram"))
+            assertTrue(fixture.isFocusedControl("Expand Flow 1 diagram"))
+            assertEquals(1, renders)
+          }
+    }
+  }
+
+  @Test
+  fun summaryArchitectureViewerReturnsFocusToItsSurvivingExpandControl() {
+    val project = resultProjectFixture()
+    val overview =
+        ProjectOverview(
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            analysis =
+                StructuredProjectAnalysis(
+                    status = "fresh", architecture = "flowchart LR\n A --> B"))
+    ComposeVisualFixture(800, 650, 1.5f) {
+          ProjectSummaryPane(
+              overview,
+              project,
+              {},
+              diagramRender = { MermaidImage(ImageBitmap(32, 32), 32f, 32f) })
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.revealText("Expand diagram", "summary-scroll")
+          assertTrue(fixture.requestDescriptionFocus("Expand Architecture diagram"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.awaitDescription("Close Architecture diagram")
+          assertTrue(fixture.pressKey(Key.Escape))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Expand Architecture diagram"))
+        }
+  }
+
+  @Test
+  fun diagramCanvasAndLongSourceCanBeScrolledFromTheKeyboardWithoutLosingControls() {
+    val source =
+        "flowchart LR\n A --> B\n" +
+            (1..120).joinToString("\n") { "note $it " + "long ".repeat(80) }
+    val view = DiagramViewState()
+    ComposeVisualFixture(800, 650, 1.5f) {
+          MermaidDiagram(
+              source,
+              "Architecture",
+              viewState = view,
+              render = { MermaidImage(ImageBitmap(1200, 900), 1200f, 900f) })
+          RestoreDiagramFocus(view)
+          if (view.showDiagram)
+              MermaidDiagramViewer(
+                  summaryDiagramInput(source), "Architecture", "Architecture", view)
+        }
+        .use { fixture ->
+          fixture.awaitDescription("Expand Architecture diagram", "Preview")
+          assertTrue(fixture.requestDescriptionFocus("Expand Architecture diagram"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.awaitDescription("Architecture diagram horizontal scroll")
+          assertTrue(fixture.requestDescriptionFocus("Architecture diagram vertical scroll"))
+          assertTrue(fixture.pressKey(Key.PageDown))
+          fixture.render()
+          assertTrue(fixture.scrollPosition("diagram-vertical-scroll", horizontal = false) > 0f)
+          assertTrue(fixture.requestDescriptionFocus("Architecture diagram horizontal scroll"))
+          assertTrue(fixture.pressKey(Key.DirectionRight))
+          fixture.render()
+          assertTrue(fixture.scrollPosition("diagram-horizontal-scroll", horizontal = true) > 0f)
+          fixture.clickText("Mermaid source")
+          fixture.render()
+          assertTrue(fixture.requestDescriptionFocus("Saved diagram source vertical scroll"))
+          assertTrue(fixture.pressKey(Key.PageDown))
+          fixture.render()
+          assertTrue(fixture.scrollPosition("diagram-source-scroll", horizontal = false) > 0f)
+          assertTrue(fixture.requestDescriptionFocus("Saved diagram source horizontal scroll"))
+          assertTrue(fixture.pressKey(Key.DirectionRight))
+          fixture.render()
+          assertTrue(
+              fixture.scrollPosition("diagram-source-horizontal-scroll", horizontal = true) > 0f)
+          assertTrue(fixture.requestDescriptionFocus("Copy saved content for Architecture"))
+          assertTrue(fixture.requestDescriptionFocus("Close Architecture diagram"))
+          assertTrue(fixture.pressKey(Key.Escape))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Expand Architecture diagram"))
+        }
+  }
+
+  @Test
+  fun summaryViewerFallsBackWithoutMovingScrollWhenLazyOpenerIsDisposed() {
+    lateinit var focusManager: FocusManager
+    val project = resultProjectFixture()
+    val overview =
+        ProjectOverview(
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            analysis =
+                StructuredProjectAnalysis(
+                    status = "fresh",
+                    architecture = "flowchart LR\n A --> B",
+                    flows = (1..12).map { "Flow $it: " + "saved context ".repeat(24) }))
+    ComposeVisualFixture(800, 650, 1.5f) {
+          focusManager = LocalFocusManager.current
+          ProjectSummaryPane(
+              overview,
+              project,
+              {},
+              diagramRender = { MermaidImage(ImageBitmap(32, 32), 32f, 32f) })
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.revealText("Expand diagram", "summary-scroll")
+          fixture.clickDescription("Expand Architecture diagram")
+          fixture.awaitDescription("Close Architecture diagram")
+          // An offscreen lazy item remains pinned while it owns focus; release it before scrolling.
+          focusManager.clearFocus(force = true)
+          fixture.scrollBy(100_000f, "summary-scroll")
+          fixture.render()
+          fixture.scrollBy(-4_000f, "summary-scroll")
+          fixture.render()
+          val position = fixture.scrollPosition("summary-scroll", horizontal = false)
+          val maximum = fixture.scrollMaximum("summary-scroll", false)
+          assertTrue(position > 0f)
+          assertFalse(fixture.hasDescription("Expand Architecture diagram"))
+          assertTrue(fixture.requestDescriptionFocus("Close Architecture diagram"))
+          assertTrue(fixture.pressKey(Key.Escape))
+          fixture.render()
+          assertFalse(fixture.hasDescription("Close Architecture diagram"))
+          assertTrue(fixture.isTaggedNodeFocused("summary-scroll"))
+          // Lazy item measurements can change when the viewer closes; preserve the visible
+          // context relative to the end of the list rather than assuming a fixed pixel height.
+          assertEquals(
+              maximum - position,
+              fixture.scrollMaximum("summary-scroll", false) -
+                  fixture.scrollPosition("summary-scroll", horizontal = false))
+        }
+  }
+
+  @Test
+  fun diagramLoadingFailureAndZoomBoundsRemainNamedAndReachableAtLargeText() {
+    val source = "flowchart LR\n A --> B"
+    val release = CompletableDeferred<Unit>()
+    ComposeVisualFixture(800, 600, 1.5f) {
+          MermaidDiagram(
+              source,
+              "Architecture",
+              render = {
+                release.await()
+                throw IllegalArgumentException("Invalid saved diagram")
+              })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertEquals("Rendering diagram", fixture.stateDescription("Expand diagram"))
+          assertTrue(fixture.requestDescriptionFocus("Expand Architecture diagram"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.awaitDescription("Close Architecture diagram")
+          assertTrue(fixture.hasText("Rendering diagram…"))
+          release.complete(Unit)
+          fixture.awaitDescription("Expand Architecture diagram", "Diagram failed")
+          fixture.revealText("Diagram unavailable: Invalid saved diagram", "ide-dialog-body")
+          assertTrue(fixture.requestDescriptionFocus("Mermaid source for Architecture"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          fixture.revealText("Copy source", "ide-dialog-body")
+          assertTrue(fixture.requestDescriptionFocus("Copy saved content for Architecture"))
+          assertTrue(fixture.requestDescriptionFocus("Zoom out Architecture"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals("Minimum zoom 75%", fixture.descriptionState("Zoom out Architecture"))
+          assertTrue(fixture.isDisabled("−"))
+          assertTrue(fixture.requestDescriptionFocus("Close Architecture diagram"))
+          fixture.pressKey(Key.Tab)
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Reset zoom Architecture"))
+          fixture.pressKey(Key.Tab, shift = true)
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Close Architecture diagram"))
+          repeat(5) {
+            assertTrue(fixture.requestDescriptionFocus("Zoom in Architecture"))
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
+          }
+          assertEquals("Maximum zoom 200%", fixture.descriptionState("Zoom in Architecture"))
+          assertTrue(fixture.isDisabled("+"))
+          assertTrue(fixture.requestDescriptionFocus("Reset zoom Architecture"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals("Zoom 100%", fixture.descriptionState("Reset zoom Architecture"))
+          assertTrue(fixture.requestDescriptionFocus("Close Architecture diagram"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Expand Architecture diagram"))
+        }
+  }
+
   @Test
   fun canceledDirectoryChooserLeavesTheExistingFailureAndSideEffectsUntouched() {
     val failure =
