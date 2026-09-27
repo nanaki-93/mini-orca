@@ -4438,6 +4438,48 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun collapsedFilesKeepLockErrorAndKeyboardRecoveryReachableAtReducedHeight() {
+    for ((width, height) in listOf(800 to 440, 1280 to 480)) {
+      val view = AnalysisFilesViewState().apply { expanded = false }
+      var reads = 0
+      var starts = 0
+      var saves = 0
+      ComposeVisualFixture(width, height, 1.5f) {
+            AnalysisWorkspacePane(
+                AnalysisWorkspacePaneState(
+                    resultProjectFixture(),
+                    ProjectAnalysisRunState(
+                        run = analysisRunFixture().copy(status = "running"),
+                        fileSelection =
+                            AnalysisSelectionState(
+                                selectionFixture(),
+                                error = "Selection read failed: try refresh",
+                                failure = AnalysisSelectionFailure.Read))),
+                AnalysisWorkspaceActions(
+                    { _, _ -> starts++ }, {}, {}, {}, {}, { reads++ }, { saves++ }),
+                view)
+          }
+          .use { fixture ->
+            fixture.render()
+            for (label in
+                listOf(
+                    "Selection locked. Finish or cancel the current run to change files.",
+                    "Selection read failed: try refresh",
+                    "Refresh files")) {
+              fixture.revealText(label, "analysis-page")
+              if (label == "Refresh files") fixture.assertTextFits(label)
+              else assertTrue(fixture.hasText(label))
+            }
+            assertTrue(fixture.requestFocus("Refresh files"))
+            assertTrue(fixture.pressKey(Key.Spacebar))
+            assertEquals(1, reads)
+            assertEquals(0, starts + saves)
+            assertFalse(fixture.hasDescription("Analyze main.go"))
+          }
+    }
+  }
+
+  @Test
   fun roundedAnalysisGroupsRunControlsAndShowsItsFileTableAtSupportedSizes() {
     listOf(1600 to 1000, 1440 to 900).forEach { (width, height) ->
       listOf(1f, 1.25f, 1.5f).forEach { scale ->
