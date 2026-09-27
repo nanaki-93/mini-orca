@@ -600,7 +600,7 @@ class DesktopVisualLayoutTest {
                 fixture.revealText("Expand diagram")
                 fixture.clickText("Expand diagram")
                 fixture.render("f04-summary-help-expanded-800-650-1.5-1x")
-                assertTrue(fixture.hasText("Hide diagram"))
+                assertTrue(fixture.hasText("Close"))
               }
             }
         ComposeVisualFixture(
@@ -4803,11 +4803,13 @@ class DesktopVisualLayoutTest {
               "Flow 1 diagram preview\n" + visualFixtureOverview.analysis.flows.first())
           fixture.render("summary-dashboard-preview-1440")
           fixture.clickDescription("Expand Architecture diagram")
-          fixture.clickDescription("Expand Flow 1 diagram")
           fixture.awaitDescription(
               "Architecture diagram\n" + visualFixtureOverview.analysis.architecture)
+          fixture.clickDescription("Close Architecture diagram")
+          fixture.clickDescription("Expand Flow 1 diagram")
           fixture.awaitDescription(
               "Flow 1 diagram\n" + visualFixtureOverview.analysis.flows.first())
+          fixture.clickDescription("Close Flow 1 diagram")
           fixture.render("summary-dashboard-1440")
           listOf(
                   "Analysis coverage",
@@ -4957,9 +4959,7 @@ class DesktopVisualLayoutTest {
           fixture.awaitDescription("Expand Architecture diagram", "Preview")
           fixture.awaitDescription("Expand Flow 1 diagram", "Preview")
           fixture.clickDescription("Expand Architecture diagram")
-          fixture.clickDescription("Expand Flow 1 diagram")
           fixture.awaitDescription("Architecture diagram\n$source")
-          fixture.awaitDescription("Flow 1 diagram\n$flow")
           fixture.clickDescription("Zoom in Architecture")
           fixture.clickDescription("Mermaid source for Architecture")
           fixture.render("summary-diagram-state-wide")
@@ -4969,14 +4969,16 @@ class DesktopVisualLayoutTest {
           for (width in listOf(800, 1440)) {
             fixture.resize(width, 2600)
             fixture.render("summary-diagram-state-$width")
-            fixture.assertNarrativeSectionOrder()
-            fixture.awaitDescription("Hide Architecture diagram", "Expanded")
-            fixture.awaitDescription("Hide Flow 1 diagram", "Expanded")
+            fixture.awaitDescription("Close Architecture diagram")
             assertTrue(fixture.hasDescription("Architecture diagram\n$source"))
-            assertTrue(fixture.hasDescription("Flow 1 diagram\n$flow"))
             assertTrue(fixture.hasText("125%"), "Zoom must survive reflow at $width")
             assertTrue(fixture.hasText("Hide Mermaid"), "Source disclosure must survive at $width")
           }
+          fixture.clickDescription("Close Architecture diagram")
+          fixture.assertNarrativeSectionOrder()
+          fixture.clickDescription("Expand Flow 1 diagram")
+          fixture.awaitDescription("Flow 1 diagram\n$flow")
+          fixture.clickDescription("Close Flow 1 diagram")
           assertEquals(0, navigations, "Resizing and disclosures must not navigate")
         }
   }
@@ -5988,14 +5990,14 @@ class DesktopVisualLayoutTest {
             assertTrue(fixture.requestFocus("Expand diagram"))
             fixture.pressKey(Key.Enter)
             fixture.awaitDescription("Architecture diagram\n$source")
-            assertEquals("Expanded", fixture.stateDescription("Hide diagram"))
+            fixture.awaitDescription("Close Architecture diagram")
             fixture.render("summary-mermaid-$width-$scale")
             assertFalse(fixture.hasText("Rendering diagram…"))
             fixture.clickText("Mermaid source")
             fixture.render()
             assertTrue(fixture.hasText(source))
             assertFalse(fixture.hasEditableText())
-            fixture.clickText("Hide diagram")
+            fixture.clickDescription("Close Architecture diagram")
             fixture.render()
             assertTrue(fixture.hasDescription("Architecture diagram preview\n$source"))
             assertFalse(fixture.hasDescription("Architecture diagram\n$source"))
@@ -6046,7 +6048,7 @@ class DesktopVisualLayoutTest {
               fixture.tryClick("Expand diagram"),
               "A valid diagram must not ignore the first disclosure click while rendering")
           fixture.awaitDescription("Architecture diagram\n$source")
-          assertEquals("Expanded", fixture.stateDescription("Hide diagram"))
+          fixture.awaitDescription("Close Architecture diagram")
         }
   }
 
@@ -6089,7 +6091,7 @@ class DesktopVisualLayoutTest {
             fixture.render()
             assertTrue(fixture.tryClick("Expand diagram"))
             fixture.awaitDescription("$label diagram\n$value")
-            assertEquals("Expanded", fixture.stateDescription("Hide diagram"))
+            fixture.awaitDescription("Close $label diagram")
           }
     }
   }
