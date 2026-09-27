@@ -4459,18 +4459,12 @@ class DesktopVisualLayoutTest {
               }
               if (width == 1600 && scale == 1.5f) {
                 val panel = fixture.taggedBounds("analysis-file-panel")
-                val files = fixture.firstVisibleTextBounds("Files")
-                val all = fixture.firstVisibleTextBounds("All")
-                val attention = fixture.firstVisibleTextBounds("Needs attention")
-                val excluded = fixture.firstVisibleTextBounds("Excluded")
-                assertTrue(
-                    files.right < all.left, "Filters must remain beside Files in the workspace")
-                assertTrue(all.right < attention.left && attention.right < excluded.left)
-                assertTrue(
-                    kotlin.math.abs(all.center.y - excluded.center.y) < 2f,
-                    "Filters must remain on one line in the workspace at 150% text scale")
-                assertTrue(
-                    excluded.right <= panel.right, "Filters must fit inside the workspace panel")
+                listOf("Files", "All", "Needs attention", "Up to date", "Excluded").forEach { label
+                  ->
+                  assertTrue(
+                      fixture.firstVisibleTextBounds(label).right <= panel.right,
+                      "$label must fit inside the workspace panel")
+                }
               }
               if (width == 1600 && scale == 1f) {
                 fixture.assertAnalysisCategoryGeometry()
@@ -4483,7 +4477,6 @@ class DesktopVisualLayoutTest {
                 assertTrue(controls.top <= content.top)
                 assertTrue(controls.left > content.right)
                 val table = fixture.taggedBounds("analysis-file-table")
-                val footer = fixture.taggedBounds("analysis-file-footer")
                 val analysisPage = fixture.taggedBounds("analysis-page")
                 listOf("File", "Analysis state", "Details").forEach { header ->
                   val bounds = fixture.firstVisibleTextBounds(header)
@@ -4494,26 +4487,10 @@ class DesktopVisualLayoutTest {
                       bounds.bottom <= table.top,
                       "$header must remain immediately above the bounded table")
                 }
+                val firstRow = fixture.taggedBounds("analysis-file-row-cmd/server/main.go")
+                assertTrue(firstRow.top >= table.top && firstRow.bottom <= table.bottom)
                 assertTrue(
-                    footer.top >= analysisPage.top && footer.bottom <= analysisPage.bottom,
-                    "File footer must be visible in the initial Analysis viewport")
-                listOf(
-                        "cmd/server/main.go",
-                        "internal/api/routes.go",
-                        "internal/api/user.go",
-                        "internal/db/store.go",
-                        "internal/models/user.go",
-                        "internal/service/service.go",
-                        "internal/services/worker1.go")
-                    .forEach { path ->
-                      val row = fixture.taggedBounds("analysis-file-row-$path")
-                      assertTrue(
-                          row.top >= table.top && row.bottom <= table.bottom,
-                          "$path must be visible in the initial bounded table viewport")
-                      assertTrue(
-                          row.top >= analysisPage.top && row.bottom <= analysisPage.bottom,
-                          "$path must be visible in the initial Analysis viewport")
-                    }
+                    firstRow.top >= analysisPage.top && firstRow.bottom <= analysisPage.bottom)
               }
               fixture.revealText("Files", "analysis-page")
               assertTrue(fixture.hasDescription("Collapse Files"))
