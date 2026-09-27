@@ -143,7 +143,9 @@ internal fun analysisFileStatus(
       when (status) {
         AnalysisFileSyncStatus.Updated -> "All applicable stages have current analysis."
         AnalysisFileSyncStatus.Unknown ->
-            "No analysis status is available. Refresh files to load the saved results."
+            if (file.stages.isEmpty())
+                "No analysis status is available. Refresh files to load the saved results."
+            else explanations.joinToString("\n")
         AnalysisFileSyncStatus.Excluded ->
             file.stages.joinToString(" ") { "${analysisStageLabel(it.stage)}: ${it.reason}" }
         else -> explanations.joinToString("\n")

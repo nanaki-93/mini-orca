@@ -357,6 +357,124 @@ class AnalysisFileStatusTest {
   }
 
   @Test
+  fun mixedSavedStagesAndAdmittedProgressNeverCertifyMissingEvidence() {
+    val savedStates =
+        listOf(
+            "fresh" to AnalysisFileSyncStatus.Updated,
+            "stale" to AnalysisFileSyncStatus.Stale,
+            "failed" to AnalysisFileSyncStatus.Failed,
+            "partial" to AnalysisFileSyncStatus.Partial,
+            "unavailable" to AnalysisFileSyncStatus.Unavailable,
+            "future_status" to AnalysisFileSyncStatus.Unknown)
+    val files =
+        savedStates.map { (stage, _) ->
+          AnalysisSelectableFile(
+              "$stage.go",
+              "",
+              listOf(
+                  AnalysisFileStageStatus("semantic", "fresh", "Current"),
+                  AnalysisFileStageStatus("performance", stage, "Saved $stage"),
+                  AnalysisFileStageStatus("security_rules", "skipped", "Not applicable")))
+        } +
+            listOf(
+                AnalysisSelectableFile("policy.go", "Policy excludes this file"),
+                AnalysisSelectableFile("user.go", "", selectionStageFixture("stale", "Old source")),
+                AnalysisSelectableFile("absent.go", ""))
+    val selection =
+        selectionFixture().copy(files = files, excludedPaths = listOf("user.go", "missing.go"))
+    val planFiles = files.map { AnalysisPlannedFile(it.path, "base", "Go", 20, emptyList()) }
+    val base = analysisRunFixture()
+    val run =
+        base.copy(
+            status = "running",
+            plan = base.plan.copy(files = planFiles),
+            files =
+                files.map {
+                  AnalysisRunFile(
+                      it.path,
+                      "base",
+                      "Go",
+                      listOf(AnalysisStageProgress("semantic", "pending", 0, false)))
+                })
+    val saved = analysisFileStatuses(selection, null)
+    assertEquals(savedStates.map { it.second }, saved.take(6).map { it.status })
+    assertEquals(
+        listOf(AnalysisFileSyncStatus.Excluded, AnalysisFileSyncStatus.Excluded),
+        saved.drop(6).take(2).map { it.status })
+    assertEquals(AnalysisFileSyncStatus.Unknown, saved.last().status)
+    assertTrue(saved[5].explanation.contains("Saved future_status"))
+    val coverage = analysisSelectionCoverage(selection)
+    assertEquals(7, coverage.total)
+    assertEquals(1, coverage.fresh)
+    assertEquals(3, coverage.unavailable) // unavailable, unknown stage and no stage data
+    val pending = analysisFileStatuses(selection, run)
+    saved.take(6).forEachIndexed { index, row ->
+      assertEquals(AnalysisFileSyncStatus.Pending, pending[index].status)
+      assertEquals(row.status, pending[index].savedStatus)
+      assertEquals("Queued", pending[index].summary)
+    }
+    assertEquals(saved.drop(6).take(2), pending.drop(6).take(2))
+    val finished =
+        analysisFileStatuses(
+            selection,
+            run.copy(
+                files =
+                    run.files.map { file ->
+                      file.copy(stages = file.stages.map { it.copy(status = "completed") })
+                    }))
+    assertEquals(AnalysisFileSyncStatus.Updated, finished.first().status)
+    finished.drop(1).take(5).forEachIndexed { index, row ->
+      assertEquals(AnalysisFileSyncStatus.Finished, row.status)
+      assertEquals(saved[index + 1].status, row.savedStatus)
+      assertEquals("All run stages finished.", row.summary)
+    }
+    assertEquals(coverage, analysisSelectionCoverage(selection))
+    val reselected = selection.copy(excludedPaths = listOf("missing.go"))
+    assertEquals(AnalysisFileSyncStatus.Stale, analysisFileStatuses(reselected, null)[7].status)
+    assertEquals(AnalysisFileSyncStatus.Pending, analysisFileStatuses(reselected, run)[7].status)
+    assertEquals(AnalysisFileSyncStatus.Stale, analysisFileStatuses(reselected, run)[7].savedStatus)
+    assertEquals(coverage.total + 1, analysisSelectionCoverage(reselected).total)
+  }
+
+  @Test
+  fun mismatchedOrTerminalRunsCannotOverlayMixedSavedRows() {
+    val selection =
+        selectionFixture()
+            .copy(
+                files =
+                    listOf(
+                        AnalysisSelectableFile(
+                            "main.go", "", selectionStageFixture("stale", "Old"))))
+    val base =
+        analysisRunFixture()
+            .copy(
+                status = "running",
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "main.go",
+                            "base",
+                            "Go",
+                            listOf(AnalysisStageProgress("semantic", "pending", 0, false)))))
+    assertEquals(
+        AnalysisFileSyncStatus.Pending, analysisFileStatuses(selection, base).single().status)
+    val mismatches =
+        listOf(
+            base.copy(identity = base.identity.copy(projectId = "other")),
+            base.copy(identity = base.identity.copy(projectRevision = "other")),
+            base.copy(plan = base.plan.copy(identity = base.plan.identity.copy(queueId = "other"))),
+            base.copy(
+                plan =
+                    base.plan.copy(files = base.plan.files.map { it.copy(contentHash = "other") })),
+            base.copy(files = base.files.map { it.copy(contentHash = "other") }),
+            base.copy(status = "completed"),
+            base.copy(status = "canceled"))
+    mismatches.forEach { mismatch ->
+      assertEquals(analysisFileStatuses(selection, null), analysisFileStatuses(selection, mismatch))
+    }
+  }
+
+  @Test
   fun categoryColorsFollowAnalysisOutcomeRegardlessOfFindingCount() {
     val navigations = mutableListOf<Workspace>()
     val outcomes =
