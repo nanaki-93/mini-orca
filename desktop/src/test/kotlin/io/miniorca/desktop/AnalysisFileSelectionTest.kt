@@ -1,6 +1,8 @@
 package io.miniorca.desktop
 
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
@@ -324,6 +326,156 @@ class AnalysisFileSelectionTest {
             fixture.clickText("Exclude all")
             assertEquals(listOf("helper.go", "main.go"), saves.last())
           }
+    }
+  }
+
+  @Test
+  fun bulkActionsIgnoreFiltersAndNoMatchesButPreserveOutOfInventoryExclusions() {
+    Harness().use { h ->
+      h.saved =
+          selectionFixture()
+              .copy(
+                  excludedPaths = listOf("absent.go", ".env", "main.go"),
+                  files =
+                      selectionFixture().files +
+                          AnalysisSelectableFile("policy.go", "excluded by policy"))
+      h.workflow.refresh()
+      h.drain()
+      var privileged = 0
+      ComposeVisualFixture(1_440, 900) {
+            AnalysisFileSelector(
+                h.state.analysisRun,
+                AnalysisWorkspaceActions(
+                    { _, _ -> privileged++ },
+                    { privileged++ },
+                    { privileged++ },
+                    { privileged++ },
+                    { privileged++ },
+                    { h.workflow.refresh() },
+                    { h.workflow.save(it) }))
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.clickDescription("Up to date")
+            fixture.setText("helper")
+            fixture.render()
+            assertTrue(fixture.hasText("1 of 4 files match"))
+            fixture.clickText("Exclude all")
+            // The workflow has accepted the write, but the only available snapshot is still
+            // confirmed.
+            fixture.render()
+            h.main.runPending()
+            h.io.runPending() // Leave the response queued while inspecting the confirmed UI.
+            assertEquals(
+                listOf(".env", "absent.go", "helper.go", "main.go"),
+                h.requests.single().excludedPaths)
+            assertEquals(
+                listOf("absent.go", ".env", "main.go"), h.current.selection!!.excludedPaths)
+            fixture.render()
+            assertTrue(fixture.hasText("1 selected · 3 excluded · Saving selection…"))
+            assertEquals(
+                ToggleableState.On, fixture.descriptionToggleableState("Analyze helper.go"))
+            assertTrue(fixture.isDescriptionDisabled("Analyze helper.go"))
+            assertTrue(fixture.isDisabled("Exclude all"))
+            assertFalse(fixture.tryClick("Exclude all")) // Duplicate activation is disabled.
+            h.drain()
+            fixture.render()
+            assertEquals(listOf("GET", "POST"), h.methods)
+            assertEquals(
+                listOf(".env", "absent.go", "helper.go", "main.go"),
+                h.current.selection!!.excludedPaths)
+            assertTrue(fixture.hasText("0 selected · 4 excluded"))
+            assertTrue(fixture.hasText("No matching files."))
+            fixture.clickDescription("All")
+            fixture.render()
+            assertEquals(
+                ToggleableState.Off, fixture.descriptionToggleableState("Analyze helper.go"))
+
+            fixture.setText("not-a-project-file")
+            fixture.render()
+            assertTrue(fixture.hasText("No matching files."))
+            assertTrue(fixture.hasText("0 of 4 files match"))
+            fixture.clickText("Select all")
+            h.drain()
+            assertEquals(listOf(".env", "absent.go"), h.requests.last().excludedPaths)
+            fixture.render()
+            assertEquals(listOf("GET", "POST", "POST"), h.methods)
+            assertEquals(listOf(".env", "absent.go"), h.current.selection!!.excludedPaths)
+            assertTrue(fixture.hasText("2 selected · 2 excluded"))
+            // Even with zero matching rows, bulk actions target the full eligible inventory.
+            fixture.clickText("Exclude all")
+            h.drain()
+            assertEquals(
+                listOf(".env", "absent.go", "helper.go", "main.go"),
+                h.requests.last().excludedPaths)
+            assertEquals(3, h.requests.size)
+            assertEquals(0, privileged)
+          }
+    }
+  }
+
+  @Test
+  fun saveConflictAndUncertainTransportResultRequireReadBackNotWriteReplay() {
+    for (uncertain in listOf(false, true)) {
+      Harness().use { h ->
+        h.workflow.refresh()
+        h.drain()
+        val confirmed = h.current.selection!!
+        if (uncertain) h.uncertainSave = true else h.saveStatus = 409
+        h.workflow.save(listOf("main.go"))
+        assertEquals(confirmed, h.current.selection)
+        assertTrue(h.current.saving)
+        h.drain()
+        assertEquals(AnalysisSelectionFailure.Save, h.current.failure)
+        assertEquals(confirmed, h.current.selection)
+        assertFalse(h.current.saving)
+        assertEquals(
+            if (uncertain) "Transport result unknown" else "Daemon returned 409", h.current.error)
+        assertEquals(listOf("GET", "POST"), h.methods)
+        assertEquals(listOf("main.go"), h.requests.single().excludedPaths)
+        // A transport error can occur after persistence; only an explicit GET can resolve it.
+        assertEquals(if (uncertain) listOf("main.go") else emptyList(), h.saved.excludedPaths)
+        h.workflow.refresh()
+        h.workflow.refresh()
+        assertEquals(confirmed, h.current.selection)
+        h.drain()
+        assertEquals(listOf("GET", "POST", "GET"), h.methods)
+        assertEquals(h.saved, h.current.selection)
+        assertNull(h.current.failure)
+        assertNull(h.current.error)
+        assertEquals(1, h.requests.size)
+      }
+    }
+  }
+
+  @Test
+  fun lateReadAndSaveCompletionsCannotReplaceAnotherProjectsSelection() {
+    for (saving in listOf(false, true)) {
+      Harness().use { h ->
+        h.workflow.refresh()
+        h.drain()
+        val previous = h.current.selection!!
+        if (saving) h.workflow.save(listOf("main.go")) else h.workflow.refresh()
+        h.main.runPending()
+        h.io.runPending() // Response is now queued on main, after transport has returned.
+        assertEquals(previous, h.current.selection)
+        assertEquals(if (saving) listOf("GET", "POST") else listOf("GET", "GET"), h.methods)
+        h.workflow.detach()
+        h.state =
+            h.state.reduce(
+                DesktopEvent.ProjectLoaded(
+                    analysisProjectFixture("other"), ProjectIndex("other", "revision")))
+        h.saved = selectionFixture().copy(projectId = "other", excludedPaths = listOf("helper.go"))
+        h.workflow.refresh()
+        h.drain()
+        assertEquals("other", h.current.selection!!.projectId)
+        assertEquals(listOf("helper.go"), h.current.selection!!.excludedPaths)
+        assertNull(h.current.error)
+        assertNull(h.current.failure)
+        assertEquals(
+            if (saving) listOf("GET", "POST", "GET") else listOf("GET", "GET", "GET"), h.methods)
+        assertEquals(if (saving) 1 else 0, h.requests.size)
+      }
     }
   }
 
@@ -743,15 +895,19 @@ class AnalysisFileSelectionTest {
     val main = AnalysisQueuedDispatcher()
     val io = AnalysisQueuedDispatcher()
     private val scope = CoroutineScope(SupervisorJob() + main)
-    var state =
-        DesktopState()
-            .reduce(
-                DesktopEvent.ProjectLoaded(
-                    analysisProjectFixture(), ProjectIndex("project", "revision")))
+    var state by
+        mutableStateOf(
+            DesktopState()
+                .reduce(
+                    DesktopEvent.ProjectLoaded(
+                        analysisProjectFixture(), ProjectIndex("project", "revision"))))
     var saved = selectionFixture()
     var failSave = false
     var failRead = false
+    var saveStatus = 200
+    var uncertainSave = false
     val methods = mutableListOf<String>()
+    val requests = mutableListOf<AnalysisSelectionRequest>()
     val current
       get() = state.analysisRun.fileSelection
 
@@ -770,12 +926,15 @@ class AnalysisFileSelectionTest {
                         if (method == "GET" && failRead)
                             return TransportResponse(500, "read failed")
                         if (method == "POST") {
-                          if (failSave) return TransportResponse(500, "save failed")
                           val request = Json.decodeFromString<AnalysisSelectionRequest>(body!!)
+                          requests += request
                           assertEquals(saved.selectionId, request.selectionId)
+                          if (failSave) return TransportResponse(500, "save failed")
+                          if (saveStatus != 200) return TransportResponse(saveStatus, "conflict")
                           saved =
                               saved.copy(
                                   selectionId = "saved", excludedPaths = request.excludedPaths)
+                          if (uncertainSave) throw IllegalStateException("Transport result unknown")
                         }
                         return TransportResponse(200, Json.encodeToString(saved))
                       }
