@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -26,7 +28,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -199,23 +203,23 @@ private fun MermaidDiagramSource(
         }
         ChromeButton(
             onClick = { showDiagram = !showDiagram },
-            enabled = source != null && state !is DiagramState.Failed,
-            accessibleName = "${if (showDiagram) "Hide" else "Show"} $label diagram",
+            enabled = source != null,
+            accessibleName = "${if (showDiagram) "Hide" else "Expand"} $label diagram",
             modifier =
                 Modifier.semantics {
                   stateDescription =
                       when (state) {
                         DiagramState.Unavailable -> "Diagram unavailable"
                         DiagramState.Loading -> "Rendering diagram"
-                        is DiagramState.Failed -> "Diagram unavailable"
-                        is DiagramState.Ready -> if (showDiagram) "Expanded" else "Collapsed"
+                        is DiagramState.Failed -> "Diagram failed"
+                        is DiagramState.Ready -> if (showDiagram) "Expanded" else "Preview"
                       }
                 }) {
               DesktopLineIcon(
                   if (showDiagram) DesktopIcon.ChevronDown else DesktopIcon.ChevronRight,
                   "",
                   iconSize = 16.dp)
-              Text(if (showDiagram) "Hide diagram" else "Show diagram")
+              Text(if (showDiagram) "Hide diagram" else "Expand diagram")
             }
       }
   prose
@@ -244,35 +248,52 @@ private fun MermaidDiagramSource(
           }
     }
   }
-  when (val current = state) {
-    DiagramState.Unavailable -> Unit
-    DiagramState.Loading ->
-        if (showDiagram)
-            Text("Rendering diagram…", color = SecondaryText, style = IdeTypography.compactBody)
-    is DiagramState.Failed -> {
-      Text(
-          "Diagram unavailable: ${current.message}",
-          color = Warning,
-          style = IdeTypography.compactBody)
-      ModelResultContent(input.original, preview = false)
-    }
-    is DiagramState.Ready ->
-        if (showDiagram) {
-          val scale = LocalDensity.current.fontScale * zoom
-          Box(
-              Modifier.fillMaxWidth()
-                  .clip(MiniOrcaShapes.control)
-                  .background(EditorCanvas)
-                  .horizontalScroll(rememberScrollState())
-                  .padding(8.dp),
-              contentAlignment = Alignment.Center) {
+  if (source != null || input.original.isNotBlank()) {
+    Box(
+        Modifier.fillMaxWidth()
+            .height(180.dp)
+            .clip(MiniOrcaShapes.control)
+            .background(EditorCanvas)
+            .testTag("diagram-preview"),
+        contentAlignment = Alignment.Center) {
+          when (val current = state) {
+            DiagramState.Unavailable ->
+                Text(
+                    "No diagram in saved content",
+                    color = SecondaryText,
+                    style = IdeTypography.compactBody)
+            DiagramState.Loading ->
+                Text("Rendering diagram…", color = SecondaryText, style = IdeTypography.compactBody)
+            is DiagramState.Failed ->
+                Text(
+                    "Diagram unavailable: ${current.message}",
+                    color = Warning,
+                    style = IdeTypography.compactBody,
+                    modifier = Modifier.padding(8.dp))
+            is DiagramState.Ready ->
                 Image(
                     current.image.bitmap,
-                    "$label diagram\n$source",
-                    modifier =
-                        Modifier.size(
-                            (current.image.width * scale).dp, (current.image.height * scale).dp))
-              }
+                    "$label diagram preview\n$source",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize().padding(8.dp))
+          }
+        }
+  }
+  if (state is DiagramState.Failed) ModelResultContent(input.original, preview = false)
+  if (showDiagram && state is DiagramState.Ready) {
+    val scale = LocalDensity.current.fontScale * zoom
+    Box(
+        Modifier.fillMaxWidth()
+            .clip(MiniOrcaShapes.control)
+            .background(EditorCanvas)
+            .horizontalScroll(rememberScrollState())
+            .padding(8.dp),
+        contentAlignment = Alignment.Center) {
+          Image(
+              state.image.bitmap,
+              "$label diagram\n$source",
+              modifier =
+                  Modifier.size((state.image.width * scale).dp, (state.image.height * scale).dp))
         }
   }
   if (showDiagram && showSource) {

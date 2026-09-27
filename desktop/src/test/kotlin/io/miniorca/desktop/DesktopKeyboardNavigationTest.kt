@@ -1661,9 +1661,9 @@ class DesktopKeyboardNavigationTest {
           fixture.render()
           assertEquals("Expanded", fixture.descriptionStateDescription("Collapse More insight"))
           fixture.revealText("Architecture")
-          fixture.awaitVisibleDescription("Show Architecture diagram")
-          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
-          assertTrue(fixture.tryClick("Show Architecture diagram"))
+          fixture.awaitVisibleDescription("Expand Architecture diagram")
+          fixture.awaitDescription("Expand Architecture diagram", "Preview")
+          assertTrue(fixture.tryClick("Expand Architecture diagram"))
           fixture.awaitDescription("Hide Architecture diagram", "Expanded")
           assertEquals(4, destinations.size, "Summary disclosures must not navigate or start work")
         }
