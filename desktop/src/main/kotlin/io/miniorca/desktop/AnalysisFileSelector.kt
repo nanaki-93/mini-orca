@@ -3,6 +3,7 @@ package io.miniorca.desktop
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -31,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.selected
@@ -246,60 +248,66 @@ internal fun AnalysisFileSelector(
               style = IdeTypography.workspaceMetadata)
       remember(view, paths) { view.preparePaths(paths) }
       LaunchedEffect(view, paths) { view.followPaths(paths) }
-      Column(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth()
-                .background(HeaderSurface)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(AnalysisWideTableGrid.columnGap)) {
-              Row(Modifier.weight(AnalysisWideTableGrid.fileWeight)) {
-                Spacer(Modifier.width(AnalysisWideTableGrid.leadingControlsWidth))
-                Text("File", color = SecondaryText, style = IdeTypography.workspaceMetadata)
-              }
-              Text(
-                  "Analysis state",
-                  Modifier.weight(AnalysisWideTableGrid.stateWeight)
-                      .padding(start = AnalysisWideTableGrid.statusMarkerWidth),
-                  color = SecondaryText,
-                  style = IdeTypography.workspaceMetadata)
-              Text(
-                  "Details",
-                  Modifier.weight(AnalysisWideTableGrid.detailsWeight),
-                  color = SecondaryText,
-                  style = IdeTypography.workspaceMetadata)
-            }
-        if (files.isEmpty())
-            Text(
-                when {
-                  selection == null && state.loading -> "Loading file selection…"
-                  selection == null -> "File status is not loaded. Refresh files to try again."
-                  rows.isEmpty() -> "No files are available for analysis."
-                  else -> "No matching files."
-                },
-                Modifier.padding(vertical = 12.dp),
-                color = SecondaryText,
-                style = IdeTypography.workspaceMetadata)
-        LazyColumn(
-            state = view.listState,
-            modifier =
-                Modifier.fillMaxWidth()
-                    .height(tableHeight)
-                    .testTag("analysis-file-table")
-                    .onSizeChanged { tableHeightPx = it.height }) {
-              itemsIndexed(files, key = { _, row -> row.file.path }) { _, row ->
-                AnalysisFileRow(
-                    row,
-                    row.file.reason.isBlank() && row.file.path !in ignored,
-                    editable && row.file.reason.isBlank(),
-                    view) {
-                      actions.saveSelection(
-                          (if (row.file.path in ignored) ignored - row.file.path
-                              else ignored + row.file.path)
-                              .sorted())
+      BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // Font scaling reduces the usable room for each textual column even at a wide viewport.
+        val wide = maxWidth >= 1100.dp * LocalDensity.current.fontScale
+        Column(Modifier.fillMaxWidth()) {
+          if (wide)
+              Row(
+                  Modifier.fillMaxWidth()
+                      .background(HeaderSurface)
+                      .padding(horizontal = 12.dp, vertical = 8.dp),
+                  horizontalArrangement = Arrangement.spacedBy(AnalysisWideTableGrid.columnGap)) {
+                    Row(Modifier.weight(AnalysisWideTableGrid.fileWeight)) {
+                      Spacer(Modifier.width(AnalysisWideTableGrid.leadingControlsWidth))
+                      Text("File", color = SecondaryText, style = IdeTypography.workspaceMetadata)
                     }
-                IdeHorizontalSeparator()
+                    Text(
+                        "Analysis state",
+                        Modifier.weight(AnalysisWideTableGrid.stateWeight)
+                            .padding(start = AnalysisWideTableGrid.statusMarkerWidth),
+                        color = SecondaryText,
+                        style = IdeTypography.workspaceMetadata)
+                    Text(
+                        "Details",
+                        Modifier.weight(AnalysisWideTableGrid.detailsWeight),
+                        color = SecondaryText,
+                        style = IdeTypography.workspaceMetadata)
+                  }
+          if (files.isEmpty())
+              Text(
+                  when {
+                    selection == null && state.loading -> "Loading file selection…"
+                    selection == null -> "File status is not loaded. Refresh files to try again."
+                    rows.isEmpty() -> "No files are available for analysis."
+                    else -> "No matching files."
+                  },
+                  Modifier.padding(vertical = 12.dp),
+                  color = SecondaryText,
+                  style = IdeTypography.workspaceMetadata)
+          LazyColumn(
+              state = view.listState,
+              modifier =
+                  Modifier.fillMaxWidth()
+                      .height(tableHeight)
+                      .testTag("analysis-file-table")
+                      .onSizeChanged { tableHeightPx = it.height }) {
+                itemsIndexed(files, key = { _, row -> row.file.path }) { _, row ->
+                  AnalysisFileRow(
+                      row,
+                      row.file.reason.isBlank() && row.file.path !in ignored,
+                      editable && row.file.reason.isBlank(),
+                      view,
+                      wide) {
+                        actions.saveSelection(
+                            (if (row.file.path in ignored) ignored - row.file.path
+                                else ignored + row.file.path)
+                                .sorted())
+                      }
+                  IdeHorizontalSeparator()
+                }
               }
-            }
+        }
       }
       FlowRow(
           Modifier.fillMaxWidth().testTag("analysis-file-footer"),
@@ -388,9 +396,27 @@ private fun AnalysisFileRow(
     selected: Boolean,
     editable: Boolean,
     view: AnalysisFilesViewState,
+    wide: Boolean,
     toggle: () -> Unit
 ) {
-  Row(
+  val identity: @Composable (Modifier) -> Unit = { modifier ->
+    Row(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(AnalysisWideTableGrid.identityGap),
+        verticalAlignment = Alignment.Top) {
+          IdeCheckbox(
+              checked = selected,
+              onCheckedChange = { toggle() },
+              accessibleName = "Analyze ${row.file.path}",
+              enabled = editable,
+              stateLabel = if (selected) "Selected for analysis" else "Excluded from analysis")
+          DesktopLineIcon(DesktopIcon.Document, "", iconSize = 16.dp, tint = SecondaryText)
+          SelectionContainer(Modifier.weight(1f)) {
+            Text(row.file.path, style = IdeTypography.workspaceMetadata, color = PrimaryText)
+          }
+        }
+  }
+  val surface =
       Modifier.fillMaxWidth()
           .testTag("analysis-file-row-${row.file.path}")
           .clip(MiniOrcaShapes.control)
@@ -398,32 +424,29 @@ private fun AnalysisFileRow(
               if (row.savedStatus != null && row.status == AnalysisFileSyncStatus.Running)
                   SelectionSurface
               else Panel)
-          .padding(horizontal = 12.dp, vertical = 4.dp),
-      horizontalArrangement = Arrangement.spacedBy(AnalysisWideTableGrid.columnGap),
-      verticalAlignment = Alignment.Top) {
-        val identity: @Composable (Modifier) -> Unit = { modifier ->
-          Row(
-              modifier,
-              horizontalArrangement = Arrangement.spacedBy(AnalysisWideTableGrid.identityGap),
-              verticalAlignment = Alignment.Top) {
-                IdeCheckbox(
-                    checked = selected,
-                    onCheckedChange = { toggle() },
-                    accessibleName = "Analyze ${row.file.path}",
-                    enabled = editable,
-                    stateLabel =
-                        if (selected) "Selected for analysis" else "Excluded from analysis")
-                DesktopLineIcon(DesktopIcon.Document, "", iconSize = 16.dp, tint = SecondaryText)
-                SelectionContainer {
-                  Text(row.file.path, style = IdeTypography.workspaceMetadata, color = PrimaryText)
-                }
-              }
+          .padding(horizontal = 12.dp, vertical = 4.dp)
+  if (wide) {
+    Row(
+        surface,
+        horizontalArrangement = Arrangement.spacedBy(AnalysisWideTableGrid.columnGap),
+        verticalAlignment = Alignment.Top) {
+          identity(Modifier.weight(AnalysisWideTableGrid.fileWeight))
+          AnalysisFileStatusLabel(
+              row.file.path, row.status, Modifier.weight(AnalysisWideTableGrid.stateWeight))
+          AnalysisFileDetails(row, view, Modifier.weight(AnalysisWideTableGrid.detailsWeight))
         }
-        identity(Modifier.weight(AnalysisWideTableGrid.fileWeight))
-        AnalysisFileStatusLabel(
-            row.file.path, row.status, Modifier.weight(AnalysisWideTableGrid.stateWeight))
-        AnalysisFileDetails(row, view, Modifier.weight(AnalysisWideTableGrid.detailsWeight))
-      }
+  } else {
+    Column(surface, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      identity(Modifier.fillMaxWidth())
+      Column(
+          Modifier.fillMaxWidth().padding(start = AnalysisWideTableGrid.leadingControlsWidth),
+          verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Analysis state", color = SecondaryText, style = IdeTypography.workspaceMetadata)
+            AnalysisFileStatusLabel(row.file.path, row.status)
+            AnalysisFileDetails(row, view, Modifier.fillMaxWidth())
+          }
+    }
+  }
 }
 
 @Composable
@@ -445,6 +468,8 @@ private fun AnalysisFileStatusLabel(
       }
 }
 
+private const val FILE_SUMMARY_PREVIEW_LIMIT = 240
+
 @Composable
 private fun AnalysisFileDetails(
     row: AnalysisFileStatus,
@@ -458,16 +483,18 @@ private fun AnalysisFileDetails(
           (row.savedStatus
               ?.let { "\nSaved analysis: ${it.label}\n" + analysisFileStatus(row.file).explanation }
               .orEmpty())
+  val summaryPreview = sanitizedOutputText(summary, FILE_SUMMARY_PREVIEW_LIMIT)
   val hasDetails =
-      detail != summary &&
-          row.status !in setOf(AnalysisFileSyncStatus.Updated, AnalysisFileSyncStatus.Excluded)
+      (detail != summary &&
+          row.status !in setOf(AnalysisFileSyncStatus.Updated, AnalysisFileSyncStatus.Excluded)) ||
+          summaryPreview.contains("… output truncated")
   Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically) {
           SelectionContainer(Modifier.weight(1f)) {
             Text(
-                sanitizedOutputText(summary),
+                summaryPreview,
                 color =
                     if (row.status == AnalysisFileSyncStatus.Running) Information
                     else SecondaryText,

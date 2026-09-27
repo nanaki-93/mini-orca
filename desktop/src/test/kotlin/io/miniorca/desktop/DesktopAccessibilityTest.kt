@@ -495,6 +495,88 @@ class DesktopAccessibilityTest {
   }
 
   @Test
+  fun reflowedFileRowsKeepSelectableTextAndLocalDetailsSeparateFromSelection() {
+    val path = "internal/services/identity/long-request-handler.go"
+    val reason = "Saved analysis is outdated for the current source revision."
+    val selection =
+        selectionFixture()
+            .copy(
+                files =
+                    listOf(
+                        AnalysisSelectableFile(path, "", selectionStageFixture("stale", reason))))
+    for ((width, scale) in listOf(1600 to 1f, 800 to 1.5f)) {
+      var reads = 0
+      var writes = 0
+      var admissions = 0
+      ComposeVisualFixture(width, 650, scale) {
+            AnalysisFileSelector(
+                ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selection)),
+                AnalysisWorkspaceActions(
+                    { _, _ -> admissions++ },
+                    { admissions++ },
+                    { admissions++ },
+                    { admissions++ },
+                    { admissions++ },
+                    { reads++ },
+                    { writes++ }))
+          }
+          .use { fixture ->
+            fixture.render()
+            assertFalse(fixture.hasEditableText(withinTag = "analysis-file-row-$path"))
+            assertEquals(1, fixture.clickableDescriptionCount("Analyze $path"))
+            assertEquals(
+                "Selected for analysis", fixture.descriptionStateDescription("Analyze $path"))
+            assertTrue(fixture.hasText("Outdated"))
+            assertTrue(fixture.hasText(reason))
+            assertTrue(fixture.copyTextByDragging(path).isNotEmpty())
+            assertEquals(0, writes + reads + admissions)
+            assertEquals(
+                "Collapsed", fixture.descriptionStateDescription("Analysis details for $path"))
+            fixture.clickDescription("Analysis details for $path")
+            fixture.render()
+            assertEquals(
+                "Expanded", fixture.descriptionStateDescription("Analysis details for $path"))
+            assertTrue(
+                fixture.hasText(
+                    listOf(
+                            "Code analysis",
+                            "Performance review",
+                            "Security rules",
+                            "AI Security review")
+                        .joinToString("\n") { "$it: $reason" }))
+            assertEquals(0, writes + reads + admissions)
+          }
+    }
+  }
+
+  @Test
+  fun longPolicyReasonCanBeExpandedWithoutSelectingOrNavigating() {
+    val path = "generated/long-identity.go"
+    val reason = "Policy excluded: " + "generated/package/日本語/".repeat(210)
+    val selection = selectionFixture().copy(files = listOf(AnalysisSelectableFile(path, reason)))
+    var writes = 0
+    var reads = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          AnalysisFileSelector(
+              ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selection)),
+              AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}, { reads++ }, { writes++ }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Excluded"))
+          assertTrue(fixture.isDescriptionDisabled("Analyze $path"))
+          assertTrue(fixture.hasDescription("Analysis details for $path"))
+          fixture.clickDescription("Analysis details for $path")
+          fixture.render()
+          assertTrue(fixture.hasText("… output truncated"))
+          fixture.clickDescription("Expand available diagnostic output")
+          fixture.render()
+          assertTrue(fixture.hasText(reason))
+          assertEquals(0, reads + writes)
+        }
+  }
+
+  @Test
   fun analysisStageFailureRetainsItsRecoveryActionAndReadableDiagnostic() {
     val reason =
         "Semantic analysis failed because the local scanner is unavailable. Start analysis to retry."
