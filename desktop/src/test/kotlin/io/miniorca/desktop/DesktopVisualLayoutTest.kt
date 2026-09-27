@@ -4704,6 +4704,114 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun savedFreshnessAndAdmittedProgressRemainSeparateInProductionRows() {
+    val stages = listOf("fresh", "stale", "failed", "partial", "unavailable", "future_status")
+    val files =
+        stages.map { stage ->
+          AnalysisSelectableFile(
+              "$stage.go",
+              "",
+              listOf(
+                  AnalysisFileStageStatus("semantic", "fresh", "Current"),
+                  AnalysisFileStageStatus("performance", stage, "Saved $stage"),
+                  AnalysisFileStageStatus("security_rules", "skipped", "Not applicable")))
+        } +
+            listOf(
+                AnalysisSelectableFile("policy.go", "Excluded by policy"),
+                AnalysisSelectableFile("user.go", "", selectionStageFixture("stale", "Old source")))
+    var selection by
+        mutableStateOf(selectionFixture().copy(files = files, excludedPaths = listOf("user.go")))
+    val original = analysisRunFixture()
+    val planned = files.map { AnalysisPlannedFile(it.path, "base", "Go", 20, emptyList()) }
+    var run by mutableStateOf<AnalysisRun?>(null)
+    var reads = 0
+    var writes = 0
+    var starts = 0
+    for ((width, scale) in listOf(1600 to 1f, 800 to 1.5f)) {
+      selection = selection.copy(excludedPaths = listOf("user.go"))
+      run = null
+      ComposeVisualFixture(width, 900, scale) {
+            AnalysisFileSelector(
+                ProjectAnalysisRunState(
+                    run = run, fileSelection = AnalysisSelectionState(selection)),
+                AnalysisWorkspaceActions(
+                    { _, _ -> starts++ },
+                    { starts++ },
+                    { starts++ },
+                    { starts++ },
+                    { starts++ },
+                    { reads++ },
+                    { writes++ }),
+                600.dp)
+          }
+          .use { fixture ->
+            val label = "f12-freshness-$width-$scale"
+            fixture.render("$label-saved")
+            for ((stage, status) in
+                stages.zip(
+                    listOf(
+                        "Up to date",
+                        "Outdated",
+                        "Failed",
+                        "Incomplete",
+                        "Unavailable",
+                        "Status unavailable"))) {
+              fixture.revealText("$stage.go", "analysis-file-table")
+              assertEquals(1, fixture.taggedTextCount("analysis-file-row-$stage.go", status), label)
+            }
+            fixture.revealText("policy.go", "analysis-file-table")
+            assertEquals(1, fixture.taggedTextCount("analysis-file-row-policy.go", "Excluded"))
+            assertTrue(fixture.isDescriptionDisabled("Analyze policy.go"))
+            fixture.revealText("user.go", "analysis-file-table")
+            assertEquals(1, fixture.taggedTextCount("analysis-file-row-user.go", "Excluded"))
+            run =
+                original.copy(
+                    status = "running",
+                    plan = original.plan.copy(files = planned),
+                    files =
+                        files.map {
+                          AnalysisRunFile(
+                              it.path,
+                              "base",
+                              "Go",
+                              listOf(AnalysisStageProgress("semantic", "pending", 0, false)))
+                        })
+            fixture.render("$label-pending")
+            fixture.revealText("stale.go", "analysis-file-table")
+            assertEquals(1, fixture.taggedTextCount("analysis-file-row-stale.go", "Pending"))
+            assertEquals(
+                1,
+                fixture.taggedTextCount("analysis-file-row-stale.go", "Saved analysis: outdated"))
+            fixture.clickDescription("Analysis details for stale.go")
+            fixture.render("$label-pending-details")
+            val detail =
+                "Code analysis · Pending\nSaved analysis: Outdated\n" +
+                    "Performance review: Saved stale"
+            fixture.revealText(detail, "analysis-file-table")
+            assertTrue(fixture.hasText(detail))
+            run =
+                run!!.copy(
+                    files =
+                        run!!.files.map { file ->
+                          file.copy(stages = file.stages.map { it.copy(status = "completed") })
+                        })
+            fixture.render("$label-finished")
+            fixture.revealText("stale.go", "analysis-file-table")
+            assertEquals(1, fixture.taggedTextCount("analysis-file-row-stale.go", "Finished"))
+            assertEquals(
+                1,
+                fixture.taggedTextCount("analysis-file-row-stale.go", "Saved analysis: outdated"))
+            run = null
+            selection = selection.copy(excludedPaths = emptyList())
+            fixture.render("$label-reselected")
+            fixture.revealText("user.go", "analysis-file-table")
+            assertEquals(1, fixture.taggedTextCount("analysis-file-row-user.go", "Outdated"))
+            assertEquals(0, reads + writes + starts)
+          }
+    }
+  }
+
+  @Test
   fun measuredAnalysisFileAllocationKeepsVariableContentAndBothScrollTargetsReachable() {
     val selectionError =
         "Selection refresh could not confirm the project inventory because the daemon returned a " +

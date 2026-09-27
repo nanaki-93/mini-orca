@@ -299,6 +299,44 @@ class DesktopAnalysisWorkflowTest {
   }
 
   @Test
+  fun selectionRefreshAndSaveUseConfirmedEvidenceWithoutAdmittingAnalysis() {
+    Harness().use { h ->
+      h.run = h.run.copy(status = "completed")
+      h.selection = selectionFixture()
+      h.workflow.refresh()
+      h.drain()
+      assertEquals(h.selection, h.state.analysisRun.fileSelection.selection)
+      val coverage = analysisSelectionCoverage(h.selection)
+      assertEquals(AnalysisCoverage(total = 2, fresh = 1, missing = 1), coverage)
+      val readCount =
+          h.calls.count { it.first == "GET" && it.second.contains("/analysis/selection?") }
+      h.workflow.fileSelection.refresh()
+      h.drain()
+      assertEquals(
+          readCount + 1,
+          h.calls.count { it.first == "GET" && it.second.contains("/analysis/selection?") })
+      assertEquals(
+          coverage,
+          analysisSelectionCoverage(requireNotNull(h.state.analysisRun.fileSelection.selection)))
+      h.workflow.preview()
+      h.drain()
+      assertNotNull(h.state.analysisRun.admission)
+      val beforeSave = h.calls.size
+      h.workflow.fileSelection.save(listOf("main.go"))
+      h.drain()
+      assertNull(h.state.analysisRun.admission)
+      assertEquals(
+          listOf("POST" to "/api/projects/current/analysis/selection"), h.calls.drop(beforeSave))
+      assertEquals(listOf("main.go"), h.selection.excludedPaths)
+      assertEquals(
+          AnalysisCoverage(total = 1, fresh = 1),
+          analysisSelectionCoverage(requireNotNull(h.state.analysisRun.fileSelection.selection)))
+      assertEquals(0, h.calls.count { it.first == "POST" && it.second.endsWith("/run") })
+      assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/preview") })
+    }
+  }
+
+  @Test
   fun fileAndPageSelectionDoNotCancelOrChangeProjectAdmission() {
     Harness().use { h ->
       h.workflow.preview()
@@ -573,6 +611,7 @@ class DesktopAnalysisWorkflowTest {
     val calls = mutableListOf<Pair<String, String>>()
     val bodies = mutableListOf<String>()
     var run = analysisRunFixture()
+    var selection = selectionFixture()
     var failure = ""
     var wrongResult = false
     var wrongRetryPreview = false
@@ -624,7 +663,15 @@ class DesktopAnalysisWorkflowTest {
                               TransportResponse(200, Json.encodeToString(result))
                             }
                             path.contains("/analysis/selection?") ->
-                                TransportResponse(200, Json.encodeToString(selectionFixture()))
+                                TransportResponse(200, Json.encodeToString(selection))
+                            path.endsWith("/analysis/selection") && method == "POST" -> {
+                              val request = Json.decodeFromString<AnalysisSelectionRequest>(body!!)
+                              assertEquals(selection.selectionId, request.selectionId)
+                              selection =
+                                  selection.copy(
+                                      selectionId = "saved", excludedPaths = request.excludedPaths)
+                              TransportResponse(200, Json.encodeToString(selection))
+                            }
                             path.contains("/overview?") ->
                                 TransportResponse(
                                     200, Json.encodeToString(ProjectOverview(analysisRun = run)))
