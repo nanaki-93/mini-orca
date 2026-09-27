@@ -411,19 +411,29 @@ is documented in the
 
 ### Choose files for project analysis
 
-In **Analysis**, **Files** opens expanded for each project and can be collapsed
-locally. Search and state filters remain usable during a run. The current table aligns File, Analysis state and Details. Its arrangement may
-change in a future responsive design.
-The footer counts matching files against the full list. **Select all** and
-**Exclude all** apply to all eligible
-files, regardless of the search filter. Changes save automatically per project
-and survive closing the project or app. Newly indexed files start selected;
-ignored paths remain saved even if temporarily absent.
+In **Analysis**, **Files** opens expanded for each project. Search file paths and
+use **All**, **Needs attention**, **Up to date** or **Excluded** to inspect the
+checklist locally; the match count is against the full returned inventory, and
+filter counts follow the search query. Wide rows align File, Analysis state and
+Details; at narrower widths or larger text they stack the path, textual state
+and details. Paths and diagnostics are selectable, and **Details** reveals full
+stage explanations without opening a file. Disclosure, search and filter survive
+refresh, saves, lazy scrolling and navigation to another workspace in the same
+project. Row details and list position follow paths that remain present. These
+local choices reset for a different project and are not saved across app
+restarts. File selection is independent of the open Editor file, and inspecting
+Files does not start analysis.
 
-Excluded or unsupported files show their reason. Build, dependency and metadata
-folders are omitted from the list. Use **Refresh files** to reload the checklist.
-Finish or cancel an active/paused run before changing its files; start a new
-analysis to use the saved selection. Existing results remain available.
+The header shows confirmed selected and excluded counts. **Select all** and
+**Exclude all** change *every eligible file* in the inventory, regardless of
+search or filter matches; individual checkboxes change only their file. Files
+excluded by policy or unsupported files show their reason and cannot be toggled.
+Build, dependency and metadata folders are omitted from the list. Explicit
+selection changes save automatically per project and survive closing the project
+or app; newly indexed files start selected, and exclusions for temporarily absent
+paths remain saved. Checkboxes and counts show the last confirmed selection until
+a save succeeds. Saving selection does not start analysis or rewrite an existing
+run; explicitly preview and start a new run to use it.
 
 The file list shows saved analysis state and current progress from an admitted
 active/paused run with matching project revision, plan identity and run/plan file hash.
@@ -436,9 +446,13 @@ or incomplete files. Unchecked files and files excluded by configuration appear
 under **Excluded** and do not count as up to date or needing attention. Re-selecting
 a file restores its saved analysis status. During active, paused or interrupted
 runs, checkboxes are disabled, bulk selection controls are hidden, and the lock
-reason stays visible even when Files is collapsed. **Refresh files** remains
-available; load/save errors retain the confirmed selection. **Refresh files**
-reads the confirmed selection again, not an unsaved failed edit. Bugs,
+reason stays visible even when Files is collapsed. Search, filters and details
+remain usable. **Refresh files** explicitly reloads the saved checklist without
+starting analysis and remains available while locked (unless a selection read or
+write is already in progress). Initial loading or a failed first read does not
+imply an empty inventory; with a prior confirmed selection, read/save errors keep
+it visible with a diagnostic. After a failed or uncertain save, **Refresh files**
+reads back the server's selection; it does not retry the edit automatically. Bugs,
 Performance and Security boxes use tinted surfaces like Summary, with text states
 for completion, partial coverage or failure independently of finding counts.
 A reported zero on an Analysis card remains unconfirmed until matching saved
