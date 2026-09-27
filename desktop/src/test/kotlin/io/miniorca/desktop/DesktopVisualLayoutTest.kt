@@ -4509,8 +4509,8 @@ class DesktopVisualLayoutTest {
 
   @Test
   fun analysisFileStatusMarkersPrecedeLabelsInAlignedRows() {
-    listOf(1_440 to 900).forEach { (width, height) ->
-      ComposeVisualFixture(width, height, 1.5f) {
+    listOf(1_600 to 900).forEach { (width, height) ->
+      ComposeVisualFixture(width, height, 1f) {
             AnalysisFileSelector(
                 ProjectAnalysisRunState(
                     fileSelection =
@@ -4558,6 +4558,105 @@ class DesktopVisualLayoutTest {
                     fixture.assertColorVisible(Warning)
                   }
                 }
+          }
+    }
+  }
+
+  @Test
+  fun fileRowsReflowWithNativeWidthAndTextScaleWithoutLosingEvidence() {
+    val path =
+        "internal/services/identity/日本語/" + "long-request-validation/".repeat(3) + "handler.go"
+    val excludedPath = "vendor/generated/identity/configuration-with-long-name.go"
+    val reason = "Policy excludes this file: " + "generated/identity/configuration/".repeat(4)
+    val savedReason = "Saved evidence is outdated: " + "source/revision/".repeat(6)
+    val runReason = "Analysis is scanning: " + "internal/services/identity/".repeat(5)
+    val selection =
+        selectionFixture()
+            .copy(
+                files =
+                    listOf(
+                        AnalysisSelectableFile(
+                            path, "", selectionStageFixture("stale", savedReason)),
+                        AnalysisSelectableFile(excludedPath, reason)))
+    val run =
+        analysisRunFixture().let { original ->
+          original.copy(
+              status = "running",
+              plan =
+                  original.plan.copy(
+                      files = listOf(AnalysisPlannedFile(path, "base", "Go", 20, emptyList()))),
+              files =
+                  listOf(
+                      AnalysisRunFile(
+                          path,
+                          "base",
+                          "Go",
+                          listOf(
+                              AnalysisStageProgress(
+                                  "semantic", "running", 1, false, reason = runReason)))))
+        }
+    for ((width, scale, density) in
+        listOf(
+            Triple(1600, 1f, 1f),
+            Triple(1600, 1.5f, 1f),
+            Triple(800, 1f, 1f),
+            Triple(800, 1.5f, 1f),
+            Triple(800, 1.5f, 2f))) {
+      var writes = 0
+      var reads = 0
+      var admissions = 0
+      ComposeVisualFixture((width * density).toInt(), (900 * density).toInt(), scale, density) {
+            AnalysisFileSelector(
+                ProjectAnalysisRunState(
+                    run = run, fileSelection = AnalysisSelectionState(selection)),
+                AnalysisWorkspaceActions(
+                    { _, _ -> admissions++ },
+                    { admissions++ },
+                    { admissions++ },
+                    { admissions++ },
+                    { admissions++ },
+                    { reads++ },
+                    { writes++ }),
+                400.dp)
+          }
+          .use { fixture ->
+            val label = "f12-rows-$width-$scale-${density}x"
+            fixture.render("$label-initial")
+            val tag = "analysis-file-row-$path"
+            val row = fixture.taggedBounds(tag)
+            val identity = fixture.taggedTextBounds(tag, path)
+            val state = fixture.taggedTextBounds(tag, "Running")
+            val summary = fixture.taggedTextBounds(tag, "Code analysis")
+            assertTrue(identity.right <= row.right && summary.right <= row.right, label)
+            if (width == 1600 && scale == 1f) {
+              fixture.assertAnalysisTableColumnsForRow(tag, path, "Running", "Code analysis")
+              assertTrue(identity.top < state.bottom && state.top < identity.bottom, label)
+            } else {
+              assertTrue(identity.bottom <= state.top && state.bottom <= summary.top, label)
+              assertTrue(fixture.hasText("Analysis state"))
+            }
+            fixture.assertTextFontFamily(path, FontFamily.Monospace)
+            if (width == 800) fixture.assertTextWrapsWithoutClipping(path)
+            assertTrue(fixture.hasDescription("Analyze $path"))
+            assertTrue(fixture.isDescriptionDisabled("Analyze $path"))
+            assertTrue(fixture.hasText("Saved analysis: outdated"))
+            fixture.clickDescription("Analysis details for $path")
+            fixture.render("$label-expanded")
+            val detail =
+                "Code analysis · Running: $runReason\nSaved analysis: Outdated\n" +
+                    listOf(
+                            "Code analysis",
+                            "Performance review",
+                            "Security rules",
+                            "AI Security review")
+                        .joinToString("\n") { "$it: $savedReason" }
+            assertTrue(fixture.hasText(detail), "$label: complete saved evidence must be available")
+            fixture.scrollBy(100_000f, "analysis-file-table")
+            fixture.render("$label-excluded")
+            assertTrue(fixture.hasText(reason), "$label: policy reason must be visible")
+            fixture.assertTextWrapsWithoutClipping(reason)
+            assertTrue(fixture.isDescriptionDisabled("Analyze $excludedPath"))
+            assertEquals(0, writes + reads + admissions)
           }
     }
   }
@@ -7516,10 +7615,15 @@ internal class ComposeVisualFixture(
       assertEquals(
           first.center.y, second.center.y, 2f, "Headers must share a row: $first and $second")
     }
-    val row = "analysis-file-row-cmd/server/main.go"
-    assertAnalysisTableCellInColumn(row, "cmd/server/main.go", headers[0], headers[1], "File")
-    assertAnalysisTableCellInColumn(row, "Up to date", headers[1], headers[2], "Analysis state")
-    assertAnalysisTableCellInColumn(row, "Complete", headers[2], null, "Details")
+    assertAnalysisTableColumnsForRow(
+        "analysis-file-row-cmd/server/main.go", "cmd/server/main.go", "Up to date", "Complete")
+  }
+
+  fun assertAnalysisTableColumnsForRow(row: String, path: String, status: String, summary: String) {
+    val headers = listOf("File", "Analysis state", "Details").map(::firstVisibleTextBounds)
+    assertAnalysisTableCellInColumn(row, path, headers[0], headers[1], "File")
+    assertAnalysisTableCellInColumn(row, status, headers[1], headers[2], "Analysis state")
+    assertAnalysisTableCellInColumn(row, summary, headers[2], null, "Details")
   }
 
   private fun assertAnalysisTableCellInColumn(
