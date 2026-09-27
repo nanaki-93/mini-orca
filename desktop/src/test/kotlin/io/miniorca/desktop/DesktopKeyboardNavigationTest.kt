@@ -18,6 +18,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.unit.dp
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -1730,6 +1731,201 @@ class DesktopKeyboardNavigationTest {
           fixture.render()
           assertTrue(fixture.hasText("3 of 3 files match"))
           assertEquals(0, requests)
+        }
+  }
+
+  @Test
+  fun filesKeyboardTraversalAndSingleActivationWorkInBothRowArrangements() {
+    val selection = selectionFixture()
+    for (width in listOf(1440, 800)) {
+      var saves = 0
+      var reads = 0
+      var starts = 0
+      val view = AnalysisFilesViewState()
+      ComposeVisualFixture(width, 650, if (width == 800) 1.5f else 1f) {
+            AnalysisFileSelector(
+                ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selection)),
+                AnalysisWorkspaceActions(
+                    { _, _ -> starts++ }, {}, {}, {}, {}, { reads++ }, { saves++ }),
+                320.dp,
+                view = view)
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.requestDescriptionFocus("Filter files"))
+            fixture.setFocusedText("main")
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Filter files"), "Typing must retain search focus")
+            assertEquals("main", view.query)
+            // The offscreen scene has no native IME; an unconsumed Space reaches text input.
+            assertFalse(fixture.pressKey(Key.Spacebar))
+            fixture.setFocusedText("main ")
+            fixture.render()
+            assertEquals("main ", view.query, "$width: Space must remain valid search text")
+            assertTrue(fixture.isFocusedControl("Filter files"))
+            fixture.resize(if (width == 1440) 800 else 1440, 650)
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Filter files"))
+            fixture.resize(width, 650)
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Filter files"))
+            assertTrue(fixture.pressKey(Key.Tab, shift = true))
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Refresh files"))
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
+            assertEquals(1, reads)
+            assertTrue(fixture.pressKey(Key.Tab))
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Filter files"))
+            fixture.setFocusedText("main")
+            fixture.render()
+            assertTrue(fixture.pressKey(Key.Tab))
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("All"))
+            for (name in listOf("Needs attention", "Up to date", "Excluded")) {
+              assertTrue(fixture.pressKey(Key.Tab))
+              fixture.render()
+              assertTrue(fixture.isFocusedControl(name), "$width: $name must follow search")
+            }
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
+            assertEquals(AnalysisFileFilter.Excluded, view.filter)
+            assertEquals(1, reads)
+            assertEquals(0, saves + starts)
+            assertTrue(fixture.pressKey(Key.Tab))
+            fixture.render()
+            assertTrue(
+                fixture.isFocusedControl("Select all"), "$width: bulk actions follow filters")
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
+            assertEquals(1, saves)
+            assertTrue(fixture.pressKey(Key.Tab))
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Exclude all"))
+            assertTrue(fixture.pressKey(Key.Spacebar))
+            fixture.render()
+            assertEquals(2, saves)
+            assertTrue(fixture.requestDescriptionFocus("All"))
+            assertTrue(fixture.pressKey(Key.Spacebar))
+            fixture.render()
+            assertTrue(fixture.requestFocus("Exclude all"))
+            assertTrue(fixture.pressKey(Key.Tab))
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Analyze main.go"))
+            assertTrue(fixture.pressKey(Key.Spacebar))
+            assertEquals(3, saves)
+            var reachedDetails = false
+            repeat(4) {
+              if (!reachedDetails) {
+                assertTrue(fixture.pressKey(Key.Tab))
+                fixture.render()
+                reachedDetails = fixture.isFocusedControl("Analysis details for main.go")
+              }
+            }
+            assertTrue(reachedDetails, "Details must be in keyboard traversal at $width")
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
+            assertEquals("Expanded", fixture.descriptionState("Analysis details for main.go"))
+            assertTrue(fixture.pressKey(Key.Spacebar))
+            fixture.render()
+            assertEquals("Collapsed", fixture.descriptionState("Analysis details for main.go"))
+            assertEquals(3, saves)
+            assertEquals(1, reads)
+            view.query = ".env"
+            fixture.render()
+            assertTrue(fixture.isDescriptionDisabled("Analyze .env"))
+            assertFalse(fixture.requestDescriptionFocus("Analyze .env"))
+            fixture.tryClick("Analyze .env")
+            fixture.render()
+            assertEquals(3, saves, "Policy-disabled file cannot save")
+            assertEquals(0, starts)
+          }
+    }
+  }
+
+  @Test
+  fun filesDoNotReclaimFocusAfterLeavingThePanel() {
+    val view = AnalysisFilesViewState()
+    var calls = 0
+    ComposeVisualFixture(1440, 650) {
+          androidx.compose.foundation.layout.Column {
+            AnalysisFileSelector(
+                ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selectionFixture())),
+                AnalysisWorkspaceActions(
+                    { _, _ -> calls++ }, {}, {}, {}, {}, { calls++ }, { calls++ }),
+                320.dp,
+                view = view)
+            MiniOrcaButton(onClick = { calls++ }) {
+              androidx.compose.material.Text("Outside Files")
+            }
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestDescriptionFocus("Analysis details for main.go"))
+          assertTrue(fixture.requestFocus("Outside Files"))
+          fixture.resize(800, 650)
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Outside Files"))
+          assertEquals(0, calls)
+        }
+  }
+
+  @Test
+  fun filesFocusRecoversFromFilteringAndRemovalAndSurvivesReflowWithoutActions() {
+    val view = AnalysisFilesViewState()
+    var selection by mutableStateOf(selectionFixture())
+    var reads = 0
+    var saves = 0
+    var starts = 0
+    ComposeVisualFixture(1440, 650) {
+          AnalysisFileSelector(
+              ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selection)),
+              AnalysisWorkspaceActions(
+                  { _, _ -> starts++ }, {}, {}, {}, {}, { reads++ }, { saves++ }),
+              320.dp,
+              view = view)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestDescriptionFocus("Analysis details for main.go"))
+          fixture.resize(800, 650)
+          fixture.render()
+          assertTrue(
+              fixture.isFocusedControl("Analysis details for main.go"),
+              "compact: ${view.focusedRow}")
+          fixture.resize(1440, 650)
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Analysis details for main.go"))
+          assertTrue(fixture.requestDescriptionFocus("Needs attention"))
+          fixture.resize(800, 650)
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Needs attention"))
+          fixture.resize(1440, 650)
+          fixture.render()
+          assertTrue(fixture.requestDescriptionFocus("Analysis details for main.go"))
+          assertTrue(fixture.requestDescriptionFocus("Filter files"))
+          fixture.render()
+          assertEquals(null, view.focusedRow, "Search must release row focus ownership")
+          fixture.resize(800, 650)
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Filter files"))
+          fixture.resize(1440, 650)
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Filter files"))
+          assertTrue(fixture.requestDescriptionFocus("Analysis details for main.go"))
+          view.query = "helper"
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Filter files"))
+          assertEquals(0, reads + saves + starts)
+          view.query = ""
+          fixture.render()
+          assertTrue(fixture.requestDescriptionFocus("Analyze main.go"))
+          selection = selection.copy(files = selection.files.filterNot { it.path == "main.go" })
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Filter files"))
+          assertEquals(0, reads + saves + starts)
         }
   }
 

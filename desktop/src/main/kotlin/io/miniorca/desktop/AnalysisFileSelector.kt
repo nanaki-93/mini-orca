@@ -26,11 +26,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -42,6 +47,7 @@ import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 internal class AnalysisFilesViewState {
   var expanded by mutableStateOf(true)
@@ -49,6 +55,11 @@ internal class AnalysisFilesViewState {
   var filter by mutableStateOf(AnalysisFileFilter.All)
   val listState = LazyListState()
   val expandedDetails = mutableStateMapOf<String, Boolean>()
+  // Focus belongs to the local view, not selection or run state.
+  var focusedRow by mutableStateOf<Pair<String, Boolean>?>(null)
+  val searchFocus = FocusRequester()
+  val rowFocus = mutableMapOf<Pair<String, Boolean>, FocusRequester>()
+  var panelHasFocus = false
   private var anchorPath: String? = null
   private var anchorOffset = 0
   private var previousPaths: List<String>? = null
@@ -67,6 +78,7 @@ internal class AnalysisFilesViewState {
 
   fun retainInventory(paths: Set<String>) {
     expandedDetails.keys.retainAll(paths)
+    rowFocus.keys.retainAll { it.first in paths }
   }
 
   // An index alone would transfer the old row's position to a different file after refresh.
@@ -126,11 +138,31 @@ internal fun AnalysisFileSelector(
   val excludedCount = rows.count { it.status == AnalysisFileSyncStatus.Excluded }
   val files = filteredAnalysisFiles(rows, query, filter)
   val paths = files.map { it.file.path }
+  LaunchedEffect(view, paths, expanded) {
+    val focused = view.focusedRow
+    if (focused != null && (focused.first !in paths || !expanded)) {
+      view.focusedRow = null
+      if (expanded) view.searchFocus.requestFocus()
+    }
+  }
   LaunchedEffect(view, selection?.files) {
     if (selection != null) view.retainInventory(selection.files.map { it.path }.toSet())
   }
+  val focusScope = rememberCoroutineScope()
   val panelModifier =
-      Modifier.testTag("analysis-file-panel").onSizeChanged { panelHeightPx = it.height }
+      Modifier.testTag("analysis-file-panel")
+          .onFocusChanged { focus ->
+            view.panelHasFocus = focus.hasFocus
+            if (!focus.hasFocus && view.focusedRow != null) {
+              focusScope.launch {
+                // A row changes layout nodes during reflow; let its keyed control reclaim focus.
+                withFrameNanos {}
+                withFrameNanos {}
+                if (!view.panelHasFocus) view.focusedRow = null
+              }
+            }
+          }
+          .onSizeChanged { panelHeightPx = it.height }
   WorkspaceSection(modifier = panelModifier) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
       FlowRow(
@@ -143,9 +175,8 @@ internal fun AnalysisFileSelector(
                 accessibleName = "${if (expanded) "Collapse" else "Expand"} Files",
                 tooltip = null,
                 modifier =
-                    Modifier.semantics {
-                      stateDescription = if (expanded) "Expanded" else "Collapsed"
-                    },
+                    Modifier.onFocusChanged { if (it.isFocused) view.focusedRow = null }
+                        .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" },
                 contentPadding = PaddingValues(0.dp)) {
                   DesktopLineIcon(
                       if (expanded) DesktopIcon.ChevronDown else DesktopIcon.ChevronRight,
@@ -180,6 +211,7 @@ internal fun AnalysisFileSelector(
             if (state.error == null)
                 MiniOrcaButton(
                     onClick = actions.refreshSelection,
+                    modifier = Modifier.onFocusChanged { if (it.isFocused) view.focusedRow = null },
                     enabled = !state.loading && !state.saving,
                     tone = ActionTone.Neutral) {
                       Text("Refresh files")
@@ -206,6 +238,7 @@ internal fun AnalysisFileSelector(
                 style = IdeTypography.workspaceMetadata)
             MiniOrcaButton(
                 onClick = actions.refreshSelection,
+                modifier = Modifier.onFocusChanged { if (it.isFocused) view.focusedRow = null },
                 enabled = !state.loading && !state.saving,
                 tone = ActionTone.Neutral) {
                   Text("Refresh files")
@@ -231,7 +264,7 @@ internal fun AnalysisFileSelector(
         }
     if (expanded) {
       AnalysisFileFilters(
-          rows, query, { view.query = it }, filter, { view.filter = it }, selection != null)
+          rows, query, { view.query = it }, filter, { view.filter = it }, selection != null, view)
       if (selection != null)
           Text(
               "${files.size} of ${rows.size} files match",
@@ -246,6 +279,32 @@ internal fun AnalysisFileSelector(
               "All eligible files are excluded; no files are selected for analysis.",
               color = SecondaryText,
               style = IdeTypography.workspaceMetadata)
+      if (!locked) {
+        FlowRow(
+            Modifier.fillMaxWidth().testTag("analysis-file-footer"),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            itemVerticalAlignment = Alignment.CenterVertically) {
+              MiniOrcaButton(
+                  onClick = {
+                    actions.saveSelection(ignored.minus(eligible.map { it.path }.toSet()).sorted())
+                  },
+                  modifier = Modifier.onFocusChanged { if (it.isFocused) view.focusedRow = null },
+                  enabled = editable,
+                  tone = ActionTone.Neutral) {
+                    Text("Select all")
+                  }
+              MiniOrcaButton(
+                  onClick = {
+                    actions.saveSelection((ignored + eligible.map { it.path }).sorted())
+                  },
+                  modifier = Modifier.onFocusChanged { if (it.isFocused) view.focusedRow = null },
+                  enabled = editable,
+                  tone = ActionTone.Neutral) {
+                    Text("Exclude all")
+                  }
+            }
+      }
       remember(view, paths) { view.preparePaths(paths) }
       LaunchedEffect(view, paths) { view.followPaths(paths) }
       BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -309,30 +368,6 @@ internal fun AnalysisFileSelector(
               }
         }
       }
-      FlowRow(
-          Modifier.fillMaxWidth().testTag("analysis-file-footer"),
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
-          itemVerticalAlignment = Alignment.CenterVertically) {
-            if (!locked) {
-              MiniOrcaButton(
-                  onClick = {
-                    actions.saveSelection(ignored.minus(eligible.map { it.path }.toSet()).sorted())
-                  },
-                  enabled = editable,
-                  tone = ActionTone.Neutral) {
-                    Text("Select all")
-                  }
-              MiniOrcaButton(
-                  onClick = {
-                    actions.saveSelection((ignored + eligible.map { it.path }).sorted())
-                  },
-                  enabled = editable,
-                  tone = ActionTone.Neutral) {
-                    Text("Exclude all")
-                  }
-            }
-          }
     }
   }
 }
@@ -345,7 +380,8 @@ private fun AnalysisFileFilters(
     setQuery: (String) -> Unit,
     filter: AnalysisFileFilter,
     setFilter: (AnalysisFileFilter) -> Unit,
-    confirmed: Boolean
+    confirmed: Boolean,
+    view: AnalysisFilesViewState
 ) {
   val counts = remember(rows, query) { analysisFileFilterCounts(rows, query) }
   FlowRow(
@@ -355,7 +391,9 @@ private fun AnalysisFileFilters(
             query,
             setQuery,
             "Filter files",
-            Modifier.width(220.dp),
+            Modifier.width(220.dp).focusRequester(view.searchFocus).onFocusChanged {
+              if (it.hasFocus) view.focusedRow = null
+            },
             placeholder = "Search file paths")
         AnalysisFileFilter.entries.forEach { choice ->
           val count = counts[choice] ?: 0
@@ -364,7 +402,9 @@ private fun AnalysisFileFilters(
               selected = selected,
               onClick = { setFilter(choice) },
               accessibleName = choice.label,
-              modifier = Modifier.semantics { this.selected = selected }) {
+              modifier =
+                  Modifier.onFocusChanged { if (it.isFocused) view.focusedRow = null }
+                      .semantics { this.selected = selected }) {
                 Text(choice.label, style = IdeTypography.action)
                 if (confirmed) {
                   Spacer(Modifier.width(6.dp))
@@ -376,6 +416,18 @@ private fun AnalysisFileFilters(
               }
         }
       }
+}
+
+private fun rowFocusModifier(
+    view: AnalysisFilesViewState,
+    path: String,
+    details: Boolean
+): Modifier {
+  val key = path to details
+  val requester = view.rowFocus.getOrPut(key) { FocusRequester() }
+  return Modifier.focusRequester(requester).onFocusChanged { focus ->
+    if (focus.isFocused) view.focusedRow = key
+  }
 }
 
 private object AnalysisWideTableGrid {
@@ -409,12 +461,16 @@ private fun AnalysisFileRow(
               onCheckedChange = { toggle() },
               accessibleName = "Analyze ${row.file.path}",
               enabled = editable,
-              stateLabel = if (selected) "Selected for analysis" else "Excluded from analysis")
+              stateLabel = if (selected) "Selected for analysis" else "Excluded from analysis",
+              modifier = rowFocusModifier(view, row.file.path, false))
           DesktopLineIcon(DesktopIcon.Document, "", iconSize = 16.dp, tint = SecondaryText)
           SelectionContainer(Modifier.weight(1f)) {
             Text(row.file.path, style = IdeTypography.workspaceMetadata, color = PrimaryText)
           }
         }
+  }
+  LaunchedEffect(view, wide) {
+    view.focusedRow?.takeIf { it.first == row.file.path }?.let { view.rowFocus[it]?.requestFocus() }
   }
   val surface =
       Modifier.fillMaxWidth()
@@ -508,7 +564,7 @@ private fun AnalysisFileDetails(
                   },
                   accessibleName = "Analysis details for ${row.file.path}",
                   modifier =
-                      Modifier.semantics {
+                      rowFocusModifier(view, row.file.path, true).semantics {
                         stateDescription = if (expanded) "Expanded" else "Collapsed"
                       },
                   contentPadding = PaddingValues(horizontal = 4.dp)) {
