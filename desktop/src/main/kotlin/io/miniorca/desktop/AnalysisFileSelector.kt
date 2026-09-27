@@ -101,15 +101,21 @@ internal fun AnalysisFileSelector(
                           Text("Files", color = PrimaryText, style = IdeTypography.workspaceHeading)
                           Text(
                               when {
-                                state.saving -> "Saving selection…"
+                                selection != null ->
+                                    "$selectedCount selected · $excludedCount excluded"
                                 state.loading -> "Loading status…"
-                                selection == null -> "Not loaded"
-                                else -> "$selectedCount selected · $excludedCount excluded"
+                                else -> "Not loaded"
                               } +
                                   when (state.failure) {
                                     AnalysisSelectionFailure.Read -> " · Refresh failed"
                                     AnalysisSelectionFailure.Save -> " · Save failed"
-                                    null -> if (state.error != null) " · Selection error" else ""
+                                    null ->
+                                        when {
+                                          state.saving -> " · Saving selection…"
+                                          state.loading && selection != null -> " · Refreshing…"
+                                          state.error != null -> " · Selection error"
+                                          else -> ""
+                                        }
                                   },
                               color = if (state.error == null) SecondaryText else Error,
                               style = IdeTypography.workspaceMetadata)
