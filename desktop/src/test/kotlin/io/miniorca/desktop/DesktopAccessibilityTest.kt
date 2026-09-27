@@ -413,6 +413,7 @@ class DesktopAccessibilityTest {
           assertTrue(fixture.hasDescription("Collapse Files"))
           assertEquals("Expanded", fixture.stateDescription("Files"))
           assertTrue(fixture.hasDescription("Filter files"))
+          assertTrue(fixture.hasText("Search file paths"))
           assertTrue(fixture.isDescriptionSelected("All"))
           assertTrue(fixture.hasDescription("Analyze helper.go"))
           assertTrue(fixture.isDescriptionDisabled("Analyze helper.go"))
@@ -424,6 +425,55 @@ class DesktopAccessibilityTest {
           assertTrue(
               fixture.hasText(
                   "Selection locked. Finish or cancel the current run to change files."))
+        }
+  }
+
+  @Test
+  fun lockedCollapsedFilesRetainRefreshAndErrorRecoveryWithoutMutations() {
+    val selection = selectionFixture().copy(editable = false)
+    var reads = 0
+    var writes = 0
+    var admissions = 0
+    var state by mutableStateOf(AnalysisSelectionState(selection))
+    ComposeVisualFixture(800, 650, 1.5f) {
+          AnalysisFileSelector(
+              ProjectAnalysisRunState(fileSelection = state),
+              AnalysisWorkspaceActions(
+                  { _, _ -> admissions++ },
+                  { admissions++ },
+                  { admissions++ },
+                  { admissions++ },
+                  { admissions++ },
+                  { reads++ },
+                  { writes++ }))
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Collapse Files")
+          fixture.render()
+          assertTrue(fixture.hasText("Selection changes unavailable."))
+          assertTrue(
+              fixture.hasText(
+                  "File selection is independent of the open Editor file and does not start analysis."))
+          assertTrue(fixture.requestFocus("Refresh files"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          state =
+              state.copy(
+                  error = "Saved selection uncertain", failure = AnalysisSelectionFailure.Save)
+          fixture.render()
+          assertTrue(fixture.hasText("Saved selection uncertain"))
+          assertTrue(fixture.hasText("Could not save file selection"))
+          assertTrue(fixture.requestFocus("Refresh files"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.clickDescription("Expand Files")
+          fixture.render()
+          assertTrue(fixture.hasDescription("Filter files"))
+          fixture.scrollBy(100_000f, "analysis-file-table")
+          fixture.render()
+          assertTrue(fixture.isDescriptionDisabled("Analyze main.go"))
+          assertEquals(2, reads)
+          assertEquals(0, writes)
+          assertEquals(0, admissions)
         }
   }
 

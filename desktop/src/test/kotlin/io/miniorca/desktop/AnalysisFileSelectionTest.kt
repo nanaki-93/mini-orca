@@ -290,6 +290,51 @@ class AnalysisFileSelectionTest {
   }
 
   @Test
+  fun queryAwareFilterCountsAgreeWithRowsAndRefreshIsOnlyExplicitRead() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      var privileged = 0
+      ComposeVisualFixture(800, 650, 1.5f) {
+            AnalysisFileSelector(
+                h.state.analysisRun,
+                AnalysisWorkspaceActions(
+                    { _, _ -> privileged++ },
+                    { privileged++ },
+                    { privileged++ },
+                    { privileged++ },
+                    { privileged++ },
+                    { h.workflow.refresh() },
+                    { h.workflow.save(it) }))
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.setText("main")
+            fixture.render()
+            assertTrue(fixture.hasText("1 of 3 files match"))
+            for (choice in AnalysisFileFilter.entries) {
+              fixture.clickDescription(choice.label)
+              fixture.render()
+              val matching =
+                  if (choice == AnalysisFileFilter.All || choice == AnalysisFileFilter.Attention) 1
+                  else 0
+              assertTrue(fixture.hasText("$matching of 3 files match"), choice.label)
+              assertEquals(matching == 1, fixture.hasText("main.go"), choice.label)
+            }
+            assertEquals(listOf("GET"), h.methods)
+            assertEquals(0, privileged)
+            fixture.clickDescription("Collapse Files")
+            fixture.render()
+            fixture.clickText("Refresh files")
+            h.drain()
+            assertEquals(listOf("GET", "GET"), h.methods)
+            assertTrue(h.requests.isEmpty())
+            assertEquals(0, privileged)
+          }
+    }
+  }
+
+  @Test
   fun selectorShowsSavedChecksSearchAndBulkActionsAtFullSize() {
     listOf(1_440 to 900).forEach { (width, height) ->
       val saves = mutableListOf<List<String>>()
@@ -615,6 +660,9 @@ class AnalysisFileSelectionTest {
 
           fullSize.render()
           assertTrue(fullSize.hasText("0 selected · 3 excluded"))
+          assertTrue(
+              fullSize.hasText(
+                  "All eligible files are excluded; no files are selected for analysis."))
           fullSize.clickText("Select all")
           assertEquals(
               emptyList(), saves.last(), "Bulk scope must still include both eligible files")
@@ -681,26 +729,30 @@ class AnalysisFileSelectionTest {
   }
 
   @Test
-  fun filtersRemainInlineAtFullSizeWithIncreasedTextScale() {
-    ComposeVisualFixture(1_600, 1_000, 1.5f) {
-          AnalysisFileSelector(
-              ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selectionFixture())),
-              AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}, {}, {}))
-        }
-        .use { fixture ->
-          fixture.render("analysis-files-inline-filters-1600-1000-150")
-          val panel = fixture.taggedBounds("analysis-file-panel")
-          val files = fixture.firstVisibleTextBounds("Files")
-          val all = fixture.firstVisibleTextBounds("All")
-          val attention = fixture.firstVisibleTextBounds("Needs attention")
-          val excluded = fixture.firstVisibleTextBounds("Excluded")
-          assertTrue(files.right < all.left, "Filters must remain beside the Files disclosure")
-          assertTrue(all.right < attention.left && attention.right < excluded.left)
-          assertTrue(
-              kotlin.math.abs(all.center.y - excluded.center.y) < 2f,
-              "Filters must stay on one line at full size and 150% text scale")
-          assertTrue(excluded.right <= panel.right, "Filters must fit inside the panel")
-        }
+  fun filesChromeWrapsAndKeepsScopeAndControlsAtLargeText() {
+    for (width in listOf(800, 1_600)) {
+      ComposeVisualFixture(width, 1_000, 1.5f) {
+            AnalysisFileSelector(
+                ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selectionFixture())),
+                AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}, {}, {}))
+          }
+          .use { fixture ->
+            fixture.render()
+            val panel = fixture.taggedBounds("analysis-file-panel")
+            for (label in listOf("Files", "All", "Needs attention", "Up to date", "Excluded")) {
+              val bounds = fixture.firstVisibleTextBounds(label)
+              assertTrue(bounds.right <= panel.right, "$label must fit inside Files at $width")
+            }
+            fixture.assertTextFits("Refresh files")
+            assertTrue(fixture.hasText("3 of 3 files match"))
+            assertTrue(
+                fixture.hasText(
+                    "Select all and Exclude all affect every eligible file, regardless of search or filter matches."))
+            assertTrue(
+                fixture.hasText(
+                    "File selection is independent of the open Editor file and does not start analysis."))
+          }
+    }
   }
 
   @Test
@@ -804,16 +856,20 @@ class AnalysisFileSelectionTest {
           fixture.render()
           assertFalse(fixture.hasText("No matching files."))
           assertFalse(fixture.hasText("No files are available for analysis."))
+          assertTrue(fixture.hasText("Loading file selection…"))
+          assertFalse(fixture.hasText("0 of 0 files match"))
 
           selectionState.value = AnalysisSelectionState(error = "Unable to load files")
           fixture.render()
           assertTrue(fixture.hasText("Unable to load files"))
+          assertFalse(fixture.hasText("0 of 0 files match"))
           assertTrue(fixture.hasText("File status is not loaded. Refresh files to try again."))
 
           selectionState.value =
               AnalysisSelectionState(selection = selectionFixture().copy(files = emptyList()))
           fixture.render()
           assertTrue(fixture.hasText("No files are available for analysis."))
+          assertTrue(fixture.hasText("0 of 0 files match"))
           assertFalse(fixture.hasText("No matching files."))
 
           selectionState.value = AnalysisSelectionState(selection = selectionFixture())
@@ -821,6 +877,7 @@ class AnalysisFileSelectionTest {
           fixture.setText("not-a-project-file")
           fixture.render()
           assertTrue(fixture.hasText("No matching files."))
+          assertTrue(fixture.hasText("0 of 3 files match"))
 
           selectionState.value =
               AnalysisSelectionState(selection = selectionFixture().copy(editable = false))

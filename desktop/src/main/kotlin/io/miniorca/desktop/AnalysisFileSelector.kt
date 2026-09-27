@@ -131,54 +131,62 @@ internal fun AnalysisFileSelector(
       Modifier.testTag("analysis-file-panel").onSizeChanged { panelHeightPx = it.height }
   WorkspaceSection(modifier = panelModifier) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-      Row(
+      FlowRow(
           Modifier.fillMaxWidth(),
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Box(Modifier.weight(1f)) {
-              ChromeButton(
-                  onClick = { view.expanded = !expanded },
-                  accessibleName = "${if (expanded) "Collapse" else "Expand"} Files",
-                  tooltip = null,
-                  modifier =
-                      Modifier.semantics {
-                        stateDescription = if (expanded) "Expanded" else "Collapsed"
-                      },
-                  contentPadding = PaddingValues(0.dp)) {
-                    DesktopLineIcon(
-                        if (expanded) DesktopIcon.ChevronDown else DesktopIcon.ChevronRight,
-                        "",
-                        iconSize = 18.dp)
-                    Column(
-                        Modifier.padding(start = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                          Text("Files", color = PrimaryText, style = IdeTypography.workspaceHeading)
-                          Text(
-                              when {
-                                selection != null ->
-                                    "$selectedCount selected · $excludedCount excluded"
-                                state.loading -> "Loading status…"
-                                else -> "Not loaded"
-                              } +
-                                  when (state.failure) {
-                                    AnalysisSelectionFailure.Read -> " · Refresh failed"
-                                    AnalysisSelectionFailure.Save -> " · Save failed"
-                                    null ->
-                                        when {
-                                          state.saving -> " · Saving selection…"
-                                          state.loading && selection != null -> " · Refreshing…"
-                                          state.error != null -> " · Selection error"
-                                          else -> ""
-                                        }
-                                  },
-                              color = if (state.error == null) SecondaryText else Error,
-                              style = IdeTypography.workspaceMetadata)
-                        }
-                  }
-            }
-            if (expanded)
-                AnalysisFileFilters(rows, query, { view.query = it }, filter, { view.filter = it })
+          horizontalArrangement = Arrangement.spacedBy(16.dp),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
+          itemVerticalAlignment = Alignment.CenterVertically) {
+            ChromeButton(
+                onClick = { view.expanded = !expanded },
+                accessibleName = "${if (expanded) "Collapse" else "Expand"} Files",
+                tooltip = null,
+                modifier =
+                    Modifier.semantics {
+                      stateDescription = if (expanded) "Expanded" else "Collapsed"
+                    },
+                contentPadding = PaddingValues(0.dp)) {
+                  DesktopLineIcon(
+                      if (expanded) DesktopIcon.ChevronDown else DesktopIcon.ChevronRight,
+                      "",
+                      iconSize = 18.dp)
+                  Column(
+                      Modifier.padding(start = 12.dp),
+                      verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Files", color = PrimaryText, style = IdeTypography.workspaceHeading)
+                        Text(
+                            when {
+                              selection != null ->
+                                  "$selectedCount selected · $excludedCount excluded"
+                              state.loading -> "Loading status…"
+                              else -> "Not loaded"
+                            } +
+                                when (state.failure) {
+                                  AnalysisSelectionFailure.Read -> " · Refresh failed"
+                                  AnalysisSelectionFailure.Save -> " · Save failed"
+                                  null ->
+                                      when {
+                                        state.saving -> " · Saving selection…"
+                                        state.loading && selection != null -> " · Refreshing…"
+                                        state.error != null -> " · Selection error"
+                                        else -> ""
+                                      }
+                                },
+                            color = if (state.error == null) SecondaryText else Error,
+                            style = IdeTypography.workspaceMetadata)
+                      }
+                }
+            if (state.error == null)
+                MiniOrcaButton(
+                    onClick = actions.refreshSelection,
+                    enabled = !state.loading && !state.saving,
+                    tone = ActionTone.Neutral) {
+                      Text("Refresh files")
+                    }
           }
+      Text(
+          "File selection is independent of the open Editor file and does not start analysis.",
+          color = SecondaryText,
+          style = IdeTypography.workspaceMetadata)
     }
     state.error?.let { error ->
       FlowRow(
@@ -220,6 +228,22 @@ internal fun AnalysisFileSelector(
               style = IdeTypography.workspaceMetadata)
         }
     if (expanded) {
+      AnalysisFileFilters(
+          rows, query, { view.query = it }, filter, { view.filter = it }, selection != null)
+      if (selection != null)
+          Text(
+              "${files.size} of ${rows.size} files match",
+              color = SecondaryText,
+              style = IdeTypography.workspaceMetadata)
+      Text(
+          "Select all and Exclude all affect every eligible file, regardless of search or filter matches.",
+          color = SecondaryText,
+          style = IdeTypography.workspaceMetadata)
+      if (selection != null && eligible.isNotEmpty() && selectedCount == 0)
+          Text(
+              "All eligible files are excluded; no files are selected for analysis.",
+              color = SecondaryText,
+              style = IdeTypography.workspaceMetadata)
       remember(view, paths) { view.preparePaths(paths) }
       LaunchedEffect(view, paths) { view.followPaths(paths) }
       Column(Modifier.fillMaxWidth()) {
@@ -244,9 +268,10 @@ internal fun AnalysisFileSelector(
                   color = SecondaryText,
                   style = IdeTypography.workspaceMetadata)
             }
-        if (files.isEmpty() && !state.loading)
+        if (files.isEmpty())
             Text(
                 when {
+                  selection == null && state.loading -> "Loading file selection…"
                   selection == null -> "File status is not loaded. Refresh files to try again."
                   rows.isEmpty() -> "No files are available for analysis."
                   else -> "No matching files."
@@ -281,18 +306,6 @@ internal fun AnalysisFileSelector(
           horizontalArrangement = Arrangement.spacedBy(12.dp),
           verticalArrangement = Arrangement.spacedBy(8.dp),
           itemVerticalAlignment = Alignment.CenterVertically) {
-            if (selection != null)
-                Text(
-                    "${files.size} of ${rows.size} files match",
-                    color = SecondaryText,
-                    style = IdeTypography.workspaceMetadata)
-            if (state.error == null)
-                MiniOrcaButton(
-                    onClick = actions.refreshSelection,
-                    enabled = !state.loading && !state.saving,
-                    tone = ActionTone.Neutral) {
-                      Text("Refresh files")
-                    }
             if (!locked) {
               MiniOrcaButton(
                   onClick = {
@@ -323,13 +336,19 @@ private fun AnalysisFileFilters(
     query: String,
     setQuery: (String) -> Unit,
     filter: AnalysisFileFilter,
-    setFilter: (AnalysisFileFilter) -> Unit
+    setFilter: (AnalysisFileFilter) -> Unit,
+    confirmed: Boolean
 ) {
   val counts = remember(rows, query) { analysisFileFilterCounts(rows, query) }
   FlowRow(
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        CompactSingleLineField(query, setQuery, "Filter files", Modifier.width(220.dp))
+        CompactSingleLineField(
+            query,
+            setQuery,
+            "Filter files",
+            Modifier.width(220.dp),
+            placeholder = "Search file paths")
         AnalysisFileFilter.entries.forEach { choice ->
           val count = counts[choice] ?: 0
           val selected = filter == choice
@@ -339,11 +358,13 @@ private fun AnalysisFileFilters(
               accessibleName = choice.label,
               modifier = Modifier.semantics { this.selected = selected }) {
                 Text(choice.label, style = IdeTypography.action)
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "$count",
-                    color = if (selected) PrimaryText else SecondaryText,
-                    style = IdeTypography.compactBody)
+                if (confirmed) {
+                  Spacer(Modifier.width(6.dp))
+                  Text(
+                      "$count",
+                      color = if (selected) PrimaryText else SecondaryText,
+                      style = IdeTypography.compactBody)
+                }
               }
         }
       }
