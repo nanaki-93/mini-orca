@@ -4550,6 +4550,30 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun f12ProductionAnalysisKeepsFilesReachableAtCompactViewportsAndTextScales() {
+    for ((width, height) in listOf(1024 to 768, 800 to 650, 1280 to 600)) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        ComposeVisualFixture(width, height, scale) { RoundedAnalysisVisualFixture(width.toFloat()) }
+            .use { fixture ->
+              val label = "f12-analysis-$width-$height-$scale"
+              fixture.render("$label-top")
+              fixture.revealText("Refresh files", "analysis-page")
+              fixture.assertTextFits("Refresh files")
+              fixture.revealText("15 of 15 files match", "analysis-page")
+              fixture.revealText("cmd/server/main.go", "analysis-page")
+              assertTrue(fixture.hasDescription("Analyze cmd/server/main.go"), label)
+              val table = fixture.taggedBounds("analysis-file-table")
+              assertTrue(table.height > 0f, "$label: the file list must remain bounded")
+              fixture.render("$label-files")
+              fixture.scrollBy(100_000f, "analysis-file-table")
+              fixture.render()
+              assertTrue(fixture.hasText(".env"), "$label: the final file must be reachable")
+            }
+      }
+    }
+  }
+
+  @Test
   fun analysisFileStatusMarkersPrecedeLabelsInAlignedRows() {
     listOf(1_600 to 900).forEach { (width, height) ->
       ComposeVisualFixture(width, height, 1f) {
@@ -4639,7 +4663,10 @@ class DesktopVisualLayoutTest {
         }
     for ((width, scale, density) in
         listOf(
+            Triple(1131, 1f, 1f),
+            Triple(1133, 1f, 1f),
             Triple(1600, 1f, 1f),
+            Triple(1600, 1.25f, 1f),
             Triple(1600, 1.5f, 1f),
             Triple(800, 1f, 1f),
             Triple(800, 1.5f, 1f),
@@ -4670,7 +4697,7 @@ class DesktopVisualLayoutTest {
             val state = fixture.taggedTextBounds(tag, "Running")
             val summary = fixture.taggedTextBounds(tag, "Code analysis")
             assertTrue(identity.right <= row.right && summary.right <= row.right, label)
-            if (width == 1600 && scale == 1f) {
+            if ((width == 1600 && scale <= 1.25f) || (width == 1133 && scale == 1f)) {
               fixture.assertAnalysisTableColumnsForRow(tag, path, "Running", "Code analysis")
               assertTrue(identity.top < state.bottom && state.top < identity.bottom, label)
             } else {
