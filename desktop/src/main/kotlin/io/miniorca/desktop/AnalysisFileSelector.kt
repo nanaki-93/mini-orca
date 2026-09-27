@@ -36,6 +36,12 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.unit.dp
 
+internal class AnalysisFilesViewState {
+  var expanded by mutableStateOf(true)
+  var query by mutableStateOf("")
+  var filter by mutableStateOf(AnalysisFileFilter.All)
+}
+
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 internal fun AnalysisFileSelector(
@@ -50,6 +56,7 @@ internal fun AnalysisFileSelector(
     actions: AnalysisWorkspaceActions,
     tableHeight: androidx.compose.ui.unit.Dp,
     onChromeHeightChanged: (Int) -> Unit = {},
+    view: AnalysisFilesViewState = remember { AnalysisFilesViewState() },
 ) {
   var panelHeightPx by remember { mutableStateOf(0) }
   var tableHeightPx by remember { mutableStateOf(0) }
@@ -58,9 +65,9 @@ internal fun AnalysisFileSelector(
   }
   val state = analysis.fileSelection
   val selection = state.selection
-  var expanded by remember(selection?.projectId) { mutableStateOf(true) }
-  var query by remember(selection?.projectId) { mutableStateOf("") }
-  var filter by remember(selection?.projectId) { mutableStateOf(AnalysisFileFilter.All) }
+  val expanded = view.expanded
+  val query = view.query
+  val filter = view.filter
   val ignored = selection?.excludedPaths.orEmpty().toSet()
   val rows =
       remember(selection, analysis.run) {
@@ -83,7 +90,7 @@ internal fun AnalysisFileSelector(
           horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Box(Modifier.weight(1f)) {
               ChromeButton(
-                  onClick = { expanded = !expanded },
+                  onClick = { view.expanded = !expanded },
                   accessibleName = "${if (expanded) "Collapse" else "Expand"} Files",
                   tooltip = null,
                   modifier =
@@ -122,7 +129,8 @@ internal fun AnalysisFileSelector(
                         }
                   }
             }
-            if (expanded) AnalysisFileFilters(rows, query, { query = it }, filter, { filter = it })
+            if (expanded)
+                AnalysisFileFilters(rows, query, { view.query = it }, filter, { view.filter = it })
           }
     }
     state.error?.let { error ->

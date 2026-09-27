@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -1653,6 +1654,82 @@ class DesktopKeyboardNavigationTest {
           assertEquals(0, cancels)
           assertEquals(0, refreshes)
           assertEquals(0, saves)
+        }
+  }
+
+  @Test
+  fun analysisFilesControlsSurviveOuterScrollNavigationAndSelectionUpdates() {
+    val project = mutableStateOf(resultProjectFixture())
+    val selection = mutableStateOf(AnalysisSelectionState(loading = true))
+    val workspace = mutableStateOf(Workspace.Analysis)
+    val filesItemComposed = mutableStateOf(true)
+    var requests = 0
+    val actions =
+        AnalysisWorkspaceActions(
+            { _, _ -> requests++ },
+            { requests++ },
+            { requests++ },
+            { requests++ },
+            { requests++ },
+            { requests++ },
+            { requests++ })
+    ComposeVisualFixture(1_024, 768) {
+          // Like DesktopShell, the owner stays above the workspace switch and the page's lazy
+          // items.
+          val view =
+              remember(project.value.projectId, project.value.projectRevision) {
+                AnalysisFilesViewState()
+              }
+          if (workspace.value == Workspace.Analysis && filesItemComposed.value)
+              AnalysisWorkspacePane(
+                  AnalysisWorkspacePaneState(
+                      project.value, ProjectAnalysisRunState(fileSelection = selection.value)),
+                  actions,
+                  view)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasDescription("Collapse Files"))
+          selection.value = AnalysisSelectionState(selectionFixture())
+          fixture.render()
+          fixture.clickDescription("Needs attention")
+          fixture.setText("main")
+          fixture.render()
+          assertTrue(fixture.hasText("1 of 3 files match"))
+          fixture.clickDescription("Collapse Files")
+          fixture.render()
+          fixture.clickDescription("Expand Files")
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("Needs attention"))
+          assertTrue(fixture.hasText("1 of 3 files match"))
+          fixture.scrollBy(100_000f, "analysis-page")
+          fixture.render()
+          fixture.scrollBy(-100_000f, "analysis-page")
+          fixture.render()
+          // Force the same disposal/re-entry that the outer lazy item can perform.
+          filesItemComposed.value = false
+          fixture.render()
+          filesItemComposed.value = true
+          fixture.render()
+          assertTrue(fixture.hasText("1 of 3 files match"))
+          selection.value = AnalysisSelectionState(selectionFixture().copy(editable = false))
+          fixture.render()
+          assertTrue(fixture.hasText("1 of 3 files match"))
+          workspace.value = Workspace.Bugs
+          fixture.render()
+          workspace.value = Workspace.Analysis
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("Needs attention"))
+          assertTrue(fixture.hasText("1 of 3 files match"))
+          project.value = resultProjectFixture().copy(projectId = "other")
+          selection.value = AnalysisSelectionState(loading = true)
+          fixture.render()
+          assertTrue(fixture.hasDescription("Collapse Files"))
+          assertTrue(fixture.isDescriptionSelected("All"))
+          selection.value = AnalysisSelectionState(selectionFixture().copy(projectId = "other"))
+          fixture.render()
+          assertTrue(fixture.hasText("3 of 3 files match"))
+          assertEquals(0, requests)
         }
   }
 

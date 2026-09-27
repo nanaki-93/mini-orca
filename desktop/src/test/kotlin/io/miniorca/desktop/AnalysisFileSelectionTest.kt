@@ -2,6 +2,7 @@ package io.miniorca.desktop
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.state.ToggleableState
@@ -734,6 +735,9 @@ class AnalysisFileSelectionTest {
                         selectionFixture().copy(excludedPaths = listOf("main.go")))))
     var calls = 0
     ComposeVisualFixture(1_440, 900, 1.5f) {
+          val project = state.value.fileSelection.selection
+          val view =
+              remember(project?.projectId, project?.projectRevision) { AnalysisFilesViewState() }
           AnalysisFileSelector(
               state.value,
               AnalysisWorkspaceActions(
@@ -743,7 +747,9 @@ class AnalysisFileSelectionTest {
                   { calls++ },
                   { calls++ },
                   { calls++ },
-                  { calls++ }))
+                  { calls++ }),
+              320.dp,
+              view = view)
         }
         .use { fixture ->
           fixture.render("analysis-files-default-expanded")
