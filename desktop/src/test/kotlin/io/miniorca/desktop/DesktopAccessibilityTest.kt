@@ -325,9 +325,9 @@ class DesktopAccessibilityTest {
           assertTrue(fixture.hasText("Project description: stale · source may have changed"))
           assertTrue(fixture.hasText("Outdated"))
           assertTrue(fixture.hasText("View analysis"))
-          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          fixture.awaitDescription("Expand Architecture diagram", "Preview")
           fixture.revealText("Flows", "summary-scroll")
-          fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
+          fixture.awaitDescription("Expand Flow 1 diagram", "Preview")
           assertEquals("Collapsed", fixture.descriptionStateDescription("Expand More insight"))
           fixture.revealText("Change lifecycle", "summary-scroll")
           assertEquals(

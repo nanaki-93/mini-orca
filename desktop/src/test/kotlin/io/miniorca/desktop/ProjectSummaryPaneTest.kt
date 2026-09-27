@@ -493,7 +493,7 @@ class ProjectSummaryPaneTest {
     listOf("classDiagram\n A <|-- B", "pie showData\n  \"Dogs\" : 12").forEach { unsupported ->
       ComposeVisualFixture(800, 650) { MermaidDiagram(unsupported, "Architecture") }
           .use { fixture ->
-            fixture.awaitDescription("Show Architecture diagram", "Diagram unavailable")
+            fixture.awaitDescription("Expand Architecture diagram", "Diagram failed")
             fixture.render()
             assertTrue(
                 fixture.hasText("Diagram unavailable: Use a Mermaid flowchart or sequence diagram"))
@@ -510,11 +510,49 @@ class ProjectSummaryPaneTest {
               .use { fixture ->
                 fixture.render()
                 assertTrue(fixture.hasText(report))
-                fixture.awaitDescription("Show Architecture diagram", "Diagram unavailable")
+                fixture.awaitDescription("Expand Architecture diagram", "Diagram unavailable")
                 assertFalse(
                     fixture.hasText(
                         "Diagram unavailable: Use a Mermaid flowchart or sequence diagram"))
               }
+        }
+  }
+
+  @Test
+  fun previewLoadingAcceptsFirstExpandWithoutDispatchingWorkflowActions() {
+    val source = "flowchart LR\n A --> B"
+    val gate = CompletableDeferred<MermaidImage>()
+    var renders = 0
+    ComposeVisualFixture(800, 650) {
+          MermaidDiagram(
+              source,
+              "Architecture",
+              render = {
+                renders++
+                gate.await()
+              })
+        }
+        .use { fixture ->
+          fixture.awaitDescription("Expand Architecture diagram", "Rendering diagram")
+          assertTrue(fixture.hasText("Rendering diagram…"))
+          assertEquals(1, fixture.tagCount("diagram-preview"))
+          fixture.clickDescription("Expand Architecture diagram")
+          fixture.awaitDescription("Hide Architecture diagram", "Rendering diagram")
+          assertEquals(1, renders)
+          gate.complete(MermaidImage(ImageBitmap(16, 16), 16f, 16f))
+          fixture.awaitDescription("Architecture diagram preview\n$source")
+          fixture.awaitDescription("Architecture diagram\n$source")
+          assertEquals(1, renders)
+        }
+  }
+
+  @Test
+  fun blankDiagramDoesNotCreatePreview() {
+    ComposeVisualFixture(800, 650) { MermaidDiagram("  ", "Architecture") }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(0, fixture.tagCount("diagram-preview"))
+          assertTrue(fixture.isDisabled("Expand diagram"))
         }
   }
 
@@ -555,6 +593,56 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun previewAndExpandKeepAllSavedFlowsAndNarrativeWithoutDispatch() {
+    val project = resultProjectFixture()
+    val architecture = "flowchart LR\n A --> B"
+    val flow = "sequenceDiagram\n A->>B: Request"
+    val overview =
+        ProjectOverview(
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            analysis =
+                StructuredProjectAnalysis(
+                    status = "fresh",
+                    purpose = "Project purpose",
+                    architecture = architecture,
+                    flows = listOf(flow, "Legacy prose flow"),
+                    components = listOf("Component description")))
+    val navigations = mutableListOf<Workspace>()
+    val actions =
+        AnalysisWorkspaceActions(
+            { _, _ -> error("Diagram preview started analysis") },
+            { error("Diagram preview started analysis") },
+            { error("Diagram preview started analysis") },
+            { error("Diagram preview started analysis") },
+            { error("Diagram preview started analysis") })
+    var renders = 0
+    ComposeVisualFixture(1000, 2400) {
+          ProjectSummaryPane(
+              overview,
+              project,
+              navigations::add,
+              analysisActions = actions,
+              diagramRender = { MermaidImage(ImageBitmap(12, 12), 12f, 12f).also { renders++ } })
+        }
+        .use { fixture ->
+          fixture.awaitDescription("Architecture diagram preview\n$architecture")
+          fixture.awaitDescription("Flow 1 diagram preview\n$flow")
+          fixture.render()
+          assertTrue(fixture.hasText("Project purpose"))
+          assertTrue(fixture.hasText("Component description"))
+          assertTrue(fixture.hasText("Legacy prose flow"))
+          assertTrue(fixture.hasText("Change lifecycle"))
+          fixture.clickDescription("Expand Architecture diagram")
+          fixture.clickDescription("Expand Flow 1 diagram")
+          fixture.awaitDescription("Architecture diagram\n$architecture")
+          fixture.awaitDescription("Flow 1 diagram\n$flow")
+          assertEquals(2, renders)
+          assertTrue(navigations.isEmpty())
+        }
+  }
+
+  @Test
   fun summaryKeepsOneDecodedResultAcrossLazyDisposalAndReflow() {
     val source = "flowchart TD\n A[Client] --> B[Service]"
     val project = resultProjectFixture()
@@ -587,9 +675,9 @@ class ProjectSummaryPaneTest {
         }
         .use { fixture ->
           fixture.render()
-          fixture.revealText("Show diagram", "summary-scroll")
-          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
-          fixture.clickDescription("Show Architecture diagram")
+          fixture.revealText("Expand diagram", "summary-scroll")
+          fixture.awaitDescription("Expand Architecture diagram", "Preview")
+          fixture.clickDescription("Expand Architecture diagram")
           fixture.awaitDescription("Architecture diagram\n$source")
           fixture.clickDescription("Zoom in Architecture")
           assertEquals(1, renders)
@@ -645,11 +733,11 @@ class ProjectSummaryPaneTest {
                 })
           }
           .use { fixture ->
-            fixture.awaitDescription("Show Architecture diagram", "Rendering diagram")
+            fixture.awaitDescription("Expand Architecture diagram", "Rendering diagram")
             overview = overview.copy(analysis = overview.analysis.copy(architecture = next))
-            fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+            fixture.awaitDescription("Expand Architecture diagram", "Preview")
             runBlocking { canceled.await() }
-            fixture.clickDescription("Show Architecture diagram")
+            fixture.clickDescription("Expand Architecture diagram")
             fixture.awaitDescription("Architecture diagram\n$next")
             oldGate.complete(oldImage)
             fixture.render()
@@ -687,20 +775,20 @@ class ProjectSummaryPaneTest {
               })
         }
         .use { fixture ->
-          fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
-          fixture.awaitDescription("Show Flow 2 diagram", "Collapsed")
-          fixture.clickDescription("Show Flow 1 diagram")
+          fixture.awaitDescription("Expand Flow 1 diagram", "Preview")
+          fixture.awaitDescription("Expand Flow 2 diagram", "Preview")
+          fixture.clickDescription("Expand Flow 1 diagram")
           fixture.awaitDescription("Flow 1 diagram\n$a")
           fixture.clickDescription("Zoom in Flow 1")
           assertEquals(mapOf(a to 1, b to 1), counts)
           overview = overview.copy(analysis = overview.analysis.copy(flows = listOf(a, c)))
-          fixture.awaitDescription("Show Flow 2 diagram", "Collapsed")
+          fixture.awaitDescription("Expand Flow 2 diagram", "Preview")
           fixture.render()
           assertTrue(fixture.hasText("125%"))
           assertEquals(mapOf(a to 1, b to 1, c to 1), counts)
           overview = overview.copy(analysis = overview.analysis.copy(flows = listOf(c, a)))
-          fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
-          fixture.awaitDescription("Show Flow 2 diagram", "Collapsed")
+          fixture.awaitDescription("Expand Flow 1 diagram", "Preview")
+          fixture.awaitDescription("Expand Flow 2 diagram", "Preview")
           fixture.render()
           assertEquals(mapOf(a to 2, b to 1, c to 2), counts)
           assertFalse(fixture.hasText("125%"))
@@ -740,8 +828,8 @@ class ProjectSummaryPaneTest {
               })
         }
         .use { fixture ->
-          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
-          fixture.clickDescription("Show Architecture diagram")
+          fixture.awaitDescription("Expand Architecture diagram", "Preview")
+          fixture.clickDescription("Expand Architecture diagram")
           fixture.awaitDescription("Architecture diagram\n$source")
           fixture.clickDescription("Zoom in Architecture")
           fixture.render()
@@ -754,9 +842,9 @@ class ProjectSummaryPaneTest {
 
           currentProject = currentProject.copy(projectId = "second", projectRevision = "two")
           currentOverview = currentOverview.copy(projectId = "second", projectRevision = "two")
-          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          fixture.awaitDescription("Expand Architecture diagram", "Preview")
           assertFalse(fixture.hasText("Mermaid source"))
-          fixture.clickDescription("Show Architecture diagram")
+          fixture.clickDescription("Expand Architecture diagram")
           fixture.awaitDescription("Architecture diagram\n$source")
           assertTrue(fixture.hasText("100%"))
           assertEquals("Collapsed", fixture.stateDescription("More insight"))
@@ -764,8 +852,8 @@ class ProjectSummaryPaneTest {
           assertEquals(2, renders)
           currentProject = currentProject.copy(projectRevision = "three")
           currentOverview = currentOverview.copy(projectRevision = "three")
-          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
-          fixture.clickDescription("Show Architecture diagram")
+          fixture.awaitDescription("Expand Architecture diagram", "Preview")
+          fixture.clickDescription("Expand Architecture diagram")
           fixture.awaitDescription("Architecture diagram\n$source")
           assertEquals(3, renders)
           assertTrue(fixture.hasText("100%"))
@@ -815,7 +903,7 @@ class ProjectSummaryPaneTest {
           }
           fun expand() {
             reveal()
-            fixture.clickDescription("Show Architecture diagram")
+            fixture.clickDescription("Expand Architecture diagram")
             fixture.awaitDescription("Architecture diagram\n$source")
             fixture.clickDescription("Zoom in Architecture")
             fixture.clickText("Mermaid source")
@@ -860,17 +948,17 @@ class ProjectSummaryPaneTest {
                   analysis =
                       overview.analysis.copy(architecture = source.replace("Service", "Store")))
           fixture.render()
-          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          fixture.awaitDescription("Expand Architecture diagram", "Preview")
           assertEquals("Expanded", fixture.stateDescription("More insight"))
-          fixture.clickDescription("Show Architecture diagram")
+          fixture.clickDescription("Expand Architecture diagram")
           fixture.awaitDescription("Architecture diagram\n${source.replace("Service", "Store")}")
           project = project.copy(projectRevision = "two")
           overview = overview.copy(projectRevision = "two")
           fixture.render()
           reveal()
-          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          fixture.awaitDescription("Expand Architecture diagram", "Preview")
           assertEquals("Collapsed", fixture.stateDescription("More insight"))
-          fixture.clickDescription("Show Architecture diagram")
+          fixture.clickDescription("Expand Architecture diagram")
           fixture.awaitDescription("Architecture diagram\n${source.replace("Service", "Store")}")
           assertTrue(fixture.tryClick("Expand More insight"))
           fixture.render()
@@ -878,7 +966,7 @@ class ProjectSummaryPaneTest {
           overview = overview.copy(projectId = "second")
           fixture.render()
           reveal()
-          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          fixture.awaitDescription("Expand Architecture diagram", "Preview")
           assertEquals("Collapsed", fixture.stateDescription("More insight"))
           assertTrue(navigations.isEmpty())
         }
@@ -906,7 +994,7 @@ class ProjectSummaryPaneTest {
         }
         .use { fixture ->
           fixture.render()
-          fixture.clickDescription("Show Architecture diagram")
+          fixture.clickDescription("Expand Architecture diagram")
           assertTrue(fixture.tryClick("Expand More insight"))
           fixture.render()
           assertEquals("Expanded", fixture.stateDescription("More insight"))

@@ -29,6 +29,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.Key
@@ -596,8 +597,8 @@ class DesktopVisualLayoutTest {
               assertTrue(fixture.hasDescription("View Bugs results"))
               assertTrue(fixture.hasDescription("View Security results"))
               if (width == 800 && scale == 1.5f && density == 1f) {
-                fixture.revealText("Show diagram")
-                fixture.clickText("Show diagram")
+                fixture.revealText("Expand diagram")
+                fixture.clickText("Expand diagram")
                 fixture.render("f04-summary-help-expanded-800-650-1.5-1x")
                 assertTrue(fixture.hasText("Hide diagram"))
               }
@@ -1584,7 +1585,7 @@ class DesktopVisualLayoutTest {
           fixture.render()
           fixture.revealText("Engineering insight")
           fixture.render("f08-summary-disclosures-collapsed-1440")
-          fixture.clickDescription("Show Architecture diagram")
+          fixture.clickDescription("Expand Architecture diagram")
           assertTrue(fixture.tryClick("Expand More insight"))
           fixture.render("f08-summary-disclosures-expanded-1440")
           assertTrue(fixture.hasText("Legacy input may fail."))
@@ -4794,11 +4795,15 @@ class DesktopVisualLayoutTest {
                             transferableLesson = "Validate at the request boundary.")))
     ComposeVisualFixture(1440, 1600) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
-          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
-          fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
-          fixture.render("summary-dashboard-collapsed-1440")
-          fixture.clickDescription("Show Architecture diagram")
-          fixture.clickDescription("Show Flow 1 diagram")
+          fixture.awaitDescription("Expand Architecture diagram", "Preview")
+          fixture.awaitDescription("Expand Flow 1 diagram", "Preview")
+          fixture.awaitDescription(
+              "Architecture diagram preview\n" + visualFixtureOverview.analysis.architecture)
+          fixture.awaitDescription(
+              "Flow 1 diagram preview\n" + visualFixtureOverview.analysis.flows.first())
+          fixture.render("summary-dashboard-preview-1440")
+          fixture.clickDescription("Expand Architecture diagram")
+          fixture.clickDescription("Expand Flow 1 diagram")
           fixture.awaitDescription(
               "Architecture diagram\n" + visualFixtureOverview.analysis.architecture)
           fixture.awaitDescription(
@@ -4929,7 +4934,7 @@ class DesktopVisualLayoutTest {
                         EngineeringInsight(
                             mechanism = "Validate requests before persistence.",
                             whyItMattersHere = "Invalid input stays outside the repository.")))
-    ComposeVisualFixture(800, 2_400, 1.5f) {
+    ComposeVisualFixture(800, 3_000, 1.5f) {
           ProjectSummaryPane(overview, visualFixtureProject, {})
         }
         .use { fixture ->
@@ -4949,10 +4954,10 @@ class DesktopVisualLayoutTest {
           ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, { navigations++ })
         }
         .use { fixture ->
-          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
-          fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
-          fixture.clickDescription("Show Architecture diagram")
-          fixture.clickDescription("Show Flow 1 diagram")
+          fixture.awaitDescription("Expand Architecture diagram", "Preview")
+          fixture.awaitDescription("Expand Flow 1 diagram", "Preview")
+          fixture.clickDescription("Expand Architecture diagram")
+          fixture.clickDescription("Expand Flow 1 diagram")
           fixture.awaitDescription("Architecture diagram\n$source")
           fixture.awaitDescription("Flow 1 diagram\n$flow")
           fixture.clickDescription("Zoom in Architecture")
@@ -5974,11 +5979,13 @@ class DesktopVisualLayoutTest {
     listOf(1440 to 1f, 800 to 1.5f).forEach { (width, scale) ->
       ComposeVisualFixture(width, 800, scale) { MermaidDiagram(source, "Architecture") }
           .use { fixture ->
-            fixture.awaitDescription("Show Architecture diagram", "Collapsed")
-            assertFalse(fixture.isDisabled("Show diagram"))
-            assertFalse(fixture.hasDescription("Architecture diagram\n$source"))
+            fixture.awaitDescription("Expand Architecture diagram", "Preview")
+            assertFalse(fixture.isDisabled("Expand diagram"))
+            fixture.awaitDescription("Architecture diagram preview\n$source")
+            assertTrue(fixture.taggedBounds("diagram-preview").height <= 180f * scale)
+            fixture.render("summary-mermaid-preview-$width-$scale")
             assertFalse(fixture.hasText("Mermaid source"))
-            assertTrue(fixture.requestFocus("Show diagram"))
+            assertTrue(fixture.requestFocus("Expand diagram"))
             fixture.pressKey(Key.Enter)
             fixture.awaitDescription("Architecture diagram\n$source")
             assertEquals("Expanded", fixture.stateDescription("Hide diagram"))
@@ -5990,9 +5997,39 @@ class DesktopVisualLayoutTest {
             assertFalse(fixture.hasEditableText())
             fixture.clickText("Hide diagram")
             fixture.render()
+            assertTrue(fixture.hasDescription("Architecture diagram preview\n$source"))
             assertFalse(fixture.hasDescription("Architecture diagram\n$source"))
             assertFalse(fixture.hasText(source))
-            assertEquals("Collapsed", fixture.stateDescription("Show diagram"))
+            assertEquals("Preview", fixture.stateDescription("Expand diagram"))
+          }
+    }
+  }
+
+  @Test
+  fun largeSavedDiagramsRemainBoundedBeforeExpansion() {
+    for ((width, height) in listOf(1200 to 80, 80 to 1200)) {
+      val source = "flowchart LR\n A --> B"
+      var renders = 0
+      val image = MermaidImage(ImageBitmap(width, height), width.toFloat(), height.toFloat())
+      ComposeVisualFixture(800, 650, 1.5f) {
+            MermaidDiagram(
+                source,
+                "Architecture",
+                render = {
+                  renders++
+                  image
+                })
+          }
+          .use { fixture ->
+            fixture.awaitDescription("Architecture diagram preview\n$source")
+            fixture.render("summary-preview-$width-$height")
+            val bounds = fixture.taggedBounds("diagram-preview")
+            assertTrue(bounds.height <= 270f)
+            assertTrue(bounds.width <= 800f)
+            assertEquals(1, renders)
+            fixture.clickDescription("Expand Architecture diagram")
+            fixture.awaitDescription("Architecture diagram\n$source")
+            assertEquals(1, renders)
           }
     }
   }
@@ -6006,7 +6043,7 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render("summary-mermaid-first-frame")
           assertTrue(
-              fixture.tryClick("Show diagram"),
+              fixture.tryClick("Expand diagram"),
               "A valid diagram must not ignore the first disclosure click while rendering")
           fixture.awaitDescription("Architecture diagram\n$source")
           assertEquals("Expanded", fixture.stateDescription("Hide diagram"))
@@ -6021,32 +6058,36 @@ class DesktopVisualLayoutTest {
           .use { fixture ->
             fixture.render("summary-diagram-unavailable-${label.replace(' ', '-')}")
             assertTrue(fixture.hasText(value))
-            assertTrue(fixture.isDisabled("Show diagram"))
-            assertEquals("Diagram unavailable", fixture.stateDescription("Show diagram"))
+            assertEquals(1, fixture.tagCount("diagram-preview"))
+            assertTrue(fixture.hasText("No diagram in saved content"))
+            assertTrue(fixture.isDisabled("Expand diagram"))
+            assertEquals("Diagram unavailable", fixture.stateDescription("Expand diagram"))
             assertFalse(fixture.hasText("Run Analysis again to generate this diagram."))
-            assertFalse(fixture.tryClick("Show diagram"))
+            assertFalse(fixture.tryClick("Expand diagram"))
 
             value = "flowchart TD\n A[Client] --> B[Server]"
-            fixture.awaitDescription("Show $label diagram", "Collapsed")
-            fixture.clickText("Show diagram")
+            fixture.awaitDescription("Expand $label diagram", "Preview")
+            fixture.clickText("Expand diagram")
             fixture.awaitDescription("$label diagram\n$value")
 
             value = "flowchart TD\n A[Replacement]"
-            fixture.awaitDescription("Show $label diagram", "Collapsed")
+            fixture.awaitDescription("Expand $label diagram", "Preview")
             assertFalse(fixture.hasDescription("$label diagram\n$value"))
-            assertFalse(fixture.isDisabled("Show diagram"))
+            assertFalse(fixture.isDisabled("Expand diagram"))
 
             value = "flowchart TD\n A[Node]\n click A \"https://example.com\""
-            fixture.awaitDescription("Show $label diagram", "Diagram unavailable")
-            // State semantics can observe the render result before enabled recomposes.
+            fixture.awaitDescription("Expand $label diagram", "Diagram failed")
             fixture.render()
-            assertTrue(fixture.isDisabled("Show diagram"))
+            assertFalse(fixture.isDisabled("Expand diagram"))
             assertTrue(fixture.hasText(value))
-            assertFalse(fixture.tryClick("Show diagram"))
+            assertTrue(
+                fixture.hasText(
+                    "Diagram unavailable: Diagram contains unsupported styling, links or markup"))
+            assertTrue(fixture.tryClick("Expand diagram"))
 
             value = "sequenceDiagram\n Client->>API: Retry\n API-->>Client: Ready"
             fixture.render()
-            assertTrue(fixture.tryClick("Show diagram"))
+            assertTrue(fixture.tryClick("Expand diagram"))
             fixture.awaitDescription("$label diagram\n$value")
             assertEquals("Expanded", fixture.stateDescription("Hide diagram"))
           }
