@@ -17,11 +17,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CoroutineScope
 
 internal enum class SummaryMetricTone {
   Fact,
@@ -467,7 +470,9 @@ internal fun ProjectSummaryPane(
             projectState = ProjectWorkspaceState(project = project),
             analysisRun = ProjectAnalysisRunState(run = run, sections = sections)),
     onFindingSelected: ((SummaryFindingTarget) -> Unit)? = null,
+    diagramRender: suspend (String) -> MermaidImage = ::renderSummaryDiagram,
 ) {
+  val diagramScope = rememberCoroutineScope()
   val findingPreview = summaryFindingPreview(findingState)
   val selectionState =
       analysisState?.fileSelection ?: AnalysisSelectionState(selection = fileSelection)
@@ -484,9 +489,14 @@ internal fun ProjectSummaryPane(
   val pieces = presentation.engineeringInsight?.let(::engineeringInsightPieces).orEmpty()
   // Own local disclosure state above the lazy item so scrolling it away does not discard it.
   val architectureView = remember(ownerIdentity, architecture) { DiagramViewState() }
+  DisposableEffect(architectureView) { onDispose { architectureView.cancel() } }
   val flowViews =
       flows.mapIndexed { index, value ->
-        key(index) { remember(ownerIdentity, value) { DiagramViewState() } }
+        key(index) {
+          val view = remember(ownerIdentity, value) { DiagramViewState() }
+          DisposableEffect(view) { onDispose { view.cancel() } }
+          view
+        }
       }
   val insightExpansion = remember(ownerIdentity, pieces) { mutableStateOf(false) }
   // Inspection is local to the confirmed coverage owner, outside the lazy item lifecycle.
@@ -580,7 +590,13 @@ internal fun ProjectSummaryPane(
         }
         if (architecture != null || pieces.isNotEmpty()) {
           item {
-            SummaryLowerComposition(presentation, ownerIdentity, architectureView, insightExpansion)
+            SummaryLowerComposition(
+                presentation,
+                ownerIdentity,
+                architectureView,
+                insightExpansion,
+                diagramScope,
+                diagramRender)
           }
         }
         item {
@@ -596,7 +612,9 @@ internal fun ProjectSummaryPane(
             SummaryFlows(
                 requireNotNull(presentation.details.firstOrNull { it.title == "Flows" }),
                 ownerIdentity,
-                flowViews)
+                flowViews,
+                diagramScope,
+                diagramRender)
           }
         }
         item { SummaryChangeLifecycle { selectWorkspace(Workspace.Editor) } }
@@ -759,6 +777,8 @@ private fun SummaryLowerComposition(
     ownerIdentity: List<String?>,
     architectureView: DiagramViewState,
     insightExpansion: MutableState<Boolean>,
+    diagramScope: CoroutineScope,
+    diagramRender: suspend (String) -> MermaidImage,
 ) {
   val architecture = presentation.details.firstOrNull { it.title == "Architecture" }
   val insight =
@@ -780,7 +800,9 @@ private fun SummaryLowerComposition(
                       "Architecture",
                       title = "Architecture",
                       ownerIdentity = ownerIdentity + "architecture",
-                      viewState = architectureView)
+                      viewState = architectureView,
+                      renderScope = diagramScope,
+                      render = diagramRender)
                 }
               }
             }
@@ -950,6 +972,8 @@ private fun SummaryFlows(
     flows: ProjectSummaryDetail,
     ownerIdentity: List<String?>,
     viewStates: List<DiagramViewState>,
+    diagramScope: CoroutineScope,
+    diagramRender: suspend (String) -> MermaidImage,
     modifier: Modifier = Modifier,
 ) {
   WorkspaceSection(modifier = modifier.testTag("summary-flows")) {
@@ -960,7 +984,9 @@ private fun SummaryFlows(
           "Flow ${index + 1}",
           title = if (flows.values.size == 1) "Flows" else "Flow ${index + 1}",
           ownerIdentity = ownerIdentity + "flow-$index",
-          viewState = viewStates[index])
+          viewState = viewStates[index],
+          renderScope = diagramScope,
+          render = diagramRender)
     }
   }
 }

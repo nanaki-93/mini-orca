@@ -15,11 +15,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,12 +32,55 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 internal class DiagramViewState {
   var showDiagram by mutableStateOf(false)
   var showSource by mutableStateOf(false)
   var zoom by mutableStateOf(1f)
+  internal var renderState by mutableStateOf<DiagramState>(DiagramState.Unavailable)
+    private set
+
+  private var job: Job? = null
+  private var generation = 0
+  private var started = false
+
+  internal fun start(
+      scope: CoroutineScope,
+      source: String?,
+      render: suspend (String) -> MermaidImage,
+  ) {
+    if (started) return
+    started = true
+    if (source == null) return
+    renderState = DiagramState.Loading
+    val active = ++generation
+    job =
+        scope.launch {
+          try {
+            val image = render(source)
+            if (generation == active) renderState = DiagramState.Ready(image)
+          } catch (cancelled: CancellationException) {
+            throw cancelled
+          } catch (exception: Exception) {
+            if (generation == active)
+                renderState =
+                    DiagramState.Failed(exception.message?.take(240) ?: "Unable to render diagram")
+          }
+        }
+  }
+
+  internal fun cancel() {
+    generation++
+    job?.cancel()
+    job = null
+  }
 }
+
+internal suspend fun renderSummaryDiagram(source: String): MermaidImage =
+    renderMermaidImage(MermaidRenderer.render(source).svg)
 
 internal data class SummaryDiagramInput(
     val source: String?,
@@ -85,7 +130,7 @@ internal fun summaryDiagramInput(value: String): SummaryDiagramInput {
   return SummaryDiagramInput(null, value, value)
 }
 
-private sealed interface DiagramState {
+internal sealed interface DiagramState {
   data object Unavailable : DiagramState
 
   data object Loading : DiagramState
@@ -102,14 +147,24 @@ internal fun MermaidDiagram(
     title: String? = null,
     ownerIdentity: Any = Unit,
     viewState: DiagramViewState? = null,
+    renderScope: CoroutineScope? = null,
+    render: suspend (String) -> MermaidImage = ::renderSummaryDiagram,
 ) {
   val input = remember(value) { summaryDiagramInput(value) }
+  val localScope = rememberCoroutineScope()
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
     if (title == null && input.prose.isNotBlank()) ModelResultContent(input.prose, preview = false)
     key(ownerIdentity, input.source) {
       val localView = remember { DiagramViewState() }
+      if (viewState == null) DisposableEffect(localView) { onDispose { localView.cancel() } }
       MermaidDiagramSource(
-          input, label, title, input.prose.takeIf { title != null }, viewState ?: localView)
+          input,
+          label,
+          title,
+          input.prose.takeIf { title != null },
+          viewState ?: localView,
+          renderScope ?: localScope,
+          render)
     }
   }
 }
@@ -121,23 +176,13 @@ private fun MermaidDiagramSource(
     label: String,
     title: String?,
     prose: String?,
-    view: DiagramViewState
+    view: DiagramViewState,
+    renderScope: CoroutineScope,
+    render: suspend (String) -> MermaidImage,
 ) {
   val source = input.source
-  val state by
-      produceState<DiagramState>(
-          if (source == null) DiagramState.Unavailable else DiagramState.Loading, source) {
-            if (source != null)
-                try {
-                  value = DiagramState.Ready(renderMermaidImage(MermaidRenderer.render(source).svg))
-                } catch (cancelled: CancellationException) {
-                  throw cancelled
-                } catch (exception: Exception) {
-                  value =
-                      DiagramState.Failed(
-                          exception.message?.take(240) ?: "Unable to render diagram")
-                }
-          }
+  LaunchedEffect(view, source) { view.start(renderScope, source, render) }
+  val state = view.renderState
   var showDiagram by view::showDiagram
   var showSource by view::showSource
   var zoom by view::zoom

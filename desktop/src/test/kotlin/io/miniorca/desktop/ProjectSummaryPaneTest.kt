@@ -3,13 +3,22 @@ package io.miniorca.desktop
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 
 class ProjectSummaryPaneTest {
   @Test
@@ -510,6 +519,195 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun ownedRenderRejectsLateCompletionAndDoesNotReportCancellationAsFailure() = runBlocking {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    val oldGate = CompletableDeferred<MermaidImage>()
+    val started = CompletableDeferred<Unit>()
+    val cancelled = CompletableDeferred<Unit>()
+    val image = MermaidImage(ImageBitmap(8, 8), 8f, 8f)
+    val old = DiagramViewState()
+    try {
+      old.start(scope, "old") {
+        started.complete(Unit)
+        try {
+          oldGate.await()
+        } catch (exception: CancellationException) {
+          cancelled.complete(Unit)
+          withContext(NonCancellable) { oldGate.await() }
+        }
+      }
+      started.await()
+      assertEquals(DiagramState.Loading, old.renderState)
+      old.cancel()
+      cancelled.await()
+      val replacement = DiagramViewState()
+      replacement.start(scope, "new") { image }
+      assertEquals(DiagramState.Ready(image), replacement.renderState)
+      oldGate.complete(image)
+      // The canceled job may finish despite cancellation; it must not publish the old image.
+      scope.coroutineContext[kotlinx.coroutines.Job]!!.children.forEach { it.join() }
+      assertEquals(DiagramState.Loading, old.renderState)
+      assertEquals(DiagramState.Ready(image), replacement.renderState)
+    } finally {
+      oldGate.complete(image)
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun summaryKeepsOneDecodedResultAcrossLazyDisposalAndReflow() {
+    val source = "flowchart TD\n A[Client] --> B[Service]"
+    val project = resultProjectFixture()
+    var overview by
+        androidx.compose.runtime.mutableStateOf(
+            ProjectOverview(
+                projectId = project.projectId,
+                projectRevision = project.projectRevision,
+                analysis =
+                    StructuredProjectAnalysis(
+                        status = "fresh",
+                        purpose = "Project context. ".repeat(400),
+                        architecture = source,
+                        engineeringInsight =
+                            EngineeringInsight(
+                                mechanism = "Mechanism",
+                                whyItMattersHere = "Reason",
+                                tradeoffOrFailureMode = "Trade-off"))))
+    var renders = 0
+    val image = MermaidImage(ImageBitmap(8, 8), 8f, 8f)
+    ComposeVisualFixture(1440, 650) {
+          ProjectSummaryPane(
+              overview,
+              project,
+              {},
+              diagramRender = {
+                renders++
+                image
+              })
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.revealText("Show diagram", "summary-scroll")
+          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          fixture.clickDescription("Show Architecture diagram")
+          fixture.awaitDescription("Architecture diagram\n$source")
+          fixture.clickDescription("Zoom in Architecture")
+          assertEquals(1, renders)
+          fixture.scrollBy(-100_000f, "summary-scroll")
+          fixture.render()
+          assertEquals(0, fixture.tagCount("summary-lower-composition"))
+          overview = overview.copy(findingCounts = FindingCounts(verified = 2))
+          fixture.resize(800, 650)
+          fixture.revealText("Hide diagram", "summary-scroll")
+          fixture.awaitDescription("Architecture diagram\n$source")
+          assertTrue(fixture.hasText("125%"))
+          assertEquals(1, renders)
+          fixture.resize(1440, 650)
+          fixture.render()
+          fixture.revealText("Hide diagram", "summary-scroll")
+          fixture.awaitDescription("Architecture diagram\n$source")
+          assertEquals(1, renders)
+        }
+  }
+
+  @Test
+  fun replacingSummaryOwnerCancelsOldRenderAndNeverDisplaysItsLateImage() {
+    val project = resultProjectFixture()
+    val old = "flowchart LR\n A --> B"
+    val next = "flowchart LR\n C --> D"
+    var overview by
+        androidx.compose.runtime.mutableStateOf(
+            ProjectOverview(
+                projectId = project.projectId,
+                projectRevision = project.projectRevision,
+                analysis = StructuredProjectAnalysis(status = "fresh", architecture = old)))
+    val oldGate = CompletableDeferred<MermaidImage>()
+    val canceled = CompletableDeferred<Unit>()
+    val oldImage = MermaidImage(ImageBitmap(8, 8), 8f, 8f)
+    val newImage = MermaidImage(ImageBitmap(12, 12), 12f, 12f)
+    val rendered = mutableListOf<String>()
+    try {
+      ComposeVisualFixture(1000, 1400) {
+            ProjectSummaryPane(
+                overview,
+                project,
+                {},
+                diagramRender = { source ->
+                  rendered += source
+                  if (source == old) {
+                    try {
+                      oldGate.await()
+                    } catch (exception: CancellationException) {
+                      canceled.complete(Unit)
+                      withContext(NonCancellable) { oldGate.await() }
+                    }
+                  } else newImage
+                })
+          }
+          .use { fixture ->
+            fixture.awaitDescription("Show Architecture diagram", "Rendering diagram")
+            overview = overview.copy(analysis = overview.analysis.copy(architecture = next))
+            fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+            runBlocking { canceled.await() }
+            fixture.clickDescription("Show Architecture diagram")
+            fixture.awaitDescription("Architecture diagram\n$next")
+            oldGate.complete(oldImage)
+            fixture.render()
+            assertFalse(fixture.hasDescription("Architecture diagram\n$old"))
+            assertFalse(fixture.hasText("Diagram unavailable:"))
+            assertEquals(listOf(old, next), rendered)
+          }
+    } finally {
+      oldGate.complete(oldImage)
+    }
+  }
+
+  @Test
+  fun flowSlotsRetainIndependentResultsAndResetWhenReplacedOrReordered() {
+    val project = resultProjectFixture()
+    val a = "flowchart LR\n A --> B"
+    val b = "flowchart LR\n C --> D"
+    val c = "flowchart LR\n E --> F"
+    var overview by
+        androidx.compose.runtime.mutableStateOf(
+            ProjectOverview(
+                projectId = project.projectId,
+                projectRevision = project.projectRevision,
+                analysis = StructuredProjectAnalysis(status = "fresh", flows = listOf(a, b))))
+    val counts = mutableMapOf<String, Int>()
+    val image = MermaidImage(ImageBitmap(8, 8), 8f, 8f)
+    ComposeVisualFixture(1000, 1800) {
+          ProjectSummaryPane(
+              overview,
+              project,
+              {},
+              diagramRender = { source ->
+                counts[source] = (counts[source] ?: 0) + 1
+                image
+              })
+        }
+        .use { fixture ->
+          fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
+          fixture.awaitDescription("Show Flow 2 diagram", "Collapsed")
+          fixture.clickDescription("Show Flow 1 diagram")
+          fixture.awaitDescription("Flow 1 diagram\n$a")
+          fixture.clickDescription("Zoom in Flow 1")
+          assertEquals(mapOf(a to 1, b to 1), counts)
+          overview = overview.copy(analysis = overview.analysis.copy(flows = listOf(a, c)))
+          fixture.awaitDescription("Show Flow 2 diagram", "Collapsed")
+          fixture.render()
+          assertTrue(fixture.hasText("125%"))
+          assertEquals(mapOf(a to 1, b to 1, c to 1), counts)
+          overview = overview.copy(analysis = overview.analysis.copy(flows = listOf(c, a)))
+          fixture.awaitDescription("Show Flow 1 diagram", "Collapsed")
+          fixture.awaitDescription("Show Flow 2 diagram", "Collapsed")
+          fixture.render()
+          assertEquals(mapOf(a to 2, b to 1, c to 2), counts)
+          assertFalse(fixture.hasText("125%"))
+        }
+  }
+
+  @Test
   fun summaryDisclosuresResetForAnotherProjectWithIdenticalContent() {
     val source = "flowchart TD\n A[Client] --> B[Service]"
     val insight =
@@ -529,7 +727,18 @@ class ProjectSummaryPaneTest {
                     StructuredProjectAnalysis(
                         status = "fresh", architecture = source, engineeringInsight = insight)))
 
-    ComposeVisualFixture(1000, 760) { ProjectSummaryPane(currentOverview, currentProject, {}) }
+    var renders = 0
+    val image = MermaidImage(ImageBitmap(8, 8), 8f, 8f)
+    ComposeVisualFixture(1000, 760) {
+          ProjectSummaryPane(
+              currentOverview,
+              currentProject,
+              {},
+              diagramRender = {
+                renders++
+                image
+              })
+        }
         .use { fixture ->
           fixture.awaitDescription("Show Architecture diagram", "Collapsed")
           fixture.clickDescription("Show Architecture diagram")
@@ -537,6 +746,7 @@ class ProjectSummaryPaneTest {
           fixture.clickDescription("Zoom in Architecture")
           fixture.render()
           assertTrue(fixture.hasText("125%"))
+          assertEquals(1, renders)
           fixture.clickText("Mermaid source")
           assertTrue(fixture.tryClick("Expand More insight"))
           fixture.render()
@@ -551,6 +761,14 @@ class ProjectSummaryPaneTest {
           assertTrue(fixture.hasText("100%"))
           assertEquals("Collapsed", fixture.stateDescription("More insight"))
           assertFalse(fixture.hasText("Trade-off or failure mode"))
+          assertEquals(2, renders)
+          currentProject = currentProject.copy(projectRevision = "three")
+          currentOverview = currentOverview.copy(projectRevision = "three")
+          fixture.awaitDescription("Show Architecture diagram", "Collapsed")
+          fixture.clickDescription("Show Architecture diagram")
+          fixture.awaitDescription("Architecture diagram\n$source")
+          assertEquals(3, renders)
+          assertTrue(fixture.hasText("100%"))
         }
   }
 
