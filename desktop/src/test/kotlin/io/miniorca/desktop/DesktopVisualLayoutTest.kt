@@ -4725,6 +4725,88 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun fileListKeepsPathAnchorAcrossDisposalAndRefreshWithoutEagerlyComposingRows() {
+    val files =
+        (0 until 500).map { index ->
+          AnalysisSelectableFile(
+              "src/file-${index.toString().padStart(3, '0')}.go",
+              "",
+              selectionStageFixture("missing", "No saved evidence."))
+        }
+    val selection = mutableStateOf(selectionFixture().copy(files = files))
+    val visible = mutableStateOf(true)
+    val view = AnalysisFilesViewState()
+    var requests = 0
+    ComposeVisualFixture(1024, 768) {
+          if (visible.value)
+              AnalysisFileSelector(
+                  ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selection.value)),
+                  AnalysisWorkspaceActions(
+                      { _, _ -> requests++ },
+                      { requests++ },
+                      { requests++ },
+                      { requests++ },
+                      { requests++ },
+                      { requests++ },
+                      { requests++ }),
+                  320.dp,
+                  view = view)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(500, view.listState.layoutInfo.totalItemsCount)
+          assertTrue(view.listState.layoutInfo.visibleItemsInfo.size < 500)
+          fixture.scrollBy(100_000f, "analysis-file-table")
+          fixture.render()
+          assertTrue(fixture.hasText(files.last().path))
+          fixture.scrollBy(-250f, "analysis-file-table")
+          fixture.render()
+          val anchor = view.listState.layoutInfo.visibleItemsInfo.first().key as String
+          assertTrue(anchor != files.first().path)
+          visible.value = false
+          fixture.render()
+          visible.value = true
+          fixture.render()
+          assertEquals(anchor, view.listState.layoutInfo.visibleItemsInfo.first().key)
+          selection.value = selection.value.copy(files = files.drop(10))
+          fixture.render()
+          assertEquals(anchor, view.listState.layoutInfo.visibleItemsInfo.first().key)
+          assertEquals(490, view.listState.layoutInfo.totalItemsCount)
+          fixture.clickDescription("Collapse Files")
+          fixture.render()
+          selection.value = selection.value.copy(files = files.drop(20))
+          fixture.render()
+          fixture.clickDescription("Expand Files")
+          fixture.render()
+          assertEquals(anchor, view.listState.layoutInfo.visibleItemsInfo.first().key)
+          view.filter = AnalysisFileFilter.Attention
+          fixture.render()
+          assertEquals(anchor, view.listState.layoutInfo.visibleItemsInfo.first().key)
+          view.query = "file-000"
+          fixture.render()
+          assertEquals(0, view.listState.layoutInfo.totalItemsCount)
+          view.query = ""
+          view.filter = AnalysisFileFilter.All
+          fixture.render()
+          assertEquals(files[20].path, view.listState.layoutInfo.visibleItemsInfo.first().key)
+          fixture.scrollBy(100_000f, "analysis-file-table")
+          fixture.render()
+          assertTrue(fixture.hasText(files.last().path))
+          val removedAnchor = view.listState.layoutInfo.visibleItemsInfo.first().key as String
+          selection.value =
+              selection.value.copy(
+                  files = selection.value.files.filterNot { it.path == removedAnchor })
+          fixture.render()
+          fixture.render()
+          assertEquals(files[20].path, view.listState.layoutInfo.visibleItemsInfo.first().key)
+          assertEquals(479, view.listState.layoutInfo.totalItemsCount)
+          fixture.render()
+          assertEquals(320f, fixture.taggedBounds("analysis-file-table").height, 1f)
+          assertEquals(0, requests)
+        }
+  }
+
+  @Test
   fun roundedSummaryUsesTheProductionFrameAndSelectedSummaryDestination() {
     listOf(1600 to 1000, 1440 to 900, 1000 to 760, 999 to 760, 800 to 650, 1280 to 600).forEach {
         (width, height) ->
