@@ -6,8 +6,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
 
 class ProjectSummaryPaneTest {
   @Test
@@ -396,17 +398,115 @@ class ProjectSummaryPaneTest {
   @Test
   fun diagramInputsPreserveMermaidAndLegacyProse() {
     val mermaid = "flowchart TD\n A[API] --> B[Service]"
-    assertEquals(mermaid, summaryDiagramInput(mermaid).source)
+    listOf(mermaid, "graph LR\r\n A --> B", "sequenceDiagram\n A->>B: Request").forEach {
+      assertEquals(SummaryDiagramInput(it.trim(), "", it), summaryDiagramInput(it))
+    }
+    listOf("Overview\n```mermaid\n$mermaid\n```", "Overview\r\n``` Mermaid\r\n$mermaid\r\n```")
+        .forEach { saved ->
+          assertEquals(SummaryDiagramInput(mermaid, "Overview", saved), summaryDiagramInput(saved))
+        }
+    val saved =
+        "Before\r\n```MERMAID\r\n$mermaid\r\n```\r\nBetween\n```mermaid\n" +
+            "sequenceDiagram\n A->>B: Request\n```\nAfter"
+    val input = summaryDiagramInput(saved)
+    assertEquals(mermaid, input.source)
     assertEquals(
-        SummaryDiagramInput(mermaid, "Overview"),
-        summaryDiagramInput("Overview\n```mermaid\n$mermaid\n```"))
-    assertEquals(
-        SummaryDiagramInput(mermaid, "Overview"),
-        summaryDiagramInput("Overview\r\n``` Mermaid\r\n$mermaid\r\n```"))
-    assertTrue(
-        summaryDiagramInput("API → Service").source!!.contains("n0[\"API\"] --> n1[\"Service\"]"))
+        "Before\r\n\r\nBetween\n```mermaid\nsequenceDiagram\n A->>B: Request\n```\nAfter",
+        input.prose)
+    assertEquals(saved, input.original)
+    assertFalse(input.generatedFromArrowChain)
+    val chain = "API → Service"
+    val generated = summaryDiagramInput(chain)
+    assertTrue(generated.source!!.contains("n0[\"API\"] --> n1[\"Service\"]"))
+    assertEquals(chain, generated.original)
+    assertEquals("", generated.prose)
+    assertTrue(generated.generatedFromArrowChain)
     listOf("Handlers call services.", "API ->", "`API -> Service`", "API -> Service\nwith details")
-        .forEach { assertEquals(SummaryDiagramInput(null, it), summaryDiagramInput(it)) }
+        .forEach { assertEquals(SummaryDiagramInput(null, it, it), summaryDiagramInput(it)) }
+  }
+
+  @Test
+  fun unsupportedDeclarationsRemainAttemptedDiagramsWithOriginalContent() = runBlocking {
+    val unsupported =
+        listOf(
+            "classDiagram\n A <|-- B",
+            "stateDiagram-v2\n A --> B",
+            "customDiagram\n A --> B",
+            "kanban\n Todo",
+            "pie showData\n  \"Dogs\" : 12",
+            "pie title Pets\n  \"Cats\" : 8",
+            "pie showData title Pets\n  \"Birds\" : 5")
+    for (source in unsupported) {
+      val saved = "Introduction\n$source\nConclusion"
+      val input = summaryDiagramInput(saved)
+      assertEquals(source + "\nConclusion", input.source)
+      assertEquals("Introduction", input.prose)
+      assertEquals(saved, input.original)
+      assertFalse(input.generatedFromArrowChain)
+      val failure =
+          assertFailsWith<IllegalArgumentException> {
+            MermaidRenderer.render(requireNotNull(input.source))
+          }
+      assertTrue(failure.message!!.contains("Use a Mermaid flowchart or sequence diagram"))
+    }
+    val fenced = "Notes\n```mermaid\nclassDiagram\n A <|-- B\n```\nMore notes"
+    assertEquals("classDiagram\n A <|-- B", summaryDiagramInput(fenced).source)
+    assertEquals(fenced, summaryDiagramInput(fenced).original)
+    assertEquals("Notes\n\nMore notes", summaryDiagramInput(fenced).prose)
+    val plain = summaryDiagramInput("Handlers call services.")
+    assertEquals(null, plain.source)
+    assertEquals("Handlers call services.", plain.original)
+    listOf(
+            "Journey through the project",
+            "Timeline of changes",
+            "ClassDiagram of the codebase",
+            "Pie shows data for each team")
+        .forEach { prose ->
+          val report = "Overview\r\n$prose\r\nOther observations."
+          assertEquals(SummaryDiagramInput(null, report, report), summaryDiagramInput(report))
+        }
+    listOf(
+            "journey",
+            "timeline",
+            "classDiagram",
+            "stateDiagram-v2",
+            "customDiagram",
+            "pie showData")
+        .forEach { declaration ->
+          val report = "Overview\r\n  $declaration  \r\n  A --> B"
+          assertEquals("$declaration  \r\n  A --> B", summaryDiagramInput(report).source)
+          assertEquals(report, summaryDiagramInput(report).original)
+        }
+  }
+
+  @Test
+  fun unsupportedDiagramFailureIsVisibleButProseOnlyIsUnavailable() {
+    listOf("classDiagram\n A <|-- B", "pie showData\n  \"Dogs\" : 12").forEach { unsupported ->
+      ComposeVisualFixture(800, 650) { MermaidDiagram(unsupported, "Architecture") }
+          .use { fixture ->
+            fixture.awaitDescription("Show Architecture diagram", "Diagram unavailable")
+            fixture.render()
+            assertTrue(
+                fixture.hasText("Diagram unavailable: Use a Mermaid flowchart or sequence diagram"))
+            assertTrue(fixture.hasText(unsupported))
+          }
+    }
+    listOf(
+            "Handlers call services.",
+            "Journey through the project",
+            "Timeline of changes",
+            "Pie shows data for each team")
+        .forEach { report ->
+          ComposeVisualFixture(800, 650) { MermaidDiagram(report, "Architecture") }
+              .use { fixture ->
+                fixture.render()
+                assertTrue(fixture.hasText(report))
+                fixture.awaitDescription("Show Architecture diagram", "Diagram unavailable")
+                assertFalse(
+                    fixture.hasText(
+                        "Diagram unavailable: Use a Mermaid flowchart or sequence diagram"))
+              }
+        }
   }
 
   @Test

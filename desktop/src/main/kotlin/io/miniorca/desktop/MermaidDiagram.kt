@@ -37,14 +37,35 @@ internal class DiagramViewState {
   var zoom by mutableStateOf(1f)
 }
 
-internal data class SummaryDiagramInput(val source: String?, val prose: String)
+internal data class SummaryDiagramInput(
+    val source: String?,
+    val prose: String,
+    val original: String,
+    val generatedFromArrowChain: Boolean = false,
+)
 
 internal fun summaryDiagramInput(value: String): SummaryDiagramInput {
   val fence = Regex("(?is)```[ \\t]*mermaid[ \\t]*\\r?\\n(.*?)\\r?\\n[ \\t]*```").find(value)
   if (fence != null)
-      return SummaryDiagramInput(fence.groupValues[1].trim(), value.removeRange(fence.range).trim())
+      return SummaryDiagramInput(
+          fence.groupValues[1].trim(), value.removeRange(fence.range).trim(), value)
   if (Regex("^(flowchart|graph|sequenceDiagram)\\b").containsMatchIn(value.trim())) {
-    return SummaryDiagramInput(value.trim(), "")
+    return SummaryDiagramInput(value.trim(), "", value)
+  }
+  // A declared but unsupported Mermaid type is an attempted diagram, not a prose report.
+  val unsupported =
+      Regex(
+              "(?im)^[ \\t]*(?:[a-z][a-z0-9]*Diagram(?:-v[0-9]+)?|journey|gantt|" +
+                  "pie(?:[ \\t]+(?:showData(?:[ \\t]+title[ \\t]+[^\\r\\n]+)?|" +
+                  "title[ \\t]+[^\\r\\n]+))?|gitGraph|mindmap|timeline|quadrantChart|" +
+                  "C4Context|zenuml|kanban|treemap|sankey-beta|xychart-beta|block-beta|" +
+                  "packet-beta|architecture-beta|radar-beta)[ \\t]*(?=\\r?\\n|\\z)")
+          .find(value)
+  if (unsupported != null) {
+    return SummaryDiagramInput(
+        value.substring(unsupported.range.first).trim(),
+        value.substring(0, unsupported.range.first).trim(),
+        value)
   }
   // Previously saved arrow chains remain usable without a new model request.
   if ('\n' !in value && '`' !in value && '<' !in value) {
@@ -54,10 +75,14 @@ internal fun summaryDiagramInput(value: String): SummaryDiagramInput {
           nodes.mapIndexed { index, label ->
             "n$index[\"${label.replace("&", "&amp;").replace("\"", "&quot;")}\"]"
           }
-      return SummaryDiagramInput("flowchart LR\n" + declarations.joinToString(" --> "), "")
+      return SummaryDiagramInput(
+          "flowchart LR\n" + declarations.joinToString(" --> "),
+          "",
+          value,
+          generatedFromArrowChain = true)
     }
   }
-  return SummaryDiagramInput(null, value)
+  return SummaryDiagramInput(null, value, value)
 }
 
 private sealed interface DiagramState {
@@ -84,7 +109,7 @@ internal fun MermaidDiagram(
     key(ownerIdentity, input.source) {
       val localView = remember { DiagramViewState() }
       MermaidDiagramSource(
-          input.source, label, title, input.prose.takeIf { title != null }, viewState ?: localView)
+          input, label, title, input.prose.takeIf { title != null }, viewState ?: localView)
     }
   }
 }
@@ -92,12 +117,13 @@ internal fun MermaidDiagram(
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun MermaidDiagramSource(
-    source: String?,
+    input: SummaryDiagramInput,
     label: String,
     title: String?,
     prose: String?,
     view: DiagramViewState
 ) {
+  val source = input.source
   val state by
       produceState<DiagramState>(
           if (source == null) DiagramState.Unavailable else DiagramState.Loading, source) {
@@ -183,7 +209,7 @@ private fun MermaidDiagramSource(
           "Diagram unavailable: ${current.message}",
           color = Warning,
           style = IdeTypography.compactBody)
-      ModelResultContent(requireNotNull(source), preview = false)
+      ModelResultContent(input.original, preview = false)
     }
     is DiagramState.Ready ->
         if (showDiagram) {
@@ -204,5 +230,15 @@ private fun MermaidDiagramSource(
               }
         }
   }
-  if (showDiagram && showSource) ModelResultContent("```mermaid\n$source\n```", preview = false)
+  if (showDiagram && showSource) {
+    Text(
+        if (input.generatedFromArrowChain) "Original saved arrow chain"
+        else "Saved diagram content",
+        style = IdeTypography.compactBody)
+    ModelResultContent(input.original, preview = false)
+    if (input.generatedFromArrowChain) {
+      Text("Generated Mermaid for rendering", style = IdeTypography.compactBody)
+      ModelResultContent("```mermaid\n$source\n```", preview = false)
+    }
+  }
 }
