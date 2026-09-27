@@ -6008,6 +6008,149 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun diagramPresentationCapturesPreviewAndViewerAcrossViewportTextAndDensity() {
+    val source = "flowchart LR\n Desktop --> API\n API --> App\n App --> Project\n App --> Storage"
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      // The density variant keeps the same logical 800 × 650 viewport.
+      val densities =
+          if (width == 800 && height == 650 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)
+      for (density in densities) {
+        val pixelWidth = (width * density).toInt()
+        val pixelHeight = (height * density).toInt()
+        val label = "f11-$width-$height-$scale-${density}x"
+        ComposeVisualFixture(pixelWidth, pixelHeight, scale, density) {
+              MermaidDiagram(source, "Architecture", title = "Architecture")
+            }
+            .use { fixture ->
+              fixture.awaitDescription("Architecture diagram preview\n$source")
+              fixture.render("$label-preview")
+              assertTrue(fixture.taggedBounds("diagram-preview").height <= 180f * density)
+              assertFalse(fixture.hasText("Mermaid source"))
+              fixture.clickDescription("Expand Architecture diagram")
+              fixture.awaitDescription("Architecture diagram\n$source")
+              repeat(8) { fixture.render() }
+              fixture.render("$label-expanded")
+              if (width == 800 && height == 650 && scale == 1.5f && density == 1f) {
+                assertTrue(fixture.requestDescriptionFocus("Zoom in Architecture"))
+                fixture.render("$label-focused")
+                assertTrue(fixture.isDescriptionFocused("Zoom in Architecture"))
+                fixture.awaitVisibleDescription("Close Architecture diagram")
+              }
+              val canvas = fixture.taggedBounds("diagram-canvas")
+              assertTrue(canvas.width <= pixelWidth.toFloat())
+              assertTrue(canvas.height <= 300f * density)
+              fixture.awaitVisibleDescription("Close Architecture diagram")
+              fixture.clickText("Mermaid source")
+              fixture.render("$label-source")
+              assertEquals(1, fixture.taggedTextCount("diagram-source-scroll", source))
+              fixture.awaitVisibleDescription("Close Architecture diagram")
+              fixture.revealText("Copy source")
+              fixture.awaitVisibleDescription("Copy saved content for Architecture")
+            }
+      }
+    }
+  }
+
+  @Test
+  fun diagramPresentationCapturesLoadingUnavailableFailureLegacyAndZoomBounds() {
+    val source = "flowchart LR\n" + (1..18).joinToString("\n") { " N$it --> N${it + 1}" }
+    val pending = kotlinx.coroutines.CompletableDeferred<MermaidImage>()
+    ComposeVisualFixture(800, 650, 1.5f) {
+          MermaidDiagram(
+              source, "Architecture", title = "Architecture", render = { pending.await() })
+        }
+        .use { fixture ->
+          fixture.render("f11-loading-preview-800-650-150")
+          assertTrue(fixture.hasText("Rendering diagram…"))
+          fixture.clickDescription("Expand Architecture diagram")
+          fixture.awaitVisibleDescription("Close Architecture diagram")
+          repeat(8) { fixture.render() }
+          assertTrue(fixture.hasText("Rendering diagram…"))
+          fixture.awaitVisibleDescription("Zoom out Architecture")
+          fixture.awaitVisibleDescription("Mermaid source for Architecture")
+          fixture.awaitVisibleDescription("Close Architecture diagram")
+          fixture.render("f11-loading-expanded-800-650-150")
+          pending.complete(kotlinx.coroutines.runBlocking { renderSummaryDiagram(source) })
+          fixture.awaitDescription("Architecture diagram\n$source")
+          fixture.render("f11-wide-expanded-800-650-150")
+          assertTrue(fixture.scrollMaximum("diagram-horizontal-scroll", horizontal = true) > 0f)
+          fixture.scrollTagged("diagram-horizontal-scroll", horizontal = true, pixels = 100_000f)
+          fixture.render("f11-wide-end-800-650-150")
+          assertEquals(
+              fixture.scrollMaximum("diagram-horizontal-scroll", horizontal = true),
+              fixture.scrollPosition("diagram-horizontal-scroll", horizontal = true))
+          repeat(4) { fixture.clickDescription("Zoom out Architecture") }
+          fixture.render("f11-zoom-minimum-800-650-150")
+          assertTrue(fixture.isDescriptionDisabled("Zoom out Architecture"))
+          assertEquals(
+              "Minimum zoom 75%", fixture.descriptionStateDescription("Zoom out Architecture"))
+          repeat(5) { fixture.clickDescription("Zoom in Architecture") }
+          fixture.render("f11-zoom-maximum-800-650-150")
+          assertTrue(fixture.isDescriptionDisabled("Zoom in Architecture"))
+          assertEquals(
+              "Maximum zoom 200%", fixture.descriptionStateDescription("Zoom in Architecture"))
+        }
+    val tallSource = "flowchart TD\n" + (1..18).joinToString("\n") { " N$it --> N${it + 1}" }
+    ComposeVisualFixture(1600, 1300, 1.5f, 2f) {
+          MermaidDiagram(tallSource, "Flow 1", title = "Flow 1")
+        }
+        .use { fixture ->
+          fixture.awaitDescription("Flow 1 diagram preview\n$tallSource")
+          fixture.render("f11-tall-preview-800-650-150-2x")
+          fixture.clickDescription("Expand Flow 1 diagram")
+          fixture.awaitDescription("Flow 1 diagram\n$tallSource")
+          fixture.render("f11-tall-expanded-800-650-150-2x")
+          assertTrue(fixture.scrollMaximum("diagram-vertical-scroll", horizontal = false) > 0f)
+          fixture.scrollTagged("diagram-vertical-scroll", horizontal = false, pixels = 100_000f)
+          fixture.render("f11-tall-end-800-650-150-2x")
+          assertEquals(
+              fixture.scrollMaximum("diagram-vertical-scroll", horizontal = false),
+              fixture.scrollPosition("diagram-vertical-scroll", horizontal = false))
+        }
+    ComposeVisualFixture(800, 650, 1.5f) {
+          MermaidDiagram("API → Service", "Flow 1", title = "Flow 1")
+        }
+        .use { fixture ->
+          fixture.awaitDescription("Expand Flow 1 diagram", "Preview")
+          fixture.render("f11-legacy-preview-800-650-150")
+          fixture.clickDescription("Expand Flow 1 diagram")
+          fixture.awaitDescription("Close Flow 1 diagram")
+          fixture.clickText("Mermaid source")
+          fixture.render("f11-legacy-source-800-650-150")
+          assertTrue(fixture.hasText("Original saved arrow chain"))
+          assertTrue(fixture.hasText("Generated Mermaid for rendering (not saved)"))
+        }
+    ComposeVisualFixture(800, 650, 1.5f) {
+          MermaidDiagram("A prose-only saved report.", "Flow 2", title = "Flow 2")
+        }
+        .use { fixture ->
+          fixture.render("f11-prose-only-800-650-150")
+          assertTrue(fixture.hasText("No diagram in saved content"))
+          assertTrue(fixture.isDisabled("Expand diagram"))
+        }
+    val invalid = "flowchart TD\n A[Node]\n click A \"https://example.com\""
+    ComposeVisualFixture(800, 650, 1.5f) {
+          MermaidDiagram(invalid, "Architecture", title = "Architecture")
+        }
+        .use { fixture ->
+          fixture.awaitDescription("Expand Architecture diagram", "Diagram failed")
+          fixture.render("f11-failed-preview-800-650-150")
+          assertTrue(fixture.hasText("Original saved content"))
+          fixture.clickDescription("Expand Architecture diagram")
+          fixture.awaitDescription("Close Architecture diagram")
+          fixture.render("f11-failed-expanded-800-650-150")
+          assertTrue(
+              fixture.hasText(
+                  "Diagram unavailable: Diagram contains unsupported styling, links or markup"))
+          fixture.clickText("Mermaid source")
+          fixture.render("f11-failed-source-800-650-150")
+          assertEquals(2, fixture.taggedTextCount("diagram-source-scroll", invalid))
+          fixture.awaitVisibleDescription("Close Architecture diagram")
+        }
+  }
+
+  @Test
   @OptIn(ExperimentalComposeUiApi::class)
   fun diagramSourceIsLiteralScrollableAndCopiesTheEntireSavedReport() {
     val saved =
@@ -6030,7 +6173,7 @@ class DesktopVisualLayoutTest {
             nativeClipboard.setContents(clipEntry?.asAwtTransferable, null)
           }
         }
-    ComposeVisualFixture(800, 650) {
+    ComposeVisualFixture(800, 650, 1.5f) {
           CompositionLocalProvider(LocalClipboard provides clipboard) {
             MermaidDiagram(
                 saved,
@@ -6046,7 +6189,7 @@ class DesktopVisualLayoutTest {
           fixture.clickDescription("Expand Architecture diagram")
           fixture.awaitDescription("Close Architecture diagram")
           fixture.clickText("Mermaid source")
-          fixture.render()
+          fixture.render("f11-long-source-800-650-150")
           assertEquals(1, fixture.taggedTextCount("diagram-source-scroll", saved))
           assertFalse(fixture.hasEditableText(withinTag = "diagram-source-scroll"))
           assertTrue(fixture.scrollMaximum("diagram-source-scroll", horizontal = false) > 0f)

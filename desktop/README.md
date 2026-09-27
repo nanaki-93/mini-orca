@@ -203,16 +203,21 @@ changes one file under guards, and Undo is available only while its guards hold.
 The stages are information, not actions or readiness indicators. **Open Editor**
 only navigates to Editor; it does not change the draft or run any editing step.
 
-Architecture and Flows place **Show diagram** beside the section heading. Diagrams
-start collapsed, with the button disabled when a diagram is unavailable. Mermaid
-flowcharts and sequence diagrams render locally; expanded diagrams provide zoom
-and selectable Mermaid source. No browser, network request, provider call or
-project-code execution is needed to display a diagram.
+Architecture and each project Flow show a bounded, locally rendered preview of
+saved Mermaid flowcharts or sequence diagrams. **Expand diagram** opens a local
+viewer without leaving Summary. It provides two-axis scrolling, 75–200% zoom in
+25-point steps with reset, and a **Mermaid source** disclosure with selectable,
+read-only original content and **Copy source**. Closing retains the diagram's zoom
+and scroll position while the same Summary result is present. Loading and render
+failures appear in the preview; failed or unsupported diagrams retain their complete
+source instead of showing an invented graph. No browser, provider call, project-code
+execution or source write is needed to inspect a diagram.
 
-New Analysis results request Mermaid diagrams. Older prose reports remain readable and
-are marked stale after the prompt update; run Analysis explicitly to replace them.
-Previously saved arrow chains also render as Mermaid. Invalid or unsupported diagrams
-keep their source visible with an error instead of an invented diagram.
+New Analysis results request Mermaid diagrams. Older prose reports remain readable,
+with an unavailable preview and disabled Expand action; they are marked stale after
+the prompt update. Run Analysis explicitly to replace them. Previously saved
+single-line arrow chains also render as Mermaid; the viewer distinguishes the
+original saved chain from generated Mermaid used only for rendering.
 
 The diagram renderer bundles beautiful-mermaid and its licenses, using the embedded
 GraalJS community runtime and JSVG for SVG text and arrow rendering. Normal Gradle builds use the checked-in bundle and do not
