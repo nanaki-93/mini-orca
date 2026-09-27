@@ -897,6 +897,67 @@ class AnalysisFileSelectionTest {
         }
   }
 
+  @Test
+  fun rowDetailsBelongToPathsAcrossCollapseDisposalFilteringAndInventoryRefresh() {
+    val initial = selectionFixture()
+    val current = mutableStateOf(initial)
+    val visible = mutableStateOf(true)
+    val view = AnalysisFilesViewState()
+    var requests = 0
+    ComposeVisualFixture(1440, 900) {
+          if (visible.value)
+              AnalysisFileSelector(
+                  ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(current.value)),
+                  AnalysisWorkspaceActions(
+                      { _, _ -> requests++ },
+                      { requests++ },
+                      { requests++ },
+                      { requests++ },
+                      { requests++ },
+                      { requests++ },
+                      { requests++ }),
+                  320.dp,
+                  view = view)
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Analysis details for main.go")
+          fixture.render()
+          assertEquals(
+              "Expanded", fixture.descriptionStateDescription("Analysis details for main.go"))
+          fixture.clickDescription("Collapse Files")
+          fixture.render()
+          fixture.clickDescription("Expand Files")
+          fixture.render()
+          assertEquals(
+              "Expanded", fixture.descriptionStateDescription("Analysis details for main.go"))
+          visible.value = false // Workspace navigation or outer lazy disposal.
+          fixture.render()
+          visible.value = true
+          fixture.render()
+          assertEquals(
+              "Expanded", fixture.descriptionStateDescription("Analysis details for main.go"))
+          fixture.setText("helper")
+          fixture.render()
+          assertFalse(fixture.hasDescription("Analysis details for main.go"))
+          fixture.setText("")
+          fixture.render()
+          assertEquals(
+              "Expanded", fixture.descriptionStateDescription("Analysis details for main.go"))
+          assertTrue(fixture.requestDescriptionFocus("Analysis details for main.go"))
+          current.value =
+              current.value.copy(files = current.value.files.filterNot { it.path == "main.go" })
+          fixture.render()
+          assertFalse(view.expandedDetails.containsKey("main.go"))
+          current.value = initial
+          fixture.render()
+          assertEquals(
+              "Collapsed", fixture.descriptionStateDescription("Analysis details for main.go"))
+          assertFalse(fixture.isDescriptionFocused("Analysis details for main.go"))
+          assertEquals(0, requests)
+        }
+  }
+
   private class Harness : AutoCloseable {
     val main = AnalysisQueuedDispatcher()
     val io = AnalysisQueuedDispatcher()

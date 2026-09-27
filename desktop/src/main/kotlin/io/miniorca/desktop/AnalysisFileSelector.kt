@@ -15,15 +15,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,11 +38,51 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 internal class AnalysisFilesViewState {
   var expanded by mutableStateOf(true)
   var query by mutableStateOf("")
   var filter by mutableStateOf(AnalysisFileFilter.All)
+  val listState = LazyListState()
+  val expandedDetails = mutableStateMapOf<String, Boolean>()
+  private var anchorPath: String? = null
+  private var anchorOffset = 0
+  private var previousPaths: List<String>? = null
+  private var pendingAnchor: Pair<String?, Int>? = null
+
+  fun preparePaths(paths: List<String>) {
+    if (previousPaths != null && previousPaths != paths) {
+      // Capture the old keyed layout before the new list is measured at the old numeric index.
+      val visible = listState.layoutInfo.visibleItemsInfo.firstOrNull()?.key as? String
+      pendingAnchor =
+          if (visible != null && previousPaths?.contains(visible) == true)
+              visible to listState.firstVisibleItemScrollOffset
+          else anchorPath to anchorOffset
+    }
+  }
+
+  fun retainInventory(paths: Set<String>) {
+    expandedDetails.keys.retainAll(paths)
+  }
+
+  // An index alone would transfer the old row's position to a different file after refresh.
+  suspend fun followPaths(paths: List<String>) {
+    if (previousPaths != null && previousPaths != paths) {
+      val (path, offset) = pendingAnchor ?: (anchorPath to anchorOffset)
+      val index = path?.let(paths::indexOf)?.takeIf { it >= 0 } ?: 0
+      listState.requestScrollToItem(index, if (path in paths) offset else 0)
+    }
+    pendingAnchor = null
+    previousPaths = paths
+    snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+        .distinctUntilChanged()
+        .collect { (visibleIndex, offset) ->
+          anchorPath = paths.getOrNull(visibleIndex)
+          anchorOffset = if (anchorPath == null) 0 else offset
+        }
+  }
 }
 
 @Composable
@@ -80,6 +123,10 @@ internal fun AnalysisFileSelector(
   val selectedCount = eligible.count { it.path !in ignored }
   val excludedCount = rows.count { it.status == AnalysisFileSyncStatus.Excluded }
   val files = filteredAnalysisFiles(rows, query, filter)
+  val paths = files.map { it.file.path }
+  LaunchedEffect(view, selection?.files) {
+    if (selection != null) view.retainInventory(selection.files.map { it.path }.toSet())
+  }
   val panelModifier =
       Modifier.testTag("analysis-file-panel").onSizeChanged { panelHeightPx = it.height }
   WorkspaceSection(modifier = panelModifier) {
@@ -173,6 +220,8 @@ internal fun AnalysisFileSelector(
               style = IdeTypography.workspaceMetadata)
         }
     if (expanded) {
+      remember(view, paths) { view.preparePaths(paths) }
+      LaunchedEffect(view, paths) { view.followPaths(paths) }
       Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth()
@@ -206,15 +255,18 @@ internal fun AnalysisFileSelector(
                 color = SecondaryText,
                 style = IdeTypography.workspaceMetadata)
         LazyColumn(
-            Modifier.fillMaxWidth()
-                .height(tableHeight)
-                .testTag("analysis-file-table")
-                .onSizeChanged { tableHeightPx = it.height }) {
+            state = view.listState,
+            modifier =
+                Modifier.fillMaxWidth()
+                    .height(tableHeight)
+                    .testTag("analysis-file-table")
+                    .onSizeChanged { tableHeightPx = it.height }) {
               itemsIndexed(files, key = { _, row -> row.file.path }) { _, row ->
                 AnalysisFileRow(
                     row,
                     row.file.reason.isBlank() && row.file.path !in ignored,
-                    editable && row.file.reason.isBlank()) {
+                    editable && row.file.reason.isBlank(),
+                    view) {
                       actions.saveSelection(
                           (if (row.file.path in ignored) ignored - row.file.path
                               else ignored + row.file.path)
@@ -314,6 +366,7 @@ private fun AnalysisFileRow(
     row: AnalysisFileStatus,
     selected: Boolean,
     editable: Boolean,
+    view: AnalysisFilesViewState,
     toggle: () -> Unit
 ) {
   Row(
@@ -348,7 +401,7 @@ private fun AnalysisFileRow(
         identity(Modifier.weight(AnalysisWideTableGrid.fileWeight))
         AnalysisFileStatusLabel(
             row.file.path, row.status, Modifier.weight(AnalysisWideTableGrid.stateWeight))
-        AnalysisFileDetails(row, Modifier.weight(AnalysisWideTableGrid.detailsWeight))
+        AnalysisFileDetails(row, view, Modifier.weight(AnalysisWideTableGrid.detailsWeight))
       }
 }
 
@@ -372,8 +425,12 @@ private fun AnalysisFileStatusLabel(
 }
 
 @Composable
-private fun AnalysisFileDetails(row: AnalysisFileStatus, modifier: Modifier = Modifier) {
-  var expanded by remember(row.file.path, row.explanation) { mutableStateOf(false) }
+private fun AnalysisFileDetails(
+    row: AnalysisFileStatus,
+    view: AnalysisFilesViewState,
+    modifier: Modifier = Modifier
+) {
+  val expanded = view.expandedDetails[row.file.path] == true
   val summary = row.summary
   val detail =
       row.explanation +
@@ -397,7 +454,10 @@ private fun AnalysisFileDetails(row: AnalysisFileStatus, modifier: Modifier = Mo
           }
           if (hasDetails)
               ChromeButton(
-                  onClick = { expanded = !expanded },
+                  onClick = {
+                    if (expanded) view.expandedDetails.remove(row.file.path)
+                    else view.expandedDetails[row.file.path] = true
+                  },
                   accessibleName = "Analysis details for ${row.file.path}",
                   modifier =
                       Modifier.semantics {
