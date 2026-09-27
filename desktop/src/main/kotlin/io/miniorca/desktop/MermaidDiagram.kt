@@ -1,8 +1,12 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,11 +37,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -56,6 +70,13 @@ internal class DiagramViewState {
   // Keep inspection position with the diagram owner, not the transient dialog composition.
   val horizontalScroll = ScrollState(0)
   val verticalScroll = ScrollState(0)
+  internal var openerFocus: FocusRequester? = null
+  internal var summaryRestore: (suspend () -> Unit)? = null
+
+  internal suspend fun restoreFocus() {
+    if (openerFocus?.requestFocus() != true) summaryRestore?.invoke()
+  }
+
   internal var renderState by mutableStateOf<DiagramState>(DiagramState.Unavailable)
     private set
 
@@ -187,8 +208,10 @@ internal fun MermaidDiagram(
           viewState ?: localView,
           renderScope ?: localScope,
           render)
-      if (viewState == null && localView.showDiagram)
-          MermaidDiagramViewer(input, label, title, localView)
+      if (viewState == null) {
+        RestoreDiagramFocus(localView)
+        if (localView.showDiagram) MermaidDiagramViewer(input, label, title, localView)
+      }
     }
   }
 }
@@ -208,6 +231,11 @@ private fun MermaidDiagramSource(
   LaunchedEffect(view, source) { view.start(renderScope, source, render) }
   val state = view.renderState
   val showDiagram = view.showDiagram
+  val opener = remember(view) { FocusRequester() }
+  DisposableEffect(view, opener) {
+    view.openerFocus = opener
+    onDispose { if (view.openerFocus === opener) view.openerFocus = null }
+  }
   Row(
       Modifier.fillMaxWidth(),
       horizontalArrangement = Arrangement.End,
@@ -224,7 +252,7 @@ private fun MermaidDiagramSource(
             enabled = source != null,
             accessibleName = "Expand $label diagram",
             modifier =
-                Modifier.semantics {
+                Modifier.focusRequester(opener).semantics {
                   stateDescription =
                       when (state) {
                         DiagramState.Unavailable -> "Diagram unavailable"
@@ -278,6 +306,19 @@ private fun MermaidDiagramSource(
 }
 
 @Composable
+internal fun RestoreDiagramFocus(view: DiagramViewState) {
+  var wasOpen by remember(view) { mutableStateOf(false) }
+  val open = view.showDiagram
+  LaunchedEffect(view, open) {
+    if (open) wasOpen = true
+    else if (wasOpen) {
+      wasOpen = false
+      view.restoreFocus()
+    }
+  }
+}
+
+@Composable
 @OptIn(ExperimentalLayoutApi::class, ExperimentalComposeUiApi::class)
 internal fun MermaidDiagramViewer(
     input: SummaryDiagramInput,
@@ -290,6 +331,9 @@ internal fun MermaidDiagramViewer(
   val source = input.source
   val clipboard = LocalClipboard.current
   val copyScope = rememberCoroutineScope()
+  val firstControl = remember { FocusRequester() }
+  val resetControl = remember { FocusRequester() }
+  val closeControl = remember { FocusRequester() }
   IdeDialog(
       onDismissRequest = { view.showDiagram = false },
       title = {
@@ -303,20 +347,50 @@ internal fun MermaidDiagramViewer(
           ChromeButton(
               onClick = { zoom = (zoom - 0.25f).coerceAtLeast(0.75f) },
               enabled = zoom > 0.75f,
-              accessibleName = "Zoom out $label") {
+              accessibleName = "Zoom out $label",
+              modifier =
+                  Modifier.focusRequester(firstControl)
+                      .onPreviewKeyEvent { event ->
+                        if (event.key == Key.Tab &&
+                            event.isShiftPressed &&
+                            event.type == KeyEventType.KeyDown) {
+                          closeControl.requestFocus()
+                          true
+                        } else false
+                      }
+                      .semantics {
+                        stateDescription =
+                            if (zoom <= 0.75f) "Minimum zoom 75%"
+                            else "Zoom ${(zoom * 100).toInt()}%"
+                      }) {
                 Text("−")
               }
           ChromeButton(
               onClick = { zoom = 1f },
               accessibleName = "Reset zoom $label",
               modifier =
-                  Modifier.semantics { stateDescription = "Zoom ${(zoom * 100).toInt()}%" }) {
+                  Modifier.focusRequester(resetControl)
+                      .onPreviewKeyEvent { event ->
+                        if (zoom <= 0.75f &&
+                            event.key == Key.Tab &&
+                            event.isShiftPressed &&
+                            event.type == KeyEventType.KeyDown) {
+                          closeControl.requestFocus()
+                          true
+                        } else false
+                      }
+                      .semantics { stateDescription = "Zoom ${(zoom * 100).toInt()}%" }) {
                 Text("${(zoom * 100).toInt()}%")
               }
           ChromeButton(
               onClick = { zoom = (zoom + 0.25f).coerceAtMost(2f) },
               enabled = zoom < 2f,
-              accessibleName = "Zoom in $label") {
+              accessibleName = "Zoom in $label",
+              modifier =
+                  Modifier.semantics {
+                    stateDescription =
+                        if (zoom >= 2f) "Maximum zoom 200%" else "Zoom ${(zoom * 100).toInt()}%"
+                  }) {
                 Text("+")
               }
           ChromeButton(
@@ -340,11 +414,18 @@ internal fun MermaidDiagramViewer(
                   Box(
                       Modifier.fillMaxSize()
                           .verticalScroll(view.verticalScroll)
-                          .testTag("diagram-vertical-scroll")) {
+                          .testTag("diagram-vertical-scroll")
+                          .semantics { contentDescription = "$label diagram vertical scroll" }
+                          .diagramScrollFocus()) {
                         Box(
                             Modifier.fillMaxWidth()
                                 .horizontalScroll(view.horizontalScroll)
                                 .testTag("diagram-horizontal-scroll")
+                                .semantics {
+                                  contentDescription = "$label diagram horizontal scroll"
+                                }
+                                .diagramHorizontalKeys(view.horizontalScroll)
+                                .diagramScrollFocus()
                                 .padding(8.dp)) {
                               Image(
                                   state.image.bitmap,
@@ -396,21 +477,60 @@ internal fun MermaidDiagramViewer(
       },
       actions = {
         ChromeButton(
-            onClick = { view.showDiagram = false }, accessibleName = "Close $label diagram") {
+            onClick = { view.showDiagram = false },
+            accessibleName = "Close $label diagram",
+            modifier =
+                Modifier.focusRequester(closeControl).onPreviewKeyEvent { event ->
+                  if (event.key == Key.Tab &&
+                      !event.isShiftPressed &&
+                      event.type == KeyEventType.KeyDown) {
+                    if (zoom <= 0.75f) resetControl.requestFocus() else firstControl.requestFocus()
+                    true
+                  } else false
+                }) {
               Text("Close")
             }
       })
 }
 
 @Composable
+private fun Modifier.diagramScrollFocus(): Modifier {
+  var focused by remember { mutableStateOf(false) }
+  return onFocusChanged { focused = it.isFocused }
+      .focusable()
+      .border(BorderStroke(if (focused) 2.dp else 0.dp, FocusAccent), MiniOrcaShapes.control)
+}
+
+@Composable
+private fun Modifier.diagramHorizontalKeys(scroll: ScrollState): Modifier {
+  val scope = rememberCoroutineScope()
+  return onPreviewKeyEvent { event ->
+    val direction =
+        when (event.key) {
+          Key.DirectionLeft -> -1
+          Key.DirectionRight -> 1
+          else -> 0
+        }
+    if (direction == 0 || event.type != KeyEventType.KeyDown || scroll.maxValue == 0) false
+    else {
+      scope.launch { scroll.scrollBy(direction * 80f) }
+      true
+    }
+  }
+}
+
+@Composable
 private fun LiteralDiagramSource(value: String) {
+  val horizontal = rememberScrollState()
   Box(
       Modifier.fillMaxWidth()
           .heightIn(max = 200.dp)
           .clip(MiniOrcaShapes.control)
           .background(EditorCanvas)
           .verticalScroll(rememberScrollState())
-          .testTag("diagram-source-scroll")) {
+          .testTag("diagram-source-scroll")
+          .semantics { contentDescription = "Saved diagram source vertical scroll" }
+          .diagramScrollFocus()) {
         SelectionContainer {
           Text(
               value,
@@ -418,8 +538,11 @@ private fun LiteralDiagramSource(value: String) {
               style = IdeTypography.resultCode,
               softWrap = false,
               modifier =
-                  Modifier.horizontalScroll(rememberScrollState())
+                  Modifier.horizontalScroll(horizontal)
                       .testTag("diagram-source-horizontal-scroll")
+                      .semantics { contentDescription = "Saved diagram source horizontal scroll" }
+                      .diagramHorizontalKeys(horizontal)
+                      .diagramScrollFocus()
                       .padding(8.dp))
         }
       }

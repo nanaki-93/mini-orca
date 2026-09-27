@@ -1,6 +1,8 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -14,21 +16,30 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusTarget
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.focused
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -513,9 +524,28 @@ internal fun ProjectSummaryPane(
   LaunchedEffect(coverageOwner, availableBuckets) {
     if (inspectedBucket.value !in availableBuckets) inspectedBucket.value = null
   }
+  val summaryFocus = remember(ownerIdentity) { FocusRequester() }
+  val summaryScroll = rememberLazyListState()
+  var summaryFocused by remember { mutableStateOf(false) }
+  var summaryFallbackAvailable by remember(ownerIdentity) { mutableStateOf(false) }
+  val expandedDiagram = architectureView.showDiagram || flowViews.any { it.showDiagram }
+  LaunchedEffect(expandedDiagram) { if (expandedDiagram) summaryFallbackAvailable = true }
+  val restoreSummary: suspend () -> Unit = { summaryFocus.requestFocus() }
+  architectureView.summaryRestore = restoreSummary
+  flowViews.forEach { it.summaryRestore = restoreSummary }
   BoxWithConstraints(Modifier.fillMaxSize().background(EditorCanvas)) {
     LazyColumn(
-        Modifier.fillMaxSize().testTag("summary-scroll"),
+        Modifier.fillMaxSize()
+            .focusRequester(summaryFocus)
+            .focusProperties { canFocus = summaryFallbackAvailable }
+            .onFocusChanged { summaryFocused = it.isFocused }
+            .focusTarget()
+            .border(
+                BorderStroke(if (summaryFocused) 2.dp else 0.dp, FocusAccent),
+                MiniOrcaShapes.control)
+            .testTag("summary-scroll")
+            .semantics { focused = summaryFocused },
+        state = summaryScroll,
         contentPadding = workspacePagePadding(vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.section),
     ) {
@@ -620,6 +650,8 @@ internal fun ProjectSummaryPane(
         item { SummaryChangeLifecycle { selectWorkspace(Workspace.Editor) } }
       }
     }
+    if (architecture != null) RestoreDiagramFocus(architectureView)
+    flowViews.forEach { RestoreDiagramFocus(it) }
     if (architecture != null && architectureView.showDiagram)
         MermaidDiagramViewer(
             summaryDiagramInput(architecture), "Architecture", "Architecture", architectureView)
