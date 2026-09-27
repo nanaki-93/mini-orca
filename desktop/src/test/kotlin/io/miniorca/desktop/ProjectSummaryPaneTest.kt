@@ -547,6 +547,59 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun legacyArrowChainCopiesOriginalInsteadOfGeneratedMermaid() {
+    val saved = "API → Service"
+    var renders = 0
+    ComposeVisualFixture(800, 650) {
+          MermaidDiagram(
+              saved,
+              "Flow 1",
+              render = {
+                renders++
+                MermaidImage(ImageBitmap(16, 16), 16f, 16f)
+              })
+        }
+        .use { fixture ->
+          fixture.awaitDescription("Expand Flow 1 diagram", "Preview")
+          fixture.clickDescription("Expand Flow 1 diagram")
+          fixture.awaitDescription("Close Flow 1 diagram")
+          fixture.clickText("Mermaid source")
+          fixture.render()
+          assertTrue(fixture.hasText("Original saved arrow chain"))
+          assertTrue(fixture.hasText(saved))
+          assertTrue(fixture.hasText("Generated Mermaid for rendering (not saved)"))
+          assertTrue(fixture.hasText(requireNotNull(summaryDiagramInput(saved).source)))
+          fixture.clickDescription("Copy saved content for Flow 1")
+          fixture.render()
+          assertEquals(saved, fixture.clipboardText())
+          assertEquals(1, renders)
+        }
+  }
+
+  @Test
+  fun failedAndOverLimitDiagramsKeepCompleteLiteralSource() {
+    val invalid = "classDiagram\n A <|-- B\n<script>inert</script>"
+    val overLimit = "flowchart LR\n" + " A --> B\n".repeat(260)
+    for (saved in listOf(invalid, overLimit)) {
+      ComposeVisualFixture(800, 650) { MermaidDiagram(saved, "Architecture") }
+          .use { fixture ->
+            fixture.awaitDescription("Expand Architecture diagram", "Diagram failed")
+            fixture.render()
+            assertTrue(fixture.hasText(saved))
+            fixture.clickDescription("Expand Architecture diagram")
+            fixture.awaitDescription("Close Architecture diagram")
+            fixture.clickText("Mermaid source")
+            fixture.render()
+            assertTrue(fixture.hasText(saved))
+            assertFalse(fixture.hasEditableText(withinTag = "diagram-source-scroll"))
+            fixture.clickDescription("Copy saved content for Architecture")
+            fixture.render()
+            assertEquals(saved, fixture.clipboardText())
+          }
+    }
+  }
+
+  @Test
   fun blankDiagramDoesNotCreatePreview() {
     ComposeVisualFixture(800, 650) { MermaidDiagram("  ", "Architecture") }
         .use { fixture ->

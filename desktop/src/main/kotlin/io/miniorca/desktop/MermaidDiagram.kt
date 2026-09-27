@@ -13,8 +13,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -27,15 +30,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import java.awt.datatransfer.StringSelection
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -45,6 +52,7 @@ internal class DiagramViewState {
   var showDiagram by mutableStateOf(false)
   var showSource by mutableStateOf(false)
   var zoom by mutableStateOf(1f)
+  var copyFeedback by mutableStateOf<DiagramCopyFeedback?>(null)
   // Keep inspection position with the diagram owner, not the transient dialog composition.
   val horizontalScroll = ScrollState(0)
   val verticalScroll = ScrollState(0)
@@ -136,6 +144,12 @@ internal fun summaryDiagramInput(value: String): SummaryDiagramInput {
     }
   }
   return SummaryDiagramInput(null, value, value)
+}
+
+internal sealed interface DiagramCopyFeedback {
+  data object Copied : DiagramCopyFeedback
+
+  data class Failed(val message: String) : DiagramCopyFeedback
 }
 
 internal sealed interface DiagramState {
@@ -257,11 +271,14 @@ private fun MermaidDiagramSource(
           }
         }
   }
-  if (state is DiagramState.Failed) ModelResultContent(input.original, preview = false)
+  if (state is DiagramState.Failed) {
+    Text("Original saved content", style = IdeTypography.compactBody)
+    LiteralDiagramSource(input.original)
+  }
 }
 
 @Composable
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalComposeUiApi::class)
 internal fun MermaidDiagramViewer(
     input: SummaryDiagramInput,
     label: String,
@@ -271,6 +288,8 @@ internal fun MermaidDiagramViewer(
   var showSource by view::showSource
   var zoom by view::zoom
   val source = input.source
+  val clipboard = LocalClipboard.current
+  val copyScope = rememberCoroutineScope()
   IdeDialog(
       onDismissRequest = { view.showDiagram = false },
       title = {
@@ -342,12 +361,36 @@ internal fun MermaidDiagramViewer(
         if (showSource) {
           Text(
               if (input.generatedFromArrowChain) "Original saved arrow chain"
-              else "Saved diagram content",
+              else "Original saved content",
               style = IdeTypography.compactBody)
-          ModelResultContent(input.original, preview = false)
-          if (input.generatedFromArrowChain) {
-            Text("Generated Mermaid for rendering", style = IdeTypography.compactBody)
-            ModelResultContent("```mermaid\n$source\n```", preview = false)
+          LiteralDiagramSource(input.original)
+          ChromeButton(
+              onClick = {
+                view.copyFeedback = null
+                copyScope.launch {
+                  try {
+                    clipboard.setClipEntry(ClipEntry(StringSelection(input.original)))
+                    view.copyFeedback = DiagramCopyFeedback.Copied
+                  } catch (cancelled: CancellationException) {
+                    throw cancelled
+                  } catch (exception: Exception) {
+                    view.copyFeedback =
+                        DiagramCopyFeedback.Failed(exception.message ?: "Clipboard unavailable")
+                  }
+                }
+              },
+              accessibleName = "Copy saved content for $label") {
+                Text("Copy source")
+              }
+          when (val feedback = view.copyFeedback) {
+            DiagramCopyFeedback.Copied -> Text("Saved content copied", color = SecondaryText)
+            is DiagramCopyFeedback.Failed ->
+                Text("Could not copy saved content: ${feedback.message}", color = Warning)
+            null -> Unit
+          }
+          if (input.generatedFromArrowChain && source != null) {
+            Text("Generated Mermaid for rendering (not saved)", style = IdeTypography.compactBody)
+            LiteralDiagramSource(source)
           }
         }
       },
@@ -357,4 +400,27 @@ internal fun MermaidDiagramViewer(
               Text("Close")
             }
       })
+}
+
+@Composable
+private fun LiteralDiagramSource(value: String) {
+  Box(
+      Modifier.fillMaxWidth()
+          .heightIn(max = 200.dp)
+          .clip(MiniOrcaShapes.control)
+          .background(EditorCanvas)
+          .verticalScroll(rememberScrollState())
+          .testTag("diagram-source-scroll")) {
+        SelectionContainer {
+          Text(
+              value,
+              color = PrimaryText,
+              style = IdeTypography.resultCode,
+              softWrap = false,
+              modifier =
+                  Modifier.horizontalScroll(rememberScrollState())
+                      .testTag("diagram-source-horizontal-scroll")
+                      .padding(8.dp))
+        }
+      }
 }
