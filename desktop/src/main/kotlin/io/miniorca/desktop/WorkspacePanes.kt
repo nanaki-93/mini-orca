@@ -79,9 +79,20 @@ internal fun AnalysisWorkspacePane(
             }
           }
           item {
-            Box(Modifier.onSizeChanged { categoryHeight = it.height }) {
-              AnalysisCategoryPanels(state, actions.openResults)
-            }
+            Column(
+                Modifier.fillMaxWidth().onSizeChanged { categoryHeight = it.height },
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                  Text(
+                      "Saved results · Bugs / Performance / Security",
+                      color = PrimaryText,
+                      style = IdeTypography.resultHeading,
+                      modifier = Modifier.semantics { heading() })
+                  Text(
+                      "Reported counts are run summaries; loaded findings are matching saved details. Zero loaded does not confirm an empty result. Open a category to inspect retained evidence and read errors.",
+                      color = SecondaryText,
+                      style = IdeTypography.workspaceMetadata)
+                  AnalysisCategoryPanels(state, actions.openResults)
+                }
           }
           item {
             AnalysisFileSelector(

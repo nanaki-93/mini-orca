@@ -749,6 +749,37 @@ class AnalysisWorkspaceStateTest {
   }
 
   @Test
+  fun categoryCountKeepsReportedEvidenceSeparateFromMatchingLoadedDetails() {
+    val page = resultPageFixture("bugs")
+    assertEquals("1 loaded · 1 reported", page.countLabel(page.semantic.size))
+    val noReport =
+        page.copy(
+            run =
+                page.run!!.copy(sections = page.run.sections.map { it.copy(findingCount = null) }))
+    assertEquals("1 loaded · — reported (count unavailable)", noReport.countLabel(1))
+    val wrongRun =
+        page.copy(
+            section =
+                page.section.copy(
+                    results =
+                        requireNotNull(page.results).let {
+                          it.copy(identity = it.identity.copy(generation = "other"))
+                        }))
+    assertNull(wrongRun.results)
+    assertTrue(wrongRun.semantic.isEmpty())
+    assertEquals("1 reported", wrongRun.countLabel(0))
+    val readFailure = page.copy(section = page.section.copy(error = "Saved read failed"))
+    assertEquals(1, readFailure.semantic.size)
+    assertEquals("1 loaded · 1 reported", readFailure.countLabel(1))
+    assertEquals(
+        AnalysisResultAvailability.Error,
+        readFailure
+            .copy(section = readFailure.section.copy(results = null))
+            .emptyPresentation(0)
+            .availability)
+  }
+
+  @Test
   fun emptyResultsKeepLifecycleAndPendingDetailsDistinct() {
     fun projected(status: String, reportedCount: Int? = null): AnalysisResultPageState {
       val original = resultPageFixture("bugs")
