@@ -326,12 +326,36 @@ limits and policy (and the same run for continuation), not a default full run.
 If that identity is obsolete, close the dialog and request a new preview; closing
 never confirms an action.
 
-Confirm each displayed remote destination and explicit Security review intent.
-Each confirmation is a checkbox; selecting it alone does not start the run.
-Admission and other dialogs keep their decisions below a scrollable body. Only
-**Start analysis** or **Resume analysis** explicitly admits the preview. One
-admission coordinates the existing specialized producers; it can make multiple
-model requests.
+Under **Your confirmation**, acknowledge each required remote destination
+independently. Checkbox labels include the returned scope, model and provider ID,
+so destinations remain distinguishable even when their scopes or models match.
+Local destinations remain inspectable without a remote-destination checkbox.
+When required, **Include AI Security review** is a separate acknowledgment even
+for an all-local preview. AI Security model findings are advisory and unverified,
+not a verified scan or safety assurance; leaving this unchecked does not remove
+Security stages from the plan. The dialog lists outstanding acknowledgments, and
+an empty included-file scope or any missing acknowledgment blocks Start/Resume.
+
+Starting or resuming may send eligible source and project context for the
+previewed scope to the listed models under the existing context policy. The
+preview describes the plan, not the exact content transmitted. Selecting a
+checkbox alone sends nothing to a model. Only **Start analysis** or **Resume
+analysis** explicitly admits the current preview. That admission is single-use,
+including after a failed response; one admitted run may initiate multiple model
+requests. Analysis does not execute project code or modify source files, and
+analysis consent does not grant function-edit permission or execution trust.
+Admission and other dialogs keep decisions below a scrollable body.
+
+If an admission is rejected with HTTP 409, the old preview and confirmations
+cannot be reused. When its captured scope is still valid, **Review fresh
+preview** explicitly requests a new preview of that same scope and policy; all
+required destinations and Security intent must be confirmed again before Start
+or Resume. If the scope or continuation run has become obsolete, Close and choose
+a current Analysis action instead. A timeout or transport failure is uncertain:
+the run may already have started. The client reads durable run status without
+resubmitting admission or offering a consent-reusing retry; Close and check the
+current Analysis run before choosing a new action. Closing the dialog discards
+transient consent but does not cancel an already admitted run.
 
 Pause/Resume/Cancel retain truthful partial coverage and cumulative attempts.
 Resume requires a fresh preview; startup never silently resumes a model request.
