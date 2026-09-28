@@ -1985,7 +1985,7 @@ class DesktopKeyboardNavigationTest {
         }
         .use { fixture ->
           fixture.render()
-          assertTrue(fixture.requestFocus("Resume"))
+          assertTrue(fixture.requestFocus("Resume → fresh preview"))
           assertTrue(fixture.pressKey(Key.Enter))
           assertEquals(1, resumes)
         }

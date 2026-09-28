@@ -54,6 +54,7 @@ class DesktopContrastTest {
               }
               .use { fixture ->
                 fixture.render("analysis-state-color-$status")
+                fixture.revealText(presentation.status, "analysis-page")
                 fixture.assertTextFits(presentation.status)
                 fixture.assertTextContrast(
                     presentation.status, labelBadgeBackground(analysisStatusTint(status)))

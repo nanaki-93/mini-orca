@@ -9,6 +9,72 @@ import kotlin.test.assertTrue
 class AnalysisWorkspaceStateTest {
 
   @Test
+  fun lifecycleExplanationSeparatesRequestFromAcceptedAndStoppedOutcomes() {
+    val project = resultProjectFixture()
+    val run = analysisRunFixture().copy(status = "running")
+    fun explanation(analysis: ProjectAnalysisRunState) =
+        projectRunPresentation(project, analysis).lifecycleExplanation
+
+    assertEquals(
+        "Requesting pause…",
+        explanation(
+            ProjectAnalysisRunState(
+                run = run,
+                action = "pause",
+                controlRequest =
+                    AnalysisControlRequest("pause", AnalysisControlOutcome.Requesting))))
+    assertEquals(
+        "Requesting cancellation…",
+        explanation(
+            ProjectAnalysisRunState(
+                run = run.copy(status = "pausing"),
+                action = "cancel",
+                controlRequest =
+                    AnalysisControlRequest("cancel", AnalysisControlOutcome.Requesting))))
+    assertEquals(
+        "Pause requested; waiting for the current stage boundary. No new stage will start.",
+        explanation(ProjectAnalysisRunState(run = run.copy(status = "pausing"))))
+    assertTrue(
+        explanation(ProjectAnalysisRunState(run = run.copy(status = "canceling")))!!.contains(
+            "Cancellation accepted"))
+    assertTrue(
+        explanation(ProjectAnalysisRunState(run = run.copy(status = "canceled")))!!.contains(
+            "new analysis requires admission"))
+    assertTrue(
+        explanation(ProjectAnalysisRunState(run = run.copy(status = "paused")))!!.contains(
+            "fresh preview"))
+    assertTrue(
+        explanation(ProjectAnalysisRunState(run = run.copy(status = "interrupted")))!!.contains(
+            "fresh preview"))
+    assertTrue(
+        explanation(ProjectAnalysisRunState(run = run.copy(status = "failed")))!!.contains(
+            "failed"))
+    assertTrue(
+        explanation(ProjectAnalysisRunState(run = run.copy(status = "partial")))!!.contains(
+            "partially"))
+    assertTrue(
+        explanation(ProjectAnalysisRunState(run = run.copy(status = "unavailable")))!!.contains(
+            "unavailable"))
+    assertNull(explanation(ProjectAnalysisRunState(run = run.copy(status = "future_state"))))
+    assertEquals(
+        "Control rejected; checking the durable run status.",
+        explanation(
+            ProjectAnalysisRunState(
+                run = run,
+                controlRequest =
+                    AnalysisControlRequest("pause", AnalysisControlOutcome.Reconciling))))
+    assertEquals(
+        "This run is out of date; no current lifecycle controls are available.",
+        projectRunPresentation(
+                project.copy(projectRevision = "next"), ProjectAnalysisRunState(run = run))
+            .lifecycleExplanation)
+    assertEquals(
+        "Current run status unavailable; the last accepted snapshot is retained.",
+        explanation(
+            ProjectAnalysisRunState(run = run.copy(status = "paused"), statusUnavailable = true)))
+  }
+
+  @Test
   fun retryButtonPreviewsOnlyStaleAndFailedFilesAtSupportedSizes() {
     for ((width, height, scale) in
         listOf(

@@ -23,7 +23,7 @@ internal enum class AnalysisRunCommand(val label: String) {
   Start("Start analysis"),
   RetryStaleFailed("Analyze stale & failed"),
   Pause("Pause"),
-  Resume("Resume"),
+  Resume("Resume → fresh preview"),
   Cancel("Cancel")
 }
 
@@ -94,6 +94,7 @@ internal data class ProjectRunPresentation(
     val failures: List<AnalysisStageFailure>,
     val stages: List<AnalysisStageSummary>,
     val reportedAttempts: Int?,
+    val lifecycleExplanation: String?,
     val commands: List<AnalysisRunCommand>,
     val isActive: Boolean,
 ) {
@@ -235,6 +236,9 @@ internal fun projectRunPresentation(
                   .map { it.first.path },
       stages = stages,
       reportedAttempts = inventory?.reportedAttempts(),
+      lifecycleExplanation =
+          if (outdated) "This run is out of date; no current lifecycle controls are available."
+          else analysisRunLifecycleExplanation(run, analysis),
       failures =
           inventory?.files.orEmpty().flatMap { (file, planned) ->
             file.stages
@@ -258,6 +262,43 @@ internal fun projectRunPresentation(
               emptyList()
           else analysisRunCommands(project, run),
       isActive = active)
+}
+
+internal fun analysisRunLifecycleExplanation(
+    run: AnalysisRun?,
+    analysis: ProjectAnalysisRunState,
+): String? {
+  if (analysis.statusUnavailable)
+      return "Current run status unavailable; the last accepted snapshot is retained."
+  if (analysis.controlRequest?.outcome == AnalysisControlOutcome.Unconfirmed)
+      return "Control outcome unconfirmed; check the durable run status before another action."
+  if (analysis.controlRequest?.outcome == AnalysisControlOutcome.Reconciling)
+      return "Control rejected; checking the durable run status."
+  val requesting =
+      analysis.controlRequest?.takeIf { it.outcome == AnalysisControlOutcome.Requesting }
+  if (requesting != null)
+      return when (requesting.action) {
+        "pause" -> "Requesting pause…"
+        "cancel" -> "Requesting cancellation…"
+        else -> null
+      }
+  return when (run?.status) {
+    "queued",
+    "running" -> "Work is admitted. Pause waits for the current stage boundary."
+    "pausing" -> "Pause requested; waiting for the current stage boundary. No new stage will start."
+    "paused" -> "Dispatch has stopped. Resume requires a fresh preview and confirmation."
+    "interrupted" -> "Work was interrupted. Resume requires a fresh preview and confirmation."
+    "canceling" ->
+        "Cancellation accepted; active work is stopping. Completed evidence remains available."
+    "canceled" ->
+        "Cancellation settled. Completed evidence remains available; a new analysis requires admission."
+    "partial" ->
+        "Analysis completed partially; inspect the retained evidence before starting another run."
+    "failed" -> "Analysis failed; inspect the retained evidence before starting another run."
+    "unavailable" ->
+        "Analysis unavailable; inspect the reported reason before starting another run."
+    else -> null
+  }
 }
 
 private data class CapturedRunProgress(
