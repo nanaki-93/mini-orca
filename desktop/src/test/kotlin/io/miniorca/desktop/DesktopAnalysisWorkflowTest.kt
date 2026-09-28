@@ -885,10 +885,7 @@ class DesktopAnalysisWorkflowTest {
           else -> h.workflow.preview(limits = AnalysisRunLimits(4, 80, 1))
         }
         h.drain()
-        if (change == "replacement") {
-          assertEquals(AnalysisRunLimits(4, 80, 1), h.state.analysisRun.admission?.preview?.limits)
-          assertFalse(h.state.analysisRun.admission!!.isConfirmed())
-        } else assertNull(h.state.analysisRun.admission, change)
+        assertNull(h.state.analysisRun.admission, change)
         assertEquals(change == "replacement", h.state.analysisRun.previewIntent != null, change)
         assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/run") }, change)
         h.workflow.retryPreview()
@@ -995,7 +992,7 @@ class DesktopAnalysisWorkflowTest {
   }
 
   @Test
-  fun lateStatusAfterDismissalOrNewPreviewCannotRestoreRejectedIntent() {
+  fun lateStatusAfterDismissalOrBlockedPreviewCannotRestoreRejectedIntent() {
     for (change in listOf("dismiss", "new preview")) {
       Harness().use { h ->
         h.workflow.refresh()
@@ -1012,8 +1009,10 @@ class DesktopAnalysisWorkflowTest {
         if (change == "dismiss") h.workflow.dismissAdmission()
         else h.workflow.preview(limits = AnalysisRunLimits(3, 60, 1))
         h.drain()
-        assertNull(h.state.analysisRun.previewIntent.takeIf { it?.resumeRun != null }, change)
-        assertEquals(change == "new preview", h.state.analysisRun.admission != null, change)
+        assertEquals(
+            change == "new preview", h.state.analysisRun.previewIntent?.resumeRun != null, change)
+        assertNull(h.state.analysisRun.admission, change)
+        assertEquals(1, h.calls.count { it.second.endsWith("/preview") })
         assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/control") })
       }
     }
@@ -1388,6 +1387,278 @@ class DesktopAnalysisWorkflowTest {
   }
 
   @Test
+  fun controlsRequireCurrentEligibleRunAndDoNotDuplicatePendingRequests() {
+    for (status in
+        listOf(
+            "queued",
+            "running",
+            "pausing",
+            "paused",
+            "interrupted",
+            "canceling",
+            "canceled",
+            "completed",
+            "stale",
+            "unknown")) {
+      Harness().use { h ->
+        h.run = h.run.copy(status = status)
+        h.workflow.refresh()
+        h.drain()
+        h.calls.clear()
+        h.bodies.clear()
+        for (action in listOf("pause", "cancel")) {
+          h.workflow.control(action)
+          h.workflow.control(action)
+          assertEquals(
+              action in
+                  if (status in setOf("queued", "running")) setOf("pause", "cancel")
+                  else if (status in setOf("pausing", "paused", "interrupted")) setOf("cancel")
+                  else emptySet(),
+              h.state.analysisRun.action == action,
+              "$status $action")
+          h.drain()
+          val requests =
+              h.bodies.mapNotNull {
+                runCatching { Json.decodeFromString<AnalysisRunControlRequest>(it) }.getOrNull()
+              }
+          assertEquals(
+              if (action == "pause" && status in setOf("queued", "running") ||
+                  action == "cancel" &&
+                      status in setOf("queued", "running", "pausing", "paused", "interrupted"))
+                  1
+              else 0,
+              requests.size,
+              "$status $action")
+          if (requests.isNotEmpty()) {
+            assertEquals(h.run.identity, requests.single().identity)
+            break
+          }
+        }
+      }
+    }
+    Harness().use { h ->
+      h.workflow.control("cancel") // No saved run.
+      h.run = h.run.copy(status = "running")
+      h.workflow.refresh()
+      h.drain()
+      h.calls.clear()
+      h.dispatch(
+          DesktopEvent.AnalysisRunUpdated(
+              h.state.analysisRun.copy(
+                  run = h.run.copy(identity = h.run.identity.copy(projectId = "other")))))
+      h.workflow.control("pause")
+      h.workflow.control("cancel")
+      h.drain()
+      assertTrue(h.calls.none { it.first == "POST" })
+    }
+  }
+
+  @Test
+  fun queuedControlRechecksStatusAndFullRunIdentityBeforeTransport() {
+    for (change in listOf("status", "run", "revision", "project")) {
+      Harness(pollMillis = 1).use { h ->
+        h.run = h.run.copy(status = "running")
+        h.workflow.refresh()
+        h.drain()
+        h.calls.clear()
+        h.workflow.control("pause")
+        when (change) {
+          "status" ->
+              h.dispatch(
+                  DesktopEvent.AnalysisRunUpdated(
+                      h.state.analysisRun.copy(run = h.run.copy(status = "canceling"))))
+          "run" -> {
+            h.run = h.run.copy(identity = h.run.identity.copy(generation = "other"))
+            h.dispatch(DesktopEvent.AnalysisRunUpdated(h.state.analysisRun.copy(run = h.run)))
+          }
+          "revision" -> h.dispatch(DesktopEvent.IndexRefreshed(ProjectIndex("project", "new")))
+          else ->
+              h.dispatch(
+                  DesktopEvent.ProjectLoaded(
+                      analysisProjectFixture("other"), ProjectIndex("other", "revision")))
+        }
+        h.drain()
+        assertTrue(h.calls.none { it.first == "POST" }, change)
+        if (change == "status" || change == "run") {
+          assertEquals("", h.state.analysisRun.action)
+          assertEquals(
+              if (change == "status") "canceling" else "running", h.state.analysisRun.run?.status)
+          h.run = h.run.copy(status = "canceled")
+          val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+          while (h.state.analysisRun.run?.status != "canceled" && System.nanoTime() < deadline) {
+            h.main.runPending()
+            h.io.runPending()
+            Thread.yield()
+          }
+          assertEquals("canceled", h.state.analysisRun.run?.status)
+          assertEquals(h.run.identity, h.state.analysisRun.run?.identity)
+          assertTrue(h.calls.none { it.first == "POST" })
+        }
+      }
+    }
+  }
+
+  @Test
+  fun queuedControlClearsPendingStateWhenRunDisappearsOrBelongsToAnotherProject() {
+    for (action in listOf("pause", "cancel")) {
+      for (replacement in listOf("absent", "foreign")) {
+        Harness().use { h ->
+          h.run = h.run.copy(status = "running")
+          h.workflow.refresh()
+          h.drain()
+          h.calls.clear()
+          h.workflow.control(action)
+          assertEquals(action, h.state.analysisRun.action)
+          val run =
+              if (replacement == "absent") null
+              else h.run.copy(identity = h.run.identity.copy(projectId = "other"))
+          h.dispatch(DesktopEvent.AnalysisRunUpdated(h.state.analysisRun.copy(run = run)))
+          h.drain()
+          assertEquals(run, h.state.analysisRun.run, "$action $replacement")
+          assertEquals("", h.state.analysisRun.action, "$action $replacement")
+          assertTrue(h.calls.none { it.first == "POST" }, "$action $replacement")
+        }
+      }
+    }
+  }
+
+  @Test
+  fun pendingAdmissionCannotBeReplacedByPreviewOrControlEvenAfterDismissal() {
+    for (resume in listOf(false, true)) {
+      Harness().use { h ->
+        h.run = h.run.copy(status = if (resume) "paused" else "running")
+        h.workflow.refresh()
+        h.drain()
+        h.workflow.preview(resume = resume)
+        h.drain()
+        h.confirm()
+        h.workflow.admit()
+        h.main.runPending()
+        h.io.runPending() // Admission response is waiting for the UI dispatcher.
+        h.workflow.preview()
+        h.workflow.control("cancel")
+        h.workflow.admit()
+        assertEquals(if (resume) "resume" else "start", h.state.analysisRun.action)
+        h.workflow.dismissAdmission()
+        h.workflow.preview()
+        h.workflow.control("cancel")
+        h.drain()
+        assertEquals(
+            1,
+            h.calls.count {
+              it.first == "POST" && it.second.endsWith(if (resume) "/control" else "/run")
+            })
+        assertEquals(1, h.calls.count { it.second.endsWith("/preview") })
+        assertEquals(
+            if (resume) "new-generation" else "generation",
+            h.state.analysisRun.run?.identity?.generation)
+      }
+    }
+  }
+
+  @Test
+  fun lateDispatchedPauseCannotReplaceCancellationOrItsFailure() {
+    for (failure in listOf(false, true)) {
+      Harness().use { h ->
+        h.run = h.run.copy(status = "running")
+        h.workflow.refresh()
+        h.drain()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        h.lateControlGate = entered to release
+        h.lateControlFailure = failure
+        h.workflow.control("pause")
+        h.main.runPending()
+        val transport = Thread { h.io.runPending() }
+        transport.start()
+        try {
+          assertTrue(entered.await(5, TimeUnit.SECONDS))
+          h.workflow.control("cancel")
+          h.workflow.control("pause") // Cancellation has priority.
+          h.workflow.control("cancel")
+          h.drain()
+          assertEquals("canceled", h.state.analysisRun.run?.status)
+          release.countDown()
+          transport.join(5_000)
+          assertFalse(transport.isAlive)
+          h.drain()
+          assertEquals("canceled", h.state.analysisRun.run?.status)
+          assertNull(h.state.analysisRun.error)
+          assertEquals(
+              listOf("pause", "cancel"),
+              h.bodies.mapNotNull {
+                runCatching { Json.decodeFromString<AnalysisRunControlRequest>(it).action }
+                    .getOrNull()
+              })
+        } finally {
+          release.countDown()
+          transport.join(5_000)
+        }
+      }
+    }
+  }
+
+  @Test
+  fun canceledPollingSuccessOrFailureCannotUndoAcceptedControl() {
+    for (failure in listOf(false, true)) {
+      Harness(pollMillis = 1).use { h ->
+        h.run = h.run.copy(status = "running")
+        h.workflow.refresh()
+        h.drain()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        h.lateStatusGate = entered to release
+        h.lateStatusFailure = failure
+        val transport = Thread {
+          while (entered.count > 0) {
+            h.io.runPending()
+            Thread.yield()
+          }
+          h.io.runPending()
+        }
+        transport.start()
+        try {
+          val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+          while (entered.count > 0 && System.nanoTime() < deadline) {
+            h.main.runPending()
+            Thread.yield()
+          }
+          assertEquals(0L, entered.count, "Polling did not reach the gated read")
+          h.workflow.control("cancel")
+          h.drain()
+          assertEquals("canceled", h.state.analysisRun.run?.status)
+          release.countDown()
+          transport.join(5_000)
+          assertFalse(transport.isAlive)
+          h.drain()
+          assertEquals("canceled", h.state.analysisRun.run?.status)
+          assertNull(h.state.analysisRun.error)
+          assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/control") })
+        } finally {
+          release.countDown()
+          transport.join(5_000)
+        }
+      }
+    }
+  }
+
+  @Test
+  fun acceptedControlReportsActualSettlementIncludingNaturalCompletion() {
+    for (status in listOf("pausing", "paused", "completed", "canceling", "canceled")) {
+      Harness().use { h ->
+        h.run = h.run.copy(status = "running")
+        h.workflow.refresh()
+        h.drain()
+        h.controlSettledStatus = status
+        h.workflow.control(if (status in setOf("canceling", "canceled")) "cancel" else "pause")
+        h.drain()
+        assertEquals(status, h.state.analysisRun.run?.status)
+        assertEquals("", h.state.analysisRun.action)
+      }
+    }
+  }
+
+  @Test
   fun queuedOlderControlCannotReachTheDaemonAfterNewerControl() {
     Harness().use { h ->
       h.workflow.refresh()
@@ -1682,8 +1953,12 @@ class DesktopAnalysisWorkflowTest {
     var admissionTransportFailure = false
     var cancelAdmission = false
     var lateAdmissionGate: Pair<CountDownLatch, CountDownLatch>? = null
+    var lateControlGate: Pair<CountDownLatch, CountDownLatch>? = null
+    var controlSettledStatus: String? = null
+    var lateControlFailure = false
     var lateAdmissionNewIdentity = false
     var lateStatusGate: Pair<CountDownLatch, CountDownLatch>? = null
+    var lateStatusFailure = false
     var staleStatus: AnalysisRun? = null
     var staleStatusReads = 0
     var previewId = "preview"
@@ -1744,16 +2019,27 @@ class DesktopAnalysisWorkflowTest {
                             }
                             path.endsWith("/control") -> {
                               val request = Json.decodeFromString<AnalysisRunControlRequest>(body!!)
-                              run =
+                              val response =
                                   when (request.action) {
                                     "resume" ->
                                         run.copy(
                                             identity =
                                                 run.identity.copy(generation = "new-generation"))
-                                    "cancel" -> run.copy(status = "canceled")
-                                    else -> run.copy(status = "paused")
+                                    "cancel" ->
+                                        run.copy(status = controlSettledStatus ?: "canceled")
+                                    else -> run.copy(status = controlSettledStatus ?: "paused")
                                   }
-                              TransportResponse(200, Json.encodeToString(run))
+                              val gate = if (request.action == "pause") lateControlGate else null
+                              if (gate != null) {
+                                lateControlGate = null
+                                gate.first.countDown()
+                                check(gate.second.await(5, TimeUnit.SECONDS)) {
+                                  "Control gate timed out"
+                                }
+                              } else run = response
+                              if (gate != null && lateControlFailure)
+                                  TransportResponse(500, """{"message":"late pause failure"}""")
+                              else TransportResponse(200, Json.encodeToString(response))
                             }
                             path.contains("/analysis/results?") -> {
                               val category = path.substringAfter("category=").substringBefore('&')
@@ -1784,7 +2070,9 @@ class DesktopAnalysisWorkflowTest {
                                 check(release.await(5, TimeUnit.SECONDS)) {
                                   "Status gate timed out"
                                 }
-                                TransportResponse(200, Json.encodeToString(captured))
+                                if (lateStatusFailure)
+                                    TransportResponse(500, """{"message":"late poll failure"}""")
+                                else TransportResponse(200, Json.encodeToString(captured))
                               } else if (method == "GET" && staleStatusReads > 0) {
                                 staleStatusReads--
                                 TransportResponse(200, Json.encodeToString(staleStatus!!))
