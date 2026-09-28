@@ -1575,7 +1575,10 @@ private fun DesktopState.withAnalysisRunUpdate(updated: ProjectAnalysisRunState)
       updated.previewIntent?.let { intent ->
         val run = updated.run
         intent.resumeRun != null &&
-            (run?.identity != intent.resumeRun || run.plan != intent.resumePlan) ||
+            (run?.identity != intent.resumeRun ||
+                run.plan != intent.resumePlan ||
+                run.status != analysisRun.run?.status ||
+                AnalysisRunCommand.Resume !in analysisRunCommands(project, run)) ||
             analysisRun.run != null && run?.identity != analysisRun.run.identity
       } == true
   return copy(
