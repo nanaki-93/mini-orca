@@ -5085,8 +5085,8 @@ class DesktopVisualLayoutTest {
                 val progress = fixture.taggedBounds("analysis-run-progress-track")
                 val controls = fixture.taggedBounds("analysis-run-controls")
                 assertTrue(progress.top > content.top)
-                assertTrue(controls.top <= content.top)
-                assertTrue(controls.left > content.right)
+                assertTrue(controls.top >= content.bottom)
+                assertTrue(controls.right <= fixture.taggedBounds("analysis-run-panel").right)
                 val table = fixture.taggedBounds("analysis-file-table")
                 val analysisPage = fixture.taggedBounds("analysis-page")
                 listOf("File", "Analysis state", "Details").forEach { header ->
@@ -5116,6 +5116,138 @@ class DesktopVisualLayoutTest {
             }
       }
     }
+  }
+
+  @Test
+  fun analysisOverviewStacksControlsAndKeepsFullPathsLocalAcrossPollsAndResizes() {
+    val path = "internal/" + "日本語-very-long-directory/".repeat(10) + "worker.go"
+    val base = requireNotNull(roundedAnalysisStateFixture().run)
+    val run =
+        base.copy(
+            plan =
+                base.plan.copy(
+                    files =
+                        base.plan.files.mapIndexed { index, file ->
+                          if (index == 2) file.copy(path = path) else file
+                        }),
+            files =
+                base.files.mapIndexed { index, file ->
+                  if (index == 2) file.copy(path = path) else file
+                })
+    for ((width, height) in listOf(1600 to 1000, 1024 to 768, 800 to 650, 1280 to 600)) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        var state by
+            mutableStateOf(
+                AnalysisWorkspacePaneState(
+                    resultProjectFixture(), roundedAnalysisStateFixture().copy(run = run)))
+        var dispatches = 0
+        val actions =
+            AnalysisWorkspaceActions(
+                { _, _ -> dispatches++ },
+                { dispatches++ },
+                { dispatches++ },
+                { dispatches++ },
+                { dispatches++ },
+                { dispatches++ },
+                { dispatches++ })
+        ComposeVisualFixture(width, height, scale) { AnalysisWorkspacePane(state, actions) }
+            .use { fixture ->
+              val label = "f15-overview-$width-$height-$scale"
+              fixture.render("$label-collapsed")
+              fixture.assertTextFits("Pause")
+              fixture.assertTextFits("Cancel")
+              fixture.revealText(
+                  "Finished includes partial and failed outcomes; it does not mean successful.",
+                  "analysis-page")
+              fixture.revealText("Show full path", "analysis-page")
+              fixture.clickDescription("Show active files")
+              fixture.render("$label-expanded")
+              fixture.revealText("Current: $path", "analysis-page")
+              assertTrue(fixture.hasText("Current: $path"))
+              val nextPath = "internal/db/store.go"
+              val polled =
+                  run.copy(
+                      windowFilesCompleted = 2,
+                      files =
+                          run.files.map { file ->
+                            when (file.path) {
+                              path ->
+                                  file.copy(
+                                      stages = file.stages.map { it.copy(status = "completed") })
+                              nextPath ->
+                                  file.copy(
+                                      stages = file.stages.map { it.copy(status = "running") })
+                              else -> file
+                            }
+                          })
+              state = state.copy(analysis = state.analysis.copy(run = polled))
+              fixture.render("$label-polled")
+              assertTrue(fixture.hasDescription("Hide active files"))
+              fixture.revealText("Current: $nextPath", "analysis-page")
+              fixture.resize((width - 80).coerceAtLeast(720), height)
+              fixture.render("$label-resized")
+              assertTrue(fixture.hasDescription("Hide active files"))
+              fixture.revealText("Refresh files", "analysis-page")
+              fixture.assertTextFits("Refresh files")
+              assertEquals(0, dispatches)
+              state =
+                  state.copy(
+                      analysis =
+                          state.analysis.copy(
+                              run =
+                                  polled.copy(
+                                      identity = run.identity.copy(generation = "new-generation"))))
+              fixture.render("$label-replaced")
+              fixture.revealText("Show full path", "analysis-page")
+              assertTrue(fixture.hasDescription("Show active files"))
+              assertEquals(0, dispatches)
+            }
+      }
+    }
+  }
+
+  @Test
+  fun analysisOverviewDistinguishesUnavailableProgressAndKeepsApplicableActions() {
+    val base = requireNotNull(roundedAnalysisStateFixture().run)
+    val mismatched =
+        base.copy(plan = base.plan.copy(identity = base.plan.identity.copy(queueId = "other")))
+    var state by
+        mutableStateOf(
+            AnalysisWorkspacePaneState(
+                resultProjectFixture(), ProjectAnalysisRunState(run = mismatched)))
+    var starts = 0
+    var resumes = 0
+    var otherActions = 0
+    val actions =
+        AnalysisWorkspaceActions(
+            { _, _ -> starts++ },
+            { otherActions++ },
+            { resumes++ },
+            { otherActions++ },
+            { otherActions++ })
+    ComposeVisualFixture(800, 650, 1.5f) { AnalysisWorkspacePane(state, actions) }
+        .use { fixture ->
+          fixture.render("f15-unavailable-progress")
+          fixture.assertTextFits("File progress unavailable")
+          assertFalse(fixture.hasText("0 of 0 files finished"))
+          assertFalse(fixture.hasText("Current: internal/api/user.go"))
+          fixture.assertTextFits("Pause")
+          fixture.assertTextFits("Cancel")
+          assertEquals(0, starts + resumes + otherActions)
+          state = state.copy(analysis = state.analysis.copy(run = base.copy(status = "paused")))
+          fixture.render("f15-paused-progress")
+          fixture.revealText("Resume", "analysis-page")
+          fixture.assertTextFits("Resume")
+          assertEquals(0, starts + resumes + otherActions)
+          state = state.copy(analysis = state.analysis.copy(run = null))
+          fixture.render("f15-not-started")
+          fixture.revealText("Start analysis", "analysis-page")
+          fixture.assertTextFits("Start analysis")
+          assertFalse(fixture.hasText("0 of 0 files finished"))
+          assertEquals(0, starts + resumes + otherActions)
+          fixture.clickText("Start analysis")
+          assertEquals(1, starts)
+        }
   }
 
   @Test
@@ -8367,8 +8499,10 @@ internal class ComposeVisualFixture(
     assertTrue(title.bottom <= finished.top, "Run title must precede the finished-file count")
     assertTrue(finished.bottom <= progress.top, "Progress must follow the title and file count")
     assertTrue(progress.bottom <= current.top, "Current file must follow progress")
-    assertTrue(controls.left >= content.right, "Run controls must remain beside run content")
-    assertTrue(controls.top <= content.top, "Run controls must align with the panel top")
+    assertTrue(controls.top >= content.bottom, "Run controls must follow run content")
+    assertTrue(
+        controls.right <= taggedBounds("analysis-run-panel").right,
+        "Run controls must fit inside the panel")
   }
 
   fun assertAnalysisCategoryGeometry() {

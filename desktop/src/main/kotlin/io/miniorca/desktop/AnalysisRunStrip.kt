@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,6 +26,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
@@ -55,7 +58,7 @@ internal fun AnalysisRunStrip(
                       AnalysisRunCommand.Cancel)
             }
       }
-  var pathsExpanded by remember(run?.identity, presentation.currentFiles) { mutableStateOf(false) }
+  var pathsExpanded by remember(run?.identity) { mutableStateOf(false) }
 
   MiniOrcaPanel(
       modifier = modifier.testTag("analysis-run-strip"),
@@ -99,19 +102,19 @@ private fun AnalysisRunPanel(
     pathsExpanded: Boolean,
     onTogglePaths: () -> Unit,
 ) {
-  Row(
-      Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.spacedBy(12.dp),
-      verticalAlignment = Alignment.Top) {
-        AnalysisLifecycleIndicator(run, presentation)
-        AnalysisRunContent(
-            run,
-            presentation,
-            pathsExpanded,
-            onTogglePaths,
-            Modifier.weight(1f).testTag("analysis-run-content"))
-        AnalysisRunControls(state, commands, actions, Modifier.testTag("analysis-run-controls"))
-      }
+  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      AnalysisLifecycleIndicator(run, presentation)
+      AnalysisRunContent(
+          run,
+          presentation,
+          pathsExpanded,
+          onTogglePaths,
+          Modifier.weight(1f).testTag("analysis-run-content"))
+    }
+    AnalysisRunControls(state, commands, actions, Modifier.testTag("analysis-run-controls"))
+    if (pathsExpanded) AnalysisExpandedPaths(presentation.currentFiles)
+  }
 }
 
 @Composable
@@ -146,8 +149,12 @@ private fun AnalysisRunContent(
       AnalysisRunProgressTrack(
           presentation, analysisStatusTint(run.status), Modifier.fillMaxWidth(), showPercent = true)
     }
-    AnalysisCurrentFiles(
-        presentation.currentFiles, pathsExpanded, onTogglePaths, showExpandedPaths = true)
+    if (run != null && presentation.progressAvailability == RunProgressAvailability.Available)
+        Text(
+            "Finished includes partial and failed outcomes; it does not mean successful.",
+            color = SecondaryText,
+            style = IdeTypography.workspaceMetadata)
+    AnalysisCurrentFiles(presentation.currentFiles, pathsExpanded, onTogglePaths)
     analysisRunSupplementalMetadata(run, presentation)?.let { metadata ->
       Text(metadata, color = SecondaryText, style = IdeTypography.workspaceMetadata)
     }
@@ -198,10 +205,7 @@ private fun SummaryRunPanel(
           }
           AnalysisRunControls(state, commands, actions)
         }
-    if (pathsExpanded)
-        currentPaths.drop(1).forEach { path ->
-          Text("Current: $path", color = SecondaryText, style = IdeTypography.workspaceMetadata)
-        }
+    if (pathsExpanded) AnalysisExpandedPaths(currentPaths)
   }
 }
 
@@ -247,27 +251,39 @@ private fun AnalysisCurrentFiles(
     currentPaths: List<String>,
     pathsExpanded: Boolean,
     onTogglePaths: () -> Unit,
-    showExpandedPaths: Boolean = false,
 ) {
   if (currentPaths.isNotEmpty()) {
     Text(
         "Current: ${currentPaths.first()}",
         color = SecondaryText,
         style = IdeTypography.workspaceMetadata,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
         modifier = Modifier.widthIn(max = 520.dp))
-    if (currentPaths.size > 1)
-        ChromeButton(
-            onClick = onTogglePaths,
-            accessibleName = if (pathsExpanded) "Hide active files" else "Show active files") {
-              Text(
-                  if (pathsExpanded) "Hide active files"
-                  else "+${currentPaths.size - 1} active files",
-                  style = IdeTypography.workspaceMetadata)
-            }
-    if (showExpandedPaths && pathsExpanded)
-        currentPaths.drop(1).forEach { path ->
-          Text("Current: $path", color = SecondaryText, style = IdeTypography.workspaceMetadata)
+    ChromeButton(
+        onClick = onTogglePaths,
+        accessibleName = if (pathsExpanded) "Hide active files" else "Show active files",
+        modifier =
+            Modifier.semantics {
+              stateDescription = if (pathsExpanded) "Expanded" else "Collapsed"
+            }) {
+          Text(
+              if (pathsExpanded) "Hide active files"
+              else if (currentPaths.size == 1) "Show full path"
+              else "+${currentPaths.size - 1} active files · Show full paths",
+              style = IdeTypography.workspaceMetadata)
         }
+  }
+}
+
+@Composable
+private fun AnalysisExpandedPaths(currentPaths: List<String>) {
+  SelectionContainer {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+      currentPaths.forEach { path ->
+        Text("Current: $path", color = SecondaryText, style = IdeTypography.workspaceMetadata)
+      }
+    }
   }
 }
 
