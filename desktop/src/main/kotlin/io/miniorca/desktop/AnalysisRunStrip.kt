@@ -163,16 +163,14 @@ private fun analysisRunSupplementalMetadata(
   if (run.isActive()) {
     if (run.windowFilesCompleted > 0) {
       facts +=
-          "${run.windowFilesCompleted} ${if (run.windowFilesCompleted == 1) "file" else "files"} processed"
+          "${run.windowFilesCompleted} ${if (run.windowFilesCompleted == 1) "file" else "files"} processed in current window"
     }
-    if (run.windowElapsedSeconds > 0) facts += "${run.windowElapsedSeconds}s elapsed"
-  } else {
-    if (presentation.progressAvailability == RunProgressAvailability.Available &&
-        presentation.totalSteps > 0)
-        facts += "${presentation.finishedSteps} of ${presentation.totalSteps} stages"
-    run.updatedAt.takeIf { it.isNotBlank() }?.let(facts::add)
+  } else if (presentation.progressAvailability == RunProgressAvailability.Available &&
+      presentation.totalSteps > 0) {
+    facts += "${presentation.finishedSteps} of ${presentation.totalSteps} stages"
   }
-  return facts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+  facts += analysisRunTimeMetadata(run)
+  return facts.joinToString(" · ")
 }
 
 @Composable
