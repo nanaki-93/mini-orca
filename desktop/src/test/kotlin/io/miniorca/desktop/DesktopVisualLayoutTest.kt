@@ -1256,8 +1256,8 @@ class DesktopVisualLayoutTest {
             if (width == 800) {
               for (description in
                   listOf(
-                      "Confirm bug destination",
-                      "Confirm analyze destination",
+                      "Confirm bug destination · bug-model (provider bug-provider)",
+                      "Confirm analyze destination · review-model (provider analyze-provider)",
                       "Include AI Security review")) {
                 assertTrue(fixture.requestDescriptionFocus(description), description)
                 fixture.render()
