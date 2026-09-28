@@ -1343,6 +1343,44 @@ class DesktopAnalysisAdmissionTest {
   }
 
   @Test
+  fun continuationRetryIsNotOfferedAfterAcceptedStatusChanges() {
+    val run = analysisRunFixture()
+    val intent =
+        AnalysisPreviewIntent(
+            run.identity.projectId,
+            run.identity.projectRevision,
+            run.plan.limits,
+            run.plan.refresh,
+            run.plan.retryStaleFailed,
+            run.identity,
+            run.plan)
+    for (status in listOf("running", "canceling", "canceled", "completed")) {
+      val state =
+          ProjectAnalysisRunState(
+              run = run.copy(status = status),
+              previewIntent = intent,
+              admissionRecovery = AdmissionRecovery.Rejected,
+              error = "Preview rejected")
+      var retries = 0
+      ComposeVisualFixture(420, 360) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+              IdeDialogSurface(
+                  320.dp,
+                  title = { DesktopAnalysisAdmissionTitle(state) },
+                  content = { DesktopAnalysisAdmissionContent(state, { _, _ -> }, {}) },
+                  actions = { DesktopAnalysisAdmissionActions(state, {}, {}, { retries++ }) })
+            }
+          }
+          .use { fixture ->
+            fixture.render()
+            assertFalse(fixture.tryClick("Review fresh preview"), status)
+            assertFalse(fixture.tryClick("Retry preview"), status)
+            assertEquals(0, retries, status)
+          }
+    }
+  }
+
+  @Test
   fun obsoleteOrMissingIntentOffersCloseInsteadOfDefaultingToFullPreview() {
     val run = analysisRunFixture()
     val intent =

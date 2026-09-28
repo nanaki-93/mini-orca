@@ -41,7 +41,8 @@ internal class DesktopAnalysisWorkflow(
             event.state.run?.identity != current.run?.identity ||
             current.previewIntent?.resumeRun != null &&
                 (event.state.run?.identity != current.previewIntent?.resumeRun ||
-                    event.state.run?.plan != current.previewIntent?.resumePlan))) {
+                    event.state.run?.plan != current.previewIntent?.resumePlan ||
+                    event.state.run?.status != current.run?.status))) {
       generation++
       actionJob?.cancel()
       pendingAdmissionToken = null
@@ -158,7 +159,7 @@ internal class DesktopAnalysisWorkflow(
     val project = project() ?: return
     if (current.statusUnavailable || current.controlRequest != null) return
     val run = current.run
-    val resumeRun = if (resume) run ?: return else null
+    val resumeRun = if (resume) run?.takeIf { canResume(it) } ?: return else null
     val capturedLimits = resumeRun?.plan?.limits ?: limits
     val capturedRefresh = resumeRun?.plan?.refresh ?: refresh
     val capturedRetry = resumeRun?.plan?.retryStaleFailed ?: retryStaleFailed
@@ -171,12 +172,14 @@ internal class DesktopAnalysisWorkflow(
             capturedRetry,
             resumeRun?.identity,
             resumeRun?.plan)
+    if (resume && current.action == "preview" && current.previewIntent == intent) return
     requestPreview(intent)
   }
 
   fun retryPreview() {
     val intent = current.previewIntent ?: return
-    if (current.action.isNotEmpty() ||
+    if (pendingAdmissionToken != null ||
+        current.action.isNotEmpty() ||
         current.admission != null ||
         current.error == null ||
         current.statusUnavailable ||
@@ -199,8 +202,13 @@ internal class DesktopAnalysisWorkflow(
     if (project.id != intent.projectId || project.revision != intent.projectRevision) return false
     if (intent.resumeRun == null) return true
     val run = current.run ?: return false
-    return run.identity == intent.resumeRun && run.plan == intent.resumePlan
+    return canResume(run) && run.identity == intent.resumeRun && run.plan == intent.resumePlan
   }
+
+  private fun canResume(run: AnalysisRun): Boolean =
+      !current.statusUnavailable &&
+          current.controlRequest == null &&
+          AnalysisRunCommand.Resume in analysisRunCommands(state().project, run)
 
   private fun requestPreview(intent: AnalysisPreviewIntent) {
     val project = WorkflowProjectIdentity(intent.projectId, intent.projectRevision)
@@ -238,7 +246,11 @@ internal class DesktopAnalysisWorkflow(
 
   fun admit() {
     val project = project() ?: return
-    if (current.statusUnavailable || current.controlRequest != null) return
+    if (pendingAdmissionToken != null ||
+        current.action.isNotEmpty() ||
+        current.statusUnavailable ||
+        current.controlRequest != null)
+        return
     val admission = current.admission ?: return
     if (admission.preview.files.isEmpty()) {
       update(
@@ -274,12 +286,28 @@ internal class DesktopAnalysisWorkflow(
     }
     val confirmations =
         AnalysisRunConfirmations(admission.providerIds.toList(), admission.securityReview)
+    val resumeStatus = if (admission.resumeRun != null) current.run?.status else null
     // Consume before dispatch, including queued cancellation and uncertain/failed HTTP responses.
     val token = begin(if (admission.resumeRun == null) "start" else "resume")
     pendingAdmissionToken = token
     actionJob =
         scope.launch {
           try {
+            if (admission.resumeRun != null &&
+                (current.run?.identity != admission.resumeRun ||
+                    current.run?.plan != intent.resumePlan ||
+                    current.run?.status != resumeStatus ||
+                    !canResume(current.run!!))) {
+              if (isCurrent(project, token)) {
+                update(
+                    current.copy(
+                        action = "",
+                        error = "Analysis scope changed. Request a fresh preview.",
+                        errorKind = AnalysisRunErrorKind.Action))
+                observe(project, token, current.run)
+              }
+              return@launch
+            }
             val run = io {
               if (admission.resumeRun == null)
                   api.startAnalysis(
@@ -298,7 +326,10 @@ internal class DesktopAnalysisWorkflow(
             if (!isCurrent(project, token)) return@launch
             require(
                 run.identity.queue() == preview.identity &&
-                    (admission.resumeRun == null || run.identity.id == admission.resumeRun.id)) {
+                    (admission.resumeRun == null ||
+                        run.identity.id == admission.resumeRun.id &&
+                            run.identity.generation != admission.resumeRun.generation &&
+                            run.plan == intent.resumePlan)) {
                   "The returned analysis does not match its admission preview."
                 }
             update(current.copy(action = ""))
@@ -404,7 +435,10 @@ internal class DesktopAnalysisWorkflow(
   ) {
     fun matches(run: AnalysisRun): Boolean =
         run.identity.queue() == queue &&
-            (resumeRun == null || run.identity.id == resumeRun.id && run.plan == resumePlan)
+            (resumeRun == null ||
+                run.identity.id == resumeRun.id &&
+                    run.identity.generation != resumeRun.generation &&
+                    run.plan == resumePlan)
   }
 
   private suspend fun recover(
@@ -447,6 +481,21 @@ internal class DesktopAnalysisWorkflow(
           return
       require(validRun(project, run)) {
         "The returned analysis belongs to another project revision."
+      }
+      if (uncertainAdmission != null &&
+          run?.identity != priorRun?.identity &&
+          (run == null || !uncertainAdmission.matches(run))) {
+        update(
+            current.copy(
+                action = "",
+                statusUnavailable = true,
+                admission = null,
+                previewIntent = null,
+                error =
+                    listOfNotNull(current.error, "Analysis was replaced. Refresh its status.")
+                        .joinToString(" · "),
+                errorKind = AnalysisRunErrorKind.Action))
+        return
       }
       update(
           current.copy(
@@ -560,7 +609,11 @@ internal class DesktopAnalysisWorkflow(
     val statusChanged = current.run?.status != run?.status
     val resumeObsolete =
         current.previewIntent?.let {
-          it.resumeRun != null && (run?.identity != it.resumeRun || run.plan != it.resumePlan)
+          it.resumeRun != null &&
+              (run?.identity != it.resumeRun ||
+                  run.plan != it.resumePlan ||
+                  run.status != current.run?.status ||
+                  !canResume(run))
         } == true
     if (current.run?.identity != run?.identity) {
       val prior = current.run

@@ -76,7 +76,9 @@ private fun ProjectAnalysisRunState.canRetryPreview(): Boolean {
       admission == null &&
       admissionRecovery != AdmissionRecovery.Uncertain &&
       (intent.resumeRun == null ||
-          run?.identity == intent.resumeRun && run.plan == intent.resumePlan)
+          run?.identity == intent.resumeRun &&
+              run.plan == intent.resumePlan &&
+              run.status in setOf("paused", "interrupted"))
 }
 
 @Composable
