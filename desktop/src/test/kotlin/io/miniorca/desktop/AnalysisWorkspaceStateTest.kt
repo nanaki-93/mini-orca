@@ -219,6 +219,8 @@ class AnalysisWorkspaceStateTest {
     val stale =
         projectRunPresentation(project, ProjectAnalysisRunState(run = run.copy(status = "stale")))
     assertEquals("Stale", stale.status)
+    assertEquals(
+        listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed), stale.commands)
     assertTrue(stale.currentFiles.isEmpty())
     assertFalse(stale.isActive)
     assertEquals("running", stale.stages.single().files.single().status)
@@ -303,12 +305,11 @@ class AnalysisWorkspaceStateTest {
             "canceling" to emptyList(),
             "paused" to listOf(AnalysisRunCommand.Resume, AnalysisRunCommand.Cancel),
             "interrupted" to listOf(AnalysisRunCommand.Resume, AnalysisRunCommand.Cancel),
-            "stale" to
-                listOf(
-                    AnalysisRunCommand.Start,
-                    AnalysisRunCommand.RetryStaleFailed,
-                    AnalysisRunCommand.Cancel))
+            "stale" to listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed))
+    val project = resultProjectFixture()
+    val run = analysisRunFixture()
     expected.forEach { (status, commands) ->
+      assertEquals(commands, analysisRunCommands(project, run.copy(status = status)))
       assertEquals(
           commands,
           projectRunPresentation(
@@ -323,6 +324,36 @@ class AnalysisWorkspaceStateTest {
                   resultProjectFixture(),
                   ProjectAnalysisRunState(run = analysisRunFixture().copy(status = it)))
               .commands)
+    }
+    listOf("canceling", "cancelled", "", "future_status").forEach { status ->
+      val reported = run.copy(status = status)
+      assertTrue(analysisRunCommands(project, reported).isEmpty(), "status $status")
+      assertTrue(
+          projectRunPresentation(project, ProjectAnalysisRunState(run = reported))
+              .commands
+              .isEmpty(),
+          "status $status")
+    }
+    assertEquals(
+        listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed),
+        analysisRunCommands(project, null))
+    assertEquals(
+        listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed),
+        analysisRunCommands(null, null))
+    assertTrue(analysisRunCommands(null, run.copy(status = "paused")).isEmpty())
+    for (foreign in
+        listOf(
+            run.copy(identity = run.identity.copy(projectId = "foreign")),
+            run.copy(identity = run.identity.copy(projectRevision = "prior")))) {
+      for (status in listOf("running", "paused", "stale", "canceled", "completed")) {
+        val outdated = foreign.copy(status = status)
+        assertTrue(analysisRunCommands(project, outdated).isEmpty(), "outdated $status")
+        assertTrue(
+            projectRunPresentation(project, ProjectAnalysisRunState(run = outdated))
+                .commands
+                .isEmpty(),
+            "outdated $status")
+      }
     }
   }
 
