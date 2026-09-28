@@ -104,9 +104,16 @@ class DesktopAnalysisAdmissionTest {
             assertTrue(
                 fixture.descriptionBounds(label).height <= body.height,
                 "$label cannot fit in scroll body: ${fixture.descriptionBounds(label)} vs $body")
-            fixture.revealText(label, "ide-dialog-body")
+            for (attempt in 0 until 80) {
+              val bounds = fixture.descriptionBounds(label)
+              if (bounds.height > 0 && bounds.top >= body.top && bounds.bottom <= body.bottom) break
+              fixture.scrollBy(80f, "ide-dialog-body")
+              fixture.render()
+            }
             val bounds = fixture.descriptionBounds(label)
-            assertTrue(bounds.top >= body.top && bounds.bottom <= body.bottom, "$label: $bounds")
+            assertTrue(
+                bounds.height > 0 && bounds.top >= body.top && bounds.bottom <= body.bottom,
+                "$label: $bounds")
             assertTrue(fixture.requestDescriptionFocus(label), label)
             fixture.render()
             assertTrue(fixture.isDescriptionFocused(label), label)
@@ -940,10 +947,10 @@ class DesktopAnalysisAdmissionTest {
     var providerChanges = 0
     var securityChanges = 0
     var starts = 0
-    ComposeVisualFixture(440, 560, 1.5f) {
+    ComposeVisualFixture(440, 700, 1.5f) {
           Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             IdeDialogSurface(
-                440.dp,
+                600.dp,
                 title = { DesktopAnalysisAdmissionTitle(state) },
                 content = {
                   DesktopAnalysisAdmissionContent(
@@ -958,7 +965,8 @@ class DesktopAnalysisAdmissionTest {
           assertTrue(fixture.hasDescription("Expand $label"))
           assertEquals("Collapsed", fixture.descriptionStateDescription("Expand $label"))
           assertFalse(fixture.hasText("Ineligible stage on included file"))
-          fixture.revealText(path, "ide-dialog-body")
+          fixture.revealTextFullyWithin(path, "ide-dialog-body")
+          fixture.assertTextWrapsWithoutClipping(path)
           assertTrue(fixture.copyTextByDragging(path).isNotBlank())
           assertTrue(fixture.requestDescriptionFocus("Expand $label"))
           assertTrue(fixture.pressKey(Key.Enter))
