@@ -20,8 +20,7 @@ internal fun DesktopAnalysisAdmissionOverlay(
     state: ProjectAnalysisRunState,
     presenter: DesktopWorkflowPresenter
 ) {
-  if (state.admission != null || state.action == "preview" || state.error != null)
-      DesktopAnalysisAdmissionDialog(state, presenter)
+  if (state.showsAdmissionOverlay()) DesktopAnalysisAdmissionDialog(state, presenter)
 }
 
 @Composable

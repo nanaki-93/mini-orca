@@ -149,7 +149,9 @@ enum class AdmissionRecovery {
 }
 
 enum class AnalysisRunErrorKind {
-  Action,
+  Preview,
+  Admission,
+  Control,
   StatusRead,
 }
 
@@ -176,6 +178,12 @@ data class ProjectAnalysisRunState(
     val sections: Map<AnalysisResultKey, AnalysisSectionState> = emptyMap(),
     val fileSelection: AnalysisSelectionState = AnalysisSelectionState(),
 )
+
+internal fun ProjectAnalysisRunState.showsAdmissionOverlay(): Boolean =
+    admission != null ||
+        action == "preview" ||
+        error != null &&
+            errorKind in setOf(AnalysisRunErrorKind.Preview, AnalysisRunErrorKind.Admission)
 
 enum class SecuritySectionOperationStatus {
   Idle,

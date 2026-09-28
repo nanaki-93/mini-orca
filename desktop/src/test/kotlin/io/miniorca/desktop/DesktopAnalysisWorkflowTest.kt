@@ -93,6 +93,8 @@ class DesktopAnalysisWorkflowTest {
       h.drain()
       assertNull(h.state.analysisRun.admission)
       assertTrue(h.state.analysisRun.error!!.contains("unavailable"))
+      assertEquals(AnalysisRunErrorKind.Preview, h.state.analysisRun.errorKind)
+      assertTrue(h.state.analysisRun.showsAdmissionOverlay())
       assertEquals(project, h.state.project)
       assertEquals(sections, h.state.analysisRun.sections)
       assertEquals(
@@ -483,6 +485,8 @@ class DesktopAnalysisWorkflowTest {
         assertNull(h.state.analysisRun.admission, mode)
         assertEquals(original, h.state.analysisRun.previewIntent?.request(), mode)
         assertEquals(AdmissionRecovery.Rejected, h.state.analysisRun.admissionRecovery, mode)
+        assertEquals(AnalysisRunErrorKind.Admission, h.state.analysisRun.errorKind, mode)
+        assertTrue(h.state.analysisRun.showsAdmissionOverlay(), mode)
         assertTrue(h.state.analysisRun.error!!.contains("rejected"), mode)
         assertEquals(h.run, h.state.analysisRun.run, mode)
         val endpoint = if (mode == "resume") "/control" else "/run"
@@ -623,6 +627,8 @@ class DesktopAnalysisWorkflowTest {
       assertNull(h.state.analysisRun.admission)
       assertNull(h.state.analysisRun.previewIntent)
       assertEquals(AdmissionRecovery.Uncertain, h.state.analysisRun.admissionRecovery)
+      assertEquals(AnalysisRunErrorKind.Admission, h.state.analysisRun.errorKind)
+      assertTrue(h.state.analysisRun.showsAdmissionOverlay())
       assertEquals(h.run, h.state.analysisRun.run)
       assertTrue(h.state.analysisRun.error!!.contains("unavailable"))
       h.workflow.retryPreview()
@@ -630,6 +636,94 @@ class DesktopAnalysisWorkflowTest {
       h.drain()
       assertEquals(1, h.calls.count { it == "POST" to "/api/projects/current/analysis/run" })
       assertTrue(h.calls.any { it.first == "GET" && it.second.contains("/analysis/run?") })
+    }
+  }
+
+  @Test
+  fun dismissingAdmissionErrorsDoesNotGrantConsentOrRetry() {
+    for (failure in listOf("preview", "rejected", "uncertain")) Harness().use { h ->
+      h.workflow.preview()
+      if (failure == "preview") h.failure = "/analysis/preview"
+      h.drain()
+      if (failure != "preview") {
+        h.confirm()
+        if (failure == "rejected") h.admissionConflict = true else h.failure = "/analysis/run"
+        h.workflow.admit()
+        h.drain()
+      }
+      assertTrue(h.state.analysisRun.showsAdmissionOverlay(), failure)
+      val posts = h.calls.count { it.first == "POST" }
+      h.workflow.dismissAdmission()
+      h.drain()
+      assertFalse(h.state.analysisRun.showsAdmissionOverlay(), failure)
+      assertNull(h.state.analysisRun.admission, failure)
+      assertNull(h.state.analysisRun.previewIntent, failure)
+      assertNull(h.state.analysisRun.admissionRecovery, failure)
+      h.workflow.admit()
+      h.workflow.retryPreview()
+      h.drain()
+      assertEquals(posts, h.calls.count { it.first == "POST" }, failure)
+      assertTrue(h.calls.none { it.first == "POST" && it.second.endsWith("/control") }, failure)
+    }
+  }
+
+  @Test
+  fun resumeStatusChangeAfterActivationProducesDismissibleAdmissionErrorWithoutDispatch() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      h.workflow.preview(resume = true)
+      h.drain()
+      h.confirm()
+      val evidence = h.state.analysisRun.sections
+      val previewPosts = h.calls.count { it.first == "POST" }
+
+      h.workflow.admit() // Consumes preview and queues dispatch on the main dispatcher.
+      assertNull(h.state.analysisRun.previewIntent)
+      assertNull(h.state.analysisRun.admission)
+      h.run = h.run.copy(status = "canceled")
+      h.dispatch(DesktopEvent.AnalysisRunUpdated(h.state.analysisRun.copy(run = h.run)))
+      h.drain()
+
+      assertEquals("canceled", h.state.analysisRun.run?.status)
+      assertEquals(evidence.keys, h.state.analysisRun.sections.keys)
+      assertTrue(h.state.analysisRun.sections.values.all { it.results?.identity == h.run.identity })
+      assertNull(h.state.analysisRun.admissionRecovery)
+      assertEquals(AnalysisRunErrorKind.Admission, h.state.analysisRun.errorKind)
+      assertTrue(h.state.analysisRun.error!!.contains("scope changed"))
+      assertTrue(h.state.analysisRun.showsAdmissionOverlay())
+      assertEquals(previewPosts, h.calls.count { it.first == "POST" })
+
+      h.workflow.dismissAdmission()
+      h.drain()
+      assertFalse(h.state.analysisRun.showsAdmissionOverlay())
+      assertNull(h.state.analysisRun.error)
+      assertNull(h.state.analysisRun.errorKind)
+      assertNull(h.state.analysisRun.previewIntent)
+      h.workflow.admit()
+      h.workflow.retryPreview()
+      h.drain()
+      assertEquals(previewPosts, h.calls.count { it.first == "POST" })
+      assertEquals("canceled", h.state.analysisRun.run?.status)
+    }
+  }
+
+  @Test
+  fun admissionRecoverySurvivesFailedStatusReconciliationWithoutBecomingARunDialog() {
+    Harness().use { h ->
+      h.workflow.preview()
+      h.drain()
+      h.confirm()
+      h.admissionConflict = true
+      h.failStatus = true
+      h.workflow.admit()
+      h.drain()
+      assertNull(h.state.analysisRun.admission)
+      assertEquals(AdmissionRecovery.Rejected, h.state.analysisRun.admissionRecovery)
+      assertEquals(AnalysisRunErrorKind.Admission, h.state.analysisRun.errorKind)
+      assertTrue(h.state.analysisRun.showsAdmissionOverlay())
+      assertTrue(h.state.analysisRun.error!!.contains("status could not be read"))
+      assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/run") })
     }
   }
 
@@ -1732,9 +1826,33 @@ class DesktopAnalysisWorkflowTest {
         assertTrue(
             h.state.analysisRun.error!!.contains(
                 if (rejected) "pause rejected" else "pause outcome unconfirmed"))
+        assertEquals(AnalysisRunErrorKind.Control, h.state.analysisRun.errorKind)
+        assertFalse(h.state.analysisRun.showsAdmissionOverlay())
+        h.workflow.dismissAdmission() // Dismissing a run error is not an admission action.
+        h.drain()
+        assertNotNull(h.state.analysisRun.error)
         assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/control") })
         assertTrue(h.calls.any { it.first == "GET" && it.second.contains("/analysis/run?") })
       }
+    }
+  }
+
+  @Test
+  fun cancellationTransportFailureStaysOnRunSurfaceWithoutAdmissionRetry() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      h.failure = "/control"
+      h.workflow.control("cancel")
+      h.drain()
+      assertEquals(AnalysisRunErrorKind.Control, h.state.analysisRun.errorKind)
+      assertTrue(h.state.analysisRun.error!!.contains("cancel outcome unconfirmed"))
+      assertFalse(h.state.analysisRun.showsAdmissionOverlay())
+      assertNull(h.state.analysisRun.admission)
+      h.workflow.dismissAdmission()
+      h.drain()
+      assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/control") })
+      assertTrue(h.calls.none { it.second.endsWith("/preview") })
     }
   }
 
@@ -1763,6 +1881,7 @@ class DesktopAnalysisWorkflowTest {
             h.state.analysisRun.controlRequest)
         assertTrue(h.state.analysisRun.error!!.contains("status could not be read"))
         assertEquals(AnalysisRunErrorKind.StatusRead, h.state.analysisRun.errorKind)
+        assertFalse(h.state.analysisRun.showsAdmissionOverlay())
         h.workflow.preview(resume = true)
         h.workflow.preview()
         h.workflow.control("cancel")
@@ -1882,6 +2001,9 @@ class DesktopAnalysisWorkflowTest {
       assertEquals(accepted, h.state.analysisRun.run)
       assertEquals("unavailable", h.state.analysisRun.error)
       assertEquals(AnalysisRunErrorKind.StatusRead, h.state.analysisRun.errorKind)
+      assertFalse(h.state.analysisRun.showsAdmissionOverlay())
+      h.workflow.dismissAdmission()
+      assertEquals("unavailable", h.state.analysisRun.error)
       val header = toolbarAnalysisStatus(h.state)!!
       assertEquals("Analysis · Status read failed · Last accepted: Completed", header.label)
       assertTrue(header.attention)
