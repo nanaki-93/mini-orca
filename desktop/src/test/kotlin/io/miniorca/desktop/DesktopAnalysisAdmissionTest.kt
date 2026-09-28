@@ -561,6 +561,194 @@ class DesktopAnalysisAdmissionTest {
   }
 
   @Test
+  fun includedFilesExposeCompleteSelectableStageEvidenceWithoutChangingAdmission() {
+    val path = "internal/" + "deeply-nested/".repeat(12) + "handler.go"
+    val reason = "No model configured: " + "configuration detail ".repeat(6) + "end"
+    val base = analysisPreviewFixture()
+    val preview =
+        base.copy(
+            files =
+                listOf(
+                    AnalysisPlannedFile(
+                        path,
+                        "hash",
+                        "Go",
+                        200,
+                        listOf(
+                            AnalysisStagePlan(
+                                "semantic", true, true, "Reused saved evidence", "bug-provider", 0),
+                            AnalysisStagePlan(
+                                "security_ai", false, false, reason, "analyze-provider", 0),
+                            AnalysisStagePlan(
+                                "new_stage", true, false, "", "analyze-provider", 2))),
+                    AnalysisPlannedFile(
+                        "other.go",
+                        "second",
+                        "Go",
+                        10,
+                        listOf(
+                            AnalysisStagePlan(
+                                "security_rules",
+                                true,
+                                false,
+                                "Local rules",
+                                maxModelRequests = 0)))),
+            excluded = listOf(AnalysisExcludedFile("skipped.go", "Whole-file policy exclusion")))
+    val state = ProjectAnalysisRunState(admission = AnalysisAdmission(preview))
+    var providerChanges = 0
+    var securityChanges = 0
+    var starts = 0
+    ComposeVisualFixture(440, 560, 1.5f) {
+          Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            IdeDialogSurface(
+                440.dp,
+                title = { DesktopAnalysisAdmissionTitle(state) },
+                content = {
+                  DesktopAnalysisAdmissionContent(
+                      state, { _, _ -> providerChanges++ }, { securityChanges++ })
+                },
+                actions = { DesktopAnalysisAdmissionActions(state, {}, { starts++ }, {}) })
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          val label = "Included file 1 · $path"
+          assertTrue(fixture.hasDescription("Expand $label"))
+          assertEquals("Collapsed", fixture.descriptionStateDescription("Expand $label"))
+          assertFalse(fixture.hasText("Ineligible stage on included file"))
+          fixture.revealText(path, "ide-dialog-body")
+          assertTrue(fixture.copyTextByDragging(path).isNotBlank())
+          assertTrue(fixture.requestDescriptionFocus("Expand $label"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals("Expanded", fixture.descriptionStateDescription("Collapse $label"))
+          for (text in
+              listOf(
+                  "Code analysis",
+                  "Eligible stage",
+                  "Cached/reused",
+                  "Maximum model requests for this stage: 0",
+                  "Reason: Reused saved evidence",
+                  "AI Security review",
+                  "Ineligible stage on included file",
+                  "Not cached",
+                  "Reason: $reason",
+                  "new_stage",
+                  "Maximum model requests for this stage: 2",
+                  "Reason: Unavailable")) assertTrue(fixture.hasText(text), text)
+          fixture.revealText("Reason: $reason", "ide-dialog-body")
+          assertTrue(fixture.copyTextByDragging("Reason: $reason").isNotBlank())
+          assertTrue(fixture.hasText("skipped.go"))
+          assertTrue(fixture.hasText("Whole-file policy exclusion"))
+          assertTrue(fixture.requestDescriptionFocus("Collapse $label"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals("Collapsed", fixture.descriptionStateDescription("Expand $label"))
+          assertEquals(0, providerChanges + securityChanges + starts)
+          assertTrue(state.admission!!.providerIds.isEmpty())
+          assertFalse(state.admission.securityReview)
+          assertTrue(fixture.isDisabled("Start analysis"))
+        }
+  }
+
+  @Test
+  fun longBackendReasonWrapsAndItsTailRemainsReachableInTheBoundedDialog() {
+    val reason = "Missing model: " + "full backend explanation ".repeat(12) + "final detail"
+    val base = analysisPreviewFixture()
+    val file =
+        base.files
+            .single()
+            .copy(
+                stages =
+                    listOf(
+                        AnalysisStagePlan(
+                            "security_ai", false, false, reason, maxModelRequests = 0)))
+    val state =
+        ProjectAnalysisRunState(admission = AnalysisAdmission(base.copy(files = listOf(file))))
+    ComposeVisualFixture(440, 900, 1.5f) {
+          Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            IdeDialogSurface(
+                750.dp,
+                title = { DesktopAnalysisAdmissionTitle(state) },
+                content = { DesktopAnalysisAdmissionContent(state, { _, _ -> }, {}) },
+                actions = { DesktopAnalysisAdmissionActions(state, {}, {}, {}) })
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestDescriptionFocus("Expand Included file 1 · ${file.path}"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          fixture.revealText("Reason: $reason", "ide-dialog-body")
+          fixture.assertTextWrapsWithoutClipping("Reason: $reason")
+          assertTrue(fixture.copyTextByDragging("Reason: $reason").isNotBlank())
+          assertTrue(fixture.hasText("Close"))
+        }
+  }
+
+  @Test
+  fun fileDisclosuresResetForReplacementPreviewButNotRecompositionAndReachFinalRecord() {
+    val base = analysisPreviewFixture()
+    val files =
+        (1..28).map { index ->
+          AnalysisPlannedFile(
+              "src/package/file-$index.go",
+              "hash-$index",
+              "Go",
+              10,
+              listOf(
+                  AnalysisStagePlan(
+                      "semantic", true, false, "Reason for file $index", "bug-provider", 1)))
+        }
+    var state by
+        mutableStateOf(
+            ProjectAnalysisRunState(admission = AnalysisAdmission(base.copy(files = files))))
+    ComposeVisualFixture(400, 510) {
+          Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            IdeDialogSurface(
+                410.dp,
+                title = { DesktopAnalysisAdmissionTitle(state) },
+                content = { DesktopAnalysisAdmissionContent(state, { _, _ -> }, {}) },
+                actions = { DesktopAnalysisAdmissionActions(state, {}, {}, {}) })
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          val first = "Included file 1 · ${files.first().path}"
+          val last = "Included file 28 · ${files.last().path}"
+          assertEquals(
+              28,
+              (1..28).count {
+                fixture.hasDescription("Expand Included file $it · ${files[it - 1].path}")
+              })
+          assertTrue(fixture.requestDescriptionFocus("Expand $first"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertTrue(fixture.hasText("Reason: Reason for file 1"))
+          fixture.render()
+          assertEquals("Expanded", fixture.descriptionStateDescription("Collapse $first"))
+          fixture.revealText(files.last().path, "ide-dialog-body")
+          assertTrue(fixture.copyTextByDragging(files.last().path).isNotBlank())
+          assertTrue(fixture.requestDescriptionFocus("Expand $last"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          fixture.revealText("Reason: Reason for file 28", "ide-dialog-body")
+          assertTrue(fixture.copyTextByDragging("Reason: Reason for file 28").isNotBlank())
+          assertEquals("Expanded", fixture.descriptionStateDescription("Collapse $last"))
+          state =
+              state.copy(
+                  admission =
+                      AnalysisAdmission(base.copy(previewId = "replacement", files = files)))
+          fixture.render()
+          assertEquals("Collapsed", fixture.descriptionStateDescription("Expand $first"))
+          assertEquals("Collapsed", fixture.descriptionStateDescription("Expand $last"))
+          assertFalse(fixture.hasText("Reason: Reason for file 28"))
+          assertTrue(fixture.hasText("Close"))
+          assertTrue(fixture.isDisabled("Start analysis"))
+        }
+  }
+
+  @Test
   fun loadingAndFailureNameTheCapturedModeWithoutReusingPreviewTotals() {
     val run = analysisRunFixture()
     val cases =
