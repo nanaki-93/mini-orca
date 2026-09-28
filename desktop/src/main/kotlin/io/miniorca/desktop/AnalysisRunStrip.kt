@@ -19,13 +19,18 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -113,6 +118,20 @@ private fun AnalysisRunPanel(
     pathsExpanded: Boolean,
     onTogglePaths: () -> Unit,
 ) {
+  val refreshFocus = remember(state.project?.projectId) { FocusRequester() }
+  var focusedCommand by
+      remember(state.project?.projectId) { mutableStateOf<AnalysisRunCommand?>(null) }
+  val currentCommands by rememberUpdatedState(commands)
+  LaunchedEffect(commands, focusedCommand) {
+    if (focusedCommand != null && focusedCommand !in commands) {
+      if (actions != null &&
+          state.project != null &&
+          (run != null || state.analysis.error != null) &&
+          state.analysis.action.isBlank())
+          refreshFocus.requestFocus()
+      focusedCommand = null
+    }
+  }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
       AnalysisLifecycleIndicator(run, presentation)
@@ -124,8 +143,27 @@ private fun AnalysisRunPanel(
           Modifier.weight(1f).testTag("analysis-run-content"))
     }
     AnalysisActionFeedback(state.analysis)
+    if (actions != null && state.project != null && (run != null || state.analysis.error != null))
+        MiniOrcaButton(
+            onClick = actions.refreshStatus,
+            enabled = state.analysis.action.isBlank(),
+            tone = ActionTone.Neutral,
+            modifier =
+                Modifier.focusRequester(refreshFocus)
+                    .semantics { contentDescription = "Refresh analysis run status" }
+                    .testTag("analysis-refresh-status")) {
+              Text("Refresh status", style = IdeTypography.action)
+            }
     AnalysisRunRecoveryContext(run, presentation, commands)
-    AnalysisRunControls(state, commands, actions, Modifier.testTag("analysis-run-controls"))
+    AnalysisRunControls(
+        state,
+        commands,
+        actions,
+        Modifier.testTag("analysis-run-controls"),
+        onFocusChanged = { command, focused ->
+          if (focused) focusedCommand = command
+          else if (focusedCommand == command && command in currentCommands) focusedCommand = null
+        })
     if (pathsExpanded) AnalysisExpandedPaths(presentation.currentFiles)
     if (run != null) AnalysisStageRows(run, presentation)
     if ((run != null && !run.isActive()) || state.analysis.previousRun != null)
@@ -655,6 +693,7 @@ private fun AnalysisRunControls(
     commands: List<AnalysisRunCommand>,
     actions: AnalysisWorkspaceActions?,
     modifier: Modifier = Modifier,
+    onFocusChanged: (AnalysisRunCommand, Boolean) -> Unit = { _, _ -> },
 ) {
   if (actions == null || commands.isEmpty()) return
   FlowRow(
@@ -675,6 +714,20 @@ private fun AnalysisRunControls(
                 }
               },
               enabled = analysisRunActionEnabled(state),
+              modifier =
+                  Modifier.onFocusChanged { onFocusChanged(command, it.isFocused) }
+                      .semantics {
+                        contentDescription =
+                            when (command) {
+                              AnalysisRunCommand.Resume -> "Resume analysis with a fresh preview"
+                              AnalysisRunCommand.Cancel -> "Cancel analysis run"
+                              AnalysisRunCommand.Pause ->
+                                  "Pause analysis at the next stage boundary"
+                              AnalysisRunCommand.Start -> "Start new analysis"
+                              AnalysisRunCommand.RetryStaleFailed ->
+                                  "Retry stale and failed analysis"
+                            }
+                      },
               tone =
                   when (command) {
                     AnalysisRunCommand.Cancel -> ActionTone.Destructive

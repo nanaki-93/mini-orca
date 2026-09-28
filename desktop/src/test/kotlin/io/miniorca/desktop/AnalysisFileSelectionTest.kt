@@ -258,7 +258,8 @@ class AnalysisFileSelectionTest {
                   { privileged++ },
                   { privileged++ },
                   { refreshes++ },
-                  { saves++ }))
+                  { saves++ },
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render()
@@ -305,7 +306,8 @@ class AnalysisFileSelectionTest {
                     { privileged++ },
                     { privileged++ },
                     { h.workflow.refresh() },
-                    { h.workflow.save(it) }))
+                    { h.workflow.save(it) },
+                    refreshStatus = { error("Unexpected status refresh") }))
           }
           .use { fixture ->
             fixture.render()
@@ -342,7 +344,15 @@ class AnalysisFileSelectionTest {
       ComposeVisualFixture(width, height, 1.5f) {
             AnalysisFileSelector(
                 ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selected)),
-                AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}, {}, { saves.add(it) }))
+                AnalysisWorkspaceActions(
+                    { _, _ -> },
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    { saves.add(it) },
+                    refreshStatus = { error("Unexpected status refresh") }))
           }
           .use { fixture ->
             fixture.render()
@@ -398,7 +408,8 @@ class AnalysisFileSelectionTest {
                     { privileged++ },
                     { privileged++ },
                     { h.workflow.refresh() },
-                    { h.workflow.save(it) }))
+                    { h.workflow.save(it) },
+                    refreshStatus = { error("Unexpected status refresh") }))
           }
           .use { fixture ->
             fixture.render()
@@ -543,7 +554,8 @@ class AnalysisFileSelectionTest {
                   { paths ->
                     saves += paths
                     selection.value = selection.value.copy(excludedPaths = paths)
-                  }))
+                  },
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render()
@@ -586,7 +598,16 @@ class AnalysisFileSelectionTest {
     var saves = 0
     ComposeVisualFixture(1_440, 900) {
           AnalysisFileSelector(
-              state.value, AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}, {}, { saves++ }))
+              state.value,
+              AnalysisWorkspaceActions(
+                  { _, _ -> },
+                  {},
+                  {},
+                  {},
+                  {},
+                  {},
+                  { saves++ },
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           listOf(
@@ -631,7 +652,8 @@ class AnalysisFileSelectionTest {
             { paths ->
               saves += paths
               selection.value = selection.value.copy(excludedPaths = paths)
-            })
+            },
+            refreshStatus = { error("Unexpected status refresh") })
     ComposeVisualFixture(1_440, 900) {
           AnalysisFileSelector(
               ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selection.value)),
@@ -696,7 +718,8 @@ class AnalysisFileSelectionTest {
                   {
                     saves++
                     selected.value = selected.value.copy(excludedPaths = it)
-                  }))
+                  },
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render()
@@ -734,7 +757,15 @@ class AnalysisFileSelectionTest {
       ComposeVisualFixture(width, 1_000, 1.5f) {
             AnalysisFileSelector(
                 ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selectionFixture())),
-                AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}, {}, {}))
+                AnalysisWorkspaceActions(
+                    { _, _ -> },
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    refreshStatus = { error("Unexpected status refresh") }))
           }
           .use { fixture ->
             fixture.render()
@@ -766,7 +797,13 @@ class AnalysisFileSelectionTest {
                       AnalysisSelectionState(
                           selection,
                           error = "Selection could not be saved. Refresh files and retry.")),
-              AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+              AnalysisWorkspaceActions(
+                  { _, _ -> },
+                  {},
+                  {},
+                  {},
+                  {},
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render()
@@ -799,7 +836,8 @@ class AnalysisFileSelectionTest {
                   { calls++ },
                   { calls++ },
                   { calls++ },
-                  { calls++ }),
+                  { calls++ },
+                  refreshStatus = { error("Unexpected status refresh") }),
               320.dp,
               view = view)
         }
@@ -847,7 +885,9 @@ class AnalysisFileSelectionTest {
   @Test
   fun fileInventoryStatesAndUnexplainedLockRemainTruthful() {
     val selectionState = mutableStateOf(AnalysisSelectionState(loading = true))
-    val actions = AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {})
+    val actions =
+        AnalysisWorkspaceActions(
+            { _, _ -> }, {}, {}, {}, {}, refreshStatus = { error("Unexpected status refresh") })
     ComposeVisualFixture(1_440, 900) {
           AnalysisFileSelector(
               ProjectAnalysisRunState(fileSelection = selectionState.value), actions)
@@ -910,7 +950,8 @@ class AnalysisFileSelectionTest {
                   { actions++ },
                   { actions++ },
                   { actions++ },
-                  { actions++ }))
+                  { actions++ },
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render()
@@ -972,7 +1013,8 @@ class AnalysisFileSelectionTest {
                       { requests++ },
                       { requests++ },
                       { requests++ },
-                      { requests++ }),
+                      { requests++ },
+                      refreshStatus = { error("Unexpected status refresh") }),
                   320.dp,
                   view = view)
         }

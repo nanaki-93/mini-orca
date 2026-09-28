@@ -385,6 +385,92 @@ class DesktopAccessibilityTest {
   }
 
   @Test
+  fun disappearingPauseKeepsKeyboardFocusOnReadOnlyStatusRecovery() {
+    val run = analysisRunFixture().copy(status = "running")
+    var analysis by mutableStateOf(ProjectAnalysisRunState(run = run))
+    var pauses = 0
+    var refreshes = 0
+    var otherActions = 0
+    ComposeVisualFixture(800, 440, 1.5f) {
+          AnalysisWorkspacePane(
+              AnalysisWorkspacePaneState(resultProjectFixture(), analysis),
+              AnalysisWorkspaceActions(
+                  { _, _ -> otherActions++ },
+                  { pauses++ },
+                  { otherActions++ },
+                  { otherActions++ },
+                  { otherActions++ },
+                  refreshStatus = { refreshes++ }))
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.revealText("Pause", "analysis-page")
+          assertTrue(fixture.hasDescription("Pause analysis at the next stage boundary"))
+          assertTrue(fixture.requestDescriptionFocus("Pause analysis at the next stage boundary"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(1, pauses)
+          analysis = analysis.copy(run = run.copy(status = "pausing"))
+          fixture.render()
+          assertFalse(fixture.hasDescription("Pause analysis at the next stage boundary"))
+          assertTrue(fixture.isDescriptionFocused("Refresh analysis run status"))
+          assertEquals(0, refreshes + otherActions)
+          analysis =
+              analysis.copy(
+                  run = run.copy(status = "paused"),
+                  error = "Status could not be read",
+                  errorKind = AnalysisRunErrorKind.StatusRead,
+                  statusUnavailable = true)
+          fixture.render()
+          assertTrue(fixture.isDescriptionFocused("Refresh analysis run status"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          assertEquals(1, refreshes)
+          assertEquals(0, otherActions)
+        }
+  }
+
+  @Test
+  fun statusRecoveryAndFileRefreshRemainSeparateKeyboardActionsAtReducedHeight() {
+    val state =
+        AnalysisWorkspacePaneState(
+            resultProjectFixture(),
+            ProjectAnalysisRunState(
+                run = analysisRunFixture().copy(status = "paused"),
+                error = "Status unavailable after cancel",
+                errorKind = AnalysisRunErrorKind.StatusRead,
+                statusUnavailable = true,
+                fileSelection = AnalysisSelectionState(selectionFixture())))
+    var statusReads = 0
+    var fileReads = 0
+    var privileged = 0
+    ComposeVisualFixture(800, 440, 1.5f) {
+          AnalysisWorkspacePane(
+              state,
+              AnalysisWorkspaceActions(
+                  { _, _ -> privileged++ },
+                  { privileged++ },
+                  { privileged++ },
+                  { privileged++ },
+                  { privileged++ },
+                  { fileReads++ },
+                  refreshStatus = { statusReads++ }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Status unavailable after cancel"))
+          assertTrue(fixture.requestDescriptionFocus("Refresh analysis run status"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(1, statusReads)
+          assertEquals(0, fileReads + privileged)
+          fixture.revealText("Refresh files", "analysis-page")
+          assertTrue(fixture.requestFocus("Refresh files"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          assertEquals(1, fileReads)
+          assertEquals(1, statusReads)
+          assertEquals(0, privileged)
+        }
+  }
+
+  @Test
   fun analysisFilesControlsExposeDisclosureFilterAndLockedSelectionStates() {
     val run =
         analysisRunFixture()
@@ -418,7 +504,13 @@ class DesktopAccessibilityTest {
                   resultProjectFixture(),
                   ProjectAnalysisRunState(
                       run = run, fileSelection = AnalysisSelectionState(selectionFixture()))),
-              AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}),
+              AnalysisWorkspaceActions(
+                  { _, _ -> },
+                  {},
+                  {},
+                  {},
+                  {},
+                  refreshStatus = { error("Unexpected status refresh") }),
           )
         }
         .use { fixture ->
@@ -458,7 +550,8 @@ class DesktopAccessibilityTest {
                   { admissions++ },
                   { admissions++ },
                   { reads++ },
-                  { writes++ }))
+                  { writes++ },
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render()
@@ -495,7 +588,13 @@ class DesktopAccessibilityTest {
     ComposeVisualFixture(1_600, 1_000, 1.5f) {
           AnalysisFileSelector(
               ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selectionFixture())),
-              AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+              AnalysisWorkspaceActions(
+                  { _, _ -> },
+                  {},
+                  {},
+                  {},
+                  {},
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render()
@@ -531,7 +630,8 @@ class DesktopAccessibilityTest {
                     { admissions++ },
                     { admissions++ },
                     { reads++ },
-                    { writes++ }))
+                    { writes++ },
+                    refreshStatus = { error("Unexpected status refresh") }))
           }
           .use { fixture ->
             fixture.render()
@@ -572,7 +672,15 @@ class DesktopAccessibilityTest {
     ComposeVisualFixture(800, 650, 1.5f) {
           AnalysisFileSelector(
               ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selection)),
-              AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}, { reads++ }, { writes++ }))
+              AnalysisWorkspaceActions(
+                  { _, _ -> },
+                  {},
+                  {},
+                  {},
+                  {},
+                  { reads++ },
+                  { writes++ },
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render()
@@ -624,7 +732,13 @@ class DesktopAccessibilityTest {
           AnalysisWorkspacePane(
               AnalysisWorkspacePaneState(
                   resultProjectFixture(), ProjectAnalysisRunState(run = run)),
-              AnalysisWorkspaceActions({ _, _ -> starts++ }, {}, {}, {}, {}))
+              AnalysisWorkspaceActions(
+                  { _, _ -> starts++ },
+                  {},
+                  {},
+                  {},
+                  {},
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render()

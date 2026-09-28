@@ -50,7 +50,13 @@ class DesktopContrastTest {
                 AnalysisWorkspacePane(
                     AnalysisWorkspacePaneState(
                         resultProjectFixture(), ProjectAnalysisRunState(run = run)),
-                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+                    AnalysisWorkspaceActions(
+                        { _, _ -> },
+                        {},
+                        {},
+                        {},
+                        {},
+                        refreshStatus = { error("Unexpected status refresh") }))
               }
               .use { fixture ->
                 fixture.render("analysis-state-color-$status")

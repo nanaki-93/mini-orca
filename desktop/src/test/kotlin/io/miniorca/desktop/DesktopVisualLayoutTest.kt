@@ -136,7 +136,12 @@ class DesktopVisualLayoutTest {
             AnalysisWorkspacePane(
                 AnalysisWorkspacePaneState(resultProjectFixture(), analysis),
                 AnalysisWorkspaceActions(
-                    { _, _ -> calls++ }, { calls++ }, { calls++ }, { calls++ }, { calls++ }))
+                    { _, _ -> calls++ },
+                    { calls++ },
+                    { calls++ },
+                    { calls++ },
+                    { calls++ },
+                    refreshStatus = { error("Unexpected status refresh") }))
           }
           .use { fixture ->
             fixture.render("f16-analysis-$name")
@@ -1711,7 +1716,13 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(900, 420, 1.5f) {
           AnalysisFileSelector(
               ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selection)),
-              AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+              AnalysisWorkspaceActions(
+                  { _, _ -> },
+                  {},
+                  {},
+                  {},
+                  {},
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render("typography-analysis-long-path-900-150")
@@ -1947,7 +1958,13 @@ class DesktopVisualLayoutTest {
             AnalysisWorkspacePane(
                 AnalysisWorkspacePaneState(
                     resultProjectFixture(), ProjectAnalysisRunState(run = acceptanceRun(status))),
-                AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+                AnalysisWorkspaceActions(
+                    { _, _ -> },
+                    {},
+                    {},
+                    {},
+                    {},
+                    refreshStatus = { error("Unexpected status refresh") }))
           }
           .use { fixture ->
             fixture.render("final-progress-$status-800-150")
@@ -2017,7 +2034,13 @@ class DesktopVisualLayoutTest {
                 AnalysisWorkspacePane(
                     AnalysisWorkspacePaneState(
                         resultProjectFixture(), ProjectAnalysisRunState(run = run)),
-                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+                    AnalysisWorkspaceActions(
+                        { _, _ -> },
+                        {},
+                        {},
+                        {},
+                        {},
+                        refreshStatus = { error("Unexpected status refresh") }))
               }
               .use { fixture ->
                 fixture.render("analysis-run-metadata-${run.status}")
@@ -2078,7 +2101,8 @@ class DesktopVisualLayoutTest {
                     { calls++ },
                     { calls++ },
                     { calls++ },
-                    { calls++ }))
+                    { calls++ },
+                    refreshStatus = { error("Unexpected status refresh") }))
           }
           .use { fixture ->
             fixture.render("history-latest-$width")
@@ -2170,7 +2194,13 @@ class DesktopVisualLayoutTest {
             AnalysisWorkspacePane(
                 AnalysisWorkspacePaneState(
                     project, ProjectAnalysisRunState(run = current, previousRun = previous)),
-                AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+                AnalysisWorkspaceActions(
+                    { _, _ -> },
+                    {},
+                    {},
+                    {},
+                    {},
+                    refreshStatus = { error("Unexpected status refresh") }))
           }
           .use { fixture ->
             fixture.render("history-incomplete-$status")
@@ -2225,7 +2255,13 @@ class DesktopVisualLayoutTest {
                         resultProjectFixture(),
                         ProjectAnalysisRunState(
                             run = run, fileSelection = AnalysisSelectionState(selectionFixture()))),
-                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, navigations::add))
+                    AnalysisWorkspaceActions(
+                        { _, _ -> },
+                        {},
+                        {},
+                        {},
+                        navigations::add,
+                        refreshStatus = { error("Unexpected status refresh") }))
               }
               .use { fixture ->
                 fixture.render("analysis-progress-$width-$scale")
@@ -2342,7 +2378,14 @@ class DesktopVisualLayoutTest {
                         overview,
                         project,
                         {},
-                        analysisActions = AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+                        analysisActions =
+                            AnalysisWorkspaceActions(
+                                { _, _ -> },
+                                {},
+                                {},
+                                {},
+                                {},
+                                refreshStatus = { error("Unexpected status refresh") }))
                   }
               .use { fixture ->
                 fixture.render("$label-introduction")
@@ -2425,7 +2468,14 @@ class DesktopVisualLayoutTest {
     listOf(1440 to 1f, 800 to 1.5f).forEach { (width, scale) ->
       var state by mutableStateOf(ProjectAnalysisRunState())
       var previews = 0
-      val actions = AnalysisWorkspaceActions({ _, _ -> previews++ }, {}, {}, {}, {})
+      val actions =
+          AnalysisWorkspaceActions(
+              { _, _ -> previews++ },
+              {},
+              {},
+              {},
+              {},
+              refreshStatus = { error("Unexpected status refresh") })
       ComposeVisualFixture(width, 650, scale) {
             ProjectSummaryPane(
                 visualFixtureOverview,
@@ -2478,7 +2528,14 @@ class DesktopVisualLayoutTest {
               project,
               {},
               run = run,
-              analysisActions = AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+              analysisActions =
+                  AnalysisWorkspaceActions(
+                      { _, _ -> },
+                      {},
+                      {},
+                      {},
+                      {},
+                      refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render("f08-summary-active-introduction-first")
@@ -2558,7 +2615,8 @@ class DesktopVisualLayoutTest {
               { pauses++ },
               { resumes++ },
               { cancels++ },
-              {})
+              {},
+              refreshStatus = { error("Unexpected status refresh") })
       ComposeVisualFixture(width, 650, scale) {
             ProjectSummaryPane(
                 visualFixtureOverview,
@@ -2623,7 +2681,13 @@ class DesktopVisualLayoutTest {
                 AnalysisWorkspacePane(
                     AnalysisWorkspacePaneState(
                         resultProjectFixture(), ProjectAnalysisRunState(run = run)),
-                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}),
+                    AnalysisWorkspaceActions(
+                        { _, _ -> },
+                        {},
+                        {},
+                        {},
+                        {},
+                        refreshStatus = { error("Unexpected status refresh") }),
                 )
               }
               .use { fixture ->
@@ -2712,7 +2776,13 @@ class DesktopVisualLayoutTest {
                             run = analysisRunFixture().copy(status = status),
                             error =
                                 "Could not reach the daemon. Retry when the local service is available. Completed results remain available in their sections; no analysis request was retried.")),
-                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+                    AnalysisWorkspaceActions(
+                        { _, _ -> },
+                        {},
+                        {},
+                        {},
+                        {},
+                        refreshStatus = { error("Unexpected status refresh") }))
               }
               .use { fixture ->
                 fixture.render("analysis-$status-800-1.5")
@@ -2735,7 +2805,8 @@ class DesktopVisualLayoutTest {
                   },
                   {},
                   {},
-                  {}))
+                  {},
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render()
@@ -2786,7 +2857,8 @@ class DesktopVisualLayoutTest {
                   { dispatches++ },
                   { dispatches++ },
                   { dispatches++ },
-                  { dispatches++ }))
+                  { dispatches++ },
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render("stage-collapsed")
@@ -2857,7 +2929,9 @@ class DesktopVisualLayoutTest {
             resultProjectFixture(),
             ProjectAnalysisRunState(
                 run = run, fileSelection = AnalysisSelectionState(selectionFixture())))
-    val actions = AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {})
+    val actions =
+        AnalysisWorkspaceActions(
+            { _, _ -> }, {}, {}, {}, {}, refreshStatus = { error("Unexpected status refresh") })
 
     ComposeVisualFixture(1_600, 1_600) { AnalysisWorkspacePane(state, actions) }
         .use { fixture ->
@@ -3244,7 +3318,9 @@ class DesktopVisualLayoutTest {
   fun f05SelectionConnectionOpeningAndLifecycleCapturesUseProductionOwners() {
     val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
     val selection = selectionFixture()
-    val actions = AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {})
+    val actions =
+        AnalysisWorkspaceActions(
+            { _, _ -> }, {}, {}, {}, {}, refreshStatus = { error("Unexpected status refresh") })
     for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
       for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
         val label = "f05-owners-$width-$height-$scale-${density}x"
@@ -5417,7 +5493,14 @@ class DesktopVisualLayoutTest {
                                 error = "Selection read failed: try refresh",
                                 failure = AnalysisSelectionFailure.Read))),
                 AnalysisWorkspaceActions(
-                    { _, _ -> starts++ }, {}, {}, {}, {}, { reads++ }, { saves++ }),
+                    { _, _ -> starts++ },
+                    {},
+                    {},
+                    {},
+                    {},
+                    { reads++ },
+                    { saves++ },
+                    refreshStatus = { error("Unexpected status refresh") }),
                 view)
           }
           .use { fixture ->
@@ -5537,7 +5620,8 @@ class DesktopVisualLayoutTest {
             { dispatches++ },
             { dispatches++ },
             { dispatches++ },
-            { dispatches++ })
+            { dispatches++ },
+            refreshStatus = { error("Unexpected status refresh") })
     for ((width, height) in
         listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)) {
       for (scale in listOf(1f, 1.25f, 1.5f)) {
@@ -5617,7 +5701,8 @@ class DesktopVisualLayoutTest {
                   { dispatches++ },
                   { dispatches++ },
                   { dispatches++ },
-                  { dispatches++ })
+                  { dispatches++ },
+                  refreshStatus = { error("Unexpected status refresh") })
           ComposeVisualFixture(
                   (width * density).toInt(), (height * density).toInt(), scale, density) {
                     AnalysisWorkspacePane(state, actions)
@@ -5706,7 +5791,8 @@ class DesktopVisualLayoutTest {
                   { otherCalls++ },
                   destinations::add,
                   { otherCalls++ },
-                  { otherCalls++ }))
+                  { otherCalls++ },
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           for (phase in listOf("running", "failed")) {
@@ -5750,7 +5836,13 @@ class DesktopVisualLayoutTest {
           AnalysisWorkspacePane(
               AnalysisWorkspacePaneState(
                   original.project, ProjectAnalysisRunState(run = current, sections = sections)),
-              AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+              AnalysisWorkspaceActions(
+                  { _, _ -> },
+                  {},
+                  {},
+                  {},
+                  {},
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render("f15-categories-unconfirmed-zero")
@@ -5785,7 +5877,8 @@ class DesktopVisualLayoutTest {
             { otherActions++ },
             { resumes++ },
             { otherActions++ },
-            { otherActions++ })
+            { otherActions++ },
+            refreshStatus = { error("Unexpected status refresh") })
     ComposeVisualFixture(800, 650, 1.5f) { AnalysisWorkspacePane(state, actions) }
         .use { fixture ->
           fixture.render("f15-unavailable-progress")
@@ -5855,7 +5948,13 @@ class DesktopVisualLayoutTest {
                                                               "semantic", "pending", "Queued")))
                                           else file
                                         }))),
-                AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+                AnalysisWorkspaceActions(
+                    { _, _ -> },
+                    {},
+                    {},
+                    {},
+                    {},
+                    refreshStatus = { error("Unexpected status refresh") }))
           }
           .use { fixture ->
             fixture.render("analysis-status-markers-$width")
@@ -5947,7 +6046,8 @@ class DesktopVisualLayoutTest {
                     { admissions++ },
                     { admissions++ },
                     { reads++ },
-                    { writes++ }),
+                    { writes++ },
+                    refreshStatus = { error("Unexpected status refresh") }),
                 400.dp)
           }
           .use { fixture ->
@@ -6038,7 +6138,8 @@ class DesktopVisualLayoutTest {
                     { starts++ },
                     { starts++ },
                     { reads++ },
-                    { writes++ }),
+                    { writes++ },
+                    refreshStatus = { error("Unexpected status refresh") }),
                 600.dp)
           }
           .use { fixture ->
@@ -6195,7 +6296,8 @@ class DesktopVisualLayoutTest {
             { actions++ },
             { actions++ },
             { actions++ },
-            { actions++ })
+            { actions++ },
+            refreshStatus = { error("Unexpected status refresh") })
 
     ComposeVisualFixture(800, 650, 1.5f) { AnalysisWorkspacePane(state, callbacks) }
         .use { fixture ->
@@ -6283,7 +6385,8 @@ class DesktopVisualLayoutTest {
                       { requests++ },
                       { requests++ },
                       { requests++ },
-                      { requests++ }),
+                      { requests++ },
+                      refreshStatus = { error("Unexpected status refresh") }),
                   320.dp,
                   view = view)
         }
@@ -7536,7 +7639,12 @@ class DesktopVisualLayoutTest {
     var actions = 0
     val callbacks =
         AnalysisWorkspaceActions(
-            { _, _ -> actions++ }, { actions++ }, { actions++ }, { actions++ }, { actions++ })
+            { _, _ -> actions++ },
+            { actions++ },
+            { actions++ },
+            { actions++ },
+            { actions++ },
+            refreshStatus = { error("Unexpected status refresh") })
     ComposeVisualFixture(800, 650, 1.5f) {
           AnalysisWorkspacePane(AnalysisWorkspacePaneState(project, analysis), callbacks)
         }
@@ -9733,7 +9841,13 @@ internal fun RoundedAnalysisVisualFixture(width: Float) {
               {
                 AnalysisWorkspacePane(
                     AnalysisWorkspacePaneState(project, analysis),
-                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+                    AnalysisWorkspaceActions(
+                        { _, _ -> },
+                        {},
+                        {},
+                        {},
+                        {},
+                        refreshStatus = { error("Unexpected status refresh") }))
               },
               Modifier.weight(1f))
         },

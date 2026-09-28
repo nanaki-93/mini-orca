@@ -251,6 +251,7 @@ internal data class DesktopShellEditorActions(
 )
 
 internal data class DesktopShellAnalysisActions(
+    val refreshStatus: () -> Unit,
     val refreshAnalysisSelection: () -> Unit,
     val saveAnalysisSelection: (List<String>) -> Unit,
     val retryResults: (String, String) -> Unit,
@@ -1553,7 +1554,8 @@ private fun DesktopShellAnalysisActions.toWorkspaceActions(openResults: (Workspa
         cancelAnalysis,
         openResults,
         refreshAnalysisSelection,
-        saveAnalysisSelection)
+        saveAnalysisSelection,
+        refreshStatus)
 
 internal fun modelDestinationLabel(scope: ModelScope, model: ScopedModel): String {
   val reasoningEffort =

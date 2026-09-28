@@ -1422,6 +1422,7 @@ class DesktopKeyboardNavigationTest {
                 createDeclaration = onOperation),
         analysisActions =
             DesktopShellAnalysisActions(
+                refreshStatus = onOperation,
                 refreshAnalysisSelection = onOperation,
                 saveAnalysisSelection = {},
                 retryResults = { _, _ -> onOperation() },
@@ -1619,7 +1620,7 @@ class DesktopKeyboardNavigationTest {
             openResults = { navigations += it },
             refreshSelection = { refreshes++ },
             saveSelection = { saves++ },
-        )
+            refreshStatus = { error("Unexpected status refresh") })
     ComposeVisualFixture(1_600, 1_000) {
           AnalysisWorkspacePane(
               AnalysisWorkspacePaneState(
@@ -1688,7 +1689,8 @@ class DesktopKeyboardNavigationTest {
             { requests++ },
             { requests++ },
             { requests++ },
-            { requests++ })
+            { requests++ },
+            refreshStatus = { error("Unexpected status refresh") })
     ComposeVisualFixture(1_024, 768) {
           // Like DesktopShell, the owner stays above the workspace switch and the page's lazy
           // items.
@@ -1761,7 +1763,14 @@ class DesktopKeyboardNavigationTest {
             AnalysisFileSelector(
                 ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selection)),
                 AnalysisWorkspaceActions(
-                    { _, _ -> starts++ }, {}, {}, {}, {}, { reads++ }, { saves++ }),
+                    { _, _ -> starts++ },
+                    {},
+                    {},
+                    {},
+                    {},
+                    { reads++ },
+                    { saves++ },
+                    refreshStatus = { error("Unexpected status refresh") }),
                 320.dp,
                 view = view)
           }
@@ -1868,7 +1877,14 @@ class DesktopKeyboardNavigationTest {
             AnalysisFileSelector(
                 ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selectionFixture())),
                 AnalysisWorkspaceActions(
-                    { _, _ -> calls++ }, {}, {}, {}, {}, { calls++ }, { calls++ }),
+                    { _, _ -> calls++ },
+                    {},
+                    {},
+                    {},
+                    {},
+                    { calls++ },
+                    { calls++ },
+                    refreshStatus = { error("Unexpected status refresh") }),
                 320.dp,
                 view = view)
             MiniOrcaButton(onClick = { calls++ }) {
@@ -1898,7 +1914,14 @@ class DesktopKeyboardNavigationTest {
           AnalysisFileSelector(
               ProjectAnalysisRunState(fileSelection = AnalysisSelectionState(selection)),
               AnalysisWorkspaceActions(
-                  { _, _ -> starts++ }, {}, {}, {}, {}, { reads++ }, { saves++ }),
+                  { _, _ -> starts++ },
+                  {},
+                  {},
+                  {},
+                  {},
+                  { reads++ },
+                  { saves++ },
+                  refreshStatus = { error("Unexpected status refresh") }),
               320.dp,
               view = view)
         }
@@ -1956,7 +1979,7 @@ class DesktopKeyboardNavigationTest {
             resume = { resumes++ },
             cancel = { cancels++ },
             openResults = {},
-        )
+            refreshStatus = { error("Unexpected status refresh") })
     ComposeVisualFixture(1_600, 1_000) {
           AnalysisWorkspacePane(
               AnalysisWorkspacePaneState(
@@ -2019,7 +2042,7 @@ class DesktopKeyboardNavigationTest {
                   cancel = {},
                   openResults = {},
                   saveSelection = { saves++ },
-              ),
+                  refreshStatus = { error("Unexpected status refresh") }),
           )
         }
         .use { fixture ->
@@ -2061,7 +2084,7 @@ class DesktopKeyboardNavigationTest {
                         cancel = {},
                         openResults = {},
                         saveSelection = { saves++ },
-                    ),
+                        refreshStatus = { error("Unexpected status refresh") }),
                 )
               }
               .use { fixture ->
@@ -2085,7 +2108,8 @@ class DesktopKeyboardNavigationTest {
             {},
             {},
             {},
-            {})
+            {},
+            refreshStatus = { error("Unexpected status refresh") })
     ComposeVisualFixture(800, 650) {
           ProjectSummaryPane(null, project, {}, analysisState = state, analysisActions = actions)
         }

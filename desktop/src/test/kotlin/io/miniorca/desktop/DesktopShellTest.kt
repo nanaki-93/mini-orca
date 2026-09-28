@@ -133,6 +133,7 @@ class DesktopShellTest {
                       createDeclaration = { operations += "create" }),
               analysisActions =
                   DesktopShellAnalysisActions(
+                      refreshStatus = { operations += "status read" },
                       refreshAnalysisSelection = { operations += "refresh" },
                       saveAnalysisSelection = { operations += "save analysis" },
                       retryResults = { category, path -> operations += "retry $category $path" },
@@ -306,6 +307,20 @@ class DesktopShellTest {
             assertEquals("retry ${type.category} ", operations.last())
           }
           assertEquals(3, operations.size)
+          shell.value =
+              shell.value.copy(
+                  app =
+                      shell.value.app.copy(
+                          workspace = Workspace.Analysis,
+                          analysisRun =
+                              shell.value.app.analysisRun.copy(
+                                  error = "Status could not be read",
+                                  errorKind = AnalysisRunErrorKind.StatusRead,
+                                  statusUnavailable = true)))
+          fixture.render()
+          fixture.revealText("Refresh status", "analysis-page")
+          fixture.clickDescription("Refresh analysis run status")
+          assertEquals(listOf("status read"), operations.drop(3))
         }
   }
 
@@ -329,7 +344,8 @@ class DesktopShellTest {
                   { requests += "cancel" },
                   { app = app.copy(workspace = it) },
                   { requests += "refresh" },
-                  { requests += "selection" }))
+                  { requests += "selection" },
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render()

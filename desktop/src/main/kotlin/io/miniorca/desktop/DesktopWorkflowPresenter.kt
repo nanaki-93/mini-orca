@@ -644,7 +644,7 @@ class DesktopWorkflowPresenter(
 
   fun pauseAnalysis() = analysisWorkflow.control("pause")
 
-  fun refreshAnalysis() = analysisWorkflow.refresh()
+  fun refreshAnalysis() = analysisWorkflow.refreshStatus()
 
   fun refreshAnalysisSelection() = analysisWorkflow.fileSelection.refresh()
 
