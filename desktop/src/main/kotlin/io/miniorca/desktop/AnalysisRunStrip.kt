@@ -42,7 +42,7 @@ internal fun AnalysisRunStrip(
     modifier: Modifier = Modifier,
 ) {
   val run = state.analysis.run
-  val presentation = projectRunPresentation(state.analysis)
+  val presentation = projectRunPresentation(state.project, state.analysis)
   val commands =
       when (scope) {
         AnalysisRunStripScope.Analysis -> presentation.commands
@@ -167,7 +167,8 @@ private fun analysisRunSupplementalMetadata(
     }
     if (run.windowElapsedSeconds > 0) facts += "${run.windowElapsedSeconds}s elapsed"
   } else {
-    if (presentation.totalSteps > 0)
+    if (presentation.progressAvailability == RunProgressAvailability.Available &&
+        presentation.totalSteps > 0)
         facts += "${presentation.finishedSteps} of ${presentation.totalSteps} stages"
     run.updatedAt.takeIf { it.isNotBlank() }?.let(facts::add)
   }
@@ -207,9 +208,15 @@ private fun SummaryRunPanel(
 }
 
 private fun analysisFileProgressLabel(presentation: ProjectRunPresentation): String =
-    if (presentation.totalFiles > 0)
-        "${presentation.finishedFiles} of ${presentation.totalFiles} files finished"
-    else "File progress unavailable"
+    when (presentation.progressAvailability) {
+      RunProgressAvailability.Available ->
+          "${presentation.finishedFiles} of ${presentation.totalFiles} files finished"
+      RunProgressAvailability.EmptyScope -> "No files in captured scope"
+      RunProgressAvailability.Incomplete ->
+          "File progress incomplete · captured records missing or inconsistent"
+      RunProgressAvailability.NotStarted,
+      RunProgressAvailability.Unavailable -> "File progress unavailable"
+    }
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -275,7 +282,7 @@ private fun AnalysisRunProgressTrack(
 ) {
   val fileProgress = presentation.fileProgress
   val description =
-      if (fileProgress == null) "Files finished: progress unavailable"
+      if (fileProgress == null) analysisFileProgressLabel(presentation)
       else "Files finished: ${presentation.finishedFiles} of ${presentation.totalFiles}"
   Row(
       modifier,

@@ -343,6 +343,20 @@ internal fun acceptanceRun(status: String): AnalysisRun? {
   return analysisRunFixture()
       .copy(
           status = status,
+          plan =
+              analysisPreviewFixture()
+                  .copy(
+                      files =
+                          listOf(
+                              AnalysisPlannedFile(
+                                  "internal/platform/transport/handlers/long_request_handler.go",
+                                  "base",
+                                  "Go",
+                                  20,
+                                  listOf("semantic", "performance", "security_rules", "security_ai")
+                                      .map {
+                                        AnalysisStagePlan(it, true, false, maxModelRequests = 0)
+                                      }))),
           reason = if (status in setOf("failed", "partial")) acceptanceFailure else "",
           sections =
               analysisRunFixture().sections.map {
