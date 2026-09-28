@@ -11,9 +11,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -75,7 +78,8 @@ internal fun AnalysisRunStrip(
                 pathsExpanded = !pathsExpanded
               }
         }
-        run?.reason?.takeIf { it.isNotBlank() }?.let { DiagnosticText(it, color = Warning) }
+        if (scope == AnalysisRunStripScope.Summary)
+            run?.reason?.takeIf { it.isNotBlank() }?.let { DiagnosticText(it, color = Warning) }
         if (scope == AnalysisRunStripScope.Analysis) {
           if (run?.plan?.compatibilityStage?.isNotBlank() == true)
               Text(
@@ -88,7 +92,7 @@ internal fun AnalysisRunStrip(
                   color = SecondaryText,
                   style = IdeTypography.workspaceMetadata)
         }
-        AnalysisActionFeedback(state.analysis)
+        if (scope == AnalysisRunStripScope.Summary) AnalysisActionFeedback(state.analysis)
       }
 }
 
@@ -112,8 +116,10 @@ private fun AnalysisRunPanel(
           onTogglePaths,
           Modifier.weight(1f).testTag("analysis-run-content"))
     }
+    AnalysisActionFeedback(state.analysis)
     AnalysisRunControls(state, commands, actions, Modifier.testTag("analysis-run-controls"))
     if (pathsExpanded) AnalysisExpandedPaths(presentation.currentFiles)
+    if (run != null) AnalysisStageRows(run, presentation)
   }
 }
 
@@ -144,6 +150,7 @@ private fun AnalysisRunContent(
           analysisFileProgressLabel(presentation),
           color = SecondaryText,
           style = IdeTypography.compactBody)
+      if (run != null) AnalysisRunAttention(run, presentation)
     }
     if (run != null) {
       AnalysisRunProgressTrack(
@@ -159,6 +166,113 @@ private fun AnalysisRunContent(
       Text(metadata, color = SecondaryText, style = IdeTypography.workspaceMetadata)
     }
   }
+}
+
+internal fun analysisStageBreakdown(stage: AnalysisStageSummary): String =
+    buildList {
+          add("${stage.finished}/${stage.total} finished")
+          if (stage.running > 0) add("${stage.running} running")
+          if (stage.pending > 0) add("${stage.pending} pending")
+          if (stage.missing > 0) add("${stage.missing} unreported")
+          val ineligible = stage.files.count { !it.eligible }
+          if (ineligible > 0) add("$ineligible not applicable")
+          stage.files
+              .filter {
+                it.eligible &&
+                    it.status !in setOf(null, "completed", "completed_empty", "running", "pending")
+              }
+              .groupingBy { it.status!! }
+              .eachCount()
+              .forEach { (status, count) ->
+                add("$count ${analysisStatusLabel(status).lowercase()}")
+              }
+        }
+        .joinToString(" · ")
+
+@Composable
+private fun AnalysisRunAttention(run: AnalysisRun, presentation: ProjectRunPresentation) {
+  val evidence = buildList {
+    presentation.stages
+        .flatMap { it.files }
+        .filter {
+          it.eligible && it.status in setOf("failed", "unavailable", "interrupted", "partial")
+        }
+        .groupingBy { it.status!! }
+        .eachCount()
+        .forEach { (status, count) -> add("$count ${analysisStatusLabel(status).lowercase()}") }
+  }
+  val runNeedsAttention = run.status in setOf("failed", "unavailable", "partial", "interrupted")
+  if (evidence.isNotEmpty() || runNeedsAttention || run.reason.isNotBlank()) {
+    val summary =
+        evidence.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+            ?: if (runNeedsAttention) analysisStatusLabel(run.status) else "Run diagnostic reported"
+    Text(
+        "Attention · $summary",
+        color = Warning,
+        style = IdeTypography.compactBody,
+        modifier = Modifier.testTag("analysis-run-attention"))
+  }
+  if (run.reason.isNotBlank() || runNeedsAttention) {
+    var expanded by remember(run.identity) { mutableStateOf(false) }
+    IdeDisclosureHeader("Run diagnostic", expanded, { expanded = !expanded })
+    if (expanded)
+        DiagnosticText(
+            run.reason.ifBlank { "No diagnostic was supplied for this run." }, color = Warning)
+  }
+}
+
+@Composable
+private fun AnalysisStageRows(run: AnalysisRun, presentation: ProjectRunPresentation) {
+  if (presentation.stages.isEmpty()) return
+  Column(
+      Modifier.fillMaxWidth().testTag("analysis-stage-rows"),
+      verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Captured stages", style = IdeTypography.resultHeading, color = PrimaryText)
+        presentation.stages.forEach { stage ->
+          var expanded by remember(run.identity, stage.stage) { mutableStateOf(false) }
+          val label = analysisStageLabel(stage.stage)
+          IdeDisclosureHeader(
+              "$label · ${analysisStageBreakdown(stage)}",
+              expanded,
+              { expanded = !expanded },
+              modifier = Modifier.testTag("analysis-stage-${stage.stage}"))
+          if (expanded) {
+            Column(
+                Modifier.fillMaxWidth()
+                    .heightIn(max = 240.dp)
+                    .verticalScroll(rememberScrollState())
+                    .testTag("analysis-stage-details-${stage.stage}"),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                  stage.files.forEach { detail ->
+                    SelectionContainer {
+                      Column {
+                        Text(
+                            detail.path,
+                            color = PrimaryText,
+                            style = IdeTypography.workspaceMetadata)
+                        Text(
+                            analysisStageDetailLabel(detail),
+                            color = SecondaryText,
+                            style = IdeTypography.workspaceMetadata)
+                      }
+                    }
+                    DiagnosticText(detail.reason, color = SecondaryText)
+                  }
+                }
+          }
+        }
+      }
+}
+
+private fun analysisStageDetailLabel(detail: AnalysisStageDetail): String {
+  val status = analysisStatusLabel(detail.status ?: "unreported")
+  val reuse =
+      when (detail.reused) {
+        true -> "reported reused"
+        false -> "not reported reused"
+        null -> "unreported"
+      }
+  return "${if (detail.eligible) status else "Not applicable · $status"} · Attempts reported: ${detail.attempts?.toString() ?: "unreported"} · Reuse: $reuse"
 }
 
 private fun analysisRunSupplementalMetadata(

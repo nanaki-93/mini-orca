@@ -2452,7 +2452,82 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun analysisPageKeepsItsSingleHeadingAndStageFailuresAfterFiles() {
+  fun stageDisclosureKeepsKeyboardFocusThroughPollingAndResetsForNewRun() {
+    val path = "src/" + "日本語-long-folder/".repeat(8) + "main.go"
+    val original =
+        analysisRunFixture()
+            .copy(
+                status = "interrupted",
+                reason = "",
+                plan =
+                    analysisRunFixture()
+                        .plan
+                        .copy(
+                            files =
+                                listOf(
+                                    AnalysisPlannedFile(
+                                        path,
+                                        "base",
+                                        "Go",
+                                        20,
+                                        listOf(
+                                            AnalysisStagePlan(
+                                                "semantic", true, false, maxModelRequests = 0))))),
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            path,
+                            "base",
+                            "Go",
+                            listOf(AnalysisStageProgress("semantic", "interrupted", 2, true)))))
+    var run by mutableStateOf(original)
+    var dispatches = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          AnalysisWorkspacePane(
+              AnalysisWorkspacePaneState(
+                  resultProjectFixture(), ProjectAnalysisRunState(run = run)),
+              AnalysisWorkspaceActions(
+                  { _, _ -> dispatches++ },
+                  { dispatches++ },
+                  { dispatches++ },
+                  { dispatches++ },
+                  { dispatches++ }))
+        }
+        .use { fixture ->
+          fixture.render("stage-collapsed")
+          assertTrue(fixture.hasText("Attention · 1 interrupted"))
+          assertFalse(fixture.hasText(path))
+          fixture.revealText("Code analysis · 0/1 finished · 1 interrupted", "analysis-page")
+          val toggle = "Expand Code analysis · 0/1 finished · 1 interrupted"
+          assertTrue(fixture.requestDescriptionFocus(toggle))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render("stage-expanded")
+          assertTrue(
+              fixture.isDescriptionFocused("Collapse Code analysis · 0/1 finished · 1 interrupted"))
+          fixture.revealText("No diagnostic was supplied for this stage.", "analysis-page")
+          assertTrue(fixture.hasText(path))
+          assertTrue(fixture.hasText("Interrupted · Attempts reported: 2 · Reuse: reported reused"))
+          fixture.revealText("Run diagnostic", "analysis-page")
+          fixture.clickText("Run diagnostic")
+          fixture.render()
+          assertTrue(fixture.hasText("No diagnostic was supplied for this run."))
+          run = run.copy(updatedAt = "2026-09-28T10:00:00Z")
+          fixture.render("stage-same-run-poll")
+          assertTrue(fixture.hasText(path))
+          assertTrue(fixture.hasText("No diagnostic was supplied for this run."))
+          run =
+              run.copy(
+                  identity = run.identity.copy(id = "new-run"),
+                  plan = run.plan.copy(identity = run.identity.copy(id = "new-run").queue()))
+          fixture.render("stage-new-run")
+          assertFalse(fixture.hasText(path))
+          assertFalse(fixture.hasText("No diagnostic was supplied for this run."))
+          assertEquals(0, dispatches)
+        }
+  }
+
+  @Test
+  fun analysisPageKeepsAttentionNearStatusAndStageDiagnosticsDisclosed() {
     val failure =
         "The semantic scanner could not read cmd/miniorca/main.go. Retry analysis after restoring the file."
     val run =
@@ -2494,15 +2569,24 @@ class DesktopVisualLayoutTest {
           assertEquals(1, fixture.textCount("Analysis"))
           fixture.assertTextAbove("Analysis", "Bugs")
           fixture.assertTextAbove("Bugs", "Files")
-          fixture.assertTextAbove("Files", "Code analysis · cmd/miniorca/main.go")
+          fixture.assertTextAbove("Attention · 1 failed", "Files")
+          assertFalse(fixture.hasText(failure))
+          fixture.clickDescription("Expand Code analysis · 1/1 finished · 1 failed")
+          fixture.render("analysis-hierarchy-stage-expanded")
           fixture.assertTextFits(failure)
-          assertTrue(
-              fixture.taggedBounds("analysis-stage-failure-cmd/miniorca/main.go").height > 0f)
+          assertTrue(fixture.taggedBounds("analysis-stage-details-semantic").height > 0f)
         }
 
     ComposeVisualFixture(800, 650, 1.5f) { AnalysisWorkspacePane(state, actions) }
         .use { fixture ->
           fixture.render("analysis-stage-failure-reachable-800-150")
+          fixture.revealText("Code analysis · 1/1 finished · 1 failed", "analysis-page")
+          assertTrue(
+              fixture.requestDescriptionFocus("Expand Code analysis · 1/1 finished · 1 failed"))
+          fixture.render()
+          assertTrue(fixture.isDescriptionFocused("Expand Code analysis · 1/1 finished · 1 failed"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
           fixture.revealText(failure, "analysis-page")
           fixture.assertTextWrapsWithoutClipping(failure)
         }
@@ -5066,6 +5150,7 @@ class DesktopVisualLayoutTest {
               fixture.assertTextFits("Cancel")
               fixture.assertAnalysisRunGeometry()
               if (width >= 1440 && scale == 1f) {
+                fixture.revealText("File", "analysis-page")
                 fixture.assertAnalysisTableColumns()
               }
               if (width == 1600 && scale == 1.5f) {
@@ -5087,13 +5172,14 @@ class DesktopVisualLayoutTest {
                 assertTrue(progress.top > content.top)
                 assertTrue(controls.top >= content.bottom)
                 assertTrue(controls.right <= fixture.taggedBounds("analysis-run-panel").right)
+                fixture.revealText("File", "analysis-page")
                 val table = fixture.taggedBounds("analysis-file-table")
                 val analysisPage = fixture.taggedBounds("analysis-page")
                 listOf("File", "Analysis state", "Details").forEach { header ->
                   val bounds = fixture.firstVisibleTextBounds(header)
                   assertTrue(
                       bounds.top >= analysisPage.top && bounds.bottom <= analysisPage.bottom,
-                      "$header must be visible in the initial Analysis viewport")
+                      "$header must remain reachable in the Analysis viewport")
                   assertTrue(
                       bounds.bottom <= table.top,
                       "$header must remain immediately above the bounded table")
@@ -5663,11 +5749,14 @@ class DesktopVisualLayoutTest {
               fixture.taggedBounds("analysis-file-table").height,
               1f,
               "Measured content must converge without table-height instability")
-          fixture.revealText(stageFailure, "analysis-page")
-          fixture.assertTextWrapsWithoutClipping(stageFailure)
-          assertTrue(
-              fixture.taggedBounds("analysis-stage-failure-internal/services/worker6.go").height >
-                  0f)
+          val stage = projectRunPresentation(state.project, state.analysis).stages.single()
+          fixture.revealText("Code analysis · ${analysisStageBreakdown(stage)}", "analysis-page")
+          fixture.clickText("Code analysis · ${analysisStageBreakdown(stage)}")
+          fixture.render()
+          fixture.scrollBy(180f, "analysis-page")
+          fixture.render()
+          fixture.revealText(stageFailure, "analysis-stage-details-semantic")
+          assertTrue(fixture.taggedBounds("analysis-stage-details-semantic").height > 0f)
           assertEquals(0, actions, "Measurement and local scrolling must not dispatch actions")
         }
 

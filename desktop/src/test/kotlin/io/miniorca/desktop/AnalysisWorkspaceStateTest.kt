@@ -130,9 +130,18 @@ class AnalysisWorkspaceStateTest {
           assertEquals(0, calls)
         }
     ComposeVisualFixture(800, 650) {
-          AnalysisFailureDetails(AnalysisStageFailure("main.go", "semantic", 2, failure))
+          AnalysisWorkspacePane(
+              AnalysisWorkspacePaneState(
+                  resultProjectFixture(), ProjectAnalysisRunState(run = run)),
+              AnalysisWorkspaceActions(
+                  { _, _ -> calls++ }, { calls++ }, { calls++ }, { calls++ }, { calls++ }))
         }
         .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Attention · 1 failed"))
+          assertFalse(fixture.hasText(failure))
+          fixture.revealText("Code analysis · 1/1 finished · 1 failed", "analysis-page")
+          fixture.clickDescription("Expand Code analysis · 1/1 finished · 1 failed")
           fixture.render()
           assertTrue(fixture.hasText(failure.replace('\u0000', ' ').take(4_096)))
           assertTrue(fixture.hasText("… output truncated"))
@@ -532,6 +541,7 @@ class AnalysisWorkspaceStateTest {
     val result = projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run))
     assertEquals(listOf("semantic", "performance"), result.stages.map { it.stage })
     val semantic = result.stages.first()
+    assertEquals("4/4 finished · 1 partial · 1 failed", analysisStageBreakdown(semantic))
     assertEquals(4, semantic.total)
     assertEquals(4, semantic.finished)
     assertEquals(2, semantic.attention)
@@ -545,6 +555,9 @@ class AnalysisWorkspaceStateTest {
     assertEquals("Partial evidence", semantic.files[1].reason)
     assertEquals("No diagnostic was supplied for this stage.", semantic.files[2].reason)
     val performance = result.stages.last()
+    assertEquals(
+        "1/4 finished · 1 running · 1 pending · 1 skipped · 1 unexpected state",
+        analysisStageBreakdown(performance))
     assertEquals(1, performance.running)
     assertEquals(1, performance.pending)
     assertEquals(1, performance.finished)
@@ -598,6 +611,7 @@ class AnalysisWorkspaceStateTest {
     val ineligible = result.stages.last()
     assertEquals(1, ineligible.finished)
     assertEquals(0, ineligible.attention)
+    assertEquals("1/1 finished · 1 not applicable", analysisStageBreakdown(ineligible))
     assertEquals("Requires Go rules.", ineligible.files.single().reason)
     assertEquals(false, ineligible.files.single().eligible)
     assertTrue(result.failures.isEmpty())
@@ -608,6 +622,7 @@ class AnalysisWorkspaceStateTest {
             ProjectAnalysisRunState(
                 run = run.copy(files = listOf(run.files.single().copy(stages = emptyList())))))
     assertEquals(RunProgressAvailability.Incomplete, missing.progressAvailability)
+    assertEquals("0/1 finished · 1 unreported", analysisStageBreakdown(missing.stages.first()))
     assertEquals(1, missing.stages.first().missing)
     assertEquals(0, missing.stages.first().pending)
     assertNull(missing.stages.first().files.single().attempts)
