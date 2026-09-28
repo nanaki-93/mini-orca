@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DesktopShellTest {
@@ -381,16 +382,27 @@ class DesktopShellTest {
     val running = toolbarAnalysisStatus(initial)!!
     assertEquals("Analysis · Running", running.label)
     assertTrue(running.running)
-    listOf("paused", "completed", "failed", "partial", "canceled", "interrupted").forEach { status
-      ->
-      val result =
-          toolbarAnalysisStatus(
-              initial.copy(
-                  analysisRun = initial.analysisRun.copy(run = run.copy(status = status))))!!
-      assertEquals("Analysis · ${status.replaceFirstChar { it.uppercase() }}", result.label)
-      assertEquals(false, result.running)
-      assertEquals(status in setOf("failed", "partial", "interrupted"), result.attention)
-    }
+    listOf(
+            "queued",
+            "pausing",
+            "paused",
+            "completed",
+            "completed_empty",
+            "failed",
+            "partial",
+            "canceled",
+            "interrupted",
+            "unavailable")
+        .forEach { status ->
+          val result =
+              toolbarAnalysisStatus(
+                  initial.copy(
+                      analysisRun = initial.analysisRun.copy(run = run.copy(status = status))))!!
+          assertEquals("Analysis · ${analysisStatusLabel(status)}", result.label)
+          assertEquals(status in setOf("queued", "pausing"), result.running)
+          assertEquals(
+              status in setOf("failed", "partial", "interrupted", "unavailable"), result.attention)
+        }
     val stale =
         toolbarAnalysisStatus(
             initial.copy(
@@ -403,13 +415,47 @@ class DesktopShellTest {
     val failedRead =
         toolbarAnalysisStatus(
             initial.copy(analysisRun = initial.analysisRun.copy(error = "Read failed")))!!
+    assertEquals("Analysis · Running · Attention", failedRead.label)
+    assertTrue(failedRead.running)
     assertTrue(failedRead.attention)
+    assertTrue(failedRead.detail.contains("Last accepted run · Running"))
     assertTrue(failedRead.detail.contains("Read failed"))
+    val completedReadFailure =
+        toolbarAnalysisStatus(
+            initial.copy(
+                analysisRun =
+                    initial.analysisRun.copy(
+                        run = run.copy(status = "completed"),
+                        error = "unavailable",
+                        errorKind = AnalysisRunErrorKind.StatusRead)))!!
+    assertEquals(
+        "Analysis · Status read failed · Last accepted: Completed", completedReadFailure.label)
+    assertFalse(completedReadFailure.running)
+    assertTrue(completedReadFailure.attention)
+    assertTrue(
+        completedReadFailure.detail.contains("Status read failed; last accepted run retained"))
+    assertTrue(completedReadFailure.detail.contains("Last accepted run · Completed"))
     val pending =
         toolbarAnalysisStatus(
             initial.copy(analysisRun = ProjectAnalysisRunState(action = "starting")))!!
     assertEquals("Analysis · Starting", pending.label)
     assertTrue(pending.running)
+    val admission =
+        toolbarAnalysisStatus(
+            initial.copy(
+                analysisRun =
+                    ProjectAnalysisRunState(
+                        run = run.copy(status = "paused"),
+                        admission = AnalysisAdmission(analysisPreviewFixture()))))!!
+    assertEquals("Analysis · Review scope", admission.label)
+    assertFalse(admission.running)
+    assertTrue(admission.detail.contains("Last accepted run · Paused"))
+    assertTrue(admission.detail.contains("Admission pending"))
+    val historicalOnly =
+        toolbarAnalysisStatus(
+            initial.copy(
+                analysisRun = ProjectAnalysisRunState(previousRun = run.copy(status = "failed"))))
+    assertEquals(null, historicalOnly)
     val foreign =
         initial.copy(
             analysisRun =

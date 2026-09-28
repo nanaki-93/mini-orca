@@ -1426,6 +1426,33 @@ class DesktopAnalysisWorkflowTest {
   }
 
   @Test
+  fun statusReadErrorKindSurvivesAnOrdinaryExceptionMessageAndClearsOnNextRead() {
+    Harness().use { h ->
+      h.run = h.run.copy(status = "completed")
+      h.workflow.refresh()
+      h.drain()
+      val accepted = h.state.analysisRun.run
+      h.failure = "/analysis/run?"
+      h.workflow.refresh()
+      h.drain()
+      assertEquals(accepted, h.state.analysisRun.run)
+      assertEquals("unavailable", h.state.analysisRun.error)
+      assertEquals(AnalysisRunErrorKind.StatusRead, h.state.analysisRun.errorKind)
+      val header = toolbarAnalysisStatus(h.state)!!
+      assertEquals("Analysis · Status read failed · Last accepted: Completed", header.label)
+      assertTrue(header.attention)
+      assertFalse(header.running)
+      assertTrue(h.calls.all { it.first == "GET" })
+      h.failure = ""
+      h.workflow.refresh()
+      h.drain()
+      assertNull(h.state.analysisRun.error)
+      assertNull(h.state.analysisRun.errorKind)
+      assertEquals("Analysis · Completed", toolbarAnalysisStatus(h.state)?.label)
+    }
+  }
+
+  @Test
   fun readFailureCanRecoverRetainedOverviewAndReconnectNeverAdmitsWork() {
     Harness().use { h ->
       h.failure = "/analysis/run?"

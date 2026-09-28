@@ -372,22 +372,50 @@ internal fun toolbarAnalysisStatus(state: DesktopState): ToolbarAnalysisStatus? 
   val stale =
       run != null &&
           (run.status == "stale" || run.identity.projectRevision != project.projectRevision)
+  val acceptedStatus = if (stale) "Stale" else analysisStatusLabel(run?.status)
+  val readFailed = analysis.error != null && analysis.errorKind == AnalysisRunErrorKind.StatusRead
   val status =
       when {
+        readFailed -> "Status read failed"
         analysis.action.isNotBlank() -> analysisStatusLabel(analysis.action)
         analysis.admission != null -> "Review scope"
-        stale -> "Stale"
-        analysis.error != null -> "Error"
-        else -> analysisStatusLabel(run?.status)
+        run != null -> acceptedStatus
+        else -> "Unavailable"
       }
+  val attention =
+      stale ||
+          analysis.error != null ||
+          run?.status in setOf("failed", "partial", "interrupted", "unavailable")
+  val detail =
+      buildList {
+            add("Whole-project analysis · $status")
+            if ((readFailed ||
+                analysis.action.isNotBlank() ||
+                analysis.admission != null ||
+                analysis.error != null) && run != null)
+                add("Last accepted run · $acceptedStatus")
+            if (analysis.admission != null) add("Admission pending; no run accepted for this scope")
+            if (stale) add("Run belongs to an older project revision")
+            if (analysis.error != null) {
+              add(
+                  if (readFailed) "Status read failed; last accepted run retained"
+                  else "Analysis action needs attention")
+              add(analysis.error)
+            }
+          }
+          .joinToString(" · ")
   return ToolbarAnalysisStatus(
-      label = "Analysis · $status",
-      detail = "Whole-project analysis · $status" + analysis.error?.let { ". $it" }.orEmpty(),
-      running = analysis.action.isNotBlank() || (!stale && run?.isActive() == true),
-      attention =
-          stale ||
-              analysis.error != null ||
-              run?.status in setOf("failed", "partial", "interrupted"))
+      label =
+          if (readFailed && run != null)
+              "Analysis · Status read failed · Last accepted: $acceptedStatus"
+          else
+              "Analysis · $status${if (analysis.error != null && !readFailed) " · Attention" else ""}",
+      detail = detail,
+      running =
+          !readFailed &&
+              (analysis.action.isNotBlank() ||
+                  (analysis.admission == null && !stale && run?.isActive() == true)),
+      attention = attention)
 }
 
 @Composable
