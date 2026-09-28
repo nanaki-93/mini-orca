@@ -136,28 +136,47 @@ internal fun DesktopAnalysisAdmissionContent(
       val preview = admission.preview
       Text(
           "Bugs · Performance · Security", color = PrimaryText, style = IdeTypography.resultHeading)
+      val included =
+          "${preview.files.size} included ${if (preview.files.size == 1) "file" else "files"}"
+      val exclusions = "${preview.excluded.size} excluded"
       Text(
-          "${preview.files.size} project ${if (preview.files.size == 1) "file" else "files"} · ${preview.excluded.size} excluded",
+          when {
+            admission.resumeRun != null ->
+                "Continuation (${admission.resumeRun.id}): ${preview.files.size} ${if (preview.files.size == 1) "file" else "files"} in the admitted file set · $exclusions"
+            preview.retryStaleFailed -> "Stale & failed scope: $included · $exclusions"
+            else -> "Full project scope: $included · $exclusions"
+          },
           color = SecondaryText)
+      Text("Reviewing this preview sends nothing to a model.", color = SecondaryText)
       Text(
           "Expected model requests: ${preview.expectedModelRequests} · Maximum: ${preview.maxModelRequests}")
-      if (preview.files.isEmpty()) {
-        Text(
-            if (preview.retryStaleFailed) "No stale or failed files to analyze."
-            else "No eligible files to analyze.")
-        return@Column
-      }
+      if (preview.files.isEmpty())
+          Text(
+              if (preview.retryStaleFailed) "No stale or failed files to analyze."
+              else "No eligible files to analyze.")
       Text(
           "This window: ${preview.limits.batchFiles} files, ${preview.limits.budgetSeconds} seconds, up to ${preview.limits.maxAttemptsPerStage} attempts per stage. Remaining work requires an explicit continuation.")
       if (preview.compatibilityStage.isNotBlank())
           Text(
               "This saved run covers only ${analysisStageLabel(preview.compatibilityStage)}.",
               color = Warning)
-      if (preview.retryStaleFailed) {
-        Text(
-            "Only files with stale or failed analysis are included. Fresh stages reuse their results.")
+      Text(
+          if (preview.refresh) "Refresh policy: request fresh evidence for eligible stages."
+          else "Reuse policy: refresh is off; eligible existing evidence may be reused.")
+      if (preview.retryStaleFailed)
+          Text("Selective retry: the daemon returned the stale & failed scope.")
+      if (preview.excluded.isNotEmpty()) {
+        IdeHorizontalSeparator()
+        Text("Excluded files", color = PrimaryText, style = IdeTypography.resultHeading)
+        for (excluded in preview.excluded) {
+          SelectionContainer {
+            Column {
+              Text(excluded.path)
+              Text(excluded.reason, color = SecondaryText)
+            }
+          }
+        }
       }
-      if (preview.refresh) Text("Refresh requests fresh evidence for eligible stages.")
       for (provider in preview.providers) {
         IdeHorizontalSeparator()
         Text(
