@@ -2027,7 +2027,7 @@ class DesktopAnalysisWorkflowTest {
       h.workflow.dismissAdmission()
       assertEquals("unavailable", h.state.analysisRun.error)
       val header = toolbarAnalysisStatus(h.state)!!
-      assertEquals("Analysis · Status read failed · Last accepted: Completed", header.label)
+      assertEquals("Analysis · Status unavailable", header.label)
       assertTrue(header.attention)
       assertFalse(header.running)
       assertTrue(h.calls.all { it.first == "GET" })

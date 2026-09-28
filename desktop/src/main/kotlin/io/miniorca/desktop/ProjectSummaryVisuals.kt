@@ -69,16 +69,17 @@ internal fun summaryAnalysisTint(status: String): Color =
 @OptIn(ExperimentalFoundationApi::class)
 internal fun SummaryAnalysisStatus(presentation: ProjectSummaryPresentation) {
   val label =
-      when (presentation.summaryStatus) {
-        "stale" -> "Outdated"
-        "missing" -> "Not analyzed"
-        "failed" -> "Failed"
-        "running" -> "Updating"
-        "fresh" -> "Updated"
-        "excluded" -> "No files selected"
-        "unknown" -> "Coverage unavailable"
-        else -> analysisStatusLabel(presentation.summaryStatus)
-      }
+      presentation.runLifecycleLabel
+          ?: when (presentation.summaryStatus) {
+            "stale" -> "Outdated"
+            "missing" -> "Not analyzed"
+            "failed" -> "Failed"
+            "running" -> "Updating"
+            "fresh" -> "Updated"
+            "excluded" -> "No files selected"
+            "unknown" -> "Coverage unavailable"
+            else -> analysisStatusLabel(presentation.summaryStatus)
+          }
   val tint = summaryAnalysisTint(presentation.summaryStatus)
   var focused by remember { mutableStateOf(false) }
   val description = "$label · ${presentation.analysisMessage}"

@@ -51,6 +51,7 @@ internal fun AnalysisRunStrip(
     actions: AnalysisWorkspaceActions?,
     scope: AnalysisRunStripScope,
     modifier: Modifier = Modifier,
+    onOpenAnalysis: (() -> Unit)? = null,
 ) {
   val run = state.analysis.run
   val presentation = projectRunPresentation(state.project, state.analysis)
@@ -79,9 +80,10 @@ internal fun AnalysisRunStrip(
                 pathsExpanded = !pathsExpanded
               }
           AnalysisRunStripScope.Summary ->
-              SummaryRunPanel(state, run, presentation, commands, actions, pathsExpanded) {
-                pathsExpanded = !pathsExpanded
-              }
+              SummaryRunPanel(
+                  state, run, presentation, commands, actions, pathsExpanded, onOpenAnalysis) {
+                    pathsExpanded = !pathsExpanded
+                  }
         }
         if (analysisRunOutdated(run, state.project))
             Text(
@@ -521,11 +523,13 @@ private fun SummaryRunPanel(
     commands: List<AnalysisRunCommand>,
     actions: AnalysisWorkspaceActions?,
     pathsExpanded: Boolean,
+    onOpenAnalysis: (() -> Unit)?,
     onTogglePaths: () -> Unit,
 ) {
   val currentPaths = presentation.currentFiles
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    AnalysisRunMetadata(run, presentation, currentPaths, pathsExpanded, onTogglePaths)
+    AnalysisRunMetadata(
+        run, presentation, state.analysis, currentPaths, pathsExpanded, onTogglePaths)
     if (run != null) {
       AnalysisRunProgressTrack(
           presentation, analysisRunDisplayTint(run, presentation), Modifier.fillMaxWidth())
@@ -534,6 +538,31 @@ private fun SummaryRunPanel(
               "Finished includes partial and failed outcomes; it does not mean successful.",
               color = SecondaryText,
               style = IdeTypography.workspaceMetadata)
+    }
+    presentation.lifecycleExplanation?.let {
+      Text(it, color = SecondaryText, style = IdeTypography.compactBody)
+    }
+    if (run != null &&
+        (state.analysis.statusUnavailable ||
+            state.analysis.controlRequest?.outcome == AnalysisControlOutcome.Unconfirmed ||
+            state.analysis.error != null ||
+            run.status in
+                setOf(
+                    "paused",
+                    "interrupted",
+                    "canceling",
+                    "canceled",
+                    "failed",
+                    "partial",
+                    "unavailable"))) {
+      Text(
+          "View Analysis for full run recovery and status details.",
+          color = SecondaryText,
+          style = IdeTypography.workspaceMetadata)
+      if (onOpenAnalysis != null)
+          MiniOrcaButton(onClick = onOpenAnalysis, tone = ActionTone.Navigation) {
+            Text("View analysis", style = IdeTypography.action)
+          }
     }
     AnalysisRunControls(state, commands, actions)
     if (pathsExpanded) AnalysisExpandedPaths(currentPaths)
@@ -557,11 +586,29 @@ private fun analysisFileProgressLabel(presentation: ProjectRunPresentation): Str
       RunProgressAvailability.Unavailable -> "File progress unavailable"
     }
 
+internal fun analysisLifecycleStatusLabel(
+    presentation: ProjectRunPresentation,
+    analysis: ProjectAnalysisRunState,
+): String =
+    when {
+      analysis.statusUnavailable ||
+          (analysis.error != null && analysis.errorKind == AnalysisRunErrorKind.StatusRead) ->
+          "Status unavailable"
+      analysis.controlRequest?.outcome == AnalysisControlOutcome.Unconfirmed ->
+          "Control outcome unconfirmed"
+      analysis.controlRequest?.outcome == AnalysisControlOutcome.Reconciling ->
+          "Checking run status"
+      analysis.controlRequest?.outcome == AnalysisControlOutcome.Requesting ->
+          presentation.lifecycleExplanation ?: presentation.status
+      else -> presentation.status
+    }
+
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun AnalysisRunMetadata(
     run: AnalysisRun?,
     presentation: ProjectRunPresentation,
+    analysis: ProjectAnalysisRunState,
     currentPaths: List<String>,
     pathsExpanded: Boolean,
     onTogglePaths: () -> Unit,
@@ -572,9 +619,14 @@ private fun AnalysisRunMetadata(
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalArrangement = Arrangement.spacedBy(6.dp)) {
         IdeLabelBadge(
-            if (run == null) "Ready" else presentation.status,
+            if (run == null) "Ready" else analysisLifecycleStatusLabel(presentation, analysis),
             analysisRunDisplayTint(run, presentation))
         if (run != null) {
+          if (analysisLifecycleStatusLabel(presentation, analysis) != presentation.status)
+              Text(
+                  "Last accepted run · ${presentation.status}",
+                  color = SecondaryText,
+                  style = IdeTypography.workspaceMetadata)
           Text(
               analysisFileProgressLabel(presentation),
               color = SecondaryText,

@@ -444,8 +444,7 @@ class DesktopShellTest {
                         run = run.copy(status = "completed"),
                         error = "unavailable",
                         errorKind = AnalysisRunErrorKind.StatusRead)))!!
-    assertEquals(
-        "Analysis · Status read failed · Last accepted: Completed", completedReadFailure.label)
+    assertEquals("Analysis · Status unavailable", completedReadFailure.label)
     assertFalse(completedReadFailure.running)
     assertTrue(completedReadFailure.attention)
     assertTrue(
