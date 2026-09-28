@@ -309,6 +309,40 @@ class DesktopShellTest {
   }
 
   @Test
+  fun analysisCategoryNavigationChangesOnlyTheRequestedWorkspace() {
+    val page = resultPageFixture("bugs")
+    var app by
+        mutableStateOf(
+            DesktopState(
+                workspace = Workspace.Analysis,
+                projectState = ProjectWorkspaceState(page.project),
+                analysisRun = ProjectAnalysisRunState(run = page.run)))
+    val requests = mutableListOf<String>()
+    ComposeVisualFixture(800, 650, 1.5f) {
+          AnalysisWorkspacePane(
+              AnalysisWorkspacePaneState(app.project, app.analysisRun),
+              AnalysisWorkspaceActions(
+                  { _, _ -> requests += "start" },
+                  { requests += "pause" },
+                  { requests += "resume" },
+                  { requests += "cancel" },
+                  { app = app.copy(workspace = it) },
+                  { requests += "refresh" },
+                  { requests += "selection" }))
+        }
+        .use { fixture ->
+          fixture.render()
+          for (type in AnalysisResultType.entries) {
+            fixture.revealText(type.workspace.name, "analysis-page")
+            fixture.clickVisibleDescription("View ${type.workspace.name} results")
+            assertEquals(type.workspace, app.workspace)
+            assertEquals(page.run, app.analysisRun.run)
+            assertTrue(requests.isEmpty())
+          }
+        }
+  }
+
+  @Test
   fun editorArrangementOmitsHiddenPanesWithoutHidingTheCanvas() {
     for ((showFiles, showTool) in listOf(false to false, true to false, false to true)) {
       val preferred =

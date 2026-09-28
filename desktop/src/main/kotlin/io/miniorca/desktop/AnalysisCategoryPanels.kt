@@ -35,7 +35,7 @@ internal fun AnalysisCategoryPanels(
             state.analysis.sections[AnalysisResultKey(type.category)] ?: AnalysisSectionState())
       }
   val metrics = summaryIssueMetrics(state.project, state.analysis.run, state.analysis.sections)
-  BoxWithConstraints(Modifier.fillMaxWidth()) {
+  BoxWithConstraints(Modifier.fillMaxWidth().testTag("analysis-results-navigation")) {
     if (categoryPanelsStacked(maxWidth, LocalDensity.current.fontScale, 8.dp)) {
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         pages.zip(metrics).forEach { (page, metric) ->
@@ -63,21 +63,46 @@ private fun AnalysisCategoryPanel(
 ) {
   val status = if (page.stale && page.run != null) "stale" else page.progress?.status
   val tint = analysisStatusTint(status)
+  // Use the same category-specific adapters as the result browsers, not the reported count.
+  val loadedCount =
+      page.results?.let {
+        page.semantic.size +
+            when (page.type) {
+              AnalysisResultType.Bugs -> 0
+              AnalysisResultType.Performance -> performanceResults(page).size
+              AnalysisResultType.Security -> securityResults(page).size
+            }
+      }
   AnalysisCategoryBox(
       type = page.type,
       count = page.reportedCount,
       status = metric.statusCode,
       statusLabel =
-          if (status == "completed_empty" && metric.statusCode == "completed") metric.status
-          else null,
+          when {
+            status == null && page.run != null -> "Status unavailable"
+            status == "completed_empty" && metric.statusCode == "completed" -> metric.status
+            else -> null
+          },
       tint = tint,
       onClick = { openResults(page.type.workspace) },
       modifier = modifier.testTag("analysis-category-${page.type.category}"),
       details = {
-        if (status == "completed_empty" || page.section.loading || page.section.error != null)
-            metric.detailStatus?.let {
-              Text(it, color = SecondaryText, style = IdeTypography.compactBody)
-            }
+        val loadedLabel =
+            loadedCount?.let {
+              "Loaded · $it matching ${if (it == 1) "finding" else "findings"}" +
+                  if (page.stale) " (outdated)" else ""
+            } ?: "Loaded details · unavailable"
+        metric.detailStatus?.let {
+          Text(
+              it,
+              color = if (page.section.error != null) Error else SecondaryText,
+              style = IdeTypography.compactBody)
+        }
+        Text(
+            loadedLabel,
+            color = SecondaryText,
+            style = IdeTypography.compactBody,
+            modifier = Modifier.testTag("analysis-category-loaded-${page.category}"))
         page.coverageLabel?.let {
           Text(it, color = SecondaryText, style = IdeTypography.compactBody)
         }
@@ -118,7 +143,7 @@ internal fun AnalysisCategoryBox(
       contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
   ) {
     Row(
-        Modifier.fillMaxWidth().padding(16.dp).align(Alignment.Top),
+        Modifier.fillMaxWidth().padding(12.dp).align(Alignment.Top),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -130,7 +155,7 @@ internal fun AnalysisCategoryBox(
               Modifier.padding(top = 2.dp).testTag("analysis-category-icon-${type.category}"))
       Column(
           Modifier.weight(1f).testTag("analysis-category-content-${type.category}"),
-          verticalArrangement = Arrangement.spacedBy(6.dp),
+          verticalArrangement = Arrangement.spacedBy(2.dp),
           horizontalAlignment = Alignment.Start,
       ) {
         Text(name, color = PrimaryText, style = IdeTypography.workspaceHeading)
@@ -141,7 +166,7 @@ internal fun AnalysisCategoryBox(
             lineHeight = 38.sp,
             fontWeight = FontWeight.SemiBold)
         Text(
-            if (status == null) "Not analyzed"
+            if (status == null) statusLabel ?: "Not analyzed"
             else statusLabel ?: analysisCategoryStatusLabel(status) ?: "Status unavailable",
             color = if (status == "completed_empty") SecondaryText else tint,
             style = IdeTypography.compactBody)

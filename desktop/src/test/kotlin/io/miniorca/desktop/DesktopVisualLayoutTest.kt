@@ -5311,30 +5311,33 @@ class DesktopVisualLayoutTest {
               fixture.assertTextFits("Pause")
               fixture.assertTextFits("Cancel")
               fixture.assertAnalysisRunGeometry()
+              if (width == 1600 && scale == 1f) {
+                assertTrue(fixture.hasText("67%"))
+                fixture.assertTextAbove("8 of 12 files finished", "Current: internal/api/user.go")
+              }
               if (width >= 1440 && scale == 1f) {
-                fixture.revealText("File", "analysis-page")
+                fixture.revealText("Refresh files", "analysis-page")
+                fixture.scrollBy(180f, "analysis-page")
+                fixture.render()
                 fixture.assertAnalysisTableColumns()
               }
               if (width == 1600 && scale == 1.5f) {
-                val panel = fixture.taggedBounds("analysis-file-panel")
+                fixture.revealText("Files", "analysis-page")
                 listOf("Files", "All", "Needs attention", "Up to date", "Excluded").forEach { label
                   ->
+                  fixture.revealText(label, "analysis-page")
                   assertTrue(
-                      fixture.firstVisibleTextBounds(label).right <= panel.right,
+                      fixture.firstVisibleTextBounds(label).right <=
+                          fixture.taggedBounds("analysis-file-panel").right,
                       "$label must fit inside the workspace panel")
                 }
               }
               if (width == 1600 && scale == 1f) {
+                fixture.revealText("Saved results · Bugs / Performance / Security", "analysis-page")
                 fixture.assertAnalysisCategoryGeometry()
-                assertTrue(fixture.hasText("67%"))
-                fixture.assertTextAbove("8 of 12 files finished", "Current: internal/api/user.go")
-                val content = fixture.taggedBounds("analysis-run-content")
-                val progress = fixture.taggedBounds("analysis-run-progress-track")
-                val controls = fixture.taggedBounds("analysis-run-controls")
-                assertTrue(progress.top > content.top)
-                assertTrue(controls.top >= content.bottom)
-                assertTrue(controls.right <= fixture.taggedBounds("analysis-run-panel").right)
-                fixture.revealText("File", "analysis-page")
+                fixture.revealText("Refresh files", "analysis-page")
+                fixture.scrollBy(180f, "analysis-page")
+                fixture.render()
                 val table = fixture.taggedBounds("analysis-file-table")
                 val analysisPage = fixture.taggedBounds("analysis-page")
                 listOf("File", "Analysis state", "Details").forEach { header ->
@@ -5452,6 +5455,93 @@ class DesktopVisualLayoutTest {
             }
       }
     }
+  }
+
+  @Test
+  fun analysisResultsStayNavigableWithRetainedRowsAndReadErrorsDuringAndAfterRun() {
+    val page = resultPageFixture("bugs")
+    val run = page.run!!.copy(status = "running")
+    val sections =
+        AnalysisResultType.entries.associate { type ->
+          AnalysisResultKey(type.category) to
+              AnalysisSectionState(
+                  results = analysisResultsFixture(run, type.category),
+                  error = "Saved details read failed")
+        }
+    var status by mutableStateOf("running")
+    val destinations = mutableListOf<Workspace>()
+    var otherCalls = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          AnalysisWorkspacePane(
+              AnalysisWorkspacePaneState(
+                  page.project,
+                  ProjectAnalysisRunState(run = run.copy(status = status), sections = sections)),
+              AnalysisWorkspaceActions(
+                  { _, _ -> otherCalls++ },
+                  { otherCalls++ },
+                  { otherCalls++ },
+                  { otherCalls++ },
+                  destinations::add,
+                  { otherCalls++ },
+                  { otherCalls++ }))
+        }
+        .use { fixture ->
+          for (phase in listOf("running", "failed")) {
+            status = phase
+            fixture.render("f15-categories-$phase")
+            fixture.revealText("Saved results · Bugs / Performance / Security", "analysis-page")
+            fixture.assertTextFits("Saved results · Bugs / Performance / Security")
+            assertTrue(fixture.hasText("Saved details unavailable · 1 reported"))
+            for (type in AnalysisResultType.entries) {
+              fixture.revealText(type.workspace.name, "analysis-page")
+              assertTrue(
+                  fixture.hasText(
+                      "Loaded · ${if (type == AnalysisResultType.Bugs) 1 else 0} matching ${if (type == AnalysisResultType.Bugs) "finding" else "findings"}"))
+              fixture.clickVisibleDescription("View ${type.workspace.name} results")
+            }
+          }
+          assertEquals(
+              List(2) { AnalysisResultType.entries.map { it.workspace } }.flatten(), destinations)
+          assertEquals(0, otherCalls)
+        }
+  }
+
+  @Test
+  fun categoryCardsDoNotTurnMissingOrForeignDetailsIntoCompletedEmpty() {
+    val original = resultPageFixture("bugs")
+    val run =
+        original.run!!.copy(
+            status = "completed_empty",
+            sections =
+                original.run.sections.map {
+                  if (it.category == "bugs") it.copy(status = "completed_empty", findingCount = 0)
+                  else it.copy(findingCount = null)
+                })
+    val foreign =
+        analysisResultsFixture(run, "bugs")
+            .copy(identity = run.identity.copy(generation = "other"), semantic = emptyList())
+    var sections by
+        mutableStateOf(mapOf(AnalysisResultKey("bugs") to AnalysisSectionState(results = foreign)))
+    var current by mutableStateOf(run)
+    ComposeVisualFixture(800, 650, 1.5f) {
+          AnalysisWorkspacePane(
+              AnalysisWorkspacePaneState(
+                  original.project, ProjectAnalysisRunState(run = current, sections = sections)),
+              AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+        }
+        .use { fixture ->
+          fixture.render("f15-categories-unconfirmed-zero")
+          fixture.revealText("0 reported · details not confirmed", "analysis-page")
+          assertTrue(fixture.hasText("Loaded details · unavailable"))
+          assertTrue(fixture.hasText("Completed · details not confirmed"))
+          current = run.copy(sections = run.sections.map { it.copy(findingCount = null) })
+          sections = emptyMap()
+          fixture.render("f15-categories-unknown-reported")
+          fixture.revealText("Saved results · Bugs / Performance / Security", "analysis-page")
+          assertTrue(fixture.hasText("Count unavailable"))
+          assertEquals(3, fixture.textCount("—"))
+          assertTrue(fixture.hasText("Loaded details · unavailable"))
+        }
   }
 
   @Test
