@@ -2,7 +2,7 @@
 
 **Status: proposed; no implementation authorized or started by this plan.**
 
-Translate the approved **Instrument · Calibrated / Tokyo Midnight** mockups into the existing Kotlin/Compose desktop application. The backlog contains **38 implementation features covering all 24 mock surfaces**, followed by an integrated release gate. Most work is presentation and interaction enhancement around existing functionality—not rebuilding the daemon or its workflows.
+Translate the approved **Instrument · Calibrated / Tokyo Midnight** mockups into the existing Kotlin/Compose desktop application. The backlog contains **38 implementation features covering all 24 mock surfaces**, with integrated end-to-end and GUI acceptance in the final task of F38. Most work is presentation and interaction enhancement around existing functionality—not rebuilding the daemon or its workflows.
 
 ## 1. References and implementation approach
 
@@ -52,13 +52,13 @@ Feature IDs identify scope, not a mandatory numeric implementation order. Respec
 | 4 — Results | F17–F20 | Complete Bugs, Performance and Security experiences, including explicitly trusted Go scans |
 | 5 — Declaration change | F23–F34 | Source → context/request → draft → validation → checks/repair → review → Apply → receipt/Undo |
 | 6 — Benchmarks and Terminal | F21–F22, F37–F38 | Identity-bound measurements and the native terminal integrated with the new shell |
-| 7 — Integrated qualification | Release gate below | Automated visual, workflow and accessibility qualification; user-led native review afterward |
+| 7 — Integrated qualification | Final task of F38 | End-to-end and GUI acceptance across the completed application; user-led native review afterward |
 
 **Recommended first review milestone:** waves 1 and 2. Validate production shell and Summary compositions before extending them across every workflow; reserve native-window observation for the final user-led review.
 
 Independent work can proceed after shared components stabilize: Summary/diagrams, analysis, and the read-only Editor can be separate streams. Diff review can proceed alongside checks once draft validation is available. Benchmark work requires the validated-draft path. Coordinate edits to shared shell, theme, presenter wiring and `ReviewEvidencePane.kt` rather than assigning overlapping implementations blindly.
 
-Sizes below are relative scope, **not calendar estimates**: **S** = bounded view; **M** = several components plus state integration; **L** = a substantial cross-pane or native interaction. Every feature includes tests and visual review. Accessibility and failure states are not deferred to wave 7.
+Sizes below are relative scope, **not calendar estimates**: **S** = bounded view; **M** = several components plus state integration; **L** = a substantial cross-pane or native interaction. Every feature includes focused behavioral tests and component visual review. Accessibility and failure states are not deferred to the final F38 task; integrated end-to-end tests and GUI acceptance are.
 
 ## 3. Mock-to-feature coverage
 
@@ -475,29 +475,9 @@ Sizes below are relative scope, **not calendar estimates**: **S** = bounded view
 
 **Owners/checks:** `DesktopTerminalWorkspace.kt`, `DesktopTerminalSession.kt`, `TerminalToolWindow.kt`, `DesktopShell.kt`; terminal/session/presenter tests and distributable build verification.
 
-## 5. Definition of done for every feature
+**Final task — integrated end-to-end tests and GUI acceptance:** After F01–F38 are implemented, run the cross-workspace journeys and GUI matrix below against the completed application. Keep focused feature tests and component visual checks in their owning features; do not treat them as substitutes for this integrated qualification. Record automated results separately from native-window observations, which require user-led review.
 
-1. **Complete interaction:** a real data/state owner and action path, not a static replica. Cover loaded, empty, running, failed, stale and unavailable states where applicable.
-2. **Preserved boundaries:** no provider/project-code/source-write side effects from passive UI; consent, trust, discard and identity checks remain in their existing owners. Preserve cancellation and reject outdated asynchronous responses.
-3. **Visual evidence:** render the changed production components with deterministic fixtures and compare against the referenced Calibrated mock. Check normal/focus/disabled/error states, not just the happy screenshot.
-4. **Accessibility:** labeled focusable controls, meaningful order, text-equivalent states, selectable read-only content, long paths and full diagnostics. Verify with optional help collapsed as well as expanded.
-5. **Responsive evidence:** use the matrix below and verify both content and action reachability. Retained pane preferences must not trap a view offscreen.
-6. **Behavioral tests:** extend the named owners' tests with successful and boundary/failure cases. Use fake providers and temporary projects, not live credentials. Call-count tests must prove that navigation/disclosures/selection do not dispatch privileged work.
-7. **Maintained gates:** run `./scripts/desktop-gradle.sh test spotlessCheck detekt` for desktop changes. If a feature actually changes Go/API behavior, add the corresponding root Go/cross-stack gates and contract tests; do not treat a frontend workaround as a contract change.
-8. **Documentation and cleanup:** update the current desktop guide only when behavior is delivered. Remove superseded presentation branches, controls and obsolete tests without weakening safety/quality assertions. Record intentional geometry changes against the selected design, not an unexplained new baseline.
-
-## 6. Integrated release gate
-
-### Viewport, density and state matrix
-
-- Production components at representative logical sizes: **1600×1000, 1440×900, 1024×768, 800×650 and 1280×600**, plus both sides of any changed breakpoint.
-- **100%, 125%, 150% text**; representative **1× and 2× display density** checked separately from font scale. The 390px browser mock is a stress reference, not a claim of a supported mobile application.
-- All-current/mixed/unavailable/empty selected-file coverage; running/pausing/paused/interrupted/canceled/partial/failed analysis; completed-empty results versus unknown results.
-- Missing/stale/failed/running validation and checks; blocked/current Apply; actual receipt, Undo conflict and Undo failure; measured/inconclusive/stale/unavailable benchmark evidence.
-- Long project names, paths, destinations, error output and many files/findings. Large lists must remain scrollable and responsive without silently truncating the loaded dataset.
-- Keyboard-only operation, topmost-dialog Escape behavior, focus restoration, text selection/copy, visible focus and accessible names/states in production-component and workflow tests.
-
-### End-to-end acceptance journeys
+#### End-to-end acceptance journeys
 
 1. Restore/open → Summary → inspect coverage/files, with no provider request or shell startup.
 2. Change file selection → preview → consent → run → pause → fresh resume admission → cancel; retained evidence remains truthful.
@@ -507,27 +487,39 @@ Sizes below are relative scope, **not calendar estimates**: **S** = bounded view
 6. Select a compatible benchmark → review command/trust → compare → inspect measurements; change the draft while work is pending and reject the obsolete result.
 7. Trigger project/provider/read failures and canceled operations → verify no fabricated success, lost draft, provider-health claim or automatic retry.
 
-### Commands and evidence
+#### GUI acceptance matrix
+
+- Production components at representative logical sizes: **1600×1000, 1440×900, 1024×768, 800×650 and 1280×600**, plus both sides of any changed breakpoint.
+- **100%, 125%, 150% text**; representative **1× and 2× display density** checked separately from font scale. The 390px browser mock is a stress reference, not a claim of a supported mobile application.
+- All-current/mixed/unavailable/empty selected-file coverage; running/pausing/paused/interrupted/canceled/partial/failed analysis; completed-empty results versus unknown results.
+- Missing/stale/failed/running validation and checks; blocked/current Apply; actual receipt, Undo conflict and Undo failure; measured/inconclusive/stale/unavailable benchmark evidence.
+- Long project names, paths, destinations, error output and many files/findings. Large lists must remain scrollable and responsive without silently truncating the loaded dataset.
+- Keyboard-only operation, topmost-dialog Escape behavior, focus restoration, text selection/copy, visible focus and accessible names/states in production-component and workflow tests.
+
+#### Commands and native review evidence
 
 Use the documented toolchain and root commands; do not hardcode a local JDK path.
 
 ```sh
 ./scripts/desktop-gradle.sh test spotlessCheck detekt
 ./scripts/validate.sh
+./scripts/desktop-gradle.sh createDistributable
 ```
 
-For F37/F38, also run `./scripts/desktop-gradle.sh createDistributable`. Native terminal support remains the documented macOS arm64 target; this plan does not expand it.
+Run `createDistributable` for F37/F38 verification as well as this final task. Native terminal support remains the documented macOS arm64 target; this plan does not expand it. Native-window observations are deferred to the user's manual review after implementation, following the [keyboard checklist](../desktop/KEYBOARD_SMOKE_CHECKLIST.md) and [terminal validation](../desktop/TERMINAL.md#validate-the-terminal). This includes chooser behavior, focus containment/restoration, popup placement, text selection/copy, screen-reader output and real/packaged terminal operation. Record observations separately from unit tests and production offscreen captures; unobserved behavior stays pending, never passed by inference from fixtures or browser mocks.
 
-Native-window observations are deferred to the user's manual review after
-implementation, following the [keyboard checklist](../desktop/KEYBOARD_SMOKE_CHECKLIST.md)
-and [terminal validation](../desktop/TERMINAL.md#validate-the-terminal). This
-includes chooser behavior, focus containment/restoration, popup placement, text
-selection/copy, screen-reader output and real/packaged terminal operation. These
-are not per-feature automated acceptance gates. Record observations separately
-from unit tests and production offscreen captures; unobserved behavior stays
-pending, never passed by inference from fixtures or browser mocks.
+## 5. Definition of done for every feature
 
-## 7. Planning assumptions and approval boundaries
+1. **Complete interaction:** a real data/state owner and action path, not a static replica. Cover loaded, empty, running, failed, stale and unavailable states where applicable.
+2. **Preserved boundaries:** no provider/project-code/source-write side effects from passive UI; consent, trust, discard and identity checks remain in their existing owners. Preserve cancellation and reject outdated asynchronous responses.
+3. **Component visual evidence:** render the changed production components with deterministic fixtures and compare against the referenced Calibrated mock. Check normal/focus/disabled/error states, not just the happy screenshot. Integrated GUI acceptance belongs to the final task of F38.
+4. **Accessibility:** labeled focusable controls, meaningful order, text-equivalent states, selectable read-only content, long paths and full diagnostics. Verify with optional help collapsed as well as expanded.
+5. **Responsive evidence:** use the GUI acceptance matrix in F38 for relevant component-level sizes and text scales, and verify both content and action reachability. Retained pane preferences must not trap a view offscreen.
+6. **Behavioral tests:** extend the named owners' tests with successful and boundary/failure cases. Use fake providers and temporary projects, not live credentials. Call-count tests must prove that navigation/disclosures/selection do not dispatch privileged work.
+7. **Maintained gates:** run `./scripts/desktop-gradle.sh test spotlessCheck detekt` for desktop changes. If a feature actually changes Go/API behavior, add the corresponding root Go/cross-stack gates and contract tests; do not treat a frontend workaround as a contract change.
+8. **Documentation and cleanup:** update the current desktop guide only when behavior is delivered. Remove superseded presentation branches, controls and obsolete tests without weakening safety/quality assertions. Record intentional geometry changes against the selected design, not an unexplained new baseline.
+
+## 6. Planning assumptions and approval boundaries
 
 - The selected Calibrated direction is the implementation reference for this effort; native accessibility or data constraints may require a documented local adaptation, not a new round of unrelated visual alternatives.
 - Existing native behavior takes precedence over illustrative fixture shortcuts. Any deliberate product-policy change needs separate approval, especially authorization, persistence, execution or supported-platform changes.

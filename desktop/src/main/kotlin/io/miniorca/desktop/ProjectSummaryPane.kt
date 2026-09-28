@@ -559,14 +559,14 @@ internal fun ProjectSummaryPane(
               style = IdeTypography.workspaceHeading,
               modifier = Modifier.testTag("summary-page-heading").semantics { heading() })
         }
-        val currentRun = currentProjectRun(run, project)
+        val visibleRun = run?.takeIf { it.identity.projectId == project?.projectId }
         val stripState = analysisState ?: ProjectAnalysisRunState(run = run, sections = sections)
-        val runPaneState = AnalysisWorkspacePaneState(project, stripState.copy(run = currentRun))
+        val runPaneState = AnalysisWorkspacePaneState(project, stripState.copy(run = visibleRun))
         item {
           SummaryIntroduction(
-              presentation, runPaneState, analysisActions, showActionFeedback = currentRun == null)
+              presentation, runPaneState, analysisActions, showActionFeedback = visibleRun == null)
         }
-        if (currentRun != null)
+        if (visibleRun != null)
             item {
               AnalysisRunStrip(
                   runPaneState,

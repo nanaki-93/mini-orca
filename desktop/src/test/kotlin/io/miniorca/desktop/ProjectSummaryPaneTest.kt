@@ -2049,7 +2049,12 @@ class ProjectSummaryPaneTest {
           assertFalse(fixture.hasText("helper.go"))
           assertEquals(0, fixture.tagCount("summary-coverage-inspection"))
           assertEquals(0, fixture.tagCount("summary-coverage-run-status"))
-          assertEquals(0, fixture.tagCount("summary-analysis-run-strip"))
+          assertEquals(1, fixture.tagCount("summary-analysis-run-strip"))
+          assertTrue(
+              fixture.hasText(
+                  "Outdated · run belongs to an older project revision; not current evidence."))
+          assertTrue(fixture.hasText("File progress unavailable"))
+          assertFalse(fixture.hasText("Pause"))
           assertFalse(fixture.hasText("Other selection failed."))
         }
   }

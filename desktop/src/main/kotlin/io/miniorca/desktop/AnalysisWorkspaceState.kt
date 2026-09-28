@@ -113,6 +113,18 @@ internal fun currentProjectRun(run: AnalysisRun?, project: ProjectAnalysis?): An
           it.identity.projectRevision == project.projectRevision
     }
 
+internal fun analysisRunRevisionOutdated(run: AnalysisRun?, project: ProjectAnalysis?): Boolean =
+    run != null &&
+        project != null &&
+        run.identity.projectId == project.projectId &&
+        run.identity.projectRevision != project.projectRevision
+
+internal fun analysisRunOutdated(run: AnalysisRun?, project: ProjectAnalysis?): Boolean =
+    run != null && currentProjectRun(run, project) == null
+
+internal fun analysisRunStale(run: AnalysisRun?, project: ProjectAnalysis?): Boolean =
+    run?.status == "stale" || analysisRunOutdated(run, project)
+
 internal fun AnalysisRun.showsProgressOnSummary(): Boolean =
     isActive() || status in setOf("paused", "interrupted")
 
@@ -121,6 +133,9 @@ internal fun projectRunPresentation(
     analysis: ProjectAnalysisRunState,
 ): ProjectRunPresentation {
   val run = analysis.run
+  val outdated = analysisRunOutdated(run, project)
+  val stale = analysisRunStale(run, project)
+  val active = run?.isActive() == true && !stale
   val inventory = run?.let { capturedRunProgress(it, project) }
   val availability =
       when {
@@ -172,8 +187,9 @@ internal fun projectRunPresentation(
         }
       }
   return ProjectRunPresentation(
-      status = analysisStatusLabel(run?.status),
-      headline = analysisRunHeadline(run, finishedSteps, inventory?.totalSteps ?: 0, availability),
+      status = if (stale) "Stale" else analysisStatusLabel(run?.status),
+      headline =
+          analysisRunHeadline(run, finishedSteps, inventory?.totalSteps ?: 0, availability, stale),
       totalSteps = inventory?.totalSteps ?: 0,
       finishedSteps = finishedSteps,
       totalFiles = inventory?.totalFiles ?: 0,
@@ -185,11 +201,13 @@ internal fun projectRunPresentation(
           },
       progressAvailability = availability,
       currentFiles =
-          inventory
-              ?.files
-              .orEmpty()
-              .filter { (file, _) -> file.stages.any { it.status == "running" } }
-              .map { it.first.path },
+          if (!active) emptyList()
+          else
+              inventory
+                  ?.files
+                  .orEmpty()
+                  .filter { (file, _) -> file.stages.any { it.status == "running" } }
+                  .map { it.first.path },
       stages = stages,
       failures =
           inventory?.files.orEmpty().flatMap { (file, planned) ->
@@ -208,21 +226,23 @@ internal fun projectRunPresentation(
                 }
           },
       commands =
-          when (run?.status) {
-            "queued",
-            "running" -> listOf(AnalysisRunCommand.Pause, AnalysisRunCommand.Cancel)
-            "pausing" -> listOf(AnalysisRunCommand.Cancel)
-            "canceling" -> emptyList()
-            "paused",
-            "interrupted" -> listOf(AnalysisRunCommand.Resume, AnalysisRunCommand.Cancel)
-            "stale" ->
-                listOf(
-                    AnalysisRunCommand.Start,
-                    AnalysisRunCommand.RetryStaleFailed,
-                    AnalysisRunCommand.Cancel)
-            else -> listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed)
-          },
-      isActive = run?.isActive() == true)
+          if (outdated) emptyList()
+          else
+              when (run?.status) {
+                "queued",
+                "running" -> listOf(AnalysisRunCommand.Pause, AnalysisRunCommand.Cancel)
+                "pausing" -> listOf(AnalysisRunCommand.Cancel)
+                "canceling" -> emptyList()
+                "paused",
+                "interrupted" -> listOf(AnalysisRunCommand.Resume, AnalysisRunCommand.Cancel)
+                "stale" ->
+                    listOf(
+                        AnalysisRunCommand.Start,
+                        AnalysisRunCommand.RetryStaleFailed,
+                        AnalysisRunCommand.Cancel)
+                else -> listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed)
+              },
+      isActive = active)
 }
 
 private data class CapturedRunProgress(
@@ -269,16 +289,18 @@ internal fun analysisRunHeadline(
     finishedSteps: Int,
     totalSteps: Int,
     availability: RunProgressAvailability = RunProgressAvailability.Available,
+    stale: Boolean = run?.status == "stale",
 ): String {
   if (run == null) return "Last run · None"
-  val facts = mutableListOf(if (run.isActive()) "Current run" else "Last run")
-  if (run.isActive()) {
+  val facts = mutableListOf(if (run.isActive() && !stale) "Current run" else "Last run")
+  if (run.isActive() && !stale) {
     if (run.windowFilesCompleted > 0) {
       facts +=
           "${run.windowFilesCompleted} ${if (run.windowFilesCompleted == 1) "file" else "files"} processed in current window"
     }
   } else {
-    if (run.status !in setOf("completed", "completed_empty"))
+    if (stale) facts += "Stale"
+    else if (run.status !in setOf("completed", "completed_empty"))
         facts += analysisStatusLabel(run.status)
     if (totalSteps > 0 && availability == RunProgressAvailability.Available)
         facts += "$finishedSteps of $totalSteps stages"
@@ -300,6 +322,7 @@ internal fun analysisRunTimeMetadata(run: AnalysisRun): List<String> = buildList
 internal fun analysisRunTitle(run: AnalysisRun?, presentation: ProjectRunPresentation): String =
     when {
       run == null -> "Ready to analyze"
+      presentation.status == "Stale" -> "Analysis out of date"
       run.status == "queued" -> "Queued to analyze"
       run.status == "pausing" -> "Pausing analysis"
       run.status == "canceling" -> "Canceling analysis"
