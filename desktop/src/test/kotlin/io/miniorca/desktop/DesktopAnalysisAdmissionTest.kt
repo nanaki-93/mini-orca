@@ -119,12 +119,67 @@ class DesktopAnalysisAdmissionTest {
   }
 
   @Test
+  fun returnedScopeAndPolicyFollowPreviewRatherThanOriginalRunPlan() {
+    val base = analysisPreviewFixture()
+    val cases =
+        listOf(
+            Triple(
+                base.copy(
+                    refresh = true,
+                    excluded = listOf(AnalysisExcludedFile("skip.go", "Policy excluded"))),
+                null,
+                "Full project scope: 1 included file · 1 excluded"),
+            Triple(
+                base.copy(retryStaleFailed = true, refresh = false),
+                null,
+                "Stale & failed scope: 1 included file · 0 excluded"),
+            Triple(
+                base.copy(
+                    files =
+                        listOf(
+                            AnalysisPlannedFile("one.go", "a", "Go", 1, emptyList()),
+                            AnalysisPlannedFile("two.go", "b", "Go", 1, emptyList())),
+                    expectedModelRequests = 0,
+                    maxModelRequests = 0,
+                    compatibilityStage = "security_rules"),
+                analysisRunFixture().identity,
+                "Continuation (run): 2 files in the admitted file set · 0 excluded"))
+    for ((preview, resumeRun, scope) in cases) {
+      val state = ProjectAnalysisRunState(admission = AnalysisAdmission(preview, resumeRun))
+      ComposeVisualFixture(600, 1600) { DesktopAnalysisAdmissionContent(state, { _, _ -> }, {}) }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.hasText(scope), scope)
+            assertTrue(fixture.hasText("Reviewing this preview sends nothing to a model."))
+            assertTrue(
+                fixture.hasText(
+                    if (preview.refresh)
+                        "Refresh policy: request fresh evidence for eligible stages."
+                    else "Reuse policy: refresh is off; eligible existing evidence may be reused."))
+            if (preview.retryStaleFailed)
+                assertTrue(
+                    fixture.hasText(
+                        "Selective retry: the daemon returned the stale & failed scope."))
+            if (resumeRun != null) {
+              assertTrue(fixture.hasText("This saved run covers only Security rules."))
+              assertTrue(fixture.hasText("Expected model requests: 0 · Maximum: 0"))
+              assertFalse(fixture.hasText("Expected model requests: 3 · Maximum: 6"))
+            }
+          }
+    }
+  }
+
+  @Test
   fun emptyRetryPreviewExplainsThatNoFilesNeedAnalysis() {
     val preview =
         analysisPreviewFixture()
             .copy(
                 retryStaleFailed = true,
                 files = emptyList(),
+                excluded =
+                    listOf(
+                        AnalysisExcludedFile(
+                            "excluded.go", "Policy: " + "detail ".repeat(70) + "end")),
                 expectedModelRequests = 0,
                 maxModelRequests = 0)
     ComposeVisualFixture(360, 1600, 1.5f) {
@@ -137,8 +192,41 @@ class DesktopAnalysisAdmissionTest {
         .use { fixture ->
           fixture.render("analysis-empty-retry-preview")
           fixture.assertTextFits("No stale or failed files to analyze.")
-          assertFalse(fixture.hasDescription("Include AI Security review"))
-          assertFalse(fixture.hasDescription("Confirm bug destination"))
+          assertTrue(fixture.hasText("excluded.go"))
+          assertTrue(fixture.hasText(preview.excluded.single().reason))
+          assertTrue(fixture.hasDescription("Include AI Security review"))
+          assertTrue(fixture.hasDescription("Confirm bug destination"))
+        }
+  }
+
+  @Test
+  fun emptyFullScopeKeepsExclusionsAccessibleButCannotStart() {
+    val reason = "Source not eligible: " + "long explanation ".repeat(30) + "end"
+    val preview =
+        analysisPreviewFixture()
+            .copy(
+                files = emptyList(),
+                excluded = listOf(AnalysisExcludedFile("src/private/skip.go", reason)),
+                expectedModelRequests = 0,
+                maxModelRequests = 0)
+    val state = ProjectAnalysisRunState(admission = AnalysisAdmission(preview))
+    ComposeVisualFixture(400, 500, 1.5f) {
+          Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            IdeDialogSurface(
+                400.dp,
+                title = { DesktopAnalysisAdmissionTitle(state) },
+                content = { DesktopAnalysisAdmissionContent(state, { _, _ -> }, {}) },
+                actions = { DesktopAnalysisAdmissionActions(state, {}, {}, {}) })
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("No eligible files to analyze."))
+          assertTrue(fixture.isDisabled("Start analysis"))
+          fixture.revealText("src/private/skip.go", "ide-dialog-body")
+          assertTrue(fixture.hasText(reason))
+          assertTrue(fixture.copyTextByDragging(reason).isNotBlank())
+          assertTrue(fixture.hasText("Close"))
         }
   }
 
