@@ -201,9 +201,15 @@ internal class DesktopAnalysisWorkflow(
       return
     }
     val preview = admission.preview
-    if (preview.identity.projectId != project.id ||
+    val intent = current.previewIntent
+    if (intent == null ||
+        !matchesIntent(intent) ||
+        preview.identity.projectId != project.id ||
         preview.identity.projectRevision != project.revision ||
-        admission.resumeRun != null && admission.resumeRun != current.run?.identity) {
+        admission.resumeRun != intent.resumeRun ||
+        preview.limits != intent.limits ||
+        preview.refresh != intent.refresh ||
+        preview.retryStaleFailed != intent.retryStaleFailed) {
       update(
           current.copy(
               admission = null, error = "Analysis scope changed. Request a fresh preview."))
@@ -242,7 +248,7 @@ internal class DesktopAnalysisWorkflow(
           } catch (error: CancellationException) {
             throw error
           } catch (error: Exception) {
-            recover(project, token, error)
+            recover(project, token, error, intent)
           }
         }
   }
@@ -280,10 +286,21 @@ internal class DesktopAnalysisWorkflow(
     actionJob = scope.launch { readCurrent(project, token) }
   }
 
-  private suspend fun recover(project: WorkflowProjectIdentity, token: Long, error: Exception) {
+  private suspend fun recover(
+      project: WorkflowProjectIdentity,
+      token: Long,
+      error: Exception,
+      admissionIntent: AnalysisPreviewIntent? = null
+  ) {
     if (!isCurrent(project, token)) return
     fail(project, token, error, "Analysis action failed")
-    // A transport failure may follow durable admission. Recover by reading, never retrying consent.
+    // Only a known rejection can retain the request scope for an explicit fresh preview.
+    // An uncertain response may already have admitted the run; never restore its consent.
+    if (error is ApiException &&
+        error.status == 409 &&
+        admissionIntent != null &&
+        matchesIntent(admissionIntent))
+        update(current.copy(previewIntent = admissionIntent))
     readCurrent(project, token, keepError = true)
   }
 
