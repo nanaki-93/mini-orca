@@ -143,11 +143,17 @@ data class AnalysisSectionState(
     val error: String? = null,
 )
 
+enum class AdmissionRecovery {
+  Rejected,
+  Uncertain,
+}
+
 /** Consent is transient and belongs only to this admission preview. */
 data class ProjectAnalysisRunState(
     val run: AnalysisRun? = null,
     val admission: AnalysisAdmission? = null,
     val previewIntent: AnalysisPreviewIntent? = null,
+    val admissionRecovery: AdmissionRecovery? = null,
     val action: String = "",
     val error: String? = null,
     val sections: Map<AnalysisResultKey, AnalysisSectionState> = emptyMap(),

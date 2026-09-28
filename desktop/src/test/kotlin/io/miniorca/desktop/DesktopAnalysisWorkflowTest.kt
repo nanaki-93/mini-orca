@@ -480,6 +480,7 @@ class DesktopAnalysisWorkflowTest {
         h.drain()
         assertNull(h.state.analysisRun.admission, mode)
         assertEquals(original, h.state.analysisRun.previewIntent?.request(), mode)
+        assertEquals(AdmissionRecovery.Rejected, h.state.analysisRun.admissionRecovery, mode)
         assertTrue(h.state.analysisRun.error!!.contains("rejected"), mode)
         assertEquals(h.run, h.state.analysisRun.run, mode)
         val endpoint = if (mode == "resume") "/control" else "/run"
@@ -515,6 +516,7 @@ class DesktopAnalysisWorkflowTest {
         assertFalse(replacement.isConfirmed(), mode)
         assertTrue(replacement.providerIds.isEmpty())
         assertFalse(replacement.securityReview)
+        assertNull(h.state.analysisRun.admissionRecovery)
         assertNull(h.state.analysisRun.error)
         assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith(endpoint) }, mode)
         h.workflow.admit() // No fresh confirmation, even with the same providers.
@@ -618,6 +620,7 @@ class DesktopAnalysisWorkflowTest {
       h.drain()
       assertNull(h.state.analysisRun.admission)
       assertNull(h.state.analysisRun.previewIntent)
+      assertEquals(AdmissionRecovery.Uncertain, h.state.analysisRun.admissionRecovery)
       assertEquals(h.run, h.state.analysisRun.run)
       assertTrue(h.state.analysisRun.error!!.contains("unavailable"))
       h.workflow.retryPreview()
