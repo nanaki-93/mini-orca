@@ -120,6 +120,8 @@ private fun AnalysisRunPanel(
     AnalysisRunControls(state, commands, actions, Modifier.testTag("analysis-run-controls"))
     if (pathsExpanded) AnalysisExpandedPaths(presentation.currentFiles)
     if (run != null) AnalysisStageRows(run, presentation)
+    if ((run != null && !run.isActive()) || state.analysis.previousRun != null)
+        AnalysisRunHistory(state.project, run, state.analysis.previousRun)
   }
 }
 
@@ -262,6 +264,140 @@ private fun AnalysisStageRows(run: AnalysisRun, presentation: ProjectRunPresenta
           }
         }
       }
+}
+
+private val savedRunStatuses =
+    setOf("completed", "completed_empty", "partial", "failed", "unavailable", "canceled")
+
+internal fun savedRunIdentityLabel(run: AnalysisRun): String =
+    "Project ${run.identity.projectId} · Revision ${run.identity.projectRevision} · " +
+        "Queue ${run.identity.queueId} · Run ${run.identity.id} · Generation ${run.identity.generation} · " +
+        "Policy ${run.identity.policyFingerprint} · Provider ${run.identity.providerFingerprint}"
+
+internal fun savedRunScopeLabel(run: AnalysisRun): String =
+    "Captured scope · ${run.plan.scope.ifBlank { "unreported" }} · " +
+        "${run.plan.files.size} planned ${if (run.plan.files.size == 1) "file" else "files"}" +
+        if (run.plan.retryStaleFailed) " · stale & failed retry" else ""
+
+@Composable
+private fun AnalysisRunHistory(
+    project: ProjectAnalysis?,
+    current: AnalysisRun?,
+    previous: AnalysisRun?,
+) {
+  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    if (current != null && current.status in savedRunStatuses) {
+      Text("Latest saved run", color = PrimaryText, style = IdeTypography.resultHeading)
+      SelectionContainer {
+        Column {
+          Text(
+              savedRunIdentityLabel(current),
+              color = SecondaryText,
+              style = IdeTypography.workspaceMetadata)
+          Text(
+              savedRunScopeLabel(current),
+              color = SecondaryText,
+              style = IdeTypography.workspaceMetadata)
+        }
+      }
+    }
+    if (previous == null || previous.identity == current?.identity) {
+      Text(
+          "Older run details unavailable in this session · only the latest saved run is restored after restart.",
+          color = SecondaryText,
+          style = IdeTypography.workspaceMetadata)
+    } else {
+      var expanded by remember(current?.identity, previous.identity) { mutableStateOf(false) }
+      IdeDisclosureHeader(
+          "Previous observed run · ${analysisStatusLabel(previous.status)}",
+          expanded,
+          { expanded = !expanded },
+          modifier = Modifier.testTag("analysis-previous-run"))
+      if (expanded) {
+        val outdated =
+            project == null ||
+                previous.identity.projectId != project.projectId ||
+                previous.identity.projectRevision != project.projectRevision
+        Column(
+            Modifier.fillMaxWidth()
+                .heightIn(max = 280.dp)
+                .verticalScroll(rememberScrollState())
+                .testTag("analysis-previous-run-details"),
+            verticalArrangement = Arrangement.spacedBy(6.dp)) {
+              if (outdated)
+                  Text(
+                      "Outdated · previous run belongs to another project revision; not current evidence.",
+                      color = Warning,
+                      style = IdeTypography.compactBody)
+              SelectionContainer {
+                Column {
+                  Text(
+                      savedRunIdentityLabel(previous),
+                      color = PrimaryText,
+                      style = IdeTypography.workspaceMetadata)
+                  Text(
+                      savedRunScopeLabel(previous),
+                      color = SecondaryText,
+                      style = IdeTypography.workspaceMetadata)
+                  Text(
+                      "Lifecycle · ${analysisStatusLabel(previous.status)}",
+                      color = SecondaryText,
+                      style = IdeTypography.workspaceMetadata)
+                  analysisRunTimeMetadata(previous).forEach { fact ->
+                    Text(fact, color = SecondaryText, style = IdeTypography.workspaceMetadata)
+                  }
+                }
+              }
+              if (previous.reason.isNotBlank() ||
+                  previous.status in setOf("failed", "unavailable", "interrupted", "partial")) {
+                Text("Run diagnostic", color = Warning, style = IdeTypography.compactBody)
+                DiagnosticText(
+                    previous.reason.ifBlank { "No diagnostic was supplied for this run." },
+                    color = Warning)
+              }
+              // Inspect only the saved snapshot against its own captured revision; never use it
+              // for the current overview's counts, controls or result pages.
+              val history =
+                  project
+                      ?.takeIf { it.projectId == previous.identity.projectId }
+                      ?.copy(projectRevision = previous.identity.projectRevision)
+                      ?.let { projectRunPresentation(it, ProjectAnalysisRunState(run = previous)) }
+              when (history?.progressAvailability) {
+                null,
+                RunProgressAvailability.Unavailable ->
+                    Text(
+                        "Stage failure details unavailable for this captured run.",
+                        color = Warning,
+                        style = IdeTypography.compactBody)
+                RunProgressAvailability.Incomplete ->
+                    Text(
+                        "Stage failure record incomplete · only validated failures shown.",
+                        color = Warning,
+                        style = IdeTypography.compactBody)
+                else -> Unit
+              }
+              if (history?.failures?.isNotEmpty() == true) {
+                Text("Reported stage failures", color = Warning, style = IdeTypography.compactBody)
+                history.failures.forEach { failure ->
+                  SelectionContainer {
+                    Text(
+                        "${failure.path} · ${analysisStageLabel(failure.stage)} · ${failure.attempts} attempts reported",
+                        color = SecondaryText,
+                        style = IdeTypography.workspaceMetadata)
+                  }
+                  DiagnosticText(failure.reason, color = Warning)
+                }
+              } else if (history?.progressAvailability in
+                  setOf(RunProgressAvailability.Available, RunProgressAvailability.EmptyScope)) {
+                Text(
+                    "No stage failures reported in this saved run.",
+                    color = SecondaryText,
+                    style = IdeTypography.workspaceMetadata)
+              }
+            }
+      }
+    }
+  }
 }
 
 private fun analysisStageDetailLabel(detail: AnalysisStageDetail): String {

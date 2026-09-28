@@ -157,6 +157,47 @@ class AnalysisWorkspaceStateTest {
   }
 
   @Test
+  fun previousSnapshotCannotChangeCurrentProgressOrCommands() {
+    val project = resultProjectFixture()
+    val current =
+        analysisRunFixture()
+            .copy(
+                status = "running",
+                plan = plannedRunFiles("main.go" to listOf("semantic")),
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "main.go",
+                            "base",
+                            "Go",
+                            listOf(AnalysisStageProgress("semantic", "running", 1, false)))))
+    val previous =
+        current.copy(
+            identity = current.identity.copy(id = "older", generation = "previous"),
+            status = "failed",
+            files =
+                listOf(
+                    AnalysisRunFile(
+                        "main.go",
+                        "base",
+                        "Go",
+                        listOf(
+                            AnalysisStageProgress(
+                                "semantic", "failed", 2, false, reason = "old failure")))))
+    val without = projectRunPresentation(project, ProjectAnalysisRunState(run = current))
+    val with =
+        projectRunPresentation(
+            project, ProjectAnalysisRunState(run = current, previousRun = previous))
+    assertEquals(without, with)
+    assertEquals(listOf("main.go"), with.currentFiles)
+    assertTrue(with.failures.isEmpty())
+    assertEquals(0, with.finishedFiles)
+    assertEquals(listOf(AnalysisRunCommand.Pause, AnalysisRunCommand.Cancel), with.commands)
+    assertTrue(savedRunIdentityLabel(previous).contains("Run older · Generation previous"))
+    assertTrue(savedRunScopeLabel(previous).contains("1 planned file"))
+  }
+
+  @Test
   fun lifecycleCommandsFollowTheDaemonAndResumeRequiresFreshAdmission() {
     assertEquals(
         listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed),
