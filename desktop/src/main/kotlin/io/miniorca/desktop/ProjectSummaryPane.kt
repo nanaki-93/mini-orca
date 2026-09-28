@@ -222,6 +222,7 @@ internal data class ProjectSummaryPresentation(
     val languages: String,
     val analysisStatus: String,
     val summaryStatus: String,
+    val runLifecycleLabel: String?,
     val analysisMessage: String,
     val selectionNotice: String?,
     val selectionError: Boolean,
@@ -247,6 +248,7 @@ internal fun projectSummaryPresentation(
     sections: Map<AnalysisResultKey, AnalysisSectionState> = emptyMap(),
     fileSelection: AnalysisFileSelection? = null,
     selectionState: AnalysisSelectionState = AnalysisSelectionState(selection = fileSelection),
+    runState: ProjectAnalysisRunState? = null,
 ): ProjectSummaryPresentation {
   val currentOverview =
       overview?.takeIf {
@@ -298,6 +300,15 @@ internal fun projectSummaryPresentation(
         it.identity.projectId == project?.projectId &&
             it.identity.projectRevision == project.projectRevision
       }
+  val lifecycle =
+      currentRun?.let {
+        projectRunPresentation(
+            project, runState?.copy(run = it) ?: ProjectAnalysisRunState(run = it))
+      }
+  val lifecycleLabel =
+      lifecycle?.let { presentation ->
+        runState?.let { analysisLifecycleStatusLabel(presentation, it) }
+      }
   val findings = currentOverview?.findingCounts
   val outdated =
       if (coverage != null) coverage.stale > 0
@@ -323,11 +334,15 @@ internal fun projectSummaryPresentation(
             normalizedStatus == "running" -> "running"
             else -> "unknown"
           },
+      runLifecycleLabel = lifecycleLabel,
       selectionNotice = selectionNotice,
       selectionError = currentSelectionState.error != null,
       runMessage =
           currentRun?.let {
-            "${if (it.isActive()) "Current" else "Last"} analysis run: ${analysisStatusLabel(it.status)} · separate from saved coverage."
+            if (lifecycle != null && lifecycleLabel != null && lifecycleLabel != lifecycle.status)
+                "$lifecycleLabel · Last accepted analysis run: ${lifecycle.status} · separate from saved coverage."
+            else
+                "${if (it.isActive()) "Current" else "Last"} analysis run: ${analysisStatusLabel(it.status)} · separate from saved coverage."
           },
       analysisMessage =
           listOfNotNull(
@@ -489,7 +504,7 @@ internal fun ProjectSummaryPane(
       analysisState?.fileSelection ?: AnalysisSelectionState(selection = fileSelection)
   val presentation =
       projectSummaryPresentation(
-          overview, project, run, sections, selectionState.selection, selectionState)
+          overview, project, run, sections, selectionState.selection, selectionState, analysisState)
   val ownerIdentity =
       listOf(
           project?.projectId ?: overview?.projectId,
@@ -572,7 +587,8 @@ internal fun ProjectSummaryPane(
                   runPaneState,
                   analysisActions,
                   AnalysisRunStripScope.Summary,
-                  Modifier.testTag("summary-analysis-run-strip"))
+                  Modifier.testTag("summary-analysis-run-strip"),
+                  onOpenAnalysis = { selectWorkspace(Workspace.Analysis) })
             }
         item {
           BoxWithConstraints(Modifier.fillMaxWidth().testTag("summary-coverage-results")) {
@@ -714,7 +730,10 @@ private fun SummaryIntroduction(
           enabled = analysisRunActionEnabled(runState),
           tone = ActionTone.Primary,
           modifier = Modifier.testTag("summary-start-analysis")) {
-            Text(AnalysisRunCommand.Start.label, style = IdeTypography.action)
+            Text(
+                if (runState.analysis.run?.status == "canceled") "Start new analysis"
+                else AnalysisRunCommand.Start.label,
+                style = IdeTypography.action)
           }
     }
     if (showActionFeedback) AnalysisActionFeedback(runState.analysis)

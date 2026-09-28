@@ -75,6 +75,42 @@ class AnalysisWorkspaceStateTest {
   }
 
   @Test
+  fun sharedLifecycleLabelDoesNotPromoteAnOldSnapshotToAnAcknowledgment() {
+    val project = resultProjectFixture()
+    val run = analysisRunFixture().copy(status = "running")
+    val cases =
+        listOf(
+            ProjectAnalysisRunState(run = run) to "Running",
+            ProjectAnalysisRunState(
+                run = run,
+                action = "pause",
+                controlRequest =
+                    AnalysisControlRequest("pause", AnalysisControlOutcome.Requesting)) to
+                "Requesting pause…",
+            ProjectAnalysisRunState(run = run.copy(status = "pausing")) to "Pausing",
+            ProjectAnalysisRunState(run = run.copy(status = "paused")) to "Paused",
+            ProjectAnalysisRunState(run = run.copy(status = "canceling")) to "Canceling",
+            ProjectAnalysisRunState(run = run.copy(status = "canceled")) to "Canceled",
+            ProjectAnalysisRunState(
+                run = run.copy(status = "paused"),
+                statusUnavailable = true,
+                error = "Read failed",
+                errorKind = AnalysisRunErrorKind.StatusRead) to "Status unavailable",
+            ProjectAnalysisRunState(
+                run = run.copy(status = "paused"),
+                controlRequest =
+                    AnalysisControlRequest("cancel", AnalysisControlOutcome.Unconfirmed)) to
+                "Control outcome unconfirmed")
+    cases.forEach { (analysis, label) ->
+      val presentation = projectRunPresentation(project, analysis)
+      assertEquals(label, analysisLifecycleStatusLabel(presentation, analysis))
+      if (analysis.statusUnavailable ||
+          analysis.controlRequest?.outcome == AnalysisControlOutcome.Unconfirmed)
+          assertTrue(presentation.commands.isEmpty())
+    }
+  }
+
+  @Test
   fun retryButtonPreviewsOnlyStaleAndFailedFilesAtSupportedSizes() {
     for ((width, height, scale) in
         listOf(

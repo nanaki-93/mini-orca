@@ -369,12 +369,15 @@ internal fun toolbarAnalysisStatus(state: DesktopState): ToolbarAnalysisStatus? 
       analysis.admission == null &&
       analysis.error == null)
       return null
+  val presentation = projectRunPresentation(project, analysis.copy(run = run))
   val stale = analysisRunStale(run, project)
-  val acceptedStatus = if (stale) "Stale" else analysisStatusLabel(run?.status)
+  val acceptedStatus = presentation.status
+  val lifecycleStatus = analysisLifecycleStatusLabel(presentation, analysis)
   val readFailed = analysis.error != null && analysis.errorKind == AnalysisRunErrorKind.StatusRead
   val status =
       when {
-        readFailed -> "Status read failed"
+        readFailed || analysis.statusUnavailable || analysis.controlRequest != null ->
+            lifecycleStatus
         analysis.action.isNotBlank() -> analysisStatusLabel(analysis.action)
         analysis.admission != null -> "Review scope"
         run != null -> acceptedStatus
@@ -382,16 +385,16 @@ internal fun toolbarAnalysisStatus(state: DesktopState): ToolbarAnalysisStatus? 
       }
   val attention =
       stale ||
+          analysis.statusUnavailable ||
+          analysis.controlRequest?.outcome == AnalysisControlOutcome.Unconfirmed ||
           analysis.error != null ||
           run?.status in setOf("failed", "partial", "interrupted", "unavailable")
   val detail =
       buildList {
             add("Whole-project analysis · $status")
-            if ((readFailed ||
-                analysis.action.isNotBlank() ||
-                analysis.admission != null ||
-                analysis.error != null) && run != null)
+            if ((status != acceptedStatus || analysis.error != null) && run != null)
                 add("Last accepted run · $acceptedStatus")
+            if (run != null) presentation.lifecycleExplanation?.let(::add)
             if (analysis.admission != null) add("Admission pending; no run accepted for this scope")
             if (stale) add("Run belongs to an older project revision")
             if (analysis.error != null) {
@@ -404,15 +407,15 @@ internal fun toolbarAnalysisStatus(state: DesktopState): ToolbarAnalysisStatus? 
           .joinToString(" · ")
   return ToolbarAnalysisStatus(
       label =
-          if (readFailed && run != null)
-              "Analysis · Status read failed · Last accepted: $acceptedStatus"
-          else
-              "Analysis · $status${if (analysis.error != null && !readFailed) " · Attention" else ""}",
+          "Analysis · $status${if (analysis.error != null && !readFailed) " · Attention" else ""}",
       detail = detail,
       running =
           !readFailed &&
+              !analysis.statusUnavailable &&
+              analysis.controlRequest?.outcome != AnalysisControlOutcome.Unconfirmed &&
+              analysis.controlRequest?.outcome != AnalysisControlOutcome.Reconciling &&
               (analysis.action.isNotBlank() ||
-                  (analysis.admission == null && !stale && run?.isActive() == true)),
+                  (analysis.admission == null && !stale && presentation.isActive)),
       attention = attention)
 }
 

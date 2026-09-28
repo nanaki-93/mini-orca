@@ -5172,6 +5172,84 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun f16HeaderAndSummaryUseTheAnalysisLifecycleWithoutConfusingDaemonConnectivity() {
+    val project = resultProjectFixture()
+    val run = analysisRunFixture()
+    val states =
+        listOf(
+            "running" to ProjectAnalysisRunState(run = run.copy(status = "running")),
+            "requesting-pause" to
+                ProjectAnalysisRunState(
+                    run = run.copy(status = "running"),
+                    action = "pause",
+                    controlRequest =
+                        AnalysisControlRequest("pause", AnalysisControlOutcome.Requesting)),
+            "pausing" to ProjectAnalysisRunState(run = run.copy(status = "pausing")),
+            "requesting-cancel" to
+                ProjectAnalysisRunState(
+                    run = run.copy(status = "pausing"),
+                    action = "cancel",
+                    controlRequest =
+                        AnalysisControlRequest("cancel", AnalysisControlOutcome.Requesting)),
+            "paused" to ProjectAnalysisRunState(run = run.copy(status = "paused")),
+            "canceling" to ProjectAnalysisRunState(run = run.copy(status = "canceling")),
+            "canceled" to ProjectAnalysisRunState(run = run.copy(status = "canceled")),
+            "unconfirmed" to
+                ProjectAnalysisRunState(
+                    run = run.copy(status = "paused"),
+                    controlRequest =
+                        AnalysisControlRequest("cancel", AnalysisControlOutcome.Unconfirmed)),
+            "failed-refresh" to
+                ProjectAnalysisRunState(
+                    run = run.copy(status = "paused"),
+                    statusUnavailable = true,
+                    error = "Read failed",
+                    errorKind = AnalysisRunErrorKind.StatusRead))
+    for ((name, analysis) in states) {
+      val presentation = projectRunPresentation(project, analysis)
+      val label = analysisLifecycleStatusLabel(presentation, analysis)
+      val state =
+          DesktopState(projectState = ProjectWorkspaceState(project), analysisRun = analysis)
+      val header = requireNotNull(toolbarAnalysisStatus(state))
+      assertTrue(header.detail.contains(presentation.lifecycleExplanation.orEmpty()), name)
+      assertEquals("Analysis · $label", header.label, name)
+      if (name == "failed-refresh") {
+        assertTrue(header.detail.contains("Status read failed; last accepted run retained"))
+        assertTrue(header.detail.contains("Last accepted run · Paused"))
+      }
+      ComposeVisualFixture(800, 650) {
+            AnalysisRunStrip(
+                AnalysisWorkspacePaneState(project, analysis), null, AnalysisRunStripScope.Analysis)
+          }
+          .use { fixture ->
+            fixture.render("f16-analysis-lifecycle-$name")
+            fixture.assertTextFits(analysisRunTitle(analysis.run, presentation))
+            presentation.lifecycleExplanation?.let { assertTrue(fixture.hasText(it), name) }
+          }
+      ComposeVisualFixture(1440, 900) {
+            ToolbarVisualFixture(
+                1440f,
+                connection = ConnectionState(label = "Disconnected"),
+                analysisStatus = header)
+          }
+          .use { fixture ->
+            fixture.render("f16-header-$name")
+            fixture.assertTextFits(header.label)
+            fixture.assertTextBefore(header.label, "Daemon disconnected")
+          }
+      ComposeVisualFixture(800, 650) {
+            ProjectSummaryPane(null, project, {}, run = analysis.run, analysisState = analysis)
+          }
+          .use { fixture ->
+            fixture.render("f16-summary-$name")
+            fixture.assertTextFits(label, maxLines = 3)
+            fixture.assertSummaryStatusPlacement(label)
+            presentation.lifecycleExplanation?.let { assertTrue(fixture.hasText(it), name) }
+          }
+    }
+  }
+
+  @Test
   fun analysisStatusStaysImmediatelyBeforeDaemonAcrossToolbarSizesAndRunChanges() {
     listOf(
             Triple(1440, 900, 1f),
@@ -5217,12 +5295,11 @@ class DesktopVisualLayoutTest {
                             state.analysisRun.copy(
                                 error = "unavailable", errorKind = AnalysisRunErrorKind.StatusRead))
                 fixture.render("toolbar-analysis-read-failure-$width-$scale")
-                fixture.assertTextFits("Analysis · Status read failed · Last accepted: Completed")
-                fixture.assertTextBefore(
-                    "Analysis · Status read failed · Last accepted: Completed", daemon)
+                fixture.assertTextFits("Analysis · Status unavailable")
+                fixture.assertTextBefore("Analysis · Status unavailable", daemon)
                 assertTrue(
                     fixture.hasDescription(
-                        "Whole-project analysis · Status read failed · Last accepted run · Completed · Status read failed; last accepted run retained · unavailable"))
+                        "Whole-project analysis · Status unavailable · Last accepted run · Completed · Status read failed; last accepted run retained · unavailable"))
                 state = state.copy(analysisRun = ProjectAnalysisRunState())
                 fixture.render()
                 assertFalse(fixture.hasText("Analysis · Completed"))
@@ -5334,7 +5411,9 @@ class DesktopVisualLayoutTest {
           analysisStatus = toolbarAnalysisStatus(state)
           fixture.render("toolbar-failed-disconnected")
           fixture.assertTextBefore("Analysis · Failed", "Daemon disconnected")
-          assertTrue(fixture.hasDescription("Whole-project analysis · Failed"))
+          assertTrue(
+              fixture.hasDescription(
+                  "Whole-project analysis · Failed · Analysis failed; inspect the retained evidence before starting another run."))
           assertFalse(fixture.hasText("Daemon connected"))
           analysisStatus =
               toolbarAnalysisStatus(

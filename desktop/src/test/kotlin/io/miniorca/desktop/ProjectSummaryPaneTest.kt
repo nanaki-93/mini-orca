@@ -2063,6 +2063,95 @@ class ProjectSummaryPaneTest {
   }
 
   @Test
+  fun compactLifecycleUsesAcceptedAndPendingPresentationWithoutDispatchingOnInspection() {
+    val project = analysisProjectFixture()
+    val base = analysisRunFixture()
+    val cases =
+        listOf(
+            "running" to ProjectAnalysisRunState(run = base.copy(status = "running")),
+            "requesting pause" to
+                ProjectAnalysisRunState(
+                    run = base.copy(status = "running"),
+                    action = "pause",
+                    controlRequest =
+                        AnalysisControlRequest("pause", AnalysisControlOutcome.Requesting)),
+            "pausing" to ProjectAnalysisRunState(run = base.copy(status = "pausing")),
+            "requesting cancel" to
+                ProjectAnalysisRunState(
+                    run = base.copy(status = "pausing"),
+                    action = "cancel",
+                    controlRequest =
+                        AnalysisControlRequest("cancel", AnalysisControlOutcome.Requesting)),
+            "paused" to ProjectAnalysisRunState(run = base.copy(status = "paused")),
+            "canceling" to ProjectAnalysisRunState(run = base.copy(status = "canceling")),
+            "canceled" to ProjectAnalysisRunState(run = base.copy(status = "canceled")),
+            "unconfirmed" to
+                ProjectAnalysisRunState(
+                    run = base.copy(status = "paused"),
+                    controlRequest =
+                        AnalysisControlRequest("cancel", AnalysisControlOutcome.Unconfirmed)),
+            "failed refresh" to
+                ProjectAnalysisRunState(
+                    run = base.copy(status = "paused"),
+                    statusUnavailable = true,
+                    error = "Status could not be read",
+                    errorKind = AnalysisRunErrorKind.StatusRead))
+    val navigations = mutableListOf<Workspace>()
+    val actions =
+        AnalysisWorkspaceActions(
+            { _, _ -> error("Passive inspection started analysis") },
+            { error("Passive inspection requested control") },
+            { error("Passive inspection requested control") },
+            { error("Passive inspection requested control") },
+            { error("Passive inspection requested control") },
+            refreshStatus = { error("Passive inspection refreshed status") })
+    var state by mutableStateOf(cases.first().second)
+    ComposeVisualFixture(800, 650) {
+          ProjectSummaryPane(
+              null,
+              project,
+              navigations::add,
+              run = state.run,
+              analysisState = state,
+              analysisActions = actions)
+        }
+        .use { fixture ->
+          for ((name, next) in cases) {
+            state = next
+            fixture.render()
+            val presentation = projectRunPresentation(project, state)
+            val label = analysisLifecycleStatusLabel(presentation, state)
+            fixture.assertTextFits(label, maxLines = 3)
+            fixture.assertSummaryStatusPlacement(label)
+            assertEquals(
+                label,
+                projectSummaryPresentation(null, project, state.run, runState = state)
+                    .runLifecycleLabel,
+                name)
+            presentation.lifecycleExplanation?.let { assertTrue(fixture.hasText(it), name) }
+            if (label != presentation.status) {
+              assertTrue(fixture.hasText("Last accepted run · ${presentation.status}"), name)
+              assertEquals(
+                  "$label · Last accepted analysis run: ${presentation.status} · separate from saved coverage.",
+                  projectSummaryPresentation(null, project, state.run, runState = state).runMessage,
+                  name)
+            }
+            assertEquals(
+                AnalysisRunCommand.Resume in presentation.commands,
+                fixture.hasText("Resume → fresh preview"),
+                name)
+            if (name == "canceled") assertTrue(fixture.hasText("Start new analysis"))
+            if (name == "failed refresh") {
+              assertFalse(fixture.hasText("Resume → fresh preview"))
+              assertTrue(fixture.hasText("Status could not be read"))
+            }
+          }
+          fixture.clickText("View analysis")
+          assertEquals(listOf(Workspace.Analysis), navigations)
+        }
+  }
+
+  @Test
   fun compactRunUsesCapturedProgressWithoutChangingSavedCoverageOrDispatchingInspection() {
     val project = analysisProjectFixture()
     val path = "src/" + "long-directory/".repeat(12) + "file.go"
