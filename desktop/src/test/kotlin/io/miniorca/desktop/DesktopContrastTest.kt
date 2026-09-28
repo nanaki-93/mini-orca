@@ -44,7 +44,8 @@ class DesktopContrastTest {
                     status = status,
                     sections = it.sections.map { section -> section.copy(status = status) })
               }
-          val presentation = projectRunPresentation(ProjectAnalysisRunState(run = run))
+          val presentation =
+              projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run))
           ComposeVisualFixture(800, 650, 1.5f) {
                 AnalysisWorkspacePane(
                     AnalysisWorkspacePaneState(

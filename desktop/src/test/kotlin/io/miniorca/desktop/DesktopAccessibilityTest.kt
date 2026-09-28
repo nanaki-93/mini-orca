@@ -390,6 +390,19 @@ class DesktopAccessibilityTest {
         analysisRunFixture()
             .copy(
                 status = "running",
+                plan =
+                    analysisPreviewFixture()
+                        .copy(
+                            files =
+                                listOf(
+                                    AnalysisPlannedFile(
+                                        "helper.go",
+                                        "helper",
+                                        "Go",
+                                        20,
+                                        listOf(
+                                            AnalysisStagePlan(
+                                                "semantic", true, false, maxModelRequests = 0))))),
                 files =
                     listOf(
                         AnalysisRunFile(
@@ -584,6 +597,19 @@ class DesktopAccessibilityTest {
         analysisRunFixture()
             .copy(
                 status = "failed",
+                plan =
+                    analysisPreviewFixture()
+                        .copy(
+                            files =
+                                listOf(
+                                    AnalysisPlannedFile(
+                                        "cmd/miniorca/main.go",
+                                        "base",
+                                        "Go",
+                                        20,
+                                        listOf(
+                                            AnalysisStagePlan(
+                                                "semantic", true, false, maxModelRequests = 0))))),
                 files =
                     listOf(
                         AnalysisRunFile(

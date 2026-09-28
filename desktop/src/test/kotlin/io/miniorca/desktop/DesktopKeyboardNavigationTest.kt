@@ -1580,6 +1580,21 @@ class DesktopKeyboardNavigationTest {
         analysisRunFixture()
             .copy(
                 status = "running",
+                plan =
+                    analysisPreviewFixture()
+                        .copy(
+                            files =
+                                listOf("helper.go" to "helper", "main.go" to "main").map {
+                                    (path, hash) ->
+                                  AnalysisPlannedFile(
+                                      path,
+                                      hash,
+                                      "Go",
+                                      20,
+                                      listOf(
+                                          AnalysisStagePlan(
+                                              "semantic", true, false, maxModelRequests = 0)))
+                                }),
                 files =
                     listOf(
                         AnalysisRunFile(

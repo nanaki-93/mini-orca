@@ -49,6 +49,7 @@ class AnalysisWorkspaceStateTest {
                 status = "running",
                 windowElapsedSeconds = 42,
                 windowFilesCompleted = 3,
+                plan = plannedRunFiles("main.go" to listOf("semantic", "performance")),
                 updatedAt = "2026-09-15T15:30:00Z",
                 files =
                     listOf(
@@ -61,18 +62,22 @@ class AnalysisWorkspaceStateTest {
                                 AnalysisStageProgress("performance", "pending", 0, false)))))
     assertEquals(
         "Current run · 3 files processed · 42s elapsed",
-        projectRunPresentation(ProjectAnalysisRunState(run = run)).headline)
+        projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run)).headline)
     assertEquals(
         "Last run · Paused · 1 of 2 stages · 2026-09-15T15:30:00Z",
-        projectRunPresentation(ProjectAnalysisRunState(run = run.copy(status = "paused"))).headline)
+        projectRunPresentation(
+                resultProjectFixture(), ProjectAnalysisRunState(run = run.copy(status = "paused")))
+            .headline)
     assertEquals(
         "Last run · 1 of 2 stages",
         projectRunPresentation(
+                resultProjectFixture(),
                 ProjectAnalysisRunState(run = run.copy(status = "completed", updatedAt = "")))
             .headline)
     assertEquals(
         "Current run",
         projectRunPresentation(
+                resultProjectFixture(),
                 ProjectAnalysisRunState(
                     run =
                         run.copy(
@@ -89,6 +94,7 @@ class AnalysisWorkspaceStateTest {
         analysisRunFixture()
             .copy(
                 status = "failed",
+                plan = plannedRunFiles("main.go" to listOf("semantic")),
                 files =
                     listOf(
                         AnalysisRunFile(
@@ -124,14 +130,17 @@ class AnalysisWorkspaceStateTest {
         }
     assertEquals(
         failure,
-        projectRunPresentation(ProjectAnalysisRunState(run = run)).failures.single().reason)
+        projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run))
+            .failures
+            .single()
+            .reason)
   }
 
   @Test
   fun lifecycleCommandsFollowTheDaemonAndResumeRequiresFreshAdmission() {
     assertEquals(
         listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed),
-        projectRunPresentation(ProjectAnalysisRunState()).commands)
+        projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState()).commands)
     val expected =
         mapOf(
             "running" to listOf(AnalysisRunCommand.Pause, AnalysisRunCommand.Cancel),
@@ -149,6 +158,7 @@ class AnalysisWorkspaceStateTest {
       assertEquals(
           commands,
           projectRunPresentation(
+                  resultProjectFixture(),
                   ProjectAnalysisRunState(run = analysisRunFixture().copy(status = status)))
               .commands)
     }
@@ -156,6 +166,7 @@ class AnalysisWorkspaceStateTest {
       assertEquals(
           listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed),
           projectRunPresentation(
+                  resultProjectFixture(),
                   ProjectAnalysisRunState(run = analysisRunFixture().copy(status = it)))
               .commands)
     }
@@ -186,6 +197,10 @@ class AnalysisWorkspaceStateTest {
         analysisRunFixture()
             .copy(
                 status = "running",
+                plan =
+                    plannedRunFiles(
+                        "main.go" to
+                            listOf("semantic", "performance", "security_source", "security_ai")),
                 files =
                     listOf(
                         AnalysisRunFile(
@@ -202,7 +217,7 @@ class AnalysisWorkspaceStateTest {
                                     false,
                                     reason = "source scanner unavailable"),
                                 AnalysisStageProgress("security_ai", "pending", 0, false)))))
-    val result = projectRunPresentation(ProjectAnalysisRunState(run = run))
+    val result = projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run))
     assertEquals(4, result.totalSteps)
     assertEquals(2, result.finishedSteps)
     assertEquals(0f, result.fileProgress)
@@ -233,15 +248,40 @@ class AnalysisWorkspaceStateTest {
             }
     val result =
         projectRunPresentation(
-            ProjectAnalysisRunState(run = analysisRunFixture().copy(files = files)))
+            resultProjectFixture(),
+            ProjectAnalysisRunState(
+                run =
+                    analysisRunFixture()
+                        .copy(
+                            plan =
+                                plannedRunFiles(
+                                    *files
+                                        .map { it.path to it.stages.map { stage -> stage.stage } }
+                                        .toTypedArray()),
+                            files = files)))
     assertEquals(6, result.totalFiles)
     assertEquals(3, result.finishedFiles)
     assertEquals(.5f, result.fileProgress)
-    assertNull(projectRunPresentation(ProjectAnalysisRunState()).fileProgress)
     assertNull(
+        projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState()).fileProgress)
+    val missing =
         projectRunPresentation(
-                ProjectAnalysisRunState(run = analysisRunFixture().copy(files = emptyList())))
-            .fileProgress)
+            resultProjectFixture(),
+            ProjectAnalysisRunState(
+                run =
+                    analysisRunFixture()
+                        .copy(
+                            plan = plannedRunFiles("main.go" to listOf("semantic")),
+                            files = emptyList())))
+    assertEquals(RunProgressAvailability.Incomplete, missing.progressAvailability)
+    assertNull(missing.fileProgress)
+    val empty =
+        projectRunPresentation(
+            resultProjectFixture(),
+            ProjectAnalysisRunState(
+                run = analysisRunFixture().copy(plan = plannedRunFiles(), files = emptyList())))
+    assertEquals(RunProgressAvailability.EmptyScope, empty.progressAvailability)
+    assertNull(empty.fileProgress)
   }
 
   @Test
@@ -284,7 +324,7 @@ class AnalysisWorkspaceStateTest {
                           })
                     })
 
-    val result = projectRunPresentation(ProjectAnalysisRunState(run = run))
+    val result = projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run))
 
     assertTrue(result.failures.isEmpty())
     assertEquals(files.size, result.totalSteps)
@@ -326,12 +366,103 @@ class AnalysisWorkspaceStateTest {
                 files = listOf(AnalysisRunFile("main.go", "base", "Go", stages)))
     val expected = stages.map { AnalysisStageFailure("main.go", it.stage, it.attempts, it.reason) }
 
-    assertEquals(expected, projectRunPresentation(ProjectAnalysisRunState(run = run)).failures)
     assertEquals(
         expected,
+        projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run)).failures)
+    assertTrue(
         projectRunPresentation(
+                resultProjectFixture(),
                 ProjectAnalysisRunState(run = run.copy(plan = analysisPreviewFixture())))
-            .failures)
+            .failures
+            .isEmpty())
+  }
+
+  @Test
+  fun invalidCapturedEvidenceCannotInflateProgressOrExposeActivePaths() {
+    val base =
+        analysisRunFixture()
+            .copy(
+                status = "running",
+                plan = plannedRunFiles("main.go" to listOf("semantic", "performance")),
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "main.go",
+                            "base",
+                            "Go",
+                            listOf(
+                                AnalysisStageProgress("semantic", "completed", 1, false),
+                                AnalysisStageProgress("performance", "running", 1, false)))))
+    val valid = projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = base))
+    assertEquals(RunProgressAvailability.Available, valid.progressAvailability)
+    assertEquals(1, valid.finishedSteps)
+    assertEquals(listOf("main.go"), valid.currentFiles)
+    val invalid =
+        listOf(
+            base.copy(identity = base.identity.copy(projectId = "other")),
+            base.copy(identity = base.identity.copy(projectRevision = "other")),
+            base.copy(plan = base.plan.copy(identity = base.plan.identity.copy(queueId = "other"))),
+            base.copy(files = base.files.map { it.copy(path = "other.go") }),
+            base.copy(files = base.files.map { it.copy(contentHash = "other") }),
+            base.copy(files = base.files + base.files.first()),
+            base.copy(files = base.files.map { it.copy(stages = it.stages + it.stages.first()) }),
+            base.copy(
+                files =
+                    base.files.map {
+                      it.copy(stages = listOf(AnalysisStageProgress("other", "running", 1, false)))
+                    }))
+    invalid.forEach { run ->
+      val result =
+          projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run))
+      assertNull(result.fileProgress)
+      assertEquals(0, result.finishedFiles)
+      assertTrue(result.currentFiles.isEmpty())
+      assertTrue(result.failures.isEmpty())
+    }
+    val partial =
+        projectRunPresentation(
+            resultProjectFixture(),
+            ProjectAnalysisRunState(
+                run = base.copy(files = base.files.map { it.copy(stages = it.stages.take(1)) })))
+    assertEquals(RunProgressAvailability.Incomplete, partial.progressAvailability)
+    assertEquals(0, partial.finishedFiles)
+    assertNull(partial.fileProgress)
+    val missingFile =
+        projectRunPresentation(
+            resultProjectFixture(),
+            ProjectAnalysisRunState(
+                run =
+                    base.copy(
+                        plan =
+                            plannedRunFiles(
+                                "main.go" to listOf("semantic", "performance"),
+                                "missing.go" to listOf("semantic")),
+                        files =
+                            listOf(
+                                base.files
+                                    .single()
+                                    .copy(
+                                        stages =
+                                            listOf(
+                                                AnalysisStageProgress(
+                                                    "semantic", "completed", 1, false),
+                                                AnalysisStageProgress(
+                                                    "performance", "failed", 1, false)))))))
+    assertEquals(2, missingFile.totalFiles)
+    assertEquals(1, missingFile.finishedFiles)
+    assertEquals(3, missingFile.totalSteps)
+    assertEquals(2, missingFile.finishedSteps)
+    assertEquals(RunProgressAvailability.Incomplete, missingFile.progressAvailability)
+    assertNull(missingFile.fileProgress)
+    val duplicatePlan =
+        projectRunPresentation(
+            resultProjectFixture(),
+            ProjectAnalysisRunState(
+                run =
+                    base.copy(
+                        plan = base.plan.copy(files = base.plan.files + base.plan.files.first()))))
+    assertEquals(RunProgressAvailability.Unavailable, duplicatePlan.progressAvailability)
+    assertTrue(duplicatePlan.currentFiles.isEmpty())
   }
 
   @Test
@@ -606,6 +737,21 @@ class AnalysisWorkspaceStateTest {
     assertFalse(page.stale)
   }
 }
+
+private fun plannedRunFiles(vararg files: Pair<String, List<String>>): AnalysisRunPreview =
+    analysisPreviewFixture()
+        .copy(
+            files =
+                files.map { (path, stages) ->
+                  AnalysisPlannedFile(
+                      path,
+                      "base",
+                      "Go",
+                      20,
+                      stages.map {
+                        AnalysisStagePlan(it, eligible = true, cached = false, maxModelRequests = 0)
+                      })
+                })
 
 internal fun resultProjectFixture() =
     ProjectAnalysis(

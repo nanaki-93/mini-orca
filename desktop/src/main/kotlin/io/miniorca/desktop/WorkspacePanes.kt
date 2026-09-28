@@ -57,7 +57,7 @@ internal fun AnalysisWorkspacePane(
         },
 ) {
   val analysis = state.analysis
-  val presentation = projectRunPresentation(analysis)
+  val presentation = projectRunPresentation(state.project, analysis)
   BoxWithConstraints(Modifier.fillMaxSize()) {
     val density = LocalDensity.current
     var headerHeight by remember { mutableStateOf<Int?>(null) }

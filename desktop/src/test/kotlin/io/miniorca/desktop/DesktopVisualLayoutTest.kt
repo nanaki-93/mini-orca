@@ -1819,7 +1819,8 @@ class DesktopVisualLayoutTest {
           .use { fixture ->
             fixture.render("final-progress-$status-800-150")
             val run = acceptanceRun(status)
-            val presentation = projectRunPresentation(ProjectAnalysisRunState(run = run))
+            val presentation =
+                projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run))
             fixture.assertTextFits(analysisRunTitle(run, presentation), maxLines = 3)
             assertEquals(
                 1,
@@ -1866,7 +1867,8 @@ class DesktopVisualLayoutTest {
             windowFilesCompleted = 0,
             windowElapsedSeconds = 0)
     listOf(active, terminal).forEach { run ->
-      val presentation = projectRunPresentation(ProjectAnalysisRunState(run = run))
+      val presentation =
+          projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run))
       val metadata =
           if (run.isActive()) "3 files processed · 42s elapsed"
           else
@@ -2219,6 +2221,26 @@ class DesktopVisualLayoutTest {
                         .copy(
                             projectId = visualFixtureProject.projectId,
                             projectRevision = visualFixtureProject.projectRevision),
+                plan =
+                    analysisPreviewFixture()
+                        .copy(
+                            identity =
+                                analysisPreviewFixture()
+                                    .identity
+                                    .copy(
+                                        projectId = visualFixtureProject.projectId,
+                                        projectRevision = visualFixtureProject.projectRevision),
+                            files =
+                                paths.mapIndexed { index, path ->
+                                  AnalysisPlannedFile(
+                                      path,
+                                      "hash-$index",
+                                      "Go",
+                                      20,
+                                      listOf(
+                                          AnalysisStagePlan(
+                                              "semantic", true, false, maxModelRequests = 0)))
+                                }),
                 files =
                     paths.mapIndexed { index, path ->
                       AnalysisRunFile(
@@ -2309,13 +2331,17 @@ class DesktopVisualLayoutTest {
               .use { fixture ->
                 fixture.render("analysis-progress-unknown-$status-800-1.5")
                 fixture.assertTextFits(analysisStatusLabel(status))
-                fixture.assertTextFits("File progress unavailable")
+                fixture.assertTextFits(
+                    "File progress incomplete · captured records missing or inconsistent",
+                    maxLines = 2)
                 fixture.assertTextFits(expectedAction)
                 fixture.assertTextFits("Cancel")
                 assertFalse(fixture.hasText(absentAction))
                 assertFalse(fixture.hasText("0 of 0 files finished"))
                 assertEquals(1, fixture.tagCount("analysis-run-progress-track"))
-                assertTrue(fixture.hasDescription("Files finished: progress unavailable"))
+                assertTrue(
+                    fixture.hasDescription(
+                        "File progress incomplete · captured records missing or inconsistent"))
               }
         }
   }
@@ -2430,6 +2456,19 @@ class DesktopVisualLayoutTest {
         analysisRunFixture()
             .copy(
                 status = "failed",
+                plan =
+                    analysisPreviewFixture()
+                        .copy(
+                            files =
+                                listOf(
+                                    AnalysisPlannedFile(
+                                        "cmd/miniorca/main.go",
+                                        "base",
+                                        "Go",
+                                        20,
+                                        listOf(
+                                            AnalysisStagePlan(
+                                                "semantic", true, false, maxModelRequests = 0))))),
                 files =
                     listOf(
                         AnalysisRunFile(
@@ -5276,7 +5315,15 @@ class DesktopVisualLayoutTest {
     var selection by
         mutableStateOf(selectionFixture().copy(files = files, excludedPaths = listOf("user.go")))
     val original = analysisRunFixture()
-    val planned = files.map { AnalysisPlannedFile(it.path, "base", "Go", 20, emptyList()) }
+    val planned =
+        files.map {
+          AnalysisPlannedFile(
+              it.path,
+              "base",
+              "Go",
+              20,
+              listOf(AnalysisStagePlan("semantic", true, false, maxModelRequests = 0)))
+        }
     var run by mutableStateOf<AnalysisRun?>(null)
     var reads = 0
     var writes = 0
@@ -5408,7 +5455,14 @@ class DesktopVisualLayoutTest {
                           files =
                               it.plan.files +
                                   extraPaths.map { path ->
-                                    AnalysisPlannedFile(path, "base", "Go", 20, emptyList())
+                                    AnalysisPlannedFile(
+                                        path,
+                                        "base",
+                                        "Go",
+                                        20,
+                                        listOf(
+                                            AnalysisStagePlan(
+                                                "semantic", true, false, maxModelRequests = 0)))
                                   }),
                   files =
                       it.files +
@@ -8812,7 +8866,16 @@ internal fun roundedAnalysisStateFixture(): ProjectAnalysisRunState {
             status = "running",
             plan =
                 original.plan.copy(
-                    files = paths.map { AnalysisPlannedFile(it, "base", "Go", 20, emptyList()) }),
+                    files =
+                        paths.map {
+                          AnalysisPlannedFile(
+                              it,
+                              "base",
+                              "Go",
+                              20,
+                              listOf(
+                                  AnalysisStagePlan("semantic", true, false, maxModelRequests = 0)))
+                        }),
             files =
                 paths.map { path ->
                   AnalysisRunFile(

@@ -710,7 +710,8 @@ private fun SummaryIntroduction(
             presentation.languages.split(" · ").filter { it.isNotBlank() }
     Text(facts.joinToString(" · "), color = SecondaryText, style = IdeTypography.workspaceMetadata)
     if (actions != null &&
-        AnalysisRunCommand.Start in projectRunPresentation(runState.analysis).commands) {
+        AnalysisRunCommand.Start in
+            projectRunPresentation(runState.project, runState.analysis).commands) {
       MiniOrcaButton(
           onClick = { actions.start(defaultAnalysisRunLimits, false) },
           enabled = analysisRunActionEnabled(runState),

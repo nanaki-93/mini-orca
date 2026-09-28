@@ -11,7 +11,7 @@ class IdeUiContractBaselineTest {
   fun acceptedNavigationSeparatesProgressResultsAndEditingWithoutStartingAShell() {
     assertEquals(
         listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed),
-        projectRunPresentation(ProjectAnalysisRunState()).commands)
+        projectRunPresentation(null, ProjectAnalysisRunState()).commands)
     assertTrue(DesktopLayoutStore(InMemoryPreferences()).load().bottomCollapsed)
     assertNull(
         declarationCreationBlockedReason(file("empty.go", "base").copy(content = "package main\n")))
