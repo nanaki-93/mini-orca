@@ -148,6 +148,11 @@ enum class AdmissionRecovery {
   Uncertain,
 }
 
+enum class AnalysisRunErrorKind {
+  Action,
+  StatusRead,
+}
+
 /** Consent is transient and belongs only to this admission preview. */
 data class ProjectAnalysisRunState(
     val run: AnalysisRun? = null,
@@ -157,6 +162,7 @@ data class ProjectAnalysisRunState(
     val admissionRecovery: AdmissionRecovery? = null,
     val action: String = "",
     val error: String? = null,
+    val errorKind: AnalysisRunErrorKind? = null,
     val sections: Map<AnalysisResultKey, AnalysisSectionState> = emptyMap(),
     val fileSelection: AnalysisSelectionState = AnalysisSelectionState(),
 )

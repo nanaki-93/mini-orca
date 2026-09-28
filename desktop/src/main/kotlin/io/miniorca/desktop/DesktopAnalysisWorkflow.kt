@@ -84,7 +84,8 @@ internal class DesktopAnalysisWorkflow(
             previewIntent = null,
             admissionRecovery = null,
             action = "",
-            error = null))
+            error = null,
+            errorKind = null))
     // Keep an in-flight admission alive: the daemon may admit it after this first status read.
     // Its eventual response (or failure) will reconcile again without restoring permission.
     if (pendingAdmission) {
@@ -149,7 +150,8 @@ internal class DesktopAnalysisWorkflow(
           current.copy(
               previewIntent = null,
               admission = null,
-              error = "Analysis scope changed. Close and request a fresh preview."))
+              error = "Analysis scope changed. Close and request a fresh preview.",
+              errorKind = AnalysisRunErrorKind.Action))
       return
     }
     requestPreview(intent)
@@ -204,13 +206,15 @@ internal class DesktopAnalysisWorkflow(
       update(
           current.copy(
               error =
-                  "No eligible files to analyze. Request a new preview after changing the selection."))
+                  "No eligible files to analyze. Request a new preview after changing the selection.",
+              errorKind = AnalysisRunErrorKind.Action))
       return
     }
     if (!admission.isConfirmed()) {
       update(
           current.copy(
-              error = "Confirm each remote destination and the Security review before starting."))
+              error = "Confirm each remote destination and the Security review before starting.",
+              errorKind = AnalysisRunErrorKind.Action))
       return
     }
     val preview = admission.preview
@@ -225,7 +229,9 @@ internal class DesktopAnalysisWorkflow(
         preview.retryStaleFailed != intent.retryStaleFailed) {
       update(
           current.copy(
-              admission = null, error = "Analysis scope changed. Request a fresh preview."))
+              admission = null,
+              error = "Analysis scope changed. Request a fresh preview.",
+              errorKind = AnalysisRunErrorKind.Action))
       return
     }
     val confirmations =
@@ -352,7 +358,11 @@ internal class DesktopAnalysisWorkflow(
       val run = io { api.analysisRun(project.id, project.revision) }
       if (!isCurrent(project, token) || readVersion != statusReadVersion || current.run != priorRun)
           return
-      update(current.copy(action = "", error = if (keepError) current.error else null))
+      update(
+          current.copy(
+              action = "",
+              error = if (keepError) current.error else null,
+              errorKind = if (keepError) current.errorKind else null))
       observe(project, token, run, uncertainAdmission)
     } catch (error: CancellationException) {
       throw error
@@ -364,8 +374,9 @@ internal class DesktopAnalysisWorkflow(
               current.copy(
                   action = "",
                   error =
-                      "${current.error} · Analysis status could not be read: ${error.message ?: "unavailable"}"))
-      else fail(project, token, error, "Analysis status could not be read")
+                      "${current.error} · Analysis status could not be read: ${error.message ?: "unavailable"}",
+                  errorKind = AnalysisRunErrorKind.StatusRead))
+      else statusReadFailed(project, token, error)
       // Overview exposes retained progress after a save fault so explicit recovery controls remain
       // reachable.
       try {
@@ -413,7 +424,8 @@ internal class DesktopAnalysisWorkflow(
                     previewIntent = null,
                     error =
                         listOfNotNull(current.error, "Analysis was replaced. Refresh its status.")
-                            .joinToString(" · ")))
+                            .joinToString(" · "),
+                    errorKind = AnalysisRunErrorKind.Action))
             false
           } else {
             if (acceptRun(project, run)) {
@@ -428,8 +440,9 @@ internal class DesktopAnalysisWorkflow(
               update(
                   current.copy(
                       error =
-                          "${current.error} · Analysis status could not be read: ${error.message ?: "unavailable"}"))
-          else fail(project, token, error, "Analysis status could not be read")
+                          "${current.error} · Analysis status could not be read: ${error.message ?: "unavailable"}",
+                      errorKind = AnalysisRunErrorKind.StatusRead))
+          else statusReadFailed(project, token, error)
         })
   }
 
@@ -438,7 +451,10 @@ internal class DesktopAnalysisWorkflow(
         (run.schemaVersion != "1" ||
             run.identity.projectId != project.id ||
             run.identity.projectRevision != project.revision && run.status != "stale")) {
-      update(current.copy(error = "The returned analysis belongs to another project revision."))
+      update(
+          current.copy(
+              error = "The returned analysis belongs to another project revision.",
+              errorKind = AnalysisRunErrorKind.Action))
       return false
     }
     val statusChanged = current.run?.status != run?.status
@@ -596,7 +612,8 @@ internal class DesktopAnalysisWorkflow(
             admission = null,
             previewIntent = intent,
             admissionRecovery = null,
-            error = null))
+            error = null,
+            errorKind = null))
     return generation
   }
 
@@ -607,7 +624,20 @@ internal class DesktopAnalysisWorkflow(
       fallback: String
   ) {
     if (isCurrent(project, token))
-        update(current.copy(action = "", error = error.message ?: fallback))
+        update(
+            current.copy(
+                action = "",
+                error = error.message ?: fallback,
+                errorKind = AnalysisRunErrorKind.Action))
+  }
+
+  private fun statusReadFailed(project: WorkflowProjectIdentity, token: Long, error: Exception) {
+    if (isCurrent(project, token))
+        update(
+            current.copy(
+                action = "",
+                error = error.message ?: "Analysis status could not be read",
+                errorKind = AnalysisRunErrorKind.StatusRead))
   }
 
   private fun project(): WorkflowProjectIdentity? =

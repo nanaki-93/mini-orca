@@ -5001,6 +5001,18 @@ class DesktopVisualLayoutTest {
                   fixture.assertTextBefore(label, daemon)
                   assertFalse(fixture.hasText("Analysis · Running"))
                 }
+                state =
+                    state.copy(
+                        analysisRun =
+                            state.analysisRun.copy(
+                                error = "unavailable", errorKind = AnalysisRunErrorKind.StatusRead))
+                fixture.render("toolbar-analysis-read-failure-$width-$scale")
+                fixture.assertTextFits("Analysis · Status read failed · Last accepted: Completed")
+                fixture.assertTextBefore(
+                    "Analysis · Status read failed · Last accepted: Completed", daemon)
+                assertTrue(
+                    fixture.hasDescription(
+                        "Whole-project analysis · Status read failed · Last accepted run · Completed · Status read failed; last accepted run retained · unavailable"))
                 state = state.copy(analysisRun = ProjectAnalysisRunState())
                 fixture.render()
                 assertFalse(fixture.hasText("Analysis · Completed"))
