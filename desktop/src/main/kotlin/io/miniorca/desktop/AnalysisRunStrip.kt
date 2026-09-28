@@ -124,6 +124,7 @@ private fun AnalysisRunPanel(
           Modifier.weight(1f).testTag("analysis-run-content"))
     }
     AnalysisActionFeedback(state.analysis)
+    AnalysisRunRecoveryContext(run, presentation, commands)
     AnalysisRunControls(state, commands, actions, Modifier.testTag("analysis-run-controls"))
     if (pathsExpanded) AnalysisExpandedPaths(presentation.currentFiles)
     if (run != null) AnalysisStageRows(run, presentation)
@@ -177,6 +178,12 @@ private fun AnalysisRunContent(
     analysisRunSupplementalMetadata(run, presentation)?.let { metadata ->
       Text(metadata, color = SecondaryText, style = IdeTypography.workspaceMetadata)
     }
+    if (run != null)
+        Text(
+            presentation.reportedAttempts?.let { "Cumulative attempts reported · $it" }
+                ?: "Cumulative attempts unavailable",
+            color = SecondaryText,
+            style = IdeTypography.workspaceMetadata)
   }
 }
 
@@ -224,12 +231,39 @@ private fun AnalysisRunAttention(run: AnalysisRun, presentation: ProjectRunPrese
         style = IdeTypography.compactBody,
         modifier = Modifier.testTag("analysis-run-attention"))
   }
-  if (run.reason.isNotBlank() || runNeedsAttention) {
+}
+
+@Composable
+private fun AnalysisRunRecoveryContext(
+    run: AnalysisRun?,
+    presentation: ProjectRunPresentation,
+    commands: List<AnalysisRunCommand>,
+) {
+  presentation.lifecycleExplanation?.let {
+    Text(it, color = SecondaryText, style = IdeTypography.compactBody)
+  }
+  if (AnalysisRunCommand.Cancel in commands || run?.status in setOf("canceling", "canceled"))
+      Text(
+          "Cancel stops active requests and future dispatch; completed evidence stays available.",
+          color = SecondaryText,
+          style = IdeTypography.workspaceMetadata)
+  if (run != null &&
+      run.status in
+          setOf("paused", "interrupted", "canceled", "failed", "partial", "unavailable")) {
+    val reason = run.reason.ifBlank { "No stop reason was supplied for this run." }
+    val preview = sanitizedOutputText(reason, 180).substringBefore('\n')
+    SelectionContainer {
+      Text("Stop reason · $preview", color = Warning, style = IdeTypography.compactBody)
+    }
     var expanded by remember(run.identity) { mutableStateOf(false) }
     IdeDisclosureHeader("Run diagnostic", expanded, { expanded = !expanded })
     if (expanded)
         DiagnosticText(
             run.reason.ifBlank { "No diagnostic was supplied for this run." }, color = Warning)
+  } else if (run?.reason?.isNotBlank() == true) {
+    var expanded by remember(run.identity) { mutableStateOf(false) }
+    IdeDisclosureHeader("Run diagnostic", expanded, { expanded = !expanded })
+    if (expanded) DiagnosticText(run.reason, color = Warning)
   }
 }
 
@@ -596,14 +630,15 @@ private fun AnalysisRunProgressTrack(
 
 @Composable
 internal fun AnalysisActionFeedback(analysis: ProjectAnalysisRunState) {
-  analysis.action
-      .takeIf { it.isNotEmpty() }
-      ?.let {
-        Text(
-            "Analysis: ${it.replaceFirstChar { character -> character.uppercase() }}…",
-            style = IdeTypography.workspaceMetadata,
-            color = SelectionText)
-      }
+  if (analysis.controlRequest?.outcome != AnalysisControlOutcome.Requesting)
+      analysis.action
+          .takeIf { it.isNotEmpty() }
+          ?.let {
+            Text(
+                "Analysis: ${it.replaceFirstChar { character -> character.uppercase() }}…",
+                style = IdeTypography.workspaceMetadata,
+                color = SelectionText)
+          }
   analysis.error?.let {
     Text("Analysis action needs attention", color = Error, style = IdeTypography.compactBody)
     DiagnosticText(it.ifBlank { "No failure details available." }, color = Error)
@@ -646,7 +681,12 @@ private fun AnalysisRunControls(
                     AnalysisRunCommand.RetryStaleFailed -> ActionTone.Neutral
                     else -> ActionTone.Primary
                   }) {
-                Text(command.label, style = IdeTypography.action)
+                Text(
+                    if (command == AnalysisRunCommand.Start &&
+                        state.analysis.run?.status == "canceled")
+                        "Start new analysis"
+                    else command.label,
+                    style = IdeTypography.action)
               }
         }
       }

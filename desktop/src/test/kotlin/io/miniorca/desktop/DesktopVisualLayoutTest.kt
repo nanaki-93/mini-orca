@@ -75,6 +75,139 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun f16AnalysisRunShowsLifecycleReasonAttemptsAndRecoveryWithDetailsCollapsed() {
+    val reason =
+        "Stopped at src/" + "日本語-long-path/".repeat(30) + "main.go\n" + "detail ".repeat(700)
+    val base =
+        analysisRunFixture()
+            .copy(
+                plan =
+                    analysisPreviewFixture().let { preview ->
+                      preview.copy(
+                          files =
+                              preview.files.map { file ->
+                                file.copy(
+                                    stages =
+                                        listOf(
+                                            AnalysisStagePlan(
+                                                "semantic", true, false, maxModelRequests = 0)))
+                              })
+                    },
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "main.go",
+                            "base",
+                            "Go",
+                            listOf(AnalysisStageProgress("semantic", "completed", 2, false)))),
+                elapsedSeconds = 42)
+    val cases =
+        listOf(
+            "requesting-pause" to
+                ProjectAnalysisRunState(
+                    run = base.copy(status = "running"),
+                    action = "pause",
+                    controlRequest =
+                        AnalysisControlRequest("pause", AnalysisControlOutcome.Requesting)),
+            "pausing" to ProjectAnalysisRunState(run = base.copy(status = "pausing")),
+            "requesting-cancel" to
+                ProjectAnalysisRunState(
+                    run = base.copy(status = "pausing"),
+                    action = "cancel",
+                    controlRequest =
+                        AnalysisControlRequest("cancel", AnalysisControlOutcome.Requesting)),
+            "canceling" to ProjectAnalysisRunState(run = base.copy(status = "canceling")),
+            "paused" to
+                ProjectAnalysisRunState(run = base.copy(status = "paused", reason = reason)),
+            "interrupted" to ProjectAnalysisRunState(run = base.copy(status = "interrupted")),
+            "canceled" to ProjectAnalysisRunState(run = base.copy(status = "canceled")),
+            "failed" to ProjectAnalysisRunState(run = base.copy(status = "failed")),
+            "partial" to ProjectAnalysisRunState(run = base.copy(status = "partial")),
+            "unavailable" to ProjectAnalysisRunState(run = base.copy(status = "unavailable")),
+            "unknown" to ProjectAnalysisRunState(run = base.copy(status = "future_state")),
+            "status-unavailable" to
+                ProjectAnalysisRunState(
+                    run = base.copy(status = "paused"),
+                    statusUnavailable = true,
+                    error = "Status read failed"))
+    for ((name, analysis) in cases) {
+      var calls = 0
+      ComposeVisualFixture(800, 650, 1.5f) {
+            AnalysisWorkspacePane(
+                AnalysisWorkspacePaneState(resultProjectFixture(), analysis),
+                AnalysisWorkspaceActions(
+                    { _, _ -> calls++ }, { calls++ }, { calls++ }, { calls++ }, { calls++ }))
+          }
+          .use { fixture ->
+            fixture.render("f16-analysis-$name")
+            val metadata = analysisRunTimeMetadata(requireNotNull(analysis.run))
+            val facts = projectRunPresentation(resultProjectFixture(), analysis)
+            val metadataLine =
+                if (facts.isActive || facts.totalSteps == 0) metadata.joinToString(" · ")
+                else
+                    "${facts.finishedSteps} of ${facts.totalSteps} stages · ${metadata.joinToString(" · ")}"
+            fixture.revealText(metadataLine, "analysis-page")
+            assertTrue(fixture.hasText(metadataLine))
+            fixture.revealText("Cumulative attempts reported · 2", "analysis-page")
+            assertTrue(fixture.hasText("Cumulative attempts reported · 2"))
+            when (name) {
+              "requesting-pause" -> {
+                assertTrue(fixture.hasText("Requesting pause…"))
+                assertFalse(
+                    fixture.hasText(
+                        "Pause requested; waiting for the current stage boundary. No new stage will start."))
+              }
+              "pausing" ->
+                  assertTrue(
+                      fixture.hasText(
+                          "Pause requested; waiting for the current stage boundary. No new stage will start."))
+              "requesting-cancel" -> assertTrue(fixture.hasText("Requesting cancellation…"))
+              "canceling" ->
+                  assertTrue(
+                      fixture.hasText(
+                          "Cancellation accepted; active work is stopping. Completed evidence remains available."))
+              "paused",
+              "interrupted" -> {
+                fixture.revealText("Resume → fresh preview", "analysis-page")
+                fixture.assertTextFits("Resume → fresh preview")
+              }
+              "canceled" -> {
+                fixture.revealText("Start new analysis", "analysis-page")
+                fixture.assertTextFits("Start new analysis")
+                assertFalse(fixture.hasText("Resume → fresh preview"))
+              }
+              "unknown" -> assertFalse(fixture.hasText("Resume → fresh preview"))
+              "status-unavailable" ->
+                  assertTrue(
+                      fixture.hasText(
+                          "Current run status unavailable; the last accepted snapshot is retained."))
+            }
+            if (name in
+                setOf("paused", "interrupted", "canceled", "failed", "partial", "unavailable")) {
+              val reasonLabel =
+                  if (name == "paused")
+                      "Stop reason · ${sanitizedOutputText(reason, 180).substringBefore('\n')}"
+                  else "Stop reason · No stop reason was supplied for this run."
+              fixture.revealText(reasonLabel, "analysis-page")
+              assertTrue(fixture.hasText(reasonLabel))
+              if (name == "paused") {
+                assertFalse(fixture.hasText(reason))
+                fixture.revealText("Run diagnostic", "analysis-page")
+                fixture.clickText("Run diagnostic")
+                fixture.render("f16-analysis-$name-expanded")
+                fixture.revealText("Show full available output", "analysis-page")
+                fixture.clickDescription("Expand available diagnostic output")
+                fixture.render()
+                assertTrue(fixture.hasText(reason.trim()))
+                assertTrue(fixture.taggedBounds("diagnostic-output-scroll").height <= 240f * 1.5f)
+              }
+            }
+            assertEquals(0, calls)
+          }
+    }
+  }
+
+  @Test
   fun projectLandingRendersRememberedOpeningAndRecoveryAcrossViewports() {
     val path = "/projects/" + "日本語-very-long-directory/".repeat(6) + "workspace"
     val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
@@ -2465,8 +2598,8 @@ class DesktopVisualLayoutTest {
             state = state.copy(run = initialRun.copy(status = "paused"), action = "")
             fixture.render("summary-run-strip-paused-$width-$scale")
             fixture.assertTextFits("Paused")
-            fixture.assertTextFits("Resume")
-            fixture.clickText("Resume")
+            fixture.assertTextFits("Resume → fresh preview")
+            fixture.clickText("Resume → fresh preview")
             assertEquals(1, resumes)
           }
     }
@@ -2476,7 +2609,7 @@ class DesktopVisualLayoutTest {
   fun unknownFileProgressKeepsOneTruthfulTrackAcrossActiveAndPausedRuns() {
     listOf(
             Triple("running", "Pause", "Resume"),
-            Triple("paused", "Resume", "Pause"),
+            Triple("paused", "Resume → fresh preview", "Pause"),
         )
         .forEach { (status, expectedAction, absentAction) ->
           val run =
@@ -2565,11 +2698,11 @@ class DesktopVisualLayoutTest {
   @Test
   fun analysisLifecycleAndOperationalErrorsStayExplicit() {
     listOf(
-            "paused" to "Resume",
-            "interrupted" to "Resume",
+            "paused" to "Resume → fresh preview",
+            "interrupted" to "Resume → fresh preview",
             "stale" to "Start analysis",
             "failed" to "Start analysis",
-            "canceled" to "Start analysis")
+            "canceled" to "Start new analysis")
         .forEach { (status, control) ->
           ComposeVisualFixture(800, 650, 1.5f) {
                 AnalysisWorkspacePane(
@@ -2672,6 +2805,7 @@ class DesktopVisualLayoutTest {
           fixture.revealText("Run diagnostic", "analysis-page")
           fixture.clickText("Run diagnostic")
           fixture.render()
+          fixture.revealText("No diagnostic was supplied for this run.", "analysis-page")
           assertTrue(fixture.hasText("No diagnostic was supplied for this run."))
           run = run.copy(updatedAt = "2026-09-28T10:00:00Z")
           fixture.render("stage-same-run-poll")
@@ -2683,7 +2817,7 @@ class DesktopVisualLayoutTest {
                   plan = run.plan.copy(identity = run.identity.copy(id = "new-run").queue()))
           fixture.render("stage-new-run")
           assertFalse(fixture.hasText(path))
-          assertFalse(fixture.hasText("No diagnostic was supplied for this run."))
+          assertTrue(fixture.hasText("Stop reason · No stop reason was supplied for this run."))
           assertEquals(0, dispatches)
         }
   }
@@ -5331,6 +5465,7 @@ class DesktopVisualLayoutTest {
                 fixture.revealText("Refresh files", "analysis-page")
                 fixture.scrollBy(180f, "analysis-page")
                 fixture.render()
+                fixture.revealText("File", "analysis-page")
                 fixture.assertAnalysisTableColumns()
               }
               if (width == 1600 && scale == 1.5f) {
@@ -5662,8 +5797,8 @@ class DesktopVisualLayoutTest {
           assertEquals(0, starts + resumes + otherActions)
           state = state.copy(analysis = state.analysis.copy(run = base.copy(status = "paused")))
           fixture.render("f15-paused-progress")
-          fixture.revealText("Resume", "analysis-page")
-          fixture.assertTextFits("Resume")
+          fixture.revealText("Resume → fresh preview", "analysis-page")
+          fixture.assertTextFits("Resume → fresh preview")
           assertEquals(0, starts + resumes + otherActions)
           state = state.copy(analysis = state.analysis.copy(run = null))
           fixture.render("f15-not-started")
@@ -6093,9 +6228,11 @@ class DesktopVisualLayoutTest {
           fixture.revealText("Code analysis · ${analysisStageBreakdown(stage)}", "analysis-page")
           fixture.clickText("Code analysis · ${analysisStageBreakdown(stage)}")
           fixture.render()
-          fixture.scrollBy(180f, "analysis-page")
+          fixture.revealText("Code analysis · ${analysisStageBreakdown(stage)}", "analysis-page")
+          fixture.scrollBy(300f, "analysis-page")
           fixture.render()
-          fixture.revealText(stageFailure, "analysis-stage-details-semantic")
+          assertTrue(
+              fixture.hasText(stageFailure), "Expanded stage retains its full failure detail")
           assertTrue(fixture.taggedBounds("analysis-stage-details-semantic").height > 0f)
           assertEquals(0, actions, "Measurement and local scrolling must not dispatch actions")
         }
