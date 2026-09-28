@@ -447,12 +447,27 @@ internal class DesktopAnalysisWorkflow(
           it.resumeRun != null && (run?.identity != it.resumeRun || run.plan != it.resumePlan)
         } == true
     if (current.run?.identity != run?.identity) {
+      val prior = current.run
+      val previousRun =
+          if (run != null &&
+              prior != null &&
+              prior.status in
+                  setOf(
+                      "completed",
+                      "completed_empty",
+                      "partial",
+                      "failed",
+                      "unavailable",
+                      "canceled"))
+              prior
+          else current.previousRun
       resultJobs.values.forEach(Job::cancel)
       resultJobs.clear()
       resultGenerations.clear()
       update(
           current.copy(
               run = run,
+              previousRun = previousRun,
               sections = emptyMap(),
               admission = null,
               previewIntent =

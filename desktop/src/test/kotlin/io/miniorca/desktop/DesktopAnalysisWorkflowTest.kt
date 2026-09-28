@@ -1519,6 +1519,119 @@ class DesktopAnalysisWorkflowTest {
     }
   }
 
+  @Test
+  fun historyRetainsOnlyObservedTerminalReplacementsAndNotPollingOrContinuation() {
+    Harness().use { h ->
+      h.run = h.run.copy(status = "running")
+      h.workflow.refresh()
+      h.drain()
+      assertNull(h.state.analysisRun.previousRun)
+      h.run = h.run.copy(identity = h.run.identity.copy(id = "unobserved-replacement"))
+      h.workflow.refresh()
+      h.drain()
+      assertNull(h.state.analysisRun.previousRun)
+
+      h.run = h.run.copy(status = "paused")
+      h.workflow.refresh()
+      h.drain()
+      h.workflow.preview(resume = true)
+      h.drain()
+      h.confirm()
+      h.workflow.admit()
+      h.drain()
+      assertEquals("new-generation", h.state.analysisRun.run?.identity?.generation)
+      assertNull(h.state.analysisRun.previousRun)
+
+      h.run = h.run.copy(status = "partial", reason = "First observed failure")
+      h.workflow.refresh()
+      h.drain()
+      h.run = h.run.copy(updatedAt = "final observation", elapsedSeconds = 42)
+      h.workflow.refresh() // Same identity, new snapshot, no history.
+      h.drain()
+      val first = h.state.analysisRun.run!!
+      assertNull(h.state.analysisRun.previousRun)
+      h.run = h.run.copy(identity = h.run.identity.copy(generation = "second"), status = "failed")
+      h.workflow.refresh()
+      h.drain()
+      assertEquals(first, h.state.analysisRun.previousRun)
+      assertTrue(h.state.analysisRun.sections.values.all { it.results?.identity == h.run.identity })
+      val second = h.state.analysisRun.run!!
+      h.run = h.run.copy(identity = h.run.identity.copy(id = "third"), status = "canceled")
+      h.workflow.refresh()
+      h.drain()
+      assertEquals(second, h.state.analysisRun.previousRun)
+      assertEquals(h.run, h.state.analysisRun.run)
+      h.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Bugs))
+      h.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Analysis))
+      assertEquals(second, h.state.analysisRun.previousRun)
+    }
+  }
+
+  @Test
+  fun onlyObservedTerminalStatusesBecomeHistory() {
+    for (status in
+        listOf(
+            "queued",
+            "running",
+            "pausing",
+            "canceling",
+            "paused",
+            "interrupted",
+            "stale",
+            "completed",
+            "completed_empty",
+            "partial",
+            "failed",
+            "unavailable",
+            "canceled")) {
+      Harness().use { h ->
+        h.run = h.run.copy(status = status)
+        h.workflow.refresh()
+        h.drain()
+        val observed = h.state.analysisRun.run!!
+        h.run = h.run.copy(identity = h.run.identity.copy(id = "next"), status = "running")
+        h.workflow.refresh()
+        h.drain()
+        assertEquals(
+            if (status in
+                setOf(
+                    "completed", "completed_empty", "partial", "failed", "unavailable", "canceled"))
+                observed
+            else null,
+            h.state.analysisRun.previousRun,
+            status)
+      }
+    }
+  }
+
+  @Test
+  fun queuedOldStatusCannotReplaceCurrentRunOrHistory() {
+    Harness().use { h ->
+      h.run = h.run.copy(status = "completed")
+      h.workflow.refresh()
+      h.drain()
+      val first = h.state.analysisRun.run!!
+      h.run =
+          h.run.copy(identity = h.run.identity.copy(generation = "replacement"), status = "partial")
+      h.workflow.refresh()
+      h.drain()
+      val accepted = h.state.analysisRun.run!!
+      assertEquals(first, h.state.analysisRun.previousRun)
+      h.staleStatus = first
+      h.staleStatusReads = 1
+      h.workflow.refresh()
+      h.main.runPending()
+      h.io.runPending() // Old terminal status is queued on the UI dispatcher.
+      val newer = accepted.copy(updatedAt = "newer progress")
+      h.dispatch(DesktopEvent.AnalysisRunUpdated(h.state.analysisRun.copy(run = newer)))
+      h.drain()
+      assertEquals(newer, h.state.analysisRun.run)
+      assertEquals(first, h.state.analysisRun.previousRun)
+      assertTrue(
+          h.state.analysisRun.sections.values.all { it.results?.identity == accepted.identity })
+    }
+  }
+
   private class Harness(pollMillis: Long = 100_000) : AutoCloseable {
     val main = AnalysisQueuedDispatcher()
     val io = AnalysisQueuedDispatcher()

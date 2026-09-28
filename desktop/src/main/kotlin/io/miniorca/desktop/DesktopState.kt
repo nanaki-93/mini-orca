@@ -151,6 +151,7 @@ enum class AdmissionRecovery {
 /** Consent is transient and belongs only to this admission preview. */
 data class ProjectAnalysisRunState(
     val run: AnalysisRun? = null,
+    val previousRun: AnalysisRun? = null,
     val admission: AnalysisAdmission? = null,
     val previewIntent: AnalysisPreviewIntent? = null,
     val admissionRecovery: AdmissionRecovery? = null,
