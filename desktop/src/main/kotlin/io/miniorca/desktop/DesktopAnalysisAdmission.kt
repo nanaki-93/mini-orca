@@ -148,14 +148,16 @@ internal fun DesktopAnalysisAdmissionContent(
           },
           color = SecondaryText)
       Text("Reviewing this preview sends nothing to a model.", color = SecondaryText)
-      Text(
-          "Expected model requests: ${preview.expectedModelRequests} · Maximum: ${preview.maxModelRequests}")
+      Text("Expected model requests without retries: ${preview.expectedModelRequests}")
+      Text("Inclusive maximum model requests with retries: ${preview.maxModelRequests}")
       if (preview.files.isEmpty())
           Text(
               if (preview.retryStaleFailed) "No stale or failed files to analyze."
               else "No eligible files to analyze.")
       Text(
-          "This window: ${preview.limits.batchFiles} files, ${preview.limits.budgetSeconds} seconds, up to ${preview.limits.maxAttemptsPerStage} attempts per stage. Remaining work requires an explicit continuation.")
+          "Dispatch window: up to ${preview.limits.batchFiles} files and ${preview.limits.budgetSeconds} seconds. These limits bound this dispatch, not the project inventory or an ETA.")
+      Text(
+          "Up to ${preview.limits.maxAttemptsPerStage} attempts per stage, including the initial attempt. Further work requires explicit continuation.")
       if (preview.compatibilityStage.isNotBlank())
           Text(
               "This saved run covers only ${analysisStageLabel(preview.compatibilityStage)}.",
@@ -183,17 +185,23 @@ internal fun DesktopAnalysisAdmissionContent(
             provider.stages.joinToString(" · ", transform = ::analysisStageLabel),
             color = PrimaryText,
             style = IdeTypography.resultHeading)
-        Text("${provider.model.scope} · ${provider.model.profile} · ${provider.model.model}")
-        Text(
-            "${if (provider.model.remoteProvider) "Remote" else "Local"} destination: ${provider.model.providerOrigin}")
+        SelectionContainer {
+          Column {
+            Text("Scope: ${provider.model.scope.availableMetadata()}")
+            Text("Profile: ${provider.model.profile.availableMetadata()}")
+            Text("Model: ${provider.model.model.availableMetadata()}")
+            Text(
+                "${if (provider.model.remoteProvider) "Remote" else "Local"} destination: ${provider.model.providerOrigin.availableMetadata()}")
+          }
+        }
         if (provider.remoteConfirmationRequired) {
           val checked = provider.id in admission.providerIds
           IdeCheckbox(
               checked = checked,
               onCheckedChange = { confirmProvider(provider.id, it) },
-              accessibleName = "Confirm ${provider.model.scope} destination",
+              accessibleName = "Confirm ${provider.model.scope.availableMetadata()} destination",
               stateLabel = if (checked) "Confirmed" else "Not confirmed",
-              label = "Confirm ${provider.model.scope} destination")
+              label = "Confirm ${provider.model.scope.availableMetadata()} destination")
         }
       }
       if (preview.securityReviewIntentRequired) {
@@ -214,6 +222,8 @@ internal fun DesktopAnalysisAdmissionContent(
     }
   }
 }
+
+private fun String.availableMetadata(): String = if (isBlank()) "Unavailable" else this
 
 internal fun analysisStageLabel(stage: String): String =
     when (stage) {

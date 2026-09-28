@@ -162,11 +162,84 @@ class DesktopAnalysisAdmissionTest {
                         "Selective retry: the daemon returned the stale & failed scope."))
             if (resumeRun != null) {
               assertTrue(fixture.hasText("This saved run covers only Security rules."))
-              assertTrue(fixture.hasText("Expected model requests: 0 · Maximum: 0"))
-              assertFalse(fixture.hasText("Expected model requests: 3 · Maximum: 6"))
+              assertTrue(fixture.hasText("Expected model requests without retries: 0"))
+              assertTrue(fixture.hasText("Inclusive maximum model requests with retries: 0"))
+              assertFalse(fixture.hasText("Expected model requests without retries: 3"))
             }
           }
     }
+  }
+
+  @Test
+  fun daemonTotalsAndDispatchWindowAreNotInferredFromFileCount() {
+    val preview =
+        analysisPreviewFixture()
+            .copy(
+                files = listOf(AnalysisPlannedFile("one.go", "a", "Go", 1, emptyList())),
+                expectedModelRequests = 47,
+                maxModelRequests = 83,
+                limits = AnalysisRunLimits(7, 120, 3))
+    ComposeVisualFixture(560, 1200) {
+          DesktopAnalysisAdmissionContent(
+              ProjectAnalysisRunState(admission = AnalysisAdmission(preview)), { _, _ -> }, {})
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Full project scope: 1 included file · 0 excluded"))
+          assertTrue(fixture.hasText("Expected model requests without retries: 47"))
+          assertTrue(fixture.hasText("Inclusive maximum model requests with retries: 83"))
+          assertTrue(
+              fixture.hasText(
+                  "Dispatch window: up to 7 files and 120 seconds. These limits bound this dispatch, not the project inventory or an ETA."))
+          assertTrue(
+              fixture.hasText(
+                  "Up to 3 attempts per stage, including the initial attempt. Further work requires explicit continuation."))
+          assertFalse(fixture.hasText("Run limits"))
+        }
+  }
+
+  @Test
+  fun everyProviderDisplaysItsOwnMetadataAndMissingFieldsStayUnavailable() {
+    val origin = "https://provider.example/" + "nested/".repeat(25) + "end"
+    val base = analysisPreviewFixture()
+    val preview =
+        base.copy(
+            providers =
+                listOf(
+                    base.providers
+                        .first()
+                        .copy(model = base.providers.first().model.copy(providerOrigin = origin)),
+                    base.providers
+                        .last()
+                        .copy(
+                            model =
+                                base.providers
+                                    .last()
+                                    .model
+                                    .copy(
+                                        scope = "",
+                                        profile = "  ",
+                                        model = "",
+                                        providerOrigin = "",
+                                        remoteProvider = false))))
+    ComposeVisualFixture(420, 1500, 1.5f) {
+          DesktopAnalysisAdmissionContent(
+              ProjectAnalysisRunState(admission = AnalysisAdmission(preview)), { _, _ -> }, {})
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Scope: bug"))
+          assertTrue(fixture.hasText("Profile: remote"))
+          assertTrue(fixture.hasText("Model: bug-model"))
+          assertTrue(fixture.hasText("Remote destination: $origin"))
+          assertTrue(fixture.hasText("Scope: Unavailable"))
+          assertTrue(fixture.hasText("Profile: Unavailable"))
+          assertTrue(fixture.hasText("Model: Unavailable"))
+          assertTrue(fixture.hasText("Local destination: Unavailable"))
+          assertTrue(fixture.hasDescription("Confirm bug destination"))
+          assertTrue(fixture.hasDescription("Confirm Unavailable destination"))
+          assertTrue(fixture.copyTextByDragging("Remote destination: $origin").isNotBlank())
+        }
   }
 
   @Test
@@ -264,8 +337,10 @@ class DesktopAnalysisAdmissionTest {
                     "Code analysis",
                     "Performance review · AI Security review",
                     "Remote destination: https://bug.example",
-                    "Remote destination: https://analyze.example")) assertTrue(
-                fixture.hasText(label))
+                    "Remote destination: https://analyze.example",
+                    "Scope: bug",
+                    "Profile: remote",
+                    "Model: bug-model")) assertTrue(fixture.hasText(label))
             assertFalse(state.admission!!.isConfirmed())
             for (label in
                 listOf(
@@ -376,7 +451,7 @@ class DesktopAnalysisAdmissionTest {
             fixture.render()
             assertTrue(fixture.hasText(title), mode)
             assertTrue(fixture.hasText(preparing), mode)
-            assertFalse(fixture.hasText("Expected model requests: 3 · Maximum: 6"), mode)
+            assertFalse(fixture.hasText("Expected model requests without retries: 3"), mode)
             assertFalse(fixture.tryClick("Retry preview"), mode)
             assertEquals(0, retries + starts + closes, mode)
             state = state.copy(action = "", error = diagnostic)
@@ -390,7 +465,7 @@ class DesktopAnalysisAdmissionTest {
             assertTrue(fixture.hasText(failureTitle), mode)
             assertTrue(fixture.hasText(diagnostic), "Complete diagnostic for $mode")
             assertTrue(fixture.hasText("Retry this preview with the same scope, or Close."), mode)
-            assertFalse(fixture.hasText("Expected model requests: 3 · Maximum: 6"), mode)
+            assertFalse(fixture.hasText("Expected model requests without retries: 3"), mode)
             assertFalse(fixture.tryClick("New preview"), mode)
             assertTrue(fixture.isFocusedControl("Close"), mode)
             assertTrue(fixture.requestFocus("Retry preview"), mode)
