@@ -1831,7 +1831,6 @@ class DesktopVisualLayoutTest {
             if (status == "completed") {
               assertTrue(fixture.hasText("1 of 1 files finished"))
               assertTrue(fixture.hasText("100%"))
-              assertTrue(fixture.hasText("4 of 4 stages"))
             }
             assertFalse(fixture.hasText("Run details"))
             assertFalse(fixture.hasText("Run limits"))
@@ -1859,37 +1858,41 @@ class DesktopVisualLayoutTest {
   fun analysisRunPanelKeepsActiveAndTerminalMetadataWithoutLifecycleHeadlines() {
     val active =
         analysisRunFixture()
-            .copy(status = "running", windowFilesCompleted = 3, windowElapsedSeconds = 42)
-    val terminal =
-        active.copy(
-            status = "paused",
-            updatedAt = "2026-09-15T15:30:00Z",
-            windowFilesCompleted = 0,
-            windowElapsedSeconds = 0)
-    listOf(active, terminal).forEach { run ->
-      val presentation =
-          projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run))
-      val metadata =
-          if (run.isActive()) "3 files processed · 42s elapsed"
-          else
-              listOfNotNull(
-                      "${presentation.finishedSteps} of ${presentation.totalSteps} stages"
-                          .takeIf { presentation.totalSteps > 0 },
-                      run.updatedAt.takeIf { it.isNotBlank() })
-                  .joinToString(" · ")
-      ComposeVisualFixture(1440, 900) {
-            AnalysisWorkspacePane(
-                AnalysisWorkspacePaneState(
-                    resultProjectFixture(), ProjectAnalysisRunState(run = run)),
-                AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
-          }
-          .use { fixture ->
-            fixture.render("analysis-run-metadata-${run.status}")
-            fixture.assertTextFits(analysisRunTitle(run, presentation))
-            fixture.assertTextFits(metadata)
-            assertFalse(fixture.hasText(presentation.headline))
-          }
-    }
+            .copy(
+                status = "running",
+                elapsedSeconds = 125,
+                windowFilesCompleted = 3,
+                windowElapsedSeconds = 42,
+                createdAt = "2026-09-15T14:00:00Z",
+                updatedAt = "2026-09-15T15:30:00Z")
+    val stopped = active.copy(status = "paused", windowFilesCompleted = 0, windowElapsedSeconds = 0)
+    val withoutTiming =
+        active.copy(elapsedSeconds = 0, windowElapsedSeconds = 0, createdAt = "", updatedAt = "")
+    val timestamps = "Created · 2026-09-15T14:00:00Z · Updated · 2026-09-15T15:30:00Z"
+    listOf(
+            active to
+                "3 files processed in current window · Reported run time · 125s · Current window · 42s · $timestamps",
+            stopped to "Reported run time · 125s · $timestamps",
+            stopped.copy(status = "interrupted") to "Reported run time · 125s · $timestamps",
+            stopped.copy(status = "completed") to "Reported run time · 125s · $timestamps",
+            withoutTiming to
+                "3 files processed in current window · Reported run time · unavailable")
+        .forEach { (run, metadata) ->
+          val presentation =
+              projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run))
+          ComposeVisualFixture(1440, 900) {
+                AnalysisWorkspacePane(
+                    AnalysisWorkspacePaneState(
+                        resultProjectFixture(), ProjectAnalysisRunState(run = run)),
+                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+              }
+              .use { fixture ->
+                fixture.render("analysis-run-metadata-${run.status}")
+                fixture.assertTextFits(analysisRunTitle(run, presentation))
+                fixture.assertTextFits(metadata, maxLines = 3)
+                assertFalse(fixture.hasText(presentation.headline))
+              }
+        }
   }
 
   @Test

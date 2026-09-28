@@ -47,8 +47,10 @@ class AnalysisWorkspaceStateTest {
         analysisRunFixture()
             .copy(
                 status = "running",
+                elapsedSeconds = 125,
                 windowElapsedSeconds = 42,
                 windowFilesCompleted = 3,
+                createdAt = "2026-09-15T14:00:00Z",
                 plan = plannedRunFiles("main.go" to listOf("semantic", "performance")),
                 updatedAt = "2026-09-15T15:30:00Z",
                 files =
@@ -61,30 +63,39 @@ class AnalysisWorkspaceStateTest {
                                 AnalysisStageProgress("semantic", "completed", 1, false),
                                 AnalysisStageProgress("performance", "pending", 0, false)))))
     assertEquals(
-        "Current run · 3 files processed · 42s elapsed",
+        "Current run · 3 files processed in current window · Reported run time · 125s · Current window · 42s · Created · 2026-09-15T14:00:00Z · Updated · 2026-09-15T15:30:00Z",
         projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run)).headline)
     assertEquals(
-        "Last run · Paused · 1 of 2 stages · 2026-09-15T15:30:00Z",
+        "Last run · Paused · 1 of 2 stages · Reported run time · 125s · Current window · 42s · Created · 2026-09-15T14:00:00Z · Updated · 2026-09-15T15:30:00Z",
         projectRunPresentation(
                 resultProjectFixture(), ProjectAnalysisRunState(run = run.copy(status = "paused")))
             .headline)
     assertEquals(
-        "Last run · 1 of 2 stages",
+        "Last run · 1 of 2 stages · Reported run time · 125s · Current window · 42s · Created · 2026-09-15T14:00:00Z",
         projectRunPresentation(
                 resultProjectFixture(),
                 ProjectAnalysisRunState(run = run.copy(status = "completed", updatedAt = "")))
             .headline)
     assertEquals(
-        "Current run",
+        "Current run · Reported run time · unavailable",
         projectRunPresentation(
                 resultProjectFixture(),
                 ProjectAnalysisRunState(
                     run =
                         run.copy(
                             files = emptyList(),
+                            elapsedSeconds = 0,
                             windowFilesCompleted = 0,
-                            windowElapsedSeconds = 0)))
+                            windowElapsedSeconds = 0,
+                            createdAt = "",
+                            updatedAt = "")))
             .headline)
+    listOf("interrupted", "failed", "partial", "completed_empty", "canceled").forEach { status ->
+      val metadata = analysisRunTimeMetadata(run.copy(status = status, windowElapsedSeconds = 0))
+      assertEquals("Reported run time · 125s", metadata.first())
+      assertFalse(metadata.any { it.startsWith("Current window") })
+      assertFalse(metadata.any { it.startsWith("Completed ·") })
+    }
   }
 
   @Test

@@ -275,17 +275,25 @@ internal fun analysisRunHeadline(
   if (run.isActive()) {
     if (run.windowFilesCompleted > 0) {
       facts +=
-          "${run.windowFilesCompleted} ${if (run.windowFilesCompleted == 1) "file" else "files"} processed"
+          "${run.windowFilesCompleted} ${if (run.windowFilesCompleted == 1) "file" else "files"} processed in current window"
     }
-    if (run.windowElapsedSeconds > 0) facts += "${run.windowElapsedSeconds}s elapsed"
   } else {
     if (run.status !in setOf("completed", "completed_empty"))
         facts += analysisStatusLabel(run.status)
     if (totalSteps > 0 && availability == RunProgressAvailability.Available)
         facts += "$finishedSteps of $totalSteps stages"
-    run.updatedAt.takeIf { it.isNotBlank() }?.let { facts += it }
   }
+  facts += analysisRunTimeMetadata(run)
   return facts.joinToString(" · ")
+}
+
+internal fun analysisRunTimeMetadata(run: AnalysisRun): List<String> = buildList {
+  add(
+      run.elapsedSeconds.takeIf { it > 0 }?.let { "Reported run time · ${it}s" }
+          ?: "Reported run time · unavailable")
+  run.windowElapsedSeconds.takeIf { it > 0 }?.let { add("Current window · ${it}s") }
+  run.createdAt.takeIf { it.isNotBlank() }?.let { add("Created · $it") }
+  run.updatedAt.takeIf { it.isNotBlank() }?.let { add("Updated · $it") }
 }
 
 /** The large heading shown above the Analysis page's run panel, distinct from the compact badge. */
