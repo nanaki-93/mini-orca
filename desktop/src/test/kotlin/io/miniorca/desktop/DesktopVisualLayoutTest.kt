@@ -1896,6 +1896,168 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun savedRunHistoryIsBoundedReadOnlyAndKeyedByFullIdentity() {
+    val project = resultProjectFixture()
+    val current =
+        analysisRunFixture()
+            .copy(
+                status = "completed",
+                identity = analysisRunFixture().identity.copy(id = "latest", generation = "new"),
+                elapsedSeconds = 73,
+                createdAt = "2026-09-15T14:00:00Z",
+                updatedAt = "2026-09-15T15:00:00Z")
+    val reason = "Historical failure: " + "sensitive context/".repeat(350)
+    val planned =
+        AnalysisPlannedFile(
+            "old.go",
+            "oldhash",
+            "Go",
+            20,
+            listOf(AnalysisStagePlan("semantic", true, false, maxModelRequests = 0)))
+    val reported =
+        AnalysisRunFile(
+            "old.go",
+            "oldhash",
+            "Go",
+            listOf(AnalysisStageProgress("semantic", "failed", 2, false, reason = reason)))
+    val previous =
+        analysisRunFixture()
+            .copy(
+                identity = analysisRunFixture().identity.copy(id = "older", generation = "old"),
+                status = "failed",
+                plan =
+                    analysisPreviewFixture()
+                        .copy(scope = "selected files", files = listOf(planned)),
+                files = listOf(reported),
+                elapsedSeconds = 125,
+                createdAt = "2026-09-14T12:00:00Z",
+                updatedAt = "2026-09-14T13:00:00Z")
+    for ((width, height, scale) in listOf(Triple(1440, 900, 1f), Triple(800, 650, 1.5f))) {
+      var snapshot by mutableStateOf(ProjectAnalysisRunState(run = current))
+      var calls = 0
+      ComposeVisualFixture(width, height, scale) {
+            AnalysisWorkspacePane(
+                AnalysisWorkspacePaneState(project, snapshot),
+                AnalysisWorkspaceActions(
+                    { _, _ -> calls++ },
+                    { calls++ },
+                    { calls++ },
+                    { calls++ },
+                    { calls++ },
+                    { calls++ },
+                    { calls++ }))
+          }
+          .use { fixture ->
+            fixture.render("history-latest-$width")
+            fixture.revealText("Latest saved run", "analysis-page")
+            assertTrue(fixture.hasText(savedRunIdentityLabel(current)))
+            assertTrue(
+                fixture.hasText(
+                    "Older run details unavailable in this session · only the latest saved run is restored after restart."))
+            assertFalse(fixture.hasText("No stage failures reported in this saved run."))
+            snapshot = snapshot.copy(previousRun = previous)
+            fixture.render("history-collapsed-$width")
+            fixture.revealText("Previous observed run · Failed", "analysis-page")
+            assertTrue(fixture.hasDescription("Expand Previous observed run · Failed"))
+            assertTrue(fixture.requestDescriptionFocus("Expand Previous observed run · Failed"))
+            assertTrue(fixture.pressKey(Key.Spacebar))
+            fixture.render("history-expanded-$width")
+            assertTrue(fixture.hasDescription("Collapse Previous observed run · Failed"))
+            assertTrue(fixture.hasText(savedRunIdentityLabel(previous)))
+            assertTrue(fixture.hasText("Captured scope · selected files · 1 planned file"))
+            assertTrue(fixture.hasText("Lifecycle · Failed"))
+            assertTrue(fixture.hasText("Reported run time · 125s"))
+            assertTrue(fixture.hasText("Created · 2026-09-14T12:00:00Z"))
+            assertTrue(fixture.hasText("Updated · 2026-09-14T13:00:00Z"))
+            assertTrue(fixture.hasText("old.go · Code analysis · 2 attempts reported"))
+            assertTrue(fixture.hasText("… output truncated"))
+            assertTrue(
+                fixture.taggedBounds("analysis-previous-run-details").height <= 280f * scale + 2f)
+            snapshot = snapshot.copy(run = current.copy(updatedAt = "2026-09-15T16:00:00Z"))
+            fixture.render("history-poll-$width")
+            assertTrue(fixture.hasDescription("Collapse Previous observed run · Failed"))
+            assertTrue(fixture.isFocusedControl("Collapse Previous observed run · Failed"))
+            snapshot =
+                snapshot.copy(
+                    run = current.copy(identity = current.identity.copy(generation = "next")))
+            fixture.render("history-replaced-$width")
+            fixture.revealText("Previous observed run · Failed", "analysis-page")
+            assertTrue(fixture.hasDescription("Expand Previous observed run · Failed"))
+            snapshot =
+                snapshot.copy(
+                    previousRun =
+                        previous.copy(
+                            identity = previous.identity.copy(projectRevision = "earlier")))
+            fixture.render("history-outdated-$width")
+            fixture.clickDescription("Expand Previous observed run · Failed")
+            fixture.render("history-outdated-expanded-$width")
+            assertTrue(
+                fixture.hasText(
+                    "Outdated · previous run belongs to another project revision; not current evidence."))
+            assertEquals(0, calls)
+          }
+    }
+  }
+
+  @Test
+  fun incompletePreviousRunShowsKnownFailuresAndMissingRunDiagnostic() {
+    val project = resultProjectFixture()
+    val current = analysisRunFixture().copy(status = "completed")
+    val plan =
+        analysisPreviewFixture()
+            .copy(
+                files =
+                    listOf("known.go", "missing.go").map { path ->
+                      AnalysisPlannedFile(
+                          path,
+                          "base",
+                          "Go",
+                          20,
+                          listOf(AnalysisStagePlan("semantic", true, false, maxModelRequests = 0)))
+                    })
+    val failedFile =
+        AnalysisRunFile(
+            "known.go",
+            "base",
+            "Go",
+            listOf(AnalysisStageProgress("semantic", "failed", 2, false, reason = "Known failure")))
+    for (status in listOf("failed", "unavailable")) {
+      val previous =
+          analysisRunFixture()
+              .copy(
+                  identity = analysisRunFixture().identity.copy(id = "older", generation = status),
+                  status = status,
+                  reason = "",
+                  plan = plan,
+                  files = listOf(failedFile))
+      val history = projectRunPresentation(project, ProjectAnalysisRunState(run = previous))
+      assertEquals(RunProgressAvailability.Incomplete, history.progressAvailability)
+      assertEquals(1, history.failures.size)
+      ComposeVisualFixture(800, 650, 1.5f) {
+            AnalysisWorkspacePane(
+                AnalysisWorkspacePaneState(
+                    project, ProjectAnalysisRunState(run = current, previousRun = previous)),
+                AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+          }
+          .use { fixture ->
+            fixture.render("history-incomplete-$status")
+            fixture.revealText(
+                "Previous observed run · ${analysisStatusLabel(status)}", "analysis-page")
+            fixture.clickDescription(
+                "Expand Previous observed run · ${analysisStatusLabel(status)}")
+            fixture.render("history-incomplete-expanded-$status")
+            assertTrue(fixture.hasText("No diagnostic was supplied for this run."))
+            assertTrue(
+                fixture.hasText("Stage failure record incomplete · only validated failures shown."))
+            assertTrue(fixture.hasText("known.go · Code analysis · 2 attempts reported"))
+            assertTrue(fixture.hasText("Known failure"))
+            assertFalse(fixture.hasText("No stage failures reported in this saved run."))
+            assertFalse(fixture.hasText("missing.go · Code analysis · 2 attempts reported"))
+          }
+    }
+  }
+
+  @Test
   fun analysisProgressAndResultLinksRemainReadableAcrossSupportedViewports() {
     listOf(
             Triple(1440, 900, 1f),
