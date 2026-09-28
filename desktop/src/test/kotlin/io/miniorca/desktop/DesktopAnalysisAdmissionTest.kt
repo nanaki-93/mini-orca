@@ -228,19 +228,141 @@ class DesktopAnalysisAdmissionTest {
   }
 
   @Test
-  fun loadingAndFailureRemainExplicitWithoutAnAdmission() {
-    ComposeVisualFixture(360, 400, 1.5f) {
-          DesktopAnalysisAdmissionContent(
-              ProjectAnalysisRunState(
-                  action = "preview", error = "Provider scope changed. Request a fresh preview."),
-              { _, _ -> },
-              {})
-        }
-        .use { fixture ->
-          fixture.render("analysis-admission-loading-error")
-          assertTrue(fixture.hasText("Preparing project scope and provider estimates…"))
-          assertTrue(fixture.hasText("Provider scope changed. Request a fresh preview."))
-          assertFalse(fixture.hasDescription("Include AI Security review"))
-        }
+  fun loadingAndFailureNameTheCapturedModeWithoutReusingPreviewTotals() {
+    val run = analysisRunFixture()
+    val cases =
+        listOf(
+            Triple(
+                "full project",
+                "Analyze whole project",
+                "Preparing full project analysis preview…"),
+            Triple(
+                "stale & failed",
+                "Analyze stale & failed",
+                "Preparing stale & failed analysis preview…"),
+            Triple(
+                "continuation",
+                "Continue project analysis",
+                "Preparing continuation preview for this analysis run…"))
+    for ((mode, title, preparing) in cases) {
+      val intent =
+          AnalysisPreviewIntent(
+              "project",
+              "revision",
+              AnalysisRunLimits(7, 120, 3),
+              mode != "stale & failed",
+              mode == "stale & failed",
+              if (mode == "continuation") run.identity else null,
+              if (mode == "continuation") run.plan else null)
+      val diagnostic =
+          "Transport failure: " + "connection detail ".repeat(300) + "end of diagnostic"
+      var state by
+          mutableStateOf(
+              ProjectAnalysisRunState(run = run, previewIntent = intent, action = "preview"))
+      var retries = 0
+      var closes = 0
+      var starts = 0
+      ComposeVisualFixture(420, 450, 1.5f) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+              IdeDialogSurface(
+                  360.dp,
+                  title = { DesktopAnalysisAdmissionTitle(state) },
+                  content = { DesktopAnalysisAdmissionContent(state, { _, _ -> }, {}) },
+                  actions = {
+                    DesktopAnalysisAdmissionActions(
+                        state,
+                        close = {
+                          closes++
+                          state = state.copy(previewIntent = null, error = null)
+                        },
+                        start = { starts++ },
+                        retry = {
+                          retries++
+                          state = state.copy(action = "preview", error = null)
+                        })
+                  },
+                  focusSafeActionOnOpen = true)
+            }
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.hasText(title), mode)
+            assertTrue(fixture.hasText(preparing), mode)
+            assertFalse(fixture.hasText("Expected model requests: 3 · Maximum: 6"), mode)
+            assertFalse(fixture.tryClick("Retry preview"), mode)
+            assertEquals(0, retries + starts + closes, mode)
+            state = state.copy(action = "", error = diagnostic)
+            fixture.render()
+            val failureTitle =
+                when (mode) {
+                  "full project" -> "Full project preview failed."
+                  "stale & failed" -> "Stale & failed preview failed."
+                  else -> "Continuation preview failed."
+                }
+            assertTrue(fixture.hasText(failureTitle), mode)
+            assertTrue(fixture.hasText(diagnostic), "Complete diagnostic for $mode")
+            assertTrue(fixture.hasText("Retry this preview with the same scope, or Close."), mode)
+            assertFalse(fixture.hasText("Expected model requests: 3 · Maximum: 6"), mode)
+            assertFalse(fixture.tryClick("New preview"), mode)
+            assertTrue(fixture.isFocusedControl("Close"), mode)
+            assertTrue(fixture.requestFocus("Retry preview"), mode)
+            fixture.render()
+            assertTrue(fixture.pressKey(Key.Enter), mode)
+            fixture.render()
+            assertEquals(1, retries, mode)
+            assertEquals(0, starts + closes, mode)
+            assertTrue(fixture.hasText(preparing), mode)
+            assertFalse(fixture.hasText(diagnostic), mode)
+            assertFalse(fixture.tryClick("Retry preview"), mode)
+            assertTrue(fixture.tryClick("Close"), mode)
+            fixture.render()
+            assertEquals(1, closes, mode)
+            assertEquals(0, starts, mode)
+          }
+    }
+  }
+
+  @Test
+  fun obsoleteOrMissingIntentOffersCloseInsteadOfDefaultingToFullPreview() {
+    val run = analysisRunFixture()
+    val intent =
+        AnalysisPreviewIntent(
+            "project",
+            "revision",
+            run.plan.limits,
+            run.plan.refresh,
+            run.plan.retryStaleFailed,
+            run.identity,
+            run.plan)
+    for (obsolete in listOf(true, false)) {
+      var retries = 0
+      var closes = 0
+      val state =
+          ProjectAnalysisRunState(
+              run = run.copy(identity = run.identity.copy(generation = "replacement")),
+              previewIntent = if (obsolete) intent else null,
+              error = "Captured run changed")
+      ComposeVisualFixture(420, 360) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+              IdeDialogSurface(
+                  320.dp,
+                  title = { DesktopAnalysisAdmissionTitle(state) },
+                  content = { DesktopAnalysisAdmissionContent(state, { _, _ -> }, {}) },
+                  actions = {
+                    DesktopAnalysisAdmissionActions(state, { closes++ }, {}, { retries++ })
+                  })
+            }
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.hasText("Close and request a new preview from Analysis."))
+            assertTrue(fixture.copyTextByDragging("Captured run changed").isNotBlank())
+            assertFalse(fixture.tryClick("Retry preview"))
+            assertFalse(fixture.tryClick("New preview"))
+            assertEquals(0, retries)
+            assertTrue(fixture.tryClick("Close"))
+            assertEquals(1, closes)
+          }
+    }
   }
 }
