@@ -443,18 +443,17 @@ private fun SummaryRunPanel(
 ) {
   val currentPaths = presentation.currentFiles
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-          AnalysisRunMetadata(
-              run, presentation, currentPaths, pathsExpanded, onTogglePaths, Modifier.weight(1f))
-          run?.let {
-            AnalysisRunProgressTrack(
-                presentation, analysisStatusTint(it.status), Modifier.weight(1f))
-          }
-          AnalysisRunControls(state, commands, actions)
-        }
+    AnalysisRunMetadata(run, presentation, currentPaths, pathsExpanded, onTogglePaths)
+    if (run != null) {
+      AnalysisRunProgressTrack(
+          presentation, analysisStatusTint(run.status), Modifier.fillMaxWidth())
+      if (presentation.progressAvailability == RunProgressAvailability.Available)
+          Text(
+              "Finished includes partial and failed outcomes; it does not mean successful.",
+              color = SecondaryText,
+              style = IdeTypography.workspaceMetadata)
+    }
+    AnalysisRunControls(state, commands, actions)
     if (pathsExpanded) AnalysisExpandedPaths(currentPaths)
   }
 }
@@ -478,7 +477,7 @@ private fun AnalysisRunMetadata(
     currentPaths: List<String>,
     pathsExpanded: Boolean,
     onTogglePaths: () -> Unit,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
   FlowRow(
       modifier = modifier,

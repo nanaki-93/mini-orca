@@ -2022,8 +2022,7 @@ class ProjectSummaryPaneTest {
             assertTrue(
                 fixture.hasText(
                     "${if (status == "completed") "Last" else "Current"} analysis run: ${analysisStatusLabel(status)} · separate from saved coverage."))
-            assertEquals(
-                if (status == "completed") 0 else 1, fixture.tagCount("summary-analysis-run-strip"))
+            assertEquals(1, fixture.tagCount("summary-analysis-run-strip"))
           }
           state = state.copy(fileSelection = AnalysisSelectionState(selectionFixture()))
           for (status in listOf("queued", "running", "completed")) {
@@ -2052,6 +2051,102 @@ class ProjectSummaryPaneTest {
           assertEquals(0, fixture.tagCount("summary-coverage-run-status"))
           assertEquals(0, fixture.tagCount("summary-analysis-run-strip"))
           assertFalse(fixture.hasText("Other selection failed."))
+        }
+  }
+
+  @Test
+  fun compactRunUsesCapturedProgressWithoutChangingSavedCoverageOrDispatchingInspection() {
+    val project = analysisProjectFixture()
+    val path = "src/" + "long-directory/".repeat(12) + "file.go"
+    val base = analysisRunFixture()
+    val planFile =
+        AnalysisPlannedFile(
+            path,
+            "hash",
+            "Go",
+            20,
+            listOf(AnalysisStagePlan("semantic", true, false, maxModelRequests = 0)))
+    val planned = base.copy(plan = base.plan.copy(files = listOf(planFile)))
+    val reported =
+        AnalysisRunFile(
+            path, "hash", "Go", listOf(AnalysisStageProgress("semantic", "partial", 1, false)))
+    var state by
+        mutableStateOf(
+            ProjectAnalysisRunState(
+                run = planned.copy(status = "running", files = listOf(reported))))
+    val coverage =
+        ProjectOverview(
+            project.projectId,
+            project.projectRevision,
+            analysisCoverage = AnalysisCoverage(total = 2, fresh = 1, stale = 1))
+    var dispatches = 0
+    val actions =
+        AnalysisWorkspaceActions(
+            { _, _ -> dispatches++ },
+            { dispatches++ },
+            { dispatches++ },
+            { dispatches++ },
+            { dispatches++ })
+    ComposeVisualFixture(800, 650, 1.5f) {
+          ProjectSummaryPane(
+              coverage,
+              project,
+              {},
+              run = state.run,
+              analysisState = state,
+              analysisActions = actions)
+        }
+        .use { fixture ->
+          for (status in listOf("running", "paused", "interrupted", "partial", "failed")) {
+            state = state.copy(run = planned.copy(status = status, files = listOf(reported)))
+            fixture.render()
+            fixture.assertTextFits(analysisStatusLabel(status))
+            fixture.assertTextFits("1 of 1 files finished")
+            fixture.revealText("1 of 2 selected files are up to date", "summary-scroll")
+            assertTrue(fixture.hasText("1 of 2 selected files are up to date"))
+            assertTrue(
+                fixture.hasText(
+                    "Finished includes partial and failed outcomes; it does not mean successful."))
+            assertEquals(1, fixture.tagCount("summary-analysis-run-strip"))
+          }
+          state =
+              state.copy(
+                  run =
+                      planned.copy(
+                          status = "running",
+                          files =
+                              listOf(
+                                  reported.copy(
+                                      stages =
+                                          listOf(
+                                              AnalysisStageProgress(
+                                                  "semantic", "running", 1, false))))))
+          fixture.render()
+          fixture.revealText("Show full path", "summary-scroll")
+          assertTrue(fixture.requestDescriptionFocus("Show active files"))
+          fixture.pressKey(androidx.compose.ui.input.key.Key.Enter)
+          fixture.render()
+          fixture.revealText("Current: $path", "summary-scroll")
+          assertTrue(fixture.hasText("Current: $path"))
+          state = state.copy(run = requireNotNull(state.run).copy(files = emptyList()))
+          fixture.render()
+          fixture.assertTextFits(
+              "File progress incomplete · captured records missing or inconsistent", maxLines = 3)
+          assertFalse(fixture.hasText("Current: $path"))
+          state =
+              state.copy(
+                  run =
+                      planned.copy(
+                          status = "interrupted",
+                          plan =
+                              planned.plan.copy(
+                                  identity = planned.plan.identity.copy(queueId = "foreign")),
+                          files = listOf(reported)))
+          fixture.render()
+          fixture.assertTextFits("File progress unavailable")
+          assertFalse(fixture.hasText("1 of 1 files finished"))
+          assertFalse(fixture.hasText("Current: $path"))
+          assertEquals(0, dispatches)
         }
   }
 
