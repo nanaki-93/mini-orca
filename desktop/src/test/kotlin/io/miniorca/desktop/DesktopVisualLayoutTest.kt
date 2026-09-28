@@ -976,6 +976,121 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun f13AdmissionModesAndRecoveryRenderAcrossHostSizesAndTextScales() {
+    val base = analysisPreviewFixture()
+    val run = analysisRunFixture()
+    val file =
+        base.files
+            .single()
+            .copy(
+                stages =
+                    listOf(
+                        AnalysisStagePlan(
+                            "semantic", true, false, "Fresh review", "bug-provider", 1),
+                        AnalysisStagePlan("security_rules", true, true, "Reused rules", "", 0)))
+    val exclusion = AnalysisExcludedFile("excluded/generated.go", "Source policy exclusion")
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        val variants =
+            listOf(
+                "full" to
+                    ProjectAnalysisRunState(
+                        admission =
+                            AnalysisAdmission(
+                                base.copy(files = listOf(file), excluded = listOf(exclusion)))),
+                "selective" to
+                    ProjectAnalysisRunState(
+                        admission =
+                            AnalysisAdmission(
+                                base.copy(
+                                    files = listOf(file),
+                                    excluded = listOf(exclusion),
+                                    retryStaleFailed = true,
+                                    refresh = false))),
+                "resume" to
+                    ProjectAnalysisRunState(
+                        admission =
+                            AnalysisAdmission(
+                                base.copy(
+                                    files = listOf(file),
+                                    expectedModelRequests = 1,
+                                    maxModelRequests = 2,
+                                    compatibilityStage = "semantic"),
+                                run.identity)),
+                "empty" to
+                    ProjectAnalysisRunState(
+                        admission =
+                            AnalysisAdmission(
+                                base.copy(files = emptyList(), excluded = listOf(exclusion)))),
+                "loading" to
+                    ProjectAnalysisRunState(
+                        action = "preview",
+                        previewIntent =
+                            AnalysisPreviewIntent("project", "revision", base.limits, false, true)),
+                "failure" to
+                    ProjectAnalysisRunState(
+                        error = "Preview unavailable: connection refused",
+                        previewIntent =
+                            AnalysisPreviewIntent("project", "revision", base.limits, false, true)))
+        for ((variant, initial) in variants) {
+          var state by mutableStateOf(initial)
+          var operations = 0
+          ComposeVisualFixture(
+                  (width * density).toInt(), (height * density).toInt(), scale, density) {
+                    Box(
+                        Modifier.fillMaxSize().background(Panel),
+                        contentAlignment = Alignment.Center) {
+                          IdeDialogSurface(
+                              maxHeight = (height - 64).coerceAtMost(520).dp,
+                              title = { DesktopAnalysisAdmissionTitle(state) },
+                              content = {
+                                DesktopAnalysisAdmissionContent(
+                                    state, { _, _ -> operations++ }, { operations++ })
+                              },
+                              actions = {
+                                DesktopAnalysisAdmissionActions(
+                                    state, { operations++ }, { operations++ }, { operations++ })
+                              },
+                              focusSafeActionOnOpen = true)
+                        }
+                  }
+              .use { fixture ->
+                val label = "f13-$variant-$width-$height-$scale-${density}x"
+                fixture.render(label)
+                assertTrue(fixture.isFocusedControl("Close"), label)
+                fixture.assertTextFits("Close")
+                when (variant) {
+                  "loading" ->
+                      assertTrue(
+                          fixture.hasText("Preparing stale & failed analysis preview…"), label)
+                  "failure" -> {
+                    fixture.revealText("Preview unavailable: connection refused", "ide-dialog-body")
+                    fixture.render("$label-diagnostic")
+                    assertTrue(fixture.hasText("Retry preview"), label)
+                  }
+                  else -> {
+                    assertTrue(
+                        fixture.hasText(
+                            "Expected model requests without retries: ${state.admission!!.preview.expectedModelRequests}"),
+                        label)
+                    if (variant == "empty") assertTrue(fixture.isDisabled("Start analysis"), label)
+                    if (variant == "resume")
+                        assertTrue(
+                            fixture.hasText("This saved run covers only Code analysis."), label)
+                    if (variant != "resume")
+                        fixture.revealText("Source policy exclusion", "ide-dialog-body")
+                    fixture.render("$label-exclusions")
+                  }
+                }
+                assertEquals(0, operations, label)
+              }
+        }
+      }
+    }
+  }
+
+  @Test
   fun analysisAdmissionManyRecordsRemainReachableWithoutDispatchAcrossDialogSizes() {
     val base = analysisPreviewFixture()
     val longPath = "src/日本語/" + "nested-package/".repeat(10) + "last.go"
@@ -1092,7 +1207,7 @@ class DesktopVisualLayoutTest {
             val last = "Included file 24 · $longPath"
             fixture.revealText(longPath, "ide-dialog-body")
             fixture.assertTextWrapsWithoutClipping(longPath)
-            assertTrue(fixture.copyTextByDragging(longPath).isNotBlank(), label)
+            fixture.copyTextByDragging(longPath, longPath)
             assertTrue(fixture.requestDescriptionFocus("Expand $last"), label)
             fixture.render()
             assertTrue(fixture.isDescriptionFocused("Expand $last"), label)
@@ -1101,7 +1216,7 @@ class DesktopVisualLayoutTest {
             assertEquals("Expanded", fixture.descriptionStateDescription("Collapse $last"))
             fixture.revealText("Reason: $stageReason", "ide-dialog-body")
             fixture.assertTextWrapsWithoutClipping("Reason: $stageReason")
-            assertTrue(fixture.copyTextByDragging("Reason: $stageReason").isNotBlank(), label)
+            fixture.copyTextByDragging("Reason: $stageReason", "Reason: $stageReason")
             if (width == 800) {
               fixture.resize(1024 * 2, 768 * 2)
               fixture.render("$label-resized-expanded")
@@ -1129,10 +1244,10 @@ class DesktopVisualLayoutTest {
             val finalRecord = fixture.firstVisibleTextBounds(lastReason)
             assertTrue(finalRecord.top >= body.top && finalRecord.bottom <= body.bottom, label)
             fixture.render("$label-final-exclusion")
-            assertTrue(fixture.copyTextByDragging(lastReason).isNotBlank(), label)
+            fixture.copyTextByDragging(lastReason, lastReason)
             fixture.revealText("Remote destination: $origin", "ide-dialog-body")
             fixture.assertTextWrapsWithoutClipping("Remote destination: $origin")
-            assertTrue(fixture.copyTextByDragging("Remote destination: $origin").isNotBlank())
+            fixture.copyTextByDragging("Remote destination: $origin", "Remote destination: $origin")
             assertTrue(fixture.verticalScrollValue("ide-dialog-body") > 0f, label)
             assertActions()
             assertEquals(0, starts + closes + confirmations, label)
@@ -7653,18 +7768,31 @@ internal class ComposeVisualFixture(
       requireNotNull(taggedNode(tag).config.getOrNull(SemanticsProperties.VerticalScrollAxisRange))
           .value()
 
-  fun copyTextByDragging(label: String): String {
-    val bounds = textNodes(label).first().boundsInRoot
-    val start = Offset(bounds.left + 1f, bounds.top + 10f)
-    val end = Offset(minOf(bounds.right - 2f, bounds.left + 120f), start.y)
-    scene.sendPointerEvent(PointerEventType.Press, start, button = PointerButton.Primary)
-    scene.sendPointerEvent(PointerEventType.Move, (start + end) / 2f)
-    scene.sendPointerEvent(PointerEventType.Move, end)
-    scene.sendPointerEvent(PointerEventType.Release, end, button = PointerButton.Primary)
-    render()
-    pressKey(Key.Copy)
-    render()
-    return clipboard.nativeClipboard.getData(DataFlavor.stringFlavor) as String
+  fun copyTextByDragging(label: String, expectedText: String? = null): String {
+    var copied = ""
+    // A drag can scroll the enclosing viewport; locate the text again before each attempt.
+    for (inset in listOf(1f, 4f, 8f, 12f)) {
+      val bounds = textNodes(label).first().boundsInRoot
+      clipboard.nativeClipboard.setContents(java.awt.datatransfer.StringSelection(""), null)
+      val start = Offset(bounds.left + inset, bounds.top + minOf(10f, bounds.height / 2f))
+      val end = Offset(minOf(bounds.right - 2f, bounds.left + 120f), start.y)
+      scene.sendPointerEvent(PointerEventType.Press, start, button = PointerButton.Primary)
+      render()
+      scene.sendPointerEvent(PointerEventType.Move, (start + end) / 2f)
+      render()
+      scene.sendPointerEvent(PointerEventType.Move, end)
+      render()
+      scene.sendPointerEvent(PointerEventType.Release, end, button = PointerButton.Primary)
+      render()
+      pressKey(Key.Copy)
+      render()
+      copied = clipboard.nativeClipboard.getData(DataFlavor.stringFlavor) as String
+      if (copied.isNotEmpty() &&
+          (expectedText == null || (copied.length >= 3 && expectedText.contains(copied)))) {
+        return copied
+      }
+    }
+    error("Dragging $label copied '$copied' instead of text from '${expectedText ?: label}'")
   }
 
   fun scrollableContentCount(): Int =

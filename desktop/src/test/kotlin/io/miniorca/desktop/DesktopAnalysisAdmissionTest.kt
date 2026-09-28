@@ -728,12 +728,12 @@ class DesktopAnalysisAdmissionTest {
           fixture.render()
           assertEquals("Expanded", fixture.descriptionStateDescription("Collapse $first"))
           fixture.revealTextFullyWithin(files.last().path, "ide-dialog-body")
-          assertTrue(fixture.copyTextByDragging(files.last().path).isNotBlank())
+          fixture.copyTextByDragging(files.last().path, files.last().path)
           assertTrue(fixture.requestDescriptionFocus("Expand $last"))
           assertTrue(fixture.pressKey(Key.Enter))
           fixture.render()
           fixture.revealText("Reason: Reason for file 28", "ide-dialog-body")
-          assertTrue(fixture.copyTextByDragging("Reason: Reason for file 28").isNotBlank())
+          fixture.copyTextByDragging("Reason: Reason for file 28", "Reason: Reason for file 28")
           assertEquals("Expanded", fixture.descriptionStateDescription("Collapse $last"))
           state =
               state.copy(
