@@ -93,6 +93,7 @@ internal data class ProjectRunPresentation(
     val currentFiles: List<String>,
     val failures: List<AnalysisStageFailure>,
     val stages: List<AnalysisStageSummary>,
+    val reportedAttempts: Int?,
     val commands: List<AnalysisRunCommand>,
     val isActive: Boolean,
 ) {
@@ -187,7 +188,7 @@ internal fun projectRunPresentation(
                     AnalysisStageDetail(
                         path = planFile.path,
                         status = reported?.status,
-                        attempts = reported?.attempts,
+                        attempts = reported?.attempts?.takeIf { it >= 0 },
                         reused = reported?.cached,
                         eligible = plannedStage.eligible,
                         reason =
@@ -233,6 +234,7 @@ internal fun projectRunPresentation(
                   .filter { (file, _) -> file.stages.any { it.status == "running" } }
                   .map { it.first.path },
       stages = stages,
+      reportedAttempts = inventory?.reportedAttempts(),
       failures =
           inventory?.files.orEmpty().flatMap { (file, planned) ->
             file.stages
@@ -264,7 +266,20 @@ private data class CapturedRunProgress(
     val planFiles: List<AnalysisPlannedFile>,
     val files: List<Pair<AnalysisRunFile, AnalysisPlannedFile>>,
     val inconsistent: Boolean,
-)
+) {
+  fun reportedAttempts(): Int? {
+    if (inconsistent || files.size != totalFiles) return null
+    var total = 0
+    for ((file, planned) in files) {
+      if (file.stages.size != planned.stages.size) return null
+      for (stage in file.stages) {
+        if (stage.attempts < 0 || stage.attempts > Int.MAX_VALUE - total) return null
+        total += stage.attempts
+      }
+    }
+    return total
+  }
+}
 
 private fun capturedRunProgress(run: AnalysisRun, project: ProjectAnalysis?): CapturedRunProgress? {
   if (currentProjectRun(run, project) == null || run.plan.identity != run.identity.queue())
@@ -272,7 +287,9 @@ private fun capturedRunProgress(run: AnalysisRun, project: ProjectAnalysis?): Ca
   val planned = run.plan.files
   // A malformed plan cannot provide a reliable denominator or stage identity.
   if (planned.any { file ->
-    file.path.isBlank() || file.stages.map { it.stage }.distinct().size != file.stages.size
+    file.path.isBlank() ||
+        file.stages.any { it.stage.isBlank() } ||
+        file.stages.map { it.stage }.distinct().size != file.stages.size
   } || planned.map { it.path }.distinct().size != planned.size)
       return null
   val byPath = planned.associateBy { it.path }
@@ -284,6 +301,8 @@ private fun capturedRunProgress(run: AnalysisRun, project: ProjectAnalysis?): Ca
         if (counts[file.path] != 1 ||
             plan == null ||
             plan.contentHash != file.contentHash ||
+            plan.language != file.language ||
+            file.stages.any { it.stage.isBlank() } ||
             file.stages.map { it.stage }.distinct().size != file.stages.size ||
             file.stages.any { stage -> plan.stages.none { it.stage == stage.stage } }) {
           inconsistent = true
