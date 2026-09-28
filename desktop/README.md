@@ -357,14 +357,39 @@ resubmitting admission or offering a consent-reusing retry; Close and check the
 current Analysis run before choosing a new action. Closing the dialog discards
 transient consent but does not cancel an already admitted run.
 
-Pause/Resume/Cancel retain truthful partial coverage and cumulative attempts.
+Pause/Resume/Cancel retain truthful partial coverage and reported attempts.
 Resume requires a fresh preview; startup never silently resumes a model request.
-Analysis groups file progress, active paths and the current run controls in one
-rounded panel. Finished-file counts include failed/partial stages and do not imply
-successful analysis. Unknown file totals stay unavailable; no ETA is inferred.
-Stored elapsed time and previous-run details remain available alongside failures.
-Named Bugs, Performance and Security cards retain live coverage and unknown counts;
-clicking a card only navigates.
+Analysis groups lifecycle, file progress, active paths and applicable run controls.
+File totals come from the captured plan; only matching project/revision, queue,
+file path/hash and planned-stage records contribute progress. Missing or inconsistent
+records show incomplete or unavailable progress, not a percentage; a valid empty
+scope is shown separately. Finished files include partial and failed stage outcomes:
+finished does not mean successful, current or safe. Expand active paths to inspect
+full names, and captured stage rows to see running, pending, finished and attention
+breakdowns. Stage details show matching paths, statuses, reported attempts, reuse
+and reasons (or a missing-diagnostic fallback). Attempts are not provider-call
+counts. Ineligible stages keep their plan reasons without counting as operational
+failures. Run failures are visible near status, with bounded diagnostic details.
+
+Analysis labels the reported cumulative run time and, when supplied, the current
+dispatch-window time separately; it does not calculate an ETA or infer duration
+from timestamps. Created and Updated are labeled as such. A restored terminal run
+is the latest saved run. If a different run replaces a terminal run actually
+observed in this app session, **Previous observed run** discloses that snapshot's
+identity, scope, lifecycle, reported time, timestamps and failures. At most one
+previous terminal run is retained in memory; polling or continuing the same run
+does not add history. It survives workspace navigation but clears on project
+replacement. Older details are unavailable after restart: the current API restores
+only the latest saved run, not an archive. Previous runs cannot supply current
+progress, result rows or lifecycle controls; revision-mismatched history is marked
+outdated.
+
+Bugs, Performance and Security cards beside the overview remain navigable during
+active and stopped runs. They distinguish run-reported counts from matching loaded
+saved findings; unknown counts are not zero, and zero loaded findings alone does
+not prove a completed-empty result. Opening a card only navigates; retained rows
+and result-read errors remain visible in their category.
+
 Each page shows all loaded findings for its category. Rounded rows retain severity,
 summary and exact source location. Optional disclosures retain evidence and
 verification details. The single **Prepare fix** action opens the existing
