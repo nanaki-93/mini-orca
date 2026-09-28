@@ -7,6 +7,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 
 /** Admits project actions and reads daemon-owned progress. Selection never schedules analysis. */
 internal class DesktopAnalysisWorkflow(
@@ -21,6 +22,7 @@ internal class DesktopAnalysisWorkflow(
   private var actionJob: Job? = null
   private var generation = 0L
   private var admissionDismissed = false
+  private var pendingAdmissionToken: Long? = null
   private var statusReadVersion = 0L
   private val resultJobs = mutableMapOf<AnalysisResultKey, Job>()
   private val resultGenerations = mutableMapOf<AnalysisResultKey, Long>()
@@ -42,6 +44,26 @@ internal class DesktopAnalysisWorkflow(
                     event.state.run?.plan != current.previewIntent?.resumePlan))) {
       generation++
       actionJob?.cancel()
+      pendingAdmissionToken = null
+      if (current.action in setOf("pause", "cancel") &&
+          event.state.run?.identity != current.run?.identity) {
+        val project = project()
+        val replacement = event.state.run
+        val token = generation
+        if (project != null) {
+          scope.launch {
+            // beforeEvent runs before the replacement is reduced into state.
+            yield()
+            if (isCurrent(project, token) && current.run?.identity == replacement?.identity) {
+              update(current.copy(action = ""))
+              if (replacement != null &&
+                  replacement.identity.projectId == project.id &&
+                  replacement.identity.projectRevision == project.revision)
+                  observe(project, token, replacement)
+            }
+          }
+        }
+      }
     }
     if (event is DesktopEvent.ProjectLoaded ||
         event is DesktopEvent.IndexRefreshed &&
@@ -54,6 +76,7 @@ internal class DesktopAnalysisWorkflow(
     fileSelection.detach()
     generation++
     actionJob?.cancel()
+    pendingAdmissionToken = null
     coordinator.stopAnalysisPolling()
     cancelResultReads()
     update(
@@ -124,6 +147,7 @@ internal class DesktopAnalysisWorkflow(
       retryStaleFailed: Boolean = false,
       refresh: Boolean = !retryStaleFailed
   ) {
+    if (pendingAdmissionToken != null) return
     val project = project() ?: return
     val run = current.run
     val resumeRun = if (resume) run ?: return else null
@@ -238,6 +262,7 @@ internal class DesktopAnalysisWorkflow(
         AnalysisRunConfirmations(admission.providerIds.toList(), admission.securityReview)
     // Consume before dispatch, including queued cancellation and uncertain/failed HTTP responses.
     val token = begin(if (admission.resumeRun == null) "start" else "resume")
+    pendingAdmissionToken = token
     actionJob =
         scope.launch {
           try {
@@ -273,22 +298,35 @@ internal class DesktopAnalysisWorkflow(
                 error,
                 intent.takeUnless { admissionDismissed },
                 PendingAdmissionRun(preview.identity, admission.resumeRun, intent.resumePlan))
+          } finally {
+            if (pendingAdmissionToken == token) pendingAdmissionToken = null
           }
         }
   }
 
   fun control(action: String) {
     require(action == "pause" || action == "cancel")
+    if (pendingAdmissionToken != null) return
     val project = project() ?: return
     val run = current.run ?: return
+    val command = if (action == "pause") AnalysisRunCommand.Pause else AnalysisRunCommand.Cancel
+    if (command !in analysisRunCommands(state().project, run)) return
+    val pending = current.action
+    if (pending.isNotEmpty() && !(pending == "pause" && action == "cancel")) return
     val token = begin(action)
     actionJob =
         scope.launch {
+          if (!isCurrentControl(project, run.identity, token)) return@launch
+          if (command !in analysisRunCommands(state().project, current.run)) {
+            update(current.copy(action = ""))
+            observe(project, token, current.run)
+            return@launch
+          }
           try {
             val updated = io {
               api.controlAnalysis(AnalysisRunControlRequest(run.identity, action))
             }
-            if (!isCurrent(project, token)) return@launch
+            if (!isCurrentControl(project, run.identity, token)) return@launch
             require(updated.identity == run.identity) {
               "Analysis changed while updating its controls."
             }
@@ -297,10 +335,16 @@ internal class DesktopAnalysisWorkflow(
           } catch (error: CancellationException) {
             throw error
           } catch (error: Exception) {
-            recover(project, token, error)
+            if (isCurrentControl(project, run.identity, token)) recover(project, token, error)
           }
         }
   }
+
+  private fun isCurrentControl(
+      project: WorkflowProjectIdentity,
+      identity: AnalysisRunIdentity,
+      token: Long
+  ) = isCurrent(project, token) && current.run?.identity == identity
 
   fun refresh() {
     fileSelection.refresh()
