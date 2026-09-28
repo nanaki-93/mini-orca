@@ -34,6 +34,46 @@ internal data class AnalysisStageFailure(
     val reason: String
 )
 
+internal data class AnalysisStageDetail(
+    val path: String,
+    val status: String?,
+    val attempts: Int?,
+    val reused: Boolean?,
+    val eligible: Boolean,
+    val reason: String,
+)
+
+internal data class AnalysisStageSummary(
+    val stage: String,
+    val files: List<AnalysisStageDetail>,
+) {
+  val total: Int
+    get() = files.size
+
+  val running: Int
+    get() = files.count { it.status == "running" }
+
+  val pending: Int
+    get() = files.count { it.status == "pending" }
+
+  val finished: Int
+    get() = files.count { it.status != null && analysisStageFinished(it.status) }
+
+  val missing: Int
+    get() = files.count { it.status == null }
+
+  val attention: Int
+    get() =
+        files.count {
+          it.eligible &&
+              it.status != null &&
+              it.status !in setOf("completed", "completed_empty", "running", "pending")
+        }
+
+  val statuses: Map<String, Int>
+    get() = files.mapNotNull { it.status }.groupingBy { it }.eachCount()
+}
+
 internal enum class RunProgressAvailability {
   NotStarted,
   Available,
@@ -52,6 +92,7 @@ internal data class ProjectRunPresentation(
     val progressAvailability: RunProgressAvailability,
     val currentFiles: List<String>,
     val failures: List<AnalysisStageFailure>,
+    val stages: List<AnalysisStageSummary>,
     val commands: List<AnalysisRunCommand>,
     val isActive: Boolean,
 ) {
@@ -89,6 +130,41 @@ internal fun projectRunPresentation(
         inventory.totalFiles == 0 -> RunProgressAvailability.EmptyScope
         else -> RunProgressAvailability.Available
       }
+  val stages =
+      inventory
+          ?.let { captured ->
+            val matched = captured.files.associate { (file, _) -> file.path to file }
+            val stageOrder =
+                captured.planFiles.flatMap { it.stages.map { stage -> stage.stage } }.distinct()
+            stageOrder.map { stageId ->
+              AnalysisStageSummary(
+                  stageId,
+                  captured.planFiles.mapNotNull { planFile ->
+                    val plannedStage =
+                        planFile.stages.firstOrNull { it.stage == stageId }
+                            ?: return@mapNotNull null
+                    val reported =
+                        matched[planFile.path]?.stages?.firstOrNull { it.stage == stageId }
+                    AnalysisStageDetail(
+                        path = planFile.path,
+                        status = reported?.status,
+                        attempts = reported?.attempts,
+                        reused = reported?.cached,
+                        eligible = plannedStage.eligible,
+                        reason =
+                            reported?.reason?.takeIf { it.isNotBlank() }
+                                ?: plannedStage.reason.takeIf {
+                                  !plannedStage.eligible && it.isNotBlank()
+                                }
+                                ?: if (reported == null) "Stage progress has not been reported."
+                                else if (reported.status in
+                                    setOf("failed", "unavailable", "interrupted", "partial"))
+                                    "No diagnostic was supplied for this stage."
+                                else "No reason was supplied for this stage.")
+                  })
+            }
+          }
+          .orEmpty()
   val finishedSteps =
       inventory?.files.orEmpty().sumOf { (file, planned) ->
         file.stages.count { stage ->
@@ -114,16 +190,22 @@ internal fun projectRunPresentation(
               .orEmpty()
               .filter { (file, _) -> file.stages.any { it.status == "running" } }
               .map { it.first.path },
+      stages = stages,
       failures =
           inventory?.files.orEmpty().flatMap { (file, planned) ->
             file.stages
                 .filter { stage ->
                   stage.status in setOf("failed", "unavailable", "interrupted") &&
-                      stage.reason.isNotBlank() &&
                       !(stage.status == "unavailable" &&
                           planned.stages.any { it.stage == stage.stage && !it.eligible })
                 }
-                .map { AnalysisStageFailure(file.path, it.stage, it.attempts, it.reason) }
+                .map {
+                  AnalysisStageFailure(
+                      file.path,
+                      it.stage,
+                      it.attempts,
+                      it.reason.ifBlank { "No diagnostic was supplied for this stage." })
+                }
           },
       commands =
           when (run?.status) {
@@ -146,6 +228,7 @@ internal fun projectRunPresentation(
 private data class CapturedRunProgress(
     val totalFiles: Int,
     val totalSteps: Int,
+    val planFiles: List<AnalysisPlannedFile>,
     val files: List<Pair<AnalysisRunFile, AnalysisPlannedFile>>,
     val inconsistent: Boolean,
 )
@@ -177,7 +260,8 @@ private fun capturedRunProgress(run: AnalysisRun, project: ProjectAnalysis?): Ca
           file to plan
         }
       }
-  return CapturedRunProgress(planned.size, planned.sumOf { it.stages.size }, files, inconsistent)
+  return CapturedRunProgress(
+      planned.size, planned.sumOf { it.stages.size }, planned, files, inconsistent)
 }
 
 internal fun analysisRunHeadline(

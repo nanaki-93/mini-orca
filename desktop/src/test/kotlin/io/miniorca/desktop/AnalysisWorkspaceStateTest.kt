@@ -366,9 +366,14 @@ class AnalysisWorkspaceStateTest {
                 files = listOf(AnalysisRunFile("main.go", "base", "Go", stages)))
     val expected = stages.map { AnalysisStageFailure("main.go", it.stage, it.attempts, it.reason) }
 
-    assertEquals(
-        expected,
-        projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run)).failures)
+    val presentation =
+        projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run))
+    assertEquals(expected, presentation.failures)
+    assertEquals("unavailable", presentation.stages[1].files.single().status)
+    assertEquals(1, presentation.stages[1].attention)
+    assertEquals("interrupted", presentation.stages.last().files.single().status)
+    assertEquals(0, presentation.stages.last().finished)
+    assertEquals(1, presentation.stages.last().attention)
     assertTrue(
         projectRunPresentation(
                 resultProjectFixture(),
@@ -463,6 +468,199 @@ class AnalysisWorkspaceStateTest {
                         plan = base.plan.copy(files = base.plan.files + base.plan.files.first()))))
     assertEquals(RunProgressAvailability.Unavailable, duplicatePlan.progressAvailability)
     assertTrue(duplicatePlan.currentFiles.isEmpty())
+  }
+
+  @Test
+  fun stageSummariesFollowCapturedPlanAndKeepMixedOutcomesAndDetails() {
+    val plan =
+        plannedRunFiles(
+            "a.go" to listOf("semantic", "performance"),
+            "b.go" to listOf("semantic", "performance"),
+            "c.go" to listOf("semantic", "performance"),
+            "d.go" to listOf("semantic", "performance"))
+    val run =
+        analysisRunFixture()
+            .copy(
+                plan = plan,
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "a.go",
+                            "base",
+                            "Go",
+                            listOf(
+                                AnalysisStageProgress("semantic", "completed", 0, true),
+                                AnalysisStageProgress("performance", "running", 2, false))),
+                        AnalysisRunFile(
+                            "b.go",
+                            "base",
+                            "Go",
+                            listOf(
+                                AnalysisStageProgress(
+                                    "semantic", "partial", 1, false, reason = "Partial evidence"),
+                                AnalysisStageProgress("performance", "pending", 0, false))),
+                        AnalysisRunFile(
+                            "c.go",
+                            "base",
+                            "Go",
+                            listOf(
+                                AnalysisStageProgress("semantic", "failed", 3, false),
+                                AnalysisStageProgress("performance", "skipped", 0, false))),
+                        AnalysisRunFile(
+                            "d.go",
+                            "base",
+                            "Go",
+                            listOf(
+                                AnalysisStageProgress("semantic", "completed_empty", 0, false),
+                                AnalysisStageProgress(
+                                    "performance",
+                                    "unexpected_state",
+                                    1,
+                                    false,
+                                    reason = "New state")))))
+    val result = projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run))
+    assertEquals(listOf("semantic", "performance"), result.stages.map { it.stage })
+    val semantic = result.stages.first()
+    assertEquals(4, semantic.total)
+    assertEquals(4, semantic.finished)
+    assertEquals(2, semantic.attention)
+    assertEquals(
+        mapOf("completed" to 1, "partial" to 1, "failed" to 1, "completed_empty" to 1),
+        semantic.statuses)
+    assertEquals(
+        AnalysisStageDetail(
+            "a.go", "completed", 0, true, true, "No reason was supplied for this stage."),
+        semantic.files.first())
+    assertEquals("Partial evidence", semantic.files[1].reason)
+    assertEquals("No diagnostic was supplied for this stage.", semantic.files[2].reason)
+    val performance = result.stages.last()
+    assertEquals(1, performance.running)
+    assertEquals(1, performance.pending)
+    assertEquals(1, performance.finished)
+    assertEquals(2, performance.attention)
+    assertEquals("unexpected_state", performance.files.last().status)
+    assertEquals("New state", performance.files.last().reason)
+    assertEquals("No diagnostic was supplied for this stage.", result.failures.single().reason)
+    assertEquals(
+        0,
+        result.stages.sumOf {
+          it.files.count { detail -> detail.reused == true && detail.path != "a.go" }
+        })
+  }
+
+  @Test
+  fun stageSummariesRetainPlanIneligibilityAndMissingEvidenceWithoutInventingReuse() {
+    val plan =
+        plannedRunFiles("main.go" to listOf("semantic", "security_rules")).let { preview ->
+          preview.copy(
+              files =
+                  preview.files.map { file ->
+                    file.copy(
+                        stages =
+                            file.stages.map { stage ->
+                              if (stage.stage == "security_rules")
+                                  stage.copy(
+                                      eligible = false,
+                                      cached = true,
+                                      reason = "Requires Go rules.")
+                              else stage.copy(cached = true)
+                            })
+                  })
+        }
+    val run =
+        analysisRunFixture()
+            .copy(
+                plan = plan,
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "main.go",
+                            "base",
+                            "Go",
+                            listOf(
+                                AnalysisStageProgress("semantic", "pending", 0, false),
+                                AnalysisStageProgress("security_rules", "unavailable", 0, false)))))
+    val result = projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run))
+    assertEquals(listOf("semantic", "security_rules"), result.stages.map { it.stage })
+    assertEquals(1, result.stages.first().pending)
+    assertEquals(false, result.stages.first().files.single().reused)
+    val ineligible = result.stages.last()
+    assertEquals(1, ineligible.finished)
+    assertEquals(0, ineligible.attention)
+    assertEquals("Requires Go rules.", ineligible.files.single().reason)
+    assertEquals(false, ineligible.files.single().eligible)
+    assertTrue(result.failures.isEmpty())
+
+    val missing =
+        projectRunPresentation(
+            resultProjectFixture(),
+            ProjectAnalysisRunState(
+                run = run.copy(files = listOf(run.files.single().copy(stages = emptyList())))))
+    assertEquals(RunProgressAvailability.Incomplete, missing.progressAvailability)
+    assertEquals(1, missing.stages.first().missing)
+    assertEquals(0, missing.stages.first().pending)
+    assertNull(missing.stages.first().files.single().attempts)
+    assertNull(missing.stages.first().files.single().reused)
+    assertEquals(
+        "Stage progress has not been reported.", missing.stages.first().files.single().reason)
+    assertEquals("Requires Go rules.", missing.stages.last().files.single().reason)
+  }
+
+  @Test
+  fun stageSummariesExcludeInvalidEvidenceAndDoNotInventAbsentStages() {
+    val base =
+        analysisRunFixture()
+            .copy(
+                plan = plannedRunFiles("main.go" to listOf("semantic")),
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "main.go",
+                            "base",
+                            "Go",
+                            listOf(AnalysisStageProgress("semantic", "running", 1, true)))))
+    val invalid =
+        listOf(
+            base.copy(identity = base.identity.copy(projectRevision = "other")),
+            base.copy(plan = base.plan.copy(identity = base.plan.identity.copy(queueId = "other"))),
+            base.copy(files = base.files.map { it.copy(contentHash = "other") }),
+            base.copy(files = base.files + base.files.first()),
+            base.copy(files = base.files.map { it.copy(stages = it.stages + it.stages.first()) }),
+            base.copy(
+                files =
+                    base.files.map {
+                      it.copy(
+                          stages =
+                              it.stages + AnalysisStageProgress("security_ai", "running", 1, false))
+                    }))
+    invalid.forEach { candidate ->
+      val result =
+          projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = candidate))
+      assertTrue(result.stages.flatMap { it.files }.none { it.status == "running" })
+      assertTrue(result.stages.flatMap { it.files }.none { it.reused == true })
+    }
+    val limited =
+        projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = base))
+    assertEquals(listOf("semantic"), limited.stages.map { it.stage })
+    assertEquals(1, limited.stages.single().running)
+    val unknownStage =
+        base.copy(
+            plan = plannedRunFiles("main.go" to listOf("future_stage")),
+            files =
+                listOf(
+                    AnalysisRunFile(
+                        "main.go",
+                        "base",
+                        "Go",
+                        listOf(AnalysisStageProgress("future_stage", "new_status", 1, false)))))
+    val unknown =
+        projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = unknownStage))
+    assertEquals("future_stage", unknown.stages.single().stage)
+    assertEquals(mapOf("new_status" to 1), unknown.stages.single().statuses)
+    assertEquals(1, unknown.stages.single().attention)
+    assertEquals(0, unknown.stages.single().finished)
+    assertTrue(
+        projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState()).stages.isEmpty())
   }
 
   @Test
