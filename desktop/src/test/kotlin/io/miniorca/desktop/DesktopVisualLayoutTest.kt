@@ -976,6 +976,203 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun analysisAdmissionManyRecordsRemainReachableWithoutDispatchAcrossDialogSizes() {
+    val base = analysisPreviewFixture()
+    val longPath = "src/日本語/" + "nested-package/".repeat(10) + "last.go"
+    val files =
+        (1..24).map { index ->
+          AnalysisPlannedFile(
+              if (index == 24) longPath else "src/package/file-$index.go",
+              "hash-$index",
+              "Go",
+              40,
+              listOf(
+                  AnalysisStagePlan(
+                      "semantic",
+                      true,
+                      false,
+                      "Backend stage reason for included file $index",
+                      "bug-provider",
+                      1)))
+        }
+    val lastReason = "Selective retry exclusion: " + "no stale evidence ".repeat(5) + "end"
+    val stageReason = "Backend stage reason for included file 24: " + "details ".repeat(7) + "end"
+    val origin = "https://example.test/" + "long-origin/".repeat(7) + "end"
+    val exclusions =
+        (1..16).map { index ->
+          AnalysisExcludedFile(
+              "excluded/日本語/file-$index.go",
+              if (index == 16) lastReason
+              else "Policy or source eligibility reason for excluded file $index")
+        }
+    val sizes = listOf(1440 to 900, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) {
+      val density = if (width == 800) 2f else 1f
+      val scale = if (width == 1440) 1f else 1.5f
+      val resume = width == 1280
+      val preview =
+          base.copy(
+              files =
+                  files.map { file ->
+                    if (file.path == longPath)
+                        file.copy(stages = file.stages.map { it.copy(reason = stageReason) })
+                    else file
+                  },
+              excluded = exclusions,
+              providers =
+                  base.providers.map { provider ->
+                    provider.copy(model = provider.model.copy(providerOrigin = origin))
+                  })
+      var state by
+          mutableStateOf(
+              ProjectAnalysisRunState(
+                  admission =
+                      AnalysisAdmission(
+                          preview, if (resume) analysisRunFixture().identity else null)))
+      var starts = 0
+      var closes = 0
+      var confirmations = 0
+      val action = if (resume) "Resume analysis" else "Start analysis"
+      ComposeVisualFixture((width * density).toInt(), (height * density).toInt(), scale, density) {
+            Box(Modifier.fillMaxSize().background(Panel), contentAlignment = Alignment.Center) {
+              IdeDialogSurface(
+                  maxHeight = (height - 64).coerceAtMost(520).dp,
+                  title = { DesktopAnalysisAdmissionTitle(state) },
+                  content = {
+                    DesktopAnalysisAdmissionContent(
+                        state,
+                        { id, checked ->
+                          confirmations++
+                          state =
+                              state.copy(
+                                  admission =
+                                      state.admission!!.copy(
+                                          providerIds =
+                                              if (checked) state.admission!!.providerIds + id
+                                              else state.admission!!.providerIds - id))
+                        },
+                        { checked ->
+                          confirmations++
+                          state =
+                              state.copy(
+                                  admission = state.admission!!.copy(securityReview = checked))
+                        })
+                  },
+                  actions = {
+                    DesktopAnalysisAdmissionActions(state, { closes++ }, { starts++ }, {})
+                  },
+                  focusSafeActionOnOpen = true,
+                  onDismissRequest = { closes++ })
+            }
+          }
+          .use { fixture ->
+            val label = "f13-many-$width-$height-$scale-${density}x"
+            fun assertActions() {
+              val body = fixture.taggedBounds("ide-dialog-body")
+              for (text in listOf("Close", action)) {
+                val bounds = fixture.firstVisibleTextBounds(text)
+                assertTrue(bounds.top >= 0 && bounds.bottom <= height * density, "$label: $text")
+                assertTrue(bounds.top >= body.bottom, "$label: $text must remain below the body")
+              }
+            }
+            fixture.render("$label-collapsed")
+            assertTrue(fixture.isFocusedControl("Close"), label)
+            assertTrue(fixture.isDisabled(action), label)
+            assertEquals(
+                24,
+                files.withIndex().count { (index, file) ->
+                  fixture.hasDescription("Expand Included file ${index + 1} · ${file.path}")
+                },
+                label)
+            for (excluded in exclusions) {
+              assertEquals(1, fixture.textCount(excluded.path), "$label: ${excluded.path}")
+              assertEquals(1, fixture.textCount(excluded.reason), "$label: ${excluded.path}")
+            }
+            assertActions()
+            val last = "Included file 24 · $longPath"
+            fixture.revealText(longPath, "ide-dialog-body")
+            fixture.assertTextWrapsWithoutClipping(longPath)
+            assertTrue(fixture.copyTextByDragging(longPath).isNotBlank(), label)
+            assertTrue(fixture.requestDescriptionFocus("Expand $last"), label)
+            fixture.render()
+            assertTrue(fixture.isDescriptionFocused("Expand $last"), label)
+            assertTrue(fixture.pressKey(Key.Enter), label)
+            fixture.render("$label-expanded")
+            assertEquals("Expanded", fixture.descriptionStateDescription("Collapse $last"))
+            fixture.revealText("Reason: $stageReason", "ide-dialog-body")
+            fixture.assertTextWrapsWithoutClipping("Reason: $stageReason")
+            assertTrue(fixture.copyTextByDragging("Reason: $stageReason").isNotBlank(), label)
+            if (width == 800) {
+              fixture.resize(1024 * 2, 768 * 2)
+              fixture.render("$label-resized-expanded")
+              assertEquals("Expanded", fixture.descriptionStateDescription("Collapse $last"))
+              fixture.resize(width * 2, height * 2)
+              fixture.render()
+              assertEquals("Expanded", fixture.descriptionStateDescription("Collapse $last"))
+              assertActions()
+            }
+            assertTrue(fixture.requestDescriptionFocus("Collapse $last"), label)
+            assertTrue(fixture.pressKey(Key.Spacebar), label)
+            fixture.render("$label-collapsed-again")
+            assertEquals("Collapsed", fixture.descriptionStateDescription("Expand $last"))
+            if (width == 800) {
+              for (excluded in exclusions) {
+                fixture.revealText(excluded.reason, "ide-dialog-body")
+                val body = fixture.taggedBounds("ide-dialog-body")
+                val record = fixture.firstVisibleTextBounds(excluded.reason)
+                assertTrue(record.top >= body.top && record.bottom <= body.bottom, excluded.path)
+              }
+            }
+            fixture.revealText(lastReason, "ide-dialog-body")
+            fixture.assertTextWrapsWithoutClipping(lastReason)
+            val body = fixture.taggedBounds("ide-dialog-body")
+            val finalRecord = fixture.firstVisibleTextBounds(lastReason)
+            assertTrue(finalRecord.top >= body.top && finalRecord.bottom <= body.bottom, label)
+            fixture.render("$label-final-exclusion")
+            assertTrue(fixture.copyTextByDragging(lastReason).isNotBlank(), label)
+            fixture.revealText("Remote destination: $origin", "ide-dialog-body")
+            fixture.assertTextWrapsWithoutClipping("Remote destination: $origin")
+            assertTrue(fixture.copyTextByDragging("Remote destination: $origin").isNotBlank())
+            assertTrue(fixture.verticalScrollValue("ide-dialog-body") > 0f, label)
+            assertActions()
+            assertEquals(0, starts + closes + confirmations, label)
+            assertFalse(state.admission!!.isConfirmed(), label)
+            assertTrue(fixture.isDisabled(action), label)
+            if (width == 800) {
+              for (description in
+                  listOf(
+                      "Confirm bug destination",
+                      "Confirm analyze destination",
+                      "Include AI Security review")) {
+                assertTrue(fixture.requestDescriptionFocus(description), description)
+                fixture.render()
+                assertTrue(fixture.pressKey(Key.Spacebar), description)
+                fixture.render()
+              }
+              assertEquals(3, confirmations)
+              assertTrue(state.admission!!.isConfirmed())
+              assertEquals(0, starts)
+              assertTrue(fixture.requestFocus(action))
+              fixture.render("$label-enabled")
+              assertActions()
+              assertFalse(fixture.isDisabled(action))
+              assertEquals(0, starts)
+              assertTrue(fixture.pressKey(Key.Enter))
+              fixture.render()
+              assertEquals(1, starts, "Explicit admission must activate only once")
+            }
+            if (resume) {
+              assertTrue(fixture.requestFocus("Close"))
+              fixture.render()
+              assertTrue(fixture.pressKey(Key.Escape))
+              assertEquals(1, closes)
+              assertEquals(0, starts)
+            }
+          }
+    }
+  }
+
+  @Test
   fun admissionKeepsFailureConsentAndDecisionsReachableInBoundedDialog() {
     val error =
         "Destination unavailable: /project/日本語/long-provider-path. Refresh the preview before starting."
@@ -7532,6 +7729,21 @@ internal class ComposeVisualFixture(
       render()
     }
     error("$label must be reachable by scrolling")
+  }
+
+  fun revealTextFullyWithin(label: String, scrollTag: String) {
+    revealText(label, scrollTag)
+    repeat(100) {
+      val viewport = taggedBounds(scrollTag)
+      val text = firstVisibleTextBounds(label)
+      if (text.top >= viewport.top + 4f && text.bottom <= viewport.bottom - 4f) return
+      val delta =
+          if (text.top < viewport.top + 4f) text.top - viewport.top - 4f
+          else text.bottom - viewport.bottom + 4f
+      scrollBy(delta, scrollTag)
+      render()
+    }
+    error("$label must fit within $scrollTag after scrolling")
   }
 
   fun assertTextWrapsAndTailIsReachable(label: String, scrollTag: String) {

@@ -727,7 +727,7 @@ class DesktopAnalysisAdmissionTest {
           assertTrue(fixture.hasText("Reason: Reason for file 1"))
           fixture.render()
           assertEquals("Expanded", fixture.descriptionStateDescription("Collapse $first"))
-          fixture.revealText(files.last().path, "ide-dialog-body")
+          fixture.revealTextFullyWithin(files.last().path, "ide-dialog-body")
           assertTrue(fixture.copyTextByDragging(files.last().path).isNotBlank())
           assertTrue(fixture.requestDescriptionFocus("Expand $last"))
           assertTrue(fixture.pressKey(Key.Enter))
@@ -745,6 +745,64 @@ class DesktopAnalysisAdmissionTest {
           assertFalse(fixture.hasText("Reason: Reason for file 28"))
           assertTrue(fixture.hasText("Close"))
           assertTrue(fixture.isDisabled("Start analysis"))
+        }
+  }
+
+  @Test
+  fun everyWholeFileExclusionRetainsItsOwnPathAndCompleteReasonWithoutChangingConsent() {
+    val exclusions =
+        listOf(
+            AnalysisExcludedFile(
+                "src/policy/internal/secret.go",
+                "Policy exclusion: " + "private source restriction ".repeat(14) + "policy end"),
+            AnalysisExcludedFile(
+                "vendor/日本語/unsupported.asset",
+                "Source eligibility: " + "unsupported content ".repeat(14) + "source end"),
+            AnalysisExcludedFile(
+                "src/retry/already-current.go",
+                "Selective retry: " + "not stale or failed ".repeat(14) + "retry end"))
+    val base = analysisPreviewFixture()
+    val preview =
+        base.copy(
+            retryStaleFailed = true,
+            refresh = false,
+            files = emptyList(),
+            excluded = exclusions,
+            expectedModelRequests = 0,
+            maxModelRequests = 0)
+    val state = ProjectAnalysisRunState(admission = AnalysisAdmission(preview))
+    var operations = 0
+    ComposeVisualFixture(420, 590, 1.5f) {
+          Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            IdeDialogSurface(
+                490.dp,
+                title = { DesktopAnalysisAdmissionTitle(state) },
+                content = {
+                  DesktopAnalysisAdmissionContent(state, { _, _ -> operations++ }, { operations++ })
+                },
+                actions = {
+                  DesktopAnalysisAdmissionActions(state, { operations++ }, { operations++ }, {})
+                },
+                focusSafeActionOnOpen = true)
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("No stale or failed files to analyze."))
+          assertTrue(fixture.isDisabled("Start analysis"))
+          assertFalse(fixture.hasText("User-selected exclusions"))
+          for (excluded in exclusions) {
+            assertEquals(1, fixture.textCount(excluded.path), excluded.path)
+            assertEquals(1, fixture.textCount(excluded.reason), excluded.path)
+            fixture.revealText(excluded.reason, "ide-dialog-body")
+            fixture.assertTextWrapsWithoutClipping(excluded.reason)
+            assertTrue(fixture.copyTextByDragging(excluded.reason).isNotBlank(), excluded.path)
+            assertTrue(fixture.hasText(excluded.reason), excluded.path)
+          }
+          assertTrue(fixture.verticalScrollValue("ide-dialog-body") > 0f)
+          assertEquals(0, operations)
+          assertTrue(state.admission!!.providerIds.isEmpty())
+          assertFalse(state.admission.securityReview)
         }
   }
 
