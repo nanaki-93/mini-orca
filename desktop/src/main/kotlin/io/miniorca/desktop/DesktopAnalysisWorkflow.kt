@@ -60,6 +60,7 @@ internal class DesktopAnalysisWorkflow(
         current.copy(
             admission = null,
             previewIntent = null,
+            admissionRecovery = null,
             action = "",
             sections = current.sections.mapValues { it.value.copy(loading = false) }))
   }
@@ -77,7 +78,13 @@ internal class DesktopAnalysisWorkflow(
       generation++
       actionJob?.cancel()
     }
-    update(current.copy(admission = null, previewIntent = null, action = "", error = null))
+    update(
+        current.copy(
+            admission = null,
+            previewIntent = null,
+            admissionRecovery = null,
+            action = "",
+            error = null))
     // Keep an in-flight admission alive: the daemon may admit it after this first status read.
     // Its eventual response (or failure) will reconcile again without restoring permission.
     if (pendingAdmission) {
@@ -318,11 +325,13 @@ internal class DesktopAnalysisWorkflow(
     fail(project, token, error, "Analysis action failed")
     // Only a known rejection can retain the request scope for an explicit fresh preview.
     // An uncertain response may already have admitted the run; never restore its consent.
-    if (error is ApiException &&
-        error.status == 409 &&
-        admissionIntent != null &&
-        matchesIntent(admissionIntent))
-        update(current.copy(previewIntent = admissionIntent))
+    val rejected = error is ApiException && error.status == 409
+    update(
+        current.copy(
+            admissionRecovery =
+                if (pendingAdmission == null) null
+                else if (rejected) AdmissionRecovery.Rejected else AdmissionRecovery.Uncertain,
+            previewIntent = admissionIntent?.takeIf { rejected && matchesIntent(it) }))
     readCurrent(
         project,
         token,
@@ -566,7 +575,13 @@ internal class DesktopAnalysisWorkflow(
     generation++
     actionJob?.cancel()
     coordinator.stopAnalysisPolling()
-    update(current.copy(action = action, admission = null, previewIntent = intent, error = null))
+    update(
+        current.copy(
+            action = action,
+            admission = null,
+            previewIntent = intent,
+            admissionRecovery = null,
+            error = null))
     return generation
   }
 

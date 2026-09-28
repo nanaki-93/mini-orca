@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DesktopAnalysisAdmissionTest {
@@ -1243,6 +1244,97 @@ class DesktopAnalysisAdmissionTest {
   }
 
   @Test
+  fun rejectedAdmissionOffersExplicitSameScopeReviewWithoutReusingConsent() {
+    val run = analysisRunFixture()
+    for (mode in listOf("full", "selective", "continuation")) {
+      val intent =
+          AnalysisPreviewIntent(
+              "project",
+              "revision",
+              run.plan.limits,
+              mode != "selective",
+              mode == "selective",
+              if (mode == "continuation") run.identity else null,
+              if (mode == "continuation") run.plan else null)
+      var state by
+          mutableStateOf(
+              ProjectAnalysisRunState(
+                  run = run,
+                  previewIntent = intent,
+                  admissionRecovery = AdmissionRecovery.Rejected,
+                  error = "Admission rejected: stale preview"))
+      var reviews = 0
+      var starts = 0
+      var closes = 0
+      ComposeVisualFixture(420, 450, 1.5f) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+              IdeDialogSurface(
+                  360.dp,
+                  title = { DesktopAnalysisAdmissionTitle(state) },
+                  content = { DesktopAnalysisAdmissionContent(state, { _, _ -> }, {}) },
+                  actions = {
+                    DesktopAnalysisAdmissionActions(
+                        state,
+                        close = {
+                          closes++
+                          state =
+                              state.copy(
+                                  admission = null,
+                                  previewIntent = null,
+                                  admissionRecovery = null,
+                                  action = "",
+                                  error = null)
+                        },
+                        start = { starts++ },
+                        retry = {
+                          reviews++
+                          state =
+                              state.copy(action = "preview", admissionRecovery = null, error = null)
+                        })
+                  },
+                  focusSafeActionOnOpen = true,
+                  onDismissRequest = {
+                    closes++
+                    state =
+                        state.copy(
+                            previewIntent = null,
+                            admissionRecovery = null,
+                            action = "",
+                            error = null)
+                  })
+            }
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Close"), mode)
+            assertTrue(fixture.hasText("This preview can no longer be admitted."), mode)
+            assertTrue(fixture.hasText("Admission rejected: stale preview"), mode)
+            assertTrue(
+                fixture.hasText(
+                    "Review a fresh ${if (mode == "full") "full project" else if (mode == "selective") "stale & failed" else "continuation"} preview before starting or resuming. All destinations and Security intent must be confirmed again."),
+                mode)
+            assertFalse(fixture.tryClick("Retry preview"), mode)
+            assertFalse(fixture.tryClick("Start analysis"), mode)
+            assertFalse(fixture.tryClick("Resume analysis"), mode)
+            assertEquals(0, reviews + starts + closes, mode)
+            assertTrue(fixture.requestFocus("Review fresh preview"), mode)
+            assertTrue(fixture.pressKey(Key.Enter), mode)
+            fixture.render()
+            assertEquals(1, reviews, mode)
+            assertEquals(intent, state.previewIntent, mode)
+            assertFalse(fixture.tryClick("Review fresh preview"), mode)
+            assertEquals(0, starts + closes, mode)
+            assertTrue(fixture.requestFocus("Close"), mode)
+            assertTrue(fixture.pressKey(Key.Escape), mode)
+            fixture.render()
+            assertEquals(1, closes, mode)
+            assertNull(state.previewIntent, mode)
+            assertEquals(run, state.run, mode)
+          }
+    }
+  }
+
+  @Test
   fun obsoleteOrMissingIntentOffersCloseInsteadOfDefaultingToFullPreview() {
     val run = analysisRunFixture()
     val intent =
@@ -1261,6 +1353,8 @@ class DesktopAnalysisAdmissionTest {
           ProjectAnalysisRunState(
               run = run.copy(identity = run.identity.copy(generation = "replacement")),
               previewIntent = if (obsolete) intent else null,
+              admissionRecovery =
+                  if (obsolete) AdmissionRecovery.Rejected else AdmissionRecovery.Uncertain,
               error = "Captured run changed")
       ComposeVisualFixture(420, 360) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1275,8 +1369,14 @@ class DesktopAnalysisAdmissionTest {
           }
           .use { fixture ->
             fixture.render()
-            assertTrue(fixture.hasText("Close and request a new preview from Analysis."))
+            assertTrue(
+                fixture.hasText(
+                    if (obsolete)
+                        "This scope is no longer available for review. Close and choose a current Analysis action (Resume analysis if available for the current run) to request a new preview."
+                    else
+                        "Analysis may already have started. Close and check the current Analysis run before choosing a new Analysis action; do not retry this admission."))
             assertTrue(fixture.copyTextByDragging("Captured run changed").isNotBlank())
+            assertFalse(fixture.tryClick("Review fresh preview"))
             assertFalse(fixture.tryClick("Retry preview"))
             assertFalse(fixture.tryClick("New preview"))
             assertEquals(0, retries)

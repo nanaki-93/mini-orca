@@ -74,6 +74,7 @@ private fun ProjectAnalysisRunState.canRetryPreview(): Boolean {
   return action.isEmpty() &&
       error != null &&
       admission == null &&
+      admissionRecovery != AdmissionRecovery.Uncertain &&
       (intent.resumeRun == null ||
           run?.identity == intent.resumeRun && run.plan == intent.resumePlan)
 }
@@ -95,7 +96,11 @@ internal fun RowScope.DesktopAnalysisAdmissionActions(
           Text(if (admission.resumeRun == null) "Start analysis" else "Resume analysis")
         }
   } else if (state.canRetryPreview()) {
-    MiniOrcaButton(onClick = retry, tone = ActionTone.Primary) { Text("Retry preview") }
+    MiniOrcaButton(onClick = retry, tone = ActionTone.Primary) {
+      Text(
+          if (state.admissionRecovery == AdmissionRecovery.Rejected) "Review fresh preview"
+          else "Retry preview")
+    }
   }
 }
 
@@ -120,17 +125,30 @@ internal fun DesktopAnalysisAdmissionContent(
     } else if (state.admission == null) {
       state.error?.let { error ->
         Text(
-            when (state.previewMode()) {
-              "continuation" -> "Continuation preview failed."
-              "stale & failed" -> "Stale & failed preview failed."
-              "full project" -> "Full project preview failed."
-              else -> "Analysis preview unavailable."
+            when (state.admissionRecovery) {
+              AdmissionRecovery.Rejected -> "This preview can no longer be admitted."
+              AdmissionRecovery.Uncertain -> "The admission response is uncertain."
+              null ->
+                  when (state.previewMode()) {
+                    "continuation" -> "Continuation preview failed."
+                    "stale & failed" -> "Stale & failed preview failed."
+                    "full project" -> "Full project preview failed."
+                    else -> "Analysis preview unavailable."
+                  }
             },
             color = Error)
         SelectionContainer { Text(error, color = Error) }
         Text(
-            if (state.canRetryPreview()) "Retry this preview with the same scope, or Close."
-            else "Close and request a new preview from Analysis.",
+            when {
+              state.admissionRecovery == AdmissionRecovery.Rejected && state.canRetryPreview() ->
+                  "Review a fresh ${state.previewMode()} preview before starting or resuming. All destinations and Security intent must be confirmed again."
+              state.admissionRecovery == AdmissionRecovery.Rejected ->
+                  "This scope is no longer available for review. Close and choose a current Analysis action (Resume analysis if available for the current run) to request a new preview."
+              state.admissionRecovery == AdmissionRecovery.Uncertain ->
+                  "Analysis may already have started. Close and check the current Analysis run before choosing a new Analysis action; do not retry this admission."
+              state.canRetryPreview() -> "Retry this preview with the same scope, or Close."
+              else -> "Close and request a new preview from Analysis."
+            },
             color = SecondaryText)
       }
     } else {
