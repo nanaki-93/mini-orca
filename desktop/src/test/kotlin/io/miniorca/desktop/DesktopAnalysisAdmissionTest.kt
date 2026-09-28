@@ -243,6 +243,176 @@ class DesktopAnalysisAdmissionTest {
   }
 
   @Test
+  fun returnedStageSummaryCountsDispositionsAndUsesStageProviderReferences() {
+    val base = analysisPreviewFixture()
+    val preview =
+        base.copy(
+            files =
+                listOf(
+                    AnalysisPlannedFile(
+                        "first.go",
+                        "a",
+                        "Go",
+                        1,
+                        listOf(
+                            AnalysisStagePlan(
+                                "semantic",
+                                true,
+                                true,
+                                providerId = "bug-provider",
+                                maxModelRequests = 0),
+                            AnalysisStagePlan(
+                                "performance",
+                                true,
+                                false,
+                                providerId = "analyze-provider",
+                                maxModelRequests = 2),
+                            AnalysisStagePlan("security_rules", true, false, maxModelRequests = 0),
+                            AnalysisStagePlan(
+                                "security_ai",
+                                true,
+                                false,
+                                "The model for this stage is not configured.",
+                                "analyze-provider",
+                                0),
+                            AnalysisStagePlan(
+                                "new_stage",
+                                true,
+                                false,
+                                providerId = "missing-provider",
+                                maxModelRequests = 1))),
+                    AnalysisPlannedFile(
+                        "second.go",
+                        "b",
+                        "Go",
+                        1,
+                        listOf(
+                            AnalysisStagePlan(
+                                "semantic",
+                                false,
+                                false,
+                                "Not eligible for semantic source analysis.",
+                                "bug-provider",
+                                0),
+                            AnalysisStagePlan(
+                                "performance",
+                                true,
+                                false,
+                                providerId = "bug-provider",
+                                maxModelRequests = 1),
+                            AnalysisStagePlan(
+                                "security_rules",
+                                false,
+                                false,
+                                "Passive rules require Go.",
+                                maxModelRequests = 0)))),
+            // Headline bounds belong to the daemon, not the stage-summary arithmetic.
+            expectedModelRequests = 41,
+            maxModelRequests = 79,
+            providers = base.providers.reversed())
+    val state = ProjectAnalysisRunState(admission = AnalysisAdmission(preview))
+    ComposeVisualFixture(680, 1800) { DesktopAnalysisAdmissionContent(state, { _, _ -> }, {}) }
+        .use { fixture ->
+          fixture.render()
+          for (label in
+              listOf(
+                  "Returned stage plan",
+                  "Code analysis",
+                  "Performance review",
+                  "Security rules",
+                  "AI Security review",
+                  "new_stage",
+                  "2 returned · 1 applicable · 1 cached/reused · 0 with model requests planned · 2 with no model requests planned",
+                  "2 returned · 2 applicable · 0 cached/reused · 2 with model requests planned · 0 with no model requests planned",
+                  "2 returned · 1 applicable · 0 cached/reused · 0 with model requests planned · 2 with no model requests planned",
+                  "1 returned · 1 applicable · 0 cached/reused · 0 with model requests planned · 1 with no model requests planned",
+                  "1 returned · 1 applicable · 0 cached/reused · 1 with model requests planned · 0 with no model requests planned",
+                  "Deterministic Security rules · no model destination",
+                  "Model destination: bug-model · Remote https://bug.example (provider bug-provider)",
+                  "Model destination: review-model · Remote https://analyze.example (provider analyze-provider)",
+                  "Model destination: Unavailable (provider reference missing-provider)",
+                  "Expected model requests without retries: 41",
+                  "Inclusive maximum model requests with retries: 79")) assertTrue(
+              fixture.hasText(label), label)
+          assertFalse(fixture.hasText("failed analysis"))
+          assertFalse(state.admission!!.isConfirmed())
+        }
+  }
+
+  @Test
+  fun stageDestinationFollowsProviderIdEvenWhenCategoryAndProviderOrderDisagree() {
+    val base = analysisPreviewFixture()
+    val preview =
+        base.copy(
+            files =
+                listOf(
+                    base.files
+                        .single()
+                        .copy(
+                            stages =
+                                listOf(
+                                    AnalysisStagePlan(
+                                        "semantic",
+                                        true,
+                                        false,
+                                        providerId = "analyze-provider",
+                                        maxModelRequests = 1)))),
+            providers = base.providers.reversed())
+    ComposeVisualFixture(580, 1000) {
+          DesktopAnalysisAdmissionContent(
+              ProjectAnalysisRunState(admission = AnalysisAdmission(preview)), { _, _ -> }, {})
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "Model destination: review-model · Remote https://analyze.example (provider analyze-provider)"))
+          assertFalse(
+              fixture.hasText(
+                  "Model destination: bug-model · Remote https://bug.example (provider bug-provider)"))
+          assertFalse(fixture.hasText("Security rules"))
+        }
+  }
+
+  @Test
+  fun resumedUncachedZeroAllowanceDoesNotClaimReuseOrCompletion() {
+    val base = analysisPreviewFixture()
+    val preview =
+        base.copy(
+            files =
+                listOf(
+                    AnalysisPlannedFile(
+                        "retained.go",
+                        "hash",
+                        "Go",
+                        1,
+                        listOf(
+                            AnalysisStagePlan(
+                                "semantic",
+                                true,
+                                false,
+                                providerId = "bug-provider",
+                                maxModelRequests = 0)))),
+            expectedModelRequests = 0,
+            maxModelRequests = 0)
+    val state =
+        ProjectAnalysisRunState(
+            admission = AnalysisAdmission(preview, analysisRunFixture().identity))
+    ComposeVisualFixture(560, 1000) { DesktopAnalysisAdmissionContent(state, { _, _ -> }, {}) }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "1 returned · 1 applicable · 0 cached/reused · 0 with model requests planned · 1 with no model requests planned"))
+          assertTrue(fixture.hasText("Expected model requests without retries: 0"))
+          assertTrue(fixture.hasText("Inclusive maximum model requests with retries: 0"))
+          assertFalse(fixture.hasText("completed"))
+          assertFalse(fixture.hasText("successful"))
+          assertFalse(state.admission!!.isConfirmed())
+        }
+  }
+
+  @Test
   fun emptyRetryPreviewExplainsThatNoFilesNeedAnalysis() {
     val preview =
         analysisPreviewFixture()
