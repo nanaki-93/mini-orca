@@ -138,7 +138,13 @@ private fun NativeAcceptanceScreen(terminal: DesktopTerminalWorkspace, directory
                     AnalysisWorkspacePaneState(
                         resultProjectFixture(),
                         ProjectAnalysisRunState(run = acceptanceRun(state))),
-                    AnalysisWorkspaceActions({ _, _ -> }, {}, {}, {}, {}))
+                    AnalysisWorkspaceActions(
+                        { _, _ -> },
+                        {},
+                        {},
+                        {},
+                        {},
+                        refreshStatus = { error("Unexpected status refresh") }))
             "Bugs",
             "Performance",
             "Security" -> AcceptanceResultPane(page.lowercase(), state)
@@ -247,6 +253,7 @@ private fun NativeRoundedWorkspace(terminal: DesktopTerminalWorkspace, directory
                 createDeclaration = { record("New function") }),
         analysisActions =
             DesktopShellAnalysisActions(
+                refreshStatus = { record("Refresh status") },
                 refreshAnalysisSelection = { record("Refresh selection") },
                 saveAnalysisSelection = { record("Save selection") },
                 retryResults = { category, path -> record("Retry $category $path") },

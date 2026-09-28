@@ -88,7 +88,12 @@ class AnalysisWorkspaceStateTest {
             AnalysisWorkspacePane(
                 AnalysisWorkspacePaneState(resultProjectFixture(), ProjectAnalysisRunState()),
                 AnalysisWorkspaceActions(
-                    { limits, retry -> starts.add(limits to retry) }, {}, {}, {}, {}))
+                    { limits, retry -> starts.add(limits to retry) },
+                    {},
+                    {},
+                    {},
+                    {},
+                    refreshStatus = { error("Unexpected status refresh") }))
           }
           .use { fixture ->
             fixture.render("analysis-retry-$width-$scale")
@@ -188,7 +193,12 @@ class AnalysisWorkspaceStateTest {
                   resultProjectFixture(),
                   ProjectAnalysisRunState(run = run, error = "Cannot resume\u0000 run")),
               AnalysisWorkspaceActions(
-                  { _, _ -> calls++ }, { calls++ }, { calls++ }, { calls++ }, { calls++ }))
+                  { _, _ -> calls++ },
+                  { calls++ },
+                  { calls++ },
+                  { calls++ },
+                  { calls++ },
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render("bottom-analysis-failures-800-1.5")
@@ -200,7 +210,12 @@ class AnalysisWorkspaceStateTest {
               AnalysisWorkspacePaneState(
                   resultProjectFixture(), ProjectAnalysisRunState(run = run)),
               AnalysisWorkspaceActions(
-                  { _, _ -> calls++ }, { calls++ }, { calls++ }, { calls++ }, { calls++ }))
+                  { _, _ -> calls++ },
+                  { calls++ },
+                  { calls++ },
+                  { calls++ },
+                  { calls++ },
+                  refreshStatus = { error("Unexpected status refresh") }))
         }
         .use { fixture ->
           fixture.render()

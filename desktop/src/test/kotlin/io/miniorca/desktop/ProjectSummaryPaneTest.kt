@@ -668,7 +668,8 @@ class ProjectSummaryPaneTest {
             { error("Diagram preview started analysis") },
             { error("Diagram preview started analysis") },
             { error("Diagram preview started analysis") },
-            { error("Diagram preview started analysis") })
+            { error("Diagram preview started analysis") },
+            refreshStatus = { error("Unexpected status refresh") })
     var renders = 0
     ComposeVisualFixture(1000, 2400) {
           ProjectSummaryPane(
@@ -1018,7 +1019,8 @@ class ProjectSummaryPaneTest {
             { error("Inspection requested run control") },
             { error("Inspection requested run control") },
             { error("Inspection requested run control") },
-            { error("Inspection requested run control") })
+            { error("Inspection requested run control") },
+            refreshStatus = { error("Unexpected status refresh") })
     ComposeVisualFixture(1000, 650) {
           unrelated // Force recomposition without changing the narrative owner.
           ProjectSummaryPane(overview, project, navigations::add, analysisActions = actions)
@@ -1707,7 +1709,8 @@ class ProjectSummaryPaneTest {
             { requests++ },
             { requests++ },
             { requests++ },
-            saveSelection = { requests++ })
+            saveSelection = { requests++ },
+            refreshStatus = { error("Unexpected status refresh") })
     ComposeVisualFixture(1440, 1100) {
           ProjectSummaryPane(
               null, project, destinations::add, analysisState = state, analysisActions = actions)
@@ -2091,7 +2094,8 @@ class ProjectSummaryPaneTest {
             { dispatches++ },
             { dispatches++ },
             { dispatches++ },
-            { dispatches++ })
+            { dispatches++ },
+            refreshStatus = { error("Unexpected status refresh") })
     ComposeVisualFixture(800, 650, 1.5f) {
           ProjectSummaryPane(
               coverage,
@@ -2170,7 +2174,8 @@ class ProjectSummaryPaneTest {
             {},
             {},
             {},
-            {})
+            {},
+            refreshStatus = { error("Unexpected status refresh") })
     ComposeVisualFixture(800, 650) {
           ProjectSummaryPane(
               null, project, destinations::add, analysisState = state, analysisActions = actions)
@@ -2210,7 +2215,14 @@ class ProjectSummaryPaneTest {
   @Test
   fun startOnlyAppearsForCurrentProjectWithAvailableStartCommandAndAction() {
     val project = analysisProjectFixture()
-    val actions = AnalysisWorkspaceActions({ _, _ -> error("Unexpected preview") }, {}, {}, {}, {})
+    val actions =
+        AnalysisWorkspaceActions(
+            { _, _ -> error("Unexpected preview") },
+            {},
+            {},
+            {},
+            {},
+            refreshStatus = { error("Unexpected status refresh") })
     ComposeVisualFixture(800, 650) { ProjectSummaryPane(null, null, {}, analysisActions = actions) }
         .use { fixture ->
           fixture.render()
@@ -2265,7 +2277,13 @@ class ProjectSummaryPaneTest {
     var saves = 0
     val actions =
         AnalysisWorkspaceActions(
-            { _, _ -> previews++ }, {}, {}, {}, {}, saveSelection = { saves++ })
+            { _, _ -> previews++ },
+            {},
+            {},
+            {},
+            {},
+            saveSelection = { saves++ },
+            refreshStatus = { error("Unexpected status refresh") })
     val selection = selectionFixture()
     ComposeVisualFixture(1000, 760) {
           ProjectSummaryPane(
@@ -2329,7 +2347,13 @@ class ProjectSummaryPaneTest {
     var saves = 0
     val actions =
         AnalysisWorkspaceActions(
-            { _, _ -> previews++ }, {}, {}, {}, {}, saveSelection = { saves++ })
+            { _, _ -> previews++ },
+            {},
+            {},
+            {},
+            {},
+            saveSelection = { saves++ },
+            refreshStatus = { error("Unexpected status refresh") })
     ComposeVisualFixture(1000, 760) {
           ProjectSummaryPane(
               null,
@@ -2501,7 +2525,13 @@ class ProjectSummaryPaneTest {
     val destinations = mutableListOf<Workspace>()
     val actions =
         AnalysisWorkspaceActions(
-            { _, _ -> previews++ }, {}, {}, {}, {}, saveSelection = { saves++ })
+            { _, _ -> previews++ },
+            {},
+            {},
+            {},
+            {},
+            saveSelection = { saves++ },
+            refreshStatus = { error("Unexpected status refresh") })
     ComposeVisualFixture(1000, 760) {
           ProjectSummaryPane(
               null,

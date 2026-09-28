@@ -1316,6 +1316,28 @@ class DesktopAnalysisWorkflowTest {
   }
 
   @Test
+  fun explicitStatusRefreshReadsOnlyTheRunWithoutSelectionOrControlRequests() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      h.failStatus = true
+      h.workflow.refreshStatus()
+      h.drain()
+      assertTrue(h.state.analysisRun.statusUnavailable)
+      val before = h.calls.size
+      h.failStatus = false
+      h.workflow.refreshStatus()
+      h.drain()
+      val refreshCalls = h.calls.drop(before)
+      assertEquals(
+          1, refreshCalls.count { it.first == "GET" && it.second.contains("/analysis/run?") })
+      assertTrue(refreshCalls.all { it.first == "GET" && !it.second.contains("/selection?") })
+      assertFalse(h.state.analysisRun.statusUnavailable)
+      assertNull(h.state.analysisRun.error)
+    }
+  }
+
+  @Test
   fun selectionRefreshAndSaveUseConfirmedEvidenceWithoutAdmittingAnalysis() {
     Harness().use { h ->
       h.run = h.run.copy(status = "completed")

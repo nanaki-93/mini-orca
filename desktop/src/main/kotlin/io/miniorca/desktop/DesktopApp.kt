@@ -787,6 +787,7 @@ internal fun MiniOrcaApp(
           ),
       analysisActions =
           DesktopShellAnalysisActions(
+              refreshStatus = presenter::refreshAnalysis,
               refreshAnalysisSelection = presenter::refreshAnalysisSelection,
               saveAnalysisSelection = presenter::saveAnalysisSelection,
               retryResults = presenter::loadAnalysisResults,

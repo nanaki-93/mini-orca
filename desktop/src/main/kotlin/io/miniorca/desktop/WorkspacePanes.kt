@@ -143,6 +143,7 @@ internal data class AnalysisWorkspaceActions(
     val openResults: (Workspace) -> Unit,
     val refreshSelection: () -> Unit = {},
     val saveSelection: (List<String>) -> Unit = {},
+    val refreshStatus: () -> Unit,
 )
 
 @Composable

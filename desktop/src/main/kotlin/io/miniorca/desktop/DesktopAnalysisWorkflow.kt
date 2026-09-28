@@ -399,6 +399,10 @@ internal class DesktopAnalysisWorkflow(
 
   fun refresh() {
     fileSelection.refresh()
+    refreshStatus()
+  }
+
+  fun refreshStatus() {
     if (actionJob?.isActive == true) return
     val project = project() ?: return
     val token = begin("refresh")
