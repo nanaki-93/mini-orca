@@ -215,9 +215,9 @@ internal fun DesktopAnalysisAdmissionContent(
           IdeCheckbox(
               checked = checked,
               onCheckedChange = { confirmProvider(provider.id, it) },
-              accessibleName = "Confirm ${provider.model.scope.availableMetadata()} destination",
+              accessibleName = provider.confirmationLabel(),
               stateLabel = if (checked) "Confirmed" else "Not confirmed",
-              label = "Confirm ${provider.model.scope.availableMetadata()} destination")
+              label = provider.confirmationLabel())
         }
       }
       if (preview.securityReviewIntentRequired) {
@@ -296,6 +296,9 @@ private fun AnalysisStageSummary(preview: AnalysisRunPreview) {
     }
   }
 }
+
+private fun AnalysisProviderRequirement.confirmationLabel(): String =
+    "Confirm ${model.scope.availableMetadata()} destination · ${model.model.availableMetadata()} (provider ${id.availableMetadata()})"
 
 private fun String.availableMetadata(): String = if (isBlank()) "Unavailable" else this
 

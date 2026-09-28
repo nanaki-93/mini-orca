@@ -18,6 +18,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DesktopAnalysisAdmissionTest {
+  private val bugConsent = "Confirm bug destination · bug-model (provider bug-provider)"
+  private val analyzeConsent =
+      "Confirm analyze destination · review-model (provider analyze-provider)"
+
   @Test
   fun shortAdmissionDialogScrollsLongDestinationsWithoutImplicitConsentOrStart() {
     val origin = "https://example.test/" + "destination/".repeat(14) + "end"
@@ -91,11 +95,7 @@ class DesktopAnalysisAdmissionTest {
           fixture.scrollBy(180f, "ide-dialog-body")
           fixture.render()
           assertTrue(fixture.verticalScrollValue("ide-dialog-body") > 0f)
-          for (label in
-              listOf(
-                  "Confirm bug destination",
-                  "Confirm analyze destination",
-                  "Include AI Security review")) {
+          for (label in listOf(bugConsent, analyzeConsent, "Include AI Security review")) {
             fixture.revealText(label, "ide-dialog-body")
             val bounds = fixture.descriptionBounds(label)
             assertTrue(bounds.top >= body.top && bounds.bottom <= body.bottom, "$label: $bounds")
@@ -236,9 +236,93 @@ class DesktopAnalysisAdmissionTest {
           assertTrue(fixture.hasText("Profile: Unavailable"))
           assertTrue(fixture.hasText("Model: Unavailable"))
           assertTrue(fixture.hasText("Local destination: Unavailable"))
-          assertTrue(fixture.hasDescription("Confirm bug destination"))
-          assertTrue(fixture.hasDescription("Confirm Unavailable destination"))
+          assertTrue(fixture.hasDescription(bugConsent))
+          assertFalse(fixture.hasDescription("Confirm Unavailable destination"))
           assertTrue(fixture.copyTextByDragging("Remote destination: $origin").isNotBlank())
+        }
+  }
+
+  @Test
+  fun repeatedScopesModelsAndMissingMetadataStillHaveIndependentKeyboardConsent() {
+    val base = analysisPreviewFixture()
+    val remote = base.providers.first()
+    val local =
+        base.providers
+            .last()
+            .copy(
+                id = "local-provider",
+                remoteConfirmationRequired = false,
+                model = base.providers.last().model.copy(remoteProvider = false))
+    val providers =
+        listOf(
+            remote.copy(
+                id = "remote-one",
+                model = remote.model.copy(scope = "shared", model = "same", providerOrigin = "")),
+            remote.copy(
+                id = "remote-two",
+                model = remote.model.copy(scope = "shared", model = "same", providerOrigin = "")),
+            remote.copy(
+                id = "remote-three",
+                model =
+                    remote.model.copy(scope = "", profile = "", model = "", providerOrigin = "")),
+            remote.copy(
+                id = "remote-four",
+                model =
+                    remote.model.copy(scope = "", profile = "", model = "", providerOrigin = "")),
+            local)
+    val preview = base.copy(providers = providers)
+    var state by mutableStateOf(ProjectAnalysisRunState(admission = AnalysisAdmission(preview)))
+    val changes = mutableListOf<Pair<String, Boolean>>()
+    val labels =
+        providers.take(4).map { provider ->
+          "Confirm ${provider.model.scope.ifBlank { "Unavailable" }} destination · " +
+              "${provider.model.model.ifBlank { "Unavailable" }} (provider ${provider.id})"
+        }
+    ComposeVisualFixture(600, 1800) {
+          DesktopAnalysisAdmissionContent(
+              state,
+              { id, checked ->
+                changes += id to checked
+                state =
+                    state.copy(
+                        admission =
+                            state.admission!!.copy(
+                                providerIds =
+                                    if (checked) state.admission!!.providerIds + id
+                                    else state.admission!!.providerIds - id))
+              },
+              { checked ->
+                state = state.copy(admission = state.admission!!.copy(securityReview = checked))
+              })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(4, labels.distinct().size)
+          assertTrue(fixture.hasText("Local destination: https://analyze.example"))
+          assertTrue(fixture.hasText("Scope: Unavailable"))
+          assertTrue(fixture.hasText("Profile: Unavailable"))
+          assertTrue(fixture.hasText("Model: Unavailable"))
+          for ((index, label) in labels.withIndex()) {
+            assertEquals(1, fixture.clickableDescriptionCount(label))
+            assertEquals(ToggleableState.Off, fixture.descriptionToggleableState(label))
+            assertTrue(fixture.requestDescriptionFocus(label))
+            assertTrue(fixture.pressKey(if (index % 2 == 0) Key.Enter else Key.Spacebar))
+            fixture.render()
+            assertEquals(
+                providers.take(index + 1).map { it.id }.toSet(), state.admission!!.providerIds)
+            assertEquals(ToggleableState.On, fixture.descriptionToggleableState(label))
+          }
+          assertEquals(providers.take(4).map { it.id to true }, changes)
+          assertFalse(state.admission!!.securityReview)
+          assertFalse(state.admission!!.isConfirmed())
+          assertTrue(fixture.requestDescriptionFocus(labels[1]))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals(
+              providers.take(4).map { it.id }.toSet() - "remote-two", state.admission!!.providerIds)
+          assertEquals("remote-two" to false, changes.last())
+          assertEquals(ToggleableState.On, fixture.descriptionToggleableState(labels[0]))
+          assertEquals(ToggleableState.Off, fixture.descriptionToggleableState(labels[1]))
         }
   }
 
@@ -438,7 +522,7 @@ class DesktopAnalysisAdmissionTest {
           assertTrue(fixture.hasText("excluded.go"))
           assertTrue(fixture.hasText(preview.excluded.single().reason))
           assertTrue(fixture.hasDescription("Include AI Security review"))
-          assertTrue(fixture.hasDescription("Confirm bug destination"))
+          assertTrue(fixture.hasDescription(bugConsent))
         }
   }
 
@@ -512,29 +596,21 @@ class DesktopAnalysisAdmissionTest {
                     "Profile: remote",
                     "Model: bug-model")) assertTrue(fixture.hasText(label))
             assertFalse(state.admission!!.isConfirmed())
-            for (label in
-                listOf(
-                    "Confirm bug destination",
-                    "Confirm analyze destination",
-                    "Include AI Security review")) {
+            for (label in listOf(bugConsent, analyzeConsent, "Include AI Security review")) {
               assertEquals(1, fixture.clickableDescriptionCount(label))
               assertEquals(ToggleableState.Off, fixture.descriptionToggleableState(label))
               assertEquals("Not confirmed", fixture.descriptionStateDescription(label))
             }
-            assertTrue(fixture.requestDescriptionFocus("Confirm bug destination"))
+            assertTrue(fixture.requestDescriptionFocus(bugConsent))
             assertTrue(fixture.pressKey(Key.Enter))
             fixture.render()
             assertEquals(listOf("bug-provider" to true), providerChanges)
             assertEquals(setOf("bug-provider"), state.admission!!.providerIds)
             assertFalse(state.admission!!.securityReview)
-            assertEquals(
-                ToggleableState.On, fixture.descriptionToggleableState("Confirm bug destination"))
-            assertEquals(
-                "Confirmed", fixture.descriptionStateDescription("Confirm bug destination"))
-            assertEquals(
-                ToggleableState.Off,
-                fixture.descriptionToggleableState("Confirm analyze destination"))
-            fixture.clickVisibleDescription("Confirm analyze destination")
+            assertEquals(ToggleableState.On, fixture.descriptionToggleableState(bugConsent))
+            assertEquals("Confirmed", fixture.descriptionStateDescription(bugConsent))
+            assertEquals(ToggleableState.Off, fixture.descriptionToggleableState(analyzeConsent))
+            fixture.clickVisibleDescription(analyzeConsent)
             fixture.render()
             assertEquals(
                 listOf("bug-provider" to true, "analyze-provider" to true), providerChanges)
