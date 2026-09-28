@@ -126,6 +126,88 @@ class DesktopAnalysisAdmissionTest {
   }
 
   @Test
+  fun outstandingDecisionTracksPartialConsentAndUncheckingWithoutInspectingDetails() {
+    val preview = analysisPreviewFixture()
+    var state by mutableStateOf(ProjectAnalysisRunState(admission = AnalysisAdmission(preview)))
+    var starts = 0
+    var changes = 0
+    val bugMissing = "Destination still needed: $bugConsent"
+    val analyzeMissing = "Destination still needed: $analyzeConsent"
+    val securityMissing = "Security intent still needed: Include AI Security review."
+    ComposeVisualFixture(640, 1300) {
+          Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            IdeDialogSurface(
+                1200.dp,
+                title = { DesktopAnalysisAdmissionTitle(state) },
+                content = {
+                  DesktopAnalysisAdmissionContent(
+                      state,
+                      { id, checked ->
+                        changes++
+                        state =
+                            state.copy(
+                                admission =
+                                    state.admission!!.copy(
+                                        providerIds =
+                                            if (checked) state.admission!!.providerIds + id
+                                            else state.admission!!.providerIds - id))
+                      },
+                      { checked ->
+                        changes++
+                        state =
+                            state.copy(admission = state.admission!!.copy(securityReview = checked))
+                      })
+                },
+                actions = { DesktopAnalysisAdmissionActions(state, {}, { starts++ }, {}) },
+                focusSafeActionOnOpen = true)
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Your confirmation"))
+          assertTrue(fixture.hasText("Still needed before Start or Resume:"))
+          assertTrue(fixture.hasText(bugMissing))
+          assertTrue(fixture.hasText(analyzeMissing))
+          assertTrue(fixture.hasText(securityMissing))
+          assertTrue(fixture.isDisabled("Start analysis"))
+          assertTrue(fixture.isFocusedControl("Close"))
+          assertTrue(
+              fixture.firstVisibleTextBounds("Your confirmation").top <
+                  fixture.firstVisibleTextBounds("Preview details").top)
+          assertFalse(fixture.hasText("Eligible stage"))
+          assertEquals(0, changes + starts)
+          assertTrue(fixture.requestDescriptionFocus(bugConsent))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertFalse(fixture.hasText(bugMissing))
+          assertTrue(fixture.hasText(analyzeMissing))
+          assertTrue(fixture.hasText(securityMissing))
+          assertTrue(fixture.isDisabled("Start analysis"))
+          assertTrue(fixture.requestDescriptionFocus("Include AI Security review"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertFalse(fixture.hasText(securityMissing))
+          assertTrue(fixture.hasText(analyzeMissing))
+          assertTrue(fixture.isDisabled("Start analysis"))
+          assertTrue(fixture.requestDescriptionFocus(analyzeConsent))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertFalse(fixture.hasText("Still needed before Start or Resume:"))
+          assertTrue(fixture.hasText("Confirmations complete for this preview."))
+          assertFalse(fixture.isDisabled("Start analysis"))
+          assertTrue(fixture.requestDescriptionFocus(bugConsent))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertTrue(fixture.hasText(bugMissing))
+          assertFalse(fixture.hasText(analyzeMissing))
+          assertFalse(fixture.hasText(securityMissing))
+          assertTrue(fixture.isDisabled("Start analysis"))
+          assertEquals(4, changes)
+          assertEquals(0, starts)
+        }
+  }
+
+  @Test
   fun returnedScopeAndPolicyFollowPreviewRatherThanOriginalRunPlan() {
     val base = analysisPreviewFixture()
     val cases =
@@ -241,6 +323,7 @@ class DesktopAnalysisAdmissionTest {
           assertTrue(fixture.hasText(contextExplanation))
           assertTrue(fixture.hasText(securityExplanation))
           assertFalse(fixture.hasDescription(analyzeConsent))
+          assertTrue(fixture.hasText("Security intent still needed: Include AI Security review."))
           assertEquals(
               ToggleableState.Off, fixture.descriptionToggleableState("Include AI Security review"))
           assertTrue(fixture.isDisabled("Start analysis"))
@@ -256,6 +339,8 @@ class DesktopAnalysisAdmissionTest {
           assertEquals(
               ToggleableState.On, fixture.descriptionToggleableState("Include AI Security review"))
           assertTrue(state.admission!!.isConfirmed())
+          assertFalse(fixture.hasText("Security intent still needed: Include AI Security review."))
+          assertTrue(fixture.hasText("Confirmations complete for this preview."))
           assertEquals(preview, state.admission!!.preview)
           assertTrue(fixture.hasText("AI Security review"))
         }
@@ -296,6 +381,8 @@ class DesktopAnalysisAdmissionTest {
           assertFalse(fixture.hasDescription(bugConsent))
           assertTrue(fixture.hasText("Local destination: https://bug.example"))
           assertTrue(state.admission!!.isConfirmed())
+          assertFalse(fixture.hasText("Still needed before Start or Resume:"))
+          assertTrue(fixture.hasText("Confirmations complete for this preview."))
           assertFalse(fixture.isDisabled("Start analysis"))
           fixture.revealText(contextExplanation, "ide-dialog-body")
           fixture.resize(440, 720)
@@ -304,6 +391,46 @@ class DesktopAnalysisAdmissionTest {
           assertTrue(fixture.hasText(contextExplanation))
           assertTrue(fixture.hasText("Close"))
         }
+  }
+
+  @Test
+  fun completedConfirmationsCannotStartAnEmptyScopeIncludingWhenNoneAreRequired() {
+    val base = analysisPreviewFixture()
+    for (preview in
+        listOf(
+            base.copy(files = emptyList()),
+            base.copy(
+                files = emptyList(),
+                providers = emptyList(),
+                securityReviewIntentRequired = false))) {
+      val admission =
+          AnalysisAdmission(
+              preview,
+              providerIds =
+                  preview.providers.filter { it.remoteConfirmationRequired }.map { it.id }.toSet(),
+              securityReview = preview.securityReviewIntentRequired)
+      val state = ProjectAnalysisRunState(admission = admission)
+      var starts = 0
+      ComposeVisualFixture(480, 640) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+              IdeDialogSurface(
+                  560.dp,
+                  title = { DesktopAnalysisAdmissionTitle(state) },
+                  content = { DesktopAnalysisAdmissionContent(state, { _, _ -> }, {}) },
+                  actions = { DesktopAnalysisAdmissionActions(state, {}, { starts++ }, {}) })
+            }
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(admission.isConfirmed())
+            assertTrue(fixture.hasText("No eligible files to analyze."))
+            assertTrue(fixture.hasText("Confirmations complete; no included files to analyze."))
+            assertFalse(fixture.hasText("Still needed before Start or Resume:"))
+            assertTrue(fixture.isDisabled("Start analysis"))
+            assertFalse(fixture.tryClick("Start analysis"))
+            assertEquals(0, starts)
+          }
+    }
   }
 
   @Test
@@ -358,7 +485,7 @@ class DesktopAnalysisAdmissionTest {
                                         model = "",
                                         providerOrigin = "",
                                         remoteProvider = false))))
-    ComposeVisualFixture(420, 1500, 1.5f) {
+    ComposeVisualFixture(420, 2600, 1.5f) {
           DesktopAnalysisAdmissionContent(
               ProjectAnalysisRunState(admission = AnalysisAdmission(preview)), { _, _ -> }, {})
         }
@@ -655,6 +782,7 @@ class DesktopAnalysisAdmissionTest {
         .use { fixture ->
           fixture.render("analysis-empty-retry-preview")
           fixture.assertTextFits("No stale or failed files to analyze.")
+          assertTrue(fixture.hasText("Still needed before Start or Resume:"))
           assertTrue(fixture.hasText("excluded.go"))
           assertTrue(fixture.hasText(preview.excluded.single().reason))
           assertTrue(fixture.hasDescription("Include AI Security review"))
@@ -685,6 +813,7 @@ class DesktopAnalysisAdmissionTest {
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("No eligible files to analyze."))
+          assertTrue(fixture.hasText("Still needed before Start or Resume:"))
           assertTrue(fixture.isDisabled("Start analysis"))
           fixture.revealText("src/private/skip.go", "ide-dialog-body")
           assertTrue(fixture.hasText(reason))
@@ -984,10 +1113,10 @@ class DesktopAnalysisAdmissionTest {
             maxModelRequests = 0)
     val state = ProjectAnalysisRunState(admission = AnalysisAdmission(preview))
     var operations = 0
-    ComposeVisualFixture(420, 590, 1.5f) {
+    ComposeVisualFixture(420, 960, 1.5f) {
           Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             IdeDialogSurface(
-                490.dp,
+                860.dp,
                 title = { DesktopAnalysisAdmissionTitle(state) },
                 content = {
                   DesktopAnalysisAdmissionContent(state, { _, _ -> operations++ }, { operations++ })

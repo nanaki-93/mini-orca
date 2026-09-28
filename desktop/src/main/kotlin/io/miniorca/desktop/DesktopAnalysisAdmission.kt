@@ -153,12 +153,58 @@ internal fun DesktopAnalysisAdmissionContent(
           },
           color = SecondaryText)
       Text("Reviewing this preview sends nothing to a model.", color = SecondaryText)
-      Text("Expected model requests without retries: ${preview.expectedModelRequests}")
-      Text("Inclusive maximum model requests with retries: ${preview.maxModelRequests}")
       if (preview.files.isEmpty())
           Text(
               if (preview.retryStaleFailed) "No stale or failed files to analyze."
               else "No eligible files to analyze.")
+      Text("Your confirmation", color = PrimaryText, style = IdeTypography.resultHeading)
+      Text(
+          "Start or Resume may send eligible source and project context for this previewed scope to the listed models under the existing context policy. This preview describes the plan, not the exact content sent to a model. One Start or Resume may initiate multiple model requests; analysis does not execute project code or modify source files. This consent does not grant function-edit permission or execution trust.",
+          color = SecondaryText)
+      val outstanding =
+          preview.providers.filter {
+            it.remoteConfirmationRequired && it.id !in admission.providerIds
+          }
+      when {
+        outstanding.isEmpty() &&
+            (!preview.securityReviewIntentRequired || admission.securityReview) ->
+            Text(
+                if (preview.files.isEmpty()) "Confirmations complete; no included files to analyze."
+                else "Confirmations complete for this preview.",
+                color = SecondaryText)
+        else -> {
+          Text("Still needed before Start or Resume:", color = Warning)
+          for (provider in outstanding) Text(
+              "Destination still needed: ${provider.confirmationLabel()}", color = Warning)
+          if (preview.securityReviewIntentRequired && !admission.securityReview)
+              Text("Security intent still needed: Include AI Security review.", color = Warning)
+        }
+      }
+      for (provider in preview.providers.filter { it.remoteConfirmationRequired }) {
+        val checked = provider.id in admission.providerIds
+        IdeCheckbox(
+            checked = checked,
+            onCheckedChange = { confirmProvider(provider.id, it) },
+            accessibleName = provider.confirmationLabel(),
+            stateLabel = if (checked) "Confirmed" else "Not confirmed",
+            label = provider.confirmationLabel())
+      }
+      if (preview.securityReviewIntentRequired) {
+        IdeHorizontalSeparator()
+        IdeCheckbox(
+            checked = admission.securityReview,
+            onCheckedChange = confirmSecurity,
+            accessibleName = "Include AI Security review",
+            stateLabel = if (admission.securityReview) "Confirmed" else "Not confirmed",
+            label = "Include AI Security review")
+        Text(
+            "AI Security review of eligible source is advisory. Model findings are unverified, not a verified scan or safety assurance. This acknowledgment does not change the returned stage plan.",
+            color = SecondaryText)
+      }
+      IdeHorizontalSeparator()
+      Text("Preview details", color = PrimaryText, style = IdeTypography.resultHeading)
+      Text("Expected model requests without retries: ${preview.expectedModelRequests}")
+      Text("Inclusive maximum model requests with retries: ${preview.maxModelRequests}")
       Text(
           "Dispatch window: up to ${preview.limits.batchFiles} files and ${preview.limits.budgetSeconds} seconds. These limits bound this dispatch, not the project inventory or an ETA.")
       Text(
@@ -210,31 +256,7 @@ internal fun DesktopAnalysisAdmissionContent(
                 "${if (provider.model.remoteProvider) "Remote" else "Local"} destination: ${provider.model.providerOrigin.availableMetadata()}")
           }
         }
-        if (provider.remoteConfirmationRequired) {
-          val checked = provider.id in admission.providerIds
-          IdeCheckbox(
-              checked = checked,
-              onCheckedChange = { confirmProvider(provider.id, it) },
-              accessibleName = provider.confirmationLabel(),
-              stateLabel = if (checked) "Confirmed" else "Not confirmed",
-              label = provider.confirmationLabel())
-        }
       }
-      if (preview.securityReviewIntentRequired) {
-        IdeHorizontalSeparator()
-        IdeCheckbox(
-            checked = admission.securityReview,
-            onCheckedChange = confirmSecurity,
-            accessibleName = "Include AI Security review",
-            stateLabel = if (admission.securityReview) "Confirmed" else "Not confirmed",
-            label = "Include AI Security review")
-        Text(
-            "AI Security review of eligible source is advisory. Model findings are unverified, not a verified scan or safety assurance. This acknowledgment does not change the returned stage plan.",
-            color = SecondaryText)
-      }
-      Text(
-          "Start or Resume may send eligible source and project context for this previewed scope to the listed models under the existing context policy. This preview describes the plan, not the exact content sent to a model. One Start or Resume may initiate multiple model requests; analysis does not execute project code or modify source files. This consent does not grant function-edit permission or execution trust.",
-          color = SecondaryText)
     }
   }
 }
