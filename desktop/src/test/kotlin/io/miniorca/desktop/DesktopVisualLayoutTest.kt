@@ -5382,6 +5382,74 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun f15CompactSummaryAndHeaderMatchTheAnalysisViewportAndDensityMatrix() {
+    val project = resultProjectFixture()
+    val analysis = roundedAnalysisStateFixture()
+    val run = requireNotNull(analysis.run)
+    val overview =
+        visualFixtureOverview.copy(
+            projectId = project.projectId, projectRevision = project.projectRevision)
+    val status =
+        requireNotNull(
+            toolbarAnalysisStatus(
+                DesktopState(
+                    projectState = ProjectWorkspaceState(project), analysisRun = analysis)))
+    assertEquals("Analysis · Running", status.label)
+    var dispatches = 0
+    val actions =
+        AnalysisWorkspaceActions(
+            { _, _ -> dispatches++ },
+            { dispatches++ },
+            { dispatches++ },
+            { dispatches++ },
+            { dispatches++ })
+    for ((width, height) in
+        listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+          val pixelWidth = (width * density).toInt()
+          val pixelHeight = (height * density).toInt()
+          val label = "f15-matrix-$width-$height-$scale-${density}x"
+          ComposeVisualFixture(pixelWidth, pixelHeight, scale, density) {
+                ProjectSummaryPane(
+                    overview,
+                    project,
+                    {},
+                    run = run,
+                    analysisState = analysis,
+                    analysisActions = actions)
+              }
+              .use { fixture ->
+                fixture.render("$label-summary")
+                assertEquals(1, fixture.tagCount("summary-analysis-run-strip"))
+                fixture.assertTextFits("Pause")
+                fixture.assertTextFits("Cancel")
+                assertTrue(fixture.hasText("Running"))
+                assertTrue(fixture.hasDescription("Show active files"))
+              }
+          ComposeVisualFixture(pixelWidth, pixelHeight, scale, density) {
+                MainToolbar(
+                    ToolbarState(
+                        project,
+                        false,
+                        "",
+                        ConnectionState(connected = true),
+                        GitStatus(available = true, branch = "main"),
+                        status),
+                    ToolbarActions({}, {}, {}, {}))
+              }
+              .use { fixture ->
+                fixture.render("$label-header")
+                fixture.assertTextFits("Analysis · Running")
+                assertFalse(fixture.hasText("Analysis · Stale"))
+              }
+        }
+      }
+    }
+    assertEquals(0, dispatches)
+  }
+
+  @Test
   fun analysisOverviewStacksControlsAndKeepsFullPathsLocalAcrossPollsAndResizes() {
     val path = "internal/" + "日本語-very-long-directory/".repeat(10) + "worker.go"
     val base = requireNotNull(roundedAnalysisStateFixture().run)
@@ -5397,74 +5465,82 @@ class DesktopVisualLayoutTest {
                 base.files.mapIndexed { index, file ->
                   if (index == 2) file.copy(path = path) else file
                 })
-    for ((width, height) in listOf(1600 to 1000, 1024 to 768, 800 to 650, 1280 to 600)) {
+    for ((width, height) in
+        listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)) {
       for (scale in listOf(1f, 1.25f, 1.5f)) {
-        var state by
-            mutableStateOf(
-                AnalysisWorkspacePaneState(
-                    resultProjectFixture(), roundedAnalysisStateFixture().copy(run = run)))
-        var dispatches = 0
-        val actions =
-            AnalysisWorkspaceActions(
-                { _, _ -> dispatches++ },
-                { dispatches++ },
-                { dispatches++ },
-                { dispatches++ },
-                { dispatches++ },
-                { dispatches++ },
-                { dispatches++ })
-        ComposeVisualFixture(width, height, scale) { AnalysisWorkspacePane(state, actions) }
-            .use { fixture ->
-              val label = "f15-overview-$width-$height-$scale"
-              fixture.render("$label-collapsed")
-              fixture.assertTextFits("Pause")
-              fixture.assertTextFits("Cancel")
-              fixture.revealText(
-                  "Finished includes partial and failed outcomes; it does not mean successful.",
-                  "analysis-page")
-              fixture.revealText("Show full path", "analysis-page")
-              fixture.clickDescription("Show active files")
-              fixture.render("$label-expanded")
-              fixture.revealText("Current: $path", "analysis-page")
-              assertTrue(fixture.hasText("Current: $path"))
-              val nextPath = "internal/db/store.go"
-              val polled =
-                  run.copy(
-                      windowFilesCompleted = 2,
-                      files =
-                          run.files.map { file ->
-                            when (file.path) {
-                              path ->
-                                  file.copy(
-                                      stages = file.stages.map { it.copy(status = "completed") })
-                              nextPath ->
-                                  file.copy(
-                                      stages = file.stages.map { it.copy(status = "running") })
-                              else -> file
-                            }
-                          })
-              state = state.copy(analysis = state.analysis.copy(run = polled))
-              fixture.render("$label-polled")
-              assertTrue(fixture.hasDescription("Hide active files"))
-              fixture.revealText("Current: $nextPath", "analysis-page")
-              fixture.resize((width - 80).coerceAtLeast(720), height)
-              fixture.render("$label-resized")
-              assertTrue(fixture.hasDescription("Hide active files"))
-              fixture.revealText("Refresh files", "analysis-page")
-              fixture.assertTextFits("Refresh files")
-              assertEquals(0, dispatches)
-              state =
-                  state.copy(
-                      analysis =
-                          state.analysis.copy(
-                              run =
-                                  polled.copy(
-                                      identity = run.identity.copy(generation = "new-generation"))))
-              fixture.render("$label-replaced")
-              fixture.revealText("Show full path", "analysis-page")
-              assertTrue(fixture.hasDescription("Show active files"))
-              assertEquals(0, dispatches)
-            }
+        for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+          var state by
+              mutableStateOf(
+                  AnalysisWorkspacePaneState(
+                      resultProjectFixture(), roundedAnalysisStateFixture().copy(run = run)))
+          var dispatches = 0
+          val actions =
+              AnalysisWorkspaceActions(
+                  { _, _ -> dispatches++ },
+                  { dispatches++ },
+                  { dispatches++ },
+                  { dispatches++ },
+                  { dispatches++ },
+                  { dispatches++ },
+                  { dispatches++ })
+          ComposeVisualFixture(
+                  (width * density).toInt(), (height * density).toInt(), scale, density) {
+                    AnalysisWorkspacePane(state, actions)
+                  }
+              .use { fixture ->
+                val label = "f15-overview-$width-$height-$scale-${density}x"
+                fixture.render("$label-collapsed")
+                fixture.assertTextFits("Pause")
+                fixture.assertTextFits("Cancel")
+                fixture.revealText(
+                    "Finished includes partial and failed outcomes; it does not mean successful.",
+                    "analysis-page")
+                fixture.revealText("Show full path", "analysis-page")
+                fixture.clickDescription("Show active files")
+                fixture.render("$label-expanded")
+                fixture.revealText("Current: $path", "analysis-page")
+                assertTrue(fixture.hasText("Current: $path"))
+                val nextPath = "internal/db/store.go"
+                val polled =
+                    run.copy(
+                        windowFilesCompleted = 2,
+                        files =
+                            run.files.map { file ->
+                              when (file.path) {
+                                path ->
+                                    file.copy(
+                                        stages = file.stages.map { it.copy(status = "completed") })
+                                nextPath ->
+                                    file.copy(
+                                        stages = file.stages.map { it.copy(status = "running") })
+                                else -> file
+                              }
+                            })
+                state = state.copy(analysis = state.analysis.copy(run = polled))
+                fixture.render("$label-polled")
+                assertTrue(fixture.hasDescription("Hide active files"))
+                fixture.revealText("Current: $nextPath", "analysis-page")
+                fixture.resize(
+                    ((width - 80).coerceAtLeast(720) * density).toInt(), (height * density).toInt())
+                fixture.render("$label-resized")
+                assertTrue(fixture.hasDescription("Hide active files"))
+                fixture.revealText("Refresh files", "analysis-page")
+                fixture.assertTextFits("Refresh files")
+                assertEquals(0, dispatches)
+                state =
+                    state.copy(
+                        analysis =
+                            state.analysis.copy(
+                                run =
+                                    polled.copy(
+                                        identity =
+                                            run.identity.copy(generation = "new-generation"))))
+                fixture.render("$label-replaced")
+                fixture.revealText("Show full path", "analysis-page")
+                assertTrue(fixture.hasDescription("Show active files"))
+                assertEquals(0, dispatches)
+              }
+        }
       }
     }
   }
@@ -7297,6 +7373,87 @@ class DesktopVisualLayoutTest {
           fixture.assertTextFits("Outdated")
           fixture.assertTextContrast("Outdated", blendOver(Warning.copy(alpha = 0.16f), Panel))
         }
+  }
+
+  @Test
+  fun revisionMismatchedRunAgreesAcrossAnalysisSummaryAndHeaderWithoutControls() {
+    val project = resultProjectFixture().copy(projectRevision = "next")
+    val original = analysisRunFixture()
+    val run =
+        original.copy(
+            status = "running",
+            files =
+                listOf(
+                    AnalysisRunFile(
+                        "main.go",
+                        "base",
+                        "Go",
+                        listOf(AnalysisStageProgress("semantic", "running", 1, false)))))
+    val analysis = ProjectAnalysisRunState(run = run)
+    val app = DesktopState(projectState = ProjectWorkspaceState(project), analysisRun = analysis)
+    val header = toolbarAnalysisStatus(app)!!
+    assertEquals("Analysis · Stale", header.label)
+    assertFalse(header.running)
+    assertTrue(header.attention)
+    assertTrue(header.detail.contains("Run belongs to an older project revision"))
+    var actions = 0
+    val callbacks =
+        AnalysisWorkspaceActions(
+            { _, _ -> actions++ }, { actions++ }, { actions++ }, { actions++ }, { actions++ })
+    ComposeVisualFixture(800, 650, 1.5f) {
+          AnalysisWorkspacePane(AnalysisWorkspacePaneState(project, analysis), callbacks)
+        }
+        .use { fixture ->
+          fixture.render("f15-outdated-analysis")
+          assertTrue(fixture.hasText("Analysis out of date"))
+          assertTrue(
+              fixture.hasText(
+                  "Outdated · run belongs to an older project revision; not current evidence."))
+          assertFalse(fixture.hasText("Current: main.go"))
+          assertEquals(0, fixture.tagCount("analysis-run-controls"))
+          assertFalse(fixture.hasText("Pause"))
+          assertFalse(fixture.hasText("Cancel"))
+        }
+    ComposeVisualFixture(800, 650, 1.5f) {
+          ProjectSummaryPane(
+              visualFixtureOverview.copy(
+                  projectId = project.projectId, projectRevision = project.projectRevision),
+              project,
+              {},
+              run = run,
+              analysisState = analysis,
+              analysisActions = callbacks)
+        }
+        .use { fixture ->
+          fixture.render("f15-outdated-summary")
+          assertEquals(1, fixture.tagCount("summary-analysis-run-strip"))
+          assertTrue(fixture.hasText("Stale"))
+          assertTrue(fixture.hasText("File progress unavailable"))
+          assertTrue(
+              fixture.hasText(
+                  "Outdated · run belongs to an older project revision; not current evidence."))
+          assertFalse(fixture.hasText("Current: main.go"))
+          assertEquals(0, fixture.tagCount("summary-start-analysis"))
+          assertFalse(fixture.hasText("Pause"))
+          assertFalse(fixture.hasText("Cancel"))
+        }
+    ComposeVisualFixture(800, 650, 1.5f) {
+          MainToolbar(
+              ToolbarState(
+                  project,
+                  false,
+                  "",
+                  ConnectionState(connected = true),
+                  GitStatus(available = true, branch = "main"),
+                  header),
+              ToolbarActions({}, {}, {}, {}))
+        }
+        .use { fixture ->
+          fixture.render("f15-outdated-header")
+          assertTrue(fixture.hasText("Analysis · Stale"))
+          assertFalse(fixture.hasText("Analysis · Running"))
+        }
+    assertEquals(0, actions)
   }
 
   @Test

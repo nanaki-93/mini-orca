@@ -369,9 +369,7 @@ internal fun toolbarAnalysisStatus(state: DesktopState): ToolbarAnalysisStatus? 
       analysis.admission == null &&
       analysis.error == null)
       return null
-  val stale =
-      run != null &&
-          (run.status == "stale" || run.identity.projectRevision != project.projectRevision)
+  val stale = analysisRunStale(run, project)
   val acceptedStatus = if (stale) "Stale" else analysisStatusLabel(run?.status)
   val readFailed = analysis.error != null && analysis.errorKind == AnalysisRunErrorKind.StatusRead
   val status =

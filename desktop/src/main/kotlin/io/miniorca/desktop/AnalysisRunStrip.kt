@@ -78,6 +78,13 @@ internal fun AnalysisRunStrip(
                 pathsExpanded = !pathsExpanded
               }
         }
+        if (analysisRunOutdated(run, state.project))
+            Text(
+                if (analysisRunRevisionOutdated(run, state.project))
+                    "Outdated · run belongs to an older project revision; not current evidence."
+                else "Outdated · run belongs to another project; not current evidence.",
+                color = Warning,
+                style = IdeTypography.workspaceMetadata)
         if (scope == AnalysisRunStripScope.Summary)
             run?.reason?.takeIf { it.isNotBlank() }?.let { DiagnosticText(it, color = Warning) }
         if (scope == AnalysisRunStripScope.Analysis) {
@@ -127,7 +134,7 @@ private fun AnalysisRunPanel(
 
 @Composable
 private fun AnalysisLifecycleIndicator(run: AnalysisRun?, presentation: ProjectRunPresentation) {
-  val tint = analysisStatusTint(run?.status)
+  val tint = analysisRunDisplayTint(run, presentation)
   Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
     if (presentation.isActive) {
       IdeBusyIndicator(Modifier.size(22.dp), color = tint, strokeWidth = 2.dp)
@@ -156,7 +163,10 @@ private fun AnalysisRunContent(
     }
     if (run != null) {
       AnalysisRunProgressTrack(
-          presentation, analysisStatusTint(run.status), Modifier.fillMaxWidth(), showPercent = true)
+          presentation,
+          analysisRunDisplayTint(run, presentation),
+          Modifier.fillMaxWidth(),
+          showPercent = true)
     }
     if (run != null && presentation.progressAvailability == RunProgressAvailability.Available)
         Text(
@@ -417,7 +427,7 @@ private fun analysisRunSupplementalMetadata(
 ): String? {
   if (run == null) return null
   val facts = mutableListOf<String>()
-  if (run.isActive()) {
+  if (presentation.isActive) {
     if (run.windowFilesCompleted > 0) {
       facts +=
           "${run.windowFilesCompleted} ${if (run.windowFilesCompleted == 1) "file" else "files"} processed in current window"
@@ -446,7 +456,7 @@ private fun SummaryRunPanel(
     AnalysisRunMetadata(run, presentation, currentPaths, pathsExpanded, onTogglePaths)
     if (run != null) {
       AnalysisRunProgressTrack(
-          presentation, analysisStatusTint(run.status), Modifier.fillMaxWidth())
+          presentation, analysisRunDisplayTint(run, presentation), Modifier.fillMaxWidth())
       if (presentation.progressAvailability == RunProgressAvailability.Available)
           Text(
               "Finished includes partial and failed outcomes; it does not mean successful.",
@@ -457,6 +467,12 @@ private fun SummaryRunPanel(
     if (pathsExpanded) AnalysisExpandedPaths(currentPaths)
   }
 }
+
+private fun analysisRunDisplayTint(
+    run: AnalysisRun?,
+    presentation: ProjectRunPresentation,
+): androidx.compose.ui.graphics.Color =
+    analysisStatusTint(if (presentation.status == "Stale") "stale" else run?.status)
 
 private fun analysisFileProgressLabel(presentation: ProjectRunPresentation): String =
     when (presentation.progressAvailability) {
@@ -484,7 +500,8 @@ private fun AnalysisRunMetadata(
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalArrangement = Arrangement.spacedBy(6.dp)) {
         IdeLabelBadge(
-            if (run == null) "Ready" else presentation.status, analysisStatusTint(run?.status))
+            if (run == null) "Ready" else presentation.status,
+            analysisRunDisplayTint(run, presentation))
         if (run != null) {
           Text(
               analysisFileProgressLabel(presentation),

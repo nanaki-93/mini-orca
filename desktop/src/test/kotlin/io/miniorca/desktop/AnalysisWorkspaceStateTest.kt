@@ -198,6 +198,99 @@ class AnalysisWorkspaceStateTest {
   }
 
   @Test
+  fun staleRunsKeepCapturedEvidenceButNeverReportCurrentPaths() {
+    val project = resultProjectFixture()
+    val run =
+        analysisRunFixture()
+            .copy(
+                status = "running",
+                plan = plannedRunFiles("main.go" to listOf("semantic")),
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "main.go",
+                            "base",
+                            "Go",
+                            listOf(AnalysisStageProgress("semantic", "running", 1, false)))))
+    val active = projectRunPresentation(project, ProjectAnalysisRunState(run = run))
+    assertEquals(listOf("main.go"), active.currentFiles)
+    assertTrue(active.isActive)
+
+    val stale =
+        projectRunPresentation(project, ProjectAnalysisRunState(run = run.copy(status = "stale")))
+    assertEquals("Stale", stale.status)
+    assertTrue(stale.currentFiles.isEmpty())
+    assertFalse(stale.isActive)
+    assertEquals("running", stale.stages.single().files.single().status)
+
+    val outdated =
+        projectRunPresentation(
+            project.copy(projectRevision = "next"), ProjectAnalysisRunState(run = run))
+    assertEquals("Stale", outdated.status)
+    assertEquals(RunProgressAvailability.Unavailable, outdated.progressAvailability)
+    assertTrue(outdated.currentFiles.isEmpty())
+    assertFalse(outdated.isActive)
+    assertTrue(outdated.commands.isEmpty())
+    assertTrue(outdated.headline.startsWith("Last run · Stale"))
+  }
+
+  @Test
+  fun stoppedRunsCannotPresentReportedRunningStagesAsCurrentPaths() {
+    val project = resultProjectFixture()
+    val run =
+        analysisRunFixture()
+            .copy(
+                status = "running",
+                plan = plannedRunFiles("main.go" to listOf("semantic")),
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "main.go",
+                            "base",
+                            "Go",
+                            listOf(AnalysisStageProgress("semantic", "running", 1, false)))))
+    assertEquals(
+        listOf("main.go"),
+        projectRunPresentation(project, ProjectAnalysisRunState(run = run)).currentFiles)
+    listOf("paused", "interrupted", "failed", "partial", "completed", "canceled").forEach { status
+      ->
+      val stopped =
+          projectRunPresentation(project, ProjectAnalysisRunState(run = run.copy(status = status)))
+      assertTrue(stopped.currentFiles.isEmpty(), "$status must not display current paths")
+      assertFalse(stopped.isActive)
+      assertEquals("running", stopped.stages.single().files.single().status)
+    }
+  }
+
+  @Test
+  fun foreignProjectRunHasNoCurrentProgressOrLifecycleAuthority() {
+    val project = resultProjectFixture()
+    val identity = analysisRunFixture().identity.copy(projectId = "another-project")
+    val run =
+        analysisRunFixture()
+            .copy(
+                identity = identity,
+                status = "running",
+                plan =
+                    plannedRunFiles("main.go" to listOf("semantic"))
+                        .copy(identity = identity.queue()),
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "main.go",
+                            "base",
+                            "Go",
+                            listOf(AnalysisStageProgress("semantic", "running", 1, false)))))
+    val presentation = projectRunPresentation(project, ProjectAnalysisRunState(run = run))
+    assertEquals("Stale", presentation.status)
+    assertEquals(RunProgressAvailability.Unavailable, presentation.progressAvailability)
+    assertTrue(presentation.currentFiles.isEmpty())
+    assertFalse(presentation.isActive)
+    assertTrue(presentation.commands.isEmpty())
+    assertTrue(presentation.headline.startsWith("Last run · Stale"))
+  }
+
+  @Test
   fun lifecycleCommandsFollowTheDaemonAndResumeRequiresFreshAdmission() {
     assertEquals(
         listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed),
