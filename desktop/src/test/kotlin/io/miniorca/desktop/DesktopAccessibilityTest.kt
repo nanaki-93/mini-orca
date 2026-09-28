@@ -631,6 +631,11 @@ class DesktopAccessibilityTest {
           assertTrue(fixture.hasText("Start analysis"))
           fixture.clickText("Start analysis")
           assertEquals(1, starts)
+          assertTrue(fixture.hasText("Attention · 1 failed"))
+          assertFalse(fixture.hasText(reason))
+          fixture.revealText("Code analysis · 1/1 finished · 1 failed", "analysis-page")
+          fixture.clickText("Code analysis · 1/1 finished · 1 failed")
+          fixture.render()
           fixture.revealText(reason, "analysis-page")
           fixture.assertTextWrapsWithoutClipping(reason)
         }

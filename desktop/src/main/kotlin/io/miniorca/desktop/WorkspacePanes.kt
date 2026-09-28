@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
@@ -57,7 +56,6 @@ internal fun AnalysisWorkspacePane(
         },
 ) {
   val analysis = state.analysis
-  val presentation = projectRunPresentation(state.project, analysis)
   BoxWithConstraints(Modifier.fillMaxSize()) {
     val density = LocalDensity.current
     var headerHeight by remember { mutableStateOf<Int?>(null) }
@@ -93,7 +91,6 @@ internal fun AnalysisWorkspacePane(
                 { height -> fileChromeHeight = height },
                 filesView)
           }
-          items(presentation.failures) { failure -> AnalysisFailureDetails(failure) }
         }
   }
 }
@@ -120,23 +117,6 @@ private fun AnalysisRunPanel(
 ) {
   AnalysisRunStrip(
       state, actions, AnalysisRunStripScope.Analysis, Modifier.testTag("analysis-run-panel"))
-}
-
-@Composable
-internal fun AnalysisFailureDetails(failure: AnalysisStageFailure) {
-  MiniOrcaPanel(
-      modifier = Modifier.fillMaxWidth().testTag("analysis-stage-failure-${failure.path}"),
-      contentPadding = PaddingValues(16.dp)) {
-        Text(
-            "${analysisStageLabel(failure.stage)} · ${failure.path}",
-            style = IdeTypography.resultLabel,
-            color = PrimaryText)
-        Text(
-            "Attempts: ${failure.attempts}",
-            style = IdeTypography.compactBody,
-            color = SecondaryText)
-        DiagnosticText(failure.reason, color = Error)
-      }
 }
 
 internal data class AnalysisWorkspacePaneState(
