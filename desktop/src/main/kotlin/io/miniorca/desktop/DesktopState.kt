@@ -153,6 +153,14 @@ enum class AnalysisRunErrorKind {
   StatusRead,
 }
 
+enum class AnalysisControlOutcome {
+  Requesting,
+  Reconciling,
+  Unconfirmed,
+}
+
+data class AnalysisControlRequest(val action: String, val outcome: AnalysisControlOutcome)
+
 /** Consent is transient and belongs only to this admission preview. */
 data class ProjectAnalysisRunState(
     val run: AnalysisRun? = null,
@@ -163,6 +171,8 @@ data class ProjectAnalysisRunState(
     val action: String = "",
     val error: String? = null,
     val errorKind: AnalysisRunErrorKind? = null,
+    val controlRequest: AnalysisControlRequest? = null,
+    val statusUnavailable: Boolean = false,
     val sections: Map<AnalysisResultKey, AnalysisSectionState> = emptyMap(),
     val fileSelection: AnalysisSelectionState = AnalysisSelectionState(),
 )
@@ -1581,7 +1591,13 @@ private fun DesktopState.withAnalysisRunUpdate(updated: ProjectAnalysisRunState)
 
 private fun ProjectAnalysisRunState.afterRevisionChange(changed: Boolean): ProjectAnalysisRunState =
     if (changed)
-        copy(admission = null, previewIntent = null, action = "", run = run?.copy(status = "stale"))
+        copy(
+            admission = null,
+            previewIntent = null,
+            action = "",
+            controlRequest = null,
+            statusUnavailable = false,
+            run = run?.copy(status = "stale"))
     else this
 
 private fun DesktopState.withFindingStatus(event: DesktopEvent.FindingStatusUpdated): DesktopState {

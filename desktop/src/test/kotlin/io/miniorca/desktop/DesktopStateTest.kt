@@ -99,6 +99,36 @@ class DesktopStateTest {
   }
 
   @Test
+  fun controlUncertaintyIsTransientAndDoesNotChangeTheAcceptedRun() {
+    val run = analysisRunFixture()
+    val retained =
+        projectState()
+            .reduce(
+                DesktopEvent.AnalysisRunUpdated(
+                    ProjectAnalysisRunState(
+                        run = run,
+                        controlRequest =
+                            AnalysisControlRequest("cancel", AnalysisControlOutcome.Unconfirmed),
+                        statusUnavailable = true,
+                        error = "Status could not be read",
+                        errorKind = AnalysisRunErrorKind.StatusRead)))
+    assertEquals(run, retained.analysisRun.run)
+    assertTrue(retained.analysisRun.statusUnavailable)
+    assertEquals("paused", retained.analysisRun.run?.status)
+    val navigated = retained.reduce(DesktopEvent.WorkspaceSelected(Workspace.Analysis))
+    assertEquals(retained.analysisRun, navigated.analysisRun)
+    val reindexed = retained.reduce(DesktopEvent.IndexRefreshed(ProjectIndex("project", "next")))
+    assertNull(reindexed.analysisRun.controlRequest)
+    assertFalse(reindexed.analysisRun.statusUnavailable)
+    assertEquals("stale", reindexed.analysisRun.run?.status)
+    val replaced =
+        retained.reduce(
+            DesktopEvent.ProjectLoaded(
+                analysisProjectFixture("other"), ProjectIndex("other", "revision")))
+    assertEquals(ProjectAnalysisRunState(), replaced.analysisRun)
+  }
+
+  @Test
   fun sessionRunHistorySurvivesNavigationButNotProjectReplacementOrRestart() {
     val previous = analysisRunFixture().copy(status = "partial", reason = "observed failure")
     val current =

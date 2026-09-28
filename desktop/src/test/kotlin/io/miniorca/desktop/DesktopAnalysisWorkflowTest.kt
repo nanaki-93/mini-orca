@@ -1697,6 +1697,176 @@ class DesktopAnalysisWorkflowTest {
   }
 
   @Test
+  fun rejectedAndUnconfirmedControlsReconcileWithoutRepeatingThePost() {
+    for (rejected in listOf(true, false)) {
+      Harness().use { h ->
+        h.run = h.run.copy(status = "running")
+        h.workflow.refresh()
+        h.drain()
+        val evidence = h.state.analysisRun.sections
+        if (rejected) h.controlConflict = true else h.failure = "/control"
+        h.workflow.control("pause")
+        assertEquals(
+            AnalysisControlRequest("pause", AnalysisControlOutcome.Requesting),
+            h.state.analysisRun.controlRequest)
+        h.main.runPending()
+        h.io.runPending()
+        h.main.runPending() // The rejection or transport failure schedules reconciliation.
+        assertEquals(
+            AnalysisControlRequest(
+                "pause",
+                if (rejected) AnalysisControlOutcome.Reconciling
+                else AnalysisControlOutcome.Unconfirmed),
+            h.state.analysisRun.controlRequest)
+        assertTrue(projectRunPresentation(h.state.project, h.state.analysisRun).commands.isEmpty())
+        h.workflow.preview(resume = true)
+        h.workflow.control("cancel")
+        h.drain()
+        assertEquals("running", h.state.analysisRun.run?.status)
+        assertEquals(evidence, h.state.analysisRun.sections)
+        assertEquals(null, h.state.analysisRun.controlRequest)
+        assertFalse(h.state.analysisRun.statusUnavailable)
+        assertTrue(
+            h.state.analysisRun.error!!.contains(
+                if (rejected) "pause rejected" else "pause outcome unconfirmed"))
+        assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/control") })
+        assertTrue(h.calls.any { it.first == "GET" && it.second.contains("/analysis/run?") })
+      }
+    }
+  }
+
+  @Test
+  fun failedControlReconciliationRetainsEvidenceAndBlocksOldAuthorityUntilExplicitRead() {
+    for (rejected in listOf(true, false)) {
+      Harness().use { h ->
+        h.workflow.refresh()
+        h.drain()
+        val accepted = h.state.analysisRun.run
+        val evidence = h.state.analysisRun.sections
+        if (rejected) h.controlConflict = true else h.failure = "/control"
+        h.failure = if (rejected) "" else "/control"
+        h.failStatus = true
+        h.run = h.run.copy(status = "interrupted", reason = "Save failed after stage 1")
+        h.workflow.control("cancel")
+        h.drain()
+        assertEquals(h.run, h.state.analysisRun.run) // Overview retains daemon progress.
+        assertEquals(evidence.keys, h.state.analysisRun.sections.keys)
+        assertTrue(h.state.analysisRun.sections.values.all { it.results != null })
+        assertTrue(h.state.analysisRun.statusUnavailable)
+        assertTrue(projectRunPresentation(h.state.project, h.state.analysisRun).commands.isEmpty())
+        assertEquals(
+            if (rejected) null
+            else AnalysisControlRequest("cancel", AnalysisControlOutcome.Unconfirmed),
+            h.state.analysisRun.controlRequest)
+        assertTrue(h.state.analysisRun.error!!.contains("status could not be read"))
+        assertEquals(AnalysisRunErrorKind.StatusRead, h.state.analysisRun.errorKind)
+        h.workflow.preview(resume = true)
+        h.workflow.preview()
+        h.workflow.control("cancel")
+        h.drain()
+        assertEquals(0, h.calls.count { it.second.endsWith("/preview") })
+        assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/control") })
+        h.failStatus = false
+        h.failure = ""
+        h.workflow.refresh()
+        h.drain()
+        assertFalse(h.state.analysisRun.statusUnavailable)
+        assertTrue(
+            projectRunPresentation(h.state.project, h.state.analysisRun).commands.isNotEmpty())
+        assertNull(h.state.analysisRun.controlRequest)
+        assertNull(h.state.analysisRun.error)
+        assertEquals(h.run, h.state.analysisRun.run)
+        assertTrue(h.calls.none { it.first == "POST" && it.second.endsWith("/run") })
+        assertTrue(accepted != h.run)
+      }
+    }
+  }
+
+  @Test
+  fun failedStatusAndOverviewKeepTheOldPausedSnapshotButNotItsResumeAuthority() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      val accepted = h.state.analysisRun.run
+      val evidence = h.state.analysisRun.sections
+      h.failure = "/overview?"
+      h.failStatus = true
+      h.controlConflict = true
+      h.workflow.control("cancel")
+      h.drain()
+      assertEquals(accepted, h.state.analysisRun.run)
+      assertEquals(evidence, h.state.analysisRun.sections)
+      assertTrue(h.state.analysisRun.statusUnavailable)
+      assertTrue(projectRunPresentation(h.state.project, h.state.analysisRun).commands.isEmpty())
+      h.workflow.preview(resume = true)
+      h.workflow.preview()
+      h.drain()
+      assertEquals(0, h.calls.count { it.second.endsWith("/preview") })
+      assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/control") })
+      h.failure = ""
+      h.failStatus = false
+      h.run = h.run.copy(status = "canceled")
+      h.workflow.refresh()
+      h.drain()
+      assertEquals("canceled", h.state.analysisRun.run?.status)
+      assertFalse(h.state.analysisRun.statusUnavailable)
+      assertNull(h.state.analysisRun.error)
+      assertFalse(
+          projectRunPresentation(h.state.project, h.state.analysisRun)
+              .commands
+              .contains(AnalysisRunCommand.Resume))
+    }
+  }
+
+  @Test
+  fun lateControlFallbackCannotReplaceNewerAcceptedProgress() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      h.failStatus = true
+      h.failure = "/control"
+      h.workflow.control("cancel")
+      h.main.runPending()
+      h.io.runPending() // Control failure.
+      h.main.runPending() // Status read begins.
+      h.io.runPending() // Failed status response awaits the UI dispatcher.
+      h.main.runPending() // Overview fallback begins.
+      h.io.runPending() // Retained overview response awaits the UI dispatcher.
+      val newer = h.run.copy(status = "interrupted", reason = "Save failed", updatedAt = "newer")
+      h.dispatch(DesktopEvent.AnalysisRunUpdated(h.state.analysisRun.copy(run = newer)))
+      val evidence = h.state.analysisRun.sections
+      h.drain()
+      assertEquals(newer, h.state.analysisRun.run)
+      assertEquals(evidence, h.state.analysisRun.sections)
+      assertTrue(h.state.analysisRun.statusUnavailable)
+      assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/control") })
+    }
+  }
+
+  @Test
+  fun lateFailedReconciliationCannotOverwriteExplicitRefresh() {
+    Harness().use { h ->
+      h.run = h.run.copy(status = "running")
+      h.workflow.refresh()
+      h.drain()
+      h.failure = "/control"
+      h.failStatus = true
+      h.workflow.control("pause")
+      h.main.runPending()
+      h.io.runPending()
+      h.main.runPending() // Reconciliation read queued.
+      h.io.runPending() // Its failure is queued for UI delivery.
+      // A newer project revision invalidates the old operation and its fallback.
+      h.dispatch(DesktopEvent.IndexRefreshed(ProjectIndex("project", "new")))
+      h.drain()
+      assertEquals("new", h.state.project?.projectRevision)
+      assertNull(h.state.analysisRun.controlRequest)
+      assertFalse(h.state.analysisRun.statusUnavailable)
+      assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/control") })
+    }
+  }
+
+  @Test
   fun statusReadErrorKindSurvivesAnOrdinaryExceptionMessageAndClearsOnNextRead() {
     Harness().use { h ->
       h.run = h.run.copy(status = "completed")
@@ -1950,6 +2120,8 @@ class DesktopAnalysisWorkflowTest {
     var wrongRetryPreview = false
     var emptyPreview = false
     var admissionConflict = false
+    var controlConflict = false
+    var failStatus = false
     var admissionTransportFailure = false
     var cancelAdmission = false
     var lateAdmissionGate: Pair<CountDownLatch, CountDownLatch>? = null
@@ -1990,7 +2162,11 @@ class DesktopAnalysisWorkflowTest {
                                   updatedAt = "admitted")
                         }
                       }
-                      if ((failure.isNotEmpty() && path.contains(failure)) ||
+                      if (failStatus && method == "GET" && path.contains("/analysis/run?"))
+                          TransportResponse(500, """{"message":"status unavailable"}""")
+                      else if (controlConflict && method == "POST" && path.endsWith("/control"))
+                          TransportResponse(409, """{"message":"Control rejected"}""")
+                      else if ((failure.isNotEmpty() && path.contains(failure)) ||
                           (admissionTransportFailure &&
                               method == "POST" &&
                               (path.endsWith("/analysis/run") || path.endsWith("/control"))))

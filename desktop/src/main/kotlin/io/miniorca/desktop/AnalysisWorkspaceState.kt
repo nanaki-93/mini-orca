@@ -249,7 +249,12 @@ internal fun projectRunPresentation(
                       it.reason.ifBlank { "No diagnostic was supplied for this stage." })
                 }
           },
-      commands = analysisRunCommands(project, run),
+      commands =
+          if (analysis.statusUnavailable ||
+              analysis.controlRequest?.outcome in
+                  setOf(AnalysisControlOutcome.Reconciling, AnalysisControlOutcome.Unconfirmed))
+              emptyList()
+          else analysisRunCommands(project, run),
       isActive = active)
 }
 
