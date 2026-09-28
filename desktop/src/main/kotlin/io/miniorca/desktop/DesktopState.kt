@@ -121,6 +121,20 @@ data class AnalysisAdmission(
           (!preview.securityReviewIntentRequired || securityReview)
 }
 
+data class AnalysisPreviewIntent(
+    val projectId: String,
+    val projectRevision: String,
+    val limits: AnalysisRunLimits,
+    val refresh: Boolean,
+    val retryStaleFailed: Boolean,
+    val resumeRun: AnalysisRunIdentity? = null,
+    val resumePlan: AnalysisRunPreview? = null,
+) {
+  fun request() =
+      AnalysisPreviewRequest(
+          projectId, projectRevision, "project", refresh, limits, resumeRun, retryStaleFailed)
+}
+
 data class AnalysisResultKey(val category: String, val path: String = "")
 
 data class AnalysisSectionState(
@@ -133,6 +147,7 @@ data class AnalysisSectionState(
 data class ProjectAnalysisRunState(
     val run: AnalysisRun? = null,
     val admission: AnalysisAdmission? = null,
+    val previewIntent: AnalysisPreviewIntent? = null,
     val action: String = "",
     val error: String? = null,
     val sections: Map<AnalysisResultKey, AnalysisSectionState> = emptyMap(),
@@ -543,8 +558,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
           copy(projectState = projectState.copy(detailsOutcome = event.outcome))
       is DesktopEvent.FindingsLoaded -> copy(findings = findings.copy(findings = event.findings))
       is DesktopEvent.FindingStatusUpdated -> withFindingStatus(event)
-      is DesktopEvent.AnalysisRunUpdated ->
-          copy(analysisRun = event.state.afterRevisionChange(projectState.sourceChangeObserved))
+      is DesktopEvent.AnalysisRunUpdated -> withAnalysisRunUpdate(event.state)
       is DesktopEvent.AnalyzeAllLoaded -> copy(findings = findings.copy(analyzeAll = event.job))
       is DesktopEvent.PerformanceLoaded ->
           copy(
@@ -1533,8 +1547,29 @@ fun draftReviewEligibility(
   return draftApplyEligibility(draft, checks, selectedFile)
 }
 
+private fun DesktopState.withAnalysisRunUpdate(updated: ProjectAnalysisRunState): DesktopState {
+  val obsolete =
+      updated.previewIntent?.let { intent ->
+        val run = updated.run
+        intent.resumeRun != null &&
+            (run?.identity != intent.resumeRun || run.plan != intent.resumePlan) ||
+            analysisRun.run != null && run?.identity != analysisRun.run.identity
+      } == true
+  return copy(
+      analysisRun =
+          updated
+              .copy(
+                  previewIntent =
+                      updated.previewIntent.takeUnless { updated.fileSelection.saving || obsolete },
+                  admission = updated.admission.takeUnless { obsolete },
+                  action = if (obsolete && updated.action == "preview") "" else updated.action)
+              .afterRevisionChange(projectState.sourceChangeObserved))
+}
+
 private fun ProjectAnalysisRunState.afterRevisionChange(changed: Boolean): ProjectAnalysisRunState =
-    if (changed) copy(admission = null, action = "", run = run?.copy(status = "stale")) else this
+    if (changed)
+        copy(admission = null, previewIntent = null, action = "", run = run?.copy(status = "stale"))
+    else this
 
 private fun DesktopState.withFindingStatus(event: DesktopEvent.FindingStatusUpdated): DesktopState {
   fun List<UnifiedFinding>.updated(): List<UnifiedFinding> = map { finding ->

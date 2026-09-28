@@ -100,12 +100,255 @@ class DesktopAnalysisWorkflowTest {
       h.drain()
       assertEquals(1, h.calls.count { it.first == "POST" })
       h.failure = ""
-      h.workflow.preview(defaultAnalysisRunLimits, resume = false)
+      h.workflow.retryPreview()
       h.drain()
       assertNotNull(h.state.analysisRun.admission)
       assertNull(h.state.analysisRun.error)
       assertEquals(2, h.calls.count { it.first == "POST" })
       h.assertPreviewOnly()
+    }
+  }
+
+  @Test
+  fun failedPreviewsRetryTheCapturedRequestWithoutAdmittingWork() {
+    for (mode in listOf("full", "selective", "resume")) {
+      Harness().use { h ->
+        val limits = AnalysisRunLimits(7, 120, 3)
+        if (mode == "resume") {
+          h.run =
+              h.run.copy(
+                  plan = h.run.plan.copy(limits = limits, refresh = true, retryStaleFailed = true))
+          h.workflow.refresh()
+          h.drain()
+          h.calls.clear()
+          h.bodies.clear()
+        }
+        h.failure = "/analysis/preview"
+        when (mode) {
+          "full" -> h.workflow.preview(limits = limits, refresh = false)
+          "selective" -> h.workflow.preview(limits = limits, retryStaleFailed = true)
+          else -> h.workflow.preview(resume = true)
+        }
+        h.drain()
+        val requested = Json.decodeFromString<AnalysisPreviewRequest>(h.bodies.single())
+        assertEquals(limits, requested.limits, mode)
+        assertEquals(mode == "selective" || mode == "resume", requested.retryStaleFailed, mode)
+        assertEquals(mode == "resume", requested.resumeRun != null, mode)
+        assertEquals(mode == "resume", requested.refresh, mode)
+        assertEquals(requested, h.state.analysisRun.previewIntent?.request(), mode)
+        assertNull(h.state.analysisRun.admission, mode)
+        h.assertPreviewOnly()
+        h.failure = ""
+        h.workflow.retryPreview()
+        h.drain()
+        assertEquals(2, h.bodies.size, mode)
+        assertEquals(
+            requested, Json.decodeFromString<AnalysisPreviewRequest>(h.bodies.last()), mode)
+        assertNotNull(h.state.analysisRun.admission, mode)
+        h.assertPreviewOnly()
+        h.confirm()
+        h.workflow.admit()
+        h.drain()
+        val expectedEndpoint = if (mode == "resume") "/control" else "/run"
+        assertEquals(
+            1, h.calls.count { it.first == "POST" && it.second.endsWith(expectedEndpoint) }, mode)
+        h.workflow.retryPreview()
+        h.drain()
+        assertEquals(
+            2, h.calls.count { it.first == "POST" && it.second.endsWith("/preview") }, mode)
+      }
+    }
+  }
+
+  @Test
+  fun obsoleteResumeCannotRetryOrRestoreReview() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      h.failure = "/analysis/preview"
+      h.workflow.preview(resume = true)
+      h.drain()
+      assertNotNull(h.state.analysisRun.previewIntent)
+      val before = h.calls.count { it.second.endsWith("/preview") }
+      h.dispatch(
+          DesktopEvent.AnalysisRunUpdated(
+              h.state.analysisRun.copy(
+                  run = h.run.copy(identity = h.run.identity.copy(generation = "replacement")))))
+      h.failure = ""
+      h.workflow.retryPreview()
+      h.drain()
+      assertEquals(before, h.calls.count { it.second.endsWith("/preview") })
+      assertNull(h.state.analysisRun.admission)
+      assertNull(h.state.analysisRun.previewIntent)
+      h.assertPreviewOnly()
+    }
+  }
+
+  @Test
+  fun lateRetryAndProviderChangeCannotRestoreReview() {
+    for (change in listOf("dismiss", "provider", "replacement")) {
+      Harness().use { h ->
+        h.failure = "/analysis/preview"
+        h.workflow.preview(retryStaleFailed = true)
+        h.drain()
+        h.failure = ""
+        h.workflow.retryPreview()
+        h.main.runPending()
+        h.io.runPending()
+        when (change) {
+          "dismiss" -> h.workflow.dismissAdmission()
+          "provider" -> h.workflow.providerChanged()
+          else -> {
+            h.failure = "/analysis/preview"
+            h.workflow.preview(limits = AnalysisRunLimits(5, 100, 2))
+          }
+        }
+        h.drain()
+        assertNull(h.state.analysisRun.admission, change)
+        assertEquals(change == "replacement", h.state.analysisRun.previewIntent != null, change)
+        assertFalse(h.calls.any { it.first == "POST" && it.second.endsWith("/run") }, change)
+      }
+    }
+  }
+
+  @Test
+  fun failedIntentIsDiscardedOnProjectProviderAndDetachChanges() {
+    for (change in listOf("project", "revision", "provider", "detach")) {
+      Harness().use { h ->
+        h.failure = "/analysis/preview"
+        h.workflow.preview(limits = AnalysisRunLimits(6, 90, 2))
+        h.drain()
+        assertNotNull(h.state.analysisRun.previewIntent, change)
+        when (change) {
+          "project" ->
+              h.dispatch(
+                  DesktopEvent.ProjectLoaded(
+                      analysisProjectFixture("other"), ProjectIndex("other", "revision")))
+          "revision" -> h.dispatch(DesktopEvent.IndexRefreshed(ProjectIndex("project", "new")))
+          "provider" -> h.workflow.providerChanged()
+          else -> h.workflow.detach()
+        }
+        h.drain()
+        assertNull(h.state.analysisRun.previewIntent, change)
+        h.failure = ""
+        h.workflow.retryPreview()
+        h.drain()
+        assertEquals(1, h.calls.count { it.second.endsWith("/preview") }, change)
+        h.assertPreviewOnly()
+      }
+    }
+  }
+
+  @Test
+  fun changedResumePolicyAndLateResponseCannotRestoreConsent() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      h.workflow.preview(resume = true)
+      h.main.runPending()
+      h.io.runPending()
+      h.run = h.run.copy(plan = h.run.plan.copy(limits = AnalysisRunLimits(3, 60, 1)))
+      h.dispatch(DesktopEvent.AnalysisRunUpdated(h.state.analysisRun.copy(run = h.run)))
+      h.drain()
+      assertNull(h.state.analysisRun.previewIntent)
+      assertNull(h.state.analysisRun.admission)
+      h.workflow.retryPreview()
+      h.drain()
+      assertEquals(1, h.calls.count { it.second.endsWith("/preview") })
+      h.assertPreviewOnly()
+    }
+  }
+
+  @Test
+  fun successfulResumePreviewLosesConsentWhenCapturedRunChanges() {
+    for (change in listOf("identity", "plan")) {
+      Harness().use { h ->
+        h.workflow.refresh()
+        h.drain()
+        h.workflow.preview(resume = true)
+        h.drain()
+        h.confirm()
+        assertTrue(h.state.analysisRun.admission!!.isConfirmed(), change)
+        assertNotNull(h.state.analysisRun.previewIntent, change)
+        val changedRun =
+            when (change) {
+              "identity" -> h.run.copy(identity = h.run.identity.copy(generation = "replacement"))
+              else -> h.run.copy(plan = h.run.plan.copy(limits = AnalysisRunLimits(3, 60, 1)))
+            }
+        h.dispatch(DesktopEvent.AnalysisRunUpdated(h.state.analysisRun.copy(run = changedRun)))
+        assertNull(h.state.analysisRun.previewIntent, change)
+        assertNull(h.state.analysisRun.admission, change)
+        h.workflow.admit()
+        h.workflow.retryPreview()
+        h.drain()
+        assertEquals(1, h.calls.count { it.second.endsWith("/preview") }, change)
+        h.assertPreviewOnly()
+      }
+    }
+  }
+
+  @Test
+  fun polledResumePlanChangeInvalidatesConfirmedAdmission() {
+    Harness(pollMillis = 15).use { h ->
+      h.run = h.run.copy(status = "running")
+      h.workflow.refresh()
+      h.drain()
+      h.workflow.preview(resume = true)
+      h.drain()
+      h.confirm()
+      assertTrue(h.state.analysisRun.admission!!.isConfirmed())
+      assertNotNull(h.state.analysisRun.previewIntent)
+
+      h.run = h.run.copy(plan = h.run.plan.copy(limits = AnalysisRunLimits(3, 60, 1)))
+      h.await { h.state.analysisRun.run?.plan == h.run.plan }
+      val statusUpdate = h.runUpdates.first { it.run?.plan == h.run.plan }
+      assertNull(statusUpdate.previewIntent)
+      assertNull(statusUpdate.admission)
+      assertEquals(h.run.identity, h.state.analysisRun.run?.identity)
+      assertNull(h.state.analysisRun.previewIntent)
+      assertNull(h.state.analysisRun.admission)
+      h.workflow.admit()
+      h.workflow.retryPreview()
+      h.drain()
+      assertEquals(1, h.calls.count { it.second.endsWith("/preview") })
+      h.assertPreviewOnly()
+    }
+  }
+
+  @Test
+  fun dismissalReplacementAndSelectionSaveSuppressLatePreviewResponses() {
+    for (change in listOf("dismiss", "replacement", "selection")) {
+      Harness().use { h ->
+        if (change == "selection") h.run = h.run.copy(status = "completed")
+        h.workflow.refresh()
+        h.drain()
+        h.calls.clear()
+        h.bodies.clear()
+        if (change == "selection") h.failure = "/analysis/preview"
+        h.workflow.preview(retryStaleFailed = true)
+        if (change == "selection") h.drain()
+        else {
+          h.main.runPending()
+          h.io.runPending()
+        }
+        when (change) {
+          "dismiss" -> h.workflow.dismissAdmission()
+          "replacement" -> h.workflow.preview(limits = AnalysisRunLimits(4, 80, 1))
+          else -> h.workflow.fileSelection.save(listOf("main.go"))
+        }
+        h.drain()
+        assertTrue(h.state.analysisRun.admission == null || change == "replacement", change)
+        assertEquals(change == "replacement", h.state.analysisRun.previewIntent != null, change)
+        if (change == "replacement")
+            assertEquals(4, h.state.analysisRun.admission?.preview?.limits?.batchFiles)
+        assertFalse(h.calls.any { it.first == "POST" && it.second.endsWith("/run") }, change)
+        h.workflow.retryPreview()
+        h.drain()
+        assertEquals(
+            if (change == "replacement") 2 else 1,
+            h.calls.count { it.second.endsWith("/preview") },
+            change)
+      }
     }
   }
 
@@ -610,6 +853,7 @@ class DesktopAnalysisWorkflowTest {
     val coordinator = DesktopJobCoordinator(scope, pollMillis)
     val calls = mutableListOf<Pair<String, String>>()
     val bodies = mutableListOf<String>()
+    val runUpdates = mutableListOf<ProjectAnalysisRunState>()
     var run = analysisRunFixture()
     var selection = selectionFixture()
     var failure = ""
@@ -703,6 +947,7 @@ class DesktopAnalysisWorkflowTest {
 
     fun dispatch(event: DesktopEvent) {
       workflow.beforeEvent(event)
+      if (event is DesktopEvent.AnalysisRunUpdated) runUpdates.add(event.state)
       state = state.reduce(event)
       if (event is DesktopEvent.ProjectLoaded)
           coordinator.projectOpened(
