@@ -125,6 +125,30 @@ internal fun analysisRunOutdated(run: AnalysisRun?, project: ProjectAnalysis?): 
 internal fun analysisRunStale(run: AnalysisRun?, project: ProjectAnalysis?): Boolean =
     run?.status == "stale" || analysisRunOutdated(run, project)
 
+/** Run-bound commands require a matching project; an absent run has no run identity to guard. */
+internal fun analysisRunCommands(
+    project: ProjectAnalysis?,
+    run: AnalysisRun?,
+): List<AnalysisRunCommand> {
+  if (run != null && currentProjectRun(run, project) == null) return emptyList()
+  return when (run?.status) {
+    null,
+    "stale",
+    "canceled",
+    "completed",
+    "completed_empty",
+    "partial",
+    "failed",
+    "unavailable" -> listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed)
+    "queued",
+    "running" -> listOf(AnalysisRunCommand.Pause, AnalysisRunCommand.Cancel)
+    "pausing" -> listOf(AnalysisRunCommand.Cancel)
+    "paused",
+    "interrupted" -> listOf(AnalysisRunCommand.Resume, AnalysisRunCommand.Cancel)
+    else -> emptyList()
+  }
+}
+
 internal fun AnalysisRun.showsProgressOnSummary(): Boolean =
     isActive() || status in setOf("paused", "interrupted")
 
@@ -225,23 +249,7 @@ internal fun projectRunPresentation(
                       it.reason.ifBlank { "No diagnostic was supplied for this stage." })
                 }
           },
-      commands =
-          if (outdated) emptyList()
-          else
-              when (run?.status) {
-                "queued",
-                "running" -> listOf(AnalysisRunCommand.Pause, AnalysisRunCommand.Cancel)
-                "pausing" -> listOf(AnalysisRunCommand.Cancel)
-                "canceling" -> emptyList()
-                "paused",
-                "interrupted" -> listOf(AnalysisRunCommand.Resume, AnalysisRunCommand.Cancel)
-                "stale" ->
-                    listOf(
-                        AnalysisRunCommand.Start,
-                        AnalysisRunCommand.RetryStaleFailed,
-                        AnalysisRunCommand.Cancel)
-                else -> listOf(AnalysisRunCommand.Start, AnalysisRunCommand.RetryStaleFailed)
-              },
+      commands = analysisRunCommands(project, run),
       isActive = active)
 }
 
