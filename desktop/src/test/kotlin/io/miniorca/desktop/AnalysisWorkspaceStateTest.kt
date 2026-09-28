@@ -413,6 +413,155 @@ class AnalysisWorkspaceStateTest {
   }
 
   @Test
+  fun cumulativeAttemptsCountEachCapturedFileStageOnceAcrossStopsAndContinuation() {
+    val run =
+        analysisRunFixture()
+            .copy(
+                plan =
+                    plannedRunFiles(
+                        "a.go" to listOf("semantic", "performance"), "b.go" to listOf("semantic")),
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "a.go",
+                            "base",
+                            "Go",
+                            listOf(
+                                AnalysisStageProgress("semantic", "completed", 2, false),
+                                AnalysisStageProgress("performance", "running", 1, false))),
+                        AnalysisRunFile(
+                            "b.go",
+                            "base",
+                            "Go",
+                            listOf(AnalysisStageProgress("semantic", "pending", 0, false)))))
+    val project = resultProjectFixture()
+    // Semantic evidence is used by multiple categories, but exists only once per file in the plan.
+    for (status in listOf("running", "paused", "interrupted", "canceled")) {
+      val snapshot = run.copy(status = status)
+      val presentation = projectRunPresentation(project, ProjectAnalysisRunState(run = snapshot))
+      assertEquals(3, presentation.reportedAttempts, status)
+      assertEquals(3, presentation.stages.sumOf { stage -> stage.files.sumOf { it.attempts ?: 0 } })
+    }
+    val resumed =
+        run.copy(
+            status = "running",
+            identity = run.identity.copy(generation = "next"),
+            files =
+                run.files.map { file ->
+                  if (file.path == "b.go")
+                      file.copy(
+                          stages = listOf(AnalysisStageProgress("semantic", "running", 1, false)))
+                  else file
+                },
+            windowFilesCompleted = 0)
+    assertEquals(
+        4, projectRunPresentation(project, ProjectAnalysisRunState(run = resumed)).reportedAttempts)
+    assertNull(projectRunPresentation(project, ProjectAnalysisRunState()).reportedAttempts)
+    assertEquals(
+        0,
+        projectRunPresentation(
+                project,
+                ProjectAnalysisRunState(
+                    run = run.copy(plan = plannedRunFiles(), files = emptyList())))
+            .reportedAttempts)
+  }
+
+  @Test
+  fun cumulativeAttemptsRequireCompleteMatchingNonnegativeInventoryWithoutOverflow() {
+    val base =
+        analysisRunFixture()
+            .copy(
+                plan = plannedRunFiles("a.go" to listOf("semantic", "performance")),
+                files =
+                    listOf(
+                        AnalysisRunFile(
+                            "a.go",
+                            "base",
+                            "Go",
+                            listOf(
+                                AnalysisStageProgress("semantic", "completed", 2, false),
+                                AnalysisStageProgress("performance", "pending", 0, false)))))
+    val project = resultProjectFixture()
+    val valid = projectRunPresentation(project, ProjectAnalysisRunState(run = base))
+    assertEquals(2, valid.reportedAttempts)
+    val invalid =
+        listOf(
+            base.copy(files = emptyList()),
+            base.copy(files = base.files + base.files.single()),
+            base.copy(files = base.files.map { it.copy(path = "other.go") }),
+            base.copy(files = base.files.map { it.copy(contentHash = "other") }),
+            base.copy(files = base.files.map { it.copy(language = "Kotlin") }),
+            base.copy(files = base.files.map { it.copy(stages = it.stages.take(1)) }),
+            base.copy(files = base.files.map { it.copy(stages = it.stages + it.stages.first()) }),
+            base.copy(
+                files =
+                    base.files.map {
+                      it.copy(stages = listOf(AnalysisStageProgress("other", "pending", 0, false)))
+                    }),
+            base.copy(
+                files =
+                    base.files.map { file ->
+                      file.copy(stages = file.stages.map { it.copy(attempts = -1) })
+                    }),
+            base.copy(
+                files =
+                    base.files.map { file ->
+                      file.copy(
+                          stages =
+                              listOf(
+                                  file.stages[0].copy(attempts = Int.MAX_VALUE),
+                                  file.stages[1].copy(attempts = 1)))
+                    }),
+            base.copy(plan = base.plan.copy(identity = base.plan.identity.copy(queueId = "old"))),
+            base.copy(plan = base.plan.copy(files = base.plan.files + base.plan.files.single())),
+            base.copy(
+                plan =
+                    base.plan.copy(
+                        files =
+                            base.plan.files.map { file ->
+                              file.copy(stages = file.stages.map { it.copy(stage = "") })
+                            })))
+    invalid.forEachIndexed { index, run ->
+      val presentation = projectRunPresentation(project, ProjectAnalysisRunState(run = run))
+      assertNull(presentation.reportedAttempts, "invalid inventory $index")
+    }
+    val negative =
+        projectRunPresentation(
+            project,
+            ProjectAnalysisRunState(
+                run =
+                    base.copy(
+                        files =
+                            base.files.map { file ->
+                              file.copy(
+                                  stages =
+                                      file.stages.map { stage ->
+                                        if (stage.stage == "performance") stage.copy(attempts = -1)
+                                        else stage
+                                      })
+                            })))
+    assertEquals(2, negative.stages.first().files.single().attempts)
+    assertNull(negative.stages.last().files.single().attempts)
+    assertNull(negative.reportedAttempts)
+    val largestValid =
+        base.copy(
+            files =
+                base.files.map { file ->
+                  file.copy(
+                      stages =
+                          listOf(file.stages[0].copy(attempts = Int.MAX_VALUE), file.stages[1]))
+                })
+    assertEquals(
+        Int.MAX_VALUE,
+        projectRunPresentation(project, ProjectAnalysisRunState(run = largestValid))
+            .reportedAttempts)
+    assertNull(
+        projectRunPresentation(
+                project.copy(projectRevision = "next"), ProjectAnalysisRunState(run = base))
+            .reportedAttempts)
+  }
+
+  @Test
   fun fileProgressCountsOnlyFilesWhoseStagesFinishedWithoutCallingThemSuccessful() {
     val files =
         listOf(
