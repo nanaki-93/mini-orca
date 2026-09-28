@@ -357,9 +357,41 @@ resubmitting admission or offering a consent-reusing retry; Close and check the
 current Analysis run before choosing a new action. Closing the dialog discards
 transient consent but does not cancel an already admitted run.
 
-Pause/Resume/Cancel retain truthful partial coverage and reported attempts.
-Resume requires a fresh preview; startup never silently resumes a model request.
 Analysis groups lifecycle, file progress, active paths and applicable run controls.
+For a queued or running run, **Pause** and **Cancel** request a control; while the
+request is in flight the run says “Requesting pause…” or “Requesting
+cancellation…”, not Paused or Canceled. Once the daemon accepts Pause, “Pause
+requested” means the current stage can finish but no new stage will start;
+**Cancel** remains available while pausing. An accepted cancellation says active
+work is stopping: Cancel stops active requests and future dispatch, but keeps
+completed evidence. The daemon may report a settled state immediately or finish
+work before a control takes effect; follow the reported status rather than
+assuming the requested outcome. Stopped runs show the reported stop reason beside
+recovery, or say when no reason was supplied. Full diagnostics remain under
+**Run diagnostic**.
+
+**Resume → fresh preview** is available for a current paused or interrupted run,
+including a run stopped at its dispatch limit. It requests a new continuation
+preview; review its scope and give fresh destination and Security confirmations
+as applicable before **Resume analysis** in the admission dialog. Neither
+startup, navigation nor closing a dialog resumes a run or reuses consent. A
+canceled run has no Resume: use **Start new analysis** to request a new preview,
+then explicitly admit it with the required confirmations. Completed evidence
+and reported attempts remain available after Pause or Cancel. The run shows
+**Cumulative attempts reported** when its captured file-stage inventory is
+complete and valid; otherwise it says **Cumulative attempts unavailable**.
+Each file-stage contributes once (including shared semantic work); attempts are
+reported accounting, not findings or a count of billable provider requests.
+
+If Pause or Cancel is rejected, the run shows the rejection and reads durable
+status without repeating the control. If its response times out or transport
+fails, the outcome is unconfirmed: the client reads status rather than assuming
+success or retrying. If that status read fails, the last accepted snapshot and
+evidence remain visible but cannot authorize Start or Resume. Use **Refresh
+status** beside the run to explicitly read status again; it does not resend a
+control or admission. **Refresh files** separately reloads the saved file
+checklist, not run status. Control/status errors stay on the run surface, while
+preview or admission failures retain their admission-dialog recovery actions.
 File totals come from the captured plan; only matching project/revision, queue,
 file path/hash and planned-stage records contribute progress. Missing or inconsistent
 records show incomplete or unavailable progress, not a percentage; a valid empty
