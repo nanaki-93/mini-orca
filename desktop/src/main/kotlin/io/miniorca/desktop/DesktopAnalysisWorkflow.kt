@@ -31,6 +31,16 @@ internal class DesktopAnalysisWorkflow(
       cancelResultReads()
       update(current.copy(sections = current.sections.mapValues { it.value.copy(loading = false) }))
     }
+    if (event is DesktopEvent.AnalysisRunUpdated &&
+        current.previewIntent != null &&
+        (event.state.fileSelection.saving && !current.fileSelection.saving ||
+            current.run != null && event.state.run?.identity != current.run?.identity ||
+            current.previewIntent?.resumeRun != null &&
+                (event.state.run?.identity != current.previewIntent?.resumeRun ||
+                    event.state.run?.plan != current.previewIntent?.resumePlan))) {
+      generation++
+      actionJob?.cancel()
+    }
     if (event is DesktopEvent.ProjectLoaded ||
         event is DesktopEvent.IndexRefreshed &&
             event.index.projectRevision != state().project?.projectRevision)
@@ -47,6 +57,7 @@ internal class DesktopAnalysisWorkflow(
     update(
         current.copy(
             admission = null,
+            previewIntent = null,
             action = "",
             sections = current.sections.mapValues { it.value.copy(loading = false) }))
   }
@@ -65,6 +76,7 @@ internal class DesktopAnalysisWorkflow(
     update(
         current.copy(
             admission = null,
+            previewIntent = null,
             action = if (current.action == "preview") "" else current.action,
             error = null))
     project()?.let { observe(it, generation, current.run) }
@@ -104,36 +116,64 @@ internal class DesktopAnalysisWorkflow(
     val capturedLimits = resumeRun?.plan?.limits ?: limits
     val capturedRefresh = resumeRun?.plan?.refresh ?: refresh
     val capturedRetry = resumeRun?.plan?.retryStaleFailed ?: retryStaleFailed
-    val token = begin("preview")
+    val intent =
+        AnalysisPreviewIntent(
+            project.id,
+            project.revision,
+            capturedLimits,
+            capturedRefresh,
+            capturedRetry,
+            resumeRun?.identity,
+            resumeRun?.plan)
+    requestPreview(intent)
+  }
+
+  fun retryPreview() {
+    val intent = current.previewIntent ?: return
+    if (current.action.isNotEmpty() || current.admission != null || current.error == null) return
+    if (!matchesIntent(intent)) {
+      update(
+          current.copy(
+              previewIntent = null,
+              admission = null,
+              error = "Analysis scope changed. Close and request a fresh preview."))
+      return
+    }
+    requestPreview(intent)
+  }
+
+  private fun matchesIntent(intent: AnalysisPreviewIntent): Boolean {
+    val project = project() ?: return false
+    if (project.id != intent.projectId || project.revision != intent.projectRevision) return false
+    if (intent.resumeRun == null) return true
+    val run = current.run ?: return false
+    return run.identity == intent.resumeRun && run.plan == intent.resumePlan
+  }
+
+  private fun requestPreview(intent: AnalysisPreviewIntent) {
+    val project = WorkflowProjectIdentity(intent.projectId, intent.projectRevision)
+    val token = begin("preview", intent)
     actionJob =
         scope.launch {
           try {
-            val preview = io {
-              api.previewAnalysis(
-                  AnalysisPreviewRequest(
-                      project.id,
-                      project.revision,
-                      "project",
-                      capturedRefresh,
-                      capturedLimits,
-                      resumeRun?.identity,
-                      capturedRetry))
-            }
+            val preview = io { api.previewAnalysis(intent.request()) }
             if (!isCurrent(project, token)) return@launch
+            require(matchesIntent(intent)) {
+              "Analysis scope changed. Close and request a fresh preview."
+            }
             require(
                 preview.schemaVersion == "1" &&
                     preview.scope == "project" &&
                     preview.identity.projectId == project.id &&
                     preview.identity.projectRevision == project.revision &&
-                    preview.limits == capturedLimits &&
-                    preview.refresh == capturedRefresh &&
-                    preview.retryStaleFailed == capturedRetry &&
-                    (resumeRun == null || preview.identity == resumeRun.identity.queue())) {
+                    preview.limits == intent.limits &&
+                    preview.refresh == intent.refresh &&
+                    preview.retryStaleFailed == intent.retryStaleFailed &&
+                    (intent.resumeRun == null || preview.identity == intent.resumeRun.queue())) {
                   "The analysis preview no longer matches this project. Request a fresh preview."
                 }
             update(
-                current.copy(
-                    action = "", admission = AnalysisAdmission(preview, resumeRun?.identity)))
+                current.copy(action = "", admission = AnalysisAdmission(preview, intent.resumeRun)))
             observe(project, token, current.run)
           } catch (error: CancellationException) {
             throw error
@@ -284,7 +324,9 @@ internal class DesktopAnalysisWorkflow(
           else if (run != null && seed != null && run.identity != seed.identity) {
             update(
                 current.copy(
-                    admission = null, error = "Analysis was replaced. Refresh its status."))
+                    admission = null,
+                    previewIntent = null,
+                    error = "Analysis was replaced. Refresh its status."))
             false
           } else acceptRun(project, run)
         },
@@ -301,12 +343,29 @@ internal class DesktopAnalysisWorkflow(
       return false
     }
     val statusChanged = current.run?.status != run?.status
+    val resumeObsolete =
+        current.previewIntent?.let {
+          it.resumeRun != null && (run?.identity != it.resumeRun || run.plan != it.resumePlan)
+        } == true
     if (current.run?.identity != run?.identity) {
       resultJobs.values.forEach(Job::cancel)
       resultJobs.clear()
       resultGenerations.clear()
-      update(current.copy(run = run, sections = emptyMap(), admission = null))
-    } else update(current.copy(run = run))
+      update(
+          current.copy(
+              run = run,
+              sections = emptyMap(),
+              admission = null,
+              previewIntent =
+                  current.previewIntent.takeUnless {
+                    it?.resumeRun != null || current.run != null
+                  }))
+    } else
+        update(
+            current.copy(
+                run = run,
+                admission = current.admission.takeUnless { resumeObsolete },
+                previewIntent = current.previewIntent.takeUnless { resumeObsolete }))
     if (statusChanged) fileSelection.refresh()
     if (run != null && run.identity.projectRevision == project.revision) {
       (listOf("bugs", "performance", "security").map { AnalysisResultKey(it) } +
@@ -412,11 +471,11 @@ internal class DesktopAnalysisWorkflow(
   private fun section(key: AnalysisResultKey, value: AnalysisSectionState) =
       update(current.copy(sections = current.sections + (key to value)))
 
-  private fun begin(action: String): Long {
+  private fun begin(action: String, intent: AnalysisPreviewIntent? = null): Long {
     generation++
     actionJob?.cancel()
     coordinator.stopAnalysisPolling()
-    update(current.copy(action = action, admission = null, error = null))
+    update(current.copy(action = action, admission = null, previewIntent = intent, error = null))
     return generation
   }
 

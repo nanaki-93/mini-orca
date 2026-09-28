@@ -638,6 +638,8 @@ class DesktopWorkflowPresenter(
 
   fun resumeAnalysis() = analysisWorkflow.preview(resume = true)
 
+  fun retryAnalysisPreview() = analysisWorkflow.retryPreview()
+
   fun startAnalysis() = analysisWorkflow.admit()
 
   fun pauseAnalysis() = analysisWorkflow.control("pause")
