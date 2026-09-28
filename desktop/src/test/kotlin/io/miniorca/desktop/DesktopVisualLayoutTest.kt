@@ -976,6 +976,221 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun f14ConsentAndRecoveryKeepDecisionsReachableAcrossViewportTextAndDensity() {
+    val base = analysisPreviewFixture()
+    val run = analysisRunFixture()
+    val origin = "https://provider.example/日本語/" + "long-destination/".repeat(9) + "end"
+    val providers =
+        base.providers.mapIndexed { index, provider ->
+          provider.copy(
+              model =
+                  provider.model.copy(
+                      scope = "shared", model = "same-model", providerOrigin = origin),
+              id = "remote-$index")
+        }
+    val files =
+        (1..22).map { index -> base.files.single().copy(path = "src/package/file-$index.go") }
+    val preview = base.copy(providers = providers, files = files)
+    val intent =
+        AnalysisPreviewIntent(
+            "project", "revision", base.limits, true, false, run.identity, run.plan)
+    val diagnostic = "Admission failed: " + "long diagnostic detail ".repeat(25) + "end"
+    val states =
+        listOf(
+            "unchecked" to ProjectAnalysisRunState(admission = AnalysisAdmission(preview)),
+            "partial" to
+                ProjectAnalysisRunState(
+                    admission = AnalysisAdmission(preview, providerIds = setOf("remote-0"))),
+            "ready" to
+                ProjectAnalysisRunState(
+                    admission =
+                        AnalysisAdmission(
+                            preview,
+                            providerIds = providers.map { it.id }.toSet(),
+                            securityReview = true)),
+            "resume" to
+                ProjectAnalysisRunState(
+                    admission =
+                        AnalysisAdmission(
+                            preview, run.identity, providers.map { it.id }.toSet(), true)),
+            "empty" to
+                ProjectAnalysisRunState(
+                    admission =
+                        AnalysisAdmission(
+                            preview.copy(files = emptyList()),
+                            providerIds = providers.map { it.id }.toSet(),
+                            securityReview = true)),
+            "loading" to ProjectAnalysisRunState(action = "preview", previewIntent = intent),
+            "rejected" to
+                ProjectAnalysisRunState(
+                    run = run,
+                    previewIntent = intent,
+                    admissionRecovery = AdmissionRecovery.Rejected,
+                    error = diagnostic),
+            "obsolete" to
+                ProjectAnalysisRunState(
+                    run = run.copy(identity = run.identity.copy(generation = "new")),
+                    previewIntent = intent,
+                    admissionRecovery = AdmissionRecovery.Rejected,
+                    error = diagnostic),
+            "uncertain" to
+                ProjectAnalysisRunState(
+                    run = run, admissionRecovery = AdmissionRecovery.Uncertain, error = diagnostic))
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      // Same logical viewport at both densities, independent of font scaling.
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        for ((variant, state) in states) {
+          var operations = 0
+          ComposeVisualFixture(
+                  (width * density).toInt(), (height * density).toInt(), scale, density) {
+                    Box(
+                        Modifier.fillMaxSize().background(Panel),
+                        contentAlignment = Alignment.Center) {
+                          IdeDialogSurface(
+                              maxHeight = (height - 64).coerceAtMost(520).dp,
+                              title = { DesktopAnalysisAdmissionTitle(state) },
+                              content = {
+                                DesktopAnalysisAdmissionContent(
+                                    state, { _, _ -> operations++ }, { operations++ })
+                              },
+                              actions = {
+                                DesktopAnalysisAdmissionActions(
+                                    state, { operations++ }, { operations++ }, { operations++ })
+                              },
+                              focusSafeActionOnOpen = true)
+                        }
+                  }
+              .use { fixture ->
+                val label = "f14-$variant-$width-$height-$scale-${density}x"
+                fixture.render(label)
+                val body = fixture.taggedBounds("ide-dialog-body")
+                val close = fixture.firstVisibleTextBounds("Close")
+                assertTrue(body.height > 0 && body.bottom <= close.top, label)
+                assertTrue(close.top >= 0 && close.bottom <= height * density, label)
+                assertTrue(fixture.isFocusedControl("Close"), label)
+                fixture.assertTextFits("Close")
+                val decision =
+                    when (variant) {
+                      "loading",
+                      "obsolete",
+                      "uncertain" -> null
+                      "rejected" -> "Review fresh preview"
+                      "resume" -> "Resume analysis"
+                      else -> "Start analysis"
+                    }
+                if (decision != null) {
+                  val action = fixture.firstVisibleTextBounds(decision)
+                  assertTrue(action.top >= body.bottom && action.bottom <= height * density, label)
+                  fixture.assertTextFits(decision)
+                }
+                when (variant) {
+                  "unchecked",
+                  "partial",
+                  "ready",
+                  "resume",
+                  "empty" -> {
+                    assertEquals(
+                        22.takeIf { variant != "empty" } ?: 0, state.admission!!.preview.files.size)
+                    assertTrue(
+                        fixture.hasDescription("Expand Included file 1 · src/package/file-1.go") ||
+                            variant == "empty",
+                        label)
+                    for (provider in providers) {
+                      val consent =
+                          "Confirm shared destination · same-model (provider ${provider.id})"
+                      assertEquals(1, fixture.clickableDescriptionCount(consent), label)
+                      assertEquals(
+                          if (provider.id in state.admission.providerIds) ToggleableState.On
+                          else ToggleableState.Off,
+                          fixture.descriptionToggleableState(consent),
+                          label)
+                      assertEquals(
+                          if (provider.id in state.admission.providerIds) "Confirmed"
+                          else "Not confirmed",
+                          fixture.descriptionStateDescription(consent),
+                          label)
+                    }
+                    assertTrue(fixture.hasDescription("Include AI Security review"), label)
+                    assertEquals(
+                        variant !in listOf("ready", "resume"),
+                        fixture.isDisabled(decision!!),
+                        label)
+                    fixture.revealText("Remote destination: $origin", "ide-dialog-body")
+                    fixture.assertTextWrapsWithoutClipping("Remote destination: $origin")
+                    if (variant == "empty")
+                        assertTrue(fixture.hasText("No eligible files to analyze."), label)
+                  }
+                  "loading" -> {
+                    assertTrue(
+                        fixture.hasText("Preparing continuation preview for this analysis run…"),
+                        label)
+                    assertFalse(
+                        fixture.hasText("Expected model requests without retries: 3"), label)
+                  }
+                  else -> {
+                    fixture.revealText(diagnostic, "ide-dialog-body")
+                    fixture.assertTextWrapsWithoutClipping(diagnostic)
+                    assertTrue(fixture.copyTextByDragging(diagnostic).isNotBlank(), label)
+                    assertEquals(
+                        variant == "rejected", fixture.hasText("Review fresh preview"), label)
+                    assertFalse(fixture.hasText("Start analysis"), label)
+                    assertFalse(fixture.hasText("Resume analysis"), label)
+                  }
+                }
+                fixture.render("$label-inspected")
+                assertEquals(0, operations, label)
+                if (variant == "unchecked" && width == 800 && scale == 1.5f) {
+                  val consent = "Confirm shared destination · same-model (provider remote-0)"
+                  fixture.scrollBy(-100_000f, "ide-dialog-body")
+                  fixture.render()
+                  for (attempt in 0 until 80) {
+                    val bounds = fixture.descriptionBounds(consent)
+                    if (bounds.height > 0 && bounds.top >= body.top && bounds.bottom <= body.bottom)
+                        break
+                    fixture.scrollBy(80f, "ide-dialog-body")
+                    fixture.render()
+                  }
+                  val bounds = fixture.descriptionBounds(consent)
+                  assertTrue(
+                      bounds.height > 0 && bounds.top >= body.top && bounds.bottom <= body.bottom,
+                      label)
+                  assertTrue(fixture.requestDescriptionFocus(consent), label)
+                  fixture.render("$label-focused-consent")
+                  assertTrue(fixture.isDescriptionFocused(consent), label)
+                  assertEquals("Not confirmed", fixture.descriptionStateDescription(consent), label)
+                  assertEquals(0, operations, label)
+                  val disclosure = "Expand Included file 1 · src/package/file-1.go"
+                  assertTrue(fixture.requestDescriptionFocus(disclosure), label)
+                  assertTrue(fixture.pressKey(Key.Enter), label)
+                  fixture.render("$label-disclosed")
+                  assertEquals(
+                      "Expanded",
+                      fixture.descriptionStateDescription(
+                          "Collapse Included file 1 · src/package/file-1.go"),
+                      label)
+                  fixture.resize((1024 * density).toInt(), (768 * density).toInt())
+                  fixture.render("$label-resized")
+                  assertEquals(
+                      "Expanded",
+                      fixture.descriptionStateDescription(
+                          "Collapse Included file 1 · src/package/file-1.go"),
+                      label)
+                  assertEquals(0, operations, label)
+                  assertTrue(fixture.isDisabled("Start analysis"), label)
+                  assertEquals(
+                      ToggleableState.Off,
+                      fixture.descriptionToggleableState(
+                          "Confirm shared destination · same-model (provider remote-0)"),
+                      label)
+                }
+              }
+        }
+      }
+    }
+  }
+
+  @Test
   fun f13AdmissionModesAndRecoveryRenderAcrossHostSizesAndTextScales() {
     val base = analysisPreviewFixture()
     val run = analysisRunFixture()
