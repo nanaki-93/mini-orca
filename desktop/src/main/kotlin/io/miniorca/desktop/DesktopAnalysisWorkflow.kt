@@ -20,6 +20,8 @@ internal class DesktopAnalysisWorkflow(
   val fileSelection = DesktopAnalysisSelectionWorkflow(api, scope, ioDispatcher, state, dispatch)
   private var actionJob: Job? = null
   private var generation = 0L
+  private var admissionDismissed = false
+  private var statusReadVersion = 0L
   private val resultJobs = mutableMapOf<AnalysisResultKey, Job>()
   private val resultGenerations = mutableMapOf<AnalysisResultKey, Long>()
   private val current
@@ -32,9 +34,9 @@ internal class DesktopAnalysisWorkflow(
       update(current.copy(sections = current.sections.mapValues { it.value.copy(loading = false) }))
     }
     if (event is DesktopEvent.AnalysisRunUpdated &&
-        current.previewIntent != null &&
+        (current.previewIntent != null || current.action.isNotEmpty()) &&
         (event.state.fileSelection.saving && !current.fileSelection.saving ||
-            current.run != null && event.state.run?.identity != current.run?.identity ||
+            event.state.run?.identity != current.run?.identity ||
             current.previewIntent?.resumeRun != null &&
                 (event.state.run?.identity != current.previewIntent?.resumeRun ||
                     event.state.run?.plan != current.previewIntent?.resumePlan))) {
@@ -69,17 +71,21 @@ internal class DesktopAnalysisWorkflow(
   }
 
   fun dismissAdmission() {
-    if (current.action == "preview") {
+    val pendingAdmission = actionJob?.isActive == true && current.action in setOf("start", "resume")
+    if (pendingAdmission) admissionDismissed = true
+    else {
       generation++
       actionJob?.cancel()
     }
-    update(
-        current.copy(
-            admission = null,
-            previewIntent = null,
-            action = if (current.action == "preview") "" else current.action,
-            error = null))
-    project()?.let { observe(it, generation, current.run) }
+    update(current.copy(admission = null, previewIntent = null, action = "", error = null))
+    // Keep an in-flight admission alive: the daemon may admit it after this first status read.
+    // Its eventual response (or failure) will reconcile again without restoring permission.
+    if (pendingAdmission) {
+      val project = project() ?: return
+      val token = generation
+      val readVersion = ++statusReadVersion
+      scope.launch { readCurrent(project, token, readVersion = readVersion) }
+    } else project()?.let { observe(it, generation, current.run) }
   }
 
   fun providerChanged() {
@@ -248,7 +254,12 @@ internal class DesktopAnalysisWorkflow(
           } catch (error: CancellationException) {
             throw error
           } catch (error: Exception) {
-            recover(project, token, error, intent)
+            recover(
+                project,
+                token,
+                error,
+                intent.takeUnless { admissionDismissed },
+                PendingAdmissionRun(preview.identity, admission.resumeRun, intent.resumePlan))
           }
         }
   }
@@ -286,11 +297,22 @@ internal class DesktopAnalysisWorkflow(
     actionJob = scope.launch { readCurrent(project, token) }
   }
 
+  private data class PendingAdmissionRun(
+      val queue: AnalysisQueueIdentity,
+      val resumeRun: AnalysisRunIdentity?,
+      val resumePlan: AnalysisRunPreview?
+  ) {
+    fun matches(run: AnalysisRun): Boolean =
+        run.identity.queue() == queue &&
+            (resumeRun == null || run.identity.id == resumeRun.id && run.plan == resumePlan)
+  }
+
   private suspend fun recover(
       project: WorkflowProjectIdentity,
       token: Long,
       error: Exception,
-      admissionIntent: AnalysisPreviewIntent? = null
+      admissionIntent: AnalysisPreviewIntent? = null,
+      pendingAdmission: PendingAdmissionRun? = null
   ) {
     if (!isCurrent(project, token)) return
     fail(project, token, error, "Analysis action failed")
@@ -301,28 +323,49 @@ internal class DesktopAnalysisWorkflow(
         admissionIntent != null &&
         matchesIntent(admissionIntent))
         update(current.copy(previewIntent = admissionIntent))
-    readCurrent(project, token, keepError = true)
+    readCurrent(
+        project,
+        token,
+        keepError = true,
+        uncertainAdmission =
+            pendingAdmission.takeUnless { error is ApiException && error.status == 409 })
   }
 
   private suspend fun readCurrent(
       project: WorkflowProjectIdentity,
       token: Long,
-      keepError: Boolean = false
+      keepError: Boolean = false,
+      uncertainAdmission: PendingAdmissionRun? = null,
+      readVersion: Long = ++statusReadVersion
   ) {
+    val priorRun = current.run
     try {
       val run = io { api.analysisRun(project.id, project.revision) }
-      if (!isCurrent(project, token)) return
+      if (!isCurrent(project, token) || readVersion != statusReadVersion || current.run != priorRun)
+          return
       update(current.copy(action = "", error = if (keepError) current.error else null))
-      observe(project, token, run)
+      observe(project, token, run, uncertainAdmission)
     } catch (error: CancellationException) {
       throw error
     } catch (error: Exception) {
-      fail(project, token, error, "Analysis status could not be read")
+      if (!isCurrent(project, token) || readVersion != statusReadVersion || current.run != priorRun)
+          return
+      if (keepError && current.error != null)
+          update(
+              current.copy(
+                  action = "",
+                  error =
+                      "${current.error} · Analysis status could not be read: ${error.message ?: "unavailable"}"))
+      else fail(project, token, error, "Analysis status could not be read")
       // Overview exposes retained progress after a save fault so explicit recovery controls remain
       // reachable.
       try {
         val retained = io { api.overview(project.revision).analysisRun }
-        if (isCurrent(project, token) && retained != null) acceptRun(project, retained)
+        if (isCurrent(project, token) &&
+            readVersion == statusReadVersion &&
+            current.run == priorRun &&
+            retained != null)
+            acceptRun(project, retained)
       } catch (canceled: CancellationException) {
         throw canceled
       } catch (_: Exception) {
@@ -331,24 +374,54 @@ internal class DesktopAnalysisWorkflow(
     }
   }
 
-  private fun observe(project: WorkflowProjectIdentity, token: Long, seed: AnalysisRun?) {
+  private fun observe(
+      project: WorkflowProjectIdentity,
+      token: Long,
+      seed: AnalysisRun?,
+      uncertainAdmission: PendingAdmissionRun? = null
+  ) {
     if (!isCurrent(project, token)) return
+    val observedRun = current.run
+    var acceptedIdentity = seed?.identity
     coordinator.observeAnalysis(
         project,
         seed,
         onUpdate = { run ->
           if (!isCurrent(project, token)) false
-          else if (run != null && seed != null && run.identity != seed.identity) {
+          else if (observedRun?.identity != current.run?.identity &&
+              run?.identity != current.run?.identity)
+              false
+          else if (run != null &&
+              acceptedIdentity != null &&
+              run.identity != acceptedIdentity &&
+              (uncertainAdmission == null ||
+                  seed?.identity != observedRun?.identity ||
+                  acceptedIdentity != seed?.identity ||
+                  !uncertainAdmission.matches(run))) {
             update(
                 current.copy(
                     admission = null,
                     previewIntent = null,
-                    error = "Analysis was replaced. Refresh its status."))
+                    error =
+                        listOfNotNull(current.error, "Analysis was replaced. Refresh its status.")
+                            .joinToString(" · ")))
             false
-          } else acceptRun(project, run)
+          } else {
+            if (acceptRun(project, run)) {
+              acceptedIdentity = run?.identity
+              true
+            } else false
+          }
         },
         fetch = { io { api.analysisRun(project.id, project.revision) } },
-        onFailure = { error -> fail(project, token, error, "Analysis status could not be read") })
+        onFailure = { error ->
+          if (isCurrent(project, token) && current.error != null)
+              update(
+                  current.copy(
+                      error =
+                          "${current.error} · Analysis status could not be read: ${error.message ?: "unavailable"}"))
+          else fail(project, token, error, "Analysis status could not be read")
+        })
   }
 
   private fun acceptRun(project: WorkflowProjectIdentity, run: AnalysisRun?): Boolean {
@@ -489,6 +562,7 @@ internal class DesktopAnalysisWorkflow(
       update(current.copy(sections = current.sections + (key to value)))
 
   private fun begin(action: String, intent: AnalysisPreviewIntent? = null): Long {
+    admissionDismissed = false
     generation++
     actionJob?.cancel()
     coordinator.stopAnalysisPolling()
