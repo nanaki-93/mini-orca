@@ -2,7 +2,9 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -24,12 +26,7 @@ internal fun DesktopAnalysisAdmissionDialog(
 ) {
   IdeDialog(
       onDismissRequest = presenter::dismissAnalysisAdmission,
-      title = {
-        Text(
-            if (state.admission?.resumeRun != null) "Continue project analysis"
-            else if (state.admission?.preview?.retryStaleFailed == true) "Analyze stale & failed"
-            else "Analyze whole project")
-      },
+      title = { DesktopAnalysisAdmissionTitle(state) },
       content = {
         DesktopAnalysisAdmissionContent(
             state,
@@ -38,22 +35,63 @@ internal fun DesktopAnalysisAdmissionDialog(
             Modifier.fillMaxWidth())
       },
       actions = {
-        MiniOrcaButton(onClick = presenter::dismissAnalysisAdmission, tone = ActionTone.Neutral) {
-          Text("Close")
-        }
-        if (state.admission != null) {
-          MiniOrcaButton(
-              onClick = presenter::startAnalysis,
-              enabled = state.admission.isConfirmed() && state.admission.preview.files.isNotEmpty(),
-              tone = ActionTone.Primary) {
-                Text(if (state.admission.resumeRun == null) "Start analysis" else "Resume analysis")
-              }
-        } else if (state.action != "preview") {
-          MiniOrcaButton(onClick = { presenter.previewAnalysis() }, tone = ActionTone.Primary) {
-            Text("New preview")
-          }
-        }
+        DesktopAnalysisAdmissionActions(
+            state,
+            presenter::dismissAnalysisAdmission,
+            presenter::startAnalysis,
+            presenter::retryAnalysisPreview)
       })
+}
+
+private fun ProjectAnalysisRunState.previewMode(): String? =
+    when {
+      admission?.resumeRun != null || admission == null && previewIntent?.resumeRun != null ->
+          "continuation"
+      admission?.preview?.retryStaleFailed == true ||
+          admission == null && previewIntent?.retryStaleFailed == true -> "stale & failed"
+      admission != null || previewIntent != null -> "full project"
+      else -> null
+    }
+
+@Composable
+internal fun DesktopAnalysisAdmissionTitle(state: ProjectAnalysisRunState) {
+  Text(
+      when (state.previewMode()) {
+        "continuation" -> "Continue project analysis"
+        "stale & failed" -> "Analyze stale & failed"
+        "full project" -> "Analyze whole project"
+        else -> "Analysis preview"
+      })
+}
+
+private fun ProjectAnalysisRunState.canRetryPreview(): Boolean {
+  val intent = previewIntent ?: return false
+  return action.isEmpty() &&
+      error != null &&
+      admission == null &&
+      (intent.resumeRun == null ||
+          run?.identity == intent.resumeRun && run.plan == intent.resumePlan)
+}
+
+@Composable
+internal fun RowScope.DesktopAnalysisAdmissionActions(
+    state: ProjectAnalysisRunState,
+    close: () -> Unit,
+    start: () -> Unit,
+    retry: () -> Unit,
+) {
+  MiniOrcaButton(onClick = close, tone = ActionTone.Neutral) { Text("Close") }
+  val admission = state.admission
+  if (admission != null) {
+    MiniOrcaButton(
+        onClick = start,
+        enabled = admission.isConfirmed() && admission.preview.files.isNotEmpty(),
+        tone = ActionTone.Primary) {
+          Text(if (admission.resumeRun == null) "Start analysis" else "Resume analysis")
+        }
+  } else if (state.canRetryPreview()) {
+    MiniOrcaButton(onClick = retry, tone = ActionTone.Primary) { Text("Retry preview") }
+  }
 }
 
 /**
@@ -67,8 +105,32 @@ internal fun DesktopAnalysisAdmissionContent(
     modifier: Modifier = Modifier,
 ) {
   Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    if (state.action == "preview") Text("Preparing project scope and provider estimates…")
-    state.error?.let { Text(it, color = Error) }
+    if (state.action == "preview") {
+      Text(
+          when (state.previewMode()) {
+            "continuation" -> "Preparing continuation preview for this analysis run…"
+            "stale & failed" -> "Preparing stale & failed analysis preview…"
+            else -> "Preparing full project analysis preview…"
+          })
+    } else if (state.admission == null) {
+      state.error?.let { error ->
+        Text(
+            when (state.previewMode()) {
+              "continuation" -> "Continuation preview failed."
+              "stale & failed" -> "Stale & failed preview failed."
+              "full project" -> "Full project preview failed."
+              else -> "Analysis preview unavailable."
+            },
+            color = Error)
+        SelectionContainer { Text(error, color = Error) }
+        Text(
+            if (state.canRetryPreview()) "Retry this preview with the same scope, or Close."
+            else "Close and request a new preview from Analysis.",
+            color = SecondaryText)
+      }
+    } else {
+      state.error?.let { error -> SelectionContainer { Text(error, color = Error) } }
+    }
     val admission = state.admission
     if (admission != null) {
       val preview = admission.preview
