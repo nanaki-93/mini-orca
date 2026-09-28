@@ -449,6 +449,162 @@ class DesktopAnalysisWorkflowTest {
   }
 
   @Test
+  fun rejectedAdmissionRetainsOnlySameScopeIntentForExplicitUncheckedReview() {
+    for (mode in listOf("full", "selective", "resume")) {
+      Harness().use { h ->
+        val limits = AnalysisRunLimits(7, 120, 3)
+        if (mode == "resume") {
+          h.run =
+              h.run.copy(
+                  plan = h.run.plan.copy(limits = limits, refresh = true, retryStaleFailed = true))
+          h.workflow.refresh()
+          h.drain()
+          h.calls.clear()
+          h.bodies.clear()
+        }
+        when (mode) {
+          "full" -> h.workflow.preview(limits = limits, refresh = false)
+          "selective" -> h.workflow.preview(limits = limits, retryStaleFailed = true)
+          else -> h.workflow.preview(resume = true)
+        }
+        h.drain()
+        val original = Json.decodeFromString<AnalysisPreviewRequest>(h.bodies.single())
+        val previewId = h.state.analysisRun.admission!!.preview.previewId
+        h.confirm()
+        h.admissionConflict = true
+        h.workflow.admit()
+        h.workflow.admit() // The first activation consumes the admission before transport.
+        h.drain()
+        assertNull(h.state.analysisRun.admission, mode)
+        assertEquals(original, h.state.analysisRun.previewIntent?.request(), mode)
+        assertTrue(h.state.analysisRun.error!!.contains("rejected"), mode)
+        assertEquals(h.run, h.state.analysisRun.run, mode)
+        val endpoint = if (mode == "resume") "/control" else "/run"
+        assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith(endpoint) }, mode)
+        assertEquals(1, h.calls.count { it.second.endsWith("/preview") }, mode)
+        assertTrue(h.calls.any { it.first == "GET" && it.second.contains("/analysis/run?") })
+        if (mode == "resume") {
+          val request = Json.decodeFromString<AnalysisRunControlRequest>(h.bodies.last())
+          assertEquals(h.run.identity, request.identity)
+          assertEquals(previewId, request.previewId)
+          assertEquals(
+              setOf("bug-provider", "analyze-provider"),
+              request.confirmations!!.providerIds.toSet())
+          assertTrue(request.confirmations.securityReview)
+        } else {
+          val request = Json.decodeFromString<AnalysisRunStartRequest>(h.bodies.last())
+          assertEquals(previewId, request.previewId)
+          assertEquals(h.state.analysisRun.run!!.identity.queue(), request.identity)
+          assertEquals(limits, request.limits)
+          assertEquals(original.refresh, request.refresh)
+          assertEquals(original.retryStaleFailed, request.retryStaleFailed)
+          assertEquals(
+              setOf("bug-provider", "analyze-provider"), request.confirmations.providerIds.toSet())
+        }
+        h.admissionConflict = false
+        h.previewId = "replacement-preview"
+        h.workflow.retryPreview()
+        h.drain()
+        assertEquals(2, h.calls.count { it.second.endsWith("/preview") }, mode)
+        assertEquals(original, Json.decodeFromString<AnalysisPreviewRequest>(h.bodies.last()), mode)
+        val replacement = assertNotNull(h.state.analysisRun.admission, mode)
+        assertEquals("replacement-preview", replacement.preview.previewId)
+        assertFalse(replacement.isConfirmed(), mode)
+        assertTrue(replacement.providerIds.isEmpty())
+        assertFalse(replacement.securityReview)
+        assertNull(h.state.analysisRun.error)
+        assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith(endpoint) }, mode)
+        h.workflow.admit() // No fresh confirmation, even with the same providers.
+        h.drain()
+        assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith(endpoint) }, mode)
+      }
+    }
+  }
+
+  @Test
+  fun rejectedAdmissionDoesNotAllowUnknownOrPartialConsentOrObsoleteResumeRecovery() {
+    Harness().use { h ->
+      h.workflow.preview()
+      h.drain()
+      h.workflow.confirmProvider("unknown", true)
+      h.workflow.confirmProvider("bug-provider", true)
+      h.workflow.confirmSecurity(true)
+      h.workflow.admit()
+      h.drain()
+      h.assertPreviewOnly()
+      h.workflow.confirmProvider("analyze-provider", true)
+      h.workflow.confirmProvider("bug-provider", false)
+      h.workflow.admit()
+      h.drain()
+      h.assertPreviewOnly()
+      h.workflow.confirmProvider("bug-provider", true)
+      h.admissionConflict = true
+      h.workflow.admit()
+      h.drain()
+      assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/run") })
+      assertNull(h.state.analysisRun.admission)
+    }
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      h.workflow.preview(resume = true)
+      h.drain()
+      h.confirm()
+      h.admissionConflict = true
+      h.workflow.admit()
+      h.drain()
+      val before = h.calls.count { it.second.endsWith("/preview") }
+      assertNotNull(h.state.analysisRun.previewIntent)
+      h.dispatch(
+          DesktopEvent.AnalysisRunUpdated(
+              h.state.analysisRun.copy(
+                  run = h.run.copy(plan = h.run.plan.copy(refresh = !h.run.plan.refresh)))))
+      h.workflow.retryPreview()
+      h.drain()
+      assertNull(h.state.analysisRun.previewIntent)
+      assertEquals(before, h.calls.count { it.second.endsWith("/preview") })
+      assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/control") })
+    }
+  }
+
+  @Test
+  fun rejectedStartCannotRetryAfterSelectionProjectOrProviderChanges() {
+    for (change in listOf("selection", "project", "revision", "provider")) {
+      Harness().use { h ->
+        if (change == "selection") h.run = h.run.copy(status = "completed")
+        h.workflow.refresh()
+        h.drain()
+        h.workflow.preview()
+        h.drain()
+        h.confirm()
+        h.admissionConflict = true
+        h.workflow.admit()
+        h.drain()
+        assertNotNull(h.state.analysisRun.previewIntent, change)
+        val before = h.calls.count { it.second.endsWith("/preview") }
+        when (change) {
+          "selection" -> h.workflow.fileSelection.save(listOf("main.go"))
+          "project" ->
+              h.dispatch(
+                  DesktopEvent.ProjectLoaded(
+                      analysisProjectFixture("other"), ProjectIndex("other", "revision")))
+          "revision" -> h.dispatch(DesktopEvent.IndexRefreshed(ProjectIndex("project", "new")))
+          else -> h.workflow.providerChanged()
+        }
+        h.drain()
+        if (change == "selection") assertEquals(listOf("main.go"), h.selection.excludedPaths)
+        h.admissionConflict = false
+        h.workflow.retryPreview()
+        h.drain()
+        assertNull(h.state.analysisRun.previewIntent, change)
+        assertNull(h.state.analysisRun.admission, change)
+        assertEquals(before, h.calls.count { it.second.endsWith("/preview") }, change)
+        assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/run") }, change)
+      }
+    }
+  }
+
+  @Test
   fun uncertainAdmissionReadsDurableStateWithoutRetryingOrReusingConsent() {
     Harness().use { h ->
       h.workflow.preview()
@@ -458,8 +614,10 @@ class DesktopAnalysisWorkflowTest {
       h.workflow.admit()
       h.drain()
       assertNull(h.state.analysisRun.admission)
+      assertNull(h.state.analysisRun.previewIntent)
       assertEquals(h.run, h.state.analysisRun.run)
       assertTrue(h.state.analysisRun.error!!.contains("unavailable"))
+      h.workflow.retryPreview()
       h.workflow.admit()
       h.drain()
       assertEquals(1, h.calls.count { it == "POST" to "/api/projects/current/analysis/run" })
@@ -860,6 +1018,8 @@ class DesktopAnalysisWorkflowTest {
     var wrongResult = false
     var wrongRetryPreview = false
     var emptyPreview = false
+    var admissionConflict = false
+    var previewId = "preview"
     val workflow =
         DesktopAnalysisWorkflow(
             ApiClient(
@@ -869,6 +1029,10 @@ class DesktopAnalysisWorkflowTest {
                       if (body != null) bodies.add(body)
                       if (failure.isNotEmpty() && path.contains(failure))
                           TransportResponse(500, """{"message":"unavailable"}""")
+                      else if (admissionConflict &&
+                          method == "POST" &&
+                          (path.endsWith("/analysis/run") || path.endsWith("/control")))
+                          TransportResponse(409, """{"message":"Admission rejected"}""")
                       else
                           when {
                             path.endsWith("/preview") -> {
@@ -878,6 +1042,7 @@ class DesktopAnalysisWorkflowTest {
                                   Json.encodeToString(
                                       analysisPreviewFixture()
                                           .copy(
+                                              previewId = previewId,
                                               refresh = request.refresh,
                                               limits = request.limits,
                                               retryStaleFailed =
