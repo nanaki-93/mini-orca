@@ -21,6 +21,10 @@ class DesktopAnalysisAdmissionTest {
   private val bugConsent = "Confirm bug destination · bug-model (provider bug-provider)"
   private val analyzeConsent =
       "Confirm analyze destination · review-model (provider analyze-provider)"
+  private val contextExplanation =
+      "Start or Resume may send eligible source and project context for this previewed scope to the listed models under the existing context policy. This preview describes the plan, not the exact content sent to a model. One Start or Resume may initiate multiple model requests; analysis does not execute project code or modify source files. This consent does not grant function-edit permission or execution trust."
+  private val securityExplanation =
+      "AI Security review of eligible source is advisory. Model findings are unverified, not a verified scan or safety assurance. This acknowledgment does not change the returned stage plan."
 
   @Test
   fun shortAdmissionDialogScrollsLongDestinationsWithoutImplicitConsentOrStart() {
@@ -37,7 +41,7 @@ class DesktopAnalysisAdmissionTest {
     var state by mutableStateOf(ProjectAnalysisRunState(admission = AnalysisAdmission(longPreview)))
     var starts = 0
     var closes = 0
-    ComposeVisualFixture(360, 400, 1.5f) {
+    ComposeVisualFixture(480, 600, 1.5f) {
           Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             IdeDialogSurface(
                 maxHeight = 340.dp,
@@ -78,7 +82,7 @@ class DesktopAnalysisAdmissionTest {
           assertTrue(fixture.isFocusedControl("Close"))
           assertTrue(fixture.isDisabled("Start analysis"))
           assertEquals(0, starts + closes)
-          fixture.resize(360, 360)
+          fixture.resize(480, 560)
           fixture.render()
           assertEquals(0, starts + closes)
           assertFalse(state.admission!!.isConfirmed())
@@ -96,6 +100,9 @@ class DesktopAnalysisAdmissionTest {
           fixture.render()
           assertTrue(fixture.verticalScrollValue("ide-dialog-body") > 0f)
           for (label in listOf(bugConsent, analyzeConsent, "Include AI Security review")) {
+            assertTrue(
+                fixture.descriptionBounds(label).height <= body.height,
+                "$label cannot fit in scroll body: ${fixture.descriptionBounds(label)} vs $body")
             fixture.revealText(label, "ide-dialog-body")
             val bounds = fixture.descriptionBounds(label)
             assertTrue(bounds.top >= body.top && bounds.bottom <= body.bottom, "$label: $bounds")
@@ -151,6 +158,8 @@ class DesktopAnalysisAdmissionTest {
             fixture.render()
             assertTrue(fixture.hasText(scope), scope)
             assertTrue(fixture.hasText("Reviewing this preview sends nothing to a model."))
+            assertTrue(fixture.hasText(contextExplanation))
+            assertTrue(fixture.hasText(securityExplanation))
             assertTrue(
                 fixture.hasText(
                     if (preview.refresh)
@@ -168,6 +177,133 @@ class DesktopAnalysisAdmissionTest {
             }
           }
     }
+  }
+
+  @Test
+  fun localOnlySecurityIntentStaysInThePlanUntilSeparatelyAcknowledged() {
+    val base = analysisPreviewFixture()
+    val preview =
+        base.copy(
+            files =
+                listOf(
+                    base.files
+                        .single()
+                        .copy(
+                            stages =
+                                listOf(
+                                    AnalysisStagePlan(
+                                        "security_ai",
+                                        true,
+                                        false,
+                                        providerId = "local-model",
+                                        maxModelRequests = 1),
+                                    AnalysisStagePlan(
+                                        "security_rules", true, false, maxModelRequests = 0)))),
+            providers =
+                listOf(
+                    base.providers
+                        .last()
+                        .copy(
+                            id = "local-model",
+                            remoteConfirmationRequired = false,
+                            model =
+                                base.providers
+                                    .last()
+                                    .model
+                                    .copy(model = "local-review", remoteProvider = false))),
+            securityReviewIntentRequired = true)
+    var state by mutableStateOf(ProjectAnalysisRunState(admission = AnalysisAdmission(preview)))
+    var securityChanges = 0
+    var starts = 0
+    ComposeVisualFixture(480, 800) {
+          Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            IdeDialogSurface(
+                700.dp,
+                title = { DesktopAnalysisAdmissionTitle(state) },
+                content = {
+                  DesktopAnalysisAdmissionContent(
+                      state,
+                      { _, _ -> error("Local destination must not require remote consent") },
+                      { checked ->
+                        securityChanges++
+                        state =
+                            state.copy(admission = state.admission!!.copy(securityReview = checked))
+                      })
+                },
+                actions = { DesktopAnalysisAdmissionActions(state, {}, { starts++ }, {}) })
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Local destination: https://analyze.example"))
+          assertTrue(fixture.hasText("AI Security review"))
+          assertTrue(fixture.hasText("Security rules"))
+          assertTrue(fixture.hasText(contextExplanation))
+          assertTrue(fixture.hasText(securityExplanation))
+          assertFalse(fixture.hasDescription(analyzeConsent))
+          assertEquals(
+              ToggleableState.Off, fixture.descriptionToggleableState("Include AI Security review"))
+          assertTrue(fixture.isDisabled("Start analysis"))
+          fixture.resize(440, 750)
+          fixture.render()
+          assertEquals(0, securityChanges + starts)
+          assertEquals(preview, state.admission!!.preview)
+          assertTrue(fixture.requestDescriptionFocus("Include AI Security review"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals(1, securityChanges)
+          assertEquals(0, starts)
+          assertEquals(
+              ToggleableState.On, fixture.descriptionToggleableState("Include AI Security review"))
+          assertTrue(state.admission!!.isConfirmed())
+          assertEquals(preview, state.admission!!.preview)
+          assertTrue(fixture.hasText("AI Security review"))
+        }
+  }
+
+  @Test
+  fun noConfirmationPreviewExplainsContextWithoutDispatchingOnInspection() {
+    val base = analysisPreviewFixture()
+    val preview =
+        base.copy(
+            providers =
+                listOf(
+                    base.providers
+                        .first()
+                        .copy(
+                            remoteConfirmationRequired = false,
+                            model = base.providers.first().model.copy(remoteProvider = false))),
+            securityReviewIntentRequired = false)
+    val state = ProjectAnalysisRunState(admission = AnalysisAdmission(preview))
+    var changes = 0
+    var starts = 0
+    ComposeVisualFixture(480, 760) {
+          Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            IdeDialogSurface(
+                680.dp,
+                title = { DesktopAnalysisAdmissionTitle(state) },
+                content = {
+                  DesktopAnalysisAdmissionContent(state, { _, _ -> changes++ }, { changes++ })
+                },
+                actions = { DesktopAnalysisAdmissionActions(state, {}, { starts++ }, {}) })
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText(contextExplanation))
+          assertFalse(fixture.hasText(securityExplanation))
+          assertFalse(fixture.hasDescription("Include AI Security review"))
+          assertFalse(fixture.hasDescription(bugConsent))
+          assertTrue(fixture.hasText("Local destination: https://bug.example"))
+          assertTrue(state.admission!!.isConfirmed())
+          assertFalse(fixture.isDisabled("Start analysis"))
+          fixture.revealText(contextExplanation, "ide-dialog-body")
+          fixture.resize(440, 720)
+          fixture.render()
+          assertEquals(0, changes + starts)
+          assertTrue(fixture.hasText(contextExplanation))
+          assertTrue(fixture.hasText("Close"))
+        }
   }
 
   @Test

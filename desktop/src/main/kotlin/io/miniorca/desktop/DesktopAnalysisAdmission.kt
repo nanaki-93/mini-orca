@@ -229,11 +229,11 @@ internal fun DesktopAnalysisAdmissionContent(
             stateLabel = if (admission.securityReview) "Confirmed" else "Not confirmed",
             label = "Include AI Security review")
         Text(
-            "Review eligible project source for possible security issues. Findings remain unverified until reviewed.",
+            "AI Security review of eligible source is advisory. Model findings are unverified, not a verified scan or safety assurance. This acknowledgment does not change the returned stage plan.",
             color = SecondaryText)
       }
       Text(
-          "Start sends the displayed context to the listed providers. It does not execute project code or change source files.",
+          "Start or Resume may send eligible source and project context for this previewed scope to the listed models under the existing context policy. This preview describes the plan, not the exact content sent to a model. One Start or Resume may initiate multiple model requests; analysis does not execute project code or modify source files. This consent does not grant function-edit permission or execution trust.",
           color = SecondaryText)
     }
   }
