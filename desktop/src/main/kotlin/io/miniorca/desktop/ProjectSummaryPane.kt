@@ -564,12 +564,9 @@ internal fun ProjectSummaryPane(
         val runPaneState = AnalysisWorkspacePaneState(project, stripState.copy(run = currentRun))
         item {
           SummaryIntroduction(
-              presentation,
-              runPaneState,
-              analysisActions,
-              showActionFeedback = currentRun?.showsProgressOnSummary() != true)
+              presentation, runPaneState, analysisActions, showActionFeedback = currentRun == null)
         }
-        if (currentRun?.showsProgressOnSummary() == true)
+        if (currentRun != null)
             item {
               AnalysisRunStrip(
                   runPaneState,

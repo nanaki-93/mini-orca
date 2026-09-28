@@ -7157,6 +7157,7 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("summary-categories-details-compact-800-150")
+          fixture.revealText("Saved details unavailable · 19 reported", "summary-scroll")
           fixture.assertSummaryCategoryContentContained()
           fixture.assertTextFits("Interrupted")
           fixture.assertTextFits("High: 1 · Medium: 1 · Low: 1", maxLines = 2)
@@ -7240,7 +7241,8 @@ class DesktopVisualLayoutTest {
             assertTrue(count.top >= icon.bottom, "Summary count must remain below its icon row")
             assertTrue(status.top >= count.bottom, "Summary status must follow the count")
           }
-          assertEquals(3, fixture.textCount("Completed"))
+          // Three result cards plus the current-run lifecycle badge.
+          assertEquals(4, fixture.textCount("Completed"))
         }
   }
 
