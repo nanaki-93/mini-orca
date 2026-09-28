@@ -6,6 +6,11 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.jetbrains.jewel.ui.component.Text
@@ -168,6 +173,16 @@ internal fun DesktopAnalysisAdmissionContent(
       if (preview.retryStaleFailed)
           Text("Selective retry: the daemon returned the stale & failed scope.")
       AnalysisStageSummary(preview)
+      if (preview.files.isNotEmpty()) {
+        IdeHorizontalSeparator()
+        Text("Included files", color = PrimaryText, style = IdeTypography.resultHeading)
+        // The disclosure belongs to this returned preview, not to the path in a later preview.
+        key(preview.previewId, preview.identity) {
+          preview.files.forEachIndexed { index, file ->
+            key(index, file.path) { AnalysisIncludedFile(file, index + 1) }
+          }
+        }
+      }
       if (preview.excluded.isNotEmpty()) {
         IdeHorizontalSeparator()
         Text("Excluded files", color = PrimaryText, style = IdeTypography.resultHeading)
@@ -220,6 +235,30 @@ internal fun DesktopAnalysisAdmissionContent(
       Text(
           "Start sends the displayed context to the listed providers. It does not execute project code or change source files.",
           color = SecondaryText)
+    }
+  }
+}
+
+@Composable
+private fun AnalysisIncludedFile(file: AnalysisPlannedFile, number: Int) {
+  var expanded by remember { mutableStateOf(false) }
+  IdeDisclosureHeader(
+      title = "Included file $number · ${file.path}",
+      expanded = expanded,
+      onToggle = { expanded = !expanded })
+  SelectionContainer { Text(file.path, color = SecondaryText) }
+  if (expanded) {
+    if (file.stages.isEmpty()) Text("No stages returned for this file.", color = SecondaryText)
+    file.stages.forEach { stage ->
+      SelectionContainer {
+        Column {
+          Text(analysisStageLabel(stage.stage), color = PrimaryText)
+          Text(if (stage.eligible) "Eligible stage" else "Ineligible stage on included file")
+          Text(if (stage.cached) "Cached/reused" else "Not cached")
+          Text("Maximum model requests for this stage: ${stage.maxModelRequests}")
+          Text("Reason: ${stage.reason.availableMetadata()}", color = SecondaryText)
+        }
+      }
     }
   }
 }
