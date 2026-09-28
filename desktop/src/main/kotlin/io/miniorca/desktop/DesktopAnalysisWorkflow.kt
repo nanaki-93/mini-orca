@@ -55,7 +55,7 @@ internal class DesktopAnalysisWorkflow(
             // beforeEvent runs before the replacement is reduced into state.
             yield()
             if (isCurrent(project, token) && current.run?.identity == replacement?.identity) {
-              update(current.copy(action = ""))
+              update(current.copy(action = "", controlRequest = null))
               if (replacement != null &&
                   replacement.identity.projectId == project.id &&
                   replacement.identity.projectRevision == project.revision)
@@ -85,6 +85,8 @@ internal class DesktopAnalysisWorkflow(
             previewIntent = null,
             admissionRecovery = null,
             action = "",
+            controlRequest = null,
+            statusUnavailable = false,
             sections = current.sections.mapValues { it.value.copy(loading = false) }))
   }
 
@@ -95,6 +97,11 @@ internal class DesktopAnalysisWorkflow(
   }
 
   fun dismissAdmission() {
+    if (current.admission == null &&
+        current.previewIntent == null &&
+        current.admissionRecovery == null &&
+        current.action !in setOf("preview", "start", "resume"))
+        return
     val pendingAdmission = actionJob?.isActive == true && current.action in setOf("start", "resume")
     if (pendingAdmission) admissionDismissed = true
     else {
@@ -149,6 +156,7 @@ internal class DesktopAnalysisWorkflow(
   ) {
     if (pendingAdmissionToken != null) return
     val project = project() ?: return
+    if (current.statusUnavailable || current.controlRequest != null) return
     val run = current.run
     val resumeRun = if (resume) run ?: return else null
     val capturedLimits = resumeRun?.plan?.limits ?: limits
@@ -168,7 +176,12 @@ internal class DesktopAnalysisWorkflow(
 
   fun retryPreview() {
     val intent = current.previewIntent ?: return
-    if (current.action.isNotEmpty() || current.admission != null || current.error == null) return
+    if (current.action.isNotEmpty() ||
+        current.admission != null ||
+        current.error == null ||
+        current.statusUnavailable ||
+        current.controlRequest != null)
+        return
     if (!matchesIntent(intent)) {
       update(
           current.copy(
@@ -225,6 +238,7 @@ internal class DesktopAnalysisWorkflow(
 
   fun admit() {
     val project = project() ?: return
+    if (current.statusUnavailable || current.controlRequest != null) return
     val admission = current.admission ?: return
     if (admission.preview.files.isEmpty()) {
       update(
@@ -309,6 +323,10 @@ internal class DesktopAnalysisWorkflow(
     if (pendingAdmissionToken != null) return
     val project = project() ?: return
     val run = current.run ?: return
+    if (current.statusUnavailable ||
+        current.controlRequest?.outcome in
+            setOf(AnalysisControlOutcome.Reconciling, AnalysisControlOutcome.Unconfirmed))
+        return
     val command = if (action == "pause") AnalysisRunCommand.Pause else AnalysisRunCommand.Cancel
     if (command !in analysisRunCommands(state().project, run)) return
     val pending = current.action
@@ -317,8 +335,9 @@ internal class DesktopAnalysisWorkflow(
     actionJob =
         scope.launch {
           if (!isCurrentControl(project, run.identity, token)) return@launch
-          if (command !in analysisRunCommands(state().project, current.run)) {
-            update(current.copy(action = ""))
+          if (current.statusUnavailable ||
+              command !in analysisRunCommands(state().project, current.run)) {
+            update(current.copy(action = "", controlRequest = null))
             observe(project, token, current.run)
             return@launch
           }
@@ -327,15 +346,16 @@ internal class DesktopAnalysisWorkflow(
               api.controlAnalysis(AnalysisRunControlRequest(run.identity, action))
             }
             if (!isCurrentControl(project, run.identity, token)) return@launch
-            require(updated.identity == run.identity) {
+            require(updated.identity == run.identity && validRun(project, updated)) {
               "Analysis changed while updating its controls."
             }
-            update(current.copy(action = ""))
+            update(current.copy(action = "", controlRequest = null, statusUnavailable = false))
             observe(project, token, updated)
           } catch (error: CancellationException) {
             throw error
           } catch (error: Exception) {
-            if (isCurrentControl(project, run.identity, token)) recover(project, token, error)
+            if (isCurrentControl(project, run.identity, token))
+                recoverControl(project, run.identity, token, action, error)
           }
         }
   }
@@ -352,6 +372,29 @@ internal class DesktopAnalysisWorkflow(
     val project = project() ?: return
     val token = begin("refresh")
     actionJob = scope.launch { readCurrent(project, token) }
+  }
+
+  private suspend fun recoverControl(
+      project: WorkflowProjectIdentity,
+      identity: AnalysisRunIdentity,
+      token: Long,
+      action: String,
+      error: Exception
+  ) {
+    if (!isCurrentControl(project, identity, token)) return
+    val rejected = error is ApiException && error.status == 409
+    update(
+        current.copy(
+            action = "",
+            controlRequest =
+                AnalysisControlRequest(
+                    action,
+                    if (rejected) AnalysisControlOutcome.Reconciling
+                    else AnalysisControlOutcome.Unconfirmed),
+            error =
+                "${if (rejected) "Analysis $action rejected" else "Analysis $action outcome unconfirmed"}: ${error.message ?: "unavailable"}",
+            errorKind = AnalysisRunErrorKind.Action))
+    readCurrent(project, token, keepError = true)
   }
 
   private data class PendingAdmissionRun(
@@ -402,9 +445,14 @@ internal class DesktopAnalysisWorkflow(
       val run = io { api.analysisRun(project.id, project.revision) }
       if (!isCurrent(project, token) || readVersion != statusReadVersion || current.run != priorRun)
           return
+      require(validRun(project, run)) {
+        "The returned analysis belongs to another project revision."
+      }
       update(
           current.copy(
               action = "",
+              controlRequest = null,
+              statusUnavailable = false,
               error = if (keepError) current.error else null,
               errorKind = if (keepError) current.errorKind else null))
       observe(project, token, run, uncertainAdmission)
@@ -417,10 +465,13 @@ internal class DesktopAnalysisWorkflow(
           update(
               current.copy(
                   action = "",
+                  statusUnavailable = true,
                   error =
                       "${current.error} · Analysis status could not be read: ${error.message ?: "unavailable"}",
                   errorKind = AnalysisRunErrorKind.StatusRead))
       else statusReadFailed(project, token, error)
+      if (current.controlRequest?.outcome == AnalysisControlOutcome.Reconciling)
+          update(current.copy(controlRequest = null))
       // Overview exposes retained progress after a save fault so explicit recovery controls remain
       // reachable.
       try {
@@ -428,7 +479,8 @@ internal class DesktopAnalysisWorkflow(
         if (isCurrent(project, token) &&
             readVersion == statusReadVersion &&
             current.run == priorRun &&
-            retained != null)
+            retained != null &&
+            validRun(project, retained))
             acceptRun(project, retained)
       } catch (canceled: CancellationException) {
         throw canceled
@@ -483,6 +535,7 @@ internal class DesktopAnalysisWorkflow(
           if (isCurrent(project, token) && current.error != null)
               update(
                   current.copy(
+                      statusUnavailable = true,
                       error =
                           "${current.error} · Analysis status could not be read: ${error.message ?: "unavailable"}",
                       errorKind = AnalysisRunErrorKind.StatusRead))
@@ -490,11 +543,14 @@ internal class DesktopAnalysisWorkflow(
         })
   }
 
+  private fun validRun(project: WorkflowProjectIdentity, run: AnalysisRun?): Boolean =
+      run == null ||
+          run.schemaVersion == "1" &&
+              run.identity.projectId == project.id &&
+              (run.identity.projectRevision == project.revision || run.status == "stale")
+
   private fun acceptRun(project: WorkflowProjectIdentity, run: AnalysisRun?): Boolean {
-    if (run != null &&
-        (run.schemaVersion != "1" ||
-            run.identity.projectId != project.id ||
-            run.identity.projectRevision != project.revision && run.status != "stale")) {
+    if (!validRun(project, run)) {
       update(
           current.copy(
               error = "The returned analysis belongs to another project revision.",
@@ -653,6 +709,10 @@ internal class DesktopAnalysisWorkflow(
     update(
         current.copy(
             action = action,
+            controlRequest =
+                if (action in setOf("pause", "cancel"))
+                    AnalysisControlRequest(action, AnalysisControlOutcome.Requesting)
+                else current.controlRequest,
             admission = null,
             previewIntent = intent,
             admissionRecovery = null,
@@ -680,6 +740,7 @@ internal class DesktopAnalysisWorkflow(
         update(
             current.copy(
                 action = "",
+                statusUnavailable = true,
                 error = error.message ?: "Analysis status could not be read",
                 errorKind = AnalysisRunErrorKind.StatusRead))
   }
