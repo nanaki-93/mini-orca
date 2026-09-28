@@ -19,6 +19,32 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DesktopAnalysisAdmissionTest {
+  @Test
+  fun overlayOnlyOpensForPreviewOrAdmissionReviewAndRecovery() {
+    val preview = analysisPreviewFixture()
+    val intent = AnalysisPreviewIntent("project", "revision", preview.limits, true, false)
+    val base = ProjectAnalysisRunState(run = analysisRunFixture(), error = "unavailable")
+    for (kind in listOf(AnalysisRunErrorKind.Control, AnalysisRunErrorKind.StatusRead, null)) {
+      assertFalse(base.copy(errorKind = kind).showsAdmissionOverlay(), "$kind")
+      assertFalse(
+          base.copy(previewIntent = intent, errorKind = kind).showsAdmissionOverlay(),
+          "An old preview intent does not turn a run error into a consent dialog: $kind")
+    }
+    assertTrue(base.copy(action = "preview", error = null).showsAdmissionOverlay())
+    assertTrue(
+        base.copy(admission = AnalysisAdmission(preview), error = null).showsAdmissionOverlay())
+    assertTrue(base.copy(errorKind = AnalysisRunErrorKind.Preview).showsAdmissionOverlay())
+    for (recovery in AdmissionRecovery.entries) {
+      assertTrue(
+          base
+              .copy(errorKind = AnalysisRunErrorKind.Admission, admissionRecovery = recovery)
+              .showsAdmissionOverlay(),
+          "Consumed $recovery admission has no preview but needs recovery")
+    }
+    assertFalse(
+        base.copy(error = null, errorKind = AnalysisRunErrorKind.Admission).showsAdmissionOverlay())
+  }
+
   private val bugConsent = "Confirm bug destination · bug-model (provider bug-provider)"
   private val analyzeConsent =
       "Confirm analyze destination · review-model (provider analyze-provider)"
