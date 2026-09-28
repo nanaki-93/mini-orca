@@ -167,6 +167,7 @@ internal fun DesktopAnalysisAdmissionContent(
           else "Reuse policy: refresh is off; eligible existing evidence may be reused.")
       if (preview.retryStaleFailed)
           Text("Selective retry: the daemon returned the stale & failed scope.")
+      AnalysisStageSummary(preview)
       if (preview.excluded.isNotEmpty()) {
         IdeHorizontalSeparator()
         Text("Excluded files", color = PrimaryText, style = IdeTypography.resultHeading)
@@ -219,6 +220,40 @@ internal fun DesktopAnalysisAdmissionContent(
       Text(
           "Start sends the displayed context to the listed providers. It does not execute project code or change source files.",
           color = SecondaryText)
+    }
+  }
+}
+
+@Composable
+private fun AnalysisStageSummary(preview: AnalysisRunPreview) {
+  val stages = preview.files.flatMap { it.stages }.groupBy { it.stage }
+  if (stages.isEmpty()) return
+  IdeHorizontalSeparator()
+  Text("Returned stage plan", color = PrimaryText, style = IdeTypography.resultHeading)
+  for ((stageId, plans) in stages) {
+    val applicable = plans.count { it.eligible }
+    val cached = plans.count { it.cached }
+    val requesting = plans.count { it.maxModelRequests > 0 }
+    val nonRequesting = plans.count { it.maxModelRequests == 0 }
+    Text(analysisStageLabel(stageId), color = PrimaryText)
+    Text(
+        "${plans.size} returned · $applicable applicable · $cached cached/reused · $requesting with model requests planned · $nonRequesting with no model requests planned",
+        color = SecondaryText)
+    if (stageId == "security_rules") {
+      Text("Deterministic Security rules · no model destination", color = SecondaryText)
+    } else {
+      val providers = preview.providers.associateBy { it.id }
+      for (providerId in plans.map { it.providerId }.distinct()) {
+        val model = providers[providerId]?.model
+        SelectionContainer {
+          Text(
+              if (model == null)
+                  "Model destination: Unavailable (provider reference ${providerId.availableMetadata()})"
+              else
+                  "Model destination: ${model.model.availableMetadata()} · ${if (model.remoteProvider) "Remote" else "Local"} ${model.providerOrigin.availableMetadata()} (provider $providerId)",
+              color = SecondaryText)
+        }
+      }
     }
   }
 }
