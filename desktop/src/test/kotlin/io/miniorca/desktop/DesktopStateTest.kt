@@ -99,6 +99,32 @@ class DesktopStateTest {
   }
 
   @Test
+  fun sessionRunHistorySurvivesNavigationButNotProjectReplacementOrRestart() {
+    val previous = analysisRunFixture().copy(status = "partial", reason = "observed failure")
+    val current =
+        analysisRunFixture()
+            .copy(identity = previous.identity.copy(generation = "next"), status = "running")
+    val initial =
+        projectState()
+            .copy(analysisRun = ProjectAnalysisRunState(run = current, previousRun = previous))
+
+    val navigated = initial.reduce(DesktopEvent.WorkspaceSelected(Workspace.Bugs))
+    assertEquals(previous, navigated.analysisRun.previousRun)
+    assertEquals(current, navigated.analysisRun.run)
+    val replacement =
+        navigated.reduce(
+            DesktopEvent.ProjectLoaded(
+                analysisProjectFixture("other"), ProjectIndex("other", "revision")))
+    assertNull(replacement.analysisRun.previousRun)
+    assertNull(replacement.analysisRun.run)
+    val restored =
+        projectState()
+            .reduce(DesktopEvent.AnalysisRunUpdated(ProjectAnalysisRunState(run = previous)))
+    assertEquals(previous, restored.analysisRun.run)
+    assertNull(restored.analysisRun.previousRun)
+  }
+
+  @Test
   fun apiClientUsesTypedTransportAndErrorMessages() {
     val client =
         ApiClient(
