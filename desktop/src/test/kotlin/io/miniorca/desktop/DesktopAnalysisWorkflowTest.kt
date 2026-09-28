@@ -1,5 +1,7 @@
 package io.miniorca.desktop
 
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -7,6 +9,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -626,6 +629,520 @@ class DesktopAnalysisWorkflowTest {
   }
 
   @Test
+  fun dismissalReconcilesAdmissionThatArrivesAfterTheFirstStatusRead() {
+    for (resume in listOf(false, true)) {
+      Harness(pollMillis = 15).use { h ->
+        h.workflow.refresh()
+        h.drain()
+        val evidence = h.state.analysisRun.sections
+        h.workflow.preview(resume = resume)
+        h.drain()
+        h.confirm()
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        h.lateAdmissionGate = entered to release
+        h.workflow.admit()
+        h.main.runPending()
+        val transport = Thread { h.io.runPending() }
+        transport.start()
+        try {
+          assertTrue(entered.await(5, TimeUnit.SECONDS), "Admission did not reach transport")
+          h.workflow.dismissAdmission()
+          h.main.runPending()
+          h.io.runPending() // Status still reports the old, paused run.
+          h.main.runPending()
+          assertEquals("paused", h.state.analysisRun.run?.status)
+          assertTrue(h.calls.any { it.first == "GET" && it.second.contains("/analysis/run?") })
+          assertNull(h.state.analysisRun.admission)
+          assertNull(h.state.analysisRun.previewIntent)
+          release.countDown()
+          transport.join(5_000)
+          assertFalse(transport.isAlive, "Admission transport did not finish")
+          h.drain()
+          assertEquals("running", h.state.analysisRun.run?.status)
+          assertEquals("admitted", h.state.analysisRun.run?.updatedAt)
+          assertEquals(evidence.keys, h.state.analysisRun.sections.keys)
+          assertNull(h.state.analysisRun.admission)
+          assertNull(h.state.analysisRun.previewIntent)
+          h.run = h.run.copy(updatedAt = "later progress")
+          h.await { h.state.analysisRun.run?.updatedAt == "later progress" }
+          h.workflow.admit()
+          h.drain()
+          assertEquals(
+              1,
+              h.calls.count {
+                it.first == "POST" && it.second.endsWith(if (resume) "/control" else "/run")
+              })
+        } finally {
+          release.countDown()
+          transport.join(5_000)
+        }
+      }
+    }
+  }
+
+  @Test
+  fun delayedUncertainAdmissionReconcilesNewIdentityAfterOldStatusAndPreservesError() {
+    for (resume in listOf(false, true)) {
+      for (dismiss in listOf(false, true)) {
+        Harness(pollMillis = 15).use { h ->
+          h.run = h.run.copy(status = "running")
+          h.workflow.refresh()
+          h.drain()
+          val oldRun = h.run
+          val evidence = h.state.analysisRun.sections
+          h.workflow.preview(resume = resume)
+          h.drain()
+          h.confirm()
+          val entered = CountDownLatch(1)
+          val release = CountDownLatch(1)
+          h.lateAdmissionGate = entered to release
+          h.lateAdmissionNewIdentity = true
+          h.admissionTransportFailure = true
+          h.workflow.admit()
+          h.main.runPending()
+          val transport = Thread { h.io.runPending() }
+          transport.start()
+          try {
+            assertTrue(entered.await(5, TimeUnit.SECONDS), "Admission did not reach transport")
+            if (dismiss) {
+              h.workflow.dismissAdmission()
+              h.main.runPending()
+              h.io.runPending() // The dismissed dialog reads the old active run.
+              h.main.runPending()
+            }
+            h.staleStatus = oldRun
+            h.staleStatusReads = 1
+            release.countDown()
+            transport.join(5_000)
+            assertFalse(transport.isAlive, "Admission transport did not finish")
+            h.main.runPending() // Failure schedules a read-only status request.
+            h.io.runPending() // This response still sees the old active run.
+            h.main.runPending()
+            assertTrue(
+                h.runUpdates.any {
+                  it.run?.identity == oldRun.identity && it.error?.contains("unavailable") == true
+                })
+            assertTrue(h.state.analysisRun.error!!.contains("unavailable"))
+            assertNull(h.state.analysisRun.admission)
+            assertNull(h.state.analysisRun.previewIntent)
+            h.await { h.state.analysisRun.run?.identity == h.run.identity }
+            assertEquals("admitted", h.state.analysisRun.run?.updatedAt)
+            assertTrue(h.state.analysisRun.error!!.contains("unavailable"))
+            assertFalse(h.state.analysisRun.error!!.contains("replaced"))
+            assertEquals(evidence.keys, h.state.analysisRun.sections.keys)
+            h.workflow.retryPreview()
+            h.workflow.admit()
+            h.drain()
+            assertEquals(
+                1,
+                h.calls.count {
+                  it.first == "POST" && it.second.endsWith(if (resume) "/control" else "/run")
+                })
+          } finally {
+            release.countDown()
+            transport.join(5_000)
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun lateDismissalStatusCannotReplaceUncertainRecoveryPollOrClearTransportError() {
+    for (resume in listOf(false, true)) {
+      Harness(pollMillis = 15).use { h ->
+        h.run = h.run.copy(status = "running")
+        h.workflow.refresh()
+        h.drain()
+        val oldRun = h.run
+        h.workflow.preview(resume = resume)
+        h.drain()
+        h.confirm()
+        val admissionEntered = CountDownLatch(1)
+        val releaseAdmission = CountDownLatch(1)
+        val statusEntered = CountDownLatch(1)
+        val releaseStatus = CountDownLatch(1)
+        h.lateAdmissionGate = admissionEntered to releaseAdmission
+        h.lateAdmissionNewIdentity = true
+        h.admissionTransportFailure = true
+        h.lateStatusGate = statusEntered to releaseStatus
+        h.workflow.admit()
+        h.main.runPending()
+        val admissionThread = Thread { h.io.runPending() }
+        admissionThread.start()
+        val statusThread = Thread { h.io.runPending() }
+        try {
+          assertTrue(admissionEntered.await(5, TimeUnit.SECONDS))
+          h.workflow.dismissAdmission()
+          h.main.runPending()
+          statusThread.start()
+          assertTrue(statusEntered.await(5, TimeUnit.SECONDS))
+          h.staleStatus = oldRun
+          h.staleStatusReads = 1
+          releaseAdmission.countDown()
+          admissionThread.join(5_000)
+          assertFalse(admissionThread.isAlive)
+          h.main.runPending() // The failed transport schedules recovery status.
+          h.io.runPending() // Recovery sees the old run and starts polling.
+          h.main.runPending()
+          assertEquals(oldRun.identity, h.state.analysisRun.run?.identity)
+          assertTrue(h.state.analysisRun.error!!.contains("unavailable"))
+          releaseStatus.countDown()
+          statusThread.join(5_000)
+          assertFalse(statusThread.isAlive)
+          h.main.runPending() // The older dismissal read must not replace recovery.
+          h.await { h.state.analysisRun.run?.identity == h.run.identity }
+          assertTrue(h.state.analysisRun.error!!.contains("unavailable"))
+          assertFalse(h.state.analysisRun.error!!.contains("replaced"))
+          assertNull(h.state.analysisRun.admission)
+          assertNull(h.state.analysisRun.previewIntent)
+          assertEquals(
+              1,
+              h.calls.count {
+                it.first == "POST" && it.second.endsWith(if (resume) "/control" else "/run")
+              })
+        } finally {
+          releaseAdmission.countDown()
+          releaseStatus.countDown()
+          admissionThread.join(5_000)
+          if (statusThread.state != Thread.State.NEW) statusThread.join(5_000)
+        }
+      }
+    }
+  }
+
+  @Test
+  fun uncertainAdmissionDoesNotFollowAnUnrelatedPolledRun() {
+    for (resume in listOf(false, true)) {
+      Harness(pollMillis = 15).use { h ->
+        h.run = h.run.copy(status = "running")
+        h.workflow.refresh()
+        h.drain()
+        val oldRun = h.run
+        h.workflow.preview(resume = resume)
+        h.drain()
+        h.confirm()
+        h.admissionTransportFailure = true
+        h.workflow.admit()
+        h.drain()
+        assertTrue(h.state.analysisRun.error!!.contains("unavailable"))
+        h.run =
+            h.run.copy(
+                identity =
+                    h.run.identity.copy(
+                        queueId = if (resume) h.run.identity.queueId else "other-queue",
+                        id = if (resume) "other-run" else h.run.identity.id,
+                        generation = "other-generation"))
+        h.await { h.state.analysisRun.error?.contains("replaced") == true }
+        assertEquals(oldRun.identity, h.state.analysisRun.run?.identity)
+        assertTrue(h.state.analysisRun.error!!.contains("unavailable"))
+        assertNull(h.state.analysisRun.previewIntent)
+        h.workflow.admit()
+        h.drain()
+        assertEquals(
+            1,
+            h.calls.count {
+              it.first == "POST" && it.second.endsWith(if (resume) "/control" else "/run")
+            })
+      }
+    }
+  }
+
+  @Test
+  fun delayedAdmissionCannotReviveDismissedOrReplacedReview() {
+    for (change in
+        listOf(
+            "dismiss", "detach", "project", "revision", "provider", "selection", "replacement")) {
+      Harness().use { h ->
+        h.workflow.refresh()
+        h.drain()
+        h.workflow.preview()
+        h.drain()
+        h.confirm()
+        h.admissionConflict = true
+        h.workflow.admit()
+        h.main.runPending()
+        h.io.runPending() // Conflict is queued for delivery.
+        when (change) {
+          "dismiss" -> h.workflow.dismissAdmission()
+          "detach" -> h.workflow.detach()
+          "project" ->
+              h.dispatch(
+                  DesktopEvent.ProjectLoaded(
+                      analysisProjectFixture("other"), ProjectIndex("other", "revision")))
+          "revision" -> h.dispatch(DesktopEvent.IndexRefreshed(ProjectIndex("project", "new")))
+          "provider" -> h.workflow.providerChanged()
+          "selection" -> {
+            h.dispatch(
+                DesktopEvent.AnalysisRunUpdated(
+                    h.state.analysisRun.copy(
+                        fileSelection = h.state.analysisRun.fileSelection.copy(saving = true))))
+          }
+          else -> h.workflow.preview(limits = AnalysisRunLimits(4, 80, 1))
+        }
+        h.drain()
+        if (change == "replacement") {
+          assertEquals(AnalysisRunLimits(4, 80, 1), h.state.analysisRun.admission?.preview?.limits)
+          assertFalse(h.state.analysisRun.admission!!.isConfirmed())
+        } else assertNull(h.state.analysisRun.admission, change)
+        assertEquals(change == "replacement", h.state.analysisRun.previewIntent != null, change)
+        assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/run") }, change)
+        h.workflow.retryPreview()
+        h.drain()
+        assertEquals(
+            if (change == "replacement") 2 else 1,
+            h.calls.count { it.second.endsWith("/preview") },
+            change)
+      }
+    }
+  }
+
+  @Test
+  fun delayedReconciliationKeepsCurrentReviewAndEvidenceInsteadOfPublishingOldStatus() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      val evidence = h.state.analysisRun.sections
+      h.workflow.preview(resume = true)
+      h.drain()
+      h.confirm()
+      h.admissionConflict = true
+      h.workflow.admit()
+      h.main.runPending()
+      h.io.runPending()
+      h.main.runPending() // Conflict schedules a read-only status request.
+      h.io.runPending()
+      val newer = h.run.copy(identity = h.run.identity.copy(generation = "replacement"))
+      h.dispatch(DesktopEvent.AnalysisRunUpdated(h.state.analysisRun.copy(run = newer)))
+      h.drain()
+      assertEquals(newer, h.state.analysisRun.run)
+      assertNull(h.state.analysisRun.previewIntent)
+      assertNull(h.state.analysisRun.admission)
+      assertEquals(evidence, h.state.analysisRun.sections)
+      assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/control") })
+    }
+  }
+
+  @Test
+  fun rejectedResumeReconcilesMatchingPlanButNotReplacementAndPreservesEvidence() {
+    for (change in listOf("same", "plan", "run")) {
+      Harness().use { h ->
+        h.workflow.refresh()
+        h.drain()
+        val evidence = h.state.analysisRun.sections
+        h.workflow.preview(resume = true)
+        h.drain()
+        h.confirm()
+        h.admissionConflict = true
+        h.workflow.admit()
+        h.main.runPending()
+        h.io.runPending()
+        h.run =
+            when (change) {
+              "plan" -> h.run.copy(plan = h.run.plan.copy(refresh = !h.run.plan.refresh))
+              "run" -> h.run.copy(identity = h.run.identity.copy(generation = "replacement"))
+              else -> h.run
+            }
+        h.drain()
+        assertEquals(h.run, h.state.analysisRun.run, change)
+        assertEquals(change == "same", h.state.analysisRun.previewIntent != null, change)
+        assertNull(h.state.analysisRun.admission, change)
+        if (change != "run") assertEquals(evidence, h.state.analysisRun.sections, change)
+        assertEquals(
+            1, h.calls.count { it.first == "POST" && it.second.endsWith("/control") }, change)
+      }
+    }
+  }
+
+  @Test
+  fun polledReplacementInvalidatesRejectedResumeButMatchingPollKeepsIt() {
+    for (change in listOf("plan", "run")) {
+      Harness(pollMillis = 15).use { h ->
+        h.run = h.run.copy(status = "running")
+        h.workflow.refresh()
+        h.drain()
+        val evidence = h.state.analysisRun.sections
+        h.workflow.preview(resume = true)
+        h.drain()
+        h.confirm()
+        h.admissionConflict = true
+        h.workflow.admit()
+        h.drain()
+        assertNotNull(h.state.analysisRun.previewIntent)
+        h.run = h.run.copy(updatedAt = "progress")
+        h.await { h.state.analysisRun.run?.updatedAt == "progress" }
+        assertNotNull(h.state.analysisRun.previewIntent)
+        assertEquals(evidence.keys, h.state.analysisRun.sections.keys)
+        val priorRun = h.state.analysisRun.run
+        h.run =
+            if (change == "plan") h.run.copy(plan = h.run.plan.copy(retryStaleFailed = true))
+            else h.run.copy(identity = h.run.identity.copy(generation = "replacement"))
+        h.await { h.state.analysisRun.previewIntent == null }
+        assertEquals(if (change == "plan") h.run else priorRun, h.state.analysisRun.run)
+        assertNull(h.state.analysisRun.previewIntent, change)
+        assertNull(h.state.analysisRun.admission, change)
+        h.workflow.retryPreview()
+        h.drain()
+        assertEquals(1, h.calls.count { it.second.endsWith("/preview") }, change)
+        assertEquals(
+            1, h.calls.count { it.first == "POST" && it.second.endsWith("/control") }, change)
+      }
+    }
+  }
+
+  @Test
+  fun lateStatusAfterDismissalOrNewPreviewCannotRestoreRejectedIntent() {
+    for (change in listOf("dismiss", "new preview")) {
+      Harness().use { h ->
+        h.workflow.refresh()
+        h.drain()
+        h.workflow.preview(resume = true)
+        h.drain()
+        h.confirm()
+        h.admissionConflict = true
+        h.workflow.admit()
+        h.main.runPending()
+        h.io.runPending()
+        h.main.runPending()
+        h.io.runPending() // Old status is queued for delivery.
+        if (change == "dismiss") h.workflow.dismissAdmission()
+        else h.workflow.preview(limits = AnalysisRunLimits(3, 60, 1))
+        h.drain()
+        assertNull(h.state.analysisRun.previewIntent.takeIf { it?.resumeRun != null }, change)
+        assertEquals(change == "new preview", h.state.analysisRun.admission != null, change)
+        assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/control") })
+      }
+    }
+  }
+
+  @Test
+  fun delayedStatusDoesNotOverwriteNewerProgressForTheSameRun() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      h.workflow.preview(resume = true)
+      h.drain()
+      h.confirm()
+      h.admissionConflict = true
+      h.workflow.admit()
+      h.main.runPending()
+      h.io.runPending()
+      h.main.runPending()
+      h.io.runPending()
+      val updated = h.run.copy(status = "interrupted", updatedAt = "newer")
+      h.dispatch(DesktopEvent.AnalysisRunUpdated(h.state.analysisRun.copy(run = updated)))
+      h.drain()
+      assertEquals(updated, h.state.analysisRun.run)
+      assertNotNull(h.state.analysisRun.previewIntent)
+      assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/control") })
+    }
+  }
+
+  @Test
+  fun uncertainStartAndResumeShowAdmittedDurableProgressWithoutRetryOrLostError() {
+    for (resume in listOf(false, true)) {
+      Harness().use { h ->
+        h.workflow.refresh()
+        h.drain()
+        val evidence = h.state.analysisRun.sections
+        h.workflow.preview(resume = resume)
+        h.drain()
+        h.confirm()
+        h.failure = if (resume) "/control" else "/analysis/run"
+        h.workflow.admit()
+        h.workflow.admit()
+        h.main.runPending()
+        h.io.runPending()
+        h.run = h.run.copy(status = "running", updatedAt = "admitted")
+        h.drain()
+        assertEquals("running", h.state.analysisRun.run?.status)
+        assertEquals("admitted", h.state.analysisRun.run?.updatedAt)
+        assertNull(h.state.analysisRun.admission)
+        assertNull(h.state.analysisRun.previewIntent)
+        assertTrue(h.state.analysisRun.error!!.contains("unavailable"))
+        assertEquals(evidence.keys, h.state.analysisRun.sections.keys)
+        h.workflow.retryPreview()
+        h.workflow.admit()
+        h.drain()
+        assertEquals(
+            1,
+            h.calls.count {
+              it.first == "POST" && it.second.endsWith(if (resume) "/control" else "/run")
+            })
+      }
+    }
+  }
+
+  @Test
+  fun delayedOverviewFallbackCannotReplaceNewerRunOrItsEvidence() {
+    Harness().use { h ->
+      h.workflow.refresh()
+      h.drain()
+      h.workflow.preview()
+      h.drain()
+      h.confirm()
+      h.failure = "/analysis/run"
+      h.workflow.admit()
+      h.main.runPending()
+      h.io.runPending() // Uncertain admission.
+      h.main.runPending()
+      h.io.runPending() // Failed status read.
+      h.main.runPending()
+      h.io.runPending() // Overview fallback is in flight.
+      val newer = h.run.copy(identity = h.run.identity.copy(generation = "replacement"))
+      h.dispatch(DesktopEvent.AnalysisRunUpdated(h.state.analysisRun.copy(run = newer)))
+      val evidence = h.state.analysisRun.sections
+      h.drain()
+      assertEquals(newer, h.state.analysisRun.run)
+      assertEquals(evidence, h.state.analysisRun.sections)
+      assertNull(h.state.analysisRun.previewIntent)
+      assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/run") })
+    }
+  }
+
+  @Test
+  fun canceledAdmissionDoesNotBecomeARejectedOrRetryableRequest() {
+    Harness().use { h ->
+      h.workflow.preview()
+      h.drain()
+      h.confirm()
+      h.cancelAdmission = true
+      h.workflow.admit()
+      h.drain()
+      assertNull(h.state.analysisRun.previewIntent)
+      assertNull(h.state.analysisRun.admission)
+      assertNull(h.state.analysisRun.error)
+      assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/run") })
+      assertFalse(h.calls.any { it.first == "GET" && it.second.contains("/analysis/run?") })
+      h.workflow.retryPreview()
+      h.workflow.admit()
+      h.drain()
+      assertEquals(1, h.calls.count { it.first == "POST" && it.second.endsWith("/run") })
+    }
+  }
+
+  @Test
+  fun statusFailureAfterUncertainAdmissionRetainsTransportErrorAndOverviewProgress() {
+    Harness().use { h ->
+      h.workflow.preview()
+      h.drain()
+      h.confirm()
+      h.failure = "/analysis/run"
+      h.workflow.admit()
+      h.main.runPending()
+      h.io.runPending()
+      h.main.runPending()
+      h.run = h.run.copy(status = "running")
+      h.drain()
+      assertEquals("running", h.state.analysisRun.run?.status)
+      assertTrue(h.state.analysisRun.error!!.contains("unavailable"))
+      assertTrue(h.state.analysisRun.error!!.contains("status could not be read"))
+      assertNull(h.state.analysisRun.previewIntent)
+    }
+  }
+
+  @Test
   fun resumeUsesFreshPreviewAndExactPriorGenerationAndDoesNotResetRetainedEvidence() {
     Harness().use { h ->
       h.workflow.refresh()
@@ -1019,6 +1536,13 @@ class DesktopAnalysisWorkflowTest {
     var wrongRetryPreview = false
     var emptyPreview = false
     var admissionConflict = false
+    var admissionTransportFailure = false
+    var cancelAdmission = false
+    var lateAdmissionGate: Pair<CountDownLatch, CountDownLatch>? = null
+    var lateAdmissionNewIdentity = false
+    var lateStatusGate: Pair<CountDownLatch, CountDownLatch>? = null
+    var staleStatus: AnalysisRun? = null
+    var staleStatusReads = 0
     var previewId = "preview"
     val workflow =
         DesktopAnalysisWorkflow(
@@ -1027,7 +1551,31 @@ class DesktopAnalysisWorkflowTest {
                     DaemonTransport { method, path, body ->
                       calls.add(method to path)
                       if (body != null) bodies.add(body)
-                      if (failure.isNotEmpty() && path.contains(failure))
+                      if (cancelAdmission && method == "POST" && path.endsWith("/analysis/run"))
+                          throw CancellationException("Canceled admission")
+                      if (method == "POST" &&
+                          (path.endsWith("/analysis/run") || path.endsWith("/control"))) {
+                        lateAdmissionGate?.let { (entered, release) ->
+                          entered.countDown()
+                          check(release.await(5, TimeUnit.SECONDS)) { "Admission gate timed out" }
+                          run =
+                              run.copy(
+                                  identity =
+                                      if (lateAdmissionNewIdentity)
+                                          run.identity.copy(
+                                              id =
+                                                  if (path.endsWith("/control")) run.identity.id
+                                                  else "admitted-run",
+                                              generation = "admitted-generation")
+                                      else run.identity,
+                                  status = "running",
+                                  updatedAt = "admitted")
+                        }
+                      }
+                      if ((failure.isNotEmpty() && path.contains(failure)) ||
+                          (admissionTransportFailure &&
+                              method == "POST" &&
+                              (path.endsWith("/analysis/run") || path.endsWith("/control"))))
                           TransportResponse(500, """{"message":"unavailable"}""")
                       else if (admissionConflict &&
                           method == "POST" &&
@@ -1085,7 +1633,19 @@ class DesktopAnalysisWorkflowTest {
                                 TransportResponse(
                                     200, Json.encodeToString(ProjectOverview(analysisRun = run)))
                             path.contains("/analysis/run") -> {
-                              if (method == "POST") {
+                              if (method == "GET" && lateStatusGate != null) {
+                                val (entered, release) = lateStatusGate!!
+                                lateStatusGate = null
+                                val captured = run
+                                entered.countDown()
+                                check(release.await(5, TimeUnit.SECONDS)) {
+                                  "Status gate timed out"
+                                }
+                                TransportResponse(200, Json.encodeToString(captured))
+                              } else if (method == "GET" && staleStatusReads > 0) {
+                                staleStatusReads--
+                                TransportResponse(200, Json.encodeToString(staleStatus!!))
+                              } else if (method == "POST") {
                                 val request = Json.decodeFromString<AnalysisRunStartRequest>(body!!)
                                 run =
                                     run.copy(
@@ -1094,8 +1654,8 @@ class DesktopAnalysisWorkflowTest {
                                                 refresh = request.refresh,
                                                 retryStaleFailed = request.retryStaleFailed,
                                                 limits = request.limits))
-                              }
-                              TransportResponse(200, Json.encodeToString(run))
+                                TransportResponse(200, Json.encodeToString(run))
+                              } else TransportResponse(200, Json.encodeToString(run))
                             }
                             else -> error("unexpected $method $path")
                           }
