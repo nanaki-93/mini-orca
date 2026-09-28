@@ -288,23 +288,51 @@ provider is connected. Non-loopback scopes require their own confirmation.
 
 ## Analysis and results
 
-Use **Start analysis** to refresh model analysis for every included project file,
-or **Analyze stale & failed** to include only files with stale or failed analysis.
-Both actions preview their scope before starting. Start bypasses saved model
-results; selective retries can reuse fresh stages. Unchanged deterministic
-Security rules can reuse their saved results. Resume continues the admitted run
-with its original refresh choice and retained progress. Ignored and unanalysed
-files have no status dot in the file tree. Opening a file does not change the
-project analysis scope.
-The preview shows exclusions, stage eligibility, cache use, expected requests and
-inclusive retry bounds. Confirm each displayed
-remote destination and explicit Security review intent. Each confirmation is a
-checkbox; selecting it alone does not start the run. Admission and other dialogs
-keep their decisions below a scrollable body, and closing them does not confirm
-an action. One admission coordinates the existing specialized producers; it can make multiple model requests.
+Use **Start analysis** to request a full-project preview, or **Analyze stale &
+failed** for a daemon-selected subset. Both actions preview before starting;
+returned included files reflect saved selection and eligibility, not every
+physical project file. A full run requests fresh evidence for eligible stages;
+selective retries may reuse fresh stages. Unchanged deterministic Security rules
+can reuse saved results. **Resume** requests a fresh continuation preview for the
+captured run, retaining its original refresh/retry policy and progress. Its
+returned files are the admitted file set, not a count of remaining files; its
+request bounds describe the current continuation. Ignored and unanalysed files
+have no status dot in the file tree. Opening a file does not change the project
+analysis scope.
 
-The daemon retains its default 100-file/900-second dispatch bounds; the desktop
-does not expose Run limits controls.
+The admission dialog names full, stale/failed or continuation scope while
+preparing, after failure and during review. Review shows the daemon-returned
+included and excluded counts, refresh/reuse policy and any saved-run stage
+compatibility limit. Expand any included file to inspect its full project-relative
+path and every returned stage's eligibility, cache disposition, model-request
+allowance and reason. Excluded files retain their full paths and reasons, which
+may reflect selection, policy, source eligibility or selective retry; an
+ineligible stage on an included file is not a whole-file exclusion. The returned
+stage summary separates applicable, cached/reused, request-bearing and
+non-requesting work, including deterministic Security rules. Neither an empty
+scope nor zero planned model requests proves successful analysis. Empty scopes
+still expose exclusions but cannot Start or Resume.
+
+Expected model requests exclude retries; the displayed inclusive maximum includes
+them. The per-stage attempt limit includes the initial attempt. The returned file
+and time limits bound the dispatch window, not the project inventory or an ETA;
+further work needs explicit continuation. The daemon defaults to a 100-file,
+900-second window; the desktop does not expose Run limits controls. Review also
+shows each returned model destination's scope, profile, model, origin and
+local/remote classification, with unavailable metadata labeled rather than
+guessed. Reviewing, expanding or copying details sends nothing to a model. On a
+preview failure, **Retry preview** explicitly requests the same captured scope,
+limits and policy (and the same run for continuation), not a default full run.
+If that identity is obsolete, close the dialog and request a new preview; closing
+never confirms an action.
+
+Confirm each displayed remote destination and explicit Security review intent.
+Each confirmation is a checkbox; selecting it alone does not start the run.
+Admission and other dialogs keep their decisions below a scrollable body. Only
+**Start analysis** or **Resume analysis** explicitly admits the preview. One
+admission coordinates the existing specialized producers; it can make multiple
+model requests.
+
 Pause/Resume/Cancel retain truthful partial coverage and cumulative attempts.
 Resume requires a fresh preview; startup never silently resumes a model request.
 Analysis groups file progress, active paths and the current run controls in one
