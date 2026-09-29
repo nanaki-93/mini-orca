@@ -93,7 +93,27 @@ internal fun AnalysisRunStrip(
                 color = Warning,
                 style = IdeTypography.workspaceMetadata)
         if (scope == AnalysisRunStripScope.Summary)
-            run?.reason?.takeIf { it.isNotBlank() }?.let { DiagnosticText(it, color = Warning) }
+            run?.reason
+                ?.takeIf { it.isNotBlank() }
+                ?.let { reason ->
+                  val label =
+                      if (run.status in
+                          setOf(
+                              "paused",
+                              "interrupted",
+                              "canceled",
+                              "failed",
+                              "partial",
+                              "unavailable"))
+                          "Stop reason"
+                      else "Run diagnostic"
+                  SelectionContainer {
+                    Text(
+                        "$label · ${sanitizedOutputText(reason, 180).substringBefore('\n')}",
+                        color = Warning,
+                        style = IdeTypography.workspaceMetadata)
+                  }
+                }
         if (scope == AnalysisRunStripScope.Analysis) {
           if (run?.plan?.compatibilityStage?.isNotBlank() == true)
               Text(

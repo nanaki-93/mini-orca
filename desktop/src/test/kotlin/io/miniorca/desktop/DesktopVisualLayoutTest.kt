@@ -210,6 +210,79 @@ class DesktopVisualLayoutTest {
             assertEquals(0, calls)
           }
     }
+    val project = resultProjectFixture()
+    val viewports = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in viewports) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        for (name in listOf("requesting-pause", "paused", "canceling", "status-unavailable")) {
+          val original = cases.first { it.first == name }.second
+          val analysis =
+              if (name == "requesting-pause")
+                  original.copy(run = original.run?.copy(reason = "Stage save needs attention"))
+              else original
+          val label = "f16-matrix-$name-$width-$height-$scale-${density}x"
+          val pixelsWide = (width * density).toInt()
+          val pixelsHigh = (height * density).toInt()
+          ComposeVisualFixture(pixelsWide, pixelsHigh, scale, density) {
+                AnalysisWorkspacePane(
+                    AnalysisWorkspacePaneState(project, analysis),
+                    AnalysisWorkspaceActions(
+                        { _, _ -> error("Passive render dispatched start") },
+                        { error("Passive render dispatched pause") },
+                        { error("Passive render dispatched resume") },
+                        { error("Passive render dispatched cancel") },
+                        { error("Passive render dispatched file refresh") },
+                        refreshStatus = { error("Passive render dispatched status refresh") }))
+              }
+              .use { fixture ->
+                fixture.render("$label-analysis")
+                fixture.revealText("Refresh status", "analysis-page")
+                fixture.assertTextFits("Refresh status")
+                if (name == "paused") {
+                  fixture.revealText("Resume → fresh preview", "analysis-page")
+                  fixture.assertTextFits("Resume → fresh preview")
+                }
+                if (name == "status-unavailable") {
+                  assertFalse(fixture.hasText("Resume → fresh preview"))
+                }
+              }
+          val state =
+              DesktopState(projectState = ProjectWorkspaceState(project), analysisRun = analysis)
+          val header = requireNotNull(toolbarAnalysisStatus(state))
+          ComposeVisualFixture(pixelsWide, pixelsHigh, scale, density) {
+                ToolbarVisualFixture(
+                    width.toFloat(),
+                    connection = ConnectionState(label = "Disconnected"),
+                    analysisStatus = header)
+              }
+              .use { fixture ->
+                fixture.render("$label-header")
+                fixture.assertTextFits(header.label)
+                fixture.assertTextBefore(header.label, "Daemon disconnected")
+              }
+          ComposeVisualFixture(pixelsWide, pixelsHigh, scale, density) {
+                ProjectSummaryPane(null, project, {}, run = analysis.run, analysisState = analysis)
+              }
+              .use { fixture ->
+                fixture.render("$label-summary")
+                val status =
+                    analysisLifecycleStatusLabel(
+                        projectRunPresentation(project, analysis), analysis)
+                fixture.assertTextFits(status, maxLines = 3)
+                if (name == "paused") {
+                  assertTrue(
+                      fixture.hasText(
+                          "Stop reason · ${sanitizedOutputText(reason, 180).substringBefore('\n')}"))
+                  assertFalse(fixture.hasText(reason.trim()))
+                }
+                if (name == "requesting-pause") {
+                  assertTrue(fixture.hasText("Run diagnostic · Stage save needs attention"))
+                  assertFalse(fixture.hasText("Stop reason · Stage save needs attention"))
+                }
+              }
+        }
+      }
+    }
   }
 
   @Test
