@@ -154,6 +154,7 @@ class DesktopWorkflowPresenter(
   private var draftChecksJob: Job? = null
   private var declarationExplanationGeneration = 0L
   private var verifiedScanActionGeneration = 0L
+  private var verifiedScanFindingsGeneration = 0L
   private var activeTask: WorkflowTaskIdentity? = null
   private var activeDraft: WorkflowDraftIdentity? = null
   private var preparationSelectionGeneration = 0L
@@ -1762,6 +1763,7 @@ class DesktopWorkflowPresenter(
     if (verifiedScanProgress(snapshot.value.state).action != VerifiedScanAction.Start) return
     val request = beginVerifiedScanAction() ?: return
     dispatch(DesktopEvent.VerifiedScanOperationUpdated(VerifiedScanOperation.Starting))
+    dispatch(DesktopEvent.VerifiedScanFindingsUpdated(VerifiedScanFindingsRefresh.Stale))
     scope.launch {
       var startRequestAttempted = false
       try {
@@ -1821,6 +1823,47 @@ class DesktopWorkflowPresenter(
         }
     check(trust.commands == listOf(listOf("go", "test", "./..."))) {
       "Local execution command scope changed; review it again before trusting execution."
+    }
+  }
+
+  /** Recovery reads status only; it never grants execution trust or retries an ambiguous start. */
+  fun refreshVerifiedScanStatus() {
+    val state = snapshot.value.state
+    val identity = state.project?.identity() ?: return
+    if (identity.id.isBlank() ||
+        identity.revision.isBlank() ||
+        state.verifiedScan.read == VerifiedScanRead.Reading ||
+        state.verifiedScan.operation == VerifiedScanOperation.Starting ||
+        state.verifiedScan.operation == VerifiedScanOperation.CancellationRequested)
+        return
+    supersedeProjectDetailsRefresh(
+        "Scan status refresh interrupted the workspace detail refresh. Re-index to retry.")
+    val generation = ++verifiedScanActionGeneration
+    verifiedScanFindingsGeneration++
+    if (state.verifiedScan.findingsRefresh == VerifiedScanFindingsRefresh.Refreshing)
+        dispatch(DesktopEvent.VerifiedScanFindingsUpdated(VerifiedScanFindingsRefresh.Stale))
+    jobCoordinator.stopVerifiedScanPolling()
+    dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Reading))
+    scope.launch {
+      try {
+        val report = io { api.goScan(identity.revision) }
+        if (!isCurrentVerifiedScanAction(identity, generation)) return@launch
+        if (rejectForeignVerifiedScan(report, identity)) return@launch
+        if (state.verifiedScan.operation !is VerifiedScanOperation.CancellationUnconfirmed ||
+            report?.isTerminalVerifiedScan() == true ||
+            report == null)
+            dispatch(DesktopEvent.VerifiedScanOperationUpdated(VerifiedScanOperation.Idle))
+        publishVerifiedScan(identity, report, generation)
+      } catch (canceled: CancellationException) {
+        throw canceled
+      } catch (error: Exception) {
+        if (isCurrentVerifiedScanAction(identity, generation))
+            dispatch(
+                DesktopEvent.VerifiedScanReadUpdated(
+                    VerifiedScanRead.Unavailable(
+                        "Unable to refresh scan status: " +
+                            (error.message?.takeIf(String::isNotBlank) ?: "read unavailable"))))
+      }
     }
   }
 
@@ -1934,6 +1977,7 @@ class DesktopWorkflowPresenter(
 
   private fun refreshProjectWorkspace(identity: WorkflowProjectIdentity) {
     dispatch(DesktopEvent.ProjectDetailsUpdated(ProjectDetailsOutcome.Refreshing))
+    dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Reading))
     analysisWorkflow.refresh()
     val workspaceScanGeneration = verifiedScanActionGeneration
     val detailsGeneration = ++workspaceDetailsGeneration
@@ -1965,12 +2009,17 @@ class DesktopWorkflowPresenter(
       } catch (canceled: CancellationException) {
         throw canceled
       } catch (error: Exception) {
-        if (currentDetails())
-            dispatch(
-                DesktopEvent.ProjectDetailsUpdated(
-                    ProjectDetailsOutcome.Unavailable(
-                        "Project inventory is available; workspace details could not be refreshed: " +
-                            (error.message?.takeIf(String::isNotBlank) ?: "read unavailable"))))
+        if (currentDetails()) {
+          val detail = error.message?.takeIf(String::isNotBlank) ?: "read unavailable"
+          dispatch(
+              DesktopEvent.ProjectDetailsUpdated(
+                  ProjectDetailsOutcome.Unavailable(
+                      "Project inventory is available; workspace details could not be refreshed: $detail")))
+          dispatch(
+              DesktopEvent.VerifiedScanReadUpdated(
+                  VerifiedScanRead.Unavailable(
+                      "Workspace details could not be read; scan status is unconfirmed: $detail")))
+        }
       }
     }
   }
@@ -1979,17 +2028,32 @@ class DesktopWorkflowPresenter(
       identity: WorkflowProjectIdentity,
       scanActionGeneration: Long? = null,
   ) {
+    val findingsGeneration = ++verifiedScanFindingsGeneration
+    if (scanActionGeneration != null)
+        dispatch(DesktopEvent.VerifiedScanFindingsUpdated(VerifiedScanFindingsRefresh.Refreshing))
+    fun current() =
+        matchesProject(identity) &&
+            findingsGeneration == verifiedScanFindingsGeneration &&
+            (scanActionGeneration == null ||
+                isCurrentVerifiedScanAction(identity, scanActionGeneration))
     scope.launch {
       try {
         val response = io { api.findings(identity.revision) }
-        if (matchesProject(identity) &&
-            (scanActionGeneration == null ||
-                isCurrentVerifiedScanAction(identity, scanActionGeneration)))
-            dispatch(DesktopEvent.FindingsLoaded(response.findings))
-      } catch (_: CancellationException) {
-        throw CancellationException()
-      } catch (_: Exception) {
-        // Findings refresh is enrichment; preserve visible deterministic state.
+        if (current()) {
+          dispatch(DesktopEvent.FindingsLoaded(response.findings))
+          if (scanActionGeneration != null)
+              dispatch(
+                  DesktopEvent.VerifiedScanFindingsUpdated(VerifiedScanFindingsRefresh.Current))
+        }
+      } catch (canceled: CancellationException) {
+        throw canceled
+      } catch (error: Exception) {
+        if (scanActionGeneration != null && current())
+            dispatch(
+                DesktopEvent.VerifiedScanFindingsUpdated(
+                    VerifiedScanFindingsRefresh.Unavailable(
+                        "Scan findings could not be refreshed; previous rows may be stale: " +
+                            (error.message?.takeIf(String::isNotBlank) ?: "read unavailable"))))
       }
     }
   }
@@ -2003,19 +2067,21 @@ class DesktopWorkflowPresenter(
     if (!isCurrentVerifiedScanAction(identity, actionGeneration) ||
         rejectForeignVerifiedScan(scan, identity))
         return
+    fun isCurrentCancelPoll(): Boolean =
+        matchesProject(identity) &&
+            actionGeneration == verifiedScanActionGeneration - 1 &&
+            snapshot.value.state.verifiedScan.operation ==
+                VerifiedScanOperation.CancellationRequested &&
+            snapshot.value.state.findings.scan?.belongsTo(identity) == true
     var terminalFromCancelPoll = false
     jobCoordinator.observeVerifiedScan(
         identity,
         scan,
         onUpdate = { updated ->
-          val cancelPoll =
-              matchesProject(identity) &&
-                  actionGeneration == verifiedScanActionGeneration - 1 &&
-                  snapshot.value.state.verifiedScan.operation ==
-                      VerifiedScanOperation.CancellationRequested &&
-                  snapshot.value.state.findings.scan?.belongsTo(identity) == true
-          if ((!isCurrentVerifiedScanAction(identity, actionGeneration) && !cancelPoll) ||
-              rejectForeignVerifiedScan(updated, identity))
+          val cancelPoll = isCurrentCancelPoll()
+          if (!isCurrentVerifiedScanAction(identity, actionGeneration) && !cancelPoll)
+              return@observeVerifiedScan false
+          if (rejectForeignVerifiedScan(updated, identity, polling = true))
               return@observeVerifiedScan false
           dispatch(DesktopEvent.GoScanLoaded(updated))
           val terminal =
@@ -2029,17 +2095,24 @@ class DesktopWorkflowPresenter(
           true
         },
         onSeedTerminal = {
-          if (refreshSeedTerminal && isCurrentVerifiedScanAction(identity, actionGeneration))
+          if (refreshSeedTerminal &&
+              isCurrentVerifiedScanAction(identity, actionGeneration) &&
+              scan?.isTerminalVerifiedScan() == true)
               refreshFindings(identity, actionGeneration)
         },
         onPollTerminal = {
-          if (isCurrentVerifiedScanAction(identity, actionGeneration) || terminalFromCancelPoll)
+          if ((isCurrentVerifiedScanAction(identity, actionGeneration) || terminalFromCancelPoll) &&
+              snapshot.value.state.findings.scan?.isTerminalVerifiedScan() == true)
               refreshFindings(identity, verifiedScanActionGeneration)
         },
         fetch = { io { api.goScan(identity.revision) } },
         onFailure = { error ->
-          if (isCurrentVerifiedScanAction(identity, actionGeneration))
-              dispatch(DesktopEvent.Failed(error.message ?: "Verified scan status failed"))
+          if (isCurrentVerifiedScanAction(identity, actionGeneration) || isCurrentCancelPoll())
+              dispatch(
+                  DesktopEvent.VerifiedScanReadUpdated(
+                      VerifiedScanRead.PollUnavailable(
+                          "Live scan status could not be read: " +
+                              (error.message?.takeIf(String::isNotBlank) ?: "read unavailable"))))
         })
   }
 
@@ -2047,6 +2120,7 @@ class DesktopWorkflowPresenter(
       scan: GoScanReport?,
       identity: WorkflowProjectIdentity,
       actionResponse: Boolean = false,
+      polling: Boolean = false,
   ): Boolean {
     if (scan == null || scan.belongsTo(identity)) return false
     val message =
@@ -2054,7 +2128,10 @@ class DesktopWorkflowPresenter(
     if (actionResponse) {
       dispatch(DesktopEvent.VerifiedScanOperationUpdated(VerifiedScanOperation.Failed(message)))
     } else {
-      dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Unavailable(message)))
+      dispatch(
+          DesktopEvent.VerifiedScanReadUpdated(
+              if (polling) VerifiedScanRead.PollUnavailable(message)
+              else VerifiedScanRead.Unavailable(message)))
     }
     return true
   }
@@ -2093,6 +2170,7 @@ class DesktopWorkflowPresenter(
     val identity = snapshot.value.state.project?.identity() ?: return null
     supersedeProjectDetailsRefresh(
         "Verified scan action interrupted the workspace detail refresh. Re-index to retry.")
+    verifiedScanFindingsGeneration++
     return VerifiedScanActionRequest(
         identity,
         ++verifiedScanActionGeneration,
@@ -2100,29 +2178,35 @@ class DesktopWorkflowPresenter(
         requiresExpectedScan = expectedScan != null)
   }
 
+  private fun GoScanReport.isTerminalVerifiedScan(): Boolean =
+      status.lowercase() in setOf("completed", "failed", "canceled", "cancelled")
+
   // Polling can observe completion while a DELETE is still in flight. Its terminal report is
   // newer evidence than either a delayed DELETE response or a transport failure.
   private fun hasTerminalVerifiedScanObservation(identity: WorkflowProjectIdentity): Boolean {
     val scan = snapshot.value.state.findings.scan ?: return false
-    return scan.belongsTo(identity) &&
-        scan.status.lowercase() in setOf("completed", "failed", "canceled", "cancelled")
+    return scan.belongsTo(identity) && scan.isTerminalVerifiedScan()
   }
 
   private fun recoverVerifiedScanPolling(identity: WorkflowProjectIdentity, generation: Long) {
     if (!isCurrentVerifiedScanAction(identity, generation)) return
     val scan = snapshot.value.state.findings.scan ?: return
     if (!scan.belongsTo(identity)) return
-    publishVerifiedScan(identity, scan, generation)
+    publishVerifiedScan(identity, scan, generation, refreshSeedTerminal = false)
   }
 
   private fun supersedeProjectDetailsRefresh(message: String) {
     workspaceDetailsGeneration++
-    if (controller.state.projectState.detailsOutcome == ProjectDetailsOutcome.Refreshing)
-        dispatch(DesktopEvent.ProjectDetailsUpdated(ProjectDetailsOutcome.Unavailable(message)))
+    if (controller.state.projectState.detailsOutcome == ProjectDetailsOutcome.Refreshing) {
+      dispatch(DesktopEvent.ProjectDetailsUpdated(ProjectDetailsOutcome.Unavailable(message)))
+      if (snapshot.value.state.verifiedScan.read == VerifiedScanRead.Reading)
+          dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Unavailable(message)))
+    }
   }
 
   private fun invalidateJobActions() {
     verifiedScanActionGeneration++
+    verifiedScanFindingsGeneration++
   }
 
   private fun isCurrentVerifiedScanAction(

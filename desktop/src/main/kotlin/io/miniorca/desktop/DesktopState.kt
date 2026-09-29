@@ -111,6 +111,20 @@ sealed interface VerifiedScanRead {
   data object Loaded : VerifiedScanRead
 
   data class Unavailable(val message: String) : VerifiedScanRead
+
+  data class PollUnavailable(val message: String) : VerifiedScanRead
+}
+
+sealed interface VerifiedScanFindingsRefresh {
+  data object Unread : VerifiedScanFindingsRefresh
+
+  data object Refreshing : VerifiedScanFindingsRefresh
+
+  data object Stale : VerifiedScanFindingsRefresh
+
+  data object Current : VerifiedScanFindingsRefresh
+
+  data class Unavailable(val message: String) : VerifiedScanFindingsRefresh
 }
 
 sealed interface VerifiedScanOperation {
@@ -130,6 +144,7 @@ sealed interface VerifiedScanOperation {
 data class VerifiedScanState(
     val read: VerifiedScanRead = VerifiedScanRead.Unread,
     val operation: VerifiedScanOperation = VerifiedScanOperation.Idle,
+    val findingsRefresh: VerifiedScanFindingsRefresh = VerifiedScanFindingsRefresh.Unread,
 )
 
 data class FindingsState(
@@ -497,6 +512,8 @@ sealed interface DesktopEvent {
 
   data class VerifiedScanReadUpdated(val read: VerifiedScanRead) : DesktopEvent
 
+  data class VerifiedScanFindingsUpdated(val outcome: VerifiedScanFindingsRefresh) : DesktopEvent
+
   data class VerifiedScanOperationUpdated(val operation: VerifiedScanOperation) : DesktopEvent
 
   data class SecurityActionStarted(val action: String) : DesktopEvent
@@ -635,6 +652,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
           copy(findings = findings.copy(performanceContext = event.context))
       is DesktopEvent.GoScanLoaded,
       is DesktopEvent.VerifiedScanReadUpdated,
+      is DesktopEvent.VerifiedScanFindingsUpdated,
       is DesktopEvent.VerifiedScanOperationUpdated -> withVerifiedScanEvent(event)
       is DesktopEvent.SecurityActionStarted ->
           copy(
@@ -867,6 +885,8 @@ private fun DesktopState.withVerifiedScanEvent(event: DesktopEvent): DesktopStat
           copy(verifiedScan = verifiedScan.copy(read = event.read))
       is DesktopEvent.VerifiedScanOperationUpdated ->
           copy(verifiedScan = verifiedScan.copy(operation = event.operation))
+      is DesktopEvent.VerifiedScanFindingsUpdated ->
+          copy(verifiedScan = verifiedScan.copy(findingsRefresh = event.outcome))
       else -> this
     }
 

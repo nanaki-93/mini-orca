@@ -134,6 +134,9 @@ fun verifiedScanProgress(state: DesktopState): VerifiedScanProgress {
                   "Reading status", "Checking the current scan status.", VerifiedScanAction.Waiting)
           is VerifiedScanRead.Unavailable ->
               VerifiedScanProgress("Status unavailable", read.message, VerifiedScanAction.Waiting)
+          is VerifiedScanRead.PollUnavailable ->
+              VerifiedScanProgress(
+                  "Live status unavailable", read.message, VerifiedScanAction.Waiting)
           VerifiedScanRead.Absent ->
               VerifiedScanProgress(
                   if (report == null) "Not run" else "No current report",
