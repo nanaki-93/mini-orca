@@ -262,7 +262,7 @@ internal data class DesktopShellAnalysisActions(
     val startScan: () -> Unit,
     val cancelScan: () -> Unit,
     val preparePerformanceFinding: (PerformanceResult, () -> Boolean) -> Unit,
-    val openPerformanceSource: (PerformanceResult) -> Unit,
+    val openPerformanceSource: (PerformanceResult, () -> Boolean) -> Unit,
     val loadGoBenchmarks: () -> Unit,
     val selectGoBenchmark: (GoBenchmarkChoice) -> Unit,
     val compareSelectedGoBenchmark: () -> Unit,
@@ -1453,7 +1453,11 @@ private fun DesktopCanvas(
                           result,
                           performanceSelectionGuard(performancePage, performanceBrowser, result))
                     },
-                    openSource = analysisActions.openPerformanceSource,
+                    openSource = { result ->
+                      analysisActions.openPerformanceSource(
+                          result,
+                          performanceSelectionGuard(performancePage, performanceBrowser, result))
+                    },
                     loadBenchmarks = analysisActions.loadGoBenchmarks,
                     selectBenchmark = analysisActions.selectGoBenchmark,
                     runBenchmark = analysisActions.compareSelectedGoBenchmark,

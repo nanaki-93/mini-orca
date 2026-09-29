@@ -833,12 +833,13 @@ internal fun MiniOrcaApp(
               cancelAnalysis = presenter::cancelAnalysis,
               startScan = presenter::runVerifiedScan,
               cancelScan = presenter::cancelVerifiedScan,
-              openPerformanceSource = { result ->
+              openPerformanceSource = { result, selectionCurrent ->
                 routePerformanceSourceRequest(
                     presenter,
                     result,
                     chatMessage,
                     advancedConstraints,
+                    selectionCurrent,
                     { chatMessage to advancedConstraints },
                     ::clearComposerInput) {
                       pendingDraftDiscard = it
@@ -1034,11 +1035,12 @@ internal fun routePerformanceSourceRequest(
     result: PerformanceResult,
     message: TextFieldValue,
     constraints: TextFieldValue,
+    selectionCurrent: () -> Boolean,
     currentInput: () -> Pair<TextFieldValue, TextFieldValue>,
     clearComposer: () -> Unit,
     pending: (PendingDraftDiscard.PerformanceSource) -> Unit,
 ) {
-  val intent = presenter.performanceSourceIntent(result)
+  val intent = presenter.performanceSourceIntent(result, selectionCurrent)
   if (intent != null &&
       intent.selectedFile?.path != intent.target.path &&
       (intent.draft.hasWork || message.text.isNotEmpty() || constraints.text.isNotEmpty()))
@@ -1046,7 +1048,7 @@ internal fun routePerformanceSourceRequest(
           PendingDraftDiscard.PerformanceSource(
               intent, currentEditIdentity(presenter.snapshot.value.state), message, constraints))
   else
-      presenter.openPerformanceFinding(result) {
+      presenter.openPerformanceFinding(result, selectionCurrent) {
         if (currentInput() == (message to constraints)) clearComposer()
       }
 }

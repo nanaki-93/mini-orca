@@ -2074,7 +2074,13 @@ class DesktopWorkflowPresenterTest {
       }
       fun route() {
         routePerformanceSourceRequest(
-            presenter, result, message, constraints, { message to constraints }, ::clear) {
+            presenter,
+            result,
+            message,
+            constraints,
+            { true },
+            { message to constraints },
+            ::clear) {
               pending = it
             }
         val approval = requireNotNull(pending)
@@ -2217,6 +2223,59 @@ class DesktopWorkflowPresenterTest {
       assertTrue(calls.isEmpty())
     } finally {
       presenter.close()
+    }
+  }
+
+  @Test
+  fun typedPerformanceSourceDropsLateSuccessAndFailureAfterSelectionOrIndexChanges() {
+    for (change in listOf("selection", "selection-failure", "index", "index-failure")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      var loaded = 0
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+            when {
+              path.contains("files/info?") ->
+                  if (change.endsWith("failure")) TransportResponse(503, "")
+                  else response(fileJson("main.go", "base"))
+              path.contains("files/symbols?") -> response(symbolsJson("main.go", "Run"))
+              else -> error("Unexpected request $path")
+            }
+          }
+      try {
+        val page = performancePageFixture()
+        val index = resultIndexFixture()
+        presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), index))
+        presenter.dispatch(
+            DesktopEvent.AnalysisRunUpdated(
+                ProjectAnalysisRunState(
+                    run = page.run,
+                    sections = mapOf(AnalysisResultKey("performance") to page.section))))
+        val currentPage = presenter.snapshot.value.state.analysisResultPage("performance")
+        val result = performanceResults(currentPage).single()
+        val browser = newResultBrowserState(currentPage)
+        browser.selectedKey = result.row().key
+        val guard = performanceSelectionGuard(currentPage, browser, result)
+        presenter.openPerformanceFinding(result, guard) { loaded++ }
+        main.runPending()
+        if (change.startsWith("selection")) browser.selectedKey = "different-row"
+        else
+            presenter.dispatch(
+                DesktopEvent.IndexRefreshed(
+                    index.copy(files = index.files.map { it.copy(contentHash = "changed") })))
+        io.runPending()
+        main.runPending()
+        val state = presenter.snapshot.value.state
+        assertNull(state.selectedFile, change)
+        assertNull(state.selection.fileReadError, change)
+        assertNull(state.jobs.error, change)
+        assertTrue(state.preparedRequest.isBlank(), change)
+        assertEquals(0, loaded, change)
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
     }
   }
 
