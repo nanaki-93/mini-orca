@@ -895,7 +895,8 @@ class ResultWorkspaceLayoutTest {
     ComposeVisualFixture(800, 650, 1.5f) {
           SecurityWorkspacePane(
               SecurityWorkspacePaneState(page, resultIndexFixture()),
-              SecurityWorkspaceActions({}, {}, FindingActions({}, { _, _ -> }, {})))
+              SecurityWorkspaceActions(
+                  { _, _ -> }, { _, _ -> }, {}, FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render()
@@ -927,7 +928,8 @@ class ResultWorkspaceLayoutTest {
     ComposeVisualFixture(800, 650) {
           SecurityWorkspacePane(
               SecurityWorkspacePaneState(provenance, resultIndexFixture()),
-              SecurityWorkspaceActions({}, {}, FindingActions({}, { _, _ -> }, {})))
+              SecurityWorkspaceActions(
+                  { _, _ -> }, { _, _ -> }, {}, FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render()
@@ -952,7 +954,8 @@ class ResultWorkspaceLayoutTest {
       ComposeVisualFixture(800, 650) {
             SecurityWorkspacePane(
                 SecurityWorkspacePaneState(findingFree, resultIndexFixture()),
-                SecurityWorkspaceActions({}, {}, FindingActions({}, { _, _ -> }, {})))
+                SecurityWorkspaceActions(
+                    { _, _ -> }, { _, _ -> }, {}, FindingActions({}, { _, _ -> }, {})))
           }
           .use { fixture ->
             fixture.render()
@@ -991,7 +994,8 @@ class ResultWorkspaceLayoutTest {
     ComposeVisualFixture(800, 650, 1.5f) {
           SecurityWorkspacePane(
               SecurityWorkspacePaneState(empty, resultIndexFixture()),
-              SecurityWorkspaceActions({}, {}, FindingActions({}, { _, _ -> }, {})))
+              SecurityWorkspaceActions(
+                  { _, _ -> }, { _, _ -> }, {}, FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render()
@@ -1014,7 +1018,8 @@ class ResultWorkspaceLayoutTest {
     ComposeVisualFixture(800, 650, 1.5f) {
           SecurityWorkspacePane(
               SecurityWorkspacePaneState(unavailable, resultIndexFixture()),
-              SecurityWorkspaceActions({}, {}, FindingActions({}, { _, _ -> }, {})))
+              SecurityWorkspaceActions(
+                  { _, _ -> }, { _, _ -> }, {}, FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render()
@@ -1081,11 +1086,21 @@ class ResultWorkspaceLayoutTest {
                 original.section.copy(
                     results = original.results!!.copy(security = listOf(rule, ai))))
     var privileged = 0
+    var inspected: SecurityResult? = null
+    var selectionCurrent: (() -> Boolean)? = null
+    val browser = newResultBrowserState(page)
     ComposeVisualFixture(800, 650, 1.5f) {
           SecurityWorkspacePane(
-              SecurityWorkspacePaneState(page, resultIndexFixture()),
+              SecurityWorkspacePaneState(page, resultIndexFixture(), browser),
               SecurityWorkspaceActions(
-                  { privileged++ }, { privileged++ }, FindingActions({}, { _, _ -> }, {})))
+                  { _, _ -> privileged++ },
+                  { result, guard ->
+                    inspected = result
+                    selectionCurrent = guard
+                    privileged++
+                  },
+                  { privileged++ },
+                  FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render()
@@ -1149,6 +1164,18 @@ class ResultWorkspaceLayoutTest {
           assertTrue(fixture.hasText("Generated at"))
           assertFalse(fixture.hasText("2026-01-02T03:04:05Z"))
           assertEquals(0, privileged)
+          fixture.revealText("Open source", "result-detail")
+          fixture.clickText("Open source")
+          assertEquals("ai", inspected?.report?.source)
+          assertTrue(
+              requireNotNull(selectionCurrent)(),
+              "selected=${browser.selectedKey}, expected=${inspected?.rowKey}, filter=${browser.filter}, query=${browser.query}")
+          assertEquals(1, privileged)
+          fixture.clickDescription("Filter results")
+          fixture.setFocusedText("no matching result")
+          fixture.render()
+          assertFalse(requireNotNull(selectionCurrent)())
+          assertEquals(1, privileged)
         }
   }
 
@@ -1181,7 +1208,8 @@ class ResultWorkspaceLayoutTest {
     ComposeVisualFixture(800, 400, 1.5f) {
           SecurityWorkspacePane(
               SecurityWorkspacePaneState(populated, resultIndexFixture()),
-              SecurityWorkspaceActions({ fixes++ }, {}, FindingActions({}, { _, _ -> }, {})))
+              SecurityWorkspaceActions(
+                  { _, _ -> fixes++ }, { _, _ -> }, {}, FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render("security-detail-compact-800-400-150")
@@ -1216,7 +1244,8 @@ class ResultWorkspaceLayoutTest {
     ComposeVisualFixture(800, 400, 1.5f) {
           SecurityWorkspacePane(
               SecurityWorkspacePaneState(stale, resultIndexFixture()),
-              SecurityWorkspaceActions({ fixes++ }, {}, FindingActions({}, { _, _ -> }, {})))
+              SecurityWorkspaceActions(
+                  { _, _ -> fixes++ }, { _, _ -> }, {}, FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render("security-detail-stale-800-400-150")

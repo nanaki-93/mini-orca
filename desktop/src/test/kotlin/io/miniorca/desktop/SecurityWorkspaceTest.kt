@@ -63,8 +63,12 @@ class SecurityWorkspaceTest {
                                     confidence = "exact",
                                     atomicTarget = true)))))
     assertEquals(
-        EditorNavigationTarget("main.go", "Run", 2),
+        EditorNavigationTarget("main.go", line = 2),
         securityFindingNavigationTarget(finding, index))
+    assertEquals(
+        EditorNavigationTarget("main.go", line = 2),
+        securityFindingNavigationTarget(
+            finding.copy(anchor = finding.anchor.copy(symbol = "NoLongerIndexed")), index))
     assertNull(
         securityFindingNavigationTarget(
             finding.copy(anchor = finding.anchor.copy(path = "other.go")), index))

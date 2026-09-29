@@ -266,7 +266,8 @@ internal data class DesktopShellAnalysisActions(
     val loadGoBenchmarks: () -> Unit,
     val selectGoBenchmark: (GoBenchmarkChoice) -> Unit,
     val compareSelectedGoBenchmark: () -> Unit,
-    val prepareSecurityFinding: (SecurityFinding) -> Unit,
+    val prepareSecurityFinding: (SecurityResult, () -> Boolean) -> Unit,
+    val openSecuritySource: (SecurityResult, () -> Boolean) -> Unit,
 )
 
 internal data class DesktopShellPaletteActions(
@@ -1467,6 +1468,7 @@ private fun DesktopCanvas(
                     openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
                     semanticActions = findingActions,
                     prepareFix = analysisActions.prepareSecurityFinding,
+                    openSource = analysisActions.openSecuritySource,
                     retryResults = { analysisActions.retryResults("security", "") }),
             modifier = Modifier.fillMaxSize(),
         )

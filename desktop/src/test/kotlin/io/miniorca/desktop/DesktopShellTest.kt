@@ -148,7 +148,8 @@ class DesktopShellTest {
                       loadGoBenchmarks = { operations += "benchmarks" },
                       selectGoBenchmark = { operations += "benchmark selection" },
                       compareSelectedGoBenchmark = { operations += "checks" },
-                      prepareSecurityFinding = { operations += "prepare" }),
+                      prepareSecurityFinding = { _, _ -> operations += "prepare" },
+                      openSecuritySource = { _, _ -> operations += "source" }),
               findingActions =
                   FindingActions(
                       { operations += "finding" }, { _, _ -> operations += "finding" }, {}),

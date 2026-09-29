@@ -81,6 +81,15 @@ internal sealed interface PendingDraftDiscard {
     override val nextLabel: String = "open ${intent.target.path}"
   }
 
+  data class SecuritySource(
+      val intent: DesktopWorkflowPresenter.SecuritySourceIntent,
+      override val currentDraft: CurrentEditIdentity?,
+      val chatMessage: TextFieldValue,
+      val constraints: TextFieldValue,
+  ) : PendingDraftDiscard {
+    override val nextLabel: String = "open ${intent.target.path}"
+  }
+
   data class Finding(
       val intent: DesktopWorkflowPresenter.FindingIntent,
       override val currentDraft: CurrentEditIdentity?,
@@ -860,9 +869,20 @@ internal fun MiniOrcaApp(
               loadGoBenchmarks = presenter::loadGoBenchmarks,
               selectGoBenchmark = presenter::selectGoBenchmark,
               compareSelectedGoBenchmark = presenter::compareSelectedGoBenchmark,
-              prepareSecurityFinding = { finding ->
-                clearComposerInput()
-                presenter.prepareSecurityFinding(finding)
+              prepareSecurityFinding = { result, _ ->
+                presenter.prepareSecurityFinding(result.finding)
+              },
+              openSecuritySource = { result, selectionCurrent ->
+                routeSecuritySourceRequest(
+                    presenter,
+                    result,
+                    chatMessage,
+                    advancedConstraints,
+                    selectionCurrent,
+                    { chatMessage to advancedConstraints },
+                    ::clearComposerInput) {
+                      pendingDraftDiscard = it
+                    }
               },
           ),
       findingActions = findingActions,
@@ -982,6 +1002,9 @@ private fun continueAfterDraftDiscard(
     is PendingDraftDiscard.PerformanceSource ->
         confirmPerformanceSourceDiscard(
             presenter, pending, message, constraints, currentInput, clearComposer)
+    is PendingDraftDiscard.SecuritySource ->
+        confirmSecuritySourceDiscard(
+            presenter, pending, message, constraints, currentInput, clearComposer)
     is PendingDraftDiscard.Finding ->
         confirmFindingDiscard(presenter, pending, message, constraints, clearComposer)
     null -> Unit
@@ -1068,6 +1091,48 @@ internal fun confirmPerformanceSourceDiscard(
   presenter.confirmPerformanceSourceIntent(pending.intent) {
     if (currentInput() == (pending.chatMessage to pending.constraints)) clearComposer()
   }
+}
+
+internal fun routeSecuritySourceRequest(
+    presenter: DesktopWorkflowPresenter,
+    result: SecurityResult,
+    message: TextFieldValue,
+    constraints: TextFieldValue,
+    selectionCurrent: () -> Boolean,
+    currentInput: () -> Pair<TextFieldValue, TextFieldValue>,
+    clearComposer: () -> Unit,
+    pending: (PendingDraftDiscard.SecuritySource) -> Unit,
+) {
+  val intent = presenter.securitySourceIntent(result, selectionCurrent)
+  if (intent != null &&
+      intent.selectedFile?.path != intent.target.path &&
+      (intent.draft.hasWork || message.text.isNotEmpty() || constraints.text.isNotEmpty()))
+      pending(
+          PendingDraftDiscard.SecuritySource(
+              intent, currentEditIdentity(presenter.snapshot.value.state), message, constraints))
+  else
+      presenter.openSecurityFinding(
+          result, selectionCurrent, { currentInput() == (message to constraints) }) {
+            if (currentInput() == (message to constraints)) clearComposer()
+          }
+}
+
+internal fun confirmSecuritySourceDiscard(
+    presenter: DesktopWorkflowPresenter,
+    pending: PendingDraftDiscard.SecuritySource,
+    message: TextFieldValue,
+    constraints: TextFieldValue,
+    currentInput: () -> Pair<TextFieldValue, TextFieldValue>,
+    clearComposer: () -> Unit,
+) {
+  if (pending.chatMessage != message || pending.constraints != constraints) {
+    presenter.dispatch(DesktopEvent.Failed("Assistant input changed. Choose Open source again."))
+    return
+  }
+  presenter.confirmSecuritySourceIntent(
+      pending.intent, { currentInput() == (pending.chatMessage to pending.constraints) }) {
+        if (currentInput() == (pending.chatMessage to pending.constraints)) clearComposer()
+      }
 }
 
 private fun routeFindingRequest(

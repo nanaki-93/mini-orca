@@ -942,19 +942,131 @@ class DesktopWorkflowPresenter(
 
   fun reviewSecurity() = previewAnalysis()
 
-  fun openSecurityFinding(finding: SecurityFinding) {
+  internal data class SecuritySourceIntent(
+      val result: SecurityResult,
+      val target: EditorNavigationTarget,
+      val project: SwitchProjectIdentity,
+      val index: ProjectIndex,
+      val draft: SwitchDraftIdentity,
+      val selectedFile: ProjectFileInfo?,
+      val selectionCurrent: () -> Boolean,
+  )
+
+  internal fun securitySourceIntent(
+      result: SecurityResult,
+      selectionCurrent: () -> Boolean = { true },
+  ): SecuritySourceIntent? {
+    if (!selectionCurrent()) return null
     val state = snapshot.value.state
-    val target =
-        finding
-            .takeIf {
-              securityResults(state.analysisResultPage("security")).any { result ->
-                result.finding == it
-              } || securityFindingIsCurrent(it, state)
+    val page = state.analysisResultPage("security")
+    val target = securitySourceTarget(result, page, state.index) ?: return null
+    return SecuritySourceIntent(
+        result,
+        target,
+        SwitchProjectIdentity(state.project ?: return null),
+        state.index ?: return null,
+        SwitchDraftIdentity(state.chat.session, state.review.draft, state.review.editor),
+        state.selectedFile,
+        selectionCurrent)
+  }
+
+  private fun currentSecuritySource(intent: SecuritySourceIntent): Boolean =
+      snapshot.value.state.index === intent.index &&
+          securitySourceIntent(intent.result, intent.selectionCurrent) == intent
+
+  internal fun openSecurityFinding(
+      result: SecurityResult,
+      selectionCurrent: () -> Boolean = { true },
+      inputCurrent: () -> Boolean = { true },
+      onLoaded: () -> Unit = {},
+  ) {
+    val intent = securitySourceIntent(result, selectionCurrent)
+    if (intent == null) {
+      dispatch(
+          DesktopEvent.Failed(
+              "This Security result or its source range is missing, invalid or ambiguous in the active project. Refresh the results or index."))
+      return
+    }
+    if (intent.selectedFile?.path != intent.target.path && intent.draft.hasWork) {
+      dispatch(
+          DesktopEvent.Failed("Confirm discarding the current draft before opening this source."))
+      return
+    }
+    loadSecuritySource(intent, inputCurrent, onLoaded)
+  }
+
+  internal fun confirmSecuritySourceIntent(
+      intent: SecuritySourceIntent,
+      inputCurrent: () -> Boolean = { true },
+      onLoaded: () -> Unit = {},
+  ): Boolean {
+    if (!currentSecuritySource(intent) || !inputCurrent()) {
+      dispatch(
+          DesktopEvent.Failed(
+              "The Security result, selection or input changed. Choose Open source again."))
+      return false
+    }
+    loadSecuritySource(intent, inputCurrent, onLoaded)
+    return true
+  }
+
+  private var securitySourceGeneration = 0L
+
+  private fun loadSecuritySource(
+      intent: SecuritySourceIntent,
+      inputCurrent: () -> Boolean,
+      onLoaded: () -> Unit,
+  ) {
+    val attempt = ++securitySourceGeneration
+    val generation = preparationSelectionGeneration
+    val fileRequest = controller.currentFileRequest()
+    fun current(): Boolean =
+        attempt == securitySourceGeneration &&
+            generation == preparationSelectionGeneration &&
+            controller.currentFileRequest() == fileRequest &&
+            inputCurrent() &&
+            currentSecuritySource(intent)
+    if (intent.selectedFile?.path == intent.target.path) {
+      if (current()) {
+        dispatch(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
+        dispatch(DesktopEvent.EditorContextSelected(null, intent.target.line))
+      }
+      return
+    }
+    fileJob?.cancel()
+    fileJob =
+        scope.launch {
+          try {
+            val (file, response) =
+                io { api.fileInfo(intent.target.path) to api.symbols(intent.target.path) }
+            if (!current()) return@launch
+            if (file.path != intent.target.path ||
+                file.lineCount < intent.result.finding.anchor.endLine ||
+                response.path != intent.target.path ||
+                response.projectId != intent.project.id ||
+                response.projectRevision != intent.project.revision) {
+              dispatch(
+                  DesktopEvent.Failed(
+                      "Loaded source does not contain the reported range or belongs to another project or file. Choose Open source again."))
+              return@launch
             }
-            ?.let { securityFindingNavigationTarget(it, state.index) }
-    if (target == null)
-        dispatch(DesktopEvent.Failed("This security finding no longer points to an indexed file."))
-    else openFileInEditor(target.path, target)
+            invalidateFileSelectionWork()
+            val request = controller.beginFileLoad(intent.target.path) ?: return@launch
+            if (!controller.fileLoaded(request, file, response.symbols)) return@launch
+            publish()
+            dispatch(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
+            dispatch(DesktopEvent.EditorContextSelected(null, intent.target.line))
+            onLoaded()
+            controller.currentFileRequest()?.let(::loadFileEnrichments)
+          } catch (canceled: CancellationException) {
+            throw canceled
+          } catch (error: Exception) {
+            if (current())
+                dispatch(
+                    DesktopEvent.Failed(
+                        error.message?.takeIf(String::isNotBlank) ?: "Source read failed"))
+          }
+        }
   }
 
   fun prepareSecurityFinding(finding: SecurityFinding) =

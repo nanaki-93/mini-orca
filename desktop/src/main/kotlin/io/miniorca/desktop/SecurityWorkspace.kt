@@ -20,7 +20,8 @@ internal data class SecurityWorkspacePaneState(
 )
 
 internal data class SecurityWorkspaceActions(
-    val prepareFix: (SecurityFinding) -> Unit,
+    val prepareFix: (SecurityResult, () -> Boolean) -> Unit,
+    val openSource: (SecurityResult, () -> Boolean) -> Unit,
     val openAnalysis: () -> Unit,
     val semanticActions: FindingActions,
     val retryResults: (() -> Unit)? = null,
@@ -106,6 +107,24 @@ internal val SecurityEvidencePresentation.warning: String
         SecurityEvidencePresentation.Unavailable ->
             "Evidence type was unavailable. Do not treat this finding as verified."
       }
+
+internal fun securitySelectionGuard(
+    page: AnalysisResultPageState,
+    browser: ResultBrowserState,
+    result: SecurityResult,
+): () -> Boolean {
+  val generation = browser.selectionGeneration
+  return {
+    browser.selectionGeneration == generation &&
+        resultBrowserSelection(
+            browser.selectedKey,
+            filteredResultRows(
+                securityResults(page).map { it.row() } + page.semantic.map(::semanticResultRow),
+                browser.filter,
+                browser.query),
+            browser.explicitTarget) == result.rowKey
+  }
+}
 
 internal fun securityResults(page: AnalysisResultPageState): List<SecurityResult> =
     page.results
@@ -200,9 +219,27 @@ internal fun securityFindingNavigationTarget(
     index: ProjectIndex?,
 ): EditorNavigationTarget? {
   val path = finding.anchor.path
-  val file = index?.files?.firstOrNull { it.path == path } ?: return null
-  if (!securityAnchorIsValid(finding.anchor, file)) return null
-  return EditorNavigationTarget(path, finding.anchor.symbol, finding.anchor.startLine)
+  val file = index?.files?.singleOrNull { it.path == path } ?: return null
+  if (finding.anchor.startLine < 1 ||
+      finding.anchor.endLine < finding.anchor.startLine ||
+      finding.anchor.endLine > file.lineCount)
+      return null
+  return EditorNavigationTarget(path, line = finding.anchor.startLine)
+}
+
+internal fun securitySourceTarget(
+    result: SecurityResult,
+    page: AnalysisResultPageState,
+    index: ProjectIndex?,
+): EditorNavigationTarget? {
+  val project = page.project ?: return null
+  if (!securityResultIsLoaded(result, page) ||
+      index?.projectId != project.projectId ||
+      index.projectRevision != project.projectRevision ||
+      result.report.projectId != project.projectId ||
+      result.report.path != result.finding.anchor.path)
+      return null
+  return securityFindingNavigationTarget(result.finding, index)
 }
 
 internal fun securityAnchorIsValid(anchor: SecuritySourceAnchor, file: IndexedFile): Boolean =
@@ -375,7 +412,8 @@ internal fun SecurityWorkspacePane(
                   "Multiple results share this finding identity; no action is available.",
                   color = Warning,
                   style = IdeTypography.compactBody)
-          matches.size == 1 -> SecurityFindingDetails(matches.single(), state.index, actions)
+          matches.size == 1 ->
+              SecurityFindingDetails(matches.single(), state.index, actions, state.browser)
           semanticMatches.size == 1 ->
               semanticMatches.single().let {
                 FindingDetailsRegion(
@@ -426,7 +464,8 @@ private fun SecurityDetailField(label: String, value: String) {
 private fun SecurityFindingDetails(
     result: SecurityResult,
     index: ProjectIndex?,
-    actions: SecurityWorkspaceActions
+    actions: SecurityWorkspaceActions,
+    browser: ResultBrowserState,
 ) {
   val finding = result.finding
   val evidence = securityEvidencePresentation(result)
@@ -474,7 +513,15 @@ private fun SecurityFindingDetails(
           Text(result.report.reason, color = Warning, style = IdeTypography.compactBody)
         }
     MiniOrcaButton(
-        onClick = { actions.prepareFix(finding) },
+        onClick = {
+          actions.openSource(result, securitySelectionGuard(result.page, browser, result))
+        }) {
+          Text("Open source")
+        }
+    MiniOrcaButton(
+        onClick = {
+          actions.prepareFix(result, securitySelectionGuard(result.page, browser, result))
+        },
         enabled = preparation is SecurityPreparationDecision.Eligible,
         tone = ActionTone.Primary) {
           Text("Prepare fix")
