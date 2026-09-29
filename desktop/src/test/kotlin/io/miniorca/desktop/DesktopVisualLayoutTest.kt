@@ -3222,7 +3222,8 @@ class DesktopVisualLayoutTest {
                             PerformanceWorkspaceActions(
                                 { _, _ -> externalActions++ },
                                 { navigation += Workspace.Analysis },
-                                findingActions))
+                                findingActions,
+                                openSource = { externalActions++ }))
                     "security" ->
                         SecurityWorkspacePane(
                             SecurityWorkspacePaneState(page, resultIndexFixture()),
@@ -3277,7 +3278,7 @@ class DesktopVisualLayoutTest {
                   if (category == "bugs") {
                     assertTrue(fixture.hasText("Open source"))
                     assertTrue(fixture.isDisabled("Open source"))
-                  } else assertFalse(fixture.hasText("Open source"))
+                  } else assertEquals(category == "performance", fixture.hasText("Open source"))
                   assertEquals(0, externalActions)
                   val nextRun =
                       original.run!!.copy(identity = original.run.identity.copy(id = "next-run"))
@@ -3714,7 +3715,8 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(800, 650, 1.25f) {
           PerformanceWorkspacePane(
               PerformanceWorkspacePaneState(stale, resultIndexFixture()),
-              PerformanceWorkspaceActions({ _, _ -> }, {}, FindingActions({}, { _, _ -> }, {})))
+              PerformanceWorkspaceActions(
+                  { _, _ -> }, {}, FindingActions({}, { _, _ -> }, {}), openSource = {}))
         }
         .use { fixture ->
           fixture.render("results-stale-error-800-1.25")
@@ -3784,7 +3786,8 @@ class DesktopVisualLayoutTest {
                     benchmarkComparison = comparison,
                     expectedBenchmarkIdentity = identity,
                     selectedBenchmark = choice),
-                PerformanceWorkspaceActions({ _, _ -> }, {}, FindingActions({}, { _, _ -> }, {})))
+                PerformanceWorkspaceActions(
+                    { _, _ -> }, {}, FindingActions({}, { _, _ -> }, {}), openSource = {}))
           }
           .use { fixture ->
             fixture.render("performance-benchmark-$width-$height-$scale")

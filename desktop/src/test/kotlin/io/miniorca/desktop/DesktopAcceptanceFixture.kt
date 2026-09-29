@@ -264,6 +264,7 @@ private fun NativeRoundedWorkspace(terminal: DesktopTerminalWorkspace, directory
                 startScan = { record("Scan") },
                 cancelScan = { record("Cancel scan") },
                 preparePerformanceFinding = { _, _ -> record("Performance finding") },
+                openPerformanceSource = { record("Performance source") },
                 loadGoBenchmarks = { record("Benchmarks") },
                 selectGoBenchmark = { record("Select benchmark") },
                 compareSelectedGoBenchmark = { record("Compare benchmark") },
@@ -435,7 +436,7 @@ internal fun AcceptanceResultPane(category: String, status: String) {
     "performance" ->
         PerformanceWorkspacePane(
             PerformanceWorkspacePaneState(page, resultIndexFixture()),
-            PerformanceWorkspaceActions({ _, _ -> }, {}, actions))
+            PerformanceWorkspaceActions({ _, _ -> }, {}, actions, openSource = {}))
     "security" ->
         SecurityWorkspacePane(
             SecurityWorkspacePaneState(page, resultIndexFixture()),

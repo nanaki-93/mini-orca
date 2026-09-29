@@ -799,7 +799,7 @@ class ResultWorkspaceLayoutTest {
           PerformanceWorkspacePane(
               PerformanceWorkspacePaneState(stale, resultIndexFixture()),
               PerformanceWorkspaceActions(
-                  { _, _ -> fixes++ }, {}, FindingActions({}, { _, _ -> }, {})))
+                  { _, _ -> fixes++ }, {}, FindingActions({}, { _, _ -> }, {}), openSource = {}))
         }
         .use { fixture ->
           fixture.render("rounded-results-long-error-800-150")
@@ -842,7 +842,7 @@ class ResultWorkspaceLayoutTest {
           PerformanceWorkspacePane(
               PerformanceWorkspacePaneState(populated, resultIndexFixture()),
               PerformanceWorkspaceActions(
-                  { _, _ -> fixes++ }, {}, FindingActions({}, { _, _ -> }, {})))
+                  { _, _ -> fixes++ }, {}, FindingActions({}, { _, _ -> }, {}), openSource = {}))
         }
         .use { fixture ->
           fixture.render("performance-detail-compact-800-400-150")
