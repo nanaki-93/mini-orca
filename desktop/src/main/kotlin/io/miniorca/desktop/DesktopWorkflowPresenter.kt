@@ -421,13 +421,17 @@ class DesktopWorkflowPresenter(
       preparedTaskSpec: BugTaskSpec? = null,
       preparationFinding: UnifiedFinding? = null,
       inspectionResult: PerformanceResult? = null,
+      inspectionCurrent: () -> Boolean = { true },
       onInspectionLoaded: (() -> Unit)? = null,
   ) {
     invalidateFileSelectionWork()
     val request = controller.beginFileLoad(path) ?: return
     val selectionGeneration = preparationSelectionGeneration
     fun obsoletePreparation(): Boolean {
-      if (inspectionResult != null && performanceSourceTarget(inspectionResult) != editorTarget)
+      if (inspectionResult != null &&
+          (selectionGeneration != preparationSelectionGeneration ||
+              !inspectionCurrent() ||
+              performanceSourceTarget(inspectionResult) != editorTarget))
           return true
       if (preparationFinding == null) return false
       if (selectionGeneration != preparationSelectionGeneration) return true
@@ -684,6 +688,8 @@ class DesktopWorkflowPresenter(
       val draft: SwitchDraftIdentity,
       val selectedFile: ProjectFileInfo?,
       val target: EditorNavigationTarget,
+      val index: ProjectIndex,
+      val selectionCurrent: () -> Boolean,
   )
 
   private fun performanceSourceTarget(result: PerformanceResult): EditorNavigationTarget? {
@@ -708,7 +714,11 @@ class DesktopWorkflowPresenter(
         result.report.path, line = result.finding.startLine.takeIf { it > 0 } ?: 0)
   }
 
-  internal fun performanceSourceIntent(result: PerformanceResult): PerformanceSourceIntent? {
+  internal fun performanceSourceIntent(
+      result: PerformanceResult,
+      selectionCurrent: () -> Boolean = { true },
+  ): PerformanceSourceIntent? {
+    if (!selectionCurrent()) return null
     val state = snapshot.value.state
     val target = performanceSourceTarget(result) ?: return null
     return PerformanceSourceIntent(
@@ -717,11 +727,21 @@ class DesktopWorkflowPresenter(
         SwitchProjectIdentity(state.project!!),
         SwitchDraftIdentity(state.chat.session, state.review.draft, state.review.editor),
         state.selectedFile,
-        target)
+        target,
+        state.index!!,
+        selectionCurrent)
   }
 
-  internal fun openPerformanceFinding(result: PerformanceResult, onLoaded: (() -> Unit)? = null) {
-    val intent = performanceSourceIntent(result)
+  private fun currentPerformanceSource(intent: PerformanceSourceIntent): Boolean =
+      snapshot.value.state.index === intent.index &&
+          performanceSourceIntent(intent.result, intent.selectionCurrent) == intent
+
+  internal fun openPerformanceFinding(
+      result: PerformanceResult,
+      selectionCurrent: () -> Boolean = { true },
+      onLoaded: (() -> Unit)? = null,
+  ) {
+    val intent = performanceSourceIntent(result, selectionCurrent)
     if (intent == null) {
       dispatch(
           DesktopEvent.Failed(
@@ -743,6 +763,9 @@ class DesktopWorkflowPresenter(
           intent.target.path,
           intent.target,
           inspectionResult = result,
+          inspectionCurrent = {
+            snapshot.value.state.index === intent.index && intent.selectionCurrent()
+          },
           onInspectionLoaded = onLoaded)
     }
   }
@@ -751,12 +774,12 @@ class DesktopWorkflowPresenter(
       intent: PerformanceSourceIntent,
       onLoaded: (() -> Unit)? = null,
   ): Boolean {
-    if (performanceSourceIntent(intent.result) != intent) {
+    if (!currentPerformanceSource(intent)) {
       dispatch(DesktopEvent.Failed("The opportunity or draft changed. Choose Open source again."))
       return false
     }
     if (intent.selectedFile?.path != intent.target.path && intent.draft.hasWork) discardDraft()
-    openPerformanceFinding(intent.result, onLoaded)
+    openPerformanceFinding(intent.result, intent.selectionCurrent, onLoaded)
     return true
   }
 

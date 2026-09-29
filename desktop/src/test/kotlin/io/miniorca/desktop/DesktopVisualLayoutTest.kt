@@ -3881,6 +3881,159 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun f18ProductionBrowserStatesRemainReachableAcrossViewportsTextAndDensity() {
+    val original = performancePageFixture()
+    val longPath = "internal/" + "deeply/nested/日本語/".repeat(5) + "handler.go"
+    val report = original.results!!.performance.single()
+    val populated =
+        original.copy(
+            section =
+                original.section.copy(
+                    results =
+                        original.results!!.copy(
+                            performance =
+                                listOf(
+                                    report.copy(
+                                        path = longPath,
+                                        findings =
+                                            (1..12).map { n ->
+                                              report.findings
+                                                  .single()
+                                                  .copy(
+                                                      id = "perf-$n",
+                                                      title = "Repeated allocation $n")
+                                            })))))
+    val sizes =
+        listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600) +
+            listOf(627 to 768, 629 to 768, 937 to 768, 939 to 768)
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      if (width in listOf(627, 629) && scale != 1f || width in listOf(937, 939) && scale != 1.5f)
+          continue
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        val label = "f18-performance-$width-$height-$scale-${density}x"
+        var page by mutableStateOf(populated)
+        val browser = newResultBrowserState(page)
+        ComposeVisualFixture(
+                (width * density).toInt(), (height * density).toInt(), scale, density) {
+                  PerformanceWorkspacePane(
+                      PerformanceWorkspacePaneState(page, resultIndexFixture(), browser = browser),
+                      PerformanceWorkspaceActions(
+                          { error("Passive render prepared a fix") },
+                          {},
+                          FindingActions(
+                              { error("Passive render prepared a semantic fix") },
+                              { _, _ -> error("Passive render changed triage") },
+                              { error("Passive render opened source") }),
+                          openSource = { error("Passive render opened source") },
+                          loadBenchmarks = { error("Passive render listed benchmarks") },
+                          selectBenchmark = { error("Passive render selected benchmark") },
+                          runBenchmark = { error("Passive render ran benchmark") }))
+                }
+            .use { fixture ->
+              fixture.render("$label-populated")
+              fixture.revealText("Repeated allocation 12", "result-list")
+              assertTrue(fixture.hasDescription("Inspect Repeated allocation 12"), label)
+              fixture.clickDescription("Inspect Repeated allocation 12")
+              fixture.render("$label-selected")
+              assertTrue(fixture.hasText("$longPath:4 · Run"), label)
+              fixture.revealText("Prepare fix", "result-detail")
+              assertTrue(fixture.isDisabled("Prepare fix"), label)
+              fixture.assertTextFits("Prepare fix")
+              fixture.clickText("Explore benchmark evidence")
+              fixture.render("$label-evidence")
+              assertTrue(
+                  fixture.hasText(
+                      "No benchmark evidence is available for the current candidate. Listing is read-only; running a benchmark requires explicit local execution."),
+                  label)
+              val list = fixture.taggedBounds("result-list")
+              val detail = fixture.taggedBounds("result-detail")
+              assertTrue(list.height > 0 && detail.height > 0, label)
+              assertTrue(list.right <= detail.left || list.bottom <= detail.top, label)
+              assertTrue(detail.bottom <= height * density, label)
+              browser.query = "absent title"
+              fixture.render("$label-no-match")
+              assertTrue(fixture.hasText("No matching results."), label)
+              browser.query = ""
+              page = populated.copy(section = populated.section.copy(error = "Saved read failed"))
+              fixture.render("$label-retained-error")
+              assertTrue(
+                  fixture.hasText("Results could not be refreshed: Saved read failed"), label)
+              assertTrue(fixture.hasText("12 loaded · 1 reported"), label)
+            }
+      }
+    }
+    val emptyProgress = original.progress!!.copy(status = "completed", findingCount = 0)
+    val emptyRun =
+        original.run!!.copy(
+            status = "completed",
+            sections =
+                original.run.sections.map {
+                  if (it.category == "performance") emptyProgress else it
+                })
+    val empty =
+        original.copy(
+            run = emptyRun,
+            section =
+                original.section.copy(
+                    results =
+                        original.results!!.copy(
+                            progress = emptyProgress, performance = emptyList())))
+    val cases =
+        listOf(
+            "empty" to (empty to "No findings in the analyzed scope."),
+            "unavailable" to
+                (empty.copy(
+                    run =
+                        emptyRun.copy(
+                            status = "unavailable",
+                            sections =
+                                emptyRun.sections.map {
+                                  if (it.category == "performance")
+                                      it.copy(status = "unavailable", findingCount = null)
+                                  else it
+                                }),
+                    section =
+                        empty.section.copy(
+                            results =
+                                empty.results!!.copy(
+                                    progress =
+                                        emptyProgress.copy(
+                                            status = "unavailable", findingCount = null)))) to
+                    "Analysis is unavailable for this category."),
+            "stale" to
+                (populated.copy(run = populated.run!!.copy(status = "stale")) to
+                    "Saved evidence may not match current source. Analyze again."),
+            "partial" to
+                (populated.copy(
+                    section =
+                        populated.section.copy(
+                            results =
+                                populated.results!!.copy(
+                                    performance = listOf(report.copy(status = "partial"))))) to
+                    "Partial report; some evidence may be missing."))
+    for ((name, expectation) in cases) {
+      val (page, text) = expectation
+      ComposeVisualFixture(800, 650, 1.5f) {
+            PerformanceWorkspacePane(
+                PerformanceWorkspacePaneState(page, resultIndexFixture()),
+                PerformanceWorkspaceActions(
+                    {}, {}, FindingActions({}, { _, _ -> }, {}), openSource = {}))
+          }
+          .use { fixture ->
+            fixture.render("f18-performance-$name-800-650-1.5-1x")
+            if (name == "stale" || name == "partial") {
+              fixture.clickDescription(
+                  if (name == "partial") "Inspect Avoid repeated allocation"
+                  else "Inspect Repeated allocation 1")
+              fixture.render()
+              fixture.revealText(text, "result-detail")
+            }
+            assertTrue(fixture.hasText(text), name)
+          }
+    }
+  }
+
+  @Test
   fun performanceBenchmarkStatusAndMeasurementDetailsRemainReadableAcrossLayouts() {
     val choice =
         GoBenchmarkChoice("BenchmarkRun", listOf("go", "test", "-bench", "^BenchmarkRun$"), "scope")

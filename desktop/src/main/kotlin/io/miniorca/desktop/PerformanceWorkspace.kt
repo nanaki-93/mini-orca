@@ -95,7 +95,8 @@ internal fun PerformanceWorkspacePane(
                   FindingDetailsRegion(
                       it,
                       actions.semanticActions,
-                      findingPreparationDecision(it, state.page.project, semantic, state.index))
+                      findingPreparationDecision(it, state.page.project, semantic, state.index),
+                      sourceAvailable = findingNavigationTarget(it, state.index) != null)
                 }
       }
 }

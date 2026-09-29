@@ -1550,7 +1550,7 @@ class DesktopKeyboardNavigationTest {
                 startScan = onOperation,
                 cancelScan = onOperation,
                 preparePerformanceFinding = { _, _ -> onOperation() },
-                openPerformanceSource = { onOperation() },
+                openPerformanceSource = { _, _ -> onOperation() },
                 loadGoBenchmarks = onOperation,
                 selectGoBenchmark = {},
                 compareSelectedGoBenchmark = onOperation,
@@ -1690,6 +1690,52 @@ class DesktopKeyboardNavigationTest {
           assertTrue(fixture.requestFocus("Prepare fix"))
           assertTrue(fixture.pressKey(Key.Enter))
           assertEquals(1, preparations)
+        }
+  }
+
+  @Test
+  fun semanticPerformanceSourceIsKeyboardReachableWithoutPreparingAndUnavailableWithoutIndex() {
+    val original = performancePageFixture()
+    val finding =
+        UnifiedFinding(
+            id = "semantic-source",
+            category = "performance",
+            projectId = "project",
+            projectRevision = "revision",
+            title = "Inspect repeated work",
+            location = FindingLocation("main.go", startLine = 7, symbol = "Run"))
+    val page =
+        original.copy(
+            section =
+                original.section.copy(
+                    results = original.results!!.copy(semantic = listOf(finding))))
+    var index by mutableStateOf<ProjectIndex?>(resultIndexFixture())
+    val browser = newResultBrowserState(page)
+    browser.choose(semanticResultRow(finding).key)
+    val opened = mutableListOf<UnifiedFinding>()
+    var prepared = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          PerformanceWorkspacePane(
+              PerformanceWorkspacePaneState(page, index, browser = browser),
+              PerformanceWorkspaceActions(
+                  prepareOptimization = { prepared++ },
+                  openAnalysis = {},
+                  semanticActions = FindingActions({ prepared++ }, { _, _ -> }, { opened += it }),
+                  openSource = {}))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("main.go:7 · Run"))
+          assertTrue(fixture.requestFocus("Open source"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(listOf(finding), opened)
+          assertEquals(0, prepared)
+
+          index = resultIndexFixture().copy(files = emptyList())
+          fixture.render()
+          assertTrue(fixture.isDisabled("Open source"))
+          assertTrue(fixture.hasText("Open source requires a path in the current project index."))
+          assertEquals(listOf(finding), opened)
         }
   }
 
