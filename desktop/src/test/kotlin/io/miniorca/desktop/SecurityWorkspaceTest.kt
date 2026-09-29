@@ -22,7 +22,7 @@ class SecurityWorkspaceTest {
           remediation = "Move it out of source.")
 
   @Test
-  fun reportsStaySeparateAndRequireTheCurrentIndexedFileHash() {
+  fun deterministicScanReportsStaySeparateFromAiReports() {
     val source = report("deterministic", listOf(finding))
     val ai = report("ai", emptyList(), status = "completed_empty")
     val state =
@@ -32,11 +32,6 @@ class SecurityWorkspaceTest {
 
     assertEquals(source, state.security.sourceReport)
     assertEquals(ai, state.security.aiReport)
-    val index =
-        resultIndexFixture().copy(files = listOf(IndexedFile("main.go", "hash", "Go", false)))
-    assertTrue(securityReportMatchesIndex(source, index))
-    assertFalse(securityReportMatchesIndex(source.copy(contentHash = "next"), index))
-    assertTrue(securityReportMatchesIndex(ai, index))
   }
 
   @Test
@@ -173,17 +168,13 @@ class SecurityWorkspaceTest {
                     sections = mapOf(AnalysisResultKey("security") to page.section)))
     assertIs<SecurityPreparationDecision.Eligible>(
         securityPreparationDecision(rows.first(), state.index))
-    assertFalse(
-        securityFindingIsCurrent(
-            rows.first().finding,
-            state.copy(
-                projectState =
-                    state.projectState.copy(index = state.index!!.copy(projectRevision = "next")))))
-    assertFalse(
-        securityFindingIsCurrent(
-            rows.first().finding,
-            state.copy(
-                analysisRun = state.analysisRun.copy(run = page.run!!.copy(status = "stale")))))
+    assertIs<SecurityPreparationDecision.Blocked>(
+        securityPreparationDecision(rows.first(), state.index!!.copy(projectRevision = "next")))
+    val stale =
+        state.copy(analysisRun = state.analysisRun.copy(run = page.run!!.copy(status = "stale")))
+    assertIs<SecurityPreparationDecision.Blocked>(
+        securityPreparationDecision(
+            rows.first(), stale.index, stale.analysisResultPage("security")))
     assertEquals("Stale", page.copy(run = page.run.copy(status = "stale")).statusLabel)
   }
 
@@ -337,10 +328,8 @@ class SecurityWorkspaceTest {
     assertEquals(rows.map { it.rowKey }.toSet(), targets.map { it.target.rowKey }.toSet())
     assertTrue(
         targets.all { resolveSummaryTarget(it.target, state) is ExplicitResultTarget.Resolved })
-    // A finding-only intent cannot pick one of two equally valued owners (including a stored scan).
-    assertFalse(
-        securityFindingIsCurrent(
-            finding, state.copy(security = SecurityWorkspaceState(sourceReport = source))))
+    // Each captured report remains distinct even when its finding values coincide.
+    assertTrue(rows.all { securityResultIsLoaded(it, loaded) })
   }
 
   @Test
@@ -651,18 +640,16 @@ class SecurityWorkspaceTest {
           it.report.source == "deterministic"
         }
     assertTrue(securityResultIsLoaded(selected, state.analysisResultPage("security")))
-    assertTrue(securityFindingIsCurrent(workspaceFinding, state))
+    assertIs<SecurityPreparationDecision.Eligible>(
+        securityPreparationDecision(selected, state.index, state.analysisResultPage("security")))
 
     val withoutDetails = state.copy(analysisRun = ProjectAnalysisRunState(run = page.run))
     assertFalse(securityResultIsLoaded(selected, withoutDetails.analysisResultPage("security")))
-    assertFalse(securityFindingIsCurrent(workspaceFinding, withoutDetails))
-    assertFalse(
-        securityFindingIsCurrent(
-            workspaceFinding, withoutDetails.copy(analysisRun = ProjectAnalysisRunState())))
-    assertTrue(securityExplicitScanFindingIsCurrent(workspaceFinding, withoutDetails))
-    assertFalse(
-        securityFindingIsCurrent(
-            workspaceFinding, state.copy(projectState = state.projectState.copy(index = null))))
+    assertIs<SecurityPreparationDecision.Blocked>(
+        securityPreparationDecision(
+            selected, withoutDetails.index, withoutDetails.analysisResultPage("security")))
+    assertIs<SecurityPreparationDecision.Blocked>(
+        securityPreparationDecision(selected, null, state.analysisResultPage("security")))
   }
 
   private fun report(

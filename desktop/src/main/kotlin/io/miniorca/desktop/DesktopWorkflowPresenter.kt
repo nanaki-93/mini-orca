@@ -1069,38 +1069,131 @@ class DesktopWorkflowPresenter(
         }
   }
 
-  fun prepareSecurityFinding(finding: SecurityFinding) =
-      prepareSecurityFindingFromOwner(finding, explicitScan = false)
+  internal data class SecurityPreparationIntent(
+      val result: SecurityResult,
+      val target: SecurityPreparationDecision.Eligible,
+      val project: SwitchProjectIdentity,
+      val index: ProjectIndex,
+      val draft: SwitchDraftIdentity,
+      val selectedFile: ProjectFileInfo?,
+      val selectionCurrent: () -> Boolean,
+  )
 
-  fun prepareExplicitSecurityScanFinding(finding: SecurityFinding) =
-      prepareSecurityFindingFromOwner(finding, explicitScan = true)
-
-  private fun prepareSecurityFindingFromOwner(finding: SecurityFinding, explicitScan: Boolean) {
+  internal fun securityPreparationIntent(
+      result: SecurityResult,
+      selectionCurrent: () -> Boolean = { true },
+  ): SecurityPreparationIntent? {
+    if (!selectionCurrent()) return null
     val state = snapshot.value.state
-    val current =
-        if (explicitScan) securityExplicitScanFindingIsCurrent(finding, state)
-        else securityFindingIsCurrent(finding, state)
-    if (!current) {
-      dispatch(DesktopEvent.Failed("Refresh Security results before preparing a fix."))
+    val page = state.analysisResultPage("security")
+    val target =
+        securityPreparationDecision(result, state.index, page)
+            as? SecurityPreparationDecision.Eligible ?: return null
+    return SecurityPreparationIntent(
+        result,
+        target,
+        SwitchProjectIdentity(state.project ?: return null),
+        state.index ?: return null,
+        SwitchDraftIdentity(state.chat.session, state.review.draft, state.review.editor),
+        state.selectedFile,
+        selectionCurrent)
+  }
+
+  private fun currentSecurityPreparation(intent: SecurityPreparationIntent): Boolean =
+      snapshot.value.state.index === intent.index &&
+          securityPreparationIntent(intent.result, intent.selectionCurrent) == intent
+
+  internal fun prepareSecurityFinding(
+      result: SecurityResult,
+      selectionCurrent: () -> Boolean = { true },
+      inputCurrent: () -> Boolean = { true },
+      onPrepared: () -> Unit = {},
+  ) {
+    val intent = securityPreparationIntent(result, selectionCurrent)
+    if (intent == null) {
+      val state = snapshot.value.state
+      val reason =
+          (securityPreparationDecision(result, state.index, state.analysisResultPage("security"))
+                  as? SecurityPreparationDecision.Blocked)
+              ?.reason ?: "The Security result or selection changed. Choose Prepare fix again."
+      dispatch(DesktopEvent.Failed(reason))
       return
     }
-    val indexed = state.index?.files?.firstOrNull { it.path == finding.anchor.path }
-    val exact =
-        indexed?.symbols?.singleOrNull {
-          it.name == finding.anchor.symbol && it.atomicTarget && it.confidence == "exact"
-        }
-    if (indexed?.language != "Go" ||
-        exact == null ||
-        !securityAnchorWithinDeclaration(finding.anchor, indexed, exact)) {
+    if (intent.draft.hasWork) {
+      dispatch(DesktopEvent.Failed("Confirm discarding the current draft before preparing a fix."))
+      return
+    }
+    loadSecurityPreparation(intent, inputCurrent, onPrepared)
+  }
+
+  internal fun confirmSecurityPreparationIntent(
+      intent: SecurityPreparationIntent,
+      inputCurrent: () -> Boolean = { true },
+      onPrepared: () -> Unit = {},
+  ): Boolean {
+    if (!currentSecurityPreparation(intent) || !inputCurrent()) {
       dispatch(
           DesktopEvent.Failed(
-              "Prepare fix is available only for one exact supported Go declaration."))
-      return
+              "The Security result, selection or input changed. Choose Prepare fix again."))
+      return false
     }
-    openFileInEditor(
-        indexed.path,
-        EditorNavigationTarget(indexed.path, exact.name, finding.anchor.startLine),
-        "Address the reviewed security finding in ${exact.name}.\nObserved condition: ${finding.observedCondition}\nRemediation: ${finding.remediation}\nKeep the change limited to this declaration.")
+    loadSecurityPreparation(intent, inputCurrent, onPrepared)
+    return true
+  }
+
+  private var securityPreparationGeneration = 0L
+
+  private fun loadSecurityPreparation(
+      intent: SecurityPreparationIntent,
+      inputCurrent: () -> Boolean,
+      onPrepared: () -> Unit,
+  ) {
+    val attempt = ++securityPreparationGeneration
+    val generation = preparationSelectionGeneration
+    val fileRequest = controller.currentFileRequest()
+    fileJob?.cancel()
+    fileJob =
+        scope.launch {
+          fun current(): Boolean =
+              attempt == securityPreparationGeneration &&
+                  generation == preparationSelectionGeneration &&
+                  controller.currentFileRequest() == fileRequest &&
+                  inputCurrent() &&
+                  currentSecurityPreparation(intent)
+          try {
+            val (file, response) =
+                io { api.fileInfo(intent.target.path) to api.symbols(intent.target.path) }
+            if (!current()) return@launch
+            when (val decision = loadedSecurityPreparationDecision(intent.target, file, response)) {
+              is SecurityPreparationDecision.Blocked -> {
+                dispatch(DesktopEvent.Failed(decision.reason))
+                return@launch
+              }
+              is SecurityPreparationDecision.Eligible -> Unit
+            }
+            // No draft, editor or composer state changes until both reads and identities validate.
+            invalidateFileSelectionWork()
+            val request = controller.beginFileLoad(intent.target.path) ?: return@launch
+            if (!controller.fileLoaded(request, file, response.symbols)) return@launch
+            publish()
+            dispatch(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
+            dispatch(
+                DesktopEvent.EditorContextSelected(
+                    intent.target.declaration, intent.target.anchor.startLine))
+            dispatch(
+                DesktopEvent.SuggestionPrepared(
+                    "fix", securityPreparationRequest(intent.result), intent.target.declaration))
+            onPrepared()
+            controller.currentFileRequest()?.let(::loadFileEnrichments)
+          } catch (canceled: CancellationException) {
+            throw canceled
+          } catch (error: Exception) {
+            if (current())
+                dispatch(
+                    DesktopEvent.Failed(
+                        error.message?.takeIf(String::isNotBlank) ?: "Security source read failed"))
+          }
+        }
   }
 
   fun triageFinding(finding: UnifiedFinding, action: FindingLifecycleAction) {

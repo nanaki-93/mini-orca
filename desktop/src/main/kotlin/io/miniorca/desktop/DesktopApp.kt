@@ -90,6 +90,15 @@ internal sealed interface PendingDraftDiscard {
     override val nextLabel: String = "open ${intent.target.path}"
   }
 
+  data class SecurityPreparation(
+      val intent: DesktopWorkflowPresenter.SecurityPreparationIntent,
+      override val currentDraft: CurrentEditIdentity?,
+      val chatMessage: TextFieldValue,
+      val constraints: TextFieldValue,
+  ) : PendingDraftDiscard {
+    override val nextLabel: String = "prepare a fix for ${intent.result.finding.title}"
+  }
+
   data class Finding(
       val intent: DesktopWorkflowPresenter.FindingIntent,
       override val currentDraft: CurrentEditIdentity?,
@@ -869,8 +878,17 @@ internal fun MiniOrcaApp(
               loadGoBenchmarks = presenter::loadGoBenchmarks,
               selectGoBenchmark = presenter::selectGoBenchmark,
               compareSelectedGoBenchmark = presenter::compareSelectedGoBenchmark,
-              prepareSecurityFinding = { result, _ ->
-                presenter.prepareSecurityFinding(result.finding)
+              prepareSecurityFinding = { result, selectionCurrent ->
+                routeSecurityPreparationRequest(
+                    presenter,
+                    result,
+                    chatMessage,
+                    advancedConstraints,
+                    selectionCurrent,
+                    { chatMessage to advancedConstraints },
+                    ::clearComposerInput) {
+                      pendingDraftDiscard = it
+                    }
               },
               openSecuritySource = { result, selectionCurrent ->
                 routeSecuritySourceRequest(
@@ -1005,6 +1023,9 @@ private fun continueAfterDraftDiscard(
     is PendingDraftDiscard.SecuritySource ->
         confirmSecuritySourceDiscard(
             presenter, pending, message, constraints, currentInput, clearComposer)
+    is PendingDraftDiscard.SecurityPreparation ->
+        confirmSecurityPreparationDiscard(
+            presenter, pending, message, constraints, currentInput, clearComposer)
     is PendingDraftDiscard.Finding ->
         confirmFindingDiscard(presenter, pending, message, constraints, clearComposer)
     null -> Unit
@@ -1091,6 +1112,47 @@ internal fun confirmPerformanceSourceDiscard(
   presenter.confirmPerformanceSourceIntent(pending.intent) {
     if (currentInput() == (pending.chatMessage to pending.constraints)) clearComposer()
   }
+}
+
+internal fun routeSecurityPreparationRequest(
+    presenter: DesktopWorkflowPresenter,
+    result: SecurityResult,
+    message: TextFieldValue,
+    constraints: TextFieldValue,
+    selectionCurrent: () -> Boolean,
+    currentInput: () -> Pair<TextFieldValue, TextFieldValue>,
+    clearComposer: () -> Unit,
+    pending: (PendingDraftDiscard.SecurityPreparation) -> Unit,
+) {
+  val intent = presenter.securityPreparationIntent(result, selectionCurrent)
+  if (intent != null &&
+      (intent.draft.hasWork || message.text.isNotEmpty() || constraints.text.isNotEmpty()))
+      pending(
+          PendingDraftDiscard.SecurityPreparation(
+              intent, currentEditIdentity(presenter.snapshot.value.state), message, constraints))
+  else
+      presenter.prepareSecurityFinding(
+          result, selectionCurrent, { currentInput() == (message to constraints) }) {
+            if (currentInput() == (message to constraints)) clearComposer()
+          }
+}
+
+internal fun confirmSecurityPreparationDiscard(
+    presenter: DesktopWorkflowPresenter,
+    pending: PendingDraftDiscard.SecurityPreparation,
+    message: TextFieldValue,
+    constraints: TextFieldValue,
+    currentInput: () -> Pair<TextFieldValue, TextFieldValue>,
+    clearComposer: () -> Unit,
+) {
+  if (pending.chatMessage != message || pending.constraints != constraints) {
+    presenter.dispatch(DesktopEvent.Failed("Assistant input changed. Choose Prepare fix again."))
+    return
+  }
+  presenter.confirmSecurityPreparationIntent(
+      pending.intent, { currentInput() == (pending.chatMessage to pending.constraints) }) {
+        if (currentInput() == (pending.chatMessage to pending.constraints)) clearComposer()
+      }
 }
 
 internal fun routeSecuritySourceRequest(

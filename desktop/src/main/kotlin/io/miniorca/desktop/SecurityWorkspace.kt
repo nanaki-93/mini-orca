@@ -150,13 +150,6 @@ internal fun securityResults(page: AnalysisResultPageState): List<SecurityResult
                 .thenBy { it.finding.anchor.startLine }
                 .thenBy { it.finding.id })
 
-internal fun securityReportMatchesIndex(report: SecurityFileReport, index: ProjectIndex?): Boolean =
-    index != null &&
-        report.projectId == index.projectId &&
-        report.projectRevision == index.projectRevision &&
-        report.status in setOf("completed", "completed_empty", "partial") &&
-        index.files.any { it.path == report.path && it.contentHash == report.contentHash }
-
 // The saved result page, not an independently stored file scan, owns workspace findings.
 // Report identity uses the same fields as Summary targets; equal finding values are not owners.
 internal fun securityResultIsLoaded(
@@ -186,33 +179,16 @@ internal fun securityResultIsLoaded(
       owner.findings.single { it.id == result.finding.id } == result.finding
 }
 
-// The finding-only presenter entry point is retained until typed intents are wired. It cannot
-// choose between equally valued findings; workspace preparation itself uses the captured result.
-internal fun securityFindingIsCurrent(finding: SecurityFinding, state: DesktopState): Boolean {
-  val page = state.analysisResultPage("security")
-  val matches = securityResults(page).filter { it.finding == finding }
-  return matches.size == 1 &&
-      securityPreparationDecision(matches.single(), state.index, page) is
-          SecurityPreparationDecision.Eligible
+internal fun securityPreparationRequest(result: SecurityResult): String = buildString {
+  append("Prepare a limited fix for the exact declaration ${result.finding.anchor.symbol}. ")
+  append(securityEvidencePresentation(result).warning)
+  append("\nObserved condition: ${result.finding.observedCondition.ifBlank { "Not supplied." }}")
+  append("\nPreconditions / unknowns: ${result.finding.preconditions.ifBlank { "Not supplied." }}")
+  append("\nSuggested remediation: ${result.finding.remediation.ifBlank { "Not supplied." }}")
+  append(
+      "\nSafe verification idea (not performed): ${result.finding.verificationIdea.ifBlank { "Not supplied." }}")
+  append("\nKeep the change limited to this declaration; review the draft before applying.")
 }
-
-// Explicit scans have a separate action entry point; this must never be a fallback for a
-// workspace result whose saved details are missing.
-internal fun securityExplicitScanFindingIsCurrent(
-    finding: SecurityFinding,
-    state: DesktopState
-): Boolean =
-    securityExplicitScanContains(finding, state) &&
-        securityFindingNavigationTarget(finding, state.index) != null
-
-private fun securityExplicitScanContains(finding: SecurityFinding, state: DesktopState): Boolean =
-    state.security.sourceReport?.let { report ->
-      report.source == "deterministic" &&
-          report.projectId == state.project?.projectId &&
-          report.findings.count { it.id == finding.id } == 1 &&
-          report.findings.single { it.id == finding.id } == finding &&
-          securityReportMatchesIndex(report, state.index)
-    } == true
 
 internal fun securityFindingNavigationTarget(
     finding: SecurityFinding,

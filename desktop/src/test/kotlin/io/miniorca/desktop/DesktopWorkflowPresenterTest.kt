@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.ui.text.input.TextFieldValue
+import java.net.http.HttpTimeoutException
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -1199,7 +1200,8 @@ class DesktopWorkflowPresenterTest {
       val presenter = presenter { method, path, _ ->
         if (method != "GET") writes.incrementAndGet()
         when {
-          path.contains("files/info?path=main.go") -> response(fileJson("main.go", "base"))
+          path.contains("files/info?path=main.go") ->
+              response(fileJson("main.go", "base").replace("\"line_count\":1", "\"line_count\":20"))
           path.contains("files/symbols?path=main.go") ->
               response(symbolsJson("main.go", "Run", "func Run()", 2, 10))
           path.contains("files/analysis") -> response("""{"path":"main.go","status":"missing"}""")
@@ -1217,7 +1219,9 @@ class DesktopWorkflowPresenterTest {
                     run = page.run, sections = mapOf(AnalysisResultKey(category) to page.section))))
         assertNull(presenter.snapshot.value.state.selectedFile)
         if (category == "security")
-            presenter.prepareSecurityFinding(securityResults(page).first().finding)
+            presenter.prepareSecurityFinding(
+                securityResults(presenter.snapshot.value.state.analysisResultPage("security"))
+                    .first())
         else
             presenter.preparePerformanceFinding(
                 performanceResults(presenter.snapshot.value.state.analysisResultPage("performance"))
@@ -4790,69 +4794,36 @@ class DesktopWorkflowPresenterTest {
 
   @Test
   fun preparingASecurityFixOnlyOpensTheComposerPathWithoutASend() {
-    val chatPosts = AtomicInteger()
+    val calls = mutableListOf<String>()
     val presenter = presenter { method, path, _ ->
+      calls += "$method $path"
       when {
-        method == "POST" && path.contains("/chat/") -> {
-          chatPosts.incrementAndGet()
-          response("{}")
-        }
-        path.contains("files/info?path=main.go") -> response(fileJson("main.go", "base"))
-        path.contains("files/symbols?path=main.go") -> response(symbolsJson("main.go", "Run"))
-        path.contains("files/analysis") -> response("{\"path\":\"main.go\",\"status\":\"missing\"}")
-        path.contains("/impact") -> response("{\"target_path\":\"main.go\"}")
-        path.contains("/git") -> response("{\"available\":false}")
-        else -> response("{}")
+        path.contains("files/info?") ->
+            response(fileJson("main.go", "base").replace("\"line_count\":1", "\"line_count\":20"))
+        path.contains("files/symbols?") ->
+            response(symbolsJson("main.go", "Run", "func Run()", 2, 10))
+        path.contains("files/analysis") -> response("""{"path":"main.go","status":"missing"}""")
+        path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+        path.contains("/git") -> response("""{"available":false}""")
+        else -> error("Unexpected $path")
       }
     }
     try {
-      presenter.dispatch(
-          DesktopEvent.ProjectLoaded(
-              project(),
-              ProjectIndex(
-                  "project",
-                  "revision",
-                  files =
-                      listOf(
-                          IndexedFile(
-                              "main.go",
-                              "base",
-                              "Go",
-                              false,
-                              lineCount = 8,
-                              symbols =
-                                  listOf(
-                                      SymbolInfo(
-                                          "Run",
-                                          "function",
-                                          startLine = 3,
-                                          endLine = 6,
-                                          confidence = "exact",
-                                          atomicTarget = true)))))))
-      presenter.dispatch(DesktopEvent.FileLoaded(file(), emptyList()))
-      val finding =
-          SecurityFinding(
-              id = "security-1",
-              anchor = SecuritySourceAnchor("main.go", 4, 4, "Run"),
-              observedCondition = "Unchecked input reaches a sink.",
-              remediation = "Validate the input.")
-      presenter.dispatch(
-          DesktopEvent.SecurityReportLoaded(
-              SecurityFileReport(
-                  "1",
-                  "project",
-                  "revision",
-                  "main.go",
-                  "base",
-                  "completed",
-                  "deterministic",
-                  findings = listOf(finding))))
-      presenter.prepareSecurityFinding(finding)
+      val page = securityPageFixture()
+      presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
+      presenter.dispatch(DesktopEvent.SecurityReportLoaded(page.results!!.security.first()))
       assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank())
-      presenter.prepareExplicitSecurityScanFinding(finding)
-      eventually { presenter.snapshot.value.state.preparedRequest.contains("Address the reviewed") }
-
-      assertEquals(0, chatPosts.get())
+      presenter.dispatch(
+          DesktopEvent.AnalysisRunUpdated(
+              ProjectAnalysisRunState(
+                  run = page.run, sections = mapOf(AnalysisResultKey("security") to page.section))))
+      val result =
+          securityResults(presenter.snapshot.value.state.analysisResultPage("security")).first()
+      presenter.prepareSecurityFinding(result)
+      eventually { presenter.snapshot.value.state.preparedRequest.contains("source rule match") }
+      assertTrue(
+          presenter.snapshot.value.state.preparedRequest.contains("Preconditions / unknowns"))
+      assertTrue(calls.none { it.startsWith("POST") })
       assertEquals("fix", presenter.snapshot.value.state.preparedAction)
     } finally {
       presenter.close()
@@ -4886,9 +4857,10 @@ class DesktopWorkflowPresenterTest {
               observedCondition = "Old evidence.",
               remediation = "Refresh.")
       presenter.openSecurityFinding(securityResults(securityPageFixture()).first())
-      presenter.prepareSecurityFinding(stale)
+      presenter.prepareSecurityFinding(
+          securityResults(securityPageFixture()).first().copy(finding = stale))
 
-      assertTrue(presenter.snapshot.value.state.jobs.error.orEmpty().contains("Refresh Security"))
+      assertTrue(presenter.snapshot.value.state.jobs.error.orEmpty().isNotBlank())
       assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank())
       assertEquals(0, sourceOpenCalls.get())
     } finally {
@@ -5083,6 +5055,317 @@ class DesktopWorkflowPresenterTest {
         assertNull(presenter.snapshot.value.state.selectedFile, change)
         assertEquals(if (change == "composer") "changed" else "keep input", message.text, change)
         assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank(), change)
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun securityPreparationWaitsForExactLoadedSourceAndPreservesWorkOnRejectionOrTimeout() {
+    for (variant in
+        listOf(
+            "hash",
+            "path",
+            "revision",
+            "declaration",
+            "duplicate",
+            "range",
+            "failure",
+            "sourceTimeout",
+            "symbolTimeout")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val calls = mutableListOf<String>()
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+            calls += "$method $path"
+            when {
+              path.contains("files/info?") ->
+                  when (variant) {
+                    "sourceTimeout" -> throw HttpTimeoutException("Source read timed out")
+                    "failure" -> TransportResponse(503, "")
+                    else ->
+                        response(
+                            fileJson(
+                                    if (variant == "path") "other.go" else "main.go",
+                                    if (variant == "hash") "changed" else "base")
+                                .replace(
+                                    "\"line_count\":1",
+                                    "\"line_count\":${if (variant == "range") 3 else 20}"))
+                  }
+              path.contains("files/symbols?") -> {
+                if (variant == "symbolTimeout") throw HttpTimeoutException("Symbols read timed out")
+                response(
+                    when (variant) {
+                      "revision" ->
+                          symbolsJson("main.go", "Run", "func Run()", 2, 10)
+                              .replace(
+                                  "\"project_revision\":\"revision\"",
+                                  "\"project_revision\":\"next\"")
+                      "declaration" -> symbolsJson("main.go", "Run", "func Other()", 2, 10)
+                      "duplicate" ->
+                          symbolsJson("main.go", "Run", "func Run()", 2, 10)
+                              .replace(
+                                  "}]",
+                                  "},{\"name\":\"Run\",\"signature\":\"func Run()\",\"start_line\":2,\"end_line\":10,\"kind\":\"function\",\"confidence\":\"exact\",\"atomic_target\":true}]")
+                      else -> symbolsJson("main.go", "Run", "func Run()", 2, 10)
+                    })
+              }
+              else -> error("Unexpected $method $path")
+            }
+          }
+      try {
+        val page = securityPageFixture()
+        presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
+        presenter.dispatch(
+            DesktopEvent.AnalysisRunUpdated(
+                ProjectAnalysisRunState(
+                    run = page.run,
+                    sections = mapOf(AnalysisResultKey("security") to page.section))))
+        presenter.dispatch(DesktopEvent.FileLoaded(file().copy(path = "other.go"), emptyList()))
+        presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+        val result =
+            securityResults(presenter.snapshot.value.state.analysisResultPage("security")).first()
+        val before = presenter.snapshot.value.state.review
+        var message = TextFieldValue("keep request")
+        var constraints = TextFieldValue("keep constraints")
+        var pending: PendingDraftDiscard.SecurityPreparation? = null
+        routeSecurityPreparationRequest(
+            presenter,
+            result,
+            message,
+            constraints,
+            { true },
+            { message to constraints },
+            {
+              message = TextFieldValue()
+              constraints = TextFieldValue()
+            }) {
+              pending = it
+            }
+        assertTrue(calls.isEmpty(), variant)
+        assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank(), variant)
+        confirmSecurityPreparationDiscard(
+            presenter, requireNotNull(pending), message, constraints, { message to constraints }) {
+              message = TextFieldValue()
+              constraints = TextFieldValue()
+            }
+        main.runPending()
+        io.runPending()
+        main.runPending()
+        assertEquals(before, presenter.snapshot.value.state.review, variant)
+        assertEquals("other.go", presenter.snapshot.value.state.selectedFile?.path, variant)
+        assertEquals("keep request", message.text, variant)
+        assertEquals("keep constraints", constraints.text, variant)
+        assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank(), variant)
+        assertTrue(presenter.snapshot.value.state.jobs.error.orEmpty().isNotBlank(), variant)
+        if (variant.endsWith("Timeout")) {
+          assertTrue(
+              presenter.snapshot.value.state.jobs.error.orEmpty().contains("timed out"), variant)
+          assertEquals(
+              variant == "symbolTimeout", calls.any { it.contains("files/symbols?") }, variant)
+        }
+        assertTrue(calls.none { it.startsWith("POST") }, variant)
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun confirmedSecurityPreparationDiscardsOnlyAfterSuccessfulReadsAndPrefillsAnUnsentRequest() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          calls += "$method $path"
+          when {
+            path.contains("files/info?") ->
+                response(
+                    fileJson("main.go", "base").replace("\"line_count\":1", "\"line_count\":20"))
+            path.contains("files/symbols?") ->
+                response(symbolsJson("main.go", "Run", "func Run()", 2, 10))
+            path.contains("files/analysis") -> response("""{"path":"main.go","status":"missing"}""")
+            path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+            path.contains("/git") -> response("""{"available":false}""")
+            else -> error("Unexpected $method $path")
+          }
+        }
+    try {
+      val page = securityPageFixture()
+      presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
+      presenter.dispatch(
+          DesktopEvent.AnalysisRunUpdated(
+              ProjectAnalysisRunState(
+                  run = page.run, sections = mapOf(AnalysisResultKey("security") to page.section))))
+      presenter.dispatch(DesktopEvent.FileLoaded(file().copy(path = "other.go"), emptyList()))
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      val result =
+          securityResults(presenter.snapshot.value.state.analysisResultPage("security")).first()
+      val original = presenter.snapshot.value.state.review
+      var message = TextFieldValue("old input")
+      var constraints = TextFieldValue("old constraints")
+      var pending: PendingDraftDiscard.SecurityPreparation? = null
+      fun route() =
+          routeSecurityPreparationRequest(
+              presenter,
+              result,
+              message,
+              constraints,
+              { true },
+              { message to constraints },
+              {
+                message = TextFieldValue()
+                constraints = TextFieldValue()
+              }) {
+                pending = it
+              }
+      route()
+      assertTrue(pending != null)
+      assertEquals(original, presenter.snapshot.value.state.review)
+      assertTrue(calls.isEmpty()) // Escape or Cancel leaves everything untouched.
+      pending = null
+      route()
+      confirmSecurityPreparationDiscard(
+          presenter, requireNotNull(pending), message, constraints, { message to constraints }) {
+            message = TextFieldValue()
+            constraints = TextFieldValue()
+          }
+      assertEquals(original, presenter.snapshot.value.state.review)
+      main.runPending()
+      assertEquals("old input", message.text)
+      assertEquals(original, presenter.snapshot.value.state.review)
+      io.runPending()
+      main.runPending()
+      assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
+      assertNull(presenter.snapshot.value.state.review.draft)
+      assertEquals("", message.text)
+      assertEquals("", constraints.text)
+      assertEquals("fix", presenter.snapshot.value.state.preparedAction)
+      assertTrue(presenter.snapshot.value.state.preparedRequest.contains("source rule match"))
+      assertTrue(calls.none { it.startsWith("POST") })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun securityPreparationRejectsObsoleteApprovalAndLateSuccessOrFailure() {
+    for (variant in
+        listOf(
+            "approval",
+            "selection",
+            "index",
+            "result",
+            "project",
+            "draft",
+            "composer",
+            "fileRequest",
+            "lateFailure")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val calls = mutableListOf<String>()
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+            calls += "$method $path"
+            when {
+              path.contains("files/info?") ->
+                  if (variant == "lateFailure") TransportResponse(503, "")
+                  else
+                      response(
+                          fileJson("main.go", "base")
+                              .replace("\"line_count\":1", "\"line_count\":20"))
+              path.contains("files/symbols?") ->
+                  response(symbolsJson("main.go", "Run", "func Run()", 2, 10))
+              else -> error("Unexpected $method $path")
+            }
+          }
+      try {
+        val page = securityPageFixture()
+        val index = resultIndexFixture()
+        presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), index))
+        presenter.dispatch(
+            DesktopEvent.AnalysisRunUpdated(
+                ProjectAnalysisRunState(
+                    run = page.run,
+                    sections = mapOf(AnalysisResultKey("security") to page.section))))
+        presenter.dispatch(DesktopEvent.FileLoaded(file().copy(path = "other.go"), emptyList()))
+        presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+        val loaded = presenter.snapshot.value.state.analysisResultPage("security")
+        val result = securityResults(loaded).first()
+        val browser = newResultBrowserState(loaded)
+        browser.selectedKey = result.rowKey
+        val guard = securitySelectionGuard(loaded, browser, result)
+        var message = TextFieldValue("keep input")
+        var pending: PendingDraftDiscard.SecurityPreparation? = null
+        routeSecurityPreparationRequest(
+            presenter,
+            result,
+            message,
+            TextFieldValue(),
+            guard,
+            { message to TextFieldValue() },
+            { message = TextFieldValue() }) {
+              pending = it
+            }
+        val approval = requireNotNull(pending)
+        if (variant == "approval") presenter.dispatch(DesktopEvent.DraftEdited("edited buffer"))
+        if (variant == "approval") {
+          confirmSecurityPreparationDiscard(
+              presenter, approval, message, TextFieldValue(), { message to TextFieldValue() }) {
+                message = TextFieldValue()
+              }
+          assertTrue(calls.isEmpty())
+        } else {
+          confirmSecurityPreparationDiscard(
+              presenter, approval, message, TextFieldValue(), { message to TextFieldValue() }) {
+                message = TextFieldValue()
+              }
+          main.runPending()
+          when (variant) {
+            "selection",
+            "lateFailure" -> browser.selectedKey = "another"
+            "index" ->
+                presenter.dispatch(
+                    DesktopEvent.IndexRefreshed(
+                        index.copy(files = index.files.map { it.copy(contentHash = "changed") })))
+            "result" ->
+                presenter.dispatch(
+                    DesktopEvent.AnalysisRunUpdated(
+                        ProjectAnalysisRunState(
+                            run = page.run,
+                            sections =
+                                mapOf(
+                                    AnalysisResultKey("security") to
+                                        page.section.copy(
+                                            results =
+                                                page.results!!.copy(
+                                                    security =
+                                                        listOf(result.report, result.report)))))))
+            "project" ->
+                presenter.dispatch(
+                    DesktopEvent.ProjectLoaded(
+                        resultProjectFixture().copy(projectRevision = "next"),
+                        index.copy(projectRevision = "next")))
+            "draft" -> presenter.dispatch(DesktopEvent.DraftEdited("edited buffer"))
+            "composer" -> message = TextFieldValue("changed input")
+            "fileRequest" -> presenter.openFileInEditor("main.go")
+          }
+          io.runPending()
+          main.runPending()
+        }
+        assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank(), variant)
+        assertEquals(
+            if (variant == "composer") "changed input" else "keep input", message.text, variant)
+        assertTrue(calls.none { it.startsWith("POST") }, variant)
       } finally {
         presenter.close()
         scope.cancel()
