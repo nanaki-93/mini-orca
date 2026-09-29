@@ -1492,6 +1492,7 @@ class DesktopKeyboardNavigationTest {
                 startScan = onOperation,
                 cancelScan = onOperation,
                 preparePerformanceFinding = { _, _ -> onOperation() },
+                openPerformanceSource = { onOperation() },
                 loadGoBenchmarks = onOperation,
                 selectGoBenchmark = {},
                 compareSelectedGoBenchmark = onOperation,
@@ -1599,12 +1600,14 @@ class DesktopKeyboardNavigationTest {
   fun resultNavigationAndFixPreparationStaySeparateFromKeyboardInspection() {
     var destination: Workspace? = null
     var preparations = 0
+    val inspected = mutableListOf<PerformanceResult>()
     val page = performancePageFixture()
     ComposeVisualFixture(1_000, 760, 1.25f) {
           PerformanceWorkspacePane(
               PerformanceWorkspacePaneState(page, resultIndexFixture()),
               PerformanceWorkspaceActions(
                   prepareOptimization = { _, _ -> preparations++ },
+                  openSource = { inspected += it },
                   openAnalysis = { destination = Workspace.Analysis },
                   semanticActions = FindingActions({}, { _, _ -> }, {})))
         }
@@ -1619,6 +1622,11 @@ class DesktopKeyboardNavigationTest {
           assertTrue(fixture.pressKey(Key.Enter))
           fixture.render()
           assertTrue(fixture.hasText("Prepare fix"))
+          assertEquals(0, preparations)
+
+          assertTrue(fixture.requestFocus("Open source"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(performanceResults(page).single().finding, inspected.single().finding)
           assertEquals(0, preparations)
 
           assertTrue(fixture.requestFocus("Prepare fix"))

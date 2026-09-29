@@ -396,12 +396,14 @@ class DesktopWorkflowPresenter(
     analysisWorkflow.refresh()
   }
 
-  fun selectFile(
+  internal fun selectFile(
       path: String,
       editorTarget: EditorNavigationTarget? = null,
       preparedFixRequest: String? = null,
       preparedTaskSpec: BugTaskSpec? = null,
       preparationFinding: UnifiedFinding? = null,
+      inspectionResult: PerformanceResult? = null,
+      onInspectionLoaded: (() -> Unit)? = null,
   ) {
     clearSecurityReviewRemoteConfirmation()
     benchmarkWorkflow.invalidate()
@@ -419,6 +421,8 @@ class DesktopWorkflowPresenter(
     val request = controller.beginFileLoad(path) ?: return
     val selectionGeneration = preparationSelectionGeneration
     fun obsoletePreparation(): Boolean {
+      if (inspectionResult != null && performanceSourceTarget(inspectionResult) != editorTarget)
+          return true
       if (preparationFinding == null) return false
       if (selectionGeneration != preparationSelectionGeneration) return true
       val latest = preparationDecision(preparationFinding)
@@ -439,7 +443,7 @@ class DesktopWorkflowPresenter(
               if (controller.cancelFileLoad(request)) publish()
               return@launch
             }
-            if (preparationFinding != null &&
+            if ((preparationFinding != null || inspectionResult != null) &&
                 (file.path != path ||
                     symbolResponse.path != path ||
                     symbolResponse.projectId != request.projectId ||
@@ -464,6 +468,7 @@ class DesktopWorkflowPresenter(
                 } else null
             if (!controller.fileLoaded(request, file, symbols)) return@launch
             publish()
+            if (inspectionResult != null) onInspectionLoaded?.invoke()
             if (prepared != null) {
               val symbol = symbols.single { it.name == prepared.task.targetSymbol }
               dispatch(DesktopEvent.EditorContextSelected(symbol, symbol.startLine))
@@ -472,7 +477,9 @@ class DesktopWorkflowPresenter(
                       "fix", findingTaskRequirement(prepared.task), symbol, prepared.task))
             } else {
               editorTarget?.let { target ->
-                val selection = resolveEditorNavigation(symbols, target)
+                val selection =
+                    if (inspectionResult != null) EditorNavigationSelection(null, target.line)
+                    else resolveEditorNavigation(symbols, target)
                 dispatch(DesktopEvent.EditorContextSelected(selection.symbol, selection.focusLine))
               }
               preparedFixRequest?.let { requestText ->
@@ -664,6 +671,89 @@ class DesktopWorkflowPresenter(
     if (path.isNotBlank() && snapshot.value.state.index?.files?.none { it.path == path } != false)
         return
     dispatch(DesktopEvent.WorkspaceSelected(analysisCategoryWorkspace(category)))
+  }
+
+  internal data class PerformanceSourceIntent(
+      val result: PerformanceResult,
+      val runIdentity: AnalysisRunIdentity,
+      val project: SwitchProjectIdentity,
+      val draft: SwitchDraftIdentity,
+      val selectedFile: ProjectFileInfo?,
+      val target: EditorNavigationTarget,
+  )
+
+  private fun performanceSourceTarget(result: PerformanceResult): EditorNavigationTarget? {
+    val state = snapshot.value.state
+    val project = state.project ?: return null
+    val page = state.analysisResultPage("performance")
+    val runIdentity = page.run?.identity ?: return null
+    val index = state.index ?: return null
+    if (result.page.run?.identity != runIdentity ||
+        result.report.projectId != project.projectId ||
+        result.report.projectRevision != project.projectRevision ||
+        runIdentity.projectId != project.projectId ||
+        runIdentity.projectRevision != project.projectRevision ||
+        performanceResults(page).count {
+          it.report == result.report && it.finding == result.finding
+        } != 1 ||
+        index.projectId != project.projectId ||
+        index.projectRevision != project.projectRevision ||
+        index.files.count { it.path == result.report.path } != 1)
+        return null
+    return EditorNavigationTarget(
+        result.report.path, line = result.finding.startLine.takeIf { it > 0 } ?: 0)
+  }
+
+  internal fun performanceSourceIntent(result: PerformanceResult): PerformanceSourceIntent? {
+    val state = snapshot.value.state
+    val target = performanceSourceTarget(result) ?: return null
+    return PerformanceSourceIntent(
+        result,
+        result.page.run!!.identity,
+        SwitchProjectIdentity(state.project!!),
+        SwitchDraftIdentity(state.chat.session, state.review.draft, state.review.editor),
+        state.selectedFile,
+        target)
+  }
+
+  internal fun openPerformanceFinding(result: PerformanceResult, onLoaded: (() -> Unit)? = null) {
+    val intent = performanceSourceIntent(result)
+    if (intent == null) {
+      dispatch(
+          DesktopEvent.Failed(
+              "This opportunity no longer has one indexed source file in the active project. Refresh the results or index."))
+      return
+    }
+    if (intent.selectedFile?.path != intent.target.path && intent.draft.hasWork) {
+      dispatch(
+          DesktopEvent.Failed(
+              "Review and confirm discarding the current draft before opening this opportunity."))
+      return
+    }
+    if (intent.selectedFile?.path == intent.target.path) {
+      dispatch(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
+      dispatch(DesktopEvent.EditorContextSelected(null, intent.target.line))
+    } else {
+      dispatch(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
+      selectFile(
+          intent.target.path,
+          intent.target,
+          inspectionResult = result,
+          onInspectionLoaded = onLoaded)
+    }
+  }
+
+  internal fun confirmPerformanceSourceIntent(
+      intent: PerformanceSourceIntent,
+      onLoaded: (() -> Unit)? = null,
+  ): Boolean {
+    if (performanceSourceIntent(intent.result) != intent) {
+      dispatch(DesktopEvent.Failed("The opportunity or draft changed. Choose Open source again."))
+      return false
+    }
+    if (intent.selectedFile?.path != intent.target.path && intent.draft.hasWork) discardDraft()
+    openPerformanceFinding(intent.result, onLoaded)
+    return true
   }
 
   fun preparePerformanceFinding(path: String, finding: PerformanceFinding) {

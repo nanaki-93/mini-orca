@@ -233,6 +233,9 @@ private fun PerformanceFindingDetails(
     ResultEvidenceSection("Observed pattern", finding.observedPattern)
     ResultEvidenceSection("Recommendation", finding.recommendation)
     Row(horizontalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact)) {
+      MiniOrcaButton(onClick = { actions.openSource(result) }, tone = ActionTone.Neutral) {
+        Text("Open source")
+      }
       MiniOrcaButton(
           onClick = { actions.prepareOptimization(result.report.path, finding) },
           enabled = preparation is PerformancePreparationDecision.Eligible,
@@ -457,6 +460,7 @@ internal data class PerformanceWorkspaceActions(
     val prepareOptimization: (String, PerformanceFinding) -> Unit,
     val openAnalysis: () -> Unit,
     val semanticActions: FindingActions,
+    val openSource: (PerformanceResult) -> Unit,
     val loadBenchmarks: () -> Unit = {},
     val selectBenchmark: (GoBenchmarkChoice) -> Unit = {},
     val runBenchmark: () -> Unit = {},

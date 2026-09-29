@@ -45,7 +45,7 @@ private data class DraftFieldIdentity(
 private fun draftFieldIdentity(editor: EditableDraftState?): DraftFieldIdentity? =
     editor?.serverDraft?.let { DraftFieldIdentity(it.id, it.revision, it.hash) }
 
-private sealed interface PendingDraftDiscard {
+internal sealed interface PendingDraftDiscard {
   val currentDraft: CurrentEditIdentity?
   val nextLabel: String
 
@@ -61,6 +61,15 @@ private sealed interface PendingDraftDiscard {
       val kind: DeclarationCreationKind,
   ) : PendingDraftDiscard {
     override val nextLabel: String = "create a ${kind.noun}"
+  }
+
+  data class PerformanceSource(
+      val intent: DesktopWorkflowPresenter.PerformanceSourceIntent,
+      override val currentDraft: CurrentEditIdentity?,
+      val chatMessage: TextFieldValue,
+      val constraints: TextFieldValue,
+  ) : PendingDraftDiscard {
+    override val nextLabel: String = "open ${intent.target.path}"
   }
 
   data class Finding(
@@ -427,24 +436,17 @@ internal fun MiniOrcaApp(
   }
 
   fun discardDraftAndContinue() {
-    when (val pending = pendingDraftDiscard) {
-      is PendingDraftDiscard.Replace -> {
-        presenter.discardDraft()
-        pendingDraftDiscard = null
-        startReplaceEdit(pending.request)
-      }
-      is PendingDraftDiscard.Create -> {
-        presenter.discardDraft()
-        pendingDraftDiscard = null
-        startCreateDeclaration(pending.kind)
-      }
-      is PendingDraftDiscard.Finding -> {
-        pendingDraftDiscard = null
-        confirmFindingDiscard(
-            presenter, pending, chatMessage, advancedConstraints, ::clearComposerInput)
-      }
-      null -> Unit
-    }
+    val pending = pendingDraftDiscard
+    pendingDraftDiscard = null
+    continueAfterDraftDiscard(
+        pending,
+        presenter,
+        chatMessage,
+        advancedConstraints,
+        ::clearComposerInput,
+        { chatMessage to advancedConstraints },
+        ::startReplaceEdit,
+        ::startCreateDeclaration)
   }
 
   fun updatePendingSwitch() {
@@ -821,6 +823,17 @@ internal fun MiniOrcaApp(
               cancelAnalysis = presenter::cancelAnalysis,
               startScan = presenter::runVerifiedScan,
               cancelScan = presenter::cancelVerifiedScan,
+              openPerformanceSource = { result ->
+                routePerformanceSourceRequest(
+                    presenter,
+                    result,
+                    chatMessage,
+                    advancedConstraints,
+                    { chatMessage to advancedConstraints },
+                    ::clearComposerInput) {
+                      pendingDraftDiscard = it
+                    }
+              },
               preparePerformanceFinding = { path, finding ->
                 clearComposerInput()
                 presenter.preparePerformanceFinding(path, finding)
@@ -916,6 +929,73 @@ internal fun MiniOrcaApp(
     DraftDiscardDialog(pending.currentDraft, pending.nextLabel, ::discardDraftAndContinue) {
       pendingDraftDiscard = null
     }
+  }
+}
+
+private fun continueAfterDraftDiscard(
+    pending: PendingDraftDiscard?,
+    presenter: DesktopWorkflowPresenter,
+    message: TextFieldValue,
+    constraints: TextFieldValue,
+    clearComposer: () -> Unit,
+    currentInput: () -> Pair<TextFieldValue, TextFieldValue>,
+    replace: (DirectEditRequest) -> Unit,
+    create: (DeclarationCreationKind) -> Unit,
+) {
+  when (pending) {
+    is PendingDraftDiscard.Replace -> {
+      presenter.discardDraft()
+      replace(pending.request)
+    }
+    is PendingDraftDiscard.Create -> {
+      presenter.discardDraft()
+      create(pending.kind)
+    }
+    is PendingDraftDiscard.PerformanceSource ->
+        confirmPerformanceSourceDiscard(
+            presenter, pending, message, constraints, currentInput, clearComposer)
+    is PendingDraftDiscard.Finding ->
+        confirmFindingDiscard(presenter, pending, message, constraints, clearComposer)
+    null -> Unit
+  }
+}
+
+internal fun routePerformanceSourceRequest(
+    presenter: DesktopWorkflowPresenter,
+    result: PerformanceResult,
+    message: TextFieldValue,
+    constraints: TextFieldValue,
+    currentInput: () -> Pair<TextFieldValue, TextFieldValue>,
+    clearComposer: () -> Unit,
+    pending: (PendingDraftDiscard.PerformanceSource) -> Unit,
+) {
+  val intent = presenter.performanceSourceIntent(result)
+  if (intent != null &&
+      intent.selectedFile?.path != intent.target.path &&
+      (intent.draft.hasWork || message.text.isNotEmpty() || constraints.text.isNotEmpty()))
+      pending(
+          PendingDraftDiscard.PerformanceSource(
+              intent, currentEditIdentity(presenter.snapshot.value.state), message, constraints))
+  else
+      presenter.openPerformanceFinding(result) {
+        if (currentInput() == (message to constraints)) clearComposer()
+      }
+}
+
+internal fun confirmPerformanceSourceDiscard(
+    presenter: DesktopWorkflowPresenter,
+    pending: PendingDraftDiscard.PerformanceSource,
+    message: TextFieldValue,
+    constraints: TextFieldValue,
+    currentInput: () -> Pair<TextFieldValue, TextFieldValue>,
+    clearComposer: () -> Unit,
+) {
+  if (pending.chatMessage != message || pending.constraints != constraints) {
+    presenter.dispatch(DesktopEvent.Failed("Assistant input changed. Choose Open source again."))
+    return
+  }
+  presenter.confirmPerformanceSourceIntent(pending.intent) {
+    if (currentInput() == (pending.chatMessage to pending.constraints)) clearComposer()
   }
 }
 
