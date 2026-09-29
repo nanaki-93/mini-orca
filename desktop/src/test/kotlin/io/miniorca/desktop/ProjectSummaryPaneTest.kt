@@ -2083,8 +2083,12 @@ class ProjectSummaryPaneTest {
                     controlRequest =
                         AnalysisControlRequest("cancel", AnalysisControlOutcome.Requesting)),
             "paused" to ProjectAnalysisRunState(run = base.copy(status = "paused")),
+            "interrupted" to ProjectAnalysisRunState(run = base.copy(status = "interrupted")),
             "canceling" to ProjectAnalysisRunState(run = base.copy(status = "canceling")),
             "canceled" to ProjectAnalysisRunState(run = base.copy(status = "canceled")),
+            "partial" to ProjectAnalysisRunState(run = base.copy(status = "partial")),
+            "failed" to ProjectAnalysisRunState(run = base.copy(status = "failed")),
+            "unavailable" to ProjectAnalysisRunState(run = base.copy(status = "unavailable")),
             "unconfirmed" to
                 ProjectAnalysisRunState(
                     run = base.copy(status = "paused"),
@@ -2140,6 +2144,25 @@ class ProjectSummaryPaneTest {
                 AnalysisRunCommand.Resume in presentation.commands,
                 fixture.hasText("Resume → fresh preview"),
                 name)
+            if (name in
+                listOf(
+                    "paused",
+                    "interrupted",
+                    "canceled",
+                    "partial",
+                    "failed",
+                    "unavailable",
+                    "unconfirmed",
+                    "failed refresh"))
+                assertTrue(
+                    fixture.hasText("Stop reason · No stop reason was supplied for this run."),
+                    name)
+            if (name == "running" ||
+                name == "requesting pause" ||
+                name == "pausing" ||
+                name == "requesting cancel" ||
+                name == "canceling")
+                assertFalse(fixture.hasText("Stop reason ·"), name)
             if (name == "canceled") assertTrue(fixture.hasText("Start new analysis"))
             if (name == "failed refresh") {
               assertFalse(fixture.hasText("Resume → fresh preview"))
