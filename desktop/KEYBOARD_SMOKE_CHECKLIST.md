@@ -50,19 +50,42 @@ with keyboard focus.
    Resume requires a fresh preview. After restart, retained progress is interrupted
    or paused without dispatch authority. Check partial, failed, unavailable,
    canceled and completed-empty evidence retain their distinct labels/counts.
-5. In each result page, verify the three category boxes name their destinations,
-   mark the current category and navigate with Enter/Space without starting work.
-   At a width on each side of the list/detail reflow boundary, filter and scroll
-   the populated list, select a row, then resize across the boundary and back.
-   Check the query, filter, selection and applicable list position survive;
-   keyboard-reveal and scroll both stacked list and detail, including long evidence.
-   Repeat with empty/filtered results and check that unavailable/failed states do
-   not become zero findings. Inspect the selected result's severity, exact source
-   location and evidence. Selection remains local and does not prepare or apply
-   a fix. Only **Prepare fix** prefills Assistant, and its disabled reason
-   remains visible when the source identity is ineligible. Performance hypotheses
-   never claim measured speedup; Security rule matches and model hypotheses remain
-   distinct in their evidence. Bugs keeps separately trusted verified Go scans.
+5. From Summary's result cards or Analysis's Saved results category panels,
+   open Bugs, Performance and Security with keyboard activation; use the six-entry
+   workspace rail (or Cmd/Ctrl+Tab) to switch categories. Check the selected
+   workspace indication and confirm navigation does not start analysis, a scan
+   or a provider request; result pages have a **View analysis** action, not three
+   category boxes. At widths on each side of the list/detail reflow boundary,
+   search by title/path, use severity facets (including unknown), scroll a
+   populated list, and select a row with Enter/Space. Resize across the boundary
+   and back; check query, facet, selection and applicable list position survive.
+   Keyboard-reveal and independently scroll the stacked list and detail, including
+   long paths and evidence at 125% and 150% text. Verify visible focus, spoken
+   names and selected/disabled states with an enabled screen reader. Select and
+   copy the exact location and long diagnostics/evidence; verify text remains
+   read-only and complete after disclosure and reflow. Repeat with completed-empty
+   and filtered-no-match results; use **Clear filters** to recover loaded rows.
+   With a saved-result read failure, check **Retry loading results** and retained
+   rows/diagnostic; retry should read saved details without starting analysis.
+   Unavailable, stale, partial and canceled results must keep distinct labels;
+   unknown counts must not become zero. Inspect severity, full title, location,
+   origin, message, and **Evidence and fix criteria** in Bugs. Row selection and
+   disclosure must not open source, prepare a fix or triage. Verify **Open source**
+   navigates to the exact indexed path/positive line without prefill, including a
+   stale or taskless finding with a valid path; an absent indexed path explains
+   why it cannot open. Return and verify **Prepare fix** is disabled with a
+   specific visible reason for an ineligible task/source. For an eligible current
+   exact Go declaration, activate it with keyboard and check Editor/Assistant
+   shows the target and prefilled request without Send, checks or source write.
+   With a different-target draft or Assistant input, try each action: cancel and
+   Escape the discard dialog and check draft, input, evidence and target survive;
+   confirm an unchanged intent and check only the chosen action proceeds. Change
+   project, finding or input while confirmation is pending and check old approval
+   cannot open or prepare the new target. Same-target source inspection should
+   retain the draft. Check that failed source reads cannot prefill. Keep triage
+   separate. Performance hypotheses never claim measured speedup; Security rule
+   matches and model hypotheses remain distinct in their evidence. Bugs keeps
+   separately trusted verified Go scans.
 6. Use Cmd/Ctrl+P to choose a file and Cmd/Ctrl+Shift+O to choose a declaration.
    Source and diff must remain selectable/read-only. Relative paths disambiguate
    equal basenames. Source drag selects text without changing the draft target.
