@@ -3,6 +3,7 @@ package io.miniorca.desktop
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -164,8 +165,8 @@ class SecurityWorkspaceTest {
                 ProjectAnalysisRunState(
                     run = page.run,
                     sections = mapOf(AnalysisResultKey("security") to page.section)))
-    assertTrue(securityFindingIsCurrent(rows.first().finding, state))
-    assertTrue(securityFindingCanPrepareFix(rows.first().finding, state.index))
+    assertIs<SecurityPreparationDecision.Eligible>(
+        securityPreparationDecision(rows.first(), state.index))
     assertFalse(
         securityFindingIsCurrent(
             rows.first().finding,
@@ -250,8 +251,8 @@ class SecurityWorkspaceTest {
     val stale =
         securityResults(page.copy(run = requireNotNull(page.run).copy(status = "stale"))).first()
 
-    assertTrue(securityFindingCanPrepareFix(stale.finding, resultIndexFixture()))
     assertTrue(stale.stale)
+    assertBlocked(stale, resultIndexFixture(), "Analyze again")
   }
 
   @Test
@@ -355,6 +356,191 @@ class SecurityWorkspaceTest {
     assertEquals(2, targets.size)
     assertTrue(
         targets.all { resolveSummaryTarget(it.target, state) is ExplicitResultTarget.Unavailable })
+  }
+
+  @Test
+  fun preparationExplainsOwnerFreshnessAndReportStatus() {
+    val page = securityPageFixture()
+    val index = resultIndexFixture()
+    val source = securityResults(page).first()
+    assertIs<SecurityPreparationDecision.Eligible>(securityPreparationDecision(source, index))
+    val other = page.copy(section = page.section.copy(results = null))
+    assertBlocked(source, index, "missing or ambiguous", other)
+    val repeated =
+        page.copy(
+            section =
+                page.section.copy(
+                    results = page.results!!.copy(security = listOf(source.report, source.report))))
+    assertBlocked(securityResults(repeated).first(), index, "missing or ambiguous")
+    assertBlocked(source, index.copy(projectRevision = "other"), "current project index")
+    assertBlocked(source, null, "current project index")
+    val stale = page.copy(run = page.run!!.copy(status = "stale"))
+    assertBlocked(securityResults(stale).first(), index, "Analyze again")
+    val unsupported =
+        page.copy(
+            section =
+                page.section.copy(
+                    results =
+                        page.results!!.copy(
+                            security = listOf(source.report.copy(status = "failed")))))
+    assertBlocked(securityResults(unsupported).single(), index, "completed or partial")
+    val altered = source.report.copy(reason = "changed")
+    val replaced =
+        page.copy(
+            section = page.section.copy(results = page.results!!.copy(security = listOf(altered))))
+    assertBlocked(source, index, "missing or ambiguous", replaced)
+  }
+
+  @Test
+  fun preparationExplainsIndexHashRangeAndDeclarationFailures() {
+    val page = securityPageFixture()
+    val source = securityResults(page).first()
+    val index = resultIndexFixture()
+    val indexed = index.files.single()
+    fun withReport(report: SecurityFileReport): SecurityResult {
+      val updated =
+          page.copy(
+              section = page.section.copy(results = page.results!!.copy(security = listOf(report))))
+      return securityResults(updated).single()
+    }
+    fun withFinding(value: SecurityFinding) =
+        withReport(source.report.copy(findings = listOf(value)))
+    assertBlocked(source, index.copy(files = emptyList()), "missing from the project index")
+    assertBlocked(source, index.copy(files = listOf(indexed, indexed)), "path is duplicated")
+    assertBlocked(withReport(source.report.copy(contentHash = "")), index, "hash is missing")
+    assertBlocked(
+        source, index.copy(files = listOf(indexed.copy(contentHash = ""))), "hash is missing")
+    assertBlocked(
+        source,
+        index.copy(files = listOf(indexed.copy(contentHash = "other"))),
+        "no longer matches")
+    assertBlocked(
+        withFinding(source.finding.copy(anchor = source.finding.anchor.copy(path = "other.go"))),
+        index,
+        "report's indexed target")
+    assertBlocked(
+        withFinding(source.finding.copy(anchor = source.finding.anchor.copy(startLine = 0))),
+        index,
+        "range must be positive")
+    assertBlocked(
+        withFinding(source.finding.copy(anchor = source.finding.anchor.copy(endLine = 21))),
+        index,
+        "range must be positive")
+    assertBlocked(
+        withFinding(source.finding.copy(anchor = source.finding.anchor.copy(endLine = 3))),
+        index,
+        "range must be positive")
+    assertBlocked(
+        withFinding(source.finding.copy(anchor = source.finding.anchor.copy(symbol = ""))),
+        index,
+        "must name")
+    assertBlocked(
+        source,
+        index.copy(files = listOf(indexed.copy(symbols = emptyList()))),
+        "declaration is missing")
+    assertBlocked(
+        source,
+        index.copy(files = listOf(indexed.copy(symbols = indexed.symbols + indexed.symbols))),
+        "declaration is ambiguous")
+    assertBlocked(
+        source,
+        index.copy(
+            files =
+                listOf(
+                    indexed.copy(symbols = listOf(indexed.symbols.single().copy(startLine = 5))))),
+        "within one valid indexed declaration")
+    assertBlocked(
+        source,
+        index.copy(
+            files =
+                listOf(
+                    indexed.copy(symbols = listOf(indexed.symbols.single().copy(endLine = 30))))),
+        "valid indexed declaration")
+    assertBlocked(source, index.copy(files = listOf(indexed.copy(binary = true))), "Binary files")
+    assertBlocked(
+        source, index.copy(files = listOf(indexed.copy(language = "Python"))), "Go files only")
+    assertBlocked(
+        source,
+        index.copy(
+            files =
+                listOf(
+                    indexed.copy(
+                        symbols = listOf(indexed.symbols.single().copy(confidence = "inferred"))))),
+        "exact Go declaration")
+    assertBlocked(
+        source,
+        index.copy(
+            files =
+                listOf(
+                    indexed.copy(
+                        symbols = listOf(indexed.symbols.single().copy(atomicTarget = false))))),
+        "Multi-function")
+    assertBlocked(
+        source,
+        index.copy(
+            files =
+                listOf(
+                    indexed.copy(
+                        symbols = listOf(indexed.symbols.single().copy(kind = "package"))))),
+        "Go function")
+  }
+
+  @Test
+  fun loadedPreparationRequiresTheSameFileDeclarationAndAnchor() {
+    val result = securityResults(securityPageFixture()).first()
+    val index = resultIndexFixture().files.single()
+    val target =
+        assertIs<SecurityPreparationDecision.Eligible>(
+            securityPreparationDecision(result, resultIndexFixture()))
+    val file =
+        ProjectFileInfo(
+            index.path,
+            index.contentHash,
+            "main.go",
+            language = "Go",
+            sizeBytes = 12,
+            lineCount = index.lineCount,
+            modifiedAt = "",
+            binary = false)
+    val response =
+        SymbolsResponse(target.projectId, target.projectRevision, target.path, index.symbols)
+    assertEquals(target, loadedSecurityPreparationDecision(target, file, response))
+    fun blocked(fileInfo: ProjectFileInfo, symbolsResponse: SymbolsResponse, expected: String) {
+      val reason =
+          assertIs<SecurityPreparationDecision.Blocked>(
+                  loadedSecurityPreparationDecision(target, fileInfo, symbolsResponse))
+              .reason
+      assertTrue(reason.contains(expected), reason)
+    }
+    blocked(file.copy(contentHash = "changed"), response, "hash")
+    blocked(file.copy(contentHash = ""), response, "hash")
+    blocked(file.copy(path = "other.go"), response, "path")
+    blocked(file, response.copy(projectId = "other"), "different project")
+    blocked(file, response.copy(projectRevision = "other"), "revision")
+    blocked(file, response.copy(path = "other.go"), "file")
+    blocked(file.copy(lineCount = 3), response, "anchor")
+    blocked(
+        file, response.copy(symbols = index.symbols + index.symbols), "exact indexed declaration")
+    blocked(file, response.copy(symbols = emptyList()), "exact indexed declaration")
+    blocked(
+        file,
+        response.copy(symbols = listOf(index.symbols.single().copy(signature = "changed"))),
+        "exact indexed declaration")
+    blocked(file.copy(binary = true), response, "Binary files")
+    blocked(file.copy(language = "Python"), response, "Go files only")
+  }
+
+  private fun assertBlocked(
+      result: SecurityResult,
+      index: ProjectIndex?,
+      expected: String,
+      page: AnalysisResultPageState = result.page,
+  ) {
+    val reason =
+        assertIs<SecurityPreparationDecision.Blocked>(
+                securityPreparationDecision(result, index, page))
+            .reason
+    assertTrue(reason.contains(expected), reason)
   }
 
   @Test
