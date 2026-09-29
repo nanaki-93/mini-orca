@@ -3864,6 +3864,145 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun foreignStartAndCancelReportsRetainEvidenceWithoutPollingOrFindingsRefresh() {
+    for (route in listOf("POST", "DELETE")) {
+      for ((foreignId, foreignRevision) in listOf("other" to "revision", "project" to "other")) {
+        val polls = AtomicInteger()
+        val findings = AtomicInteger()
+        val presenter = presenter { method, path, _ ->
+          when {
+            method == route && path.contains("/scan") ->
+                response(
+                    """{"project_id":"$foreignId","project_revision":"$foreignRevision","status":"completed"}""")
+            method == "GET" && path.contains("/scan?") -> {
+              polls.incrementAndGet()
+              TransportResponse(204, "")
+            }
+            path.contains("/findings?") -> {
+              findings.incrementAndGet()
+              response("{}")
+            }
+            else -> error("Unexpected $method $path")
+          }
+        }
+        try {
+          loadProject(presenter)
+          val retained = GoScanReport("project", "revision", status = "completed")
+          presenter.dispatch(DesktopEvent.GoScanLoaded(retained))
+          if (route == "POST") presenter.runVerifiedScan() else presenter.cancelVerifiedScan()
+          eventually {
+            presenter.snapshot.value.state.verifiedScan.operation is VerifiedScanOperation.Failed
+          }
+          assertEquals(retained, presenter.snapshot.value.state.findings.scan)
+          assertTrue(
+              (presenter.snapshot.value.state.verifiedScan.operation
+                      as VerifiedScanOperation.Failed)
+                  .message
+                  .contains("identity"))
+          assertEquals(0, polls.get())
+          assertEquals(0, findings.get())
+        } finally {
+          presenter.close()
+        }
+      }
+    }
+  }
+
+  @Test
+  fun foreignPollStopsWithoutPublishingOrRefreshingFindings() {
+    for ((foreignId, foreignRevision) in listOf("other" to "revision", "project" to "other")) {
+      val polls = AtomicInteger()
+      val findings = AtomicInteger()
+      val presenter = presenter { method, path, _ ->
+        when (method to path) {
+          "POST" to "/api/projects/current/scan" ->
+              response(
+                  """{"project_id":"project","project_revision":"revision","status":"running"}""")
+          "GET" to "/api/projects/current/scan?project_revision=revision" -> {
+            polls.incrementAndGet()
+            response(
+                """{"project_id":"$foreignId","project_revision":"$foreignRevision","status":"completed"}""")
+          }
+          "GET" to "/api/projects/current/findings?project_revision=revision" -> {
+            findings.incrementAndGet()
+            response("{}")
+          }
+          else -> error("Unexpected $method $path")
+        }
+      }
+      try {
+        loadProject(presenter)
+        presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
+        presenter.runVerifiedScan()
+        eventually {
+          presenter.snapshot.value.state.verifiedScan.read is VerifiedScanRead.Unavailable
+        }
+        assertEquals("running", presenter.snapshot.value.state.findings.scan?.status)
+        assertEquals(1, polls.get())
+        assertEquals(0, findings.get())
+      } finally {
+        presenter.close()
+      }
+    }
+  }
+
+  @Test
+  fun foreignWorkspaceScanCannotReplaceRetainedEvidence() {
+    for ((foreignId, foreignRevision) in listOf("other" to "revision", "project" to "other")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val findings = AtomicInteger()
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+            when {
+              path.endsWith("/reindex") -> response(indexJson())
+              path.contains("/analysis/run?") -> TransportResponse(204, "")
+              path.contains("/analysis/selection?") || path.contains("/overview?") -> response("{}")
+              path.contains("/findings?") -> {
+                findings.incrementAndGet()
+                response("{}")
+              }
+              path.contains("/scan?") ->
+                  response(
+                      """{"project_id":"$foreignId","project_revision":"$foreignRevision","status":"completed"}""")
+              else -> error("Unexpected $method $path")
+            }
+          }
+      try {
+        loadProject(presenter)
+        val retained = GoScanReport("project", "revision", status = "completed")
+        presenter.dispatch(DesktopEvent.GoScanLoaded(retained))
+        val retainedFindings =
+            listOf(
+                UnifiedFinding(
+                    id = "saved",
+                    category = "bugs",
+                    projectId = "project",
+                    projectRevision = "revision",
+                    location = FindingLocation("main.go")))
+        presenter.dispatch(DesktopEvent.FindingsLoaded(retainedFindings))
+        presenter.reindexProject()
+        repeat(12) {
+          main.runPending()
+          io.runPending()
+        }
+        main.runPending()
+        assertEquals(retained, presenter.snapshot.value.state.findings.scan)
+        assertEquals(retainedFindings, presenter.snapshot.value.state.findings.findings)
+        assertTrue(presenter.snapshot.value.state.verifiedScan.read is VerifiedScanRead.Unavailable)
+        assertTrue(
+            presenter.snapshot.value.state.projectState.detailsOutcome
+                is ProjectDetailsOutcome.Unavailable)
+        assertEquals(1, findings.get())
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
   fun delayedVerifiedScanStartCannotReplaceACancelResponse() {
     val startRequested = CountDownLatch(1)
     val releaseStart = CountDownLatch(1)

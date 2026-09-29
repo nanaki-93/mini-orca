@@ -1785,6 +1785,7 @@ class DesktopWorkflowPresenter(
               }
             } ?: return@launch
         if (!isCurrentVerifiedScanAction(request.project, request.generation)) return@launch
+        if (rejectForeignVerifiedScan(report, request.project, actionResponse = true)) return@launch
         dispatch(DesktopEvent.VerifiedScanOperationUpdated(VerifiedScanOperation.Idle))
         publishVerifiedScan(request.project, report, request.generation)
       } catch (canceled: CancellationException) {
@@ -1827,6 +1828,7 @@ class DesktopWorkflowPresenter(
               else api.cancelGoScan(request.project.revision)
             } ?: return@launch
         if (!isCurrentVerifiedScanAction(request.project, request.generation)) return@launch
+        if (rejectForeignVerifiedScan(report, request.project, actionResponse = true)) return@launch
         publishVerifiedScan(request.project, report, request.generation)
       } catch (_: CancellationException) {
         throw CancellationException()
@@ -1933,6 +1935,13 @@ class DesktopWorkflowPresenter(
               api.goScan(identity.revision))
         }
         if (!currentDetails()) return@launch
+        if (rejectForeignVerifiedScan(details.scan, identity)) {
+          dispatch(
+              DesktopEvent.ProjectDetailsUpdated(
+                  ProjectDetailsOutcome.Unavailable(
+                      "Workspace details include a scan report for another project; previous results were retained.")))
+          return@launch
+        }
         dispatch(DesktopEvent.OverviewLoaded(details.overview))
         dispatch(DesktopEvent.FindingsLoaded(details.findings.findings))
         publishVerifiedScan(
@@ -1976,12 +1985,15 @@ class DesktopWorkflowPresenter(
       actionGeneration: Long = verifiedScanActionGeneration,
       refreshSeedTerminal: Boolean = true,
   ) {
-    if (!isCurrentVerifiedScanAction(identity, actionGeneration)) return
+    if (!isCurrentVerifiedScanAction(identity, actionGeneration) ||
+        rejectForeignVerifiedScan(scan, identity))
+        return
     jobCoordinator.observeVerifiedScan(
         identity,
         scan,
         onUpdate = { updated ->
-          if (!isCurrentVerifiedScanAction(identity, actionGeneration))
+          if (!isCurrentVerifiedScanAction(identity, actionGeneration) ||
+              rejectForeignVerifiedScan(updated, identity))
               return@observeVerifiedScan false
           dispatch(DesktopEvent.GoScanLoaded(updated))
           true
@@ -1999,6 +2011,22 @@ class DesktopWorkflowPresenter(
           if (isCurrentVerifiedScanAction(identity, actionGeneration))
               dispatch(DesktopEvent.Failed(error.message ?: "Verified scan status failed"))
         })
+  }
+
+  private fun rejectForeignVerifiedScan(
+      scan: GoScanReport?,
+      identity: WorkflowProjectIdentity,
+      actionResponse: Boolean = false,
+  ): Boolean {
+    if (scan == null || scan.belongsTo(identity)) return false
+    val message =
+        "Verified scan report identity does not match the current project; refresh status before relying on it."
+    if (actionResponse) {
+      dispatch(DesktopEvent.VerifiedScanOperationUpdated(VerifiedScanOperation.Failed(message)))
+    } else {
+      dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Unavailable(message)))
+    }
+    return true
   }
 
   private fun reloadAfterMutation(file: WorkflowFileIdentity, revision: String) {
