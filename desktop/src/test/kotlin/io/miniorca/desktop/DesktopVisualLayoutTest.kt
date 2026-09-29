@@ -3725,6 +3725,10 @@ class DesktopVisualLayoutTest {
           fixture.render()
           assertTrue(fixture.isDisabled("Prepare fix"))
           assertTrue(fixture.hasText("Stale"))
+          assertTrue(fixture.hasText("Report warning"))
+          assertTrue(fixture.hasText("Saved evidence may not match current source. Analyze again."))
+          assertTrue(fixture.hasText("Analyze again to prepare a fix from current source."))
+          assertFalse(fixture.hasText("Prompt version"))
         }
     val empty = resultPageFixture("bugs").copy(run = null, section = AnalysisSectionState())
     ComposeVisualFixture(800, 650, 1.5f) {
@@ -3752,6 +3756,127 @@ class DesktopVisualLayoutTest {
           fixture.clickText("Previous analysis · unclassified")
           fixture.render("results-history-800")
           assertTrue(fixture.hasText("Previous uncategorized risk"))
+        }
+  }
+
+  @Test
+  fun performanceHypothesisKeepsCompleteQualitativeEvidenceAndWarningsReachable() {
+    val original = performancePageFixture()
+    val path =
+        "internal/platform/transport/generated/configuration/validation/repeated_allocation_handler.go"
+    val narrative =
+        "Observe allocations in a representative workload with <literal> markup. ".repeat(3)
+    val warning = "Partial analysis: some source contexts were unavailable. ".repeat(2)
+    val report =
+        original.results!!
+            .performance
+            .single()
+            .copy(
+                path = path,
+                status = "partial",
+                warning = warning,
+                model = "",
+                profile = "local profile",
+                providerOrigin = "",
+                generatedAt = "",
+                findings =
+                    listOf(
+                        original.results!!
+                            .performance
+                            .single()
+                            .findings
+                            .single()
+                            .copy(
+                                observedPattern = narrative,
+                                recommendation = narrative,
+                                workloadConditions = narrative,
+                                tradeoff = narrative,
+                                verificationPlan = narrative,
+                                engineeringInsight =
+                                    EngineeringInsight(
+                                        mechanism = narrative,
+                                        whyItMattersHere = narrative,
+                                        tradeoffOrFailureMode = narrative,
+                                        transferableLesson = narrative))))
+    val page =
+        original.copy(
+            section =
+                original.section.copy(
+                    results = original.results!!.copy(performance = listOf(report))))
+    listOf(Triple(1440, 900, 1f), Triple(800, 650, 1.5f)).forEach { (width, height, scale) ->
+      ComposeVisualFixture(width, height, scale) {
+            PerformanceWorkspacePane(
+                PerformanceWorkspacePaneState(page, resultIndexFixture()),
+                PerformanceWorkspaceActions(
+                    {}, {}, FindingActions({}, { _, _ -> }, {}), openSource = {}))
+          }
+          .use { fixture ->
+            fixture.render("performance-hypothesis-$width-$scale")
+            fixture.clickDescription("Inspect Avoid repeated allocation")
+            fixture.render("performance-hypothesis-detail-$width-$scale")
+            assertTrue(fixture.hasText("$path:4 · Run"))
+            assertTrue(fixture.hasText("Partial"))
+            assertTrue(fixture.hasText("Partial report; some evidence may be missing."))
+            assertTrue(fixture.hasText("Model suggestion"))
+            assertTrue(fixture.hasText("Potential impact · qualitative, not a measured gain"))
+            assertTrue(
+                fixture.hasText("Model confidence · not a measurement or speedup probability"))
+            assertTrue(fixture.hasText("high"))
+            assertTrue(fixture.hasText("medium"))
+            fixture.revealText(warning, "result-detail")
+            if (width == 800) fixture.assertTextWrapsWithoutClipping(warning)
+            fixture.revealText("Prepare fix", "result-detail")
+            assertTrue(fixture.isDisabled("Prepare fix"))
+            assertTrue(
+                fixture.hasText("The target file is missing or ambiguous in the project index."))
+            fixture.revealText(narrative, "result-detail")
+            fixture.assertTextWrapsWithoutClipping(narrative)
+            fixture.revealText("Engineering insight", "result-detail")
+            if (!fixture.hasText("Transferable lesson")) fixture.clickText("Engineering insight")
+            fixture.render("performance-hypothesis-insight-$width-$scale")
+            assertTrue(fixture.hasText("Transferable lesson"))
+            fixture.revealText("Report metadata", "result-detail")
+            fixture.clickText("Report metadata")
+            fixture.render("performance-hypothesis-metadata-$width-$scale")
+            assertTrue(fixture.hasText("Provider origin"))
+            assertTrue(fixture.hasText("Not supplied."))
+            assertTrue(fixture.hasText("local profile"))
+          }
+    }
+    val missing =
+        report.copy(
+            status = "completed",
+            warning = "",
+            findings =
+                listOf(
+                    report.findings
+                        .single()
+                        .copy(
+                            startLine = 0,
+                            symbol = "",
+                            potentialImpact = "",
+                            confidence = "",
+                            workloadConditions = "",
+                            verificationPlan = "",
+                            engineeringInsight = null)))
+    val missingPage =
+        page.copy(
+            section =
+                page.section.copy(results = page.results!!.copy(performance = listOf(missing))))
+    ComposeVisualFixture(800, 650, 1.25f) {
+          PerformanceWorkspacePane(
+              PerformanceWorkspacePaneState(missingPage, resultIndexFixture()),
+              PerformanceWorkspaceActions(
+                  {}, {}, FindingActions({}, { _, _ -> }, {}), openSource = {}))
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Inspect Avoid repeated allocation")
+          fixture.render("performance-hypothesis-missing-800-1.25")
+          assertTrue(fixture.hasText("$path · Source line not supplied · Symbol not supplied"))
+          assertFalse(fixture.hasText("$path:0"))
+          assertTrue(fixture.hasText("Not supplied."))
+          assertTrue(fixture.hasText("Engineering insight"))
         }
   }
 

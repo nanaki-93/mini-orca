@@ -372,7 +372,7 @@ class ProjectSummaryEvidenceTest {
     assertEquals(5, first.loadedCount)
     assertEquals(5, first.rows.size)
     assertEquals(2, first.categories[1].loadedCount)
-    assertEquals("a.go:4", first.rows[1].location)
+    assertEquals("a.go:4 · Run", first.rows[1].location)
     val duplicate =
         perf.copy(
             section =
