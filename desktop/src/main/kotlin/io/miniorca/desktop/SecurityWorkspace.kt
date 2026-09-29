@@ -29,11 +29,28 @@ internal data class SecurityWorkspaceActions(
 internal data class SecurityResult(
     val report: SecurityFileReport,
     val finding: SecurityFinding,
-    val stale: Boolean
+    val stale: Boolean,
+    val page: AnalysisResultPageState,
 ) {
+  // Keep the report identity in the row key so two producers (or two report versions) cannot
+  // select one another. Duplicate IDs within the same report still collide and are rejected.
+  val rowKey: String
+    get() =
+        "security:" +
+            listOf(
+                    report.source,
+                    report.path,
+                    report.contentHash,
+                    report.ruleSetVersion,
+                    report.model,
+                    report.profile,
+                    report.generatedAt,
+                    finding.id)
+                .joinToString(":") { "${it.length}:$it" }
+
   fun row() =
       ResultRowPresentation(
-          "security:${report.source}:${report.path}:${finding.id}",
+          rowKey,
           finding.title.ifBlank { "Untitled security finding" },
           "${finding.anchor.path}:${finding.anchor.startLine}",
           finding.observedCondition,
@@ -90,9 +107,9 @@ internal fun securityResults(page: AnalysisResultPageState): List<SecurityResult
               it.projectRevision == page.run?.identity?.projectRevision
         }
         .flatMap { report ->
-          report.findings
-              .filter { it.anchor.path == report.path }
-              .map { SecurityResult(report, it, page.stale || report.status == "stale") }
+          report.findings.map {
+            SecurityResult(report, it, page.stale || report.status == "stale", page)
+          }
         }
         .sortedWith(
             compareBy<SecurityResult> {
@@ -112,21 +129,63 @@ internal fun securityReportMatchesIndex(report: SecurityFileReport, index: Proje
         report.status in setOf("completed", "completed_empty", "partial") &&
         index.files.any { it.path == report.path && it.contentHash == report.contentHash }
 
+// The saved result page, not an independently stored file scan, owns workspace findings.
+// Report identity uses the same fields as Summary targets; equal finding values are not owners.
+internal fun securityResultIsLoaded(
+    result: SecurityResult,
+    page: AnalysisResultPageState
+): Boolean {
+  if (result.page.results !== page.results ||
+      result.page.project != page.project ||
+      result.page.run?.identity != page.run?.identity ||
+      result.report.projectId != page.project?.projectId ||
+      result.report.projectRevision != page.run?.identity?.projectRevision)
+      return false
+  val owner = result.report
+  val reports =
+      page.results?.security.orEmpty().filter {
+        it.source == owner.source &&
+            it.path == owner.path &&
+            it.contentHash == owner.contentHash &&
+            it.ruleSetVersion == owner.ruleSetVersion &&
+            it.model == owner.model &&
+            it.profile == owner.profile &&
+            it.generatedAt == owner.generatedAt
+      }
+  return reports.size == 1 &&
+      reports.single() == owner &&
+      owner.findings.count { it.id == result.finding.id } == 1 &&
+      owner.findings.single { it.id == result.finding.id } == result.finding
+}
+
 internal fun securityFindingIsCurrent(finding: SecurityFinding, state: DesktopState): Boolean {
   val page = state.analysisResultPage("security")
-  val current =
-      securityResults(page).any {
-        it.finding == finding && !it.stale && securityReportMatchesIndex(it.report, state.index)
-      }
-  // Explicit source scans retain their own report identity, independently of a project run.
-  val scanned =
-      listOfNotNull(state.security.sourceReport, state.security.aiReport).any {
-        it.projectId == state.project?.projectId &&
-            securityReportMatchesIndex(it, state.index) &&
-            finding in it.findings
-      }
-  return (current || scanned) && securityFindingNavigationTarget(finding, state.index) != null
+  val matches = securityResults(page).filter { it.finding == finding }
+  val loaded =
+      matches.size == 1 &&
+          securityResultIsLoaded(matches.single(), page) &&
+          !matches.single().stale &&
+          securityReportMatchesIndex(matches.single().report, state.index)
+  return loaded && securityFindingNavigationTarget(finding, state.index) != null
 }
+
+// Explicit scans have a separate action entry point; this must never be a fallback for a
+// workspace result whose saved details are missing.
+internal fun securityExplicitScanFindingIsCurrent(
+    finding: SecurityFinding,
+    state: DesktopState
+): Boolean =
+    securityExplicitScanContains(finding, state) &&
+        securityFindingNavigationTarget(finding, state.index) != null
+
+private fun securityExplicitScanContains(finding: SecurityFinding, state: DesktopState): Boolean =
+    state.security.sourceReport?.let { report ->
+      report.source == "deterministic" &&
+          report.projectId == state.project?.projectId &&
+          report.findings.count { it.id == finding.id } == 1 &&
+          report.findings.single { it.id == finding.id } == finding &&
+          securityReportMatchesIndex(report, state.index)
+    } == true
 
 internal fun securityFindingNavigationTarget(
     finding: SecurityFinding,
@@ -183,17 +242,23 @@ internal fun SecurityWorkspacePane(
       browser = state.browser,
       openAnalysis = actions.openAnalysis,
       retryResults = actions.retryResults) { key ->
-        val result = results.firstOrNull { it.row().key == key }
-        if (result != null) SecurityFindingDetails(result, state.index, actions)
-        else
-            semantic
-                .firstOrNull { semanticResultRow(it).key == key }
-                ?.let {
-                  FindingDetailsRegion(
-                      it,
-                      actions.semanticActions,
-                      findingPreparationDecision(it, state.page.project, semantic, state.index))
-                }
+        val matches = results.filter { it.rowKey == key }
+        val semanticMatches = semantic.filter { semanticResultRow(it).key == key }
+        when {
+          matches.size + semanticMatches.size > 1 ->
+              Text(
+                  "Multiple results share this finding identity; no action is available.",
+                  color = Warning,
+                  style = IdeTypography.compactBody)
+          matches.size == 1 -> SecurityFindingDetails(matches.single(), state.index, actions)
+          semanticMatches.size == 1 ->
+              semanticMatches.single().let {
+                FindingDetailsRegion(
+                    it,
+                    actions.semanticActions,
+                    findingPreparationDecision(it, state.page.project, semantic, state.index))
+              }
+        }
       }
 }
 
@@ -206,7 +271,8 @@ private fun SecurityFindingDetails(
   val finding = result.finding
   val evidence = securityEvidencePresentation(result)
   val canPrepare =
-      !result.stale &&
+      securityResultIsLoaded(result, result.page) &&
+          !result.stale &&
           securityReportMatchesIndex(result.report, index) &&
           securityFindingCanPrepareFix(finding, index)
   var technical by remember(result.row().key) { mutableStateOf(false) }
