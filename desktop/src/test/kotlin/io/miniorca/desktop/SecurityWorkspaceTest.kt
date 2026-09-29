@@ -154,6 +154,7 @@ class SecurityWorkspaceTest {
     val rows = securityResults(page)
     assertEquals(2, rows.size)
     assertTrue(rows.all { it.row().source.isBlank() })
+    assertTrue(rows.all { securityResultIsLoaded(it, page) })
     assertTrue(rows.all { it.row().state.isBlank() })
     assertEquals(2, rows.map { it.row().key }.distinct().size)
     val state =
@@ -218,12 +219,13 @@ class SecurityWorkspaceTest {
 
   @Test
   fun evidenceIdentityRequiresTheValidReportAndFindingSourcePair() {
-    val source = SecurityResult(report("deterministic", listOf(finding)), finding, stale = false)
+    val page = securityPageFixture()
+    val source = SecurityResult(report("deterministic", listOf(finding)), finding, false, page)
     val modelFinding = finding.copy(evidenceKind = "model_suspicion")
-    val model = SecurityResult(report("ai", listOf(modelFinding)), modelFinding, stale = false)
+    val model = SecurityResult(report("ai", listOf(modelFinding)), modelFinding, false, page)
     val unexpected =
-        SecurityResult(report("deterministic", listOf(modelFinding)), modelFinding, stale = false)
-    val unavailable = SecurityResult(report("ai", listOf(finding)), finding, stale = false)
+        SecurityResult(report("deterministic", listOf(modelFinding)), modelFinding, false, page)
+    val unavailable = SecurityResult(report("ai", listOf(finding)), finding, false, page)
 
     assertEquals(SecurityEvidencePresentation.SourceRule, securityEvidencePresentation(source))
     assertEquals(
@@ -250,6 +252,177 @@ class SecurityWorkspaceTest {
 
     assertTrue(securityFindingCanPrepareFix(stale.finding, resultIndexFixture()))
     assertTrue(stale.stale)
+  }
+
+  @Test
+  fun equalFindingValuesKeepDistinctReportOwnersAndExactSummaryTargets() {
+    val page = securityPageFixture()
+    val source = page.results!!.security.first().copy(findings = listOf(finding))
+    val ai = source.copy(source = "ai")
+    val loaded =
+        page.copy(
+            section =
+                page.section.copy(results = page.results!!.copy(security = listOf(source, ai))))
+    val rows = securityResults(loaded)
+    assertEquals(2, rows.size)
+    assertEquals(setOf("deterministic", "ai"), rows.map { it.report.source }.toSet())
+    assertEquals(2, rows.map { it.rowKey }.toSet().size)
+    assertTrue(rows.all { securityResultIsLoaded(it, loaded) })
+    val state =
+        DesktopState(
+            projectState = ProjectWorkspaceState(project = loaded.project),
+            analysisRun =
+                ProjectAnalysisRunState(
+                    run = loaded.run,
+                    sections = mapOf(AnalysisResultKey("security") to loaded.section)))
+    val targets =
+        summaryFindingPreview(state).rows.filter {
+          it.target.category == AnalysisResultType.Security
+        }
+    assertEquals(rows.map { it.rowKey }.toSet(), targets.map { it.target.rowKey }.toSet())
+    assertTrue(
+        targets.all { resolveSummaryTarget(it.target, state) is ExplicitResultTarget.Resolved })
+    // A finding-only intent cannot pick one of two equally valued owners (including a stored scan).
+    assertFalse(
+        securityFindingIsCurrent(
+            finding, state.copy(security = SecurityWorkspaceState(sourceReport = source))))
+  }
+
+  @Test
+  fun invalidAnchorsStayBrowsableButDuplicatedIdentitiesCannotAuthorize() {
+    val page = securityPageFixture()
+    val source = page.results!!.security.first()
+    val missing = finding.copy(id = "missing", anchor = SecuritySourceAnchor())
+    val invalid = finding.copy(id = "invalid", anchor = SecuritySourceAnchor("elsewhere.go", 0, -1))
+    val loaded =
+        page.copy(
+            section =
+                page.section.copy(
+                    results =
+                        page.results!!.copy(
+                            security = listOf(source.copy(findings = listOf(missing, invalid))))))
+    val rows = securityResults(loaded)
+    assertEquals(2, rows.size)
+    assertEquals(setOf("missing", "invalid"), rows.map { it.finding.id }.toSet())
+    assertTrue(rows.all { securityResultIsLoaded(it, loaded) })
+    assertTrue(rows.all { it.row().key.isNotBlank() })
+    val browserRows = rows.map { it.row() }
+    assertEquals(2, filteredResultRows(browserRows, ResultBrowserFilter.All, "").size)
+    assertEquals(browserRows.first().key, resultBrowserSelection(null, browserRows))
+    assertEquals(
+        invalid.id,
+        rows
+            .single {
+              it.rowKey ==
+                  filteredResultRows(browserRows, ResultBrowserFilter.All, "elsewhere.go")
+                      .single()
+                      .key
+            }
+            .finding
+            .id)
+
+    val duplicated = source.copy(findings = listOf(finding, finding))
+    val ambiguous =
+        loaded.copy(
+            section =
+                loaded.section.copy(results = loaded.results!!.copy(security = listOf(duplicated))))
+    assertEquals(2, securityResults(ambiguous).size)
+    assertTrue(securityResults(ambiguous).all { !securityResultIsLoaded(it, ambiguous) })
+    val twoReports =
+        ambiguous.copy(
+            section =
+                ambiguous.section.copy(
+                    results = ambiguous.results!!.copy(security = listOf(source, source))))
+    assertTrue(securityResults(twoReports).all { !securityResultIsLoaded(it, twoReports) })
+    val altered = source.copy(reason = "other result with same report identity")
+    val conflicting =
+        ambiguous.copy(
+            section =
+                ambiguous.section.copy(
+                    results = ambiguous.results!!.copy(security = listOf(source, altered))))
+    assertTrue(securityResults(conflicting).all { !securityResultIsLoaded(it, conflicting) })
+    val state =
+        DesktopState(
+            projectState = ProjectWorkspaceState(project = twoReports.project),
+            analysisRun =
+                ProjectAnalysisRunState(
+                    run = twoReports.run,
+                    sections = mapOf(AnalysisResultKey("security") to twoReports.section)))
+    val targets =
+        summaryFindingPreview(state).rows.filter {
+          it.target.category == AnalysisResultType.Security
+        }
+    assertEquals(2, targets.size)
+    assertTrue(
+        targets.all { resolveSummaryTarget(it.target, state) is ExplicitResultTarget.Unavailable })
+  }
+
+  @Test
+  fun semanticResultsRetainTheirOwnBrowserAndSummaryIdentity() {
+    val page = securityPageFixture()
+    val semantic =
+        UnifiedFinding(
+            id = "semantic",
+            category = "security",
+            source = "analysis",
+            projectId = "project",
+            projectRevision = "revision",
+            location = FindingLocation("main.go"))
+    val loaded =
+        page.copy(
+            section = page.section.copy(results = page.results!!.copy(semantic = listOf(semantic))))
+    val rows = securityResults(loaded).map { it.row() } + loaded.semantic.map(::semanticResultRow)
+    assertEquals(3, rows.size)
+    assertEquals(3, rows.map { it.key }.distinct().size)
+    val state =
+        DesktopState(
+            projectState = ProjectWorkspaceState(project = loaded.project),
+            analysisRun =
+                ProjectAnalysisRunState(
+                    run = loaded.run,
+                    sections = mapOf(AnalysisResultKey("security") to loaded.section)))
+    val target =
+        summaryFindingPreview(state)
+            .rows
+            .single { it.target.producer is SummaryFindingProducer.Semantic }
+            .target
+    assertEquals(semanticResultRow(semantic).key, target.rowKey)
+    assertTrue(resolveSummaryTarget(target, state) is ExplicitResultTarget.Resolved)
+  }
+
+  @Test
+  fun storedScanCannotReplaceDisappearingWorkspaceDetails() {
+    val page = securityPageFixture()
+    val workspaceFinding = page.results!!.security.first().findings.single()
+    val state =
+        DesktopState(
+            projectState = ProjectWorkspaceState(resultProjectFixture(), resultIndexFixture()),
+            analysisRun =
+                ProjectAnalysisRunState(
+                    run = page.run,
+                    sections = mapOf(AnalysisResultKey("security") to page.section)),
+            security =
+                SecurityWorkspaceState(
+                    sourceReport =
+                        report("deterministic", listOf(workspaceFinding))
+                            .copy(contentHash = "base")))
+    val selected =
+        securityResults(state.analysisResultPage("security")).single {
+          it.report.source == "deterministic"
+        }
+    assertTrue(securityResultIsLoaded(selected, state.analysisResultPage("security")))
+    assertTrue(securityFindingIsCurrent(workspaceFinding, state))
+
+    val withoutDetails = state.copy(analysisRun = ProjectAnalysisRunState(run = page.run))
+    assertFalse(securityResultIsLoaded(selected, withoutDetails.analysisResultPage("security")))
+    assertFalse(securityFindingIsCurrent(workspaceFinding, withoutDetails))
+    assertFalse(
+        securityFindingIsCurrent(
+            workspaceFinding, withoutDetails.copy(analysisRun = ProjectAnalysisRunState())))
+    assertTrue(securityExplicitScanFindingIsCurrent(workspaceFinding, withoutDetails))
+    assertFalse(
+        securityFindingIsCurrent(
+            workspaceFinding, state.copy(projectState = state.projectState.copy(index = null))))
   }
 
   private fun report(

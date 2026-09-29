@@ -4848,6 +4848,8 @@ class DesktopWorkflowPresenterTest {
                   "deterministic",
                   findings = listOf(finding))))
       presenter.prepareSecurityFinding(finding)
+      assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank())
+      presenter.prepareExplicitSecurityScanFinding(finding)
       eventually { presenter.snapshot.value.state.preparedRequest.contains("Address the reviewed") }
 
       assertEquals(0, chatPosts.get())

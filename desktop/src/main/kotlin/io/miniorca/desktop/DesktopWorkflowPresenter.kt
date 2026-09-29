@@ -957,9 +957,18 @@ class DesktopWorkflowPresenter(
     else openFileInEditor(target.path, target)
   }
 
-  fun prepareSecurityFinding(finding: SecurityFinding) {
+  fun prepareSecurityFinding(finding: SecurityFinding) =
+      prepareSecurityFindingFromOwner(finding, explicitScan = false)
+
+  fun prepareExplicitSecurityScanFinding(finding: SecurityFinding) =
+      prepareSecurityFindingFromOwner(finding, explicitScan = true)
+
+  private fun prepareSecurityFindingFromOwner(finding: SecurityFinding, explicitScan: Boolean) {
     val state = snapshot.value.state
-    if (!securityFindingIsCurrent(finding, state)) {
+    val current =
+        if (explicitScan) securityExplicitScanFindingIsCurrent(finding, state)
+        else securityFindingIsCurrent(finding, state)
+    if (!current) {
       dispatch(DesktopEvent.Failed("Refresh Security results before preparing a fix."))
       return
     }
