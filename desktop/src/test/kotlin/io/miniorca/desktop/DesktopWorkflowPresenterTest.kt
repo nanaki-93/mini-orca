@@ -3944,7 +3944,7 @@ class DesktopWorkflowPresenterTest {
         presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
         presenter.runVerifiedScan()
         eventually {
-          presenter.snapshot.value.state.verifiedScan.read is VerifiedScanRead.Unavailable
+          presenter.snapshot.value.state.verifiedScan.read is VerifiedScanRead.PollUnavailable
         }
         assertEquals("running", presenter.snapshot.value.state.findings.scan?.status)
         assertEquals(1, polls.get())
@@ -4008,6 +4008,261 @@ class DesktopWorkflowPresenterTest {
         presenter.close()
         scope.cancel()
       }
+    }
+  }
+
+  @Test
+  fun failedInitialWorkspaceScanReadIsUnavailableNotAbsent() {
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/reindex" -> response(indexJson())
+        "GET" to
+            "/api/projects/current/analysis/run?project_id=project&project_revision=revision" ->
+            TransportResponse(204, "")
+        "GET" to "/api/projects/current/analysis/selection?project_revision=revision",
+        "GET" to "/api/projects/current/overview?project_revision=revision",
+        "GET" to "/api/projects/current/findings?project_revision=revision" -> response("{}")
+        "GET" to "/api/projects/current/scan?project_revision=revision" ->
+            TransportResponse(503, "status unavailable")
+        else -> error("Unexpected $method $path")
+      }
+    }
+    try {
+      loadProject(presenter)
+      assertEquals(VerifiedScanRead.Unread, presenter.snapshot.value.state.verifiedScan.read)
+      val retained = GoScanReport("project", "revision", status = "completed")
+      presenter.dispatch(DesktopEvent.GoScanLoaded(retained))
+      presenter.reindexProject()
+      eventually {
+        presenter.snapshot.value.state.verifiedScan.read is VerifiedScanRead.Unavailable
+      }
+      assertEquals(retained, presenter.snapshot.value.state.findings.scan)
+      assertNull(presenter.snapshot.value.state.jobs.error)
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun statusRecoveryReadsOnlyScanAndDistinguishesAbsenceFromReadFailure() {
+    val requests = Collections.synchronizedList(mutableListOf<String>())
+    var fail = true
+    val presenter = presenter { method, path, _ ->
+      requests += "$method $path"
+      when (method to path) {
+        "GET" to "/api/projects/current/scan?project_revision=revision" ->
+            if (fail) TransportResponse(503, "status offline") else TransportResponse(204, "")
+        else -> error("Unexpected $method $path")
+      }
+    }
+    try {
+      loadProject(presenter)
+      val retained = GoScanReport("project", "revision", status = "completed")
+      presenter.dispatch(DesktopEvent.GoScanLoaded(retained))
+      presenter.refreshVerifiedScanStatus()
+      eventually {
+        presenter.snapshot.value.state.verifiedScan.read is VerifiedScanRead.Unavailable
+      }
+      assertEquals(retained, presenter.snapshot.value.state.findings.scan)
+      assertTrue(
+          (presenter.snapshot.value.state.verifiedScan.read as VerifiedScanRead.Unavailable)
+              .message
+              .contains("Unable to refresh scan status"))
+      fail = false
+      presenter.refreshVerifiedScanStatus()
+      eventually { presenter.snapshot.value.state.verifiedScan.read == VerifiedScanRead.Absent }
+      assertEquals(retained, presenter.snapshot.value.state.findings.scan)
+      assertEquals(
+          listOf(
+              "GET /api/projects/current/scan?project_revision=revision",
+              "GET /api/projects/current/scan?project_revision=revision"),
+          requests.toList())
+      assertNull(presenter.snapshot.value.state.jobs.error)
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun statusRecoveryResumesOnePollerAndReportsPollFailureBesideDiagnostics() {
+    val pollStarted = CountDownLatch(1)
+    val releasePoll = CountDownLatch(1)
+    val reads = AtomicInteger()
+    val requests = Collections.synchronizedList(mutableListOf<String>())
+    val presenter = presenter { method, path, _ ->
+      requests += "$method $path"
+      when (method to path) {
+        "GET" to "/api/projects/current/scan?project_revision=revision" -> {
+          if (reads.incrementAndGet() == 1)
+              response(
+                  """{"project_id":"project","project_revision":"revision","status":"running"}""")
+          else {
+            pollStarted.countDown()
+            assertTrue(releasePoll.await(5, TimeUnit.SECONDS))
+            TransportResponse(503, "poll offline")
+          }
+        }
+        else -> error("Unexpected $method $path")
+      }
+    }
+    try {
+      loadProject(presenter)
+      presenter.refreshVerifiedScanStatus()
+      assertTrue(pollStarted.await(2, TimeUnit.SECONDS))
+      assertEquals(VerifiedScanRead.Loaded, presenter.snapshot.value.state.verifiedScan.read)
+      releasePoll.countDown()
+      eventually {
+        presenter.snapshot.value.state.verifiedScan.read is VerifiedScanRead.PollUnavailable
+      }
+      assertEquals("running", presenter.snapshot.value.state.findings.scan?.status)
+      assertTrue(
+          (presenter.snapshot.value.state.verifiedScan.read as VerifiedScanRead.PollUnavailable)
+              .message
+              .contains("Live scan status"))
+      assertEquals(2, reads.get())
+      assertTrue(requests.all { it == "GET /api/projects/current/scan?project_revision=revision" })
+      assertNull(presenter.snapshot.value.state.jobs.error)
+    } finally {
+      releasePoll.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun foreignStatusRecoveryAndLateProjectResponseCannotPublish() {
+    for (foreign in listOf("project_id" to "other", "project_revision" to "other")) {
+      val pollCount = AtomicInteger()
+      val findingsCount = AtomicInteger()
+      val presenter = presenter { method, path, _ ->
+        when (method to path) {
+          "GET" to "/api/projects/current/scan?project_revision=revision" ->
+              response(
+                  """{"project_id":"${if (foreign.first == "project_id") foreign.second else "project"}","project_revision":"${if (foreign.first == "project_revision") foreign.second else "revision"}","status":"completed"}""")
+          "GET" to "/api/projects/current/findings?project_revision=revision" -> {
+            findingsCount.incrementAndGet()
+            response("{}")
+          }
+          else -> {
+            pollCount.incrementAndGet()
+            error("Unexpected $method $path")
+          }
+        }
+      }
+      try {
+        loadProject(presenter)
+        val retained = GoScanReport("project", "revision", status = "running")
+        presenter.dispatch(DesktopEvent.GoScanLoaded(retained))
+        presenter.refreshVerifiedScanStatus()
+        eventually {
+          presenter.snapshot.value.state.verifiedScan.read is VerifiedScanRead.Unavailable
+        }
+        assertEquals(retained, presenter.snapshot.value.state.findings.scan)
+        assertEquals(0, findingsCount.get())
+        assertEquals(0, pollCount.get())
+      } finally {
+        presenter.close()
+      }
+    }
+
+    val requested = CountDownLatch(1)
+    val release = CountDownLatch(1)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val presenter =
+        presenter(parentScope = scope) { method, path, _ ->
+          when (method to path) {
+            "GET" to "/api/projects/current/scan?project_revision=revision" -> {
+              requested.countDown()
+              assertTrue(release.await(5, TimeUnit.SECONDS))
+              response(
+                  """{"project_id":"project","project_revision":"revision","status":"completed"}""")
+            }
+            else -> error("Unexpected $method $path")
+          }
+        }
+    try {
+      loadProject(presenter)
+      val lifetime = scope.coroutineContext[Job]!!.children.single()
+      val before = lifetime.children.toSet()
+      presenter.refreshVerifiedScanStatus()
+      assertTrue(requested.await(2, TimeUnit.SECONDS))
+      val readJob = (lifetime.children.toSet() - before).single()
+      presenter.dispatch(
+          DesktopEvent.ProjectLoaded(
+              project("replacement", "new"), ProjectIndex("replacement", "new")))
+      release.countDown()
+      runBlocking { withTimeout(2_000) { readJob.join() } }
+      assertEquals(VerifiedScanRead.Unread, presenter.snapshot.value.state.verifiedScan.read)
+      assertNull(presenter.snapshot.value.state.findings.scan)
+    } finally {
+      release.countDown()
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun terminalFindingsFailureRetainsRowsAndLateEnrichmentCannotReplaceNewScan() {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val firstFindingsStarted = CountDownLatch(1)
+    val releaseFirstFindings = CountDownLatch(1)
+    val requests = Collections.synchronizedList(mutableListOf<String>())
+    val findingsReads = AtomicInteger()
+    val presenter =
+        presenter(parentScope = scope) { method, path, _ ->
+          requests += "$method $path"
+          when (method to path) {
+            "GET" to "/api/projects/current/scan?project_revision=revision" ->
+                response(
+                    """{"project_id":"project","project_revision":"revision","status":"completed"}""")
+            "GET" to "/api/projects/current/findings?project_revision=revision" -> {
+              if (findingsReads.incrementAndGet() == 1) {
+                firstFindingsStarted.countDown()
+                assertTrue(releaseFirstFindings.await(5, TimeUnit.SECONDS))
+                response(
+                    """{"findings":[{"id":"late","category":"bugs","project_id":"project","project_revision":"revision","location":{"path":"main.go"}}]}""")
+              } else TransportResponse(503, "findings offline")
+            }
+            else -> error("Unexpected $method $path")
+          }
+        }
+    try {
+      loadProject(presenter)
+      val rows =
+          listOf(
+              UnifiedFinding(
+                  id = "saved",
+                  category = "bugs",
+                  projectId = "project",
+                  projectRevision = "revision",
+                  location = FindingLocation("main.go")))
+      presenter.dispatch(DesktopEvent.FindingsLoaded(rows))
+      val lifetime = scope.coroutineContext[Job]!!.children.single()
+      val before = lifetime.children.toSet()
+      presenter.refreshVerifiedScanStatus()
+      assertTrue(firstFindingsStarted.await(2, TimeUnit.SECONDS))
+      val firstRefreshJob = (lifetime.children.toSet() - before).single()
+      assertEquals(
+          VerifiedScanFindingsRefresh.Refreshing,
+          presenter.snapshot.value.state.verifiedScan.findingsRefresh)
+      presenter.refreshVerifiedScanStatus()
+      eventually {
+        presenter.snapshot.value.state.verifiedScan.findingsRefresh is
+            VerifiedScanFindingsRefresh.Unavailable
+      }
+      assertTrue(
+          (presenter.snapshot.value.state.verifiedScan.findingsRefresh
+                  as VerifiedScanFindingsRefresh.Unavailable)
+              .message
+              .contains("previous rows may be stale"))
+      releaseFirstFindings.countDown()
+      runBlocking { withTimeout(2_000) { firstRefreshJob.join() } }
+      assertEquals(rows, presenter.snapshot.value.state.findings.findings)
+      assertEquals("completed", presenter.snapshot.value.state.findings.scan?.status)
+      assertEquals(2, requests.count { it.contains("/findings?") })
+    } finally {
+      releaseFirstFindings.countDown()
+      presenter.close()
+      scope.cancel()
     }
   }
 
@@ -4120,7 +4375,11 @@ class DesktopWorkflowPresenterTest {
                   projectId = "project", projectRevision = "revision", status = "running")))
       presenter.cancelVerifiedScan()
       eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
-      eventually { findingsRefreshes.get() == 1 }
+      eventually {
+        findingsRefreshes.get() == 1 &&
+            presenter.snapshot.value.state.verifiedScan.findingsRefresh ==
+                VerifiedScanFindingsRefresh.Current
+      }
 
       assertEquals(1, polls.get())
       assertEquals(1, findingsRefreshes.get())
@@ -4200,6 +4459,74 @@ class DesktopWorkflowPresenterTest {
         presenter.close()
         scope.cancel()
       }
+    }
+  }
+
+  @Test
+  fun pollFailureWhileCancelIsPendingRetainsReportAndMarksLiveStatusUnavailable() {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val pollStarted = CountDownLatch(1)
+    val releasePoll = CountDownLatch(1)
+    val cancelStarted = CountDownLatch(1)
+    val releaseCancel = CountDownLatch(1)
+    val polls = AtomicInteger()
+    val findingsRefreshes = AtomicInteger()
+    val presenter =
+        presenter(parentScope = scope) { method, path, _ ->
+          when (method to path) {
+            "POST" to "/api/projects/current/scan" ->
+                response(
+                    """{"project_id":"project","project_revision":"revision","status":"running"}""")
+            "GET" to "/api/projects/current/scan?project_revision=revision" -> {
+              polls.incrementAndGet()
+              pollStarted.countDown()
+              assertTrue(releasePoll.await(5, TimeUnit.SECONDS))
+              TransportResponse(503, "poll offline")
+            }
+            "DELETE" to "/api/projects/current/scan?project_revision=revision" -> {
+              cancelStarted.countDown()
+              assertTrue(releaseCancel.await(5, TimeUnit.SECONDS))
+              response(
+                  """{"project_id":"project","project_revision":"revision","status":"running"}""")
+            }
+            "GET" to "/api/projects/current/findings?project_revision=revision" -> {
+              findingsRefreshes.incrementAndGet()
+              response("{}")
+            }
+            else -> error("Unexpected $method $path")
+          }
+        }
+    try {
+      loadProject(presenter)
+      presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
+      presenter.runVerifiedScan()
+      assertTrue(pollStarted.await(2, TimeUnit.SECONDS))
+      val retained = presenter.snapshot.value.state.findings.scan
+      presenter.cancelVerifiedScan()
+      assertTrue(cancelStarted.await(2, TimeUnit.SECONDS))
+      assertEquals(
+          VerifiedScanOperation.CancellationRequested,
+          presenter.snapshot.value.state.verifiedScan.operation)
+      releasePoll.countDown()
+      eventually {
+        presenter.snapshot.value.state.verifiedScan.read is VerifiedScanRead.PollUnavailable
+      }
+      assertEquals(retained, presenter.snapshot.value.state.findings.scan)
+      assertEquals(
+          VerifiedScanOperation.CancellationRequested,
+          presenter.snapshot.value.state.verifiedScan.operation)
+      assertTrue(
+          (presenter.snapshot.value.state.verifiedScan.read as VerifiedScanRead.PollUnavailable)
+              .message
+              .contains("Live scan status"))
+      assertEquals(1, polls.get())
+      assertEquals(0, findingsRefreshes.get())
+      assertNull(presenter.snapshot.value.state.jobs.error)
+    } finally {
+      releasePoll.countDown()
+      releaseCancel.countDown()
+      presenter.close()
+      scope.cancel()
     }
   }
 
