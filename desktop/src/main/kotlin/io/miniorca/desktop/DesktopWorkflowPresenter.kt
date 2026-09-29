@@ -1763,6 +1763,7 @@ class DesktopWorkflowPresenter(
     val request = beginVerifiedScanAction() ?: return
     dispatch(DesktopEvent.VerifiedScanOperationUpdated(VerifiedScanOperation.Starting))
     scope.launch {
+      var startRequestAttempted = false
       try {
         val report =
             io {
@@ -1779,6 +1780,7 @@ class DesktopWorkflowPresenter(
                     check(acknowledgment.trusted) {
                       "Project-code execution trust was not confirmed; review and retry."
                     }
+                    startRequestAttempted = true
                     api.startGoScan(request.project.revision)
                   }
                 }
@@ -1792,11 +1794,15 @@ class DesktopWorkflowPresenter(
         throw canceled
       } catch (error: Exception) {
         if (isCurrentVerifiedScanAction(request.project, request.generation)) {
+          val detail = error.message?.takeIf(String::isNotBlank) ?: "Request failed"
           dispatch(
               DesktopEvent.VerifiedScanOperationUpdated(
-                  VerifiedScanOperation.Failed(error.message ?: "Unable to start verified scan")))
-          dispatch(DesktopEvent.Failed(error.message ?: "Unable to start verified scan"))
-          recoverVerifiedScanPolling(request.project, request.generation)
+                  if (startRequestAttempted)
+                      VerifiedScanOperation.StartUncertain(
+                          "Start request failed ($detail). The scan may have started; refresh scan status before trying again.")
+                  else VerifiedScanOperation.Failed("Unable to start verified scan: $detail")))
+          if (!startRequestAttempted)
+              recoverVerifiedScanPolling(request.project, request.generation)
         }
       }
     }
@@ -1819,7 +1825,9 @@ class DesktopWorkflowPresenter(
   }
 
   fun cancelVerifiedScan() {
+    if (verifiedScanProgress(snapshot.value.state).action != VerifiedScanAction.Cancel) return
     val request = beginVerifiedScanAction(snapshot.value.state.findings.scan) ?: return
+    dispatch(DesktopEvent.VerifiedScanOperationUpdated(VerifiedScanOperation.CancellationRequested))
     scope.launch {
       try {
         val report =
@@ -1827,14 +1835,21 @@ class DesktopWorkflowPresenter(
               if (!canInvokeVerifiedScanAction(request)) null
               else api.cancelGoScan(request.project.revision)
             } ?: return@launch
-        if (!isCurrentVerifiedScanAction(request.project, request.generation)) return@launch
+        if (!isCurrentVerifiedScanAction(request.project, request.generation) ||
+            hasTerminalVerifiedScanObservation(request.project))
+            return@launch
         if (rejectForeignVerifiedScan(report, request.project, actionResponse = true)) return@launch
         publishVerifiedScan(request.project, report, request.generation)
-      } catch (_: CancellationException) {
-        throw CancellationException()
+      } catch (canceled: CancellationException) {
+        throw canceled
       } catch (error: Exception) {
-        if (isCurrentVerifiedScanAction(request.project, request.generation)) {
-          dispatch(DesktopEvent.Failed(error.message ?: "Unable to cancel verified scan"))
+        if (isCurrentVerifiedScanAction(request.project, request.generation) &&
+            !hasTerminalVerifiedScanObservation(request.project)) {
+          val detail = error.message?.takeIf(String::isNotBlank) ?: "Request failed"
+          dispatch(
+              DesktopEvent.VerifiedScanOperationUpdated(
+                  VerifiedScanOperation.CancellationUnconfirmed(
+                      "Cancellation could not be confirmed ($detail). Refresh scan status to check the outcome.")))
           recoverVerifiedScanPolling(request.project, request.generation)
         }
       }
@@ -1988,14 +2003,29 @@ class DesktopWorkflowPresenter(
     if (!isCurrentVerifiedScanAction(identity, actionGeneration) ||
         rejectForeignVerifiedScan(scan, identity))
         return
+    var terminalFromCancelPoll = false
     jobCoordinator.observeVerifiedScan(
         identity,
         scan,
         onUpdate = { updated ->
-          if (!isCurrentVerifiedScanAction(identity, actionGeneration) ||
+          val cancelPoll =
+              matchesProject(identity) &&
+                  actionGeneration == verifiedScanActionGeneration - 1 &&
+                  snapshot.value.state.verifiedScan.operation ==
+                      VerifiedScanOperation.CancellationRequested &&
+                  snapshot.value.state.findings.scan?.belongsTo(identity) == true
+          if ((!isCurrentVerifiedScanAction(identity, actionGeneration) && !cancelPoll) ||
               rejectForeignVerifiedScan(updated, identity))
               return@observeVerifiedScan false
           dispatch(DesktopEvent.GoScanLoaded(updated))
+          val terminal =
+              updated?.status?.lowercase() in setOf("completed", "failed", "canceled", "cancelled")
+          terminalFromCancelPoll = cancelPoll && terminal
+          val operation = snapshot.value.state.verifiedScan.operation
+          if (terminal &&
+              (operation == VerifiedScanOperation.CancellationRequested ||
+                  operation is VerifiedScanOperation.CancellationUnconfirmed))
+              dispatch(DesktopEvent.VerifiedScanOperationUpdated(VerifiedScanOperation.Idle))
           true
         },
         onSeedTerminal = {
@@ -2003,8 +2033,8 @@ class DesktopWorkflowPresenter(
               refreshFindings(identity, actionGeneration)
         },
         onPollTerminal = {
-          if (isCurrentVerifiedScanAction(identity, actionGeneration))
-              refreshFindings(identity, actionGeneration)
+          if (isCurrentVerifiedScanAction(identity, actionGeneration) || terminalFromCancelPoll)
+              refreshFindings(identity, verifiedScanActionGeneration)
         },
         fetch = { io { api.goScan(identity.revision) } },
         onFailure = { error ->
@@ -2068,6 +2098,14 @@ class DesktopWorkflowPresenter(
         ++verifiedScanActionGeneration,
         expectedScan,
         requiresExpectedScan = expectedScan != null)
+  }
+
+  // Polling can observe completion while a DELETE is still in flight. Its terminal report is
+  // newer evidence than either a delayed DELETE response or a transport failure.
+  private fun hasTerminalVerifiedScanObservation(identity: WorkflowProjectIdentity): Boolean {
+    val scan = snapshot.value.state.findings.scan ?: return false
+    return scan.belongsTo(identity) &&
+        scan.status.lowercase() in setOf("completed", "failed", "canceled", "cancelled")
   }
 
   private fun recoverVerifiedScanPolling(identity: WorkflowProjectIdentity, generation: Long) {
