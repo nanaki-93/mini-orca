@@ -39,22 +39,37 @@ internal sealed interface ExplicitResultTarget {
 internal class ResultBrowserState internal constructor(val identity: ResultBrowserIdentity) {
   var filter: ResultBrowserFilter by mutableStateOf(ResultBrowserFilter.All)
   var query: String by mutableStateOf("")
-  var selectedKey: String? by mutableStateOf(null)
+  private var selectionKey by mutableStateOf<String?>(null)
+  var selectionGeneration: Long = 0
+    private set
+
+  var selectedKey: String?
+    get() = selectionKey
+    set(value) {
+      if (selectionKey != value) {
+        selectionKey = value
+        selectionGeneration++
+      }
+    }
+
   var explicitTarget: ExplicitResultTarget? by mutableStateOf(null)
     private set
 
   val listState = LazyListState()
 
   fun choose(key: String) {
+    if (explicitTarget != null) selectionGeneration++
     explicitTarget = null
     selectedKey = key
   }
 
   fun dismissTarget() {
+    if (explicitTarget != null) selectionGeneration++
     explicitTarget = null
   }
 
   internal fun target(result: ExplicitResultTarget) {
+    if (explicitTarget != result) selectionGeneration++
     explicitTarget = result
     selectedKey = (result as? ExplicitResultTarget.Resolved)?.target?.rowKey
   }

@@ -396,15 +396,7 @@ class DesktopWorkflowPresenter(
     analysisWorkflow.refresh()
   }
 
-  internal fun selectFile(
-      path: String,
-      editorTarget: EditorNavigationTarget? = null,
-      preparedFixRequest: String? = null,
-      preparedTaskSpec: BugTaskSpec? = null,
-      preparationFinding: UnifiedFinding? = null,
-      inspectionResult: PerformanceResult? = null,
-      onInspectionLoaded: (() -> Unit)? = null,
-  ) {
+  private fun invalidateFileSelectionWork() {
     clearSecurityReviewRemoteConfirmation()
     benchmarkWorkflow.invalidate()
     if (mutableSnapshot.value.declarationExplanation.status !=
@@ -418,6 +410,20 @@ class DesktopWorkflowPresenter(
     securityWorkflow.cancel()
     activeTask = null
     activeDraft = null
+    fileFreshnessJob?.cancel()
+    enrichmentJobs.forEach(Job::cancel)
+  }
+
+  internal fun selectFile(
+      path: String,
+      editorTarget: EditorNavigationTarget? = null,
+      preparedFixRequest: String? = null,
+      preparedTaskSpec: BugTaskSpec? = null,
+      preparationFinding: UnifiedFinding? = null,
+      inspectionResult: PerformanceResult? = null,
+      onInspectionLoaded: (() -> Unit)? = null,
+  ) {
+    invalidateFileSelectionWork()
     val request = controller.beginFileLoad(path) ?: return
     val selectionGeneration = preparationSelectionGeneration
     fun obsoletePreparation(): Boolean {
@@ -431,9 +437,7 @@ class DesktopWorkflowPresenter(
           latest.task != preparedTaskSpec
     }
     publish()
-    fileFreshnessJob?.cancel()
     fileJob?.cancel()
-    enrichmentJobs.forEach(Job::cancel)
     fileJob =
         scope.launch {
           try {
@@ -756,22 +760,159 @@ class DesktopWorkflowPresenter(
     return true
   }
 
-  fun preparePerformanceFinding(path: String, finding: PerformanceFinding) {
+  internal data class PerformancePreparationIntent(
+      val result: PerformanceResult,
+      val target: PerformancePreparationDecision.Eligible,
+      val runIdentity: AnalysisRunIdentity,
+      val project: SwitchProjectIdentity,
+      val draft: SwitchDraftIdentity,
+      val selectedFile: ProjectFileInfo?,
+      val selectionCurrent: () -> Boolean,
+  )
+
+  internal fun performancePreparationIntent(
+      result: PerformanceResult,
+      selectionCurrent: () -> Boolean = { true },
+  ): PerformancePreparationIntent? {
+    if (!selectionCurrent()) return null
     val state = snapshot.value.state
-    val result =
-        performanceResults(state.analysisResultPage("performance")).firstOrNull {
-          it.report.path == path && it.finding == finding
-        }
-    if (result == null || !performanceCanPrepare(result, state.index)) {
-      dispatch(
-          DesktopEvent.Failed(
-              "Refresh this opportunity; preparation requires one exact eligible Go declaration."))
+    val page = state.analysisResultPage("performance")
+    if (result.page.run?.identity != page.run?.identity ||
+        result.page.project != page.project ||
+        result.page.results != page.results ||
+        result.stale ||
+        result.page.stale ||
+        performanceResults(page).count {
+          it.report == result.report && it.finding == result.finding
+        } != 1)
+        return null
+    val target =
+        performancePreparationDecision(result.copy(page = page), state.index)
+            as? PerformancePreparationDecision.Eligible ?: return null
+    return PerformancePreparationIntent(
+        result,
+        target,
+        page.run!!.identity,
+        SwitchProjectIdentity(state.project!!),
+        SwitchDraftIdentity(state.chat.session, state.review.draft, state.review.editor),
+        state.selectedFile,
+        selectionCurrent)
+  }
+
+  private fun currentPerformancePreparation(intent: PerformancePreparationIntent): Boolean =
+      performancePreparationIntent(intent.result, intent.selectionCurrent) == intent
+
+  internal fun preparePerformanceFinding(
+      result: PerformanceResult,
+      selectionCurrent: () -> Boolean = { true },
+      inputCurrent: () -> Boolean = { true },
+      onPrepared: () -> Unit = {},
+  ) {
+    val intent = performancePreparationIntent(result, selectionCurrent)
+    if (intent == null) {
+      val page = snapshot.value.state.analysisResultPage("performance")
+      val reason =
+          if (result.page.run?.identity != page.run?.identity ||
+              result.page.project != page.project ||
+              result.page.results != page.results ||
+              performanceResults(page).count {
+                it.report == result.report && it.finding == result.finding
+              } != 1)
+              "This opportunity changed or is ambiguous. Refresh Performance results."
+          else
+              (performancePreparationDecision(result.copy(page = page), snapshot.value.state.index)
+                      as? PerformancePreparationDecision.Blocked)
+                  ?.reason ?: "This opportunity changed. Refresh Performance results."
+      dispatch(DesktopEvent.Failed(reason))
       return
     }
-    openFileInEditor(
-        path,
-        EditorNavigationTarget(path, finding.symbol, finding.startLine),
-        "Optimize ${finding.symbol} without changing behavior. Observed pattern: ${finding.observedPattern} Trade-off: ${finding.tradeoff}")
+    if (intent.draft.hasWork) {
+      dispatch(
+          DesktopEvent.Failed(
+              "Review and confirm discarding the current draft before preparing this opportunity."))
+      return
+    }
+    loadPerformancePreparation(intent, inputCurrent, onPrepared)
+  }
+
+  internal fun confirmPerformancePreparationIntent(
+      intent: PerformancePreparationIntent,
+      inputCurrent: () -> Boolean = { true },
+      onPrepared: () -> Unit = {},
+  ): Boolean {
+    if (!currentPerformancePreparation(intent)) {
+      dispatch(DesktopEvent.Failed("The opportunity or draft changed. Choose Prepare fix again."))
+      return false
+    }
+    loadPerformancePreparation(intent, inputCurrent, onPrepared)
+    return true
+  }
+
+  private var performancePreparationGeneration = 0L
+
+  private fun loadPerformancePreparation(
+      intent: PerformancePreparationIntent,
+      inputCurrent: () -> Boolean,
+      onPrepared: () -> Unit,
+  ) {
+    val attempt = ++performancePreparationGeneration
+    val generation = preparationSelectionGeneration
+    val fileRequest = controller.currentFileRequest()
+    fileJob?.cancel()
+    fileJob =
+        scope.launch {
+          fun current(): Boolean =
+              attempt == performancePreparationGeneration &&
+                  generation == preparationSelectionGeneration &&
+                  controller.currentFileRequest() == fileRequest &&
+                  inputCurrent() &&
+                  currentPerformancePreparation(intent)
+          try {
+            val (file, response) =
+                io { api.fileInfo(intent.target.path) to api.symbols(intent.target.path) }
+            if (!current()) return@launch
+            if (response.projectId != intent.target.projectId ||
+                response.projectRevision != intent.target.projectRevision ||
+                response.path != intent.target.path) {
+              dispatch(
+                  DesktopEvent.Failed(
+                      "Loaded declarations belong to another project, revision or file."))
+              return@launch
+            }
+            when (val decision =
+                loadedPerformancePreparationDecision(
+                    intent.target, intent.result.finding, file, response.symbols)) {
+              is PerformancePreparationDecision.Blocked -> {
+                dispatch(DesktopEvent.Failed(decision.reason))
+                return@launch
+              }
+              is PerformancePreparationDecision.Eligible -> Unit
+            }
+            // Admission commits only after both reads validate; a failed read retains the draft.
+            invalidateFileSelectionWork()
+            val request = controller.beginFileLoad(intent.target.path) ?: return@launch
+            if (!controller.fileLoaded(request, file, response.symbols)) return@launch
+            publish()
+            dispatch(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
+            dispatch(
+                DesktopEvent.EditorContextSelected(
+                    intent.target.declaration, intent.result.finding.startLine))
+            dispatch(
+                DesktopEvent.SuggestionPrepared(
+                    "fix",
+                    performancePreparationRequest(intent.result.finding),
+                    intent.target.declaration))
+            onPrepared()
+            controller.currentFileRequest()?.let(::loadFileEnrichments)
+          } catch (canceled: CancellationException) {
+            throw canceled
+          } catch (error: Exception) {
+            if (current())
+                dispatch(
+                    DesktopEvent.Failed(
+                        error.message?.takeIf(String::isNotBlank) ?: "File load failed"))
+          }
+        }
   }
 
   fun scanSecurity() = securityWorkflow.scanSecurity()

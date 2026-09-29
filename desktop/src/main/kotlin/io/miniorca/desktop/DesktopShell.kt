@@ -261,7 +261,7 @@ internal data class DesktopShellAnalysisActions(
     val cancelAnalysis: () -> Unit,
     val startScan: () -> Unit,
     val cancelScan: () -> Unit,
-    val preparePerformanceFinding: (String, PerformanceFinding) -> Unit,
+    val preparePerformanceFinding: (PerformanceResult, () -> Boolean) -> Unit,
     val openPerformanceSource: (PerformanceResult) -> Unit,
     val loadGoBenchmarks: () -> Unit,
     val selectGoBenchmark: (GoBenchmarkChoice) -> Unit,
@@ -1369,6 +1369,8 @@ private fun DesktopCanvas(
   val editor = state.editor
   val context = state.context
   val workspace = appState.workspace
+  val performancePage = appState.analysisResultPage("performance")
+  val performanceBrowser = resultBrowsers.stateFor(performancePage)
   EditorArea(
       content = {
         ContentPane(
@@ -1407,16 +1409,14 @@ private fun DesktopCanvas(
                             appState.index),
                     performance =
                         PerformanceWorkspacePaneState(
-                            page = appState.analysisResultPage("performance"),
+                            page = performancePage,
                             index = appState.index,
                             benchmarkComparison = appState.review.benchmark.comparison,
                             expectedBenchmarkIdentity = benchmarkEvidenceIdentity(appState.review),
                             benchmarkCatalog = appState.review.benchmark.catalog,
                             selectedBenchmark = appState.review.benchmark.selected,
                             benchmarkRunning = appState.review.benchmark.running,
-                            browser =
-                                resultBrowsers.stateFor(
-                                    appState.analysisResultPage("performance"))),
+                            browser = performanceBrowser),
                     security =
                         SecurityWorkspacePaneState(
                             appState.analysisResultPage("security"),
@@ -1448,7 +1448,11 @@ private fun DesktopCanvas(
                 PerformanceWorkspaceActions(
                     openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
                     semanticActions = findingActions,
-                    prepareOptimization = analysisActions.preparePerformanceFinding,
+                    prepareOptimization = { result ->
+                      analysisActions.preparePerformanceFinding(
+                          result,
+                          performanceSelectionGuard(performancePage, performanceBrowser, result))
+                    },
                     openSource = analysisActions.openPerformanceSource,
                     loadBenchmarks = analysisActions.loadGoBenchmarks,
                     selectBenchmark = analysisActions.selectGoBenchmark,

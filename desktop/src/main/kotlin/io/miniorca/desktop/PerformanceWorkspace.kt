@@ -107,6 +107,24 @@ internal data class PerformanceResult(
           if (stale) "Stale" else "")
 }
 
+internal fun performanceSelectionGuard(
+    page: AnalysisResultPageState,
+    browser: ResultBrowserState,
+    result: PerformanceResult,
+): () -> Boolean {
+  val generation = browser.selectionGeneration
+  return {
+    browser.selectionGeneration == generation &&
+        resultBrowserSelection(
+            browser.selectedKey,
+            filteredResultRows(
+                performanceResults(page).map { it.row() } + page.semantic.map(::semanticResultRow),
+                browser.filter,
+                browser.query),
+            browser.explicitTarget) == result.row().key
+  }
+}
+
 internal fun performanceResults(page: AnalysisResultPageState): List<PerformanceResult> =
     page.results
         ?.performance
@@ -211,9 +229,42 @@ internal fun performancePreparationDecision(
       project.projectId, project.projectRevision, file.path, file.contentHash, declaration)
 }
 
-// The existing presenter still consumes a Boolean until typed action wiring moves to the decision.
-internal fun performanceCanPrepare(result: PerformanceResult, index: ProjectIndex?): Boolean =
-    performancePreparationDecision(result, index) is PerformancePreparationDecision.Eligible
+internal fun loadedPerformancePreparationDecision(
+    target: PerformancePreparationDecision.Eligible,
+    finding: PerformanceFinding,
+    file: ProjectFileInfo,
+    symbols: List<SymbolInfo>,
+): PerformancePreparationDecision {
+  if (file.path != target.path || file.contentHash != target.contentHash)
+      return PerformancePreparationDecision.Blocked(
+          "Loaded source no longer matches the indexed file hash. Reanalyze the file.")
+  val matches = symbols.filter { it.name == target.declaration.name }
+  if (matches.size != 1 ||
+      matches.single() != target.declaration ||
+      finding.startLine !in matches.single().startLine..matches.single().endLine)
+      return PerformancePreparationDecision.Blocked(
+          "Loaded source no longer contains the exact indexed declaration and anchor. Reanalyze the file.")
+  val eligibility = symbolEditEligibility(file, symbols, matches.single())
+  if (!eligibility.eligible)
+      return PerformancePreparationDecision.Blocked(eligibility.blockedReason)
+  return target
+}
+
+internal fun performancePreparationRequest(finding: PerformanceFinding): String = buildString {
+  append("Optimize ")
+      .append(finding.symbol)
+      .append(" without changing behavior. Keep the change within this declaration.")
+  listOf(
+          "Observed pattern" to finding.observedPattern,
+          "Recommendation" to finding.recommendation,
+          "Workload conditions" to finding.workloadConditions,
+          "Trade-offs" to finding.tradeoff,
+          "Verification plan" to finding.verificationPlan,
+      )
+      .forEach { (label, value) ->
+        if (value.isNotBlank()) append("\n").append(label).append(": ").append(value)
+      }
+}
 
 @Composable
 private fun PerformanceFindingDetails(
@@ -237,7 +288,7 @@ private fun PerformanceFindingDetails(
         Text("Open source")
       }
       MiniOrcaButton(
-          onClick = { actions.prepareOptimization(result.report.path, finding) },
+          onClick = { actions.prepareOptimization(result) },
           enabled = preparation is PerformancePreparationDecision.Eligible,
           tone = ActionTone.Primary) {
             Text("Prepare fix")
@@ -457,7 +508,7 @@ internal data class PerformanceWorkspacePaneState(
 )
 
 internal data class PerformanceWorkspaceActions(
-    val prepareOptimization: (String, PerformanceFinding) -> Unit,
+    val prepareOptimization: (PerformanceResult) -> Unit,
     val openAnalysis: () -> Unit,
     val semanticActions: FindingActions,
     val openSource: (PerformanceResult) -> Unit,

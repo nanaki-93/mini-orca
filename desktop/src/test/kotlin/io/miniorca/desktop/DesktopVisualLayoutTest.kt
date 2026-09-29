@@ -3220,7 +3220,7 @@ class DesktopVisualLayoutTest {
                         PerformanceWorkspacePane(
                             PerformanceWorkspacePaneState(page, resultIndexFixture()),
                             PerformanceWorkspaceActions(
-                                { _, _ -> externalActions++ },
+                                { externalActions++ },
                                 { navigation += Workspace.Analysis },
                                 findingActions,
                                 openSource = { externalActions++ }))
@@ -3716,7 +3716,7 @@ class DesktopVisualLayoutTest {
           PerformanceWorkspacePane(
               PerformanceWorkspacePaneState(stale, resultIndexFixture()),
               PerformanceWorkspaceActions(
-                  { _, _ -> }, {}, FindingActions({}, { _, _ -> }, {}), openSource = {}))
+                  {}, {}, FindingActions({}, { _, _ -> }, {}), openSource = {}))
         }
         .use { fixture ->
           fixture.render("results-stale-error-800-1.25")
@@ -3787,7 +3787,7 @@ class DesktopVisualLayoutTest {
                     expectedBenchmarkIdentity = identity,
                     selectedBenchmark = choice),
                 PerformanceWorkspaceActions(
-                    { _, _ -> }, {}, FindingActions({}, { _, _ -> }, {}), openSource = {}))
+                    {}, {}, FindingActions({}, { _, _ -> }, {}), openSource = {}))
           }
           .use { fixture ->
             fixture.render("performance-benchmark-$width-$height-$scale")

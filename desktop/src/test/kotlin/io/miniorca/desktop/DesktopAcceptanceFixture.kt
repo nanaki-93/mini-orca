@@ -436,7 +436,7 @@ internal fun AcceptanceResultPane(category: String, status: String) {
     "performance" ->
         PerformanceWorkspacePane(
             PerformanceWorkspacePaneState(page, resultIndexFixture()),
-            PerformanceWorkspaceActions({ _, _ -> }, {}, actions, openSource = {}))
+            PerformanceWorkspaceActions({}, {}, actions, openSource = {}))
     "security" ->
         SecurityWorkspacePane(
             SecurityWorkspacePaneState(page, resultIndexFixture()),

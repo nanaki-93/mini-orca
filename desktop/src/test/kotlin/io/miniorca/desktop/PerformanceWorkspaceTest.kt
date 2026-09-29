@@ -123,7 +123,6 @@ class PerformanceWorkspaceTest {
         PerformancePreparationDecision.Eligible(
             "project", "revision", "main.go", "base", index.files.single().symbols.single()),
         decision)
-    assertTrue(performanceCanPrepare(result, index))
     val partialReport = result.report.copy(status = "partial")
     val partialPage = result.page.results!!.copy(performance = listOf(partialReport))
     val partial =
@@ -142,6 +141,49 @@ class PerformanceWorkspaceTest {
         (performancePreparationDecision(pending, index) as PerformancePreparationDecision.Blocked)
             .reason
             .contains("completed or partial"))
+  }
+
+  @Test
+  fun loadedPreparationRejectsChangedSourceAndInexactOrAmbiguousDeclarations() {
+    val result = performanceResults(performancePageFixture()).single()
+    val index = resultIndexFixture()
+    val target =
+        performancePreparationDecision(result, index) as PerformancePreparationDecision.Eligible
+    val symbol = target.declaration
+    val file =
+        ProjectFileInfo(
+            "main.go",
+            "base",
+            "main.go",
+            language = "Go",
+            sizeBytes = 1,
+            lineCount = 20,
+            modifiedAt = "",
+            binary = false)
+    fun reason(source: ProjectFileInfo = file, symbols: List<SymbolInfo> = listOf(symbol)): String =
+        (loadedPerformancePreparationDecision(target, result.finding, source, symbols)
+                as PerformancePreparationDecision.Blocked)
+            .reason
+    assertEquals(
+        target, loadedPerformancePreparationDecision(target, result.finding, file, listOf(symbol)))
+    assertTrue(reason(file.copy(path = "other.go")).contains("indexed file"))
+    assertTrue(reason(file.copy(contentHash = "changed")).contains("hash"))
+    assertTrue(reason(symbols = emptyList()).contains("exact indexed"))
+    assertTrue(reason(symbols = listOf(symbol, symbol)).contains("exact indexed"))
+    assertTrue(
+        reason(symbols = listOf(symbol.copy(signature = "func Run(int)")))
+            .contains("exact indexed"))
+    assertTrue(reason(symbols = listOf(symbol.copy(startLine = 5))).contains("exact indexed"))
+    assertTrue(reason(source = file.copy(binary = true)).contains("Binary"))
+    assertTrue(reason(source = file.copy(language = "Kotlin")).contains("Go"))
+    assertTrue(
+        performancePreparationRequest(result.finding)
+            .contains("Workload conditions: High request volume."))
+    assertTrue(
+        performancePreparationRequest(result.finding)
+            .contains("Verification plan: Measure representative traffic."))
+    assertFalse(
+        performancePreparationRequest(result.finding.copy(tradeoff = "")).contains("Trade-offs:"))
   }
 
   @Test
