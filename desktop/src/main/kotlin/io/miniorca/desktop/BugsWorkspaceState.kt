@@ -175,6 +175,27 @@ fun findingPreparationDecision(
   return FindingPreparationDecision.Eligible(EditorNavigationTarget(file.path, symbol.name), task)
 }
 
+/** Recheck the preflight target against source returned by both file and symbol reads. */
+fun loadedFindingPreparationDecision(
+    decision: FindingPreparationDecision.Eligible,
+    file: ProjectFileInfo,
+    symbols: List<SymbolInfo>,
+    expectedHash: String,
+): FindingPreparationDecision {
+  val task = decision.task
+  if (file.path != decision.target.path ||
+      expectedHash.isBlank() ||
+      file.contentHash != expectedHash)
+      return FindingPreparationDecision.Blocked("The loaded source does not match the fix target.")
+  val matches = symbols.filter { it.name == task.targetSymbol }
+  if (matches.size != 1 || matches.single().signature != task.targetSignature)
+      return FindingPreparationDecision.Blocked(
+          "The loaded source must contain one exact declaration with the task signature.")
+  val eligibility = symbolEditEligibility(file, symbols, matches.single())
+  if (!eligibility.eligible) return FindingPreparationDecision.Blocked(eligibility.blockedReason)
+  return decision
+}
+
 fun findingTaskRequirement(task: BugTaskSpec): String =
     buildString {
           append("Implement the reviewed bug task for ").append(task.targetSymbol).append(".\n")

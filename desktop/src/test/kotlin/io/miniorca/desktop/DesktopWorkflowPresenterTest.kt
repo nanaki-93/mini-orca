@@ -1236,7 +1236,8 @@ class DesktopWorkflowPresenterTest {
         calls += "$method $path"
         when {
           path.contains("files/info?path=main.go") -> response(fileJson("main.go", "base"))
-          path.contains("files/symbols?path=main.go") -> response(symbolsJson("main.go", "Run"))
+          path.contains("files/symbols?path=main.go") ->
+              response(symbolsJson("main.go", "Run", "func Run()"))
           path.contains("files/analysis") -> response("""{"path":"main.go","status":"missing"}""")
           path.contains("/impact") -> response("""{"target_path":"main.go"}""")
           path.contains("/git") -> response("""{"available":false}""")
@@ -1297,6 +1298,184 @@ class DesktopWorkflowPresenterTest {
         assertEquals(requestsBefore, calls.size, category)
       } finally {
         presenter.close()
+      }
+    }
+  }
+
+  @Test
+  fun preparationRejectsLoadedSourceThatDiffersFromIndexedEvidence() {
+    for (variant in
+        listOf("hash", "signature", "missing", "ambiguous", "inexact", "path", "failure")) {
+      val calls = Collections.synchronizedList(mutableListOf<String>())
+      val presenter = presenter { method, path, _ ->
+        calls += "$method $path"
+        when {
+          path.contains("files/info?path=main.go") ->
+              if (variant == "failure") TransportResponse(503, "")
+              else response(fileJson("main.go", if (variant == "hash") "changed" else "base"))
+          path.contains("files/symbols?path=main.go") ->
+              response(
+                  when (variant) {
+                    "path" -> symbolsJson("other.go", "Run", "func Run()")
+                    "missing" -> symbolsJson("main.go")
+                    "signature" -> symbolsJson("main.go", "Run", "func Changed()")
+                    "ambiguous" ->
+                        symbolsJson("main.go", "Run", "func Run()")
+                            .replace(
+                                "\"symbols\":[{",
+                                "\"symbols\":[{\"name\":\"Run\",\"signature\":\"func Run()\",\"kind\":\"function\",\"confidence\":\"exact\",\"atomic_target\":true},{")
+                    "inexact" ->
+                        symbolsJson("main.go", "Run", "func Run()")
+                            .replace("\"confidence\":\"exact\"", "\"confidence\":\"approximate\"")
+                    else -> symbolsJson("main.go", "Run", "func Run()")
+                  })
+          path.contains("files/analysis") -> response("""{"path":"main.go","status":"missing"}""")
+          path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+          path.contains("/git") -> response("""{"available":false}""")
+          else -> error("Unexpected $method $path")
+        }
+      }
+      try {
+        val project = resultProjectFixture()
+        val run = analysisRunFixture()
+        val finding =
+            UnifiedFinding(
+                id = "bug",
+                category = "bugs",
+                projectId = project.projectId,
+                projectRevision = project.projectRevision,
+                fileHash = "base",
+                freshness = "fresh",
+                location = FindingLocation("main.go", symbol = "Run"),
+                taskSpec = BugTaskSpec("1", "main.go", "Run", "func Run()", listOf("Fix Run.")))
+        presenter.dispatch(DesktopEvent.ProjectLoaded(project, resultIndexFixture()))
+        presenter.dispatch(
+            DesktopEvent.AnalysisRunUpdated(
+                ProjectAnalysisRunState(
+                    run = run,
+                    sections =
+                        mapOf(
+                            AnalysisResultKey("bugs") to
+                                AnalysisSectionState(
+                                    results =
+                                        analysisResultsFixture(run, "bugs")
+                                            .copy(semantic = listOf(finding)))))))
+        presenter.prepareFinding(finding)
+        eventually { presenter.snapshot.value.state.jobs.error != null }
+        assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank(), variant)
+        assertTrue(calls.none { it.startsWith("POST") }, variant)
+        if (variant == "failure" || variant == "path")
+            assertTrue(presenter.snapshot.value.state.selection.fileReadError != null, variant)
+      } finally {
+        presenter.close()
+      }
+    }
+  }
+
+  @Test
+  fun latePreparationCannotPublishAfterEvidenceOrSelectionChanges() {
+    for (change in
+        listOf(
+            "evidence",
+            "evidence-failure",
+            "evidence-replaced",
+            "selection",
+            "selection-failure",
+            "replacement")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+            when {
+              path.contains("files/info?path=main.go") ->
+                  if (change.endsWith("failure")) TransportResponse(503, "")
+                  else response(fileJson("main.go", "base"))
+              path.contains("files/symbols?path=main.go") ->
+                  response(symbolsJson("main.go", "Run", "func Run()"))
+              path.contains("files/analysis") ->
+                  response("""{"path":"main.go","status":"missing"}""")
+              path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+              path.contains("/git") -> response("""{"available":false}""")
+              else -> error("Unexpected $path")
+            }
+          }
+      try {
+        val project = resultProjectFixture()
+        val run = analysisRunFixture()
+        val finding =
+            UnifiedFinding(
+                id = "bug",
+                category = "bugs",
+                projectId = project.projectId,
+                projectRevision = project.projectRevision,
+                fileHash = "base",
+                freshness = "fresh",
+                location = FindingLocation("main.go", symbol = "Run"),
+                taskSpec = BugTaskSpec("1", "main.go", "Run", "func Run()", listOf("Fix Run.")))
+        presenter.dispatch(DesktopEvent.ProjectLoaded(project, resultIndexFixture()))
+        val key = AnalysisResultKey("bugs")
+        val results = analysisResultsFixture(run, "bugs")
+        presenter.dispatch(
+            DesktopEvent.AnalysisRunUpdated(
+                ProjectAnalysisRunState(
+                    run = run,
+                    sections =
+                        mapOf(
+                            key to
+                                AnalysisSectionState(
+                                    results = results.copy(semantic = listOf(finding)))))))
+        presenter.prepareFinding(finding)
+        main.runPending()
+        io.runPending()
+        when (change) {
+          "evidence",
+          "evidence-failure",
+          "evidence-replaced" ->
+              presenter.dispatch(
+                  DesktopEvent.AnalysisRunUpdated(
+                      ProjectAnalysisRunState(
+                          run = run,
+                          sections =
+                              mapOf(
+                                  key to
+                                      AnalysisSectionState(
+                                          results =
+                                              results.copy(
+                                                  semantic =
+                                                      if (change == "evidence-replaced")
+                                                          listOf(finding.copy(fileHash = "new"))
+                                                      else emptyList()))))))
+          "selection",
+          "selection-failure" -> presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Bugs))
+          else -> presenter.selectFile("main.go")
+        }
+        main.runPending()
+        io.runPending()
+        main.runPending()
+        val state = presenter.snapshot.value.state
+        assertTrue(state.preparedRequest.isBlank(), change)
+        if (change.startsWith("selection") || change.startsWith("evidence")) {
+          assertFalse(state.jobs.loading, change)
+          assertNull(state.jobs.error, change)
+          assertNull(state.selection.fileReadError, change)
+          assertNull(state.selectedFile, change)
+          assertNull(presenter.snapshot.value.state.selection.selectedSymbol, change)
+          assertEquals(
+              if (change.startsWith("evidence")) Workspace.Editor else Workspace.Bugs,
+              state.workspace,
+              change)
+          if (change == "evidence-replaced")
+              assertEquals("new", state.projectBugFindings().single().fileHash)
+          else if (change.startsWith("evidence")) assertTrue(state.projectBugFindings().isEmpty())
+        } else if (change == "replacement") {
+          assertEquals("main.go", state.selectedFile?.path)
+          assertFalse(state.jobs.loading)
+          assertNull(state.jobs.error)
+        }
+      } finally {
+        presenter.close()
+        scope.cancel()
       }
     }
   }
@@ -3565,11 +3744,11 @@ class DesktopWorkflowPresenterTest {
   private fun fileJson(path: String, hash: String) =
       "{\"path\":\"$path\",\"content_hash\":\"$hash\",\"name\":\"$path\",\"language\":\"Go\",\"size_bytes\":1,\"line_count\":1,\"modified_at\":\"\",\"binary\":false,\"content\":\"package main\"}"
 
-  private fun symbolsJson(path: String, symbol: String = "") =
+  private fun symbolsJson(path: String, symbol: String = "", signature: String = "") =
       if (symbol.isBlank())
           """{"project_id":"project","project_revision":"revision","path":"$path","symbols":[]}"""
       else
-          """{"project_id":"project","project_revision":"revision","path":"$path","symbols":[{"name":"$symbol","kind":"function","confidence":"exact","atomic_target":true}]}"""
+          """{"project_id":"project","project_revision":"revision","path":"$path","symbols":[{"name":"$symbol","signature":"$signature","kind":"function","confidence":"exact","atomic_target":true}]}"""
 
   private fun eventually(condition: () -> Boolean) {
     val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)

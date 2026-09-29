@@ -1274,7 +1274,9 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
   fun cancelFileLoad(request: RequestIdentity): Boolean =
       if (fileRequest?.id == request.id && matchesProject(request)) {
         fileRequest = null
-        accept(DesktopEvent.Status("File load canceled"))
+        dispatch(DesktopEvent.Status("File load canceled"))
+        state = state.copy(jobs = state.jobs.copy(loading = false))
+        true
       } else false
 
   fun analysisLoaded(request: RequestIdentity, analysis: FileAnalysis): Boolean =
