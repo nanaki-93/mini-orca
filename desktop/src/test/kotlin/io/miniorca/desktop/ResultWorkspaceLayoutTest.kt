@@ -876,6 +876,155 @@ class ResultWorkspaceLayoutTest {
   }
 
   @Test
+  fun securityReportAvailabilityStaysOutsideFindingSelectionAndOptionalDisclosure() {
+    val original = securityPageFixture()
+    val source = original.results!!.security.first()
+    val ai =
+        source.copy(
+            source = "ai",
+            status = "failed",
+            findings = emptyList(),
+            reason = "AI evidence could not be loaded")
+    val page =
+        original.copy(
+            section =
+                original.section.copy(
+                    results = original.results!!.copy(security = listOf(source, ai))))
+    val warning =
+        "Security findings describe analyzed evidence, not proof of safety. No findings does not mean the project is secure; unavailable evidence and incomplete coverage remain unknown."
+    ComposeVisualFixture(800, 650, 1.5f) {
+          SecurityWorkspacePane(
+              SecurityWorkspacePaneState(page, resultIndexFixture()),
+              SecurityWorkspaceActions({}, {}, FindingActions({}, { _, _ -> }, {})))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText(warning))
+          assertTrue(fixture.hasText("ai · main.go · Failed: AI evidence could not be loaded"))
+          assertTrue(
+              fixture.hasText("deterministic · main.go · Partial: Some rules were unavailable."))
+          assertTrue(fixture.hasText("Source rule · Partial"))
+          assertTrue(fixture.hasDescription("Inspect Credential-like assignment"))
+          fixture.clickDescription("Inspect Credential-like assignment")
+          fixture.render()
+          assertTrue(fixture.hasText("Source rule"))
+          assertTrue(fixture.hasText(warning))
+        }
+
+    val unknown =
+        source.copy(
+            source = "other",
+            findings =
+                listOf(source.findings.single().copy(id = "unknown", title = "Unknown provenance")))
+    val provenance =
+        original.copy(
+            section =
+                original.section.copy(
+                    results =
+                        original.results!!.copy(
+                            security =
+                                listOf(source, original.results!!.security.last(), unknown))))
+    ComposeVisualFixture(800, 650) {
+          SecurityWorkspacePane(
+              SecurityWorkspacePaneState(provenance, resultIndexFixture()),
+              SecurityWorkspaceActions({}, {}, FindingActions({}, { _, _ -> }, {})))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Source rule · Partial"))
+          assertTrue(fixture.hasText("Model hypothesis · Partial"))
+          assertTrue(fixture.hasText("Evidence type unavailable · Partial"))
+        }
+
+    listOf("failed", "partial", "unavailable").forEach { status ->
+      val findingFree =
+          original.copy(
+              section =
+                  original.section.copy(
+                      results =
+                          original.results!!.copy(
+                              security =
+                                  listOf(
+                                      ai.copy(
+                                          status = status,
+                                          reason = "Reason for $status",
+                                          findings = emptyList())))))
+      ComposeVisualFixture(800, 650) {
+            SecurityWorkspacePane(
+                SecurityWorkspacePaneState(findingFree, resultIndexFixture()),
+                SecurityWorkspaceActions({}, {}, FindingActions({}, { _, _ -> }, {})))
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.hasText(warning))
+            assertTrue(
+                fixture.hasText(
+                    "ai · main.go · ${status.replaceFirstChar(Char::uppercase)}: Reason for $status"))
+            assertFalse(fixture.hasDescription("Inspect Credential-like assignment"))
+          }
+    }
+
+    val empty =
+        original.copy(
+            run =
+                original.run!!.copy(
+                    status = "completed",
+                    sections =
+                        original.run.sections.map {
+                          if (it.category == "security")
+                              it.copy(status = "completed_empty", findingCount = 0)
+                          else it
+                        }),
+            section =
+                original.section.copy(
+                    results =
+                        original.results!!.copy(
+                            progress =
+                                original.progress!!.copy(
+                                    status = "completed_empty", findingCount = 0),
+                            security =
+                                listOf(
+                                    source.copy(
+                                        status = "completed_empty",
+                                        findings = emptyList(),
+                                        reason = "")))))
+    ComposeVisualFixture(800, 650, 1.5f) {
+          SecurityWorkspacePane(
+              SecurityWorkspacePaneState(empty, resultIndexFixture()),
+              SecurityWorkspaceActions({}, {}, FindingActions({}, { _, _ -> }, {})))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText(warning))
+          assertTrue(fixture.hasText("No findings in the analyzed scope."))
+          assertFalse(fixture.hasText("0 hypotheses"))
+        }
+
+    val unavailable =
+        original.copy(
+            section =
+                original.section.copy(
+                    error = "Saved result read failed",
+                    results =
+                        original.results!!.copy(
+                            security =
+                                listOf(
+                                    ai.copy(
+                                        status = "unavailable", reason = "Model not configured")))))
+    ComposeVisualFixture(800, 650, 1.5f) {
+          SecurityWorkspacePane(
+              SecurityWorkspacePaneState(unavailable, resultIndexFixture()),
+              SecurityWorkspaceActions({}, {}, FindingActions({}, { _, _ -> }, {})))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText(warning))
+          assertTrue(fixture.hasText("ai · main.go · Unavailable: Model not configured"))
+          assertTrue(fixture.hasText("Results could not be refreshed: Saved result read failed"))
+        }
+  }
+
+  @Test
   fun securityDetailKeepsEvidenceWarningsVisibleAndLongVerificationOnDemand() {
     val original = securityPageFixture()
     val results = requireNotNull(original.results)
