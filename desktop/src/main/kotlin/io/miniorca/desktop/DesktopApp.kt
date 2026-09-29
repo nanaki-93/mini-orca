@@ -851,6 +851,7 @@ internal fun MiniOrcaApp(
               cancelAnalysis = presenter::cancelAnalysis,
               startScan = presenter::runVerifiedScan,
               cancelScan = presenter::cancelVerifiedScan,
+              refreshScanStatus = presenter::refreshVerifiedScanStatus,
               openPerformanceSource = { result, selectionCurrent ->
                 routePerformanceSourceRequest(
                     presenter,

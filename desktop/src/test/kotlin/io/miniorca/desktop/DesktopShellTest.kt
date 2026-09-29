@@ -143,6 +143,7 @@ class DesktopShellTest {
                       cancelAnalysis = { operations += "cancel" },
                       startScan = { operations += "checks" },
                       cancelScan = { operations += "cancel scan" },
+                      refreshScanStatus = { operations += "refresh scan status" },
                       preparePerformanceFinding = { _, _ -> operations += "prepare" },
                       openPerformanceSource = { _, _ -> operations += "source" },
                       loadGoBenchmarks = { operations += "benchmarks" },

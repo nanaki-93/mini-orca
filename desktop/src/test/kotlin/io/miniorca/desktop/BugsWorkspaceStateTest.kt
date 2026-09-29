@@ -44,6 +44,98 @@ class BugsWorkspaceStateTest {
         }
   }
 
+  @Test
+  fun scanScopeAndTrustStayVisibleBeforeActivationAndPassiveInspectionIsInert() {
+    val project = resultProjectFixture()
+    val report = GoScanReport(project.projectId, project.projectRevision, "completed")
+    val requests = mutableListOf<String>()
+    ComposeVisualFixture(800, 650, 1.5f) {
+          BugsWorkspacePane(
+              BugsWorkspacePaneState(
+                  emptyList(),
+                  report,
+                  false,
+                  project = project,
+                  scanState = VerifiedScanState(read = VerifiedScanRead.Loaded)),
+              BugsWorkspaceActions(
+                  FindingActions({ requests += "provider" }, { _, _ -> requests += "write" }, {}),
+                  { requests += "trust/start" },
+                  { requests += "cancel" },
+                  refreshScanStatus = { requests += "status GET" }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Verified Go scan"))
+          assertTrue(
+              fixture.hasText(
+                  "Project: ${project.projectId} · Revision: ${project.projectRevision}"))
+          assertTrue(
+              fixture.hasText(
+                  "Whole-project checks, independent of the Analysis file selection: parser inspection of indexed Go source; go vet ./...; go test ./..."))
+          assertTrue(
+              fixture.hasText(
+                  "Checks run in a temporary copied workspace; the scan does not edit original source. Tests and package initialization can execute project code. A copy is not a security sandbox."))
+          assertTrue(
+              fixture.hasText(
+                  "Local tool evidence is scoped to these checks, not a general safety assurance. Model suggestions are separate results below."))
+          assertTrue(fixture.hasText("Trust project-code execution & run checks"))
+          fixture.clickText("Command and output")
+          fixture.render()
+          assertEquals(emptyList(), requests)
+          fixture.clickText("Refresh scan status")
+          assertEquals(listOf("status GET"), requests)
+        }
+  }
+
+  @Test
+  fun unsupportedAndUnavailableScansKeepEvidenceWithoutAuthorizingExecution() {
+    val project = resultProjectFixture()
+    val report =
+        GoScanReport(
+            project.projectId,
+            project.projectRevision,
+            "failed",
+            phases = listOf(GoScanPhase("go vet", "failed", output = "retained diagnostic")))
+    val cases =
+        listOf(
+            project.copy(type = "Java") to "this project is Java",
+            project.copy(type = "unknown") to "Project type is unknown",
+            project.copy(projectRevision = "") to "identity or revision is missing")
+    for ((current, explanation) in cases) {
+      var requests = 0
+      ComposeVisualFixture(800, 650) {
+            BugsWorkspacePane(
+                BugsWorkspacePaneState(
+                    emptyList(),
+                    report,
+                    false,
+                    project = current,
+                    scanState = VerifiedScanState(read = VerifiedScanRead.Loaded)),
+                BugsWorkspaceActions(
+                    FindingActions({}, { _, _ -> }, {}),
+                    { requests++ },
+                    { requests++ },
+                    refreshScanStatus = { requests++ }))
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.hasText("Unavailable"))
+            assertTrue(fixture.hasText("Trust project-code execution & run checks"))
+            assertTrue(fixture.isDisabled("Trust project-code execution & run checks"))
+            val summary =
+                verifiedScanProgress(
+                        current, VerifiedScanState(read = VerifiedScanRead.Loaded), report)
+                    .summary
+            assertTrue(summary.contains(explanation))
+            assertTrue(fixture.hasText(summary))
+            fixture.clickText("Command and output")
+            fixture.render()
+            assertTrue(fixture.hasText("retained diagnostic"))
+            assertEquals(0, requests)
+          }
+    }
+  }
+
   private val verified =
       UnifiedFinding(
           id = "vet-1",

@@ -175,7 +175,10 @@ internal fun RemoteProviderConfirmation(
 @Composable
 internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorkspaceActions) {
   val visible = groupFindingsByPriority(state.findings).flatMap { it.findings }
-  var scanExpanded by remember { mutableStateOf(false) }
+  var scanExpanded by
+      remember(state.project?.projectId, state.project?.projectRevision, state.scan) {
+        mutableStateOf(false)
+      }
   AnalysisResultsPane(
       page = state.page,
       rows = visible.map(::semanticResultRow),
@@ -183,8 +186,8 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
       openAnalysis = actions.openAnalysis,
       retryResults = actions.retryResults,
       tools = {
-        val scan = verifiedScanProgress(state.scan)
-        VerifiedChecksActionRow(state.scan, scan, actions)
+        val scan = verifiedScanProgress(state.project, state.scanState, state.scan)
+        VerifiedChecksActionRow(state, scan, actions)
         IdeDisclosureHeader(
             "Command and output",
             scanExpanded,
@@ -196,9 +199,6 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
                     .heightIn(max = 180.dp)
                     .verticalScroll(rememberScrollState())
                     .padding(8.dp)) {
-                  SelectionContainer {
-                    Text(scan.summary, style = IdeTypography.compactBody, color = SecondaryText)
-                  }
                   state.scan?.let { VerifiedScanDiagnostics(it) }
                 }
       }) { key ->
@@ -217,31 +217,88 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun VerifiedChecksActionRow(
-    report: GoScanReport?,
+    state: BugsWorkspacePaneState,
     progress: VerifiedScanProgress,
     actions: BugsWorkspaceActions,
 ) {
-  FlowRow(
+  Column(
       Modifier.fillMaxWidth().testTag("verified-checks-row"),
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
-      verticalArrangement = Arrangement.spacedBy(4.dp),
-      itemVerticalAlignment = Alignment.CenterVertically) {
-        Text("Verified checks", color = PrimaryText, style = IdeTypography.resultHeading)
-        IdeLabelBadge(progress.statusLabel, evidenceColor(checkStatus(report?.status.orEmpty())))
-        when (progress.action) {
-          VerifiedScanAction.Start ->
-              MiniOrcaButton(onClick = actions.startScan, tone = ActionTone.Neutral) {
-                Text("Trust project-code execution & run checks")
-              }
-          VerifiedScanAction.Cancel ->
-              MiniOrcaButton(onClick = actions.cancelScan, tone = ActionTone.Destructive) {
-                Text("Cancel checks")
-              }
-          VerifiedScanAction.Waiting ->
-              MiniOrcaButton(onClick = {}, enabled = false, tone = ActionTone.Neutral) {
-                Text("${progress.statusLabel} checks")
-              }
+      verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            itemVerticalAlignment = Alignment.CenterVertically) {
+              Text("Verified Go scan", color = PrimaryText, style = IdeTypography.resultHeading)
+              IdeLabelBadge(progress.statusLabel, evidenceColor(checkStatus(progress.statusLabel)))
+            }
+        SelectionContainer {
+          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                "Project: ${state.project?.projectId?.takeIf { it.isNotBlank() } ?: "unavailable"} · Revision: ${state.project?.projectRevision?.takeIf { it.isNotBlank() } ?: "unavailable"}",
+                style = IdeTypography.compactBody,
+                color = SecondaryText)
+            Text(
+                "Whole-project checks, independent of the Analysis file selection: parser inspection of indexed Go source; go vet ./...; go test ./...",
+                style = IdeTypography.compactBody,
+                color = SecondaryText)
+            Text(
+                "Checks run in a temporary copied workspace; the scan does not edit original source. Tests and package initialization can execute project code. A copy is not a security sandbox.",
+                style = IdeTypography.compactBody,
+                color = Warning)
+            Text(progress.summary, style = IdeTypography.compactBody, color = SecondaryText)
+            when (val refresh = state.scanState.findingsRefresh) {
+              is VerifiedScanFindingsRefresh.Unavailable ->
+                  Text(
+                      "Tool findings unavailable: ${refresh.message}. Previously loaded findings may be stale.",
+                      style = IdeTypography.compactBody,
+                      color = Warning)
+              VerifiedScanFindingsRefresh.Stale ->
+                  Text(
+                      "Tool findings may be stale; scan diagnostics remain available.",
+                      style = IdeTypography.compactBody,
+                      color = Warning)
+              VerifiedScanFindingsRefresh.Refreshing ->
+                  Text(
+                      "Refreshing tool findings; previous rows remain available.",
+                      style = IdeTypography.compactBody,
+                      color = SecondaryText)
+              else -> Unit
+            }
+          }
         }
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+              when (progress.action) {
+                VerifiedScanAction.Start ->
+                    MiniOrcaButton(onClick = actions.startScan, tone = ActionTone.Neutral) {
+                      Text("Trust project-code execution & run checks")
+                    }
+                VerifiedScanAction.Cancel ->
+                    MiniOrcaButton(onClick = actions.cancelScan, tone = ActionTone.Destructive) {
+                      Text("Cancel checks")
+                    }
+                VerifiedScanAction.Waiting ->
+                    MiniOrcaButton(onClick = {}, enabled = false, tone = ActionTone.Neutral) {
+                      Text("Trust project-code execution & run checks")
+                    }
+              }
+              if (state.project?.projectId?.isNotBlank() == true &&
+                  state.project.projectRevision.isNotBlank() &&
+                  state.scanState.read != VerifiedScanRead.Reading &&
+                  state.scanState.operation != VerifiedScanOperation.Starting &&
+                  state.scanState.operation != VerifiedScanOperation.CancellationRequested)
+                  MiniOrcaButton(
+                      onClick = actions.refreshScanStatus, tone = ActionTone.Navigation) {
+                        Text("Refresh scan status")
+                      }
+            }
+        Text(
+            "Local tool evidence is scoped to these checks, not a general safety assurance. Model suggestions are separate results below.",
+            style = IdeTypography.compactBody,
+            color = SecondaryText)
       }
 }
 
@@ -332,6 +389,8 @@ internal data class BugsWorkspacePaneState(
         AnalysisResultPageState(AnalysisResultType.Bugs, null, null),
     val browser: ResultBrowserState = newResultBrowserState(page),
     val index: ProjectIndex? = null,
+    val project: ProjectAnalysis? = page.project,
+    val scanState: VerifiedScanState = VerifiedScanState(),
 )
 
 /** Finding navigation, task preparation, triage, and scan intents. */
@@ -341,4 +400,5 @@ internal data class BugsWorkspaceActions(
     val cancelScan: () -> Unit,
     val openAnalysis: () -> Unit = {},
     val retryResults: (() -> Unit)? = null,
+    val refreshScanStatus: () -> Unit = {},
 )
