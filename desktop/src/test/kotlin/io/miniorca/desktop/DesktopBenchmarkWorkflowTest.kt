@@ -15,6 +15,48 @@ import kotlinx.serialization.json.Json
 
 class DesktopBenchmarkWorkflowTest {
   @Test
+  fun exploringPerformanceEvidenceWithoutCandidateDoesNotDispatchTransportOrActions() {
+    Harness().use { harness ->
+      var sourceActions = 0
+      val page = performancePageFixture()
+      val browser = newResultBrowserState(page)
+      browser.choose(performanceResults(page).single().row().key)
+      ComposeVisualFixture(800, 650) {
+            PerformanceWorkspacePane(
+                PerformanceWorkspacePaneState(page, null, browser = browser),
+                PerformanceWorkspaceActions(
+                    prepareOptimization = { sourceActions++ },
+                    openAnalysis = { sourceActions++ },
+                    semanticActions =
+                        FindingActions(
+                            { sourceActions++ }, { _, _ -> sourceActions++ }, { sourceActions++ }),
+                    openSource = { sourceActions++ },
+                    loadBenchmarks = harness.workflow::loadGoBenchmarks,
+                    selectBenchmark = harness.workflow::selectGoBenchmark,
+                    runBenchmark = harness.workflow::compareSelectedGoBenchmark))
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.clickDescription("Expand Explore benchmark evidence")
+            fixture.render()
+            assertTrue(
+                fixture.hasText(
+                    performanceBenchmarkStatusPresentation(null, null, null, false).summary))
+            assertTrue(
+                fixture.hasText(
+                    "Listing compatible benchmarks is read-only and does not execute project code."))
+            assertTrue(fixture.isDisabled("List compatible benchmarks"))
+            harness.completeRequest()
+            assertTrue(
+                harness.methods.isEmpty(),
+                "Disclosure must not call even read-only catalog transport")
+            assertTrue(harness.events.isEmpty(), "Disclosure must not select, trust or run")
+            assertEquals(0, sourceActions, "Disclosure must not prepare, navigate or write source")
+          }
+    }
+  }
+
+  @Test
   fun catalogAndSelectionNeverAuthorizeExecutionImplicitly() {
     Harness().use { harness ->
       harness.workflow.loadGoBenchmarks()

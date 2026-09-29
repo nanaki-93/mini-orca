@@ -3917,7 +3917,7 @@ class DesktopVisualLayoutTest {
           .use { fixture ->
             fixture.render("performance-benchmark-$width-$height-$scale")
             assertTrue(fixture.hasText("Measured · selected benchmark"))
-            fixture.clickText("Benchmark evidence")
+            fixture.clickText("Explore benchmark evidence")
             fixture.render("performance-benchmark-expanded-$width-$height-$scale")
             assertTrue(
                 fixture.hasText(

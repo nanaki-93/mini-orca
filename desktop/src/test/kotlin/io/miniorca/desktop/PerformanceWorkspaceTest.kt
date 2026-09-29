@@ -114,6 +114,17 @@ class PerformanceWorkspaceTest {
                 null,
                 false)
             .stateLabel)
+    for ((status, label) in
+        listOf("failed" to "Not measured · failed", "canceled" to "Not measured · canceled")) {
+      val presentation =
+          performanceBenchmarkStatusPresentation(
+              comparison.copy(status = status, reason = "Execution $status"),
+              comparison.identity(),
+              selectedChoice,
+              false)
+      assertEquals(label, presentation.stateLabel)
+      assertTrue(presentation.summary.contains("does not measure this model suggestion"))
+    }
     assertEquals(
         "Inconclusive · incomplete measurement evidence",
         performanceBenchmarkStatusPresentation(
