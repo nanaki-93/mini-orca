@@ -1554,7 +1554,8 @@ class DesktopKeyboardNavigationTest {
                 loadGoBenchmarks = onOperation,
                 selectGoBenchmark = {},
                 compareSelectedGoBenchmark = onOperation,
-                prepareSecurityFinding = { onOperation() }),
+                prepareSecurityFinding = { _, _ -> onOperation() },
+                openSecuritySource = { _, _ -> onOperation() }),
         findingActions = FindingActions({ onOperation() }, { _, _ -> onOperation() }, {}),
         paletteActions =
             DesktopShellPaletteActions(

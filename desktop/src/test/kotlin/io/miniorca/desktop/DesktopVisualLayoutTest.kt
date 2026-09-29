@@ -3228,7 +3228,8 @@ class DesktopVisualLayoutTest {
                         SecurityWorkspacePane(
                             SecurityWorkspacePaneState(page, resultIndexFixture()),
                             SecurityWorkspaceActions(
-                                { externalActions++ },
+                                { _, _ -> externalActions++ },
+                                { _, _ -> externalActions++ },
                                 { navigation += Workspace.Analysis },
                                 findingActions))
                     else ->
@@ -3278,7 +3279,7 @@ class DesktopVisualLayoutTest {
                   if (category == "bugs") {
                     assertTrue(fixture.hasText("Open source"))
                     assertTrue(fixture.isDisabled("Open source"))
-                  } else assertEquals(category == "performance", fixture.hasText("Open source"))
+                  } else assertTrue(fixture.hasText("Open source"))
                   assertEquals(0, externalActions)
                   val nextRun =
                       original.run!!.copy(identity = original.run.identity.copy(id = "next-run"))
@@ -3316,7 +3317,10 @@ class DesktopVisualLayoutTest {
           SecurityWorkspacePane(
               SecurityWorkspacePaneState(populated, resultIndexFixture()),
               SecurityWorkspaceActions(
-                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> }, {})))
+                  { _, _ -> prepared++ },
+                  { _, _ -> },
+                  { openedAnalysis++ },
+                  FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render("security-populated-wide-1440-900")
@@ -3347,7 +3351,10 @@ class DesktopVisualLayoutTest {
           SecurityWorkspacePane(
               SecurityWorkspacePaneState(unavailableEvidence, resultIndexFixture()),
               SecurityWorkspaceActions(
-                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> }, {})))
+                  { _, _ -> prepared++ },
+                  { _, _ -> },
+                  { openedAnalysis++ },
+                  FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render("security-unavailable-evidence-compact-800-650-150")
@@ -3366,7 +3373,10 @@ class DesktopVisualLayoutTest {
           SecurityWorkspacePane(
               SecurityWorkspacePaneState(empty, null),
               SecurityWorkspaceActions(
-                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> }, {})))
+                  { _, _ -> prepared++ },
+                  { _, _ -> },
+                  { openedAnalysis++ },
+                  FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render("security-empty-compact-800-650-150")

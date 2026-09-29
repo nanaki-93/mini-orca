@@ -268,7 +268,8 @@ private fun NativeRoundedWorkspace(terminal: DesktopTerminalWorkspace, directory
                 loadGoBenchmarks = { record("Benchmarks") },
                 selectGoBenchmark = { record("Select benchmark") },
                 compareSelectedGoBenchmark = { record("Compare benchmark") },
-                prepareSecurityFinding = { record("Security finding") }),
+                prepareSecurityFinding = { _, _ -> record("Security finding") },
+                openSecuritySource = { _, _ -> record("Security source") }),
         findingActions =
             FindingActions({ selectFile(it.location.path) }, { _, _ -> record("Finding") }, {}),
         paletteActions =
@@ -440,7 +441,7 @@ internal fun AcceptanceResultPane(category: String, status: String) {
     "security" ->
         SecurityWorkspacePane(
             SecurityWorkspacePaneState(page, resultIndexFixture()),
-            SecurityWorkspaceActions({}, {}, actions))
+            SecurityWorkspaceActions({ _, _ -> }, { _, _ -> }, {}, actions))
     else ->
         BugsWorkspacePane(
             BugsWorkspacePaneState(page.semantic, null, false, page),
