@@ -25,6 +25,7 @@ internal data class SecurityWorkspaceActions(
     val openAnalysis: () -> Unit,
     val semanticActions: FindingActions,
     val retryResults: (() -> Unit)? = null,
+    val reviewSecurityIntent: () -> Unit = openAnalysis,
 )
 
 internal data class SecurityResult(
@@ -379,7 +380,10 @@ internal fun SecurityWorkspacePane(
       browser = state.browser,
       openAnalysis = actions.openAnalysis,
       retryResults = actions.retryResults,
-      tools = { SecurityReportAvailability(state.page) }) { key ->
+      tools = {
+        SecurityReviewEntry(actions.reviewSecurityIntent)
+        SecurityReportAvailability(state.page)
+      }) { key ->
         val matches = results.filter { it.rowKey == key }
         val semanticMatches = semantic.filter { semanticResultRow(it).key == key }
         when {
@@ -399,6 +403,21 @@ internal fun SecurityWorkspacePane(
               }
         }
       }
+}
+
+@Composable
+private fun SecurityReviewEntry(openAnalysis: () -> Unit) {
+  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    MiniOrcaButton(onClick = openAnalysis, tone = ActionTone.Navigation) {
+      Text("Review Security intent", style = IdeTypography.action)
+    }
+    SelectionContainer {
+      Text(
+          "AI Security review is admitted through whole-project Analysis, not a Security-only scan. Open Analysis, then use its Start or Resume preview to review scope, destinations and separate Security intent before dispatch.",
+          color = SecondaryText,
+          style = IdeTypography.compactBody)
+    }
+  }
 }
 
 // Report failures must be visible even when the affected producer supplied no finding row.

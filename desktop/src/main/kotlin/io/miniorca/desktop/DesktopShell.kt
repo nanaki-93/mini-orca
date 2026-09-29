@@ -1466,6 +1466,7 @@ private fun DesktopCanvas(
             securityActions =
                 SecurityWorkspaceActions(
                     openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
+                    reviewSecurityIntent = { onWorkspaceSelected(Workspace.Analysis) },
                     semanticActions = findingActions,
                     prepareFix = analysisActions.prepareSecurityFinding,
                     openSource = analysisActions.openSecuritySource,

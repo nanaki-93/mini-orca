@@ -35,6 +35,34 @@ class SecurityWorkspaceTest {
   }
 
   @Test
+  fun reviewEntryExplainsWholeProjectScopeAndDoesNotInvokeFindingOrResultWork() {
+    val page = securityPageFixture().copy(section = AnalysisSectionState())
+    val calls = mutableListOf<String>()
+    ComposeVisualFixture(800, 650, 1.5f) {
+          SecurityWorkspacePane(
+              SecurityWorkspacePaneState(page, null),
+              SecurityWorkspaceActions(
+                  prepareFix = { _, _ -> calls += "prepare" },
+                  openSource = { _, _ -> calls += "source" },
+                  openAnalysis = { calls += "view" },
+                  semanticActions = FindingActions({ calls += "finding" }, { _, _ -> }, {}),
+                  retryResults = { calls += "read" },
+                  reviewSecurityIntent = { calls += "navigate" }))
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.revealText("Review Security intent", "result-overview")
+          assertTrue(fixture.hasText("Review Security intent"))
+          assertTrue(
+              fixture.hasText(
+                  "AI Security review is admitted through whole-project Analysis, not a Security-only scan. Open Analysis, then use its Start or Resume preview to review scope, destinations and separate Security intent before dispatch."))
+          assertEquals(emptyList(), calls)
+          fixture.clickText("Review Security intent")
+          assertEquals(listOf("navigate"), calls)
+        }
+  }
+
+  @Test
   fun navigationIsReadOnlyAndUsesTheRealAnchor() {
     val index =
         ProjectIndex(

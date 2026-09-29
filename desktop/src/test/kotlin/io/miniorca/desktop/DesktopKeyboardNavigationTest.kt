@@ -32,6 +32,47 @@ import kotlinx.coroutines.CompletableDeferred
 
 class DesktopKeyboardNavigationTest {
   @Test
+  fun securityReviewEntryUsesKeyboardNavigationWithoutPreviewOrDispatch() {
+    val page = securityPageFixture()
+    val runState =
+        ProjectAnalysisRunState(
+            run = page.run, sections = mapOf(AnalysisResultKey("security") to page.section))
+    var state by
+        mutableStateOf(
+            shellFocusState(resultProjectFixture()).let {
+              it.copy(app = it.app.copy(workspace = Workspace.Security, analysisRun = runState))
+            })
+    var privilegedCalls = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          FocusTestShell(state, onState = { state = it }, onOperation = { privilegedCalls++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.revealText("Review Security intent", "result-overview")
+          assertTrue(fixture.requestFocus("Review Security intent"))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Review Security intent"))
+          assertEquals(0, privilegedCalls)
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals(Workspace.Analysis, state.app.workspace)
+          assertEquals(runState, state.app.analysisRun)
+          assertEquals(0, privilegedCalls)
+          assertFalse(fixture.hasText("Include AI Security review"))
+
+          state = state.copy(app = state.app.copy(workspace = Workspace.Security))
+          fixture.render()
+          fixture.revealText("Review Security intent", "result-overview")
+          assertTrue(fixture.requestFocus("Review Security intent"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals(Workspace.Analysis, state.app.workspace)
+          assertEquals(runState, state.app.analysisRun)
+          assertEquals(0, privilegedCalls)
+        }
+  }
+
+  @Test
   fun performanceEvidenceEntryIsKeyboardReachableAndScopedToResultAndProject() {
     val original = performancePageFixture()
     val report = original.results!!.performance.single()

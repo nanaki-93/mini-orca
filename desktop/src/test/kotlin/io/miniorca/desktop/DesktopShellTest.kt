@@ -305,7 +305,11 @@ class DesktopShellTest {
             fixture.assertTextFits("Retry loading results")
             fixture.clickText("Retry loading results")
             assertEquals("retry ${type.category} ", operations.last())
-            fixture.clickText("View analysis")
+            if (type == AnalysisResultType.Security) {
+              fixture.revealText("Review Security intent", "result-overview")
+              assertTrue(fixture.hasText("Review Security intent"))
+              fixture.clickText("Review Security intent")
+            } else fixture.clickText("View analysis")
             assertEquals(Workspace.Analysis, shell.value.app.workspace)
             assertEquals("retry ${type.category} ", operations.last())
           }
