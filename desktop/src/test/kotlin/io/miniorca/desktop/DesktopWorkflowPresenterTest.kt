@@ -1200,7 +1200,8 @@ class DesktopWorkflowPresenterTest {
         if (method != "GET") writes.incrementAndGet()
         when {
           path.contains("files/info?path=main.go") -> response(fileJson("main.go", "base"))
-          path.contains("files/symbols?path=main.go") -> response(symbolsJson("main.go", "Run"))
+          path.contains("files/symbols?path=main.go") ->
+              response(symbolsJson("main.go", "Run", "func Run()", 2, 10))
           path.contains("files/analysis") -> response("""{"path":"main.go","status":"missing"}""")
           path.contains("/impact") -> response("""{"target_path":"main.go"}""")
           path.contains("/git") -> response("""{"available":false}""")
@@ -1219,7 +1220,8 @@ class DesktopWorkflowPresenterTest {
             presenter.prepareSecurityFinding(securityResults(page).first().finding)
         else
             presenter.preparePerformanceFinding(
-                "main.go", performanceResults(page).single().finding)
+                performanceResults(presenter.snapshot.value.state.analysisResultPage("performance"))
+                    .single())
         eventually { presenter.snapshot.value.state.preparedRequest.isNotBlank() }
         assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
         assertEquals(0, writes.get())
@@ -1316,22 +1318,28 @@ class DesktopWorkflowPresenterTest {
 
   @Test
   fun findingNavigationRequiresCurrentApprovalBeforeReplacingDraft() {
-    val calls = Collections.synchronizedList(mutableListOf<String>())
-    val presenter = presenter { method, path, _ ->
-      calls += "$method $path"
-      when {
-        path.contains("files/info?path=") ->
-            response(fileJson(if (path.contains("other.go")) "other.go" else "main.go", "base"))
-        path.contains("files/symbols?path=") ->
-            response(
-                symbolsJson(
-                    if (path.contains("other.go")) "other.go" else "main.go", "Run", "func Run()"))
-        path.contains("files/analysis") -> response("""{"path":"other.go","status":"missing"}""")
-        path.contains("/impact") -> response("""{"target_path":"other.go"}""")
-        path.contains("/git") -> response("""{"available":false}""")
-        else -> error("Unexpected $method $path")
-      }
-    }
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val calls = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, _ ->
+          calls += "$method $path"
+          when {
+            path.contains("files/info?path=") ->
+                response(fileJson(if (path.contains("other.go")) "other.go" else "main.go", "base"))
+            path.contains("files/symbols?path=") ->
+                response(
+                    symbolsJson(
+                        if (path.contains("other.go")) "other.go" else "main.go",
+                        "Run",
+                        "func Run()"))
+            path.contains("files/analysis") ->
+                response("""{"path":"other.go","status":"missing"}""")
+            path.contains("/impact") -> response("""{"target_path":"other.go"}""")
+            path.contains("/git") -> response("""{"available":false}""")
+            else -> error("Unexpected $method $path")
+          }
+        }
     try {
       val run = analysisRunFixture()
       val finding =
@@ -1361,7 +1369,8 @@ class DesktopWorkflowPresenterTest {
                                       analysisResultsFixture(run, "bugs")
                                           .copy(semantic = listOf(finding)))))))
       presenter.selectFile("main.go")
-      eventually { presenter.snapshot.value.state.selectedFile?.path == "main.go" }
+      dispatcher.runPending()
+      assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
       presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
       val original = presenter.snapshot.value.state
       val source = presenter.findingIntent(finding, false)!!
@@ -1405,19 +1414,23 @@ class DesktopWorkflowPresenterTest {
                                       analysisResultsFixture(run, "bugs")
                                           .copy(semantic = listOf(finding)))))))
       presenter.confirmFindingIntent(presenter.findingIntent(finding, true)!!)
-      eventually { presenter.snapshot.value.state.preparedRequest.contains("Fix Run.") }
+      dispatcher.runPending()
+      assertTrue(presenter.snapshot.value.state.preparedRequest.contains("Fix Run."))
       assertEquals("other.go", presenter.snapshot.value.state.selectedFile?.path)
       assertNull(presenter.snapshot.value.state.review.draft)
       presenter.selectFile("main.go")
-      eventually { presenter.snapshot.value.state.selectedFile?.path == "main.go" }
+      dispatcher.runPending()
+      assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
       presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
       presenter.confirmFindingIntent(presenter.findingIntent(finding, false)!!)
-      eventually { presenter.snapshot.value.state.selectedFile?.path == "other.go" }
-      eventually { presenter.snapshot.value.state.selection.focusedLine == 7 }
+      dispatcher.runPending()
+      assertEquals("other.go", presenter.snapshot.value.state.selectedFile?.path)
+      assertEquals(7, presenter.snapshot.value.state.selection.focusedLine)
       assertNull(presenter.snapshot.value.state.review.draft)
       assertTrue(calls.none { it.startsWith("POST") })
     } finally {
       presenter.close()
+      scope.cancel()
     }
   }
 
@@ -1517,6 +1530,462 @@ class DesktopWorkflowPresenterTest {
     } finally {
       presenter.close()
       scope.cancel()
+    }
+  }
+
+  @Test
+  fun typedPerformancePreparationRetainsWorkOnReadFailureAndRejectsChangedApproval() {
+    val dispatcher = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    var fail = true
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          when {
+            path.contains("files/info?") ->
+                if (fail) TransportResponse(503, "") else response(fileJson("main.go", "base"))
+            path.contains("files/symbols?") ->
+                response(symbolsJson("main.go", "Run", "func Run()", 2, 10))
+            else -> error("Unexpected request $path")
+          }
+        }
+    try {
+      val page = performancePageFixture()
+      presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
+      presenter.dispatch(
+          DesktopEvent.AnalysisRunUpdated(
+              ProjectAnalysisRunState(
+                  run = page.run,
+                  sections = mapOf(AnalysisResultKey("performance") to page.section))))
+      val result =
+          performanceResults(presenter.snapshot.value.state.analysisResultPage("performance"))
+              .single()
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      var message = TextFieldValue("Keep this text")
+      var constraints = TextFieldValue("Keep constraints")
+      fun clearConstraints() {
+        constraints = TextFieldValue()
+      }
+      var pending: PendingDraftDiscard.PerformancePreparation? = null
+      fun route() {
+        routePerformancePreparationRequest(
+            presenter,
+            result,
+            message,
+            constraints,
+            { true },
+            { message to constraints },
+            ::clearConstraints) {
+              pending = it
+            }
+      }
+      fun confirm() {
+        confirmPerformancePreparationDiscard(
+            presenter,
+            requireNotNull(pending),
+            message,
+            constraints,
+            { message to constraints },
+            ::clearConstraints)
+      }
+      route()
+      assertEquals("Keep this text", message.text) // Dismissal leaves all work intact.
+      assertEquals(draft(), presenter.snapshot.value.state.review.draft)
+      constraints = TextFieldValue("Changed")
+      confirm()
+      assertEquals("Changed", constraints.text)
+      assertEquals(draft(), presenter.snapshot.value.state.review.draft)
+      constraints = TextFieldValue("Keep constraints")
+      pending = null
+      route()
+      presenter.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() { return }"))
+      confirm()
+      assertEquals("Keep constraints", constraints.text)
+      assertEquals(
+          "func Run() { return }", presenter.snapshot.value.state.review.editor?.declaration)
+      pending = null
+      route()
+      confirm()
+      dispatcher.runPending()
+      io.runPending()
+      dispatcher.runPending()
+      assertEquals("Keep this text", message.text)
+      assertEquals("Keep constraints", constraints.text)
+      assertEquals(
+          "func Run() { return }", presenter.snapshot.value.state.review.editor?.declaration)
+      assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank())
+      fail = false
+      pending = null
+      route()
+      confirm()
+      dispatcher.runNext()
+      message = TextFieldValue("New input during read")
+      io.runPending()
+      dispatcher.runPending()
+      assertEquals("New input during read", message.text)
+      assertEquals("Keep constraints", constraints.text)
+      assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank())
+      assertEquals(
+          "func Run() { return }", presenter.snapshot.value.state.review.editor?.declaration)
+      pending = null
+      route()
+      confirm()
+      dispatcher.runPending()
+      io.runPending()
+      dispatcher.runPending()
+      val state = presenter.snapshot.value.state
+      assertEquals("", constraints.text)
+      assertNull(state.review.editor)
+      assertTrue(
+          state.preparedRequest.contains(
+              "Observed pattern: A buffer is allocated on every request."))
+      assertTrue(state.preparedRequest.contains("Recommendation: Reuse a bounded buffer."))
+      assertTrue(
+          state.preparedRequest.contains("Trade-offs: Retained buffers increase memory use."))
+      assertEquals("Run", state.selectedSymbol?.name)
+      assertEquals(0, state.preparedTaskSpec?.acceptanceCriteria?.size ?: 0)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun typedPreparationCancelsPreviousFileWorkOnlyAfterLoadedSourceValidation() {
+    for (readFails in listOf(false, true)) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      var chatRequests = 0
+      var fileReads = 0
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+            when {
+              path.contains("files/info?") -> {
+                fileReads++
+                if (readFails && fileReads == 2) TransportResponse(503, "")
+                else response(fileJson("main.go", "base"))
+              }
+              path.contains("files/symbols?") ->
+                  response(symbolsJson("main.go", "Run", "func Run()", 2, 10))
+              path.contains("files/analysis") ->
+                  response("""{"path":"main.go","status":"missing"}""")
+              path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+              path.contains("/git") -> response("""{"available":false}""")
+              method == "POST" -> {
+                chatRequests++
+                response(creationSessionJson())
+              }
+              else -> error("Unexpected $method $path")
+            }
+          }
+      try {
+        val page = performancePageFixture()
+        presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
+        presenter.dispatch(
+            DesktopEvent.AnalysisRunUpdated(
+                ProjectAnalysisRunState(
+                    run = page.run,
+                    sections = mapOf(AnalysisResultKey("performance") to page.section))))
+        presenter.selectFile("main.go")
+        repeat(3) {
+          main.runPending()
+          io.runPending()
+        }
+        main.runPending()
+        assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
+        presenter.dispatch(
+            DesktopEvent.SymbolSelected(resultIndexFixture().files.single().symbols.single()))
+        val result =
+            performanceResults(presenter.snapshot.value.state.analysisResultPage("performance"))
+                .single()
+        // Preparation reads first; a still-authorized chat starts while those reads are pending.
+        presenter.preparePerformanceFinding(result)
+        main.runNext()
+        presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Improve Run")
+        assertTrue(presenter.snapshot.value.generating)
+        main.runNext()
+        io.runNext() // Complete only the preparation read, leaving chat I/O queued.
+        main.runPending()
+        if (readFails) {
+          assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
+          assertTrue(presenter.snapshot.value.generating)
+          assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank())
+        } else {
+          assertTrue(
+              presenter.snapshot.value.state.preparedRequest.startsWith("Optimize Run"),
+              "error=${presenter.snapshot.value.state.error}, reads=$fileReads, chat=$chatRequests, generating=${presenter.snapshot.value.generating}")
+          io.runPending()
+          main.runPending()
+          assertFalse(presenter.snapshot.value.generating)
+          assertEquals(0, chatRequests)
+          assertNull(presenter.snapshot.value.state.chat.session)
+        }
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun typedPreparationRejectsBrowserSelectionChangesDuringReadAndBeforeApproval() {
+    for (failure in listOf(false, true)) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+            when {
+              path.contains("files/info?") ->
+                  if (failure) TransportResponse(503, "") else response(fileJson("main.go", "base"))
+              path.contains("files/symbols?") ->
+                  response(symbolsJson("main.go", "Run", "func Run()", 2, 10))
+              else -> error("Unexpected $path")
+            }
+          }
+      try {
+        val base = performancePageFixture()
+        val report = base.results!!.performance.single()
+        val updated =
+            report.copy(
+                findings =
+                    report.findings +
+                        report.findings.single().copy(id = "other", title = "Other opportunity"))
+        val page =
+            base.copy(
+                section =
+                    base.section.copy(results = base.results!!.copy(performance = listOf(updated))))
+        presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
+        presenter.dispatch(
+            DesktopEvent.AnalysisRunUpdated(
+                ProjectAnalysisRunState(
+                    run = page.run,
+                    sections = mapOf(AnalysisResultKey("performance") to page.section))))
+        val loaded = presenter.snapshot.value.state.analysisResultPage("performance")
+        val results = performanceResults(loaded)
+        val selected = results.single { it.finding.id == "perf" }
+        val other = results.single { it.finding.id == "other" }
+        val browser = newResultBrowserState(loaded)
+        browser.choose(selected.row().key)
+        val guard = performanceSelectionGuard(loaded, browser, selected)
+        presenter.preparePerformanceFinding(selected, guard)
+        main.runNext() // File and symbol reads are suspended on I/O.
+        io.runPending()
+        browser.choose(other.row().key)
+        browser.choose(selected.row().key) // Returning does not reinstate the old action.
+        main.runPending()
+        assertNull(presenter.snapshot.value.state.selectedFile)
+        assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank())
+        assertNull(presenter.snapshot.value.state.error)
+
+        presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+        val input = TextFieldValue("Keep my request")
+        val constraints = TextFieldValue("Keep my constraints")
+        var pending: PendingDraftDiscard.PerformancePreparation? = null
+        routePerformancePreparationRequest(
+            presenter,
+            selected,
+            input,
+            constraints,
+            performanceSelectionGuard(loaded, browser, selected),
+            { input to constraints },
+            { error("Selection change must not clear constraints") }) {
+              pending = it
+            }
+        browser.choose(other.row().key)
+        confirmPerformancePreparationDiscard(
+            presenter,
+            requireNotNull(pending),
+            input,
+            constraints,
+            { input to constraints },
+            { error("Selection change must not clear constraints") })
+        assertEquals(draft(), presenter.snapshot.value.state.review.draft)
+        assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank())
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun typedPreparationIgnoresLateReadsAfterEvidenceOrSelectionChanges() {
+    for (change in
+        listOf("results", "index", "selection", "project", "file request", "late failure")) {
+      val dispatcher = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + dispatcher)
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+            when {
+              path.contains("files/info?") ->
+                  if (change == "late failure") TransportResponse(503, "")
+                  else response(fileJson("main.go", "base"))
+              path.contains("files/symbols?") ->
+                  response(symbolsJson("main.go", "Run", "func Run()", 2, 10))
+              path.contains("files/analysis") ->
+                  response("""{"path":"main.go","status":"missing"}""")
+              path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+              path.contains("/git") -> response("""{"available":false}""")
+              else -> error("Unexpected $path")
+            }
+          }
+      try {
+        val page = performancePageFixture()
+        presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
+        presenter.dispatch(
+            DesktopEvent.AnalysisRunUpdated(
+                ProjectAnalysisRunState(
+                    run = page.run,
+                    sections = mapOf(AnalysisResultKey("performance") to page.section))))
+        val result =
+            performanceResults(presenter.snapshot.value.state.analysisResultPage("performance"))
+                .single()
+        presenter.preparePerformanceFinding(result)
+        dispatcher.runNext() // Suspend before the file read completes.
+        when (change) {
+          "late failure",
+          "results" ->
+              presenter.dispatch(
+                  DesktopEvent.AnalysisRunUpdated(
+                      ProjectAnalysisRunState(
+                          run = page.run,
+                          sections =
+                              mapOf(
+                                  AnalysisResultKey("performance") to
+                                      page.section.copy(
+                                          results =
+                                              page.results!!.copy(performance = emptyList()))))))
+          "index" ->
+              presenter.dispatch(
+                  DesktopEvent.IndexRefreshed(
+                      resultIndexFixture()
+                          .copy(
+                              files =
+                                  resultIndexFixture().files.map { it.copy(contentHash = "new") })))
+          "selection" -> presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Bugs))
+          "project" ->
+              presenter.dispatch(
+                  DesktopEvent.ProjectLoaded(
+                      resultProjectFixture().copy(projectRevision = "next"),
+                      resultIndexFixture().copy(projectRevision = "next")))
+          "file request" -> presenter.selectFile("main.go")
+        }
+        dispatcher.runPending()
+        io.runPending()
+        dispatcher.runPending()
+        assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank(), change)
+        assertNull(presenter.snapshot.value.state.error, change)
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun typedPreparationRejectsObsoleteAndAmbiguousResultsBeforeReading() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    var reads = 0
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { _, _, _ ->
+          reads++
+          error("Unexpected read")
+        }
+    try {
+      val page = performancePageFixture()
+      presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
+      presenter.dispatch(
+          DesktopEvent.AnalysisRunUpdated(
+              ProjectAnalysisRunState(
+                  run = page.run,
+                  sections = mapOf(AnalysisResultKey("performance") to page.section))))
+      val result =
+          performanceResults(presenter.snapshot.value.state.analysisResultPage("performance"))
+              .single()
+      val intent = requireNotNull(presenter.performancePreparationIntent(result))
+      val duplicate =
+          page.section.copy(
+              results = page.results!!.copy(performance = listOf(result.report, result.report)))
+      presenter.dispatch(
+          DesktopEvent.AnalysisRunUpdated(
+              ProjectAnalysisRunState(
+                  run = page.run, sections = mapOf(AnalysisResultKey("performance") to duplicate))))
+      assertFalse(presenter.confirmPerformancePreparationIntent(intent))
+      presenter.preparePerformanceFinding(result)
+      assertTrue(presenter.snapshot.value.state.error?.contains("ambiguous") == true)
+      assertEquals(0, reads)
+      assertNull(presenter.snapshot.value.state.selectedFile)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun typedPreparationRejectsMismatchedReadIdentityWithoutPublishing() {
+    for (read in
+        listOf(
+            "file hash",
+            "file path",
+            "symbols project",
+            "symbols revision",
+            "symbols path",
+            "signature")) {
+      val dispatcher = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + dispatcher)
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = dispatcher) { _, path, _ ->
+            when {
+              path.contains("files/info?") ->
+                  response(
+                      fileJson(
+                          if (read == "file path") "other.go" else "main.go",
+                          if (read == "file hash") "new" else "base"))
+              path.contains("files/symbols?") -> {
+                val symbols =
+                    symbolsJson(
+                        if (read == "symbols path") "other.go" else "main.go",
+                        "Run",
+                        if (read == "signature") "func Run(int)" else "func Run()",
+                        2,
+                        10)
+                response(
+                    when (read) {
+                      "symbols project" ->
+                          symbols.replace("\"project_id\":\"project\"", "\"project_id\":\"other\"")
+                      "symbols revision" ->
+                          symbols.replace(
+                              "\"project_revision\":\"revision\"", "\"project_revision\":\"next\"")
+                      else -> symbols
+                    })
+              }
+              else -> error("Unexpected $path")
+            }
+          }
+      try {
+        val page = performancePageFixture()
+        presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
+        presenter.dispatch(
+            DesktopEvent.AnalysisRunUpdated(
+                ProjectAnalysisRunState(
+                    run = page.run,
+                    sections = mapOf(AnalysisResultKey("performance") to page.section))))
+        val result =
+            performanceResults(presenter.snapshot.value.state.analysisResultPage("performance"))
+                .single()
+        presenter.preparePerformanceFinding(result)
+        dispatcher.runPending()
+        assertNull(presenter.snapshot.value.state.selectedFile, read)
+        assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank(), read)
+        assertTrue(presenter.snapshot.value.state.error?.isNotBlank() == true, read)
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
     }
   }
 
@@ -4529,11 +4998,17 @@ class DesktopWorkflowPresenterTest {
   private fun fileJson(path: String, hash: String) =
       "{\"path\":\"$path\",\"content_hash\":\"$hash\",\"name\":\"$path\",\"language\":\"Go\",\"size_bytes\":1,\"line_count\":1,\"modified_at\":\"\",\"binary\":false,\"content\":\"package main\"}"
 
-  private fun symbolsJson(path: String, symbol: String = "", signature: String = "") =
+  private fun symbolsJson(
+      path: String,
+      symbol: String = "",
+      signature: String = "",
+      start: Int = 0,
+      end: Int = 0
+  ) =
       if (symbol.isBlank())
           """{"project_id":"project","project_revision":"revision","path":"$path","symbols":[]}"""
       else
-          """{"project_id":"project","project_revision":"revision","path":"$path","symbols":[{"name":"$symbol","signature":"$signature","kind":"function","confidence":"exact","atomic_target":true}]}"""
+          """{"project_id":"project","project_revision":"revision","path":"$path","symbols":[{"name":"$symbol","signature":"$signature","start_line":$start,"end_line":$end,"kind":"function","confidence":"exact","atomic_target":true}]}"""
 
   private fun eventually(condition: () -> Boolean) {
     val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)

@@ -1606,7 +1606,7 @@ class DesktopKeyboardNavigationTest {
           PerformanceWorkspacePane(
               PerformanceWorkspacePaneState(page, resultIndexFixture()),
               PerformanceWorkspaceActions(
-                  prepareOptimization = { _, _ -> preparations++ },
+                  prepareOptimization = { preparations++ },
                   openSource = { inspected += it },
                   openAnalysis = { destination = Workspace.Analysis },
                   semanticActions = FindingActions({}, { _, _ -> }, {})))

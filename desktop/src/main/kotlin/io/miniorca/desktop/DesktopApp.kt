@@ -63,6 +63,15 @@ internal sealed interface PendingDraftDiscard {
     override val nextLabel: String = "create a ${kind.noun}"
   }
 
+  data class PerformancePreparation(
+      val intent: DesktopWorkflowPresenter.PerformancePreparationIntent,
+      override val currentDraft: CurrentEditIdentity?,
+      val chatMessage: TextFieldValue,
+      val constraints: TextFieldValue,
+  ) : PendingDraftDiscard {
+    override val nextLabel: String = "prepare a fix for ${intent.result.finding.title}"
+  }
+
   data class PerformanceSource(
       val intent: DesktopWorkflowPresenter.PerformanceSourceIntent,
       override val currentDraft: CurrentEditIdentity?,
@@ -444,6 +453,7 @@ internal fun MiniOrcaApp(
         chatMessage,
         advancedConstraints,
         ::clearComposerInput,
+        { advancedConstraints = TextFieldValue() },
         { chatMessage to advancedConstraints },
         ::startReplaceEdit,
         ::startCreateDeclaration)
@@ -834,9 +844,17 @@ internal fun MiniOrcaApp(
                       pendingDraftDiscard = it
                     }
               },
-              preparePerformanceFinding = { path, finding ->
-                clearComposerInput()
-                presenter.preparePerformanceFinding(path, finding)
+              preparePerformanceFinding = { result, selectionCurrent ->
+                routePerformancePreparationRequest(
+                    presenter,
+                    result,
+                    chatMessage,
+                    advancedConstraints,
+                    selectionCurrent,
+                    { chatMessage to advancedConstraints },
+                    { advancedConstraints = TextFieldValue() }) {
+                      pendingDraftDiscard = it
+                    }
               },
               loadGoBenchmarks = presenter::loadGoBenchmarks,
               selectGoBenchmark = presenter::selectGoBenchmark,
@@ -938,6 +956,7 @@ private fun continueAfterDraftDiscard(
     message: TextFieldValue,
     constraints: TextFieldValue,
     clearComposer: () -> Unit,
+    clearConstraints: () -> Unit,
     currentInput: () -> Pair<TextFieldValue, TextFieldValue>,
     replace: (DirectEditRequest) -> Unit,
     create: (DeclarationCreationKind) -> Unit,
@@ -951,6 +970,14 @@ private fun continueAfterDraftDiscard(
       presenter.discardDraft()
       create(pending.kind)
     }
+    is PendingDraftDiscard.PerformancePreparation ->
+        confirmPerformancePreparationDiscard(
+            presenter,
+            pending,
+            message,
+            constraints,
+            currentInput,
+            clearConstraints = clearConstraints)
     is PendingDraftDiscard.PerformanceSource ->
         confirmPerformanceSourceDiscard(
             presenter, pending, message, constraints, currentInput, clearComposer)
@@ -958,6 +985,48 @@ private fun continueAfterDraftDiscard(
         confirmFindingDiscard(presenter, pending, message, constraints, clearComposer)
     null -> Unit
   }
+}
+
+internal fun routePerformancePreparationRequest(
+    presenter: DesktopWorkflowPresenter,
+    result: PerformanceResult,
+    message: TextFieldValue,
+    constraints: TextFieldValue,
+    selectionCurrent: () -> Boolean,
+    currentInput: () -> Pair<TextFieldValue, TextFieldValue>,
+    clearConstraints: () -> Unit,
+    pending: (PendingDraftDiscard.PerformancePreparation) -> Unit,
+) {
+  val intent = presenter.performancePreparationIntent(result, selectionCurrent)
+  if (intent != null &&
+      (intent.draft.hasWork || message.text.isNotEmpty() || constraints.text.isNotEmpty()))
+      pending(
+          PendingDraftDiscard.PerformancePreparation(
+              intent, currentEditIdentity(presenter.snapshot.value.state), message, constraints))
+  else
+      presenter.preparePerformanceFinding(
+          result,
+          selectionCurrent,
+          { currentInput() == (message to constraints) },
+          clearConstraints)
+}
+
+internal fun confirmPerformancePreparationDiscard(
+    presenter: DesktopWorkflowPresenter,
+    pending: PendingDraftDiscard.PerformancePreparation,
+    message: TextFieldValue,
+    constraints: TextFieldValue,
+    currentInput: () -> Pair<TextFieldValue, TextFieldValue>,
+    clearConstraints: () -> Unit,
+) {
+  if (pending.chatMessage != message || pending.constraints != constraints) {
+    presenter.dispatch(DesktopEvent.Failed("Assistant input changed. Choose Prepare fix again."))
+    return
+  }
+  presenter.confirmPerformancePreparationIntent(
+      pending.intent,
+      { currentInput() == (pending.chatMessage to pending.constraints) },
+      clearConstraints)
 }
 
 internal fun routePerformanceSourceRequest(
