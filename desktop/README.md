@@ -455,6 +455,49 @@ preview. Verified Go scans, performance hypotheses, measured benchmarks, source
 rules and model hypotheses retain distinct evidence and execution requirements
 without routine badge labels.
 
+### Performance hypotheses and benchmark evidence
+
+Performance uses the shared result browser for loaded typed opportunities and
+semantic findings. Search title/path, filter by impact and select a row to inspect
+it without preparing a fix. Typed opportunity details show the full relative
+path, supplied positive line and symbol, report status/freshness, observed pattern,
+qualitative potential impact, model confidence (not a measurement or speedup
+probability), recommendation, workload conditions, trade-offs, verification plan,
+warning and engineering insight. Absent evidence fields are labeled rather than invented;
+**Report metadata** expands the saved profile/model/provider and report identity.
+A partial or stale report retains its warning. These model recommendations are
+unmeasured; a candidate benchmark comparison does not measure the selected
+hypothesis.
+
+On a typed opportunity, **Open source** inspects the one indexed file at its
+supplied positive line, including from retained stale results; a missing line
+is not replaced with an unrelated declaration. It does not prepare Assistant.
+If the file is missing or ambiguous in the active index, the action reports a
+failure. **Prepare fix** is a separate action: it requires current completed or
+partial evidence, a matching nonblank source hash, and one exact eligible Go
+declaration whose indexed anchor still matches the loaded file and symbols.
+The disabled action shows a specific blocked reason when preflight fails. A
+successful preparation opens Editor/Assistant with a behavior-preserving request
+using the supplied pattern, recommendation, workload, trade-offs and verification
+plan; it does not send, run checks or write source. Failed or obsolete reads
+cannot prepare the request. Changing targets with a draft or Assistant input
+requires discard confirmation; cancel/Escape preserves them, and an approval
+is invalid if the opportunity, project, draft or input changes. Same-file source
+inspection retains the draft. Semantic Performance rows use the shared finding
+details and task-based preparation eligibility. Their separate **Open source**
+action opens the indexed path and supplied line without preparing Assistant; if
+the path is unavailable in the index, the control is disabled with a reason.
+
+**Explore benchmark evidence** opens a local disclosure, without a candidate or
+catalog request. It does not list benchmarks, select one, grant trust, run code,
+contact a provider or write source. **List compatible benchmarks** explicitly
+requests the read-only catalog when a current candidate is available. Select a
+benchmark separately; only **Run selected benchmark** (or **Trust and run selected
+benchmark**) starts local execution, with trust required when not already granted.
+**Measurement details** shows the comparison for the candidate and selected
+benchmark, not a measured gain for a model hypothesis. Running, unavailable,
+failed, canceled, stale and inconclusive comparisons keep their own labels.
+
 ## New Go functions
 
 Open a Go file, including one containing only a package declaration, and select

@@ -86,6 +86,54 @@ with keyboard focus.
    separate. Performance hypotheses never claim measured speedup; Security rule
    matches and model hypotheses remain distinct in their evidence. Bugs keeps
    separately trusted verified Go scans.
+
+   In Performance, keyboard-select a typed opportunity and scroll the detail
+   independently of the result list. At 800×650 and 1280×600, 125%/150% text,
+   and with **Report metadata** collapsed, reach and copy the full path, positive
+   line (no `:0` for an absent line), observed pattern, qualitative impact,
+   confidence disclaimer, recommendation, workload, trade-offs, verification,
+   warnings and engineering insight. Expand metadata and copy a long value;
+   confirm model prose is read-only and no content or action is clipped. Check
+   completed-empty, no-match, retained-error, partial and stale rows without
+   treating unknown counts as zero. Tab to **Open source** and **Prepare fix**;
+   verify focus and enabled/disabled announcements. Open source on current and
+   retained stale typed evidence with an indexed path: check the exact path and
+   supplied positive line in read-only Editor without an Assistant prefill. With
+   a missing/ambiguous indexed file, check the visible failure instead. Check
+   blocked preparation reasons for stale, changed/missing hash, ambiguous or
+   inexact declaration and unsupported source. For an exact current Go target,
+   Prepare fix should prefill Assistant with the supplied hypothesis context but
+   never Send, execute or write. Cancel and Escape each target-changing discard
+   prompt with a draft and with Assistant input; confirm both remain intact.
+   Confirm an unchanged intent, then change project/result/draft/input while a
+   prompt is pending and verify the old approval cannot act. Same-file Open
+   source must retain the draft. A failed source/symbol read must not prefill.
+
+   Inspect a semantic Performance row separately: check its shared evidence and
+   task-based blocked reason. Tab to its **Open source** control and activate it
+   with Enter/Space; verify the indexed path and supplied positive line open in
+   read-only Editor without preparing a request. With no indexed path, verify
+   the control is disabled and its reason is visible. Reject missing, duplicate
+   and wrong-project findings without navigating or preparing. Record this
+   native source-action check as pending until performed; presenter and
+   component tests alone cannot establish native behavior.
+
+   With no candidate, Tab to **Explore benchmark evidence**, activate with
+   Enter/Space, and check expanded state, focus, scrolling and **Benchmark
+   comparison** reachability. Switch result/project and check the disclosure
+   resets. Merely selecting a row, opening the disclosure or **Measurement
+   details** must not list/select/run benchmarks, grant execution trust, send
+   to a provider or write source (observe the fake transport and any execution
+   log separately). Only **List compatible benchmarks** requests a read-only
+   catalog for a current candidate; choose a benchmark and inspect its command
+   before explicitly using **Run selected benchmark** or **Trust and run selected
+   benchmark** on a disposable project. Verify running, unavailable, failed,
+   canceled, stale, inconclusive and measured-candidate states stay distinct;
+   even a measured candidate must not label the selected hypothesis measured.
+   Record native focus, keyboard, copy and side-effect observations separately
+   from the automated Performance presenter, benchmark and production-component
+   tests; those tests do not establish native behavior.
+
 6. Use Cmd/Ctrl+P to choose a file and Cmd/Ctrl+Shift+O to choose a declaration.
    Source and diff must remain selectable/read-only. Relative paths disambiguate
    equal basenames. Source drag selects text without changing the draft target.
