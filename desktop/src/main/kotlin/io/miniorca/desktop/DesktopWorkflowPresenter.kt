@@ -516,20 +516,25 @@ class DesktopWorkflowPresenter(
   }
 
   fun prepareFinding(finding: UnifiedFinding) {
-    if (!findingCanPrepareFix(finding)) {
-      dispatch(DesktopEvent.Failed("Refresh this finding before preparing a fix."))
-      return
+    val state = snapshot.value.state
+    val findings =
+        when (finding.category) {
+          "",
+          "bugs" -> state.projectBugFindings()
+          "performance",
+          "security" -> state.analysisResultPage(finding.category).semantic
+          else -> emptyList()
+        }
+    when (val decision =
+        findingPreparationDecision(finding, state.project, findings, state.index)) {
+      is FindingPreparationDecision.Blocked -> dispatch(DesktopEvent.Failed(decision.reason))
+      is FindingPreparationDecision.Eligible ->
+          openFileInEditor(
+              decision.target.path,
+              decision.target,
+              findingTaskRequirement(decision.task),
+              decision.task)
     }
-    val target = findingTaskNavigationTarget(finding)
-    val requirement = findingTaskRequirement(finding)
-    if (target == null ||
-        requirement == null ||
-        snapshot.value.state.index?.files?.any { it.path == target.path } != true) {
-      dispatch(
-          DesktopEvent.Failed("This finding no longer points to a file in the active project."))
-      return
-    }
-    openFileInEditor(target.path, target, requirement, finding.taskSpec)
   }
 
   fun viewAnalysisResults(category: String, path: String) {

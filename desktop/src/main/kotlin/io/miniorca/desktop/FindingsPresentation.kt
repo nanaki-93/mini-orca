@@ -63,6 +63,7 @@ internal class FindingActions(
 internal fun FindingActionButtons(
     finding: UnifiedFinding,
     actions: FindingActions,
+    preparation: FindingPreparationDecision,
 ) {
   FlowRow(
       Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.compact),
@@ -70,7 +71,7 @@ internal fun FindingActionButtons(
       verticalArrangement = Arrangement.spacedBy(8.dp)) {
         MiniOrcaButton(
             onClick = { actions.prepareFix(finding) },
-            enabled = findingCanPrepareFix(finding),
+            enabled = preparation is FindingPreparationDecision.Eligible,
             tone = ActionTone.Primary,
             density = ButtonDensity.Toolbar) {
               Text("Prepare fix")

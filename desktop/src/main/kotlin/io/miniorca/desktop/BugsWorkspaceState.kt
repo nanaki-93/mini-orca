@@ -105,43 +105,94 @@ fun verifiedScanProgress(scan: GoScanReport?): VerifiedScanProgress =
               VerifiedScanAction.Start)
     }
 
-fun findingCanPrepareFix(finding: UnifiedFinding): Boolean {
-  val task = finding.taskSpec ?: return false
-  return finding.freshness.lowercase() == "fresh" &&
-      task.schemaVersion == "1" &&
-      task.targetPath.isNotBlank() &&
-      task.targetPath == finding.location.path &&
-      task.targetSymbol.isNotBlank() &&
-      task.targetSymbol == finding.location.symbol &&
-      task.targetSignature.isNotBlank() &&
-      task.acceptanceCriteria.isNotEmpty()
+sealed interface FindingPreparationDecision {
+  data class Eligible(val target: EditorNavigationTarget, val task: BugTaskSpec) :
+      FindingPreparationDecision
+
+  data class Blocked(val reason: String) : FindingPreparationDecision
 }
 
-fun findingTaskNavigationTarget(finding: UnifiedFinding): EditorNavigationTarget? =
-    finding.taskSpec
-        ?.takeIf { findingCanPrepareFix(finding) }
-        ?.let { EditorNavigationTarget(it.targetPath, it.targetSymbol) }
+/** Index evidence is a preflight only; the loaded file and symbols must be checked again. */
+fun findingPreparationDecision(
+    finding: UnifiedFinding,
+    project: ProjectAnalysis?,
+    findings: List<UnifiedFinding>,
+    index: ProjectIndex?,
+): FindingPreparationDecision {
+  fun blocked(reason: String) = FindingPreparationDecision.Blocked(reason)
+  if (project == null ||
+      index == null ||
+      project.projectId.isBlank() ||
+      project.projectRevision.isBlank() ||
+      index.projectId != project.projectId ||
+      index.projectRevision != project.projectRevision)
+      return blocked("Load the current project index before preparing a fix.")
+  if (finding.projectId != project.projectId ||
+      finding.projectRevision != project.projectRevision ||
+      findings.count { it == finding } != 1)
+      return blocked("This finding is no longer in the current Bugs results.")
+  if (!finding.freshness.equals("fresh", ignoreCase = true))
+      return blocked("Analyze again to prepare a fix from current source.")
+  val task = finding.taskSpec ?: return blocked("This finding has no reviewed fix task.")
+  if (task.schemaVersion != "1" ||
+      task.targetPath.isBlank() ||
+      task.targetPath != finding.location.path ||
+      task.targetSymbol.isBlank() ||
+      task.targetSymbol != finding.location.symbol ||
+      task.targetSignature.isBlank() ||
+      task.acceptanceCriteria.isEmpty() ||
+      task.acceptanceCriteria.any { it.isBlank() })
+      return blocked(
+          "The fix task needs a matching path, declaration, signature and acceptance criteria.")
+  val files = index.files.filter { it.path == task.targetPath }
+  if (files.size != 1)
+      return blocked("The target file is missing or ambiguous in the project index.")
+  val file = files.single()
+  if (finding.fileHash.isBlank() ||
+      file.contentHash.isBlank() ||
+      finding.fileHash != file.contentHash)
+      return blocked("The finding's file hash no longer matches the indexed source.")
+  val declarations = file.symbols.filter { it.name == task.targetSymbol }
+  if (declarations.size != 1)
+      return blocked("The task must identify one unambiguous indexed declaration.")
+  val symbol = declarations.single()
+  if (symbol.signature != task.targetSignature)
+      return blocked("The task signature does not match the indexed declaration.")
+  val eligibility =
+      symbolEditEligibility(
+          ProjectFileInfo(
+              file.path,
+              file.contentHash,
+              file.path.substringAfterLast('/'),
+              language = file.language,
+              sizeBytes = file.sizeBytes,
+              lineCount = file.lineCount,
+              modifiedAt = file.modifiedAt,
+              binary = file.binary),
+          file.symbols,
+          symbol)
+  if (!eligibility.eligible) return blocked(eligibility.blockedReason)
+  return FindingPreparationDecision.Eligible(EditorNavigationTarget(file.path, symbol.name), task)
+}
 
-fun findingTaskRequirement(finding: UnifiedFinding): String? {
-  val task = finding.taskSpec?.takeIf { findingCanPrepareFix(finding) } ?: return null
-  return buildString {
-        append("Implement the reviewed bug task for ").append(task.targetSymbol).append(".\n")
-        append("Target: ").append(task.targetPath).append("\n")
-        append("Signature: ").append(task.targetSignature).append("\n\n")
-        append("Acceptance criteria:\n")
-        task.acceptanceCriteria.forEach { append("- ").append(it).append('\n') }
-        append("Non-goals:\n")
-        if (task.nonGoals.isEmpty()) append("- None supplied.\n")
-        else task.nonGoals.forEach { append("- ").append(it).append('\n') }
-        task.goTestCandidate?.let { candidate ->
-          append("Optional Go test candidate (review only; do not write automatically): ")
-              .append(candidate.name)
-              .append("\n")
-          append(candidate.content).append('\n')
+fun findingTaskRequirement(task: BugTaskSpec): String =
+    buildString {
+          append("Implement the reviewed bug task for ").append(task.targetSymbol).append(".\n")
+          append("Target: ").append(task.targetPath).append("\n")
+          append("Signature: ").append(task.targetSignature).append("\n\n")
+          append("Acceptance criteria:\n")
+          task.acceptanceCriteria.forEach { append("- ").append(it).append('\n') }
+          append("Non-goals:\n")
+          if (task.nonGoals.isEmpty()) append("- None supplied.\n")
+          else task.nonGoals.forEach { append("- ").append(it).append('\n') }
+          task.goTestCandidate?.let { candidate ->
+            append("Optional Go test candidate (review only; do not write automatically): ")
+                .append(candidate.name)
+                .append("\n")
+            append(candidate.content).append('\n')
+          }
         }
-      }
-      .trim()
-}
+        .trim()
 
 internal fun findingEvidenceSummary(finding: UnifiedFinding): String =
     when (classifyFinding(finding)) {

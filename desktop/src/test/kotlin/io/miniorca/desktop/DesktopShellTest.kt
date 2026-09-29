@@ -1389,21 +1389,28 @@ class DesktopShellTest {
   }
 
   @Test
-  fun onlyFreshLocatedFindingsCanPrepareFixes() {
+  fun onlyCurrentIndexedFindingsCanPrepareFixes() {
+    val project = resultProjectFixture()
+    val index = resultIndexFixture()
     val task = BugTaskSpec("1", "main.go", "Run", "func Run()", listOf("Return errors."))
+    val finding =
+        UnifiedFinding(
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            fileHash = "base",
+            freshness = "fresh",
+            location = FindingLocation(path = "main.go", symbol = "Run"),
+            taskSpec = task)
     assertTrue(
-        findingCanPrepareFix(
-            UnifiedFinding(
-                freshness = "fresh",
-                location = FindingLocation(path = "main.go", symbol = "Run"),
-                taskSpec = task)))
+        findingPreparationDecision(finding, project, listOf(finding), index)
+            is FindingPreparationDecision.Eligible)
     assertTrue(
-        !findingCanPrepareFix(
-            UnifiedFinding(
-                freshness = "stale",
-                location = FindingLocation(path = "main.go", symbol = "Run"),
-                taskSpec = task)))
-    assertTrue(!findingCanPrepareFix(UnifiedFinding(freshness = "fresh")))
+        findingPreparationDecision(
+            finding.copy(freshness = "stale"), project, listOf(finding), index)
+            is FindingPreparationDecision.Blocked)
+    assertTrue(
+        findingPreparationDecision(finding, project, emptyList(), index)
+            is FindingPreparationDecision.Blocked)
   }
 
   @Test

@@ -188,7 +188,12 @@ internal fun SecurityWorkspacePane(
         else
             semantic
                 .firstOrNull { semanticResultRow(it).key == key }
-                ?.let { FindingDetailsRegion(it, actions.semanticActions) }
+                ?.let {
+                  FindingDetailsRegion(
+                      it,
+                      actions.semanticActions,
+                      findingPreparationDecision(it, state.page.project, semantic, state.index))
+                }
       }
 }
 

@@ -1229,6 +1229,79 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun semanticPreparationUsesTheDisplayedCategoryAndRejectsRemovedEvidence() {
+    for (category in listOf("bugs", "performance", "security")) {
+      val calls = Collections.synchronizedList(mutableListOf<String>())
+      val presenter = presenter { method, path, _ ->
+        calls += "$method $path"
+        when {
+          path.contains("files/info?path=main.go") -> response(fileJson("main.go", "base"))
+          path.contains("files/symbols?path=main.go") -> response(symbolsJson("main.go", "Run"))
+          path.contains("files/analysis") -> response("""{"path":"main.go","status":"missing"}""")
+          path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+          path.contains("/git") -> response("""{"available":false}""")
+          else -> error("Unexpected $method $path")
+        }
+      }
+      try {
+        val project = resultProjectFixture()
+        val index = resultIndexFixture()
+        val run = analysisRunFixture()
+        val finding =
+            UnifiedFinding(
+                id = "semantic-$category",
+                category = category,
+                projectId = project.projectId,
+                projectRevision = project.projectRevision,
+                fileHash = "base",
+                freshness = "fresh",
+                location = FindingLocation("main.go", symbol = "Run"),
+                taskSpec = BugTaskSpec("1", "main.go", "Run", "func Run()", listOf("Fix Run.")))
+        val key = AnalysisResultKey(category)
+        val results = analysisResultsFixture(run, category).copy(semantic = listOf(finding))
+        presenter.dispatch(DesktopEvent.ProjectLoaded(project, index))
+        presenter.dispatch(
+            DesktopEvent.AnalysisRunUpdated(
+                ProjectAnalysisRunState(
+                    run = run, sections = mapOf(key to AnalysisSectionState(results = results)))))
+        val state = presenter.snapshot.value.state
+        val displayed =
+            if (category == "bugs") state.projectBugFindings()
+            else state.analysisResultPage(category).semantic
+        assertTrue(
+            findingPreparationDecision(finding, state.project, displayed, state.index)
+                is FindingPreparationDecision.Eligible,
+            category)
+        presenter.prepareFinding(finding)
+        eventually { presenter.snapshot.value.state.preparedRequest.contains("Fix Run.") }
+        assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path, category)
+        assertTrue(calls.any { it.contains("files/info?path=main.go") }, category)
+        assertTrue(calls.none { it.startsWith("POST") }, category)
+        val requestsBeforeMismatch = calls.size
+        presenter.prepareFinding(finding.copy(fileHash = "different"))
+        assertTrue(presenter.snapshot.value.state.error?.contains("no longer") == true, category)
+        assertEquals(requestsBeforeMismatch, calls.size, category)
+
+        presenter.dispatch(
+            DesktopEvent.AnalysisRunUpdated(
+                ProjectAnalysisRunState(
+                    run = run,
+                    sections =
+                        mapOf(
+                            key to
+                                AnalysisSectionState(
+                                    results = results.copy(semantic = emptyList()))))))
+        val requestsBefore = calls.size
+        presenter.prepareFinding(finding)
+        assertTrue(presenter.snapshot.value.state.error?.contains("no longer") == true, category)
+        assertEquals(requestsBefore, calls.size, category)
+      } finally {
+        presenter.close()
+      }
+    }
+  }
+
+  @Test
   fun failedReindexRetainsTheProjectRunWithoutStartingAnotherAnalysis() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()

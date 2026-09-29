@@ -16,6 +16,9 @@ class FindingsPresentationTest {
           message = "Handle the returned error.",
           status = "open",
           freshness = "fresh",
+          projectId = "project",
+          projectRevision = "revision",
+          fileHash = "hash",
           location = FindingLocation("internal/main.go", startLine = 12, symbol = "Run"),
           taskSpec =
               BugTaskSpec(
@@ -165,7 +168,31 @@ class FindingsPresentationTest {
               highOpen,
               FindingActions(
                   prepareFinding = { prepared = it },
-                  triageFinding = { _, action -> triaged = action }))
+                  triageFinding = { _, action -> triaged = action }),
+              findingPreparationDecision(
+                  highOpen,
+                  resultProjectFixture(),
+                  listOf(highOpen),
+                  ProjectIndex(
+                      "project",
+                      "revision",
+                      files =
+                          listOf(
+                              IndexedFile(
+                                  "internal/main.go",
+                                  "hash",
+                                  "Go",
+                                  false,
+                                  symbols =
+                                      listOf(
+                                          SymbolInfo(
+                                              "Run",
+                                              "function",
+                                              "func Run() error",
+                                              12,
+                                              20,
+                                              "exact",
+                                              true)))))))
         }
         .use { fixture ->
           fixture.render()
