@@ -2,7 +2,8 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -100,11 +101,19 @@ internal data class PerformanceResult(
       ResultRowPresentation(
           "performance:${report.path}:${finding.id}",
           finding.title.ifBlank { "Untitled opportunity" },
-          "${report.path}:${finding.startLine}",
+          buildString {
+            append(report.path.ifBlank { "Path not supplied" })
+            if (finding.startLine > 0) append(":${finding.startLine}")
+            else append(" · Source line not supplied")
+            append(" · ").append(finding.symbol.ifBlank { "Symbol not supplied" })
+          },
           finding.observedPattern,
           finding.potentialImpact.ifBlank { "Unknown impact" },
           "Model suggestion",
-          if (stale) "Stale" else "")
+          listOfNotNull(
+                  report.status.takeIf { it != "completed" }?.replaceFirstChar(Char::uppercase),
+                  "Stale".takeIf { stale && report.status != "stale" })
+              .joinToString(" · "))
 }
 
 internal fun performanceSelectionGuard(
@@ -267,6 +276,16 @@ internal fun performancePreparationRequest(finding: PerformanceFinding): String 
 }
 
 @Composable
+private fun PerformanceField(label: String, value: String) {
+  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Text(label, color = SecondaryText, style = IdeTypography.workspaceMetadata)
+    ModelResultContent(
+        value.ifBlank { "Not supplied." }, preview = false, style = IdeTypography.workspaceBody)
+  }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
 private fun PerformanceFindingDetails(
     result: PerformanceResult,
     index: ProjectIndex?,
@@ -281,40 +300,66 @@ private fun PerformanceFindingDetails(
         "Unmeasured recommendation. Benchmark the affected workload before claiming an improvement.",
         color = SecondaryText,
         style = IdeTypography.compactBody)
-    ResultEvidenceSection("Observed pattern", finding.observedPattern)
-    ResultEvidenceSection("Recommendation", finding.recommendation)
-    Row(horizontalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact)) {
-      MiniOrcaButton(onClick = { actions.openSource(result) }, tone = ActionTone.Neutral) {
-        Text("Open source")
-      }
-      MiniOrcaButton(
-          onClick = { actions.prepareOptimization(result) },
-          enabled = preparation is PerformancePreparationDecision.Eligible,
-          tone = ActionTone.Primary) {
-            Text("Prepare fix")
+    PerformanceField("Report status", result.report.status.ifBlank { "Not supplied." })
+    PerformanceField(
+        "Freshness", if (result.stale) "Stale · saved evidence" else "Current for this analysis")
+    PerformanceField("Observed pattern", finding.observedPattern)
+    PerformanceField("Potential impact · qualitative, not a measured gain", finding.potentialImpact)
+    PerformanceField(
+        "Model confidence · not a measurement or speedup probability", finding.confidence)
+    PerformanceField("Recommendation", finding.recommendation)
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact),
+        verticalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact)) {
+          MiniOrcaButton(onClick = { actions.openSource(result) }, tone = ActionTone.Neutral) {
+            Text("Open source")
           }
-    }
+          MiniOrcaButton(
+              onClick = { actions.prepareOptimization(result) },
+              enabled = preparation is PerformancePreparationDecision.Eligible,
+              tone = ActionTone.Primary) {
+                Text("Prepare fix")
+              }
+        }
     if (preparation is PerformancePreparationDecision.Blocked)
         Text(preparation.reason, color = SecondaryText, style = IdeTypography.compactBody)
-    IdeDisclosureHeader(
-        "Workload, trade-offs and verification", technical, { technical = !technical })
+    if (result.stale || result.report.status == "partial")
+        Text(
+            if (result.stale) "Saved evidence may not match current source. Analyze again."
+            else "Partial report; some evidence may be missing.",
+            color = Warning,
+            style = IdeTypography.compactBody)
+    PerformanceField("Report warning", result.report.warning)
+    PerformanceField("Workload conditions", finding.workloadConditions)
+    PerformanceField("Trade-offs", finding.tradeoff)
+    PerformanceField("Verification plan", finding.verificationPlan)
+    if (finding.engineeringInsight == null ||
+        engineeringInsightPieces(finding.engineeringInsight).isEmpty())
+        PerformanceField("Engineering insight", "Not supplied.")
+    else
+        EngineeringInsightPanel(
+            finding.engineeringInsight,
+            stale = result.stale,
+            scopeLabel = "Selected performance opportunity")
+    IdeDisclosureHeader("Report metadata", technical, { technical = !technical })
     if (technical) {
-      Text(
-          "Potential improvement; benchmark the affected workload to verify its impact.",
-          color = SecondaryText,
-          style = IdeTypography.compactBody)
-      ResultEvidenceSection("When it matters", finding.workloadConditions)
-      ResultEvidenceSection("Trade-offs", finding.tradeoff)
-      ResultEvidenceSection("Verification plan", finding.verificationPlan)
-      Text(
-          "${result.report.profile} · ${result.report.model} · ${result.report.providerOrigin}",
-          color = SecondaryText,
-          style = IdeTypography.compactBody)
-      if (result.report.warning.isNotBlank()) ModelResultContent(result.report.warning)
-      EngineeringInsightPanel(
-          finding.engineeringInsight,
-          stale = result.stale,
-          scopeLabel = "Selected performance opportunity")
+      val report = result.report
+      listOf(
+              "Finding category" to finding.category,
+              "Finding ID" to finding.id,
+              "Profile" to report.profile,
+              "Model" to report.model,
+              "Provider origin" to report.providerOrigin,
+              "Scope" to report.scope,
+              "Reasoning effort" to report.reasoningEffort,
+              "Generated at" to report.generatedAt,
+              "Schema version" to report.schemaVersion,
+              "Prompt version" to report.promptVersion,
+              "Context policy version" to report.contextPolicyVersion,
+              "Project ID" to report.projectId,
+              "Project revision" to report.projectRevision,
+              "Content hash" to report.contentHash)
+          .forEach { (label, value) -> PerformanceField(label, value) }
     }
   }
 }

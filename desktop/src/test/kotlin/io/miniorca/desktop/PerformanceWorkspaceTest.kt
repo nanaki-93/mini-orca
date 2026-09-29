@@ -25,6 +25,30 @@ class PerformanceWorkspaceTest {
   }
 
   @Test
+  fun typedLocationsAndReportStatesDoNotInventSourceLinesOrMeasurements() {
+    val result = performanceResults(performancePageFixture()).single()
+    assertEquals("main.go:4 · Run", result.row().location)
+    assertEquals("high", result.row().severity)
+    val missing =
+        result.copy(
+            report = result.report.copy(path = "", status = "partial"),
+            finding = result.finding.copy(startLine = 0, symbol = "", potentialImpact = ""))
+    assertEquals(
+        "Path not supplied · Source line not supplied · Symbol not supplied",
+        missing.row().location)
+    assertEquals(
+        "main.go · Source line not supplied · Run",
+        result.copy(finding = result.finding.copy(startLine = -1)).row().location)
+    assertFalse(missing.row().location.contains(":0"))
+    assertEquals("Unknown impact", missing.row().severity)
+    assertEquals("Partial", missing.row().state)
+    assertEquals("Partial · Stale", missing.copy(stale = true).row().state)
+    assertEquals(
+        "Stale",
+        missing.copy(stale = true, report = missing.report.copy(status = "stale")).row().state)
+  }
+
+  @Test
   fun summaryAndPerformanceResultKeepReportedCountWhenSavedDetailsFail() {
     val page = performancePageFixture()
     val run =
