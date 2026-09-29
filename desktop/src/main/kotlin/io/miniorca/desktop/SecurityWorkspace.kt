@@ -2,6 +2,8 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
@@ -456,6 +458,7 @@ private fun SecurityDetailField(label: String, value: String) {
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun SecurityFindingDetails(
     result: SecurityResult,
     index: ProjectIndex?,
@@ -507,19 +510,26 @@ private fun SecurityFindingDetails(
         SelectionContainer {
           Text(result.report.reason, color = Warning, style = IdeTypography.compactBody)
         }
-    MiniOrcaButton(
-        onClick = {
-          actions.openSource(result, securitySelectionGuard(result.page, browser, result))
-        }) {
-          Text("Open source")
-        }
-    MiniOrcaButton(
-        onClick = {
-          actions.prepareFix(result, securitySelectionGuard(result.page, browser, result))
-        },
-        enabled = preparation is SecurityPreparationDecision.Eligible,
-        tone = ActionTone.Primary) {
-          Text("Prepare fix")
+    FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          MiniOrcaButton(
+              onClick = {
+                actions.openSource(result, securitySelectionGuard(result.page, browser, result))
+              },
+              density = ButtonDensity.Toolbar) {
+                Text("Open source")
+              }
+          MiniOrcaButton(
+              onClick = {
+                actions.prepareFix(result, securitySelectionGuard(result.page, browser, result))
+              },
+              enabled = preparation is SecurityPreparationDecision.Eligible,
+              tone = ActionTone.Primary,
+              density = ButtonDensity.Toolbar) {
+                Text("Prepare fix")
+              }
         }
     if (preparation is SecurityPreparationDecision.Blocked)
         SelectionContainer {

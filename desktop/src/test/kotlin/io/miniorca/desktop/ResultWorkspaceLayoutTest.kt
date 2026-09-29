@@ -876,6 +876,112 @@ class ResultWorkspaceLayoutTest {
   }
 
   @Test
+  fun securityEmptyAndRetainedStatesKeepWarningsAndRecoveryReachable() {
+    val original = securityPageFixture()
+    val reports = requireNotNull(original.results)
+    val source = reports.security.first()
+    val ai = reports.security.last()
+    val warning =
+        "Security findings describe analyzed evidence, not proof of safety. No findings does not mean the project is secure; unavailable evidence and incomplete coverage remain unknown."
+    val completedProgress =
+        requireNotNull(original.progress).copy(status = "completed_empty", findingCount = 0)
+    val completed =
+        original.copy(
+            run =
+                requireNotNull(original.run)
+                    .copy(
+                        status = "completed",
+                        sections =
+                            original.run.sections.map {
+                              if (it.category == "security") completedProgress else it
+                            }),
+            section =
+                original.section.copy(
+                    results =
+                        reports.copy(
+                            progress = completedProgress,
+                            security =
+                                listOf(
+                                    source.copy(
+                                        status = "completed_empty", findings = emptyList())))))
+    val cases =
+        listOf(
+            Triple("completed-empty", completed, "No findings in the analyzed scope."),
+            Triple(
+                "unavailable",
+                original.copy(
+                    section =
+                        original.section.copy(
+                            results =
+                                reports.copy(
+                                    security =
+                                        listOf(
+                                            ai.copy(
+                                                status = "unavailable",
+                                                reason = "Provider not configured",
+                                                findings = emptyList()))))),
+                "ai · main.go · Unavailable: Provider not configured"),
+            Triple(
+                "partial",
+                original,
+                "deterministic · main.go · Partial: Some rules were unavailable."),
+            Triple(
+                "stale",
+                original.copy(run = original.run.copy(status = "stale")),
+                "Analyze again to prepare a fix from current source."),
+            Triple(
+                "retained-error",
+                original.copy(
+                    section = original.section.copy(error = "Saved results could not refresh")),
+                "Results could not be refreshed: Saved results could not refresh"))
+    for ((name, page, expected) in cases) {
+      var requests = 0
+      ComposeVisualFixture(800, 650, 1.5f) {
+            SecurityWorkspacePane(
+                SecurityWorkspacePaneState(page, resultIndexFixture()),
+                SecurityWorkspaceActions(
+                    { _, _ -> requests++ },
+                    { _, _ -> requests++ },
+                    { requests++ },
+                    FindingActions({}, { _, _ -> }, {}),
+                    { requests++ }))
+          }
+          .use { fixture ->
+            fixture.render("f19-security-$name")
+            fixture.revealText(warning, "result-overview")
+            assertTrue(fixture.hasText(warning))
+            if (name == "stale") {
+              fixture.clickDescription("Inspect Credential-like assignment")
+              fixture.render()
+            }
+            fixture.revealText(
+                expected,
+                if (name == "stale") "result-detail"
+                else if (name == "retained-error") "result-read-feedback"
+                else if (name == "completed-empty") "result-empty" else "result-overview")
+            assertTrue(fixture.hasText(expected), name)
+            if (name == "completed-empty" || name == "unavailable") {
+              assertFalse(fixture.hasText("0 hypotheses"))
+              assertFalse(fixture.hasText("Prepare fix"))
+            } else {
+              if (name != "stale") {
+                fixture.clickDescription("Inspect Credential-like assignment")
+                fixture.render()
+              }
+              revealDetailAction(fixture, "Prepare fix")
+              if (name == "stale") assertTrue(fixture.isDisabled("Prepare fix"))
+              if (name == "retained-error") {
+                assertTrue(fixture.hasText("Credential-like assignment"))
+                fixture.revealText("Retry loading results", "result-read-feedback")
+                fixture.assertTextFits("Retry loading results")
+              }
+            }
+            assertEquals(0, requests, name)
+          }
+    }
+  }
+
+  @Test
   fun securityReportAvailabilityStaysOutsideFindingSelectionAndOptionalDisclosure() {
     val original = securityPageFixture()
     val source = original.results!!.security.first()
