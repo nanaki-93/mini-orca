@@ -201,7 +201,12 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
       }) { key ->
         visible
             .firstOrNull { semanticResultRow(it).key == key }
-            ?.let { FindingDetailsRegion(it, actions.findingActions) }
+            ?.let {
+              FindingDetailsRegion(
+                  it,
+                  actions.findingActions,
+                  findingPreparationDecision(it, state.page.project, state.findings, state.index))
+            }
       }
 }
 
@@ -252,20 +257,21 @@ internal fun VerifiedScanDiagnostics(scan: GoScanReport) {
 }
 
 @Composable
-internal fun FindingDetailsRegion(finding: UnifiedFinding, actions: FindingActions) {
+internal fun FindingDetailsRegion(
+    finding: UnifiedFinding,
+    actions: FindingActions,
+    preparation: FindingPreparationDecision =
+        FindingPreparationDecision.Blocked("Current project evidence is unavailable."),
+) {
   var technical by remember(findingDisplayKey(finding)) { mutableStateOf(false) }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
     ResultDetailHeader(semanticResultRow(finding))
     IdeLabelBadge(findingEvidenceIdentity(finding), findingEvidenceTint(finding))
     ModelResultContent(
         finding.message.ifBlank { "No summary supplied." }, style = IdeTypography.workspaceBody)
-    FindingActionButtons(finding, actions)
-    if (!findingCanPrepareFix(finding))
-        Text(
-            if (finding.freshness == "stale") "Analyze again to prepare a fix from current source."
-            else "Fix preparation requires a current declaration task with acceptance criteria.",
-            style = IdeTypography.compactBody,
-            color = SecondaryText)
+    FindingActionButtons(finding, actions, preparation)
+    if (preparation is FindingPreparationDecision.Blocked)
+        Text(preparation.reason, style = IdeTypography.compactBody, color = SecondaryText)
     IdeDisclosureHeader("Evidence and fix criteria", technical, { technical = !technical })
     if (technical) {
       Text(
@@ -299,6 +305,7 @@ internal data class BugsWorkspacePaneState(
     val page: AnalysisResultPageState =
         AnalysisResultPageState(AnalysisResultType.Bugs, null, null),
     val browser: ResultBrowserState = newResultBrowserState(page),
+    val index: ProjectIndex? = null,
 )
 
 /** Finding navigation, task preparation, triage, and scan intents. */

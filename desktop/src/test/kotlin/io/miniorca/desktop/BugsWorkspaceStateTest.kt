@@ -54,6 +54,7 @@ class BugsWorkspaceStateTest {
           message = "Check the returned error",
           projectId = "project",
           projectRevision = "revision",
+          fileHash = "hash",
           location = FindingLocation("main.go", startLine = 7, symbol = "Run"),
           evidence = "err is ignored",
           status = "open",
@@ -206,7 +207,7 @@ class BugsWorkspaceStateTest {
   }
 
   @Test
-  fun triageAndPrepareFixRemainRevisionAndLocationSafe() {
+  fun triageAndExactPreparationKeepDistinctNavigationPolicies() {
     assertEquals(
         listOf(
             FindingLifecycleAction("Mark fixed", "fixed"),
@@ -214,26 +215,121 @@ class BugsWorkspaceStateTest {
         findingLifecycleActions(verified))
     assertEquals(
         listOf(FindingLifecycleAction("Reopen", "open")), findingLifecycleActions(suggested))
-    assertTrue(findingCanPrepareFix(verified))
-    assertFalse(findingCanPrepareFix(suggested))
-    assertFalse(findingCanPrepareFix(verified.copy(location = FindingLocation())))
-    assertFalse(findingCanPrepareFix(verified.copy(freshness = "stale")))
-    assertFalse(
-        findingCanPrepareFix(
-            verified.copy(taskSpec = verified.taskSpec?.copy(targetSignature = ""))))
-
-    val index =
-        ProjectIndex(
-            "project", "revision", files = listOf(IndexedFile("main.go", "hash", "Go", false)))
+    val project = resultProjectFixture()
+    val index = eligibleIndex()
     assertEquals(
         EditorNavigationTarget("main.go", "Run", 7), findingNavigationTarget(verified, index))
     assertEquals(
         null, findingNavigationTarget(verified.copy(location = FindingLocation("other.go")), index))
-    assertEquals(EditorNavigationTarget("main.go", "Run"), findingTaskNavigationTarget(verified))
-    val requirement = requireNotNull(findingTaskRequirement(verified))
-    assertTrue(requirement.contains("Acceptance criteria:"))
-    assertTrue(requirement.contains("Non-goals:"))
-    assertTrue(requirement.contains("review only"))
+    val decision = findingPreparationDecision(verified, project, listOf(verified), index)
+    assertEquals(
+        FindingPreparationDecision.Eligible(
+            EditorNavigationTarget("main.go", "Run"), requireNotNull(verified.taskSpec)),
+        decision)
+    val requirement = findingTaskRequirement((decision as FindingPreparationDecision.Eligible).task)
+    assertTrue(requirement.contains("Acceptance criteria:\n- Return the error."))
+    assertTrue(requirement.contains("Non-goals:\n- Do not edit other files."))
+    assertTrue(requirement.contains("review only; do not write automatically"))
+  }
+
+  private fun eligibleIndex() =
+      ProjectIndex(
+          "project",
+          "revision",
+          files =
+              listOf(
+                  IndexedFile(
+                      "main.go",
+                      "hash",
+                      "Go",
+                      false,
+                      symbols =
+                          listOf(
+                              SymbolInfo(
+                                  "Run", "function", "func Run() error", 7, 10, "exact", true)))))
+
+  @Test
+  fun preparationRejectsMissingForeignOrOutdatedEvidenceAndHashes() {
+    val project = resultProjectFixture()
+    val index = eligibleIndex()
+    fun reason(
+        finding: UnifiedFinding,
+        findings: List<UnifiedFinding> = listOf(finding),
+        activeProject: ProjectAnalysis? = project,
+        activeIndex: ProjectIndex? = index
+    ): String =
+        (findingPreparationDecision(finding, activeProject, findings, activeIndex)
+                as FindingPreparationDecision.Blocked)
+            .reason
+
+    assertTrue(reason(verified, emptyList()).contains("no longer"))
+    assertTrue(reason(verified, listOf(verified, verified)).contains("no longer"))
+    assertTrue(reason(verified.copy(projectId = "other")).contains("no longer"))
+    assertTrue(reason(verified.copy(projectRevision = "other")).contains("no longer"))
+    assertTrue(
+        reason(verified, activeProject = project.copy(projectRevision = "other"))
+            .contains("current"))
+    assertTrue(
+        reason(verified, activeIndex = index.copy(projectRevision = "other")).contains("index"))
+    assertTrue(reason(verified, activeIndex = null).contains("index"))
+    assertTrue(reason(verified.copy(freshness = "stale")).contains("Analyze again"))
+    assertTrue(reason(verified.copy(fileHash = "")).contains("hash"))
+    assertTrue(reason(verified.copy(fileHash = "other")).contains("hash"))
+    assertTrue(
+        reason(
+                verified,
+                activeIndex =
+                    index.copy(files = listOf(index.files.single().copy(contentHash = ""))))
+            .contains("hash"))
+    assertTrue(reason(verified, activeIndex = index.copy(files = emptyList())).contains("file"))
+    assertTrue(
+        reason(verified, activeIndex = index.copy(files = index.files + index.files))
+            .contains("ambiguous"))
+  }
+
+  @Test
+  fun preparationRejectsMalformedTasksAndInexactOrUnsupportedDeclarations() {
+    val index = eligibleIndex()
+    val file = index.files.single()
+    val symbol = file.symbols.single()
+    fun reason(finding: UnifiedFinding = verified, candidate: IndexedFile = file): String =
+        (findingPreparationDecision(
+                finding,
+                resultProjectFixture(),
+                listOf(finding),
+                index.copy(files = listOf(candidate)))
+                as FindingPreparationDecision.Blocked)
+            .reason
+    fun task(change: (BugTaskSpec) -> BugTaskSpec) =
+        verified.copy(taskSpec = change(requireNotNull(verified.taskSpec)))
+
+    assertTrue(reason(verified.copy(taskSpec = null)).contains("no reviewed"))
+    assertTrue(reason(task { it.copy(schemaVersion = "2") }).contains("task"))
+    assertTrue(reason(task { it.copy(targetPath = "other.go") }).contains("task"))
+    assertTrue(reason(task { it.copy(targetSymbol = "Other") }).contains("task"))
+    assertTrue(reason(task { it.copy(targetSignature = "") }).contains("task"))
+    assertTrue(reason(task { it.copy(acceptanceCriteria = listOf(" ")) }).contains("task"))
+    assertTrue(reason(task { it.copy(targetSignature = "func Run()") }).contains("signature"))
+    assertTrue(reason(candidate = file.copy(symbols = emptyList())).contains("declaration"))
+    assertTrue(
+        reason(candidate = file.copy(symbols = listOf(symbol, symbol))).contains("unambiguous"))
+    assertTrue(
+        reason(candidate = file.copy(symbols = listOf(symbol.copy(name = "Runner"))))
+            .contains("declaration"))
+    assertTrue(
+        reason(candidate = file.copy(symbols = listOf(symbol.copy(signature = "func Run()"))))
+            .contains("signature"))
+    assertTrue(
+        reason(candidate = file.copy(symbols = listOf(symbol.copy(confidence = "approximate"))))
+            .contains("exact"))
+    assertTrue(
+        reason(candidate = file.copy(symbols = listOf(symbol.copy(atomicTarget = false))))
+            .contains("declaration"))
+    assertTrue(
+        reason(candidate = file.copy(symbols = listOf(symbol.copy(kind = "package"))))
+            .contains("function"))
+    assertTrue(reason(candidate = file.copy(binary = true)).contains("Binary"))
+    assertTrue(reason(candidate = file.copy(language = "Kotlin")).contains("Go"))
   }
 
   @Test

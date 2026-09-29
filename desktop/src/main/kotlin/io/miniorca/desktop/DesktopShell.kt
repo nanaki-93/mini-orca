@@ -1402,7 +1402,8 @@ private fun DesktopCanvas(
                             appState.findings.scan,
                             appState.loading,
                             appState.analysisResultPage("bugs"),
-                            resultBrowsers.stateFor(appState.analysisResultPage("bugs"))),
+                            resultBrowsers.stateFor(appState.analysisResultPage("bugs")),
+                            appState.index),
                     performance =
                         PerformanceWorkspacePaneState(
                             page = appState.analysisResultPage("performance"),
