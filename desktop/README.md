@@ -422,20 +422,38 @@ saved findings; unknown counts are not zero, and zero loaded findings alone does
 not prove a completed-empty result. Opening a card only navigates; retained rows
 and result-read errors remain visible in their category.
 
-Each page shows all loaded findings for its category. Rounded rows retain severity,
-summary and exact source location. Optional disclosures retain evidence and
-verification details. The single **Prepare fix** action opens the existing
-Assistant workflow only when the current declaration is eligible; row selection
-does not prepare a fix. An unavailable or failed report is never presented as zero
-findings, and an empty Security result is not assurance. If a saved-result read
-fails, **Retry loading results** beside the result status reads saved data for
-that category and path only; it does not start analysis. Loading and read errors
-remain visible even with retained rows or filters that match nothing. **Clear
-filters** changes only the local view; **View analysis** only navigates. A canceled
-run needs a new admitted start, while a paused or interrupted run can be resumed
-through a fresh preview. Verified Go scans, performance hypotheses, measured
-benchmarks, source rules and model hypotheses
-retain distinct evidence and execution requirements without routine badge labels.
+Each result page shows all loaded findings for its category. Search by title or
+path and filter by severity (including unknown severity); **Clear filters**
+restores the local view. Selecting a row inspects evidence only. Bugs rows show
+severity, title and location; details retain the full title, exact path/line,
+message, evidence origin and material state. **Evidence and fix criteria** expands
+additional evidence, task criteria, non-goals and engineering insight. Stale,
+partial and canceled evidence remains labeled; model suggestions are not verified
+tool reports. Bugs details offer separate **Open source** and **Prepare fix**
+actions. Open source navigates to the indexed path and supplied source line for
+read-only inspection, even when a fix task is absent or the finding is stale; a
+missing indexed path disables it with an explanation. It does not prefill Assistant.
+Prepare fix requires a current finding with a reviewed task, matching indexed
+source hash and one exact eligible Go declaration. Its blocked reason appears in
+details. An eligible preparation opens the declaration in Editor and prefills
+Assistant without sending a model request, running checks or writing source.
+
+Opening a different source target or preparing a fix while a draft or Assistant
+input would be lost asks for explicit discard confirmation. Cancel or Escape
+keeps the current target, draft and input; confirm only for the unchanged finding
+and draft. Same-target source inspection retains the draft. If the finding, project
+or input changed while confirmation was pending, choose the action again. A
+failed source read cannot prepare the request. Triage is a separate explicit
+action, never a consequence of row selection. An unavailable or failed report is
+never presented as zero findings, and an empty Security result is not assurance.
+If a saved-result read fails, **Retry loading results** beside the result status
+reads saved data for that category and path only; it does not start analysis.
+Loading and read errors remain visible even with retained rows or filters that
+match nothing. **View analysis** only navigates. A canceled run needs a new
+admitted start, while a paused or interrupted run can be resumed through a fresh
+preview. Verified Go scans, performance hypotheses, measured benchmarks, source
+rules and model hypotheses retain distinct evidence and execution requirements
+without routine badge labels.
 
 ## New Go functions
 
