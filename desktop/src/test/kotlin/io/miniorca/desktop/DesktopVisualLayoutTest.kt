@@ -3309,6 +3309,123 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun f19SecurityProductionMatrixKeepsEvidenceActionsAndScrollRegionsReachable() {
+    val original = securityPageFixture()
+    val path = "internal/" + "日本語/very-long-directory/".repeat(8) + "boundary.go"
+    val reports = requireNotNull(original.results)
+    val rule =
+        reports.security.first().let { report ->
+          report.copy(
+              path = path,
+              findings =
+                  report.findings.map { finding ->
+                    finding.copy(
+                        anchor = finding.anchor.copy(path = path),
+                        observedCondition = "Source pattern at the trust boundary. ".repeat(18))
+                  })
+        }
+    val ai =
+        reports.security
+            .last()
+            .copy(
+                findings =
+                    reports.security.last().findings.map {
+                      it.copy(observedCondition = "Advisory hypothesis, not verified. ".repeat(18))
+                    })
+    val unknown =
+        rule.copy(
+            source = "other",
+            findings =
+                rule.findings.map {
+                  it.copy(id = "unknown-provenance", title = "Unknown evidence type")
+                })
+    val page =
+        original.copy(
+            section =
+                original.section.copy(results = reports.copy(security = listOf(rule, ai, unknown))))
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        val label = "f19-security-$width-$height-$scale-${density}x"
+        val browser = newResultBrowserState(page)
+        var privileged = 0
+        ComposeVisualFixture(
+                (width * density).toInt(), (height * density).toInt(), scale, density) {
+                  SecurityWorkspacePane(
+                      SecurityWorkspacePaneState(page, resultIndexFixture(), browser),
+                      SecurityWorkspaceActions(
+                          { _, _ -> privileged++ },
+                          { _, _ -> privileged++ },
+                          { privileged++ },
+                          FindingActions(
+                              { privileged++ }, { _, _ -> privileged++ }, { privileged++ }),
+                          reviewSecurityIntent = { privileged++ }))
+                }
+            .use { fixture ->
+              fixture.render("$label-loaded")
+              fixture.assertTextFits("View analysis")
+              fixture.revealText("Review Security intent", "result-overview")
+              fixture.assertTextFits("Review Security intent")
+              browser.choose(
+                  securityResults(page).single { it.finding.id == "unknown-provenance" }.rowKey)
+              fixture.render("$label-unknown")
+              assertTrue(
+                  fixture.hasText(
+                      "Evidence type was unavailable. Do not treat this finding as verified."))
+              browser.choose(
+                  securityResults(page).single { it.report.source == "deterministic" }.rowKey)
+              fixture.render("$label-rule")
+              assertTrue(fixture.hasText("Source rule"))
+              assertTrue(fixture.hasText(path + ":4"))
+              assertTrue(
+                  fixture.hasText(
+                      "A source rule match identifies a pattern; it does not confirm a vulnerability."))
+              assertFalse(fixture.hasText("Scope"), "Optional report metadata starts collapsed")
+              val list = fixture.taggedBounds("result-list")
+              val detail = fixture.taggedBounds("result-detail")
+              assertTrue(
+                  list.height > 0f && detail.height > 0f && detail.bottom <= height * density,
+                  label)
+              assertTrue(list.right <= detail.left || list.bottom <= detail.top, label)
+              fixture.revealText("Open source", "result-detail")
+              fixture.assertTextFits("Open source")
+              fixture.revealText("Prepare fix", "result-detail")
+              fixture.assertTextFits("Prepare fix")
+              assertTrue(fixture.isDisabled("Prepare fix"), "Long path is absent from the index")
+              assertTrue(fixture.requestFocus("Open source"))
+              fixture.render("$label-focused")
+              assertTrue(fixture.isFocusedControl("Open source"))
+              fixture.assertColorVisible(FocusAccent)
+              assertFalse(fixture.hasEditableText(withinTag = "result-detail"))
+              assertTrue(fixture.verticalScrollValue("result-detail") > 0f)
+              browser.choose(securityResults(page).single { it.report.source == "ai" }.rowKey)
+              fixture.render("$label-model")
+              assertTrue(fixture.hasText("Model hypothesis"))
+              assertTrue(
+                  fixture.hasText(
+                      "Unverified model hypothesis. Validate the preconditions and source evidence before remediation."))
+              if (width == 800 && scale == 1.5f && density == 1f) {
+                browser.choose(
+                    securityResults(page).single { it.report.source == "deterministic" }.rowKey)
+                fixture.render()
+                fixture.revealText(path + ":4", "result-detail")
+                val warning =
+                    "A source rule match identifies a pattern; it does not confirm a vulnerability."
+                fixture.revealText(warning, "result-detail")
+                assertTrue(fixture.copyTextByDragging(warning, warning).isNotEmpty())
+                fixture.revealText("Report metadata", "result-detail")
+                fixture.clickText("Report metadata")
+                fixture.render("$label-metadata-expanded")
+                assertTrue(fixture.hasText("Content hash"))
+                assertTrue(fixture.taggedBounds("result-detail").bottom <= height * density)
+              }
+              assertEquals(0, privileged, label)
+            }
+      }
+    }
+  }
+
+  @Test
   fun securityProductionRendersKeepEvidenceIdentityAndScopedEmptyStateDistinct() {
     val populated = securityPageFixture()
     var prepared = 0

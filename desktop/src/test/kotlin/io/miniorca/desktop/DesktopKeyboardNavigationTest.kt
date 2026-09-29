@@ -32,6 +32,95 @@ import kotlinx.coroutines.CompletableDeferred
 
 class DesktopKeyboardNavigationTest {
   @Test
+  fun securityKeyboardBrowseSearchAndDisclosureDoNotDispatchWork() {
+    val original = securityPageFixture()
+    val report = original.results!!.security.first()
+    val page =
+        original.copy(
+            section =
+                original.section.copy(
+                    results =
+                        original.results!!.copy(
+                            security =
+                                listOf(
+                                    report.copy(
+                                        findings =
+                                            (1..60).map { number ->
+                                              report.findings
+                                                  .single()
+                                                  .copy(
+                                                      id =
+                                                          "rule-${number.toString().padStart(2, '0')}",
+                                                      title = "Rule finding $number")
+                                            })))))
+    val browser = newResultBrowserState(page)
+    val calls = mutableListOf<String>()
+    ComposeVisualFixture(800, 650, 1.5f) {
+          SecurityWorkspacePane(
+              SecurityWorkspacePaneState(page, resultIndexFixture(), browser),
+              SecurityWorkspaceActions(
+                  { _, _ -> calls += "prepare/provider" },
+                  { _, _ -> calls += "source/read" },
+                  { calls += "analysis/preview" },
+                  FindingActions(
+                      { calls += "semantic/provider" },
+                      { _, _ -> calls += "triage/write" },
+                      { calls += "semantic/read" }),
+                  retryResults = { calls += "saved/read" },
+                  reviewSecurityIntent = { calls += "analysis/navigation" }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestDescriptionFocus("Inspect Rule finding 1"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("Inspect Rule finding 1"))
+          assertTrue(fixture.requestDescriptionFocus("Inspect Rule finding 1"))
+          assertTrue(fixture.pressKey(Key.DirectionDown))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Inspect Rule finding 2"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("Inspect Rule finding 2"))
+          fixture.revealText("Report metadata", "result-detail")
+          assertTrue(fixture.requestDescriptionFocus("Expand Report metadata"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals("Expanded", fixture.descriptionState("Collapse Report metadata"))
+          assertTrue(fixture.hasText("Content hash"))
+          assertTrue(fixture.requestDescriptionFocus("Collapse Report metadata"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertFalse(fixture.hasText("Content hash"))
+          fixture.scrollBy(500f, "result-detail")
+          fixture.render()
+          val detailOffset = fixture.verticalScrollValue("result-detail")
+          assertTrue(detailOffset > 0f)
+          fixture.scrollBy(700f, "result-list")
+          fixture.render()
+          assertTrue(browser.listState.firstVisibleItemIndex > 0)
+          assertEquals(detailOffset, fixture.verticalScrollValue("result-detail"), 5f)
+          fixture.focusDescribedEditor("Filter results")
+          fixture.setFocusedText("Rule finding 42")
+          fixture.render()
+          assertEquals("Rule finding 42", browser.query)
+          assertTrue(fixture.hasText("Rule finding 42"))
+          fixture.clickDescription("Clear filters")
+          fixture.render()
+          browser.listState.requestScrollToItem(59)
+          fixture.render()
+          fixture.awaitVisibleDescription("Inspect Rule finding 60")
+          assertTrue(fixture.requestDescriptionFocus("Inspect Rule finding 60"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("Inspect Rule finding 60"))
+          assertTrue(
+              calls.isEmpty(),
+              "Search, selection, scrolling and disclosure must stay local: $calls")
+        }
+  }
+
+  @Test
   fun securityReviewEntryUsesKeyboardNavigationWithoutPreviewOrDispatch() {
     val page = securityPageFixture()
     val runState =
