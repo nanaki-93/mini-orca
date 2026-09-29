@@ -18,10 +18,13 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 
 class DesktopWorkflowPresenterTest {
 
@@ -3889,11 +3892,17 @@ class DesktopWorkflowPresenterTest {
           loadProject(presenter)
           val retained = GoScanReport("project", "revision", status = "completed")
           presenter.dispatch(DesktopEvent.GoScanLoaded(retained))
-          if (route == "POST") presenter.runVerifiedScan() else presenter.cancelVerifiedScan()
+          if (route == "POST") presenter.runVerifiedScan()
+          else {
+            presenter.dispatch(DesktopEvent.GoScanLoaded(retained.copy(status = "running")))
+            presenter.cancelVerifiedScan()
+          }
           eventually {
             presenter.snapshot.value.state.verifiedScan.operation is VerifiedScanOperation.Failed
           }
-          assertEquals(retained, presenter.snapshot.value.state.findings.scan)
+          assertEquals(
+              if (route == "POST") retained else retained.copy(status = "running"),
+              presenter.snapshot.value.state.findings.scan)
           assertTrue(
               (presenter.snapshot.value.state.verifiedScan.operation
                       as VerifiedScanOperation.Failed)
@@ -4003,7 +4012,7 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun delayedVerifiedScanStartCannotReplaceACancelResponse() {
+  fun pendingVerifiedScanStartCannotBeCanceledBeforeAcceptance() {
     val startRequested = CountDownLatch(1)
     val releaseStart = CountDownLatch(1)
     val findingsRefreshes = AtomicInteger()
@@ -4031,13 +4040,12 @@ class DesktopWorkflowPresenterTest {
       presenter.runVerifiedScan()
       assertTrue(startRequested.await(1, TimeUnit.SECONDS))
       presenter.cancelVerifiedScan()
-      eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
-      eventually { findingsRefreshes.get() == 1 }
+      assertEquals(
+          VerifiedScanOperation.Starting, presenter.snapshot.value.state.verifiedScan.operation)
       releaseStart.countDown()
-      Thread.sleep(25)
+      eventually { presenter.snapshot.value.state.findings.scan?.status == "running" }
 
-      assertEquals("canceled", presenter.snapshot.value.state.findings.scan?.status)
-      assertEquals(1, findingsRefreshes.get())
+      assertEquals(0, findingsRefreshes.get())
     } finally {
       releaseStart.countDown()
       presenter.close()
@@ -4122,58 +4130,76 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun terminalPollThatOverlapsDelayedCancelCannotPublishOrRefreshTwice() {
-    val pollStarted = CountDownLatch(1)
-    val releasePoll = CountDownLatch(1)
-    val cancelStarted = CountDownLatch(1)
-    val releaseCancel = CountDownLatch(1)
-    val findingsRefreshes = AtomicInteger()
-    val presenter = presenter { method, path, _ ->
-      when (method to path) {
-        "POST" to "/api/projects/current/scan" ->
-            response(
-                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
-        "GET" to "/api/projects/current/scan?project_revision=revision" -> {
-          pollStarted.countDown()
-          releasePoll.await(2, TimeUnit.SECONDS)
-          response(
-              "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceled\"}")
-        }
-        "DELETE" to "/api/projects/current/scan?project_revision=revision" -> {
-          cancelStarted.countDown()
-          releaseCancel.await(2, TimeUnit.SECONDS)
-          response(
-              "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceled\"}")
-        }
-        "GET" to "/api/projects/current/findings?project_revision=revision" -> {
-          findingsRefreshes.incrementAndGet()
-          response("{}")
-        }
-        else -> response("{}")
+  fun terminalPollWhileCancelIsPendingOutranksLateCancelResponseOrFailure() {
+    for (cancelFails in listOf(false, true)) {
+      val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+      val pollStarted = CountDownLatch(1)
+      val releasePoll = CountDownLatch(1)
+      val cancelStarted = CountDownLatch(1)
+      val releaseCancel = CountDownLatch(1)
+      val polls = AtomicInteger()
+      val findingsRefreshes = AtomicInteger()
+      val presenter =
+          presenter(parentScope = scope) { method, path, _ ->
+            when (method to path) {
+              "POST" to "/api/projects/current/scan" ->
+                  response(
+                      """{"project_id":"project","project_revision":"revision","status":"running"}""")
+              "GET" to "/api/projects/current/scan?project_revision=revision" -> {
+                polls.incrementAndGet()
+                pollStarted.countDown()
+                assertTrue(releasePoll.await(5, TimeUnit.SECONDS))
+                response(
+                    """{"project_id":"project","project_revision":"revision","status":"canceled"}""")
+              }
+              "DELETE" to "/api/projects/current/scan?project_revision=revision" -> {
+                cancelStarted.countDown()
+                assertTrue(releaseCancel.await(5, TimeUnit.SECONDS))
+                if (cancelFails) TransportResponse(504, "cancel timed out")
+                else
+                    response(
+                        """{"project_id":"project","project_revision":"revision","status":"running"}""")
+              }
+              "GET" to "/api/projects/current/findings?project_revision=revision" -> {
+                findingsRefreshes.incrementAndGet()
+                response("{}")
+              }
+              else -> error("Unexpected $method $path")
+            }
+          }
+      try {
+        loadProject(presenter)
+        presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
+        presenter.runVerifiedScan()
+        assertTrue(pollStarted.await(2, TimeUnit.SECONDS))
+        val presenterLifetime = scope.coroutineContext[Job]!!.children.single()
+        val beforeCancel = presenterLifetime.children.toSet()
+        presenter.cancelVerifiedScan()
+        val cancelJob = (presenterLifetime.children.toSet() - beforeCancel).single()
+        assertTrue(cancelStarted.await(2, TimeUnit.SECONDS))
+        assertEquals(
+            VerifiedScanOperation.CancellationRequested,
+            presenter.snapshot.value.state.verifiedScan.operation)
+        releasePoll.countDown()
+        eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
+        eventually { findingsRefreshes.get() == 1 }
+        assertEquals(
+            VerifiedScanOperation.Idle, presenter.snapshot.value.state.verifiedScan.operation)
+
+        releaseCancel.countDown()
+        runBlocking { withTimeout(2_000) { cancelJob.join() } }
+        assertEquals("canceled", presenter.snapshot.value.state.findings.scan?.status)
+        assertEquals(
+            VerifiedScanOperation.Idle, presenter.snapshot.value.state.verifiedScan.operation)
+        assertEquals(1, polls.get())
+        assertEquals(1, findingsRefreshes.get())
+        assertNull(presenter.snapshot.value.state.jobs.error)
+      } finally {
+        releasePoll.countDown()
+        releaseCancel.countDown()
+        presenter.close()
+        scope.cancel()
       }
-    }
-    try {
-      loadProject(presenter)
-      presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
-      presenter.runVerifiedScan()
-      assertTrue(pollStarted.await(1, TimeUnit.SECONDS))
-      presenter.cancelVerifiedScan()
-      assertTrue(cancelStarted.await(1, TimeUnit.SECONDS))
-      releasePoll.countDown()
-      Thread.sleep(25)
-
-      assertEquals("running", presenter.snapshot.value.state.findings.scan?.status)
-      assertEquals(0, findingsRefreshes.get())
-
-      releaseCancel.countDown()
-      eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
-      eventually { findingsRefreshes.get() == 1 }
-
-      assertEquals(1, findingsRefreshes.get())
-    } finally {
-      releasePoll.countDown()
-      releaseCancel.countDown()
-      presenter.close()
     }
   }
 
@@ -4222,15 +4248,16 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun failedVerifiedScanCancelRestoresOnePollForACancelingScan() {
+  fun failedVerifiedScanCancelRetainsEvidenceUntilTerminalPoll() {
     val initialPollStarted = CountDownLatch(1)
     val releaseInitialPoll = CountDownLatch(1)
+    val releaseTerminalPoll = CountDownLatch(1)
     val polls = AtomicInteger()
     val presenter = presenter { method, path, _ ->
       when (method to path) {
         "POST" to "/api/projects/current/scan" ->
             response(
-                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceling\"}")
+                "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"running\"}")
         "DELETE" to "/api/projects/current/scan?project_revision=revision" ->
             TransportResponse(500, "cancel failed")
         "GET" to "/api/projects/current/scan?project_revision=revision" ->
@@ -4239,9 +4266,11 @@ class DesktopWorkflowPresenterTest {
               releaseInitialPoll.await(2, TimeUnit.SECONDS)
               response(
                   "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceling\"}")
-            } else
-                response(
-                    "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceled\"}")
+            } else {
+              releaseTerminalPoll.await(2, TimeUnit.SECONDS)
+              response(
+                  "{\"project_id\":\"project\",\"project_revision\":\"revision\",\"status\":\"canceled\"}")
+            }
         else -> response("{}")
       }
     }
@@ -4251,19 +4280,29 @@ class DesktopWorkflowPresenterTest {
       presenter.runVerifiedScan()
       assertTrue(initialPollStarted.await(1, TimeUnit.SECONDS))
       presenter.cancelVerifiedScan()
+      eventually {
+        presenter.snapshot.value.state.verifiedScan.operation is
+            VerifiedScanOperation.CancellationUnconfirmed
+      }
+      assertEquals("running", presenter.snapshot.value.state.findings.scan?.status)
+      assertNull(presenter.snapshot.value.state.jobs.error)
+      releaseInitialPoll.countDown()
+      releaseTerminalPoll.countDown()
       eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
-      Thread.sleep(25)
 
       assertEquals(2, polls.get())
-      assertTrue(presenter.snapshot.value.state.jobs.error != null)
+      assertNull(presenter.snapshot.value.state.jobs.error)
+      assertEquals(
+          VerifiedScanOperation.Idle, presenter.snapshot.value.state.verifiedScan.operation)
     } finally {
       releaseInitialPoll.countDown()
+      releaseTerminalPoll.countDown()
       presenter.close()
     }
   }
 
   @Test
-  fun queuedOlderVerifiedScanStartCannotReachTheDaemonAfterCancel() {
+  fun queuedVerifiedScanStartDoesNotAllowCancelBeforeAcceptance() {
     val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
     val scope = CoroutineScope(SupervisorJob() + dispatcher)
     val blockerStarted = CountDownLatch(1)
@@ -4303,10 +4342,9 @@ class DesktopWorkflowPresenterTest {
       presenter.cancelVerifiedScan()
       releaseBlocker.countDown()
 
-      eventually { cancels.get() == 1 }
-      eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
-      assertEquals(0, starts.get())
-      assertEquals("canceled", presenter.snapshot.value.state.findings.scan?.status)
+      eventually { starts.get() == 1 }
+      assertEquals(0, cancels.get())
+      assertEquals("running", presenter.snapshot.value.state.findings.scan?.status)
     } finally {
       releaseBlocker.countDown()
       presenter.close()
@@ -4763,6 +4801,159 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun startFailureAfterPostIsUncertainAndRetainsEarlierReport() {
+    val requests = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "POST" to "/api/projects/current/scan" -> {
+          requests.incrementAndGet()
+          TransportResponse(504, "request timed out")
+        }
+        else -> error("Unexpected $method $path")
+      }
+    }
+    try {
+      loadProject(presenter)
+      val prior = GoScanReport("project", "revision", status = "completed")
+      presenter.dispatch(DesktopEvent.GoScanLoaded(prior))
+      presenter.runVerifiedScan()
+      assertEquals(
+          VerifiedScanOperation.Starting, presenter.snapshot.value.state.verifiedScan.operation)
+      assertEquals(prior, presenter.snapshot.value.state.findings.scan)
+      presenter.runVerifiedScan()
+      eventually {
+        presenter.snapshot.value.state.verifiedScan.operation is
+            VerifiedScanOperation.StartUncertain
+      }
+      assertEquals(prior, presenter.snapshot.value.state.findings.scan)
+      assertTrue(
+          (presenter.snapshot.value.state.verifiedScan.operation
+                  as VerifiedScanOperation.StartUncertain)
+              .message
+              .contains("refresh scan status"))
+      presenter.runVerifiedScan()
+      assertEquals(1, requests.get())
+      assertNull(presenter.snapshot.value.state.jobs.error)
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun trustFailureBeforeStartIsLocalAndDoesNotClaimRequestWasSent() {
+    val starts = AtomicInteger()
+    val presenter =
+        presenter(interceptTrust = false) { method, path, _ ->
+          when (method to path) {
+            "GET" to "/api/projects/current/execution-trust?project_revision=revision" ->
+                TransportResponse(500, "trust unavailable")
+            "POST" to "/api/projects/current/scan" -> {
+              starts.incrementAndGet()
+              error("Start must not be sent")
+            }
+            else -> error("Unexpected $method $path")
+          }
+        }
+    try {
+      loadProject(presenter)
+      presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
+      presenter.runVerifiedScan()
+      eventually {
+        presenter.snapshot.value.state.verifiedScan.operation is VerifiedScanOperation.Failed
+      }
+      assertEquals(0, starts.get())
+      assertNull(presenter.snapshot.value.state.jobs.error)
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun cancelTimeoutLeavesCancellationUnconfirmedAndRetainsDiagnostics() {
+    val pollStarted = CountDownLatch(1)
+    val releasePoll = CountDownLatch(1)
+    val cancels = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "DELETE" to "/api/projects/current/scan?project_revision=revision" -> {
+          cancels.incrementAndGet()
+          TransportResponse(504, "cancel timed out")
+        }
+        "GET" to "/api/projects/current/scan?project_revision=revision" -> {
+          pollStarted.countDown()
+          releasePoll.await(2, TimeUnit.SECONDS)
+          response("""{"project_id":"project","project_revision":"revision","status":"running"}""")
+        }
+        else -> error("Unexpected $method $path")
+      }
+    }
+    try {
+      loadProject(presenter)
+      val running = GoScanReport("project", "revision", status = "running")
+      presenter.dispatch(DesktopEvent.GoScanLoaded(running))
+      presenter.cancelVerifiedScan()
+      assertTrue(pollStarted.await(1, TimeUnit.SECONDS))
+      eventually {
+        presenter.snapshot.value.state.verifiedScan.operation is
+            VerifiedScanOperation.CancellationUnconfirmed
+      }
+      presenter.cancelVerifiedScan()
+      assertEquals(1, cancels.get())
+      assertEquals(running, presenter.snapshot.value.state.findings.scan)
+      assertNull(presenter.snapshot.value.state.jobs.error)
+    } finally {
+      releasePoll.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun cancelRunningResponseStaysPendingUntilTerminalPoll() {
+    val pollStarted = CountDownLatch(1)
+    val releasePoll = CountDownLatch(1)
+    val cancels = AtomicInteger()
+    val presenter = presenter { method, path, _ ->
+      when (method to path) {
+        "DELETE" to "/api/projects/current/scan?project_revision=revision" -> {
+          cancels.incrementAndGet()
+          response("""{"project_id":"project","project_revision":"revision","status":"running"}""")
+        }
+        "GET" to "/api/projects/current/scan?project_revision=revision" -> {
+          pollStarted.countDown()
+          releasePoll.await(2, TimeUnit.SECONDS)
+          response("""{"project_id":"project","project_revision":"revision","status":"canceled"}""")
+        }
+        "GET" to "/api/projects/current/findings?project_revision=revision" -> response("{}")
+        else -> error("Unexpected $method $path")
+      }
+    }
+    try {
+      loadProject(presenter)
+      val running = GoScanReport("project", "revision", status = "running")
+      presenter.dispatch(DesktopEvent.GoScanLoaded(running))
+      presenter.cancelVerifiedScan()
+      assertEquals(
+          VerifiedScanOperation.CancellationRequested,
+          presenter.snapshot.value.state.verifiedScan.operation)
+      assertEquals(running, presenter.snapshot.value.state.findings.scan)
+      presenter.cancelVerifiedScan()
+      assertTrue(pollStarted.await(1, TimeUnit.SECONDS))
+      assertEquals(
+          VerifiedScanOperation.CancellationRequested,
+          presenter.snapshot.value.state.verifiedScan.operation)
+      assertEquals("running", presenter.snapshot.value.state.findings.scan?.status)
+      releasePoll.countDown()
+      eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
+      assertEquals(
+          VerifiedScanOperation.Idle, presenter.snapshot.value.state.verifiedScan.operation)
+      assertEquals(1, cancels.get())
+    } finally {
+      releasePoll.countDown()
+      presenter.close()
+    }
+  }
+
+  @Test
   fun verifiedScanTrustsBeforeStartingAndNavigationSendsNoTrustRequest() {
     val requests = mutableListOf<String>()
     val presenter =
@@ -4869,7 +5060,7 @@ class DesktopWorkflowPresenterTest {
     val valid =
         """{"project_id":"project","project_revision":"revision","trusted":true,"commands":[["go","test","./..."]]}"""
     for (stage in listOf("GET", "POST")) {
-      for (replacement in listOf("project", "revision", "action")) {
+      for (replacement in listOf("project", "revision", "reindex")) {
         val main = QueuedDispatcher()
         val io = QueuedDispatcher()
         val scope = CoroutineScope(SupervisorJob() + main)
@@ -4892,15 +5083,11 @@ class DesktopWorkflowPresenterTest {
                       presenter.dispatch(
                           DesktopEvent.ProjectLoaded(
                               project(revision = "new"), ProjectIndex("project", "new")))
-                  else -> {
-                    presenter.dispatch(
-                        DesktopEvent.GoScanLoaded(
-                            GoScanReport("project", "revision", status = "running")))
-                    presenter.cancelVerifiedScan()
-                  }
+                  "reindex" -> presenter.reindexProject()
                 }
               }
               when {
+                path.endsWith("/reindex") -> response(indexJson())
                 path.contains("/execution-trust") -> response(valid)
                 method == "DELETE" ->
                     response(
