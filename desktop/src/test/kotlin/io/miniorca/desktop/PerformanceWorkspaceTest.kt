@@ -115,30 +115,170 @@ class PerformanceWorkspaceTest {
   }
 
   @Test
-  fun prepareRequiresMatchingRevisionHashAndExactGoAnchor() {
+  fun preparationCapturesExactIndexedDeclarationWithoutRequiringReportSignature() {
     val result = performanceResults(performancePageFixture()).single()
     val index = resultIndexFixture()
+    val decision = performancePreparationDecision(result, index)
+    assertEquals(
+        PerformancePreparationDecision.Eligible(
+            "project", "revision", "main.go", "base", index.files.single().symbols.single()),
+        decision)
     assertTrue(performanceCanPrepare(result, index))
-    assertFalse(performanceCanPrepare(result.copy(stale = true), index))
-    assertFalse(
-        performanceCanPrepare(result.copy(report = result.report.copy(contentHash = "old")), index))
-    assertFalse(performanceCanPrepare(result, index.copy(projectRevision = "next")))
-    assertFalse(performanceCanPrepare(result, index.copy(projectId = "other")))
-    assertFalse(
-        performanceCanPrepare(result.copy(finding = result.finding.copy(startLine = 19)), index))
-    assertFalse(
-        performanceCanPrepare(
-            result, index.copy(files = index.files.map { it.copy(language = "Kotlin") })))
-    assertFalse(
-        performanceCanPrepare(
-            result,
-            index.copy(
-                files =
-                    index.files.map {
-                      it.copy(
-                          symbols =
-                              it.symbols.map { symbol -> symbol.copy(confidence = "heuristic") })
-                    })))
+    val partialReport = result.report.copy(status = "partial")
+    val partialPage = result.page.results!!.copy(performance = listOf(partialReport))
+    val partial =
+        result.copy(
+            report = partialReport,
+            page = result.page.copy(section = result.page.section.copy(results = partialPage)))
+    assertTrue(
+        performancePreparationDecision(partial, index) is PerformancePreparationDecision.Eligible)
+    val pendingReport = partialReport.copy(status = "running")
+    val pendingPage = partial.page.results!!.copy(performance = listOf(pendingReport))
+    val pending =
+        partial.copy(
+            report = pendingReport,
+            page = partial.page.copy(section = partial.page.section.copy(results = pendingPage)))
+    assertTrue(
+        (performancePreparationDecision(pending, index) as PerformancePreparationDecision.Blocked)
+            .reason
+            .contains("completed or partial"))
+  }
+
+  @Test
+  fun preparationExplainsMissingStaleAndAmbiguousEvidence() {
+    val result = performanceResults(performancePageFixture()).single()
+    val index = resultIndexFixture()
+    fun reason(candidate: PerformanceResult = result, source: ProjectIndex? = index): String =
+        (performancePreparationDecision(candidate, source)
+                as PerformancePreparationDecision.Blocked)
+            .reason
+
+    assertTrue(reason(source = null).contains("project index"))
+    assertTrue(reason(source = index.copy(projectId = "other")).contains("project index"))
+    assertTrue(reason(source = index.copy(projectRevision = "next")).contains("project index"))
+    assertTrue(reason(result.copy(stale = true)).contains("Analyze again"))
+    assertTrue(
+        reason(result.copy(page = result.page.copy(project = null))).contains("project index"))
+    assertTrue(reason(result.copy(page = result.page.copy(run = null))).contains("project index"))
+    assertTrue(
+        reason(result.copy(report = result.report.copy(contentHash = "old")))
+            .contains("Performance results"))
+    assertTrue(
+        reason(result.copy(finding = result.finding.copy(startLine = 19)))
+            .contains("Performance results"))
+    assertTrue(reason(source = index.copy(files = emptyList())).contains("target file"))
+    assertTrue(
+        reason(source = index.copy(files = index.files + index.files.single()))
+            .contains("target file"))
+    assertTrue(
+        reason(
+                result.copy(
+                    page = result.page.copy(section = result.page.section.copy(results = null))))
+            .contains("Performance results"))
+    val duplicateReport =
+        result.page.results!!.copy(performance = listOf(result.report, result.report))
+    assertTrue(
+        reason(
+                result.copy(
+                    page =
+                        result.page.copy(
+                            section = result.page.section.copy(results = duplicateReport))))
+            .contains("ambiguous"))
+    val duplicateFinding = result.report.copy(findings = listOf(result.finding, result.finding))
+    val duplicated = result.page.results!!.copy(performance = listOf(duplicateFinding))
+    assertTrue(
+        reason(
+                result.copy(
+                    report = duplicateFinding,
+                    page =
+                        result.page.copy(section = result.page.section.copy(results = duplicated))))
+            .contains("ambiguous"))
+  }
+
+  @Test
+  fun preparationExplainsHashAnchorAndDeclarationEligibilityFailures() {
+    val result = performanceResults(performancePageFixture()).single()
+    val index = resultIndexFixture()
+    fun reason(source: ProjectIndex): String =
+        (performancePreparationDecision(result, source) as PerformancePreparationDecision.Blocked)
+            .reason
+    fun changedFile(change: (IndexedFile) -> IndexedFile): ProjectIndex =
+        index.copy(files = listOf(change(index.files.single())))
+
+    assertTrue(reason(changedFile { it.copy(contentHash = "") }).contains("hash"))
+    assertTrue(reason(changedFile { it.copy(contentHash = "new") }).contains("hash"))
+    assertTrue(reason(changedFile { it.copy(binary = true) }).contains("Binary"))
+    assertTrue(reason(changedFile { it.copy(language = "Kotlin") }).contains("Go"))
+    assertTrue(reason(changedFile { it.copy(symbols = emptyList()) }).contains("declaration"))
+    assertTrue(
+        reason(changedFile { it.copy(symbols = it.symbols + it.symbols.single()) })
+            .contains("unambiguous"))
+    assertTrue(
+        reason(changedFile { it.copy(symbols = it.symbols.map { s -> s.copy(startLine = 5) }) })
+            .contains("source line"))
+    assertTrue(
+        reason(
+                changedFile {
+                  it.copy(symbols = it.symbols.map { s -> s.copy(confidence = "heuristic") })
+                })
+            .contains("exact"))
+    assertTrue(
+        reason(
+                changedFile {
+                  it.copy(symbols = it.symbols.map { s -> s.copy(atomicTarget = false) })
+                })
+            .contains("declaration"))
+    assertTrue(
+        reason(changedFile { it.copy(symbols = it.symbols.map { s -> s.copy(kind = "package") }) })
+            .contains("Go"))
+    val blankPathReport = result.report.copy(path = "")
+    val blankPathPage = result.page.results!!.copy(performance = listOf(blankPathReport))
+    val blankPathResult =
+        result.copy(
+            report = blankPathReport,
+            page = result.page.copy(section = result.page.section.copy(results = blankPathPage)))
+    assertTrue(
+        (performancePreparationDecision(blankPathResult, index)
+                as PerformancePreparationDecision.Blocked)
+            .reason
+            .contains("path"))
+    val blankSymbol = result.finding.copy(symbol = "")
+    val symbolReport = result.report.copy(findings = listOf(blankSymbol))
+    val symbolPage = result.page.results!!.copy(performance = listOf(symbolReport))
+    val symbolResult =
+        result.copy(
+            report = symbolReport,
+            finding = blankSymbol,
+            page = result.page.copy(section = result.page.section.copy(results = symbolPage)))
+    assertTrue(
+        (performancePreparationDecision(symbolResult, index)
+                as PerformancePreparationDecision.Blocked)
+            .reason
+            .contains("declaration"))
+    val blankHashReport = result.report.copy(contentHash = "")
+    val blankHashPage = result.page.results!!.copy(performance = listOf(blankHashReport))
+    val blankResult =
+        result.copy(
+            report = blankHashReport,
+            page = result.page.copy(section = result.page.section.copy(results = blankHashPage)))
+    assertTrue(
+        (performancePreparationDecision(blankResult, index)
+                as PerformancePreparationDecision.Blocked)
+            .reason
+            .contains("hash"))
+    val missingAnchor = result.finding.copy(startLine = 0)
+    val anchorReport = result.report.copy(findings = listOf(missingAnchor))
+    val anchorPage = result.page.results!!.copy(performance = listOf(anchorReport))
+    val anchorResult =
+        result.copy(
+            report = anchorReport,
+            finding = missingAnchor,
+            page = result.page.copy(section = result.page.section.copy(results = anchorPage)))
+    assertTrue(
+        (performancePreparationDecision(anchorResult, index)
+                as PerformancePreparationDecision.Blocked)
+            .reason
+            .contains("source line"))
   }
 
   @Test
