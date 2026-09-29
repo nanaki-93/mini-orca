@@ -2,8 +2,8 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -390,21 +390,36 @@ internal fun SecurityWorkspacePane(
 // Report failures must be visible even when the affected producer supplied no finding row.
 @Composable
 private fun SecurityReportAvailability(page: AnalysisResultPageState) {
-  Text(
-      "Security findings describe analyzed evidence, not proof of safety. No findings does not mean the project is secure; unavailable evidence and incomplete coverage remain unknown.",
-      color = Warning,
-      style = IdeTypography.compactBody)
+  SelectionContainer {
+    Text(
+        "Security findings describe analyzed evidence, not proof of safety. No findings does not mean the project is secure; unavailable evidence and incomplete coverage remain unknown.",
+        color = Warning,
+        style = IdeTypography.compactBody)
+  }
   page.results?.security.orEmpty().forEach { report ->
     if (report.status in setOf("failed", "partial", "unavailable") || report.reason.isNotBlank()) {
-      Text(
-          "${report.source.ifBlank { "Unknown source" }} · ${report.path.ifBlank { "Path not supplied" }} · ${analysisResultStatusLabel(report.status) ?: report.status.ifBlank { "Status unavailable" }}: ${report.reason.ifBlank { "No report reason supplied." }}",
-          color = Warning,
-          style = IdeTypography.compactBody)
+      SelectionContainer {
+        Text(
+            "${report.source.ifBlank { "Unknown source" }} · ${report.path.ifBlank { "Path not supplied" }} · ${analysisResultStatusLabel(report.status) ?: report.status.ifBlank { "Status unavailable" }}: ${report.reason.ifBlank { "No report reason supplied." }}",
+            color = Warning,
+            style = IdeTypography.compactBody)
+      }
     }
   }
   if (page.progress?.status in setOf("failed", "partial", "unavailable") &&
       page.run?.reason?.isNotBlank() == true)
-      Text("Analysis · ${page.run.reason}", color = Warning, style = IdeTypography.compactBody)
+      SelectionContainer {
+        Text("Analysis · ${page.run.reason}", color = Warning, style = IdeTypography.compactBody)
+      }
+}
+
+@Composable
+private fun SecurityDetailField(label: String, value: String) {
+  Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Text(label, color = SecondaryText, style = IdeTypography.workspaceMetadata)
+    ModelResultContent(
+        value.ifBlank { "Not supplied." }, preview = false, style = IdeTypography.workspaceBody)
+  }
 }
 
 @Composable
@@ -420,42 +435,77 @@ private fun SecurityFindingDetails(
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
     ResultDetailHeader(result.row())
     IdeLabelBadge(evidence.label, Information)
-    Text(evidence.warning, color = Warning, style = IdeTypography.compactBody)
-    ResultEvidenceSection("Observed condition", finding.observedCondition)
-    ResultEvidenceSection("Remediation", finding.remediation)
-    if (result.report.reason.isNotBlank())
-        Text(result.report.reason, color = Warning, style = IdeTypography.compactBody)
-    Row(horizontalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact)) {
-      MiniOrcaButton(
-          onClick = { actions.prepareFix(finding) },
-          enabled = preparation is SecurityPreparationDecision.Eligible,
-          tone = ActionTone.Primary) {
-            Text("Prepare fix")
-          }
+    SelectionContainer {
+      Text(evidence.warning, color = Warning, style = IdeTypography.compactBody)
     }
+    SecurityDetailField("Report status", result.report.status)
+    SecurityDetailField(
+        "Freshness", if (result.stale) "Stale · saved evidence" else "Current for this analysis")
+    SecurityDetailField(
+        "Reported range",
+        listOfNotNull(
+                finding.anchor.startLine.takeIf { it > 0 }?.toString(),
+                finding.anchor.endLine.takeIf { it > 0 }?.toString())
+            .joinToString("–"))
+    SecurityDetailField("Symbol", finding.anchor.symbol)
+    SecurityDetailField("Observed condition", finding.observedCondition)
+    SecurityDetailField("Remediation", finding.remediation)
+    SecurityDetailField("Preconditions / unknowns", finding.preconditions)
+    SecurityDetailField("Safe verification idea · not performed", finding.verificationIdea)
+    SecurityDetailField("Rule", finding.rule)
+    SecurityDetailField("Category", finding.category)
+    SecurityDetailField("Supplied confidence · not verification", finding.confidence)
+    SecurityDetailField("CWE", finding.cwe)
+    SecurityDetailField("Reference · plain text, not a link", finding.reference)
+    SecurityDetailField("Triage state", finding.triage)
+    SecurityDetailField(
+        "Supplied verification state · not independently verified", finding.verificationState)
+    if (finding.engineeringInsight == null ||
+        engineeringInsightPieces(finding.engineeringInsight).isEmpty())
+        SecurityDetailField("Engineering insight", "")
+    else {
+      Text("Engineering insight", color = SecondaryText, style = IdeTypography.workspaceMetadata)
+      engineeringInsightPieces(finding.engineeringInsight).forEach { piece ->
+        SecurityDetailField(piece.label, piece.content)
+      }
+    }
+    if (result.report.reason.isNotBlank())
+        SelectionContainer {
+          Text(result.report.reason, color = Warning, style = IdeTypography.compactBody)
+        }
+    MiniOrcaButton(
+        onClick = { actions.prepareFix(finding) },
+        enabled = preparation is SecurityPreparationDecision.Eligible,
+        tone = ActionTone.Primary) {
+          Text("Prepare fix")
+        }
     if (preparation is SecurityPreparationDecision.Blocked)
-        Text(preparation.reason, color = SecondaryText, style = IdeTypography.compactBody)
-    IdeDisclosureHeader("Evidence and safe verification", technical, { technical = !technical })
+        SelectionContainer {
+          Text(preparation.reason, color = SecondaryText, style = IdeTypography.compactBody)
+        }
+    IdeDisclosureHeader("Report metadata", technical, { technical = !technical })
     if (technical) {
-      Text(
-          when (evidence) {
-            SecurityEvidencePresentation.ModelHypothesis ->
-                "Model-provided hypothesis; verify the preconditions and source evidence."
-            SecurityEvidencePresentation.SourceRule ->
-                "Matched source rule: ${finding.rule}. Verify the preconditions before remediation."
-            SecurityEvidencePresentation.Unavailable ->
-                "Evidence provenance is unavailable; verify the preconditions before remediation."
-          },
-          color = SecondaryText,
-          style = IdeTypography.compactBody)
-      ResultEvidenceSection(
-          "Preconditions / unknowns", finding.preconditions.ifBlank { "Not provided" })
-      ResultEvidenceSection(
-          "Safe verification idea", finding.verificationIdea.ifBlank { "Not provided" })
-      Text(
-          "${result.report.source} · ${result.report.ruleSetVersion} · ${result.report.profile} · ${result.report.model}",
-          color = SecondaryText,
-          style = IdeTypography.compactBody)
+      val report = result.report
+      listOf(
+              "Report source" to report.source,
+              "Evidence kind" to finding.evidenceKind,
+              "Report path" to report.path,
+              "Scope" to report.scope,
+              "Content hash" to report.contentHash,
+              "Ruleset version" to report.ruleSetVersion,
+              "Profile" to report.profile,
+              "Model" to report.model,
+              "Configured model" to report.configuredModel,
+              "Provider origin" to report.providerOrigin,
+              "Reasoning effort" to report.reasoningEffort,
+              "Generated at" to report.generatedAt,
+              "Schema version" to report.schemaVersion,
+              "Prompt version" to report.promptVersion,
+              "Context policy version" to report.contextPolicyVersion,
+              "Project ID" to report.projectId,
+              "Project revision" to report.projectRevision,
+              "Finding ID" to finding.id)
+          .forEach { (label, value) -> SecurityDetailField(label, value) }
     }
   }
 }

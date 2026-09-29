@@ -247,6 +247,16 @@ class SecurityWorkspaceTest {
     assertEquals("Evidence type unavailable", unexpected.row().source)
     assertEquals("Evidence type unavailable", unavailable.row().source)
     assertEquals("main.go:2", source.row().location)
+    val longPath = "nested/".repeat(30) + "main.go"
+    assertEquals(
+        "$longPath:2",
+        source
+            .copy(finding = finding.copy(anchor = finding.anchor.copy(path = longPath)))
+            .row()
+            .location)
+    assertEquals(
+        "Full supplied security title",
+        source.copy(finding = finding.copy(title = "Full supplied security title")).row().title)
     assertEquals(
         "Path not supplied",
         source.copy(finding = finding.copy(anchor = SecuritySourceAnchor())).row().location)
