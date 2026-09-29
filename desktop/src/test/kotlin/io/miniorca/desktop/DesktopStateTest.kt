@@ -242,6 +242,47 @@ class DesktopStateTest {
   }
 
   @Test
+  fun revisionChangingReindexResetsScanOutcomesButRetainsEarlierEvidence() {
+    val report = GoScanReport("project", "revision", "completed")
+    val initial =
+        projectState()
+            .reduce(DesktopEvent.GoScanLoaded(report))
+            .reduce(
+                DesktopEvent.VerifiedScanOperationUpdated(
+                    VerifiedScanOperation.StartUncertain("Start may have been accepted")))
+    val sameRevision =
+        initial.reduce(DesktopEvent.IndexRefreshed(ProjectIndex("project", "revision")))
+    assertEquals(initial.verifiedScan, sameRevision.verifiedScan)
+
+    val next = initial.reduce(DesktopEvent.IndexRefreshed(ProjectIndex("project", "next")))
+    assertEquals("next", next.project?.projectRevision)
+    assertEquals(VerifiedScanState(), next.verifiedScan)
+    assertEquals(report, next.findings.scan)
+    assertEquals("Status unread", verifiedScanProgress(next).statusLabel)
+    assertEquals(VerifiedScanAction.Waiting, verifiedScanProgress(next).action)
+
+    val attempt = ProjectIndexingAttempt(4, "project", "revision", "/tmp/fixture")
+    val failedOperation =
+        initial.reduce(
+            DesktopEvent.VerifiedScanOperationUpdated(VerifiedScanOperation.Failed("Old failure")))
+    val completed =
+        failedOperation
+            .reduce(DesktopEvent.ProjectIndexingStarted(attempt))
+            .reduce(DesktopEvent.ProjectIndexingCompleted(attempt, ProjectIndex("project", "next")))
+    assertEquals(VerifiedScanState(), completed.verifiedScan)
+    assertEquals(report, completed.findings.scan)
+    assertEquals("Status unread", verifiedScanProgress(completed).statusLabel)
+
+    val pending =
+        initial.reduce(DesktopEvent.VerifiedScanOperationUpdated(VerifiedScanOperation.Starting))
+    val reindexedPending =
+        pending.reduce(DesktopEvent.IndexRefreshed(ProjectIndex("project", "next")))
+    assertEquals(VerifiedScanState(), reindexedPending.verifiedScan)
+    assertEquals(report, reindexedPending.findings.scan)
+    assertEquals("Status unread", verifiedScanProgress(reindexedPending).statusLabel)
+  }
+
+  @Test
   fun refreshedIndexRequiresTheLoadedProjectAndAUsableRevision() {
     val original = projectState()
     listOf(ProjectIndex("other", "next"), ProjectIndex("project", " ")).forEach { index ->

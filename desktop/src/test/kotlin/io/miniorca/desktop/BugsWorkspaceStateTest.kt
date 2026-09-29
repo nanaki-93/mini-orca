@@ -344,32 +344,119 @@ class BugsWorkspaceStateTest {
   }
 
   @Test
-  fun verifiedScanProgressOnlyOffersActionsOwnedByTheCurrentLifecycleState() {
-    assertFalse(shouldPollVerifiedScan(null))
-    assertTrue(verifiedScanProgress(null).summary.contains("never starts them automatically"))
-    assertEquals("Not run", verifiedScanProgress(null).statusLabel)
-    assertEquals(VerifiedScanAction.Start, verifiedScanProgress(null).action)
+  fun scanEligibilityRequiresGoIdentityAndAConfirmedKnownLifecycle() {
+    val project = resultProjectFixture()
+    val initial = DesktopState(projectState = ProjectWorkspaceState(project = project))
+    fun progress(state: DesktopState) = verifiedScanProgress(state)
+    assertEquals("Status unread", progress(initial).statusLabel)
+    assertEquals(VerifiedScanAction.Waiting, progress(initial).action)
+    assertEquals(
+        VerifiedScanAction.Waiting,
+        progress(initial.copy(projectState = ProjectWorkspaceState())).action)
     assertTrue(
-        verifiedScanProgress(GoScanReport(status = "running"))
-            .summary
-            .contains("temporary copied workspace; source remains unchanged"))
-    assertTrue(shouldPollVerifiedScan(GoScanReport(status = "running")))
+        progress(initial.copy(projectState = ProjectWorkspaceState())).summary.contains("Load"))
+    for (type in listOf("Java", "", "unknown")) {
+      val blocked =
+          progress(initial.copy(projectState = ProjectWorkspaceState(project.copy(type = type))))
+      assertEquals(VerifiedScanAction.Waiting, blocked.action)
+      assertTrue(blocked.summary.contains("root Go module"))
+      if (type.isBlank() || type == "unknown") assertTrue(blocked.summary.contains("unknown"))
+      else assertTrue(blocked.summary.contains("Java"))
+    }
+    for (missing in listOf(project.copy(projectId = ""), project.copy(projectRevision = ""))) {
+      val blocked = progress(initial.copy(projectState = ProjectWorkspaceState(missing)))
+      assertEquals(VerifiedScanAction.Waiting, blocked.action)
+      assertTrue(blocked.summary.contains("identity or revision"))
+    }
+    val reading = initial.reduce(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Reading))
+    assertEquals("Reading status", progress(reading).statusLabel)
+    val absent = reading.reduce(DesktopEvent.GoScanLoaded(null))
+    assertEquals(VerifiedScanRead.Absent, absent.verifiedScan.read)
+    assertEquals("Not run", progress(absent).statusLabel)
+    assertEquals(VerifiedScanAction.Start, progress(absent).action)
+    val report = GoScanReport("project", "revision", "completed")
+    val loaded = absent.reduce(DesktopEvent.GoScanLoaded(report))
+    assertEquals(VerifiedScanAction.Start, progress(loaded).action)
+    assertEquals(VerifiedScanRead.Loaded, loaded.verifiedScan.read)
+    for (status in listOf("failed", "canceled")) {
+      assertEquals(
+          VerifiedScanAction.Start,
+          progress(loaded.reduce(DesktopEvent.GoScanLoaded(report.copy(status = status)))).action)
+    }
+    for (status in listOf("", "unexpected", "queued")) {
+      val unknown = loaded.reduce(DesktopEvent.GoScanLoaded(report.copy(status = status)))
+      assertEquals(VerifiedScanAction.Waiting, progress(unknown).action)
+      assertEquals("Status unknown", progress(unknown).statusLabel)
+    }
     assertEquals(
-        VerifiedScanAction.Cancel, verifiedScanProgress(GoScanReport(status = "running")).action)
-    assertTrue(shouldPollVerifiedScan(GoScanReport(status = "canceling")))
-    assertEquals(
-        VerifiedScanAction.Waiting, verifiedScanProgress(GoScanReport(status = "canceling")).action)
-    assertTrue(shouldPollVerifiedScan(GoScanReport(status = "pausing")))
-    assertEquals(
-        VerifiedScanAction.Waiting, verifiedScanProgress(GoScanReport(status = "pausing")).action)
-    assertFalse(shouldPollVerifiedScan(GoScanReport(status = "completed")))
+        VerifiedScanAction.Waiting,
+        progress(loaded.reduce(DesktopEvent.GoScanLoaded(report.copy(projectRevision = "old"))))
+            .action)
+    assertFalse(shouldPollVerifiedScan(report))
+  }
 
-    val progress =
-        verifiedScanProgress(
-            GoScanReport(
-                status = "failed",
-                phases = listOf(GoScanPhase("go vet", "failed", output = "vet output"))))
-    assertEquals(VerifiedScanAction.Start, progress.action)
-    assertTrue(progress.summary.contains("results, command and output remain available"))
+  @Test
+  fun scanReadAndOperationOutcomesPreserveReportsAndUnrelatedFindings() {
+    val report =
+        GoScanReport(
+            "project",
+            "revision",
+            "completed",
+            phases = listOf(GoScanPhase("go vet", "failed", output = "vet output")))
+    val initial =
+        DesktopState(
+                projectState = ProjectWorkspaceState(project = resultProjectFixture()),
+                findings = FindingsState(findings = listOf(verified)))
+            .reduce(DesktopEvent.GoScanLoaded(report))
+    val starting =
+        initial.reduce(DesktopEvent.VerifiedScanOperationUpdated(VerifiedScanOperation.Starting))
+    assertEquals("Starting", verifiedScanProgress(starting).statusLabel)
+    assertEquals(VerifiedScanAction.Waiting, verifiedScanProgress(starting).action)
+    val running = initial.reduce(DesktopEvent.GoScanLoaded(report.copy(status = "running")))
+    assertEquals(VerifiedScanAction.Cancel, verifiedScanProgress(running).action)
+    assertTrue(shouldPollVerifiedScan(running.findings.scan))
+    val canceling =
+        running.reduce(
+            DesktopEvent.VerifiedScanOperationUpdated(VerifiedScanOperation.CancellationRequested))
+    assertEquals("Cancellation requested", verifiedScanProgress(canceling).statusLabel)
+    assertEquals(VerifiedScanAction.Waiting, verifiedScanProgress(canceling).action)
+    for (status in listOf("pausing", "canceling")) {
+      val waiting = initial.reduce(DesktopEvent.GoScanLoaded(report.copy(status = status)))
+      assertEquals(VerifiedScanAction.Waiting, verifiedScanProgress(waiting).action)
+      assertTrue(shouldPollVerifiedScan(waiting.findings.scan))
+    }
+    val unavailable =
+        initial.reduce(
+            DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Unavailable("Status timed out")))
+    assertEquals("Status unavailable", verifiedScanProgress(unavailable).statusLabel)
+    assertTrue(verifiedScanProgress(unavailable).summary.contains("timed out"))
+    assertEquals(VerifiedScanAction.Waiting, verifiedScanProgress(unavailable).action)
+    for (operation in
+        listOf(
+            VerifiedScanOperation.Failed("Trust failed"),
+            VerifiedScanOperation.StartUncertain("Start may have been accepted"),
+            VerifiedScanOperation.CancellationUnconfirmed("Cancel may have timed out"))) {
+      val outcome = initial.reduce(DesktopEvent.VerifiedScanOperationUpdated(operation))
+      assertEquals(VerifiedScanAction.Waiting, verifiedScanProgress(outcome).action)
+      assertTrue(verifiedScanProgress(outcome).summary.isNotBlank())
+    }
+    val confirmedAbsent = unavailable.reduce(DesktopEvent.GoScanLoaded(null))
+    assertEquals(VerifiedScanRead.Absent, confirmedAbsent.verifiedScan.read)
+    assertEquals("No current report", verifiedScanProgress(confirmedAbsent).statusLabel)
+    assertTrue(verifiedScanProgress(confirmedAbsent).summary.contains("Earlier scan evidence"))
+    assertFalse(
+        verifiedScanProgress(confirmedAbsent).summary.contains("No verified checks have run"))
+    assertEquals(VerifiedScanAction.Start, verifiedScanProgress(confirmedAbsent).action)
+    assertEquals(report, confirmedAbsent.findings.scan)
+    assertEquals(listOf(verified), confirmedAbsent.findings.findings)
+    assertEquals(report, unavailable.findings.scan)
+    assertEquals(listOf(verified), unavailable.findings.findings)
+    assertEquals(report, starting.findings.scan)
+    assertEquals(report, canceling.findings.scan?.copy(status = "completed"))
+    assertEquals(
+        VerifiedScanState(),
+        initial
+            .reduce(DesktopEvent.ProjectLoaded(resultProjectFixture(), eligibleIndex()))
+            .verifiedScan)
   }
 }
