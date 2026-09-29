@@ -15,6 +15,44 @@ import kotlin.test.assertTrue
 
 class DesktopContrastTest {
   @Test
+  fun bugsDetailShowsReadableSeverityProvenanceAndDisabledPreparationAtLargeText() {
+    val page = resultPageFixture("bugs")
+    val finding =
+        page.semantic
+            .first()
+            .copy(
+                title = "Saved tool finding",
+                severity = "high",
+                source = "go vet",
+                confidence = "tool_reported",
+                freshness = "stale")
+    val loaded =
+        page.copy(
+            section = page.section.copy(results = page.results!!.copy(semantic = listOf(finding))))
+    ComposeVisualFixture(800, 650, 1.5f) {
+          BugsWorkspacePane(
+              BugsWorkspacePaneState(
+                  listOf(finding), null, false, loaded, index = resultIndexFixture()),
+              BugsWorkspaceActions(FindingActions({}, { _, _ -> }, {}), {}, {}))
+        }
+        .use { fixture ->
+          fixture.render("f17-bugs-contrast-row")
+          fixture.clickDescription("Inspect Saved tool finding")
+          fixture.render("f17-bugs-contrast-detail")
+          fixture.assertTextContrast("Saved tool finding", Panel)
+          fixture.assertTextContrast("Tool report · go vet", Panel)
+          fixture.revealText("Analyze again to prepare a fix from current source.", "result-detail")
+          fixture.assertTextContrast("Analyze again to prepare a fix from current source.", Panel)
+          fixture.revealText("Prepare fix", "result-detail")
+          fixture.assertTextFits("Prepare fix")
+          fixture.assertTextContrast(
+              "Prepare fix",
+              blendOver(actionToneStyle(ActionTone.Primary).disabledBackground, Panel))
+          assertTrue(fixture.isDisabled("Prepare fix"))
+        }
+  }
+
+  @Test
   fun checkboxAndInvalidFieldIndicatorsContrastOnResolvedSurfaces() {
     listOf(Panel, OverlaySurface, EditorCanvas, SelectionSurface).forEach { host ->
       val focusHost = blendOver(ControlHover, host)
