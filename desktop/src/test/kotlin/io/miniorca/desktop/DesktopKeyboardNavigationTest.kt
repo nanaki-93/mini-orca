@@ -32,6 +32,64 @@ import kotlinx.coroutines.CompletableDeferred
 
 class DesktopKeyboardNavigationTest {
   @Test
+  fun performanceEvidenceEntryIsKeyboardReachableAndScopedToResultAndProject() {
+    val original = performancePageFixture()
+    val report = original.results!!.performance.single()
+    val second = report.findings.single().copy(id = "another", title = "Another opportunity")
+    var page by
+        mutableStateOf(
+            original.copy(
+                section =
+                    original.section.copy(
+                        results =
+                            original.results!!.copy(
+                                performance =
+                                    listOf(report.copy(findings = report.findings + second))))))
+    var browser by mutableStateOf(newResultBrowserState(page))
+    browser.choose("performance:main.go:perf")
+    var actions = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          PerformanceWorkspacePane(
+              PerformanceWorkspacePaneState(page, null, browser = browser),
+              PerformanceWorkspaceActions(
+                  { actions++ },
+                  { actions++ },
+                  FindingActions({ actions++ }, { _, _ -> actions++ }, { actions++ }),
+                  { actions++ },
+                  { actions++ },
+                  { actions++ },
+                  { actions++ }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestDescriptionFocus("Expand Explore benchmark evidence"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Collapse Explore benchmark evidence"))
+          assertEquals("Expanded", fixture.descriptionState("Collapse Explore benchmark evidence"))
+          assertTrue(fixture.hasText("Benchmark comparison"))
+          assertEquals(0, actions)
+
+          fixture.clickDescription("Inspect Another opportunity")
+          fixture.render()
+          assertEquals("performance:main.go:another", browser.selectedKey)
+          assertTrue(fixture.hasDescription("Expand Explore benchmark evidence"))
+          assertFalse(fixture.hasText("Benchmark comparison"))
+          assertTrue(fixture.requestDescriptionFocus("Expand Explore benchmark evidence"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertTrue(fixture.hasText("Benchmark comparison"))
+
+          page = page.copy(project = page.project!!.copy(projectId = "new-project"))
+          browser = newResultBrowserState(page)
+          fixture.render()
+          assertTrue(fixture.hasDescription("Expand Explore benchmark evidence"))
+          assertFalse(fixture.hasText("Benchmark comparison"))
+          assertEquals(0, actions)
+        }
+  }
+
+  @Test
   fun bugsKeyboardInspectionKeepsTextEntryAndBothScrollRegionsIndependent() {
     val base = resultPageFixture("bugs")
     val findings =

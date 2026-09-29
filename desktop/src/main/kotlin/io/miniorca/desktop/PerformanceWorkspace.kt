@@ -26,8 +26,6 @@ internal fun PerformanceWorkspacePane(
     state: PerformanceWorkspacePaneState,
     actions: PerformanceWorkspaceActions
 ) {
-  var benchmarksExpanded by remember { mutableStateOf(false) }
-  var measurementDetailsExpanded by remember { mutableStateOf(false) }
   val results = performanceResults(state.page)
   val semantic = state.page.semantic
   val benchmarkStatus =
@@ -44,8 +42,19 @@ internal fun PerformanceWorkspacePane(
       openAnalysis = actions.openAnalysis,
       retryResults = actions.retryResults,
       tools = {
+        val selected = state.browser.selectedKey
+        val selectedResult = results.firstOrNull { it.row().key == selected }
+        val selectedSemantic = semantic.firstOrNull { semanticResultRow(it).key == selected }
+        var benchmarksExpanded by
+            remember(state.browser.identity, selected, selectedResult, selectedSemantic) {
+              mutableStateOf(false)
+            }
+        var measurementDetailsExpanded by
+            remember(state.browser.identity, selected, selectedResult, selectedSemantic) {
+              mutableStateOf(false)
+            }
         IdeDisclosureHeader(
-            "Benchmark evidence",
+            "Explore benchmark evidence",
             benchmarksExpanded,
             { benchmarksExpanded = !benchmarksExpanded },
             stateLabel = benchmarkStatus.stateLabel)
