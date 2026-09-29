@@ -205,7 +205,8 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
               FindingDetailsRegion(
                   it,
                   actions.findingActions,
-                  findingPreparationDecision(it, state.page.project, state.findings, state.index))
+                  findingPreparationDecision(it, state.page.project, state.findings, state.index),
+                  sourceAvailable = findingNavigationTarget(it, state.index) != null)
             }
       }
 }
@@ -262,6 +263,7 @@ internal fun FindingDetailsRegion(
     actions: FindingActions,
     preparation: FindingPreparationDecision =
         FindingPreparationDecision.Blocked("Current project evidence is unavailable."),
+    sourceAvailable: Boolean? = null,
 ) {
   var technical by remember(findingDisplayKey(finding)) { mutableStateOf(false) }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -269,7 +271,12 @@ internal fun FindingDetailsRegion(
     IdeLabelBadge(findingEvidenceIdentity(finding), findingEvidenceTint(finding))
     ModelResultContent(
         finding.message.ifBlank { "No summary supplied." }, style = IdeTypography.workspaceBody)
-    FindingActionButtons(finding, actions, preparation)
+    FindingActionButtons(finding, actions, preparation, sourceAvailable)
+    if (sourceAvailable == false)
+        Text(
+            "Open source requires a path in the current project index.",
+            style = IdeTypography.compactBody,
+            color = SecondaryText)
     if (preparation is FindingPreparationDecision.Blocked)
         Text(preparation.reason, style = IdeTypography.compactBody, color = SecondaryText)
     IdeDisclosureHeader("Evidence and fix criteria", technical, { technical = !technical })

@@ -30,7 +30,7 @@ class BugsWorkspaceStateTest {
           BugsWorkspacePane(
               BugsWorkspacePaneState(emptyList(), report, false),
               BugsWorkspaceActions(
-                  FindingActions({}, { _, _ -> }), { executions++ }, { executions++ }))
+                  FindingActions({}, { _, _ -> }, {}), { executions++ }, { executions++ }))
         }
         .use { fixture ->
           fixture.render()

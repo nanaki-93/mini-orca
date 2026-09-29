@@ -128,10 +128,12 @@ class FindingsPresentationTest {
   @Test
   fun fixPreparationUsesTheSelectedFindingAndItsExactTarget() {
     var prepared: UnifiedFinding? = null
+    var opened: UnifiedFinding? = null
     val actions =
         FindingActions(
             prepareFinding = { prepared = it },
             triageFinding = { _, _ -> },
+            openSource = { opened = it },
         )
     val index =
         ProjectIndex(
@@ -139,12 +141,45 @@ class FindingsPresentationTest {
             "revision",
             files = listOf(IndexedFile("internal/main.go", "hash", "Go", false)))
 
+    actions.openSource(highOpen)
+    assertEquals(highOpen, opened)
+    assertEquals(null, prepared)
     actions.prepareFix(highOpen)
 
     assertEquals(highOpen, prepared)
     assertEquals(
         EditorNavigationTarget("internal/main.go", "Run", 12),
         findingNavigationTarget(highOpen, index))
+  }
+
+  @Test
+  fun staleTasklessEvidenceCanOpenIndexedSourceWithoutPreparingOrTriage() {
+    val finding = highOpen.copy(freshness = "stale", taskSpec = null)
+    val index =
+        ProjectIndex(
+            "project",
+            "revision",
+            files = listOf(IndexedFile("internal/main.go", "hash", "Go", false)))
+    var opened: UnifiedFinding? = null
+    var prepared = 0
+    var triaged = 0
+    ComposeVisualFixture(900, 500) {
+          FindingDetailsRegion(
+              finding,
+              FindingActions({ prepared++ }, { _, _ -> triaged++ }, { opened = it }),
+              findingPreparationDecision(finding, resultProjectFixture(), listOf(finding), index),
+              sourceAvailable = findingNavigationTarget(finding, index) != null)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.isDisabled("Prepare fix"))
+          assertTrue(fixture.hasText("Analyze again to prepare a fix from current source."))
+          fixture.clickText("Open source")
+          assertEquals(finding, opened)
+          assertEquals(12, findingNavigationTarget(requireNotNull(opened), index)?.line)
+          assertEquals(0, prepared)
+          assertEquals(0, triaged)
+        }
   }
 
   @Test
@@ -162,13 +197,15 @@ class FindingsPresentationTest {
   @Test
   fun detailIdentifiesEvidenceBeforeGuardedPrepareAndSecondaryTriageActions() {
     var prepared: UnifiedFinding? = null
+    var opened: UnifiedFinding? = null
     var triaged: FindingLifecycleAction? = null
     ComposeVisualFixture(900, 500) {
           FindingDetailsRegion(
               highOpen,
               FindingActions(
                   prepareFinding = { prepared = it },
-                  triageFinding = { _, action -> triaged = action }),
+                  triageFinding = { _, action -> triaged = action },
+                  openSource = { opened = it }),
               findingPreparationDecision(
                   highOpen,
                   resultProjectFixture(),
@@ -192,11 +229,16 @@ class FindingsPresentationTest {
                                               12,
                                               20,
                                               "exact",
-                                              true)))))))
+                                              true)))))),
+              sourceAvailable = true)
         }
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("Tool report · vet"))
+          fixture.clickText("Open source")
+          assertEquals(highOpen, opened)
+          assertEquals(null, prepared)
+          assertEquals(null, triaged)
           fixture.clickText("Prepare fix")
           fixture.clickText("Dismiss")
           assertEquals(highOpen, prepared)
@@ -204,12 +246,14 @@ class FindingsPresentationTest {
         }
 
     ComposeVisualFixture(900, 500) {
-          FindingDetailsRegion(highOpen.copy(freshness = "stale"), FindingActions({}, { _, _ -> }))
+          FindingDetailsRegion(
+              highOpen.copy(freshness = "stale"), FindingActions({}, { _, _ -> }, {}))
         }
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("Tool report · vet"))
           assertTrue(fixture.isDisabled("Prepare fix"))
+          assertTrue(fixture.hasText("Current project evidence is unavailable."))
           assertFalse(fixture.hasText("Apply fix"))
         }
   }

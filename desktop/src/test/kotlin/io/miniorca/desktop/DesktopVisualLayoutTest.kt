@@ -1852,7 +1852,7 @@ class DesktopVisualLayoutTest {
                 freshness = "stale")
     ComposeVisualFixture(520, 650, 1.5f) {
           Column(Modifier.fillMaxSize().background(Panel).padding(16.dp)) {
-            FindingDetailsRegion(finding, FindingActions({}, { _, _ -> }))
+            FindingDetailsRegion(finding, FindingActions({}, { _, _ -> }, {}))
           }
         }
         .use { fixture ->
@@ -3082,7 +3082,7 @@ class DesktopVisualLayoutTest {
             var page by
                 mutableStateOf(original.copy(section = AnalysisSectionState(loading = true)))
             val findingActions =
-                FindingActions({ externalActions++ }, { _, _ -> externalActions++ })
+                FindingActions({ externalActions++ }, { _, _ -> externalActions++ }, {})
             ComposeVisualFixture(width, height, scale) {
                   when (category) {
                     "performance" ->
@@ -3143,7 +3143,10 @@ class DesktopVisualLayoutTest {
                         fixture.hasText(
                             "Unmeasured recommendation. Benchmark the affected workload before claiming an improvement."))
                   }
-                  assertFalse(fixture.hasText("Open source"))
+                  if (category == "bugs") {
+                    assertTrue(fixture.hasText("Open source"))
+                    assertTrue(fixture.isDisabled("Open source"))
+                  } else assertFalse(fixture.hasText("Open source"))
                   assertEquals(0, externalActions)
                   val nextRun =
                       original.run!!.copy(identity = original.run.identity.copy(id = "next-run"))
@@ -3181,7 +3184,7 @@ class DesktopVisualLayoutTest {
           SecurityWorkspacePane(
               SecurityWorkspacePaneState(populated, resultIndexFixture()),
               SecurityWorkspaceActions(
-                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> })))
+                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render("security-populated-wide-1440-900")
@@ -3212,7 +3215,7 @@ class DesktopVisualLayoutTest {
           SecurityWorkspacePane(
               SecurityWorkspacePaneState(unavailableEvidence, resultIndexFixture()),
               SecurityWorkspaceActions(
-                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> })))
+                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render("security-unavailable-evidence-compact-800-650-150")
@@ -3231,7 +3234,7 @@ class DesktopVisualLayoutTest {
           SecurityWorkspacePane(
               SecurityWorkspacePaneState(empty, null),
               SecurityWorkspaceActions(
-                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> })))
+                  { prepared++ }, { openedAnalysis++ }, FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render("security-empty-compact-800-650-150")
@@ -3580,7 +3583,7 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(800, 650, 1.25f) {
           PerformanceWorkspacePane(
               PerformanceWorkspacePaneState(stale, resultIndexFixture()),
-              PerformanceWorkspaceActions({ _, _ -> }, {}, FindingActions({}, { _, _ -> })))
+              PerformanceWorkspaceActions({ _, _ -> }, {}, FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render("results-stale-error-800-1.25")
@@ -3594,7 +3597,7 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(800, 650, 1.5f) {
           BugsWorkspacePane(
               BugsWorkspacePaneState(emptyList(), null, false, empty),
-              BugsWorkspaceActions(FindingActions({}, { _, _ -> }), {}, {}))
+              BugsWorkspaceActions(FindingActions({}, { _, _ -> }, {}), {}, {}))
         }
         .use { fixture ->
           fixture.render("results-empty-800-1.5")
@@ -3650,7 +3653,7 @@ class DesktopVisualLayoutTest {
                     benchmarkComparison = comparison,
                     expectedBenchmarkIdentity = identity,
                     selectedBenchmark = choice),
-                PerformanceWorkspaceActions({ _, _ -> }, {}, FindingActions({}, { _, _ -> })))
+                PerformanceWorkspaceActions({ _, _ -> }, {}, FindingActions({}, { _, _ -> }, {})))
           }
           .use { fixture ->
             fixture.render("performance-benchmark-$width-$height-$scale")
@@ -8442,7 +8445,8 @@ class DesktopVisualLayoutTest {
               BugsWorkspaceActions(
                   FindingActions(
                       prepareFinding = { workflowActions++ },
-                      triageFinding = { _, _ -> workflowActions++ }),
+                      triageFinding = { _, _ -> workflowActions++ },
+                      openSource = { workflowActions++ }),
                   {},
                   {}))
         }
@@ -8500,14 +8504,14 @@ class DesktopVisualLayoutTest {
           BugsWorkspacePane(
               BugsWorkspacePaneState(visualFixtureFindings, null, false),
               BugsWorkspaceActions(
-                  FindingActions({ mutations++ }, { _, _ -> mutations++ }), {}, {}))
+                  FindingActions({ mutations++ }, { _, _ -> mutations++ }, {}), {}, {}))
         }
         .use { fixture ->
           fixture.render()
           fixture.clickText("Validate the user identifier")
           fixture.render()
           kotlin.test.assertEquals(0, mutations)
-          assertFalse(fixture.hasText("Open source"))
+          assertTrue(fixture.isDisabled("Open source"))
           assertTrue(fixture.isDisabled("Prepare fix"))
           assertTrue(fixture.hasText("Model suggestion"))
           fixture.clickText("Evidence and fix criteria")

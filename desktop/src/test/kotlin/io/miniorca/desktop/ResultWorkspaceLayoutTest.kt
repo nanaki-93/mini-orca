@@ -637,7 +637,8 @@ class ResultWorkspaceLayoutTest {
     ComposeVisualFixture(800, 650, 1.5f) {
           PerformanceWorkspacePane(
               PerformanceWorkspacePaneState(stale, resultIndexFixture()),
-              PerformanceWorkspaceActions({ _, _ -> fixes++ }, {}, FindingActions({}, { _, _ -> })))
+              PerformanceWorkspaceActions(
+                  { _, _ -> fixes++ }, {}, FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render("rounded-results-long-error-800-150")
@@ -679,7 +680,8 @@ class ResultWorkspaceLayoutTest {
     ComposeVisualFixture(800, 400, 1.5f) {
           PerformanceWorkspacePane(
               PerformanceWorkspacePaneState(populated, resultIndexFixture()),
-              PerformanceWorkspaceActions({ _, _ -> fixes++ }, {}, FindingActions({}, { _, _ -> })))
+              PerformanceWorkspaceActions(
+                  { _, _ -> fixes++ }, {}, FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render("performance-detail-compact-800-400-150")
@@ -736,7 +738,7 @@ class ResultWorkspaceLayoutTest {
     ComposeVisualFixture(800, 400, 1.5f) {
           SecurityWorkspacePane(
               SecurityWorkspacePaneState(populated, resultIndexFixture()),
-              SecurityWorkspaceActions({ fixes++ }, {}, FindingActions({}, { _, _ -> })))
+              SecurityWorkspaceActions({ fixes++ }, {}, FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render("security-detail-compact-800-400-150")
@@ -768,7 +770,7 @@ class ResultWorkspaceLayoutTest {
     ComposeVisualFixture(800, 400, 1.5f) {
           SecurityWorkspacePane(
               SecurityWorkspacePaneState(stale, resultIndexFixture()),
-              SecurityWorkspaceActions({ fixes++ }, {}, FindingActions({}, { _, _ -> })))
+              SecurityWorkspaceActions({ fixes++ }, {}, FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render("security-detail-stale-800-400-150")
@@ -847,10 +849,22 @@ class ResultWorkspaceLayoutTest {
             section =
                 original.section.copy(
                     results = requireNotNull(original.results).copy(semantic = listOf(finding))))
+    var opened: UnifiedFinding? = null
+    var prepared = 0
     ComposeVisualFixture(800, 650, 1.5f) {
           BugsWorkspacePane(
-              BugsWorkspacePaneState(page.semantic, null, false, page),
-              BugsWorkspaceActions(FindingActions({}, { _, _ -> }), {}, {}))
+              BugsWorkspacePaneState(
+                  page.semantic,
+                  null,
+                  false,
+                  page,
+                  index =
+                      ProjectIndex(
+                          finding.projectId,
+                          finding.projectRevision,
+                          files = listOf(IndexedFile(finding.location.path, "hash", "Go", false)))),
+              BugsWorkspaceActions(
+                  FindingActions({ prepared++ }, { _, _ -> }, { opened = it }), {}, {}))
         }
         .use { fixture ->
           fixture.render()
@@ -860,6 +874,10 @@ class ResultWorkspaceLayoutTest {
           assertTrue(fixture.hasText(path))
           fixture.assertTextWrapsWithoutClipping(prose)
           assertTrue(fixture.hasText("Model suggestion"))
+          fixture.clickText("Open source")
+          assertEquals(finding, opened)
+          assertEquals(0, prepared)
+          assertTrue(fixture.isDisabled("Prepare fix"))
         }
   }
 
@@ -875,7 +893,7 @@ class ResultWorkspaceLayoutTest {
                       status = "failed",
                       phases = listOf(GoScanPhase("go vet", "failed", output = diagnostic))),
                   false),
-              BugsWorkspaceActions(FindingActions({}, { _, _ -> }), { starts++ }, {}))
+              BugsWorkspaceActions(FindingActions({}, { _, _ -> }, {}), { starts++ }, {}))
         }
         .use { fixture ->
           fixture.render("bugs-checks-long-diagnostic-800-400-150")

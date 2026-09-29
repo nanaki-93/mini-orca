@@ -713,6 +713,11 @@ internal fun MiniOrcaApp(
   }
   val findingActions =
       FindingActions(
+          openSource = {
+            routeFindingRequest(presenter, it, false, chatMessage, advancedConstraints) {
+              pendingDraftDiscard = it
+            }
+          },
           prepareFinding = {
             routeFindingRequest(presenter, it, true, chatMessage, advancedConstraints) {
               pendingDraftDiscard = it
