@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class ResultWorkspaceLayoutTest {
@@ -174,6 +175,72 @@ class ResultWorkspaceLayoutTest {
           browser.query = "Finding"
           fixture.render()
           assertEquals("finding-81", browser.selectedKey)
+        }
+  }
+
+  @Test
+  fun browsingAllLoadedResultsAndSwitchingCategoriesOnlyChangesLocalState() {
+    val bugs = resultPageFixture("bugs")
+    val security = bugs.copy(type = AnalysisResultType.Security)
+    val store = ResultBrowserStore()
+    val bugsBrowser = store.stateFor(bugs)
+    val securityBrowser = store.stateFor(security)
+    val bugsRows =
+        (1..320).map { number ->
+          row(number)
+              .copy(
+                  location = "internal/module$number/Handler.go:$number",
+                  severity = if (number % 2 == 0) "HIGH" else "")
+        }
+    var category by mutableStateOf(AnalysisResultType.Bugs)
+    var privilegedActions = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          val page = if (category == AnalysisResultType.Bugs) bugs else security
+          AnalysisResultsPane(
+              page,
+              if (category == AnalysisResultType.Bugs) bugsRows else listOf(row(1)),
+              store.stateFor(page),
+              openAnalysis = { privilegedActions++ },
+              retryResults = { privilegedActions++ }) { key ->
+                Text("Evidence for $key")
+              }
+        }
+        .use { fixture ->
+          fixture.render()
+          bugsBrowser.listState.requestScrollToItem(319)
+          fixture.render()
+          fixture.awaitVisibleDescription("Inspect Finding 320")
+          fixture.clickDescription("Inspect Finding 320")
+          fixture.render()
+          assertEquals("finding-320", bugsBrowser.selectedKey)
+          assertTrue(fixture.hasText("Evidence for finding-320"))
+          fixture.clickDescription("Filter results")
+          fixture.setFocusedText("mOdUlE319/hAnDlEr.Go")
+          fixture.render()
+          assertEquals("finding-319", bugsBrowser.selectedKey)
+          assertTrue(fixture.hasText("Evidence for finding-319"))
+          fixture.clickDescription("Severity Unknown 160")
+          fixture.render()
+          assertTrue(fixture.hasText("Evidence for finding-319"))
+          fixture.clickDescription("Clear filters")
+          fixture.render()
+          assertEquals(ResultBrowserFilter.All, bugsBrowser.filter)
+          assertEquals("", bugsBrowser.query)
+          bugsBrowser.listState.requestScrollToItem(18, 4)
+          fixture.render()
+          val index = bugsBrowser.listState.firstVisibleItemIndex
+          val offset = bugsBrowser.listState.firstVisibleItemScrollOffset
+          category = AnalysisResultType.Security
+          fixture.render()
+          assertTrue(fixture.hasText("Evidence for finding-1"))
+          assertEquals("", securityBrowser.query)
+          category = AnalysisResultType.Bugs
+          fixture.render()
+          assertSame(bugsBrowser, store.stateFor(bugs))
+          assertEquals("finding-319", bugsBrowser.selectedKey)
+          assertEquals(index, bugsBrowser.listState.firstVisibleItemIndex)
+          assertEquals(offset, bugsBrowser.listState.firstVisibleItemScrollOffset)
+          assertEquals(0, privilegedActions)
         }
   }
 
@@ -591,6 +658,94 @@ class ResultWorkspaceLayoutTest {
             assertEquals(1, retries)
           }
     }
+  }
+
+  @Test
+  fun bugsBrowsingDisclosuresAndCategoryNavigationDoNotInvokeWorkIntents() {
+    val page = resultPageFixture("bugs")
+    val findings =
+        (1..2).map { number ->
+          UnifiedFinding(
+              id = "result-$number",
+              projectId = page.project!!.projectId,
+              projectRevision = page.project.projectRevision,
+              category = "bugs",
+              title = "Result $number",
+              severity = if (number == 1) "high" else "",
+              location = FindingLocation("internal/handler$number.go", startLine = number),
+              evidence = "Local evidence $number")
+        }
+    val store = ResultBrowserStore()
+    val bugsBrowser = store.stateFor(page)
+    val security = page.copy(type = AnalysisResultType.Security)
+    var category by mutableStateOf(AnalysisResultType.Bugs)
+    val requests = mutableListOf<String>()
+    ComposeVisualFixture(800, 650) {
+          if (category == AnalysisResultType.Bugs)
+              BugsWorkspacePane(
+                  BugsWorkspacePaneState(findings, null, false, page, store.stateFor(page)),
+                  BugsWorkspaceActions(
+                      FindingActions(
+                          { requests += "prepare/provider" },
+                          { _, _ -> requests += "triage/write" },
+                          { requests += "source/read" }),
+                      { requests += "scan/execution" },
+                      { requests += "cancel scan" },
+                      { requests += "analysis/provider" },
+                      { requests += "retry/read" }))
+          else
+              AnalysisResultsPane(
+                  security,
+                  emptyList(),
+                  store.stateFor(security),
+                  openAnalysis = { requests += "analysis/provider" },
+                  retryResults = { requests += "retry/read" }) {
+                    Text("unused")
+                  }
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Inspect Result 2")
+          fixture.render()
+          assertTrue(fixture.hasText("Result 2"))
+          fixture.clickText("Evidence and fix criteria")
+          fixture.render()
+          assertTrue(fixture.hasText("Local evidence 2"))
+          fixture.clickDescription("Filter results")
+          fixture.setFocusedText("HANDLER2.GO")
+          fixture.render()
+          assertTrue(fixture.hasText("Result 2"))
+          category = AnalysisResultType.Security
+          fixture.render()
+          category = AnalysisResultType.Bugs
+          fixture.render()
+          assertEquals("HANDLER2.GO", bugsBrowser.query)
+          assertEquals(semanticResultRow(findings[1]).key, bugsBrowser.selectedKey)
+          assertTrue(fixture.hasText("Result 2"))
+          assertTrue(
+              requests.isEmpty(),
+              "Local browsing must not dispatch read, provider, scan or write intents")
+        }
+  }
+
+  @Test
+  fun unknownCountsAndUnavailableReadsNeverLookLikeCompletedEmpty() {
+    val original = resultPageFixture("bugs")
+    val progress = original.progress!!.copy(status = "unavailable", findingCount = null)
+    val run = original.run!!.copy(status = "unavailable", sections = listOf(progress))
+    val page = original.copy(run = run, section = AnalysisSectionState())
+    ComposeVisualFixture(800, 650) {
+          AnalysisResultsPane(page, emptyList(), newResultBrowserState(page), openAnalysis = {}) {
+            Text("unused")
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.assertTextFits("— reported (count unavailable)")
+          fixture.assertTextFits("Analysis is unavailable for this category.")
+          assertFalse(fixture.hasText("No findings in the analyzed scope."))
+          assertFalse(fixture.hasText("0 findings"))
+        }
   }
 
   @Test
