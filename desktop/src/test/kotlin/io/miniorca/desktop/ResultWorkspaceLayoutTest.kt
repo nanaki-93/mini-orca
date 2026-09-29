@@ -1025,6 +1025,134 @@ class ResultWorkspaceLayoutTest {
   }
 
   @Test
+  fun securityDetailExposesSuppliedEvidenceAndMetadataWithoutActivatingModelProse() {
+    val original = securityPageFixture()
+    val longPath = "nested/".repeat(18) + "boundary.go"
+    val literal = "<img src='https://example.invalid/track'> [reference](https://example.invalid)"
+    val source = original.results!!.security.first()
+    val rule =
+        source.copy(
+            path = longPath,
+            scope = "package boundary",
+            ruleSetVersion = "rules-7",
+            generatedAt = "2026-01-02T03:04:05Z",
+            findings =
+                listOf(
+                    source.findings
+                        .single()
+                        .copy(
+                            anchor = SecuritySourceAnchor(longPath, 4, 5, "Run"),
+                            category = "secrets",
+                            confidence = "medium",
+                            cwe = "CWE-798",
+                            reference = literal,
+                            triage = "reviewing",
+                            verificationState = "unverified",
+                            preconditions = "Only if reachable",
+                            verificationIdea = "Inspect test fixtures without execution",
+                            engineeringInsight =
+                                EngineeringInsight(
+                                    mechanism = literal,
+                                    whyItMattersHere = "User input crosses a boundary",
+                                    tradeoffOrFailureMode = "Rotation may invalidate fixtures",
+                                    transferableLesson = "Keep secrets out of source"))))
+    val ai =
+        source.copy(
+            source = "ai",
+            model = "review-model",
+            configuredModel = "configured-model",
+            profile = "advisory",
+            providerOrigin = "local",
+            reasoningEffort = "low",
+            promptVersion = "prompt-3",
+            contextPolicyVersion = "context-2",
+            findings =
+                listOf(
+                    rule.findings
+                        .single()
+                        .copy(
+                            id = "model-2",
+                            title = "Hypothesis about the same boundary",
+                            evidenceKind = "model_suspicion",
+                            verificationIdea = "")))
+    val page =
+        original.copy(
+            section =
+                original.section.copy(
+                    results = original.results!!.copy(security = listOf(rule, ai))))
+    var privileged = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          SecurityWorkspacePane(
+              SecurityWorkspacePaneState(page, resultIndexFixture()),
+              SecurityWorkspaceActions(
+                  { privileged++ }, { privileged++ }, FindingActions({}, { _, _ -> }, {})))
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.revealText("Credential-like assignment", "result-list")
+          fixture.clickDescription("Inspect Credential-like assignment")
+          fixture.render()
+          assertTrue(fixture.hasText("Source rule"))
+          assertTrue(
+              fixture.hasText(
+                  "A source rule match identifies a pattern; it does not confirm a vulnerability."))
+          listOf(
+                  "High",
+                  "Reported range",
+                  "4–5",
+                  "Run",
+                  "partial",
+                  "secrets",
+                  "medium",
+                  "CWE-798",
+                  "reviewing",
+                  "unverified",
+                  "Only if reachable",
+                  "Inspect test fixtures without execution",
+                  "Engineering insight",
+                  literal,
+                  "User input crosses a boundary",
+                  "Rotation may invalidate fixtures",
+                  "Keep secrets out of source")
+              .forEach { assertTrue(fixture.hasText(it), "Missing detail: $it") }
+          fixture.revealText(longPath + ":4", "result-detail")
+          assertTrue(fixture.taggedTextCount("result-detail", longPath + ":4") > 0)
+          assertFalse(fixture.hasText("Scope"))
+          fixture.revealText("Report metadata", "result-detail")
+          fixture.clickText("Report metadata")
+          fixture.render()
+          listOf("package boundary", "rules-7", "2026-01-02T03:04:05Z", "base").forEach {
+            assertTrue(fixture.hasText(it), "Missing metadata: $it")
+          }
+          fixture.revealText("Report metadata", "result-detail")
+          fixture.clickText("Report metadata")
+          fixture.clickDescription("Severity High 2")
+          fixture.render()
+          fixture.revealText("Hypothesis about the same boundary", "result-list")
+          assertTrue(fixture.hasDescription("Inspect Hypothesis about the same boundary"))
+          fixture.clickDescription("Filter results")
+          fixture.setFocusedText("Hypothesis about the same boundary")
+          fixture.render()
+          fixture.clickDescription("Inspect Hypothesis about the same boundary")
+          fixture.render()
+          assertTrue(fixture.hasText("Model hypothesis"))
+          assertTrue(
+              fixture.hasText(
+                  "Unverified model hypothesis. Validate the preconditions and source evidence before remediation."))
+          assertTrue(fixture.hasText("Not supplied."))
+          assertFalse(fixture.hasText("package boundary"))
+          fixture.revealText("Report metadata", "result-detail")
+          fixture.clickText("Report metadata")
+          fixture.render()
+          listOf("review-model", "configured-model", "advisory", "local", "prompt-3", "context-2")
+              .forEach { assertTrue(fixture.hasText(it), "Missing metadata: $it") }
+          assertTrue(fixture.hasText("Generated at"))
+          assertFalse(fixture.hasText("2026-01-02T03:04:05Z"))
+          assertEquals(0, privileged)
+        }
+  }
+
+  @Test
   fun securityDetailKeepsEvidenceWarningsVisibleAndLongVerificationOnDemand() {
     val original = securityPageFixture()
     val results = requireNotNull(original.results)
@@ -1065,14 +1193,17 @@ class ResultWorkspaceLayoutTest {
               fixture.hasText(
                   "A source rule match identifies a pattern; it does not confirm a vulnerability."))
           assertTrue(fixture.hasText(longWarning))
-          assertFalse(fixture.hasText("Preconditions / unknowns"))
-          assertFalse(fixture.hasText("Safe verification idea"))
-          fixture.revealText("Evidence and safe verification", "result-detail")
-          fixture.clickText("Evidence and safe verification")
-          fixture.render("security-detail-disclosure-800-400-150")
           assertTrue(fixture.hasText("Preconditions / unknowns"))
-          assertTrue(fixture.hasText("Safe verification idea"))
-          fixture.assertTextWrapsWithoutClipping(longPreconditions)
+          assertTrue(fixture.hasText("Safe verification idea · not performed"))
+          assertFalse(fixture.hasText("Scope"))
+          fixture.revealText("Report metadata", "result-detail")
+          fixture.clickText("Report metadata")
+          fixture.render("security-detail-disclosure-800-400-150")
+          assertTrue(fixture.hasText("Scope"))
+          assertTrue(fixture.taggedTextCount("result-detail", longPreconditions) > 0)
+          fixture.scrollBy(100_000f, "result-detail")
+          fixture.render()
+          assertTrue(fixture.verticalScrollValue("result-detail") > 0f)
           revealDetailAction(fixture, "Prepare fix")
           fixture.clickText("Prepare fix")
           assertEquals(1, fixes)
