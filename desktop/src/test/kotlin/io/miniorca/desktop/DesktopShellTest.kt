@@ -149,7 +149,8 @@ class DesktopShellTest {
                       compareSelectedGoBenchmark = { operations += "checks" },
                       prepareSecurityFinding = { operations += "prepare" }),
               findingActions =
-                  FindingActions({ operations += "finding" }, { _, _ -> operations += "finding" }),
+                  FindingActions(
+                      { operations += "finding" }, { _, _ -> operations += "finding" }, {}),
               paletteActions =
                   DesktopShellPaletteActions(
                       updateQuery = { operations += "query" },

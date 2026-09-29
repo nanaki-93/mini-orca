@@ -1437,7 +1437,7 @@ class DesktopKeyboardNavigationTest {
                 selectGoBenchmark = {},
                 compareSelectedGoBenchmark = onOperation,
                 prepareSecurityFinding = { onOperation() }),
-        findingActions = FindingActions({ onOperation() }, { _, _ -> onOperation() }),
+        findingActions = FindingActions({ onOperation() }, { _, _ -> onOperation() }, {}),
         paletteActions =
             DesktopShellPaletteActions(
                 updateQuery = { onState(state.copy(palette = state.palette.copy(query = it))) },
@@ -1547,7 +1547,7 @@ class DesktopKeyboardNavigationTest {
               PerformanceWorkspaceActions(
                   prepareOptimization = { _, _ -> preparations++ },
                   openAnalysis = { destination = Workspace.Analysis },
-                  semanticActions = FindingActions({}, { _, _ -> })))
+                  semanticActions = FindingActions({}, { _, _ -> }, {})))
         }
         .use { fixture ->
           fixture.render()

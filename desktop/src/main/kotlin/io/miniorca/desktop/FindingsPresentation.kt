@@ -51,7 +51,10 @@ import androidx.compose.ui.unit.dp
 internal class FindingActions(
     private val prepareFinding: (UnifiedFinding) -> Unit,
     private val triageFinding: (UnifiedFinding, FindingLifecycleAction) -> Unit,
+    private val openSource: (UnifiedFinding) -> Unit,
 ) {
+  fun openSource(finding: UnifiedFinding) = openSource.invoke(finding)
+
   fun prepareFix(finding: UnifiedFinding) = prepareFinding(finding)
 
   fun triage(finding: UnifiedFinding, action: FindingLifecycleAction) =
@@ -64,11 +67,20 @@ internal fun FindingActionButtons(
     finding: UnifiedFinding,
     actions: FindingActions,
     preparation: FindingPreparationDecision,
+    sourceAvailable: Boolean? = null,
 ) {
   FlowRow(
       Modifier.fillMaxWidth().padding(top = MiniOrcaSpacing.compact),
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (sourceAvailable != null)
+            MiniOrcaButton(
+                onClick = { actions.openSource(finding) },
+                enabled = sourceAvailable,
+                tone = ActionTone.Neutral,
+                density = ButtonDensity.Toolbar) {
+                  Text("Open source")
+                }
         MiniOrcaButton(
             onClick = { actions.prepareFix(finding) },
             enabled = preparation is FindingPreparationDecision.Eligible,

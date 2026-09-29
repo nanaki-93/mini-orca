@@ -269,7 +269,7 @@ private fun NativeRoundedWorkspace(terminal: DesktopTerminalWorkspace, directory
                 compareSelectedGoBenchmark = { record("Compare benchmark") },
                 prepareSecurityFinding = { record("Security finding") }),
         findingActions =
-            FindingActions({ selectFile(it.location.path) }, { _, _ -> record("Finding") }),
+            FindingActions({ selectFile(it.location.path) }, { _, _ -> record("Finding") }, {}),
         paletteActions =
             DesktopShellPaletteActions(
                 updateQuery = { palette = palette.copy(query = it) },
@@ -430,7 +430,7 @@ internal fun acceptanceResultPage(category: String, status: String): AnalysisRes
 @Composable
 internal fun AcceptanceResultPane(category: String, status: String) {
   val page = acceptanceResultPage(category, status)
-  val actions = FindingActions({}, { _, _ -> })
+  val actions = FindingActions({}, { _, _ -> }, {})
   when (category) {
     "performance" ->
         PerformanceWorkspacePane(
