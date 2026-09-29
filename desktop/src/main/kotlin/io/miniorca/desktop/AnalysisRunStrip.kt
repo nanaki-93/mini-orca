@@ -92,28 +92,20 @@ internal fun AnalysisRunStrip(
                 else "Outdated · run belongs to another project; not current evidence.",
                 color = Warning,
                 style = IdeTypography.workspaceMetadata)
-        if (scope == AnalysisRunStripScope.Summary)
-            run?.reason
-                ?.takeIf { it.isNotBlank() }
-                ?.let { reason ->
-                  val label =
-                      if (run.status in
-                          setOf(
-                              "paused",
-                              "interrupted",
-                              "canceled",
-                              "failed",
-                              "partial",
-                              "unavailable"))
-                          "Stop reason"
-                      else "Run diagnostic"
-                  SelectionContainer {
-                    Text(
-                        "$label · ${sanitizedOutputText(reason, 180).substringBefore('\n')}",
-                        color = Warning,
-                        style = IdeTypography.workspaceMetadata)
-                  }
-                }
+        if (scope == AnalysisRunStripScope.Summary && run != null) {
+          val stopped =
+              run.status in
+                  setOf("paused", "interrupted", "canceled", "failed", "partial", "unavailable")
+          if (stopped || run.reason.isNotBlank()) {
+            val reason = run.reason.ifBlank { "No stop reason was supplied for this run." }
+            SelectionContainer {
+              Text(
+                  "${if (stopped) "Stop reason" else "Run diagnostic"} · ${sanitizedOutputText(reason, 180).substringBefore('\n')}",
+                  color = Warning,
+                  style = IdeTypography.workspaceMetadata)
+            }
+          }
+        }
         if (scope == AnalysisRunStripScope.Analysis) {
           if (run?.plan?.compatibilityStage?.isNotBlank() == true)
               Text(
