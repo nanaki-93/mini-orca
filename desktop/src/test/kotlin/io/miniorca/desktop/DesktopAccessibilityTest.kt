@@ -13,6 +13,47 @@ import kotlin.test.assertTrue
 
 class DesktopAccessibilityTest {
   @Test
+  fun bugsSelectionAndBlockedPreparationExposeDistinctAccessibleStates() {
+    val page = resultPageFixture("bugs")
+    val finding =
+        page.semantic
+            .first()
+            .copy(
+                title = "Inspect saved Bugs evidence",
+                location = FindingLocation("main.go", startLine = 7, symbol = "Run"),
+                freshness = "stale")
+    val loaded =
+        page.copy(
+            section = page.section.copy(results = page.results!!.copy(semantic = listOf(finding))))
+    var selected: UnifiedFinding? = null
+    var prepared = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          BugsWorkspacePane(
+              BugsWorkspacePaneState(
+                  listOf(finding), null, false, loaded, index = resultIndexFixture()),
+              BugsWorkspaceActions(
+                  FindingActions({ prepared++ }, { _, _ -> }, { selected = it }), {}, {}))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("Inspect ${finding.title}"))
+          assertTrue(fixture.requestDescriptionFocus("Inspect ${finding.title}"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("Inspect ${finding.title}"))
+          assertTrue(fixture.hasText("main.go:7 · Run"))
+          assertTrue(fixture.hasText("Stale"))
+          fixture.revealText("Prepare fix", "result-detail")
+          assertTrue(fixture.isDisabled("Prepare fix"))
+          assertTrue(fixture.hasText("Analyze again to prepare a fix from current source."))
+          assertTrue(fixture.requestFocus("Open source"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(finding, selected)
+          assertEquals(0, prepared)
+        }
+  }
+
+  @Test
   fun switchReviewsKeepSafeFocusAndEscapeOnlyDismissesTheActiveReview() {
     val draft = DeclarationDraft(id = "draft", targetPath = "cmd/main.go")
     val model = ScopedModel(scope = "analyze", remoteProvider = true, model = "remote-model")

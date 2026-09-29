@@ -32,6 +32,65 @@ import kotlinx.coroutines.CompletableDeferred
 
 class DesktopKeyboardNavigationTest {
   @Test
+  fun bugsKeyboardInspectionKeepsTextEntryAndBothScrollRegionsIndependent() {
+    val base = resultPageFixture("bugs")
+    val findings =
+        (1..240).map { number ->
+          base.semantic
+              .first()
+              .copy(
+                  id = "f17-$number",
+                  title = "Finding $number",
+                  message = "Long evidence line $number ".repeat(80).trim(),
+                  location = FindingLocation("internal/handler$number.go", startLine = number))
+        }
+    val page =
+        base.copy(section = base.section.copy(results = base.results!!.copy(semantic = findings)))
+    val browser = newResultBrowserState(page)
+    var external = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          BugsWorkspacePane(
+              BugsWorkspacePaneState(findings, null, false, page, browser),
+              BugsWorkspaceActions(
+                  FindingActions({ external++ }, { _, _ -> external++ }, { external++ }),
+                  { external++ },
+                  { external++ }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestDescriptionFocus("Inspect Finding 1"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("Inspect Finding 1"))
+          assertTrue(fixture.requestDescriptionFocus("Inspect Finding 1"))
+          assertTrue(fixture.pressKey(Key.DirectionDown))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Inspect Finding 2"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("Inspect Finding 2"))
+          assertEquals("semantic:${findingDisplayKey(findings[1])}", browser.selectedKey)
+          fixture.scrollBy(700f, "result-detail")
+          fixture.render()
+          val detail = fixture.verticalScrollValue("result-detail")
+          assertTrue(detail > 0f)
+          fixture.scrollBy(1300f, "result-list")
+          fixture.render()
+          assertTrue(browser.listState.firstVisibleItemIndex > 0)
+          assertTrue(fixture.verticalScrollValue("result-detail") >= detail - 5f)
+          fixture.revealText("Filter results", "result-overview")
+          fixture.focusDescribedEditor("Filter results")
+          fixture.setFocusedText("Finding 2")
+          fixture.render()
+          fixture.pressKey(Key.DirectionDown)
+          fixture.render()
+          assertEquals("Finding 2", browser.query)
+          assertEquals("semantic:${findingDisplayKey(findings[1])}", browser.selectedKey)
+          assertEquals(0, external)
+        }
+  }
+
+  @Test
   fun diagramViewerTrapsFocusAndRestoresTheOpenerAfterCloseAndEscape() {
     val source = "flowchart LR\n A --> B"
     for (attempt in 0..1) {

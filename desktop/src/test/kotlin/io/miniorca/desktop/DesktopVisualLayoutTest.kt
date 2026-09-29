@@ -75,6 +75,137 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun f17BugsProductionStatesAndActionsRemainReachableAtResponsiveTextAndDensity() {
+    val base = resultPageFixture("bugs")
+    val path = "internal/" + "deeply/nested/日本語/".repeat(5) + "handler.go"
+    val message = "Long model explanation <script>inert</script> ".repeat(20).trim()
+    val finding =
+        base.semantic
+            .first()
+            .copy(
+                id = "f17-long",
+                title = "Reject incomplete results after a failed scan",
+                message = message,
+                evidence = "Evidence from saved analysis ".repeat(35).trim(),
+                location = FindingLocation(path, startLine = 118, symbol = "Refresh"),
+                source = "file_analysis",
+                confidence = "suggested",
+                freshness = "stale",
+                status = "partial")
+    val populated =
+        base.copy(
+            section = base.section.copy(results = base.results!!.copy(semantic = listOf(finding))))
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        val label = "f17-bugs-$width-$height-$scale-${density}x"
+        var page by mutableStateOf(populated)
+        val browser = newResultBrowserState(page)
+        var operations = 0
+        ComposeVisualFixture(
+                (width * density).toInt(), (height * density).toInt(), scale, density) {
+                  BugsWorkspacePane(
+                      BugsWorkspacePaneState(
+                          page.semantic,
+                          null,
+                          false,
+                          page,
+                          browser,
+                          ProjectIndex(
+                              finding.projectId,
+                              finding.projectRevision,
+                              files = listOf(IndexedFile(path, "hash", "Go", false)))),
+                      BugsWorkspaceActions(
+                          FindingActions(
+                              { operations++ }, { _, _ -> operations++ }, { operations++ }),
+                          { operations++ },
+                          { operations++ },
+                          { operations++ },
+                          { operations++ }))
+                }
+            .use { fixture ->
+              fixture.render("$label-populated")
+              fixture.assertTextFits("View analysis")
+              fixture.clickDescription("Inspect ${finding.title}")
+              fixture.render("$label-stale-partial")
+              assertTrue(fixture.hasText("Partial · Stale"))
+              assertTrue(fixture.hasText("Model suggestion"))
+              assertTrue(fixture.hasText("$path:118 · Refresh"))
+              assertTrue(fixture.hasText(message))
+              assertTrue(fixture.isDisabled("Prepare fix"))
+              fixture.revealText("Prepare fix", "result-detail")
+              fixture.assertTextFits("Prepare fix")
+              fixture.revealText("Open source", "result-detail")
+              assertTrue(fixture.requestFocus("Open source"))
+              fixture.render("$label-source-focused")
+              assertTrue(fixture.isFocusedControl("Open source"))
+              fixture.assertColorVisible(FocusAccent)
+              fixture.revealText("Evidence and fix criteria", "result-detail")
+              assertFalse(fixture.hasText(finding.evidence), "Optional evidence starts collapsed")
+              if (width == 800 && scale == 1.5f && density == 1f) {
+                fixture.clickText("Evidence and fix criteria")
+                fixture.render("$label-evidence-expanded")
+                assertTrue(fixture.hasText(finding.evidence))
+              }
+              val list = fixture.taggedBounds("result-list")
+              val detail = fixture.taggedBounds("result-detail")
+              assertTrue(list.height > 0 && detail.height > 0, label)
+              assertTrue(list.right <= detail.left || list.bottom <= detail.top, label)
+              assertTrue(detail.bottom <= height * density, label)
+              browser.query = "no matching result"
+              fixture.render("$label-no-match")
+              assertTrue(fixture.hasText("No matching results."))
+              assertTrue(fixture.hasDescription("Clear filters"))
+              browser.query = ""
+              page = populated.copy(section = populated.section.copy(error = "saved read failed"))
+              fixture.render("$label-retained-error")
+              assertTrue(fixture.hasText("Results could not be refreshed: saved read failed"))
+              assertTrue(fixture.hasDescription("Inspect ${finding.title}"))
+              assertEquals(0, operations, "Passive inspection and reflow cannot dispatch work")
+            }
+      }
+    }
+    fun emptyPage(status: String, count: Int?): AnalysisResultPageState {
+      val progress = requireNotNull(base.progress).copy(status = status, findingCount = count)
+      val run =
+          requireNotNull(base.run)
+              .copy(
+                  status = status,
+                  sections = base.run.sections.map { if (it.category == "bugs") progress else it })
+      return base.copy(
+          run = run,
+          section =
+              base.section.copy(
+                  results =
+                      requireNotNull(base.results)
+                          .copy(progress = progress, semantic = emptyList())))
+    }
+    val states =
+        listOf(
+            Triple(
+                "completed-empty", emptyPage("completed", 0), "No findings in the analyzed scope."),
+            Triple("canceled", emptyPage("canceled", null), "Analysis was canceled."),
+            Triple(
+                "unavailable",
+                emptyPage("unavailable", null),
+                "Analysis is unavailable for this category."))
+    for ((name, page, message) in states) {
+      ComposeVisualFixture(800, 650, 1.5f) {
+            BugsWorkspacePane(
+                BugsWorkspacePaneState(page.semantic, null, false, page),
+                BugsWorkspaceActions(FindingActions({}, { _, _ -> }, {}), {}, {}))
+          }
+          .use { fixture ->
+            fixture.render("f17-bugs-$name-800-650-1.5-1x")
+            assertTrue(fixture.taggedBounds("result-empty").height > 0)
+            fixture.assertTextFits("View analysis")
+            fixture.assertTextFits(message)
+            if (name != "completed-empty") assertFalse(fixture.hasText("0 findings"))
+          }
+    }
+  }
+
+  @Test
   fun f16AnalysisRunShowsLifecycleReasonAttemptsAndRecoveryWithDetailsCollapsed() {
     val reason =
         "Stopped at src/" + "日本語-long-path/".repeat(30) + "main.go\n" + "detail ".repeat(700)
