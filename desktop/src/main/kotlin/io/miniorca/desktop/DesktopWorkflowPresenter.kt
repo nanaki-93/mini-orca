@@ -577,7 +577,7 @@ class DesktopWorkflowPresenter(
     val target =
         if (prepare) (preparationDecision(finding) as? FindingPreparationDecision.Eligible)?.target
         else {
-          val displayed = state.projectBugFindings()
+          val displayed = state.loadedFindingsFor(finding.category)
           if (finding.projectId != project.projectId ||
               finding.projectRevision != project.projectRevision ||
               displayed.count { it == finding } != 1)
@@ -646,16 +646,18 @@ class DesktopWorkflowPresenter(
 
   private fun preparationDecision(finding: UnifiedFinding): FindingPreparationDecision {
     val state = snapshot.value.state
-    val findings =
-        when (finding.category) {
-          "",
-          "bugs" -> state.projectBugFindings()
-          "performance",
-          "security" -> state.analysisResultPage(finding.category).semantic
-          else -> emptyList()
-        }
-    return findingPreparationDecision(finding, state.project, findings, state.index)
+    return findingPreparationDecision(
+        finding, state.project, state.loadedFindingsFor(finding.category), state.index)
   }
+
+  private fun DesktopState.loadedFindingsFor(category: String): List<UnifiedFinding> =
+      when (category) {
+        "",
+        "bugs" -> projectBugFindings()
+        "performance",
+        "security" -> analysisResultPage(category).semantic
+        else -> emptyList()
+      }
 
   fun viewAnalysisResults(category: String, path: String) {
     if (category !in setOf("bugs", "performance", "security")) return

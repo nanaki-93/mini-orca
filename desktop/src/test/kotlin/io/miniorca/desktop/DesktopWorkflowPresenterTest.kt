@@ -1465,18 +1465,21 @@ class DesktopWorkflowPresenterTest {
 
   @Test
   fun sameSourceFindingInspectionPreservesDraftAndExactLineWithoutReads() {
-    val calls = Collections.synchronizedList(mutableListOf<String>())
-    val presenter = presenter { method, path, _ ->
-      calls += "$method $path"
-      when {
-        path.contains("files/info?") -> response(fileJson("main.go", "base"))
-        path.contains("files/symbols?") -> response(symbolsJson("main.go", "Run", "func Run()"))
-        path.contains("files/analysis") -> response("""{"path":"main.go","status":"missing"}""")
-        path.contains("/impact") -> response("""{"target_path":"main.go"}""")
-        path.contains("/git") -> response("""{"available":false}""")
-        else -> error("Unexpected $method $path")
-      }
-    }
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val calls = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, _ ->
+          calls += "$method $path"
+          when {
+            path.contains("files/info?") -> response(fileJson("main.go", "base"))
+            path.contains("files/symbols?") -> response(symbolsJson("main.go", "Run", "func Run()"))
+            path.contains("files/analysis") -> response("""{"path":"main.go","status":"missing"}""")
+            path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+            path.contains("/git") -> response("""{"available":false}""")
+            else -> error("Unexpected $method $path")
+          }
+        }
     try {
       val run = analysisRunFixture()
       val finding =
@@ -1499,7 +1502,8 @@ class DesktopWorkflowPresenterTest {
                                       analysisResultsFixture(run, "bugs")
                                           .copy(semantic = listOf(finding)))))))
       presenter.selectFile("main.go")
-      eventually { presenter.snapshot.value.state.selectedFile != null }
+      dispatcher.runPending()
+      assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
       presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
       val sourceReads = calls.count { it.contains("files/info?") || it.contains("files/symbols?") }
       val review = presenter.snapshot.value.state.review
@@ -1511,25 +1515,133 @@ class DesktopWorkflowPresenterTest {
       assertEquals(Workspace.Editor, presenter.snapshot.value.state.workspace)
     } finally {
       presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun semanticSourceInspectionUsesTheLoadedCategoryWithoutPreparing() {
+    for (category in listOf("bugs", "performance", "security")) {
+      val dispatcher = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + dispatcher)
+      val calls = mutableListOf<String>()
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, _ ->
+            calls += "$method $path"
+            when {
+              path.contains("files/info?path=main.go") -> response(fileJson("main.go", "base"))
+              path.contains("files/symbols?path=main.go") ->
+                  response(symbolsJson("main.go", "Run", "func Run()"))
+              path.contains("files/analysis") ->
+                  response("""{"path":"main.go","status":"missing"}""")
+              path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+              path.contains("/git") -> response("""{"available":false}""")
+              else -> error("Unexpected $method $path")
+            }
+          }
+      try {
+        val run = analysisRunFixture()
+        val finding =
+            UnifiedFinding(
+                id = "semantic-$category",
+                category = category,
+                projectId = "project",
+                projectRevision = "revision",
+                location = FindingLocation("main.go", startLine = 17, symbol = "Run"))
+        presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
+        presenter.dispatch(
+            DesktopEvent.AnalysisRunUpdated(
+                ProjectAnalysisRunState(
+                    run = run,
+                    sections =
+                        mapOf(
+                            AnalysisResultKey(category) to
+                                AnalysisSectionState(
+                                    results =
+                                        analysisResultsFixture(run, category)
+                                            .copy(semantic = listOf(finding)))))))
+        presenter.openFinding(finding)
+        dispatcher.runPending()
+        assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path, category)
+        assertEquals(17, presenter.snapshot.value.state.selection.focusedLine, category)
+        assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank(), category)
+        assertTrue(calls.any { it.contains("files/info?path=main.go") }, category)
+        assertTrue(calls.none { it.startsWith("POST") }, category)
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun semanticPerformanceSourceRejectsMissingDuplicateAndWrongProjectFindings() {
+    for (case in listOf("missing", "duplicate", "wrong-project")) {
+      val calls = mutableListOf<String>()
+      val presenter = presenter { method, path, _ ->
+        calls += "$method $path"
+        error("Unexpected request $method $path")
+      }
+      try {
+        val run = analysisRunFixture()
+        val finding =
+            UnifiedFinding(
+                id = "performance-source",
+                category = "performance",
+                projectId = "project",
+                projectRevision = "revision",
+                location = FindingLocation("main.go", startLine = 17, symbol = "Run"))
+        val loaded =
+            when (case) {
+              "missing" -> emptyList()
+              "duplicate" -> listOf(finding, finding)
+              else -> listOf(finding)
+            }
+        val requested =
+            if (case == "wrong-project") finding.copy(projectId = "another-project") else finding
+        presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
+        presenter.dispatch(
+            DesktopEvent.AnalysisRunUpdated(
+                ProjectAnalysisRunState(
+                    run = run,
+                    sections =
+                        mapOf(
+                            AnalysisResultKey("performance") to
+                                AnalysisSectionState(
+                                    results =
+                                        analysisResultsFixture(run, "performance")
+                                            .copy(semantic = loaded))))))
+        assertNull(presenter.findingIntent(requested, false), case)
+        presenter.openFinding(requested)
+        assertNull(presenter.snapshot.value.state.selectedFile, case)
+        assertTrue(presenter.snapshot.value.state.error?.contains("no longer") == true, case)
+        assertTrue(calls.isEmpty(), case)
+      } finally {
+        presenter.close()
+      }
     }
   }
 
   @Test
   fun semanticPreparationUsesTheDisplayedCategoryAndRejectsRemovedEvidence() {
     for (category in listOf("bugs", "performance", "security")) {
-      val calls = Collections.synchronizedList(mutableListOf<String>())
-      val presenter = presenter { method, path, _ ->
-        calls += "$method $path"
-        when {
-          path.contains("files/info?path=main.go") -> response(fileJson("main.go", "base"))
-          path.contains("files/symbols?path=main.go") ->
-              response(symbolsJson("main.go", "Run", "func Run()"))
-          path.contains("files/analysis") -> response("""{"path":"main.go","status":"missing"}""")
-          path.contains("/impact") -> response("""{"target_path":"main.go"}""")
-          path.contains("/git") -> response("""{"available":false}""")
-          else -> error("Unexpected $method $path")
-        }
-      }
+      val dispatcher = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + dispatcher)
+      val calls = mutableListOf<String>()
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, _ ->
+            calls += "$method $path"
+            when {
+              path.contains("files/info?path=main.go") -> response(fileJson("main.go", "base"))
+              path.contains("files/symbols?path=main.go") ->
+                  response(symbolsJson("main.go", "Run", "func Run()"))
+              path.contains("files/analysis") ->
+                  response("""{"path":"main.go","status":"missing"}""")
+              path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+              path.contains("/git") -> response("""{"available":false}""")
+              else -> error("Unexpected $method $path")
+            }
+          }
       try {
         val project = resultProjectFixture()
         val index = resultIndexFixture()
@@ -1560,7 +1672,8 @@ class DesktopWorkflowPresenterTest {
                 is FindingPreparationDecision.Eligible,
             category)
         presenter.prepareFinding(finding)
-        eventually { presenter.snapshot.value.state.preparedRequest.contains("Fix Run.") }
+        dispatcher.runPending()
+        assertTrue(presenter.snapshot.value.state.preparedRequest.contains("Fix Run."), category)
         assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path, category)
         assertTrue(calls.any { it.contains("files/info?path=main.go") }, category)
         assertTrue(calls.none { it.startsWith("POST") }, category)
@@ -1584,6 +1697,7 @@ class DesktopWorkflowPresenterTest {
         assertEquals(requestsBefore, calls.size, category)
       } finally {
         presenter.close()
+        scope.cancel()
       }
     }
   }
