@@ -52,14 +52,23 @@ internal data class SecurityResult(
       ResultRowPresentation(
           rowKey,
           finding.title.ifBlank { "Untitled security finding" },
-          "${finding.anchor.path}:${finding.anchor.startLine}",
+          buildString {
+            append(finding.anchor.path.ifBlank { "Path not supplied" })
+            if (finding.anchor.startLine > 0) append(":${finding.anchor.startLine}")
+          },
           finding.observedCondition,
           finding.severity,
-          "",
+          securityEvidencePresentation(this).label,
           listOfNotNull(
+                  securityEvidencePresentation(this).label,
+                  report.status
+                      .takeIf { it in setOf("failed", "partial", "unavailable") }
+                      ?.replaceFirstChar(Char::uppercase),
                   "Stale".takeIf { stale },
                   finding.triage.takeIf { it.isNotBlank() && it !in setOf("open", "untriaged") },
-                  finding.verificationState.takeIf { it.isNotBlank() && it != "unverified" })
+                  finding.verificationState
+                      .takeIf { it.isNotBlank() && it != "unverified" }
+                      ?.let { "Supplied verification: $it" })
               .joinToString(" · "))
 }
 
@@ -356,7 +365,8 @@ internal fun SecurityWorkspacePane(
       rows = results.map { it.row() } + semantic.map(::semanticResultRow),
       browser = state.browser,
       openAnalysis = actions.openAnalysis,
-      retryResults = actions.retryResults) { key ->
+      retryResults = actions.retryResults,
+      tools = { SecurityReportAvailability(state.page) }) { key ->
         val matches = results.filter { it.rowKey == key }
         val semanticMatches = semantic.filter { semanticResultRow(it).key == key }
         when {
@@ -375,6 +385,26 @@ internal fun SecurityWorkspacePane(
               }
         }
       }
+}
+
+// Report failures must be visible even when the affected producer supplied no finding row.
+@Composable
+private fun SecurityReportAvailability(page: AnalysisResultPageState) {
+  Text(
+      "Security findings describe analyzed evidence, not proof of safety. No findings does not mean the project is secure; unavailable evidence and incomplete coverage remain unknown.",
+      color = Warning,
+      style = IdeTypography.compactBody)
+  page.results?.security.orEmpty().forEach { report ->
+    if (report.status in setOf("failed", "partial", "unavailable") || report.reason.isNotBlank()) {
+      Text(
+          "${report.source.ifBlank { "Unknown source" }} · ${report.path.ifBlank { "Path not supplied" }} · ${analysisResultStatusLabel(report.status) ?: report.status.ifBlank { "Status unavailable" }}: ${report.reason.ifBlank { "No report reason supplied." }}",
+          color = Warning,
+          style = IdeTypography.compactBody)
+    }
+  }
+  if (page.progress?.status in setOf("failed", "partial", "unavailable") &&
+      page.run?.reason?.isNotBlank() == true)
+      Text("Analysis · ${page.run.reason}", color = Warning, style = IdeTypography.compactBody)
 }
 
 @Composable

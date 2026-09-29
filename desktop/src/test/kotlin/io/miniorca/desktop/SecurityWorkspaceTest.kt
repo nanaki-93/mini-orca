@@ -154,9 +154,11 @@ class SecurityWorkspaceTest {
     val page = securityPageFixture()
     val rows = securityResults(page)
     assertEquals(2, rows.size)
-    assertTrue(rows.all { it.row().source.isBlank() })
+    assertEquals(setOf("Source rule", "Model hypothesis"), rows.map { it.row().source }.toSet())
     assertTrue(rows.all { securityResultIsLoaded(it, page) })
-    assertTrue(rows.all { it.row().state.isBlank() })
+    assertEquals(
+        setOf("Source rule · Partial", "Model hypothesis · Partial"),
+        rows.map { it.row().state }.toSet())
     assertEquals(2, rows.map { it.row().key }.distinct().size)
     val state =
         DesktopState(
@@ -242,7 +244,45 @@ class SecurityWorkspaceTest {
         securityEvidencePresentation(unavailable)
             .warning
             .contains("Do not treat this finding as verified."))
-    assertTrue(unexpected.row().source.isBlank())
+    assertEquals("Evidence type unavailable", unexpected.row().source)
+    assertEquals("Evidence type unavailable", unavailable.row().source)
+    assertEquals("main.go:2", source.row().location)
+    assertEquals(
+        "Path not supplied",
+        source.copy(finding = finding.copy(anchor = SecuritySourceAnchor())).row().location)
+    assertEquals(
+        "main.go",
+        source
+            .copy(finding = finding.copy(anchor = finding.anchor.copy(startLine = 0)))
+            .row()
+            .location)
+    assertFalse(source.row().source.contains("verified", ignoreCase = true))
+    val supplied =
+        unavailable.copy(stale = true, finding = finding.copy(verificationState = "verified"))
+    assertEquals("Evidence type unavailable", supplied.row().source)
+    assertTrue(supplied.row().state.startsWith("Evidence type unavailable · Stale"))
+    assertTrue(supplied.row().state.contains("Supplied verification: verified"))
+  }
+
+  @Test
+  fun reportStatesNeverTurnUnknownEvidenceIntoZeroOrVerification() {
+    val page = securityPageFixture()
+    val source = page.results!!.security.first()
+    val failed =
+        source.copy(
+            source = "ai",
+            status = "failed",
+            findings = emptyList(),
+            reason = "Provider unavailable")
+    val loaded =
+        page.copy(
+            section =
+                page.section.copy(results = page.results!!.copy(security = listOf(source, failed))))
+    assertEquals(1, securityResults(loaded).size)
+    assertEquals("Source rule", securityResults(loaded).single().row().source)
+    assertTrue(loaded.countLabel(1).contains("loaded"))
+    assertFalse(loaded.countLabel(1).contains("0 hypotheses"))
+    assertTrue(securityResults(loaded).single().row().state.contains("Partial"))
   }
 
   @Test
