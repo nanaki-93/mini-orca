@@ -31,6 +31,32 @@ class ResultBrowserStateTest {
   }
 
   @Test
+  fun filteringUsesEveryLoadedRowAndSearchesTitleOrPathWithoutCaseSensitivity() {
+    val rows =
+        (1..320).map { number ->
+          row(if (number % 2 == 0) "HIGH" else "", "Finding $number")
+              .copy(location = "internal/module$number/Handler.go:$number")
+        }
+
+    assertEquals(320, filteredResultRows(rows, ResultBrowserFilter.All, "").size)
+    assertEquals(
+        listOf("Finding 280"),
+        filteredResultRows(rows, ResultBrowserFilter.All, "  fInDiNg 280 ").map { it.title })
+    assertEquals(
+        listOf("Finding 319"),
+        filteredResultRows(rows, ResultBrowserFilter.Value("unknown"), "MODULE319/handler.GO").map {
+          it.title
+        })
+    assertEquals(
+        listOf("Finding 320"),
+        filteredResultRows(rows, ResultBrowserFilter.Value("high"), "MODULE320").map { it.title })
+    assertTrue(filteredResultRows(rows, ResultBrowserFilter.Value("high"), "module319").isEmpty())
+    assertEquals(
+        listOf("High" to 160, "Unknown" to 160),
+        resultBrowserFacets(rows).map { it.label to it.count })
+  }
+
+  @Test
   fun selectionRetainsVisibleKeyAndFallsBackToFirstVisibleRow() {
     val rows = listOf(row("high", "First"), row("critical", "Second"))
 
@@ -67,6 +93,7 @@ class ResultBrowserStateTest {
     browser.filter = ResultBrowserFilter.Value("high")
     browser.selectedKey = "semantic:first"
     val position = browser.listState
+    position.requestScrollToItem(20, 7)
 
     listOf(
             page.copy(section = page.section.copy(loading = true)),
@@ -76,6 +103,8 @@ class ResultBrowserStateTest {
         .forEach { updated ->
           assertSame(browser, store.stateFor(updated))
           assertSame(position, store.stateFor(updated).listState)
+          assertEquals(20, browser.listState.firstVisibleItemIndex)
+          assertEquals(7, browser.listState.firstVisibleItemScrollOffset)
           assertEquals("handler", browser.query)
           assertEquals(ResultBrowserFilter.Value("high"), browser.filter)
           assertEquals("semantic:first", browser.selectedKey)
@@ -92,20 +121,36 @@ class ResultBrowserStateTest {
     first.filter = ResultBrowserFilter.Value("high")
     first.query = "retained"
     first.selectedKey = "semantic:first"
+    first.listState.requestScrollToItem(12, 5)
 
-    assertEquals("", store.stateFor(page.copy(type = AnalysisResultType.Performance)).query)
-    assertEquals(first, store.stateFor(page))
+    val performance = store.stateFor(page.copy(type = AnalysisResultType.Performance))
+    performance.query = "different category"
+    performance.selectedKey = "performance:other"
+    performance.listState.requestScrollToItem(6, 3)
+    assertSame(first, store.stateFor(page))
+    assertEquals("retained", first.query)
+    assertEquals(12, first.listState.firstVisibleItemIndex)
+    assertEquals(5, first.listState.firstVisibleItemScrollOffset)
+    assertEquals(
+        "different category",
+        store.stateFor(page.copy(type = AnalysisResultType.Performance)).query)
+    assertEquals(6, performance.listState.firstVisibleItemIndex)
 
     val changedProject = page.copy(project = project.copy(projectId = "other"))
     val afterProjectChange = store.stateFor(changedProject)
     assertEquals("", afterProjectChange.query)
     assertNull(afterProjectChange.selectedKey)
-    assertEquals("", store.stateFor(page).query)
+    assertEquals(0, afterProjectChange.listState.firstVisibleItemIndex)
+    val afterReturn = store.stateFor(page)
+    assertEquals("", afterReturn.query)
+    assertEquals(ResultBrowserFilter.All, afterReturn.filter)
+    assertEquals(0, afterReturn.listState.firstVisibleItemIndex)
 
     val changedRun = page.copy(run = run.copy(identity = run.identity.copy(generation = "next")))
     val afterRunChange = store.stateFor(changedRun)
     afterRunChange.query = "new run"
     assertEquals("", store.stateFor(page).query)
+    assertEquals(0, afterRunChange.listState.firstVisibleItemIndex)
 
     val changedRevision =
         page.copy(
