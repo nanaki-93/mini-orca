@@ -1229,6 +1229,91 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun browsingAndSourceInspectionStayLocalUntilAnExactFixIsExplicitlyPrepared() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val calls = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, _ ->
+          calls += "$method $path"
+          when {
+            method == "GET" && path.contains("files/info?path=main.go") ->
+                response(fileJson("main.go", "base"))
+            method == "GET" && path.contains("files/symbols?path=main.go") ->
+                response(symbolsJson("main.go", "Run", "func Run()"))
+            method == "GET" && path.contains("files/analysis") ->
+                response("""{"path":"main.go","status":"missing"}""")
+            method == "GET" && path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+            method == "GET" && path.contains("/git") -> response("""{"available":false}""")
+            else -> error("Unexpected $method $path")
+          }
+        }
+    try {
+      val run = analysisRunFixture()
+      val finding =
+          UnifiedFinding(
+              id = "exact",
+              category = "bugs",
+              projectId = "project",
+              projectRevision = "revision",
+              fileHash = "base",
+              freshness = "fresh",
+              title = "Fix Run",
+              location = FindingLocation("main.go", startLine = 17, symbol = "Run"),
+              taskSpec = BugTaskSpec("1", "main.go", "Run", "func Run()", listOf("Fix Run.")))
+      presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
+      presenter.dispatch(
+          DesktopEvent.AnalysisRunUpdated(
+              ProjectAnalysisRunState(
+                  run = run,
+                  sections =
+                      mapOf(
+                          AnalysisResultKey("bugs") to
+                              AnalysisSectionState(
+                                  results =
+                                      analysisResultsFixture(run, "bugs")
+                                          .copy(semantic = listOf(finding)))))))
+      val store = ResultBrowserStore()
+      val bugs = presenter.snapshot.value.state.analysisResultPage("bugs")
+      val browser = store.stateFor(bugs)
+      val rows = presenter.snapshot.value.state.projectBugFindings().map(::semanticResultRow)
+      assertEquals(1, rows.size)
+      browser.query = "MAIN.GO"
+      browser.filter = ResultBrowserFilter.Value("unknown")
+      assertEquals(rows, filteredResultRows(rows, browser.filter, browser.query))
+      browser.choose(rows.single().key)
+      presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Performance))
+      store.stateFor(presenter.snapshot.value.state.analysisResultPage("performance"))
+      presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Bugs))
+      assertEquals(
+          browser, store.stateFor(presenter.snapshot.value.state.analysisResultPage("bugs")))
+      assertEquals(rows.single().key, browser.selectedKey)
+      assertTrue(calls.isEmpty(), "Browsing and selecting evidence must not issue requests")
+
+      presenter.openFinding(finding)
+      dispatcher.runPending()
+      assertEquals(17, presenter.snapshot.value.state.selection.focusedLine)
+      assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
+      assertTrue(presenter.snapshot.value.state.preparedRequest.isBlank())
+      val sourceCalls = calls.toList()
+      assertEquals(5, sourceCalls.size)
+      assertTrue(sourceCalls.all { it.startsWith("GET ") }, "$sourceCalls")
+
+      presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Bugs))
+      presenter.prepareFinding(finding)
+      dispatcher.runPending()
+      assertEquals("Run", presenter.snapshot.value.state.selectedSymbol?.name)
+      assertTrue(presenter.snapshot.value.state.preparedRequest.contains("Fix Run."))
+      assertEquals(sourceCalls + sourceCalls, calls)
+      assertTrue(calls.none { it.startsWith("POST") || it.startsWith("DELETE") })
+      assertNull(presenter.snapshot.value.state.review.draft)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun findingNavigationRequiresCurrentApprovalBeforeReplacingDraft() {
     val calls = Collections.synchronizedList(mutableListOf<String>())
     val presenter = presenter { method, path, _ ->
@@ -1416,10 +1501,11 @@ class DesktopWorkflowPresenterTest {
       presenter.selectFile("main.go")
       eventually { presenter.snapshot.value.state.selectedFile != null }
       presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
-      val before = calls.size
+      val sourceReads = calls.count { it.contains("files/info?") || it.contains("files/symbols?") }
       val review = presenter.snapshot.value.state.review
       presenter.openFinding(finding)
-      assertEquals(before, calls.size)
+      assertEquals(
+          sourceReads, calls.count { it.contains("files/info?") || it.contains("files/symbols?") })
       assertEquals(review, presenter.snapshot.value.state.review)
       assertEquals(7, presenter.snapshot.value.state.selection.focusedLine)
       assertEquals(Workspace.Editor, presenter.snapshot.value.state.workspace)
