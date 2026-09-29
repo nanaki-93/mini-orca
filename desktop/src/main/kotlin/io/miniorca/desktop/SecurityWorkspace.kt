@@ -158,15 +158,14 @@ internal fun securityResultIsLoaded(
       owner.findings.single { it.id == result.finding.id } == result.finding
 }
 
+// The finding-only presenter entry point is retained until typed intents are wired. It cannot
+// choose between equally valued findings; workspace preparation itself uses the captured result.
 internal fun securityFindingIsCurrent(finding: SecurityFinding, state: DesktopState): Boolean {
   val page = state.analysisResultPage("security")
   val matches = securityResults(page).filter { it.finding == finding }
-  val loaded =
-      matches.size == 1 &&
-          securityResultIsLoaded(matches.single(), page) &&
-          !matches.single().stale &&
-          securityReportMatchesIndex(matches.single().report, state.index)
-  return loaded && securityFindingNavigationTarget(finding, state.index) != null
+  return matches.size == 1 &&
+      securityPreparationDecision(matches.single(), state.index, page) is
+          SecurityPreparationDecision.Eligible
 }
 
 // Explicit scans have a separate action entry point; this must never be a fallback for a
@@ -220,13 +219,129 @@ internal fun securityAnchorWithinDeclaration(
         anchor.startLine >= declaration.startLine &&
         anchor.endLine <= declaration.endLine
 
-internal fun securityFindingCanPrepareFix(finding: SecurityFinding, index: ProjectIndex?): Boolean {
-  val file = index?.files?.firstOrNull { it.path == finding.anchor.path } ?: return false
-  val declaration =
-      file.symbols.singleOrNull {
-        it.name == finding.anchor.symbol && it.atomicTarget && it.confidence == "exact"
-      } ?: return false
-  return file.language == "Go" && securityAnchorWithinDeclaration(finding.anchor, file, declaration)
+internal sealed interface SecurityPreparationDecision {
+  data class Eligible(
+      val projectId: String,
+      val projectRevision: String,
+      val path: String,
+      val contentHash: String,
+      val declaration: SymbolInfo,
+      val anchor: SecuritySourceAnchor,
+  ) : SecurityPreparationDecision
+
+  data class Blocked(val reason: String) : SecurityPreparationDecision
+}
+
+/** Indexed evidence is a preflight, not authorization to publish a prepared request. */
+internal fun securityPreparationDecision(
+    result: SecurityResult,
+    index: ProjectIndex?,
+    page: AnalysisResultPageState = result.page,
+): SecurityPreparationDecision {
+  fun blocked(reason: String) = SecurityPreparationDecision.Blocked(reason)
+  val project = page.project
+  val run = page.run
+  if (project == null ||
+      run == null ||
+      index == null ||
+      project.projectId.isBlank() ||
+      project.projectRevision.isBlank() ||
+      run.identity.projectId != project.projectId ||
+      run.identity.projectRevision != project.projectRevision ||
+      index.projectId != project.projectId ||
+      index.projectRevision != project.projectRevision)
+      return blocked("Load the current project index and Security results before preparing a fix.")
+  if (!securityResultIsLoaded(result, page))
+      return blocked(
+          "This finding is missing or ambiguous in the current Security results. Refresh the analysis.")
+  if (result.stale || page.stale)
+      return blocked("Analyze again to prepare a fix from current source.")
+  if (result.report.status !in setOf("completed", "partial"))
+      return blocked("Wait for a completed or partial Security report before preparing a fix.")
+  val anchor = result.finding.anchor
+  if (result.report.path.isBlank() || anchor.path != result.report.path)
+      return blocked("The finding must identify the report's indexed target file path.")
+  val files = index.files.filter { it.path == anchor.path }
+  if (files.isEmpty()) return blocked("The target file is missing from the project index.")
+  if (files.size != 1) return blocked("The target file path is duplicated in the project index.")
+  val indexed = files.single()
+  if (result.report.contentHash.isBlank() || indexed.contentHash.isBlank())
+      return blocked("The report or indexed file hash is missing. Reanalyze the file.")
+  if (result.report.contentHash != indexed.contentHash)
+      return blocked(
+          "The report's file hash no longer matches the indexed source. Reanalyze the file.")
+  if (anchor.startLine < 1 ||
+      anchor.endLine < anchor.startLine ||
+      anchor.endLine > indexed.lineCount)
+      return blocked("The reported source range must be positive and within the indexed file.")
+  if (anchor.symbol.isBlank()) return blocked("The finding must name one indexed declaration.")
+  val declarations = indexed.symbols.filter { it.name == anchor.symbol }
+  if (declarations.isEmpty())
+      return blocked("The named declaration is missing from the indexed file.")
+  if (declarations.size != 1)
+      return blocked("The named declaration is ambiguous in the indexed file.")
+  val declaration = declarations.single()
+  if (declaration.startLine < 1 ||
+      declaration.endLine < declaration.startLine ||
+      declaration.endLine > indexed.lineCount ||
+      !securityAnchorWithinDeclaration(anchor, indexed, declaration))
+      return blocked("The reported source range must fall within one valid indexed declaration.")
+  val eligibility =
+      symbolEditEligibility(
+          ProjectFileInfo(
+              indexed.path,
+              indexed.contentHash,
+              indexed.path.substringAfterLast('/'),
+              language = indexed.language,
+              sizeBytes = indexed.sizeBytes,
+              lineCount = indexed.lineCount,
+              modifiedAt = indexed.modifiedAt,
+              binary = indexed.binary),
+          indexed.symbols,
+          declaration)
+  if (!eligibility.eligible) return blocked(eligibility.blockedReason)
+  return SecurityPreparationDecision.Eligible(
+      project.projectId,
+      project.projectRevision,
+      indexed.path,
+      indexed.contentHash,
+      declaration,
+      anchor)
+}
+
+/** Revalidate both returned source and symbols against the captured indexed target. */
+internal fun loadedSecurityPreparationDecision(
+    target: SecurityPreparationDecision.Eligible,
+    file: ProjectFileInfo,
+    response: SymbolsResponse,
+): SecurityPreparationDecision {
+  if (file.path != target.path ||
+      file.contentHash.isBlank() ||
+      file.contentHash != target.contentHash)
+      return SecurityPreparationDecision.Blocked(
+          "Loaded source no longer matches the indexed file path and hash. Reanalyze the file.")
+  if (response.projectId != target.projectId ||
+      response.projectRevision != target.projectRevision ||
+      response.path != target.path)
+      return SecurityPreparationDecision.Blocked(
+          "Loaded symbols belong to a different project, revision or file. Reanalyze the file.")
+  val symbols = response.symbols
+  val matches = symbols.filter { it.name == target.declaration.name }
+  if (matches.size != 1 ||
+      matches.single() != target.declaration ||
+      target.anchor.path != file.path ||
+      target.anchor.startLine < 1 ||
+      target.anchor.endLine < target.anchor.startLine ||
+      target.anchor.endLine > file.lineCount ||
+      target.declaration.startLine < 1 ||
+      target.declaration.endLine > file.lineCount ||
+      target.anchor.startLine < target.declaration.startLine ||
+      target.anchor.endLine > target.declaration.endLine)
+      return SecurityPreparationDecision.Blocked(
+          "Loaded source no longer contains the exact indexed declaration and anchor. Reanalyze the file.")
+  val eligibility = symbolEditEligibility(file, symbols, matches.single())
+  if (!eligibility.eligible) return SecurityPreparationDecision.Blocked(eligibility.blockedReason)
+  return target
 }
 
 @Composable
@@ -270,11 +385,7 @@ private fun SecurityFindingDetails(
 ) {
   val finding = result.finding
   val evidence = securityEvidencePresentation(result)
-  val canPrepare =
-      securityResultIsLoaded(result, result.page) &&
-          !result.stale &&
-          securityReportMatchesIndex(result.report, index) &&
-          securityFindingCanPrepareFix(finding, index)
+  val preparation = securityPreparationDecision(result, index)
   var technical by remember(result.row().key) { mutableStateOf(false) }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
     ResultDetailHeader(result.row())
@@ -287,17 +398,13 @@ private fun SecurityFindingDetails(
     Row(horizontalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact)) {
       MiniOrcaButton(
           onClick = { actions.prepareFix(finding) },
-          enabled = canPrepare,
+          enabled = preparation is SecurityPreparationDecision.Eligible,
           tone = ActionTone.Primary) {
             Text("Prepare fix")
           }
     }
-    if (!canPrepare)
-        Text(
-            if (result.stale) "Analyze again to prepare a fix from current source."
-            else "Fix preparation requires a matching indexed Go declaration.",
-            color = SecondaryText,
-            style = IdeTypography.compactBody)
+    if (preparation is SecurityPreparationDecision.Blocked)
+        Text(preparation.reason, color = SecondaryText, style = IdeTypography.compactBody)
     IdeDisclosureHeader("Evidence and safe verification", technical, { technical = !technical })
     if (technical) {
       Text(
