@@ -1759,7 +1759,9 @@ class DesktopWorkflowPresenter(
   fun cancelPerformance() = cancelAnalysis()
 
   fun runVerifiedScan() {
+    if (verifiedScanProgress(snapshot.value.state).action != VerifiedScanAction.Start) return
     val request = beginVerifiedScanAction() ?: return
+    dispatch(DesktopEvent.VerifiedScanOperationUpdated(VerifiedScanOperation.Starting))
     scope.launch {
       try {
         val report =
@@ -1767,24 +1769,51 @@ class DesktopWorkflowPresenter(
               if (!canInvokeVerifiedScanAction(request)) null
               else {
                 val trustScope = api.executionTrust(request.project.revision)
-                if (trustScope.commands != listOf(listOf("go", "test", "./..."))) {
-                  throw IllegalStateException(
-                      "Local execution command scope changed; review it again before trusting execution.")
+                if (!canInvokeVerifiedScanAction(request)) null
+                else {
+                  validateVerifiedScanTrust(trustScope, request.project)
+                  val acknowledgment = api.trustProjectExecution(request.project.revision)
+                  if (!canInvokeVerifiedScanAction(request)) null
+                  else {
+                    validateVerifiedScanTrust(acknowledgment, request.project)
+                    check(acknowledgment.trusted) {
+                      "Project-code execution trust was not confirmed; review and retry."
+                    }
+                    api.startGoScan(request.project.revision)
+                  }
                 }
-                api.trustProjectExecution(request.project.revision)
-                api.startGoScan(request.project.revision)
               }
             } ?: return@launch
         if (!isCurrentVerifiedScanAction(request.project, request.generation)) return@launch
+        dispatch(DesktopEvent.VerifiedScanOperationUpdated(VerifiedScanOperation.Idle))
         publishVerifiedScan(request.project, report, request.generation)
-      } catch (_: CancellationException) {
-        throw CancellationException()
+      } catch (canceled: CancellationException) {
+        throw canceled
       } catch (error: Exception) {
         if (isCurrentVerifiedScanAction(request.project, request.generation)) {
+          dispatch(
+              DesktopEvent.VerifiedScanOperationUpdated(
+                  VerifiedScanOperation.Failed(error.message ?: "Unable to start verified scan")))
           dispatch(DesktopEvent.Failed(error.message ?: "Unable to start verified scan"))
           recoverVerifiedScanPolling(request.project, request.generation)
         }
       }
+    }
+  }
+
+  private fun validateVerifiedScanTrust(
+      trust: ExecutionTrust,
+      identity: WorkflowProjectIdentity,
+  ) {
+    check(
+        trust.projectId.isNotBlank() &&
+            trust.projectRevision.isNotBlank() &&
+            trust.projectId == identity.id &&
+            trust.projectRevision == identity.revision) {
+          "Project-code execution trust identity changed; review and retry."
+        }
+    check(trust.commands == listOf(listOf("go", "test", "./..."))) {
+      "Local execution command scope changed; review it again before trusting execution."
     }
   }
 

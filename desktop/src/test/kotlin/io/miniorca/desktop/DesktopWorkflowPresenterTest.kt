@@ -3066,6 +3066,7 @@ class DesktopWorkflowPresenterTest {
             presenter.snapshot.value.state.projectState.detailsOutcome)
         assertTrue(calls.none { it.contains("/findings?") })
 
+        presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
         presenter.runVerifiedScan()
         val interrupted = presenter.snapshot.value.state.projectState.detailsOutcome
         assertTrue(interrupted is ProjectDetailsOutcome.Unavailable)
@@ -3887,6 +3888,7 @@ class DesktopWorkflowPresenterTest {
     }
     try {
       loadProject(presenter)
+      presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
       presenter.runVerifiedScan()
       assertTrue(startRequested.await(1, TimeUnit.SECONDS))
       presenter.cancelVerifiedScan()
@@ -3904,7 +3906,7 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun delayedOlderVerifiedScanStartCannotReplaceANewerStart() {
+  fun repeatedVerifiedScanStartDuringPendingRequestIsCoalesced() {
     val firstStartRequested = CountDownLatch(1)
     val releaseFirstStart = CountDownLatch(1)
     val starts = AtomicInteger()
@@ -3927,14 +3929,15 @@ class DesktopWorkflowPresenterTest {
     }
     try {
       loadProject(presenter)
+      presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
       presenter.runVerifiedScan()
       assertTrue(firstStartRequested.await(1, TimeUnit.SECONDS))
       presenter.runVerifiedScan()
-      eventually { presenter.snapshot.value.state.findings.scan?.status == "completed" }
+      assertEquals(1, starts.get())
       releaseFirstStart.countDown()
-      Thread.sleep(25)
+      eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
 
-      assertEquals("completed", presenter.snapshot.value.state.findings.scan?.status)
+      assertEquals(1, starts.get())
     } finally {
       releaseFirstStart.countDown()
       presenter.close()
@@ -4012,6 +4015,7 @@ class DesktopWorkflowPresenterTest {
     }
     try {
       loadProject(presenter)
+      presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
       presenter.runVerifiedScan()
       assertTrue(pollStarted.await(1, TimeUnit.SECONDS))
       presenter.cancelVerifiedScan()
@@ -4035,7 +4039,7 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun failedVerifiedScanStartRestoresOnePollForARunningScan() {
+  fun activeVerifiedScanCannotStartAgainWhilePolling() {
     val initialPollStarted = CountDownLatch(1)
     val releaseInitialPoll = CountDownLatch(1)
     val starts = AtomicInteger()
@@ -4061,14 +4065,17 @@ class DesktopWorkflowPresenterTest {
     }
     try {
       loadProject(presenter)
+      presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
       presenter.runVerifiedScan()
       assertTrue(initialPollStarted.await(1, TimeUnit.SECONDS))
       presenter.runVerifiedScan()
+      assertEquals(1, starts.get())
+      releaseInitialPoll.countDown()
       eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
-      Thread.sleep(25)
 
+      assertEquals(1, starts.get())
       assertEquals(2, polls.get())
-      assertTrue(presenter.snapshot.value.state.jobs.error != null)
+      assertNull(presenter.snapshot.value.state.jobs.error)
     } finally {
       releaseInitialPoll.countDown()
       presenter.close()
@@ -4101,6 +4108,7 @@ class DesktopWorkflowPresenterTest {
     }
     try {
       loadProject(presenter)
+      presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
       presenter.runVerifiedScan()
       assertTrue(initialPollStarted.await(1, TimeUnit.SECONDS))
       presenter.cancelVerifiedScan()
@@ -4150,10 +4158,7 @@ class DesktopWorkflowPresenterTest {
     try {
       assertTrue(blockerStarted.await(1, TimeUnit.SECONDS))
       loadProject(presenter)
-      presenter.dispatch(
-          DesktopEvent.GoScanLoaded(
-              GoScanReport(
-                  projectId = "project", projectRevision = "revision", status = "running")))
+      presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
 
       presenter.runVerifiedScan()
       presenter.cancelVerifiedScan()
@@ -4200,6 +4205,7 @@ class DesktopWorkflowPresenterTest {
     }
     try {
       loadProject(presenter)
+      presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
       presenter.runVerifiedScan()
       assertTrue(firstRefreshStarted.await(1, TimeUnit.SECONDS))
       presenter.runVerifiedScan()
@@ -4247,6 +4253,7 @@ class DesktopWorkflowPresenterTest {
     try {
       presenter.loadProject("/tmp/project", restore = false)
       assertTrue(workspaceFindingsStarted.await(1, TimeUnit.SECONDS))
+      presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
       presenter.runVerifiedScan()
       eventually { presenter.snapshot.value.state.findings.findings.singleOrNull()?.id == "fresh" }
       releaseWorkspaceFindings.countDown()
@@ -4620,12 +4627,17 @@ class DesktopWorkflowPresenterTest {
   fun verifiedScanTrustsBeforeStartingAndNavigationSendsNoTrustRequest() {
     val requests = mutableListOf<String>()
     val presenter =
-        presenter(interceptTrust = false) { method, path, _ ->
+        presenter(interceptTrust = false) { method, path, body ->
           requests += "$method $path"
+          if (method == "POST" && path.endsWith("/execution-trust"))
+              assertTrue(body.orEmpty().contains("\"confirm\":true"))
           when (method to path) {
             "GET" to "/api/projects/current/execution-trust?project_revision=revision" ->
                 response(
                     """{"project_id":"project","project_revision":"revision","trusted":false,"commands":[["go","test","./..."]]}""")
+            "POST" to "/api/projects/current/execution-trust" ->
+                response(
+                    """{"project_id":"project","project_revision":"revision","trusted":true,"commands":[["go","test","./..."]]}""")
             "POST" to "/api/projects/current/scan" ->
                 response(
                     """{"project_id":"project","project_revision":"revision","status":"canceled"}""")
@@ -4635,7 +4647,10 @@ class DesktopWorkflowPresenterTest {
         }
     try {
       loadProject(presenter)
+      presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Bugs))
       assertTrue(requests.isEmpty())
+      presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
+      presenter.runVerifiedScan()
       presenter.runVerifiedScan()
       eventually { requests.any { it == "POST /api/projects/current/scan" } }
       assertEquals(
@@ -4644,6 +4659,164 @@ class DesktopWorkflowPresenterTest {
               "POST /api/projects/current/execution-trust",
               "POST /api/projects/current/scan"),
           requests.take(3))
+      assertEquals(1, requests.count { it == "POST /api/projects/current/scan" })
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun verifiedScanRejectsInvalidTrustAtEachStageWithoutFurtherMutation() {
+    val invalid =
+        listOf(
+            """{"project_id":"other","project_revision":"revision","trusted":true,"commands":[["go","test","./..."]]}""",
+            """{"project_id":"","project_revision":"revision","trusted":true,"commands":[["go","test","./..."]]}""",
+            """{"project_id":"project","project_revision":"","trusted":true,"commands":[["go","test","./..."]]}""",
+            """{"project_id":"project","project_revision":"changed","trusted":true,"commands":[["go","test","./..."]]}""",
+            """{"project_id":"project","project_revision":"revision","trusted":true,"commands":[["go","vet","./..."]]}""",
+            """{"project_id":"project","project_revision":"revision","trusted":true,"commands":[]}""",
+        )
+    val valid =
+        """{"project_id":"project","project_revision":"revision","trusted":true,"commands":[["go","test","./..."]]}"""
+    for (stage in listOf("GET", "POST")) {
+      for (body in
+          invalid +
+              if (stage == "POST") listOf(valid.replace("\"trusted\":true", "\"trusted\":false"))
+              else emptyList()) {
+        val main = QueuedDispatcher()
+        val io = QueuedDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + main)
+        val calls = mutableListOf<String>()
+        val presenter =
+            presenter(parentScope = scope, ioDispatcher = io, interceptTrust = false) {
+                method,
+                path,
+                _ ->
+              calls += "$method $path"
+              when (method to path) {
+                "GET" to "/api/projects/current/execution-trust?project_revision=revision" ->
+                    response(if (stage == "GET") body else valid)
+                "POST" to "/api/projects/current/execution-trust" -> response(body)
+                else -> error("Unexpected request $method $path")
+              }
+            }
+        try {
+          loadProject(presenter)
+          presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
+          presenter.runVerifiedScan()
+          main.runPending()
+          io.runPending()
+          main.runPending()
+          assertEquals(
+              if (stage == "GET")
+                  listOf("GET /api/projects/current/execution-trust?project_revision=revision")
+              else
+                  listOf(
+                      "GET /api/projects/current/execution-trust?project_revision=revision",
+                      "POST /api/projects/current/execution-trust"),
+              calls)
+          assertTrue(
+              presenter.snapshot.value.state.verifiedScan.operation is VerifiedScanOperation.Failed)
+        } finally {
+          presenter.close()
+          scope.cancel()
+        }
+      }
+    }
+  }
+
+  @Test
+  fun verifiedScanAdmissionStopsAfterProjectOrActionReplacementDuringTrust() {
+    val valid =
+        """{"project_id":"project","project_revision":"revision","trusted":true,"commands":[["go","test","./..."]]}"""
+    for (stage in listOf("GET", "POST")) {
+      for (replacement in listOf("project", "revision", "action")) {
+        val main = QueuedDispatcher()
+        val io = QueuedDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + main)
+        val calls = mutableListOf<String>()
+        lateinit var presenter: DesktopWorkflowPresenter
+        presenter =
+            presenter(parentScope = scope, ioDispatcher = io, interceptTrust = false) {
+                method,
+                path,
+                _ ->
+              calls += "$method $path"
+              if ((stage == "GET" && method == "GET" && path.contains("/execution-trust?")) ||
+                  (stage == "POST" && method == "POST" && path.endsWith("/execution-trust"))) {
+                when (replacement) {
+                  "project" ->
+                      presenter.dispatch(
+                          DesktopEvent.ProjectLoaded(
+                              project(id = "other"), ProjectIndex("other", "revision")))
+                  "revision" ->
+                      presenter.dispatch(
+                          DesktopEvent.ProjectLoaded(
+                              project(revision = "new"), ProjectIndex("project", "new")))
+                  else -> {
+                    presenter.dispatch(
+                        DesktopEvent.GoScanLoaded(
+                            GoScanReport("project", "revision", status = "running")))
+                    presenter.cancelVerifiedScan()
+                  }
+                }
+              }
+              when {
+                path.contains("/execution-trust") -> response(valid)
+                method == "DELETE" ->
+                    response(
+                        """{"project_id":"project","project_revision":"revision","status":"canceled"}""")
+                path.contains("/findings?") -> response("{}")
+                else -> error("Unexpected request $method $path")
+              }
+            }
+        try {
+          loadProject(presenter)
+          presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
+          presenter.runVerifiedScan()
+          main.runPending()
+          io.runPending()
+          main.runPending()
+          io.runPending()
+          main.runPending()
+          assertEquals(
+              if (stage == "GET") 0 else 1,
+              calls.count { it == "POST /api/projects/current/execution-trust" })
+          assertEquals(0, calls.count { it == "POST /api/projects/current/scan" })
+        } finally {
+          presenter.close()
+          scope.cancel()
+        }
+      }
+    }
+  }
+
+  @Test
+  fun verifiedScanRejectsUnsupportedMissingAndUnknownLifecycleBeforeTrust() {
+    val calls = mutableListOf<String>()
+    val presenter = presenter { method, path, _ ->
+      calls += "$method $path"
+      error("Unexpected request $method $path")
+    }
+    try {
+      presenter.runVerifiedScan()
+      for (candidate in
+          listOf(
+              project().copy(type = "python"),
+              project().copy(type = "unknown"),
+              project(id = ""),
+              project(revision = ""))) {
+        presenter.dispatch(
+            DesktopEvent.ProjectLoaded(
+                candidate, ProjectIndex(candidate.projectId, candidate.projectRevision)))
+        presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
+        presenter.runVerifiedScan()
+      }
+      loadProject(presenter)
+      presenter.dispatch(
+          DesktopEvent.GoScanLoaded(GoScanReport("project", "revision", status = "unexpected")))
+      presenter.runVerifiedScan()
+      assertTrue(calls.isEmpty())
     } finally {
       presenter.close()
     }
