@@ -348,7 +348,9 @@ class ResultWorkspaceLayoutTest {
           assertEquals(null, browser.explicitTarget)
           assertTrue(fixture.hasText("Evidence for finding-1"))
           assertEquals(0, navigations)
-          fixture.revealText("Finding 20", "result-list")
+          browser.listState.requestScrollToItem(19)
+          fixture.render()
+          fixture.awaitVisibleDescription("Inspect Finding 20")
           assertTrue(fixture.requestDescriptionFocus("Inspect Finding 20"))
           assertTrue(fixture.pressKey(Key.Spacebar))
           fixture.render()
@@ -525,7 +527,9 @@ class ResultWorkspaceLayoutTest {
           }
           .use { fixture ->
             fixture.render()
-            fixture.revealText("Finding 20", "result-list")
+            browser.listState.requestScrollToItem(19)
+            fixture.render()
+            fixture.awaitVisibleDescription("Inspect Finding 20")
             fixture.clickDescription("Inspect Finding 20")
             browser.query = "Finding"
             browser.filter = ResultBrowserFilter.Value("high")
@@ -573,7 +577,9 @@ class ResultWorkspaceLayoutTest {
             assertFalse(fixture.hasText("No matching results."))
             assertEquals(index, browser.listState.firstVisibleItemIndex)
             assertEquals(offset, browser.listState.firstVisibleItemScrollOffset)
-            fixture.revealText("Finding 20", "result-list")
+            browser.listState.requestScrollToItem(19)
+            fixture.render()
+            fixture.awaitVisibleDescription("Inspect Finding 20")
             assertTrue(fixture.hasDescription("Inspect Finding 20"))
             assertEquals(ResultBrowserFilter.All, browser.filter)
             assertEquals("", browser.query)
@@ -878,6 +884,78 @@ class ResultWorkspaceLayoutTest {
           assertEquals(finding, opened)
           assertEquals(0, prepared)
           assertTrue(fixture.isDisabled("Prepare fix"))
+        }
+  }
+
+  @Test
+  fun bugsDetailRetainsLongEvidenceCriteriaAndReviewOnlyCandidateBehindDisclosure() {
+    val original = resultPageFixture("bugs")
+    val title = "An exact and very long finding title ".repeat(5).trim()
+    val path = "internal/very/deeply/nested/path/to/a/source/file/with/a/long/name/handler.go"
+    val message =
+        "Full message with <script>ignored</script> and https://example.test/proof ".repeat(12)
+    val evidence = "Evidence with ![remote image](https://example.test/image.png) ".repeat(12)
+    val criteria = "Keep all acceptance criteria even when they are long. ".repeat(12)
+    val nonGoal = "Do not modify unrelated declarations. ".repeat(12)
+    val finding =
+        UnifiedFinding(
+            id = "long-evidence",
+            projectId = original.project!!.projectId,
+            projectRevision = original.run!!.identity.projectRevision,
+            source = "file_analysis",
+            confidence = "suggested",
+            severity = "high",
+            title = title,
+            message = message,
+            evidence = evidence,
+            location = FindingLocation(path, startLine = 91, symbol = "Serve"),
+            status = "partial",
+            freshness = "stale",
+            taskSpec =
+                BugTaskSpec(
+                    targetSymbol = "Serve",
+                    targetSignature = "func Serve() error",
+                    acceptanceCriteria = listOf(criteria),
+                    nonGoals = listOf(nonGoal),
+                    goTestCandidate =
+                        GoTestCandidateSpec("TestServe", "Review only: assert error.")),
+            engineeringInsight = EngineeringInsight(mechanism = "Insight retained for review."))
+    val page =
+        original.copy(
+            section =
+                original.section.copy(
+                    results = original.results!!.copy(semantic = listOf(finding))))
+    ComposeVisualFixture(800, 650, 1.5f) {
+          BugsWorkspacePane(
+              BugsWorkspacePaneState(listOf(finding), null, false, page),
+              BugsWorkspaceActions(FindingActions({}, { _, _ -> }, {}), {}, {}))
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Inspect $title")
+          fixture.render()
+          assertTrue(fixture.hasText(title))
+          assertTrue(fixture.hasText("$path:91 · Serve"))
+          assertTrue(fixture.hasText("Partial · Stale"))
+          assertTrue(fixture.hasText("Model suggestion"))
+          assertTrue(fixture.hasText(message))
+          assertFalse(fixture.hasText(evidence))
+          fixture.revealText("Evidence and fix criteria", "result-detail")
+          fixture.clickText("Evidence and fix criteria")
+          fixture.render()
+          assertTrue(fixture.hasText(evidence))
+          assertTrue(fixture.hasText(criteria))
+          assertTrue(fixture.hasText(nonGoal))
+          assertTrue(fixture.hasText("Test candidate · review only"))
+          assertTrue(fixture.hasText("TestServe"))
+          assertFalse(fixture.hasDescription("https://example.test/proof"))
+          assertFalse(fixture.hasDescription("https://example.test/image.png"))
+          fixture.revealText("Engineering insight", "result-detail")
+          if (!fixture.hasText("Insight retained for review.")) {
+            fixture.clickText("Engineering insight")
+            fixture.render()
+          }
+          assertTrue(fixture.hasText("Insight retained for review."))
         }
   }
 

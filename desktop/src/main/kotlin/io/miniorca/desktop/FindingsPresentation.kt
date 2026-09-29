@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -181,19 +182,24 @@ internal fun ResultRowContent(row: ResultRowPresentation) {
           .padding(start = 13.dp),
       horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-          Text(
-              row.title,
-              color = PrimaryText,
-              style = IdeTypography.resultHeading,
-              maxLines = 2,
-              overflow = TextOverflow.Ellipsis)
           FlowRow(
               horizontalArrangement = Arrangement.spacedBy(6.dp),
               verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 IdeLabelBadge(resultFacetLabel(row.severity), resultSeverityTint(row.severity))
                 if (row.state.isNotBlank()) IdeLabelBadge(row.state, SecondaryText)
               }
-          Text(row.location, color = SelectionText, style = IdeTypography.resultCode, maxLines = 1)
+          Text(
+              row.title,
+              color = PrimaryText,
+              style = IdeTypography.resultHeading,
+              maxLines = 2,
+              overflow = TextOverflow.Ellipsis)
+          Text(
+              row.location,
+              color = SelectionText,
+              style = IdeTypography.resultCode,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis)
         }
       }
 }
@@ -207,10 +213,14 @@ internal fun ResultDetailHeader(row: ResultRowPresentation) {
           IdeLabelBadge(resultFacetLabel(row.severity), resultSeverityTint(row.severity))
           if (row.state.isNotBlank()) IdeLabelBadge(row.state, SecondaryText)
         }
-    Text(row.title, color = PrimaryText, style = IdeTypography.workspaceHeading)
-    Text(row.location, color = SelectionText, style = IdeTypography.resultCode)
-    if (row.source.isNotBlank())
-        Text(row.source, color = SecondaryText, style = IdeTypography.workspaceMetadata)
+    SelectionContainer {
+      Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(row.title, color = PrimaryText, style = IdeTypography.workspaceHeading)
+        Text(row.location, color = SelectionText, style = IdeTypography.resultCode)
+        if (row.source.isNotBlank())
+            Text(row.source, color = SecondaryText, style = IdeTypography.workspaceMetadata)
+      }
+    }
   }
   IdeHorizontalSeparator(Modifier.padding(vertical = 4.dp))
 }
