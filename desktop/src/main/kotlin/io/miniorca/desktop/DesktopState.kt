@@ -101,6 +101,37 @@ data class JobState(
     val error: String? = null,
 )
 
+sealed interface VerifiedScanRead {
+  data object Unread : VerifiedScanRead
+
+  data object Reading : VerifiedScanRead
+
+  data object Absent : VerifiedScanRead
+
+  data object Loaded : VerifiedScanRead
+
+  data class Unavailable(val message: String) : VerifiedScanRead
+}
+
+sealed interface VerifiedScanOperation {
+  data object Idle : VerifiedScanOperation
+
+  data object Starting : VerifiedScanOperation
+
+  data object CancellationRequested : VerifiedScanOperation
+
+  data class Failed(val message: String) : VerifiedScanOperation
+
+  data class StartUncertain(val message: String) : VerifiedScanOperation
+
+  data class CancellationUnconfirmed(val message: String) : VerifiedScanOperation
+}
+
+data class VerifiedScanState(
+    val read: VerifiedScanRead = VerifiedScanRead.Unread,
+    val operation: VerifiedScanOperation = VerifiedScanOperation.Idle,
+)
+
 data class FindingsState(
     val findings: List<UnifiedFinding> = emptyList(),
     val scan: GoScanReport? = null,
@@ -355,6 +386,7 @@ data class DesktopState(
     val selection: FileSelectionState = FileSelectionState(),
     val jobs: JobState = JobState(),
     val findings: FindingsState = FindingsState(),
+    val verifiedScan: VerifiedScanState = VerifiedScanState(),
     val analysisRun: ProjectAnalysisRunState = ProjectAnalysisRunState(),
     val security: SecurityWorkspaceState = SecurityWorkspaceState(),
     val chat: ChatState = ChatState(),
@@ -462,6 +494,10 @@ sealed interface DesktopEvent {
   data class PerformanceContextLoaded(val context: PerformanceQueuePreview) : DesktopEvent
 
   data class GoScanLoaded(val scan: GoScanReport?) : DesktopEvent
+
+  data class VerifiedScanReadUpdated(val read: VerifiedScanRead) : DesktopEvent
+
+  data class VerifiedScanOperationUpdated(val operation: VerifiedScanOperation) : DesktopEvent
 
   data class SecurityActionStarted(val action: String) : DesktopEvent
 
@@ -597,7 +633,9 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                   findings.copy(performanceJob = event.job, performanceReport = event.report))
       is DesktopEvent.PerformanceContextLoaded ->
           copy(findings = findings.copy(performanceContext = event.context))
-      is DesktopEvent.GoScanLoaded -> copy(findings = findings.copy(scan = event.scan))
+      is DesktopEvent.GoScanLoaded,
+      is DesktopEvent.VerifiedScanReadUpdated,
+      is DesktopEvent.VerifiedScanOperationUpdated -> withVerifiedScanEvent(event)
       is DesktopEvent.SecurityActionStarted ->
           copy(
               security =
@@ -815,6 +853,23 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       is DesktopEvent.Status -> copy(jobs = jobs.copy(status = event.message))
     }
 
+private fun DesktopState.withVerifiedScanEvent(event: DesktopEvent): DesktopState =
+    when (event) {
+      is DesktopEvent.GoScanLoaded ->
+          copy(
+              findings = if (event.scan == null) findings else findings.copy(scan = event.scan),
+              verifiedScan =
+                  verifiedScan.copy(
+                      read =
+                          if (event.scan == null) VerifiedScanRead.Absent
+                          else VerifiedScanRead.Loaded))
+      is DesktopEvent.VerifiedScanReadUpdated ->
+          copy(verifiedScan = verifiedScan.copy(read = event.read))
+      is DesktopEvent.VerifiedScanOperationUpdated ->
+          copy(verifiedScan = verifiedScan.copy(operation = event.operation))
+      else -> this
+    }
+
 private fun DesktopState.withStaleDraft(): DesktopState =
     review.editor?.let { editor ->
       copy(
@@ -892,6 +947,7 @@ private fun DesktopState.withLoadedProject(event: DesktopEvent.ProjectLoaded): D
                 preferenceSaveWarning = null),
         selection = FileSelectionState(),
         findings = FindingsState(),
+        verifiedScan = VerifiedScanState(),
         analysisRun = ProjectAnalysisRunState(),
         security = SecurityWorkspaceState(),
         chat = ChatState(),
@@ -1085,6 +1141,7 @@ private fun DesktopState.withRefreshedIndex(index: ProjectIndex): DesktopState {
               index = index,
               sourceChangeObserved = false),
       analysisRun = analysisRun.afterRevisionChange(revisionChanged),
+      verifiedScan = if (revisionChanged) VerifiedScanState() else verifiedScan,
       chat = if (revisionChanged) ChatState() else chat,
       review =
           if (revisionChanged)

@@ -81,6 +81,108 @@ fun shouldPollVerifiedScan(scan: GoScanReport?): Boolean =
 fun verifiedScanStatusLabel(scan: GoScanReport?): String =
     scan?.status?.takeIf { it.isNotBlank() }?.let(::analysisStatusLabel) ?: "Not run"
 
+/**
+ * Eligibility uses the current project's identity and the last confirmed status, never old evidence
+ * alone.
+ */
+fun verifiedScanProgress(state: DesktopState): VerifiedScanProgress {
+  val project = state.project
+  val read = state.verifiedScan.read
+  val operation = state.verifiedScan.operation
+  val report = state.findings.scan
+  val availability =
+      when {
+        project == null -> "Load a project before running verified Go checks."
+        project.projectId.isBlank() || project.projectRevision.isBlank() ->
+            "The current project identity or revision is missing. Reopen the project."
+        !project.type.equals("go", ignoreCase = true) ->
+            if (project.type.isBlank() || project.type.equals("unknown", ignoreCase = true))
+                "Project type is unknown; verified checks require a root Go module."
+            else "Verified checks require a root Go module; this project is ${project.type}."
+        else -> null
+      }
+  if (availability != null)
+      return VerifiedScanProgress("Unavailable", availability, VerifiedScanAction.Waiting)
+
+  return when (operation) {
+    VerifiedScanOperation.Starting ->
+        VerifiedScanProgress(
+            "Starting",
+            "Requesting trust and starting verified checks; previous results remain available.",
+            VerifiedScanAction.Waiting)
+    VerifiedScanOperation.CancellationRequested ->
+        VerifiedScanProgress(
+            "Cancellation requested",
+            "Waiting for a terminal scan status; cancellation is not confirmed yet.",
+            VerifiedScanAction.Waiting)
+    is VerifiedScanOperation.StartUncertain ->
+        VerifiedScanProgress("Start unconfirmed", operation.message, VerifiedScanAction.Waiting)
+    is VerifiedScanOperation.CancellationUnconfirmed ->
+        VerifiedScanProgress(
+            "Cancellation unconfirmed", operation.message, VerifiedScanAction.Waiting)
+    is VerifiedScanOperation.Failed ->
+        VerifiedScanProgress("Operation failed", operation.message, VerifiedScanAction.Waiting)
+    VerifiedScanOperation.Idle ->
+        when (read) {
+          VerifiedScanRead.Unread ->
+              VerifiedScanProgress(
+                  "Status unread",
+                  "Read scan status before starting checks.",
+                  VerifiedScanAction.Waiting)
+          VerifiedScanRead.Reading ->
+              VerifiedScanProgress(
+                  "Reading status", "Checking the current scan status.", VerifiedScanAction.Waiting)
+          is VerifiedScanRead.Unavailable ->
+              VerifiedScanProgress("Status unavailable", read.message, VerifiedScanAction.Waiting)
+          VerifiedScanRead.Absent ->
+              VerifiedScanProgress(
+                  if (report == null) "Not run" else "No current report",
+                  if (report == null)
+                      "No verified checks have run. Importing or reindexing never starts them automatically."
+                  else
+                      "No current scan report was found. Earlier scan evidence remains available; importing or reindexing never starts checks automatically.",
+                  VerifiedScanAction.Start)
+          VerifiedScanRead.Loaded -> {
+            if (report == null ||
+                report.projectId != project?.projectId ||
+                report.projectRevision != project.projectRevision)
+                VerifiedScanProgress(
+                    "Status unknown",
+                    "The scan report does not match the current project. Refresh status.",
+                    VerifiedScanAction.Waiting)
+            else
+                when (report.status.lowercase()) {
+                  "running" ->
+                      VerifiedScanProgress(
+                          verifiedScanStatusLabel(report),
+                          "Verified checks are running in a temporary copied workspace; source remains unchanged.",
+                          VerifiedScanAction.Cancel)
+                  "pausing",
+                  "canceling" ->
+                      VerifiedScanProgress(
+                          verifiedScanStatusLabel(report),
+                          "Verified checks are ${report.status.lowercase()} in a temporary copied workspace; source remains unchanged.",
+                          VerifiedScanAction.Waiting)
+                  "completed",
+                  "failed",
+                  "canceled",
+                  "cancelled" ->
+                      VerifiedScanProgress(
+                          verifiedScanStatusLabel(report),
+                          "Verified checks ${report.status.lowercase()}; results, command and output remain available.",
+                          VerifiedScanAction.Start)
+                  else ->
+                      VerifiedScanProgress(
+                          "Status unknown",
+                          "Unrecognized scan lifecycle '${report.status}'; refresh status before another action.",
+                          VerifiedScanAction.Waiting)
+                }
+          }
+        }
+  }
+}
+
+// The existing Bugs pane still uses its report-only input until scan-local state is wired in.
 fun verifiedScanProgress(scan: GoScanReport?): VerifiedScanProgress =
     when {
       scan == null ->
@@ -98,11 +200,16 @@ fun verifiedScanProgress(scan: GoScanReport?): VerifiedScanProgress =
               verifiedScanStatusLabel(scan),
               "Verified checks are ${scan.status.lowercase()} in a temporary copied workspace; source remains unchanged.",
               VerifiedScanAction.Waiting)
-      else ->
+      scan.status.lowercase() in setOf("completed", "failed", "canceled", "cancelled") ->
           VerifiedScanProgress(
               verifiedScanStatusLabel(scan),
               "Verified checks ${scan.status.lowercase()}; results, command and output remain available.",
               VerifiedScanAction.Start)
+      else ->
+          VerifiedScanProgress(
+              "Status unknown",
+              "Refresh scan status before another action.",
+              VerifiedScanAction.Waiting)
     }
 
 sealed interface FindingPreparationDecision {
