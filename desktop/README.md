@@ -455,6 +455,54 @@ preview. Verified Go scans, performance hypotheses, measured benchmarks, source
 rules and model hypotheses retain distinct evidence and execution requirements
 without routine badge labels.
 
+### Security evidence and advisory review
+
+Security uses the shared results browser for loaded source-rule matches, model
+hypotheses and semantic findings. Search by title or path, filter by severity and
+select a row to inspect it; these local interactions and **Report metadata** do
+not scan, prepare a fix or request a model. Typed rows label **Source rule** for
+deterministic rule matches, **Model hypothesis** for AI suspicions and **Evidence
+type unavailable** for other source/evidence pairings. A rule match identifies a
+pattern, not a confirmed vulnerability; a model hypothesis is unverified advice.
+Supplied verification state and confidence do not independently verify either.
+
+Typed details retain the complete title and path, supplied positive range and
+symbol, status and freshness, observed condition, remediation, preconditions,
+safe verification idea (not performed), rule/category, confidence, CWE/reference,
+triage and verification state, and engineering insight. **Report metadata**
+expands scope, source hash, ruleset and supplied model/profile/provider/version/time
+fields; missing values are labeled rather than guessed. Report failures and
+blocked-action reasons remain visible with the disclosure collapsed. Failed,
+partial or unavailable report reasons remain visible even without finding rows
+and alongside another report's findings; saved-result read errors can retain old
+rows. **Retry loading results** reloads saved category data, not analysis. A
+completed empty report does not establish safety, and missing AI evidence is not
+zero model hypotheses. Stale and incomplete coverage retain their labels.
+
+On a typed finding, **Open source** is independent of **Prepare fix**: it opens
+the one indexed path at the supplied positive line for read-only inspection,
+including retained stale evidence, without Assistant prefill. An invalid or
+ambiguous target reports why it cannot open; no nearby declaration is substituted.
+Inspecting the already selected file preserves its draft. **Prepare fix** is
+available only for a uniquely loaded, current completed or partial report with
+matching nonblank indexed source hash and one exact eligible Go declaration and
+range. Its disabled reason explains missing/stale evidence or an unsupported or
+inexact target. After activation, loaded source and symbols must still match the
+captured file, hash, declaration and selection before Editor/Assistant receives
+an unsent request based on the supplied evidence. Failed or obsolete reads cannot
+prepare it; neither action runs checks or writes source. Target-changing actions
+that would replace a draft or Assistant input ask for explicit discard approval;
+Cancel/Escape keeps that work, and changed result, project, draft or input
+invalidates the approval. Only successful admitted transitions replace input.
+
+**Review Security intent** opens Analysis locally, without previewing, scanning
+or starting a run. AI Security review belongs to the whole-project Analysis
+Start/Resume preview and admission dialog, not a Security-only dispatcher. Review
+the returned file/stage scope and destinations there, confirm every required
+remote destination and the separate **Include AI Security review** intent when
+required (even with local models), then explicitly **Start analysis** or
+**Resume analysis**. Changing the preview or resuming requires fresh admission.
+
 ### Performance hypotheses and benchmark evidence
 
 Performance uses the shared result browser for loaded typed opportunities and
@@ -567,11 +615,10 @@ placement, screen-reader output and real PTY resize still require the native
 [keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md). Do not infer native success from
 component tests.
 
-Security entry and selection stay local. Whole-project analysis owns
-passive rules and explicitly admitted advisory review. Prepare fix opens the
-existing Assistant composer only for current, exact Go declarations; it does not
-send a request or change source. No file-scoped start controls or duplicate bottom
-Problems/Checks/Output panels remain.
+Security selection is local; its source, preparation and whole-project review
+routes are described [above](#security-evidence-and-advisory-review). No
+file-scoped start controls or duplicate bottom Problems/Checks/Output panels
+remain.
 
 UI work follows [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) for
 interaction and accessibility, not for a fixed visual direction. Existing metadata

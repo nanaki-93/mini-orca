@@ -134,6 +134,52 @@ with keyboard focus.
    from the automated Performance presenter, benchmark and production-component
    tests; those tests do not establish native behavior.
 
+   In Security, use disposable saved source-rule and AI results (and, if
+   available, a mismatched source/evidence pair). At compact width and 125%/150%
+   text, Tab to **Review Security intent**, **Open source**, **Prepare fix** and
+   **Report metadata** on a typed row. Check visible focus, keyboard activation,
+   spoken names and expanded/disabled states with an enabled screen reader; verify
+   that wrapped actions and their blocked reasons remain reachable with metadata
+   collapsed. Check **Source rule** describes a pattern rather than a verified
+   vulnerability, **Model hypothesis** remains unverified and an unknown pairing
+   says **Evidence type unavailable**. Inspect a completed-empty result: the
+   no-safety-assurance explanation must remain visible. For a failed, partial or
+   unavailable report with no rows, read its reason without selecting a finding;
+   check retained rows and saved-result read errors independently. Search/filter
+   and select both typed and semantic rows with Enter/Space, including a long path;
+   copy the complete path, positive range, condition, remediation, preconditions,
+   verification idea and engineering insight. Expand/collapse **Report metadata**
+   from the keyboard, copy long scope/hash/model values, and verify disclosure
+   does not trigger source reads, scans, provider requests or writes.
+
+   On a typed Security row, Tab to **Open source** and **Prepare fix**; test current
+   and retained stale evidence with a valid indexed path. Open source should show
+   the supplied positive line in read-only Editor without Assistant prefill; an
+   invalid or ambiguous anchor should report a failure, not jump to a nearby
+   declaration. Same-file inspection must retain the draft. With an unsupported,
+   stale, changed-hash or inexact target, check Prepare fix is disabled with a
+   readable reason and its state is announced. With a current exact Go declaration,
+   Prepare fix should open an unsent Assistant request; check no checks or source
+   write occurred. For each target-changing action with draft or Assistant input,
+   inspect the discard dialog: Tab through **Keep draft**/**Discard draft** (or
+   **Keep work**/**Discard work** for input alone), cancel using the keep action and
+   Escape in separate attempts, and verify target, draft and input remain. After
+   each dismissal, check *native focus* returns to the surviving Security action
+   opener; reopen the dialog and confirm only an unchanged intent. Change the
+   selection or input while approval is pending and verify old approval cannot
+   act. A failed read must retain existing work and never prefill.
+
+   Activate **Review Security intent** by keyboard and verify it only opens
+   Analysis: no preview, scan or run. Then explicitly choose **Start analysis**
+   or a valid **Resume → fresh preview**, inspect whole-project scope and
+   destinations, and check the separate **Include AI Security review** checkbox
+   and each required remote confirmation before admitting the run. Dismiss the
+   admission dialog with Escape and check native focus returns to a surviving
+   Analysis opener; no preview review or dismissal may dispatch a model request.
+   Record native focus, screen-reader and copy observations as pending until
+   performed; automated production renders and fake-call tests do not establish
+   native behavior.
+
 6. Use Cmd/Ctrl+P to choose a file and Cmd/Ctrl+Shift+O to choose a declaration.
    Source and diff must remain selectable/read-only. Relative paths disambiguate
    equal basenames. Source drag selects text without changing the draft target.
