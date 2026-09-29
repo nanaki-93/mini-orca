@@ -195,6 +195,37 @@ class FindingsPresentationTest {
   }
 
   @Test
+  fun evidenceOriginsAndMaterialStatesAreExplicitInRowsAndDetails() {
+    val cases =
+        listOf(
+            highOpen to "Tool report · vet",
+            highOpen.copy(source = "file_analysis", confidence = "suggested") to "Model suggestion",
+            highOpen.copy(source = "", confidence = "") to "Evidence origin unavailable")
+    cases.forEach { (finding, identity) ->
+      ComposeVisualFixture(800, 650) {
+            FindingDetailsRegion(finding, FindingActions({}, { _, _ -> }, {}))
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.hasText(identity))
+            assertTrue(fixture.hasText("High"))
+          }
+    }
+    listOf("partial" to "Partial", "canceled" to "Canceled", "failed" to "Failed").forEach {
+        (status, label) ->
+      val finding = highOpen.copy(status = status, freshness = "stale")
+      assertEquals("$label · Stale", semanticResultRow(finding).state)
+      ComposeVisualFixture(800, 650) {
+            FindingDetailsRegion(finding, FindingActions({}, { _, _ -> }, {}))
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.hasText("$label · Stale"))
+          }
+    }
+  }
+
+  @Test
   fun detailIdentifiesEvidenceBeforeGuardedPrepareAndSecondaryTriageActions() {
     var prepared: UnifiedFinding? = null
     var opened: UnifiedFinding? = null

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -195,7 +196,9 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
                     .heightIn(max = 180.dp)
                     .verticalScroll(rememberScrollState())
                     .padding(8.dp)) {
-                  Text(scan.summary, style = IdeTypography.compactBody, color = SecondaryText)
+                  SelectionContainer {
+                    Text(scan.summary, style = IdeTypography.compactBody, color = SecondaryText)
+                  }
                   state.scan?.let { VerifiedScanDiagnostics(it) }
                 }
       }) { key ->
@@ -246,10 +249,12 @@ private fun VerifiedChecksActionRow(
 internal fun VerifiedScanDiagnostics(scan: GoScanReport) {
   scan.phases.forEach { phase ->
     IdeHorizontalSeparator(Modifier.padding(vertical = 8.dp))
-    Text(
-        sanitizedOutputText(phase.name.ifBlank { "Unnamed scan phase" }, 256),
-        color = PrimaryText,
-        style = IdeTypography.resultHeading)
+    SelectionContainer {
+      Text(
+          phase.name.ifBlank { "Unnamed scan phase" },
+          color = PrimaryText,
+          style = IdeTypography.resultHeading)
+    }
     IdeLabelBadge(analysisStatusLabel(phase.state), evidenceColor(checkStatus(phase.state)))
     if (phase.command.isNotEmpty())
         DiagnosticText("\$ ${phase.command.joinToString(" ")}", color = SecondaryText)
@@ -270,7 +275,9 @@ internal fun FindingDetailsRegion(
     ResultDetailHeader(semanticResultRow(finding))
     IdeLabelBadge(findingEvidenceIdentity(finding), findingEvidenceTint(finding))
     ModelResultContent(
-        finding.message.ifBlank { "No summary supplied." }, style = IdeTypography.workspaceBody)
+        finding.message.ifBlank { "No summary supplied." },
+        preview = false,
+        style = IdeTypography.workspaceBody)
     FindingActionButtons(finding, actions, preparation, sourceAvailable)
     if (sourceAvailable == false)
         Text(
@@ -283,17 +290,29 @@ internal fun FindingDetailsRegion(
     if (technical) {
       Text(
           findingEvidenceSummary(finding), style = IdeTypography.compactBody, color = SecondaryText)
-      if (finding.evidence.isNotBlank()) ModelResultContent(finding.evidence)
+      if (finding.evidence.isNotBlank()) ModelResultContent(finding.evidence, preview = false)
       finding.taskSpec?.let { task ->
-        Text(
-            "${task.targetSymbol} · ${task.targetSignature}",
-            style = IdeTypography.resultCode,
-            color = PrimaryText)
+        SelectionContainer {
+          Text(
+              "${task.targetSymbol} · ${task.targetSignature}",
+              style = IdeTypography.resultCode,
+              color = PrimaryText)
+        }
         Text("Acceptance criteria", style = IdeTypography.resultLabel, color = PrimaryText)
-        task.acceptanceCriteria.forEach { ModelResultContent(it) }
+        task.acceptanceCriteria.forEach { ModelResultContent(it, preview = false) }
         if (task.nonGoals.isNotEmpty()) {
           Text("Non-goals", style = IdeTypography.resultLabel, color = PrimaryText)
-          task.nonGoals.forEach { ModelResultContent(it) }
+          task.nonGoals.forEach { ModelResultContent(it, preview = false) }
+        }
+        task.goTestCandidate?.let { candidate ->
+          Text(
+              "Test candidate · review only",
+              style = IdeTypography.resultLabel,
+              color = PrimaryText)
+          SelectionContainer {
+            Text(candidate.name, style = IdeTypography.resultCode, color = PrimaryText)
+          }
+          ModelResultContent(candidate.content, preview = false)
         }
       }
       EngineeringInsightPanel(
