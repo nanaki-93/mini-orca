@@ -561,26 +561,87 @@ class DesktopWorkflowPresenter(
     selectFile(path, editorTarget, preparedFixRequest, preparedTaskSpec)
   }
 
+  /** An approval is bound to the observed project, finding, target and complete draft buffer. */
+  internal data class FindingIntent(
+      val finding: UnifiedFinding,
+      val prepare: Boolean,
+      val project: SwitchProjectIdentity,
+      val draft: SwitchDraftIdentity,
+      val selectedFile: ProjectFileInfo?,
+      val target: EditorNavigationTarget,
+  )
+
+  internal fun findingIntent(finding: UnifiedFinding, prepare: Boolean): FindingIntent? {
+    val state = snapshot.value.state
+    val project = state.project ?: return null
+    val target =
+        if (prepare) (preparationDecision(finding) as? FindingPreparationDecision.Eligible)?.target
+        else {
+          val displayed = state.projectBugFindings()
+          if (finding.projectId != project.projectId ||
+              finding.projectRevision != project.projectRevision ||
+              displayed.count { it == finding } != 1)
+              null
+          else findingNavigationTarget(finding, state.index)
+        }
+    return target?.let {
+      FindingIntent(
+          finding,
+          prepare,
+          SwitchProjectIdentity(project),
+          SwitchDraftIdentity(state.chat.session, state.review.draft, state.review.editor),
+          state.selectedFile,
+          it)
+    }
+  }
+
+  private fun approvedFindingIntent(
+      finding: UnifiedFinding,
+      prepare: Boolean,
+  ): EditorNavigationTarget? {
+    val current = findingIntent(finding, prepare)
+    if (current == null) {
+      val reason =
+          if (prepare) (preparationDecision(finding) as FindingPreparationDecision.Blocked).reason
+          else "This finding no longer points to a file in the active project."
+      dispatch(DesktopEvent.Failed(reason))
+      return null
+    }
+    val state = snapshot.value.state
+    val sameSource = !prepare && state.selectedFile?.path == current.target.path
+    if (!sameSource && current.draft.hasWork) {
+      dispatch(
+          DesktopEvent.Failed(
+              "Review and confirm discarding the current draft before opening this finding."))
+      return null
+    }
+    return current.target
+  }
+
+  internal fun confirmFindingIntent(intent: FindingIntent): Boolean {
+    if (findingIntent(intent.finding, intent.prepare) != intent) {
+      dispatch(DesktopEvent.Failed("The finding or draft changed. Choose the action again."))
+      return false
+    }
+    if (intent.draft.hasWork) discardDraft()
+    if (intent.prepare) prepareFinding(intent.finding) else openFinding(intent.finding)
+    return true
+  }
+
   fun openFinding(finding: UnifiedFinding) {
-    val target = findingNavigationTarget(finding, snapshot.value.state.index)
-    if (target == null)
-        dispatch(
-            DesktopEvent.Failed("This finding no longer points to a file in the active project."))
-    else openFileInEditor(target.path, target)
+    val target = approvedFindingIntent(finding, false) ?: return
+    if (snapshot.value.state.selectedFile?.path == target.path) {
+      dispatch(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
+      val selection = resolveEditorNavigation(snapshot.value.state.symbols, target)
+      dispatch(DesktopEvent.EditorContextSelected(selection.symbol, selection.focusLine))
+    } else openFileInEditor(target.path, target)
   }
 
   fun prepareFinding(finding: UnifiedFinding) {
-    when (val decision = preparationDecision(finding)) {
-      is FindingPreparationDecision.Blocked -> dispatch(DesktopEvent.Failed(decision.reason))
-      is FindingPreparationDecision.Eligible -> {
-        dispatch(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
-        selectFile(
-            decision.target.path,
-            decision.target,
-            preparationFinding = finding,
-            preparedTaskSpec = decision.task)
-      }
-    }
+    val target = approvedFindingIntent(finding, true) ?: return
+    val decision = preparationDecision(finding) as? FindingPreparationDecision.Eligible ?: return
+    dispatch(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
+    selectFile(target.path, target, preparationFinding = finding, preparedTaskSpec = decision.task)
   }
 
   private fun preparationDecision(finding: UnifiedFinding): FindingPreparationDecision {

@@ -1229,6 +1229,206 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun findingNavigationRequiresCurrentApprovalBeforeReplacingDraft() {
+    val calls = Collections.synchronizedList(mutableListOf<String>())
+    val presenter = presenter { method, path, _ ->
+      calls += "$method $path"
+      when {
+        path.contains("files/info?path=") ->
+            response(fileJson(if (path.contains("other.go")) "other.go" else "main.go", "base"))
+        path.contains("files/symbols?path=") ->
+            response(
+                symbolsJson(
+                    if (path.contains("other.go")) "other.go" else "main.go", "Run", "func Run()"))
+        path.contains("files/analysis") -> response("""{"path":"other.go","status":"missing"}""")
+        path.contains("/impact") -> response("""{"target_path":"other.go"}""")
+        path.contains("/git") -> response("""{"available":false}""")
+        else -> error("Unexpected $method $path")
+      }
+    }
+    try {
+      val run = analysisRunFixture()
+      val finding =
+          UnifiedFinding(
+              id = "other",
+              category = "bugs",
+              projectId = "project",
+              projectRevision = "revision",
+              fileHash = "base",
+              freshness = "fresh",
+              location = FindingLocation("other.go", startLine = 7, symbol = "Run"),
+              taskSpec = BugTaskSpec("1", "other.go", "Run", "func Run()", listOf("Fix Run.")))
+      val index = resultIndexFixture()
+      presenter.dispatch(
+          DesktopEvent.ProjectLoaded(
+              resultProjectFixture(),
+              index.copy(files = index.files + index.files.single().copy(path = "other.go"))))
+      presenter.dispatch(
+          DesktopEvent.AnalysisRunUpdated(
+              ProjectAnalysisRunState(
+                  run = run,
+                  sections =
+                      mapOf(
+                          AnalysisResultKey("bugs") to
+                              AnalysisSectionState(
+                                  results =
+                                      analysisResultsFixture(run, "bugs")
+                                          .copy(semantic = listOf(finding)))))))
+      presenter.selectFile("main.go")
+      eventually { presenter.snapshot.value.state.selectedFile?.path == "main.go" }
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      val original = presenter.snapshot.value.state
+      val source = presenter.findingIntent(finding, false)!!
+      val prepare = presenter.findingIntent(finding, true)!!
+      val before = calls.size
+      presenter.openFinding(finding)
+      presenter.prepareFinding(finding)
+      assertEquals(before, calls.size)
+      assertEquals(original.review, presenter.snapshot.value.state.review)
+      assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
+
+      presenter.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() { changed() }"))
+      presenter.confirmFindingIntent(source)
+      presenter.confirmFindingIntent(prepare)
+      assertEquals(before, calls.size)
+      assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
+      assertTrue(presenter.snapshot.value.state.review.draft != null)
+
+      val current = presenter.findingIntent(finding, true)!!
+      presenter.dispatch(
+          DesktopEvent.AnalysisRunUpdated(
+              ProjectAnalysisRunState(
+                  run = run,
+                  sections =
+                      mapOf(
+                          AnalysisResultKey("bugs") to
+                              AnalysisSectionState(
+                                  results = analysisResultsFixture(run, "bugs"))))))
+      presenter.confirmFindingIntent(current)
+      assertEquals(before, calls.size)
+      assertTrue(presenter.snapshot.value.state.review.draft != null)
+      presenter.dispatch(
+          DesktopEvent.AnalysisRunUpdated(
+              ProjectAnalysisRunState(
+                  run = run,
+                  sections =
+                      mapOf(
+                          AnalysisResultKey("bugs") to
+                              AnalysisSectionState(
+                                  results =
+                                      analysisResultsFixture(run, "bugs")
+                                          .copy(semantic = listOf(finding)))))))
+      presenter.confirmFindingIntent(presenter.findingIntent(finding, true)!!)
+      eventually { presenter.snapshot.value.state.preparedRequest.contains("Fix Run.") }
+      assertEquals("other.go", presenter.snapshot.value.state.selectedFile?.path)
+      assertNull(presenter.snapshot.value.state.review.draft)
+      presenter.selectFile("main.go")
+      eventually { presenter.snapshot.value.state.selectedFile?.path == "main.go" }
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      presenter.confirmFindingIntent(presenter.findingIntent(finding, false)!!)
+      eventually { presenter.snapshot.value.state.selectedFile?.path == "other.go" }
+      eventually { presenter.snapshot.value.state.selection.focusedLine == 7 }
+      assertNull(presenter.snapshot.value.state.review.draft)
+      assertTrue(calls.none { it.startsWith("POST") })
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun changedProjectRevokesCapturedFindingApproval() {
+    val calls = mutableListOf<String>()
+    val presenter = presenter { method, path, _ ->
+      calls += "$method $path"
+      error("Unexpected request $method $path")
+    }
+    try {
+      val run = analysisRunFixture()
+      val finding =
+          UnifiedFinding(
+              id = "bug",
+              category = "bugs",
+              projectId = "project",
+              projectRevision = "revision",
+              location = FindingLocation("main.go", startLine = 4))
+      val project = resultProjectFixture()
+      val index = resultIndexFixture()
+      presenter.dispatch(DesktopEvent.ProjectLoaded(project, index))
+      presenter.dispatch(
+          DesktopEvent.AnalysisRunUpdated(
+              ProjectAnalysisRunState(
+                  run = run,
+                  sections =
+                      mapOf(
+                          AnalysisResultKey("bugs") to
+                              AnalysisSectionState(
+                                  results =
+                                      analysisResultsFixture(run, "bugs")
+                                          .copy(semantic = listOf(finding)))))))
+      val captured = presenter.findingIntent(finding, false)!!
+      presenter.dispatch(
+          DesktopEvent.ProjectLoaded(
+              project.copy(projectRevision = "next"), index.copy(projectRevision = "next")))
+      presenter.confirmFindingIntent(captured)
+      assertTrue(calls.isEmpty())
+      assertNull(presenter.snapshot.value.state.selectedFile)
+      assertTrue(presenter.snapshot.value.state.jobs.error?.contains("changed") == true)
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun sameSourceFindingInspectionPreservesDraftAndExactLineWithoutReads() {
+    val calls = Collections.synchronizedList(mutableListOf<String>())
+    val presenter = presenter { method, path, _ ->
+      calls += "$method $path"
+      when {
+        path.contains("files/info?") -> response(fileJson("main.go", "base"))
+        path.contains("files/symbols?") -> response(symbolsJson("main.go", "Run", "func Run()"))
+        path.contains("files/analysis") -> response("""{"path":"main.go","status":"missing"}""")
+        path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+        path.contains("/git") -> response("""{"available":false}""")
+        else -> error("Unexpected $method $path")
+      }
+    }
+    try {
+      val run = analysisRunFixture()
+      val finding =
+          UnifiedFinding(
+              id = "same",
+              category = "bugs",
+              projectId = "project",
+              projectRevision = "revision",
+              location = FindingLocation("main.go", startLine = 7, symbol = "Run"))
+      presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
+      presenter.dispatch(
+          DesktopEvent.AnalysisRunUpdated(
+              ProjectAnalysisRunState(
+                  run = run,
+                  sections =
+                      mapOf(
+                          AnalysisResultKey("bugs") to
+                              AnalysisSectionState(
+                                  results =
+                                      analysisResultsFixture(run, "bugs")
+                                          .copy(semantic = listOf(finding)))))))
+      presenter.selectFile("main.go")
+      eventually { presenter.snapshot.value.state.selectedFile != null }
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      val before = calls.size
+      val review = presenter.snapshot.value.state.review
+      presenter.openFinding(finding)
+      assertEquals(before, calls.size)
+      assertEquals(review, presenter.snapshot.value.state.review)
+      assertEquals(7, presenter.snapshot.value.state.selection.focusedLine)
+      assertEquals(Workspace.Editor, presenter.snapshot.value.state.workspace)
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
   fun semanticPreparationUsesTheDisplayedCategoryAndRejectsRemovedEvidence() {
     for (category in listOf("bugs", "performance", "security")) {
       val calls = Collections.synchronizedList(mutableListOf<String>())

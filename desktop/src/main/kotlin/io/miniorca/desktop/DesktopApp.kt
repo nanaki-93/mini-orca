@@ -46,7 +46,7 @@ private fun draftFieldIdentity(editor: EditableDraftState?): DraftFieldIdentity?
     editor?.serverDraft?.let { DraftFieldIdentity(it.id, it.revision, it.hash) }
 
 private sealed interface PendingDraftDiscard {
-  val currentDraft: CurrentEditIdentity
+  val currentDraft: CurrentEditIdentity?
   val nextLabel: String
 
   data class Replace(
@@ -61,6 +61,17 @@ private sealed interface PendingDraftDiscard {
       val kind: DeclarationCreationKind,
   ) : PendingDraftDiscard {
     override val nextLabel: String = "create a ${kind.noun}"
+  }
+
+  data class Finding(
+      val intent: DesktopWorkflowPresenter.FindingIntent,
+      override val currentDraft: CurrentEditIdentity?,
+      val chatMessage: TextFieldValue,
+      val constraints: TextFieldValue,
+  ) : PendingDraftDiscard {
+    override val nextLabel: String =
+        if (intent.prepare) "prepare a fix for ${intent.finding.title}"
+        else "open ${intent.target.path}"
   }
 }
 
@@ -427,6 +438,11 @@ internal fun MiniOrcaApp(
         pendingDraftDiscard = null
         startCreateDeclaration(pending.kind)
       }
+      is PendingDraftDiscard.Finding -> {
+        pendingDraftDiscard = null
+        confirmFindingDiscard(
+            presenter, pending, chatMessage, advancedConstraints, ::clearComposerInput)
+      }
       null -> Unit
     }
   }
@@ -698,8 +714,9 @@ internal fun MiniOrcaApp(
   val findingActions =
       FindingActions(
           prepareFinding = {
-            clearComposerInput()
-            presenter.prepareFinding(it)
+            routeFindingRequest(presenter, it, true, chatMessage, advancedConstraints) {
+              pendingDraftDiscard = it
+            }
           },
           triageFinding = presenter::triageFinding,
       )
@@ -896,6 +913,45 @@ internal fun MiniOrcaApp(
     }
   }
 }
+
+private fun routeFindingRequest(
+    presenter: DesktopWorkflowPresenter,
+    finding: UnifiedFinding,
+    prepare: Boolean,
+    message: TextFieldValue,
+    constraints: TextFieldValue,
+    pending: (PendingDraftDiscard.Finding) -> Unit,
+) {
+  val intent = presenter.findingIntent(finding, prepare)
+  if (intent != null && findingRequiresDiscard(intent, message.text, constraints.text))
+      pending(
+          PendingDraftDiscard.Finding(
+              intent, currentEditIdentity(presenter.snapshot.value.state), message, constraints))
+  else if (prepare) presenter.prepareFinding(finding) else presenter.openFinding(finding)
+}
+
+private fun confirmFindingDiscard(
+    presenter: DesktopWorkflowPresenter,
+    pending: PendingDraftDiscard.Finding,
+    message: TextFieldValue,
+    constraints: TextFieldValue,
+    clearComposer: () -> Unit,
+) {
+  if (pending.chatMessage != message || pending.constraints != constraints) {
+    presenter.dispatch(
+        DesktopEvent.Failed("Assistant input changed. Choose the finding action again."))
+    return
+  }
+  if (presenter.confirmFindingIntent(pending.intent) && !pending.intent.prepare) clearComposer()
+}
+
+internal fun findingRequiresDiscard(
+    intent: DesktopWorkflowPresenter.FindingIntent,
+    message: String,
+    constraints: String,
+): Boolean =
+    (intent.prepare || intent.selectedFile?.path != intent.target.path) &&
+        (intent.draft.hasWork || message.isNotEmpty() || constraints.isNotEmpty())
 
 private fun projectSwitchPending(chooserOpen: Boolean, pending: PendingProjectSwitch?): Boolean =
     chooserOpen || pending != null
@@ -1273,21 +1329,30 @@ internal fun ProjectImportConfirmationDialog(
 
 @Composable
 internal fun DraftDiscardDialog(
-    currentDraft: CurrentEditIdentity,
+    currentDraft: CurrentEditIdentity?,
     nextLabel: String,
     onDiscard: () -> Unit,
     onCancel: () -> Unit,
 ) {
   IdeDialog(
       onDismissRequest = onCancel,
-      title = { Text("Discard current draft?") },
+      title = {
+        Text(if (currentDraft == null) "Discard current work?" else "Discard current draft?")
+      },
       content = {
         Text(
-            "Discard the draft for ${currentDraft.targetSymbol} in ${currentDraft.targetPath} before you $nextLabel in ${currentDraft.targetPath}? This only clears the in-memory conversation, draft, and focused checks.")
+            if (currentDraft == null)
+                "Discard the current conversation or Assistant input before you $nextLabel?"
+            else
+                "Discard the draft for ${currentDraft.targetSymbol} in ${currentDraft.targetPath} before you $nextLabel? This clears the in-memory conversation, draft, and focused checks.")
       },
       actions = {
-        MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Keep draft") }
-        MiniOrcaButton(onClick = onDiscard, tone = ActionTone.Destructive) { Text("Discard draft") }
+        MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) {
+          Text(if (currentDraft == null) "Keep work" else "Keep draft")
+        }
+        MiniOrcaButton(onClick = onDiscard, tone = ActionTone.Destructive) {
+          Text(if (currentDraft == null) "Discard work" else "Discard draft")
+        }
       },
   )
 }

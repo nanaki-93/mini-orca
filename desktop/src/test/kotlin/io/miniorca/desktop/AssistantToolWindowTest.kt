@@ -16,6 +16,63 @@ import kotlin.test.assertTrue
 class AssistantToolWindowTest {
 
   @Test
+  fun findingDiscardRoutingProtectsDraftAndComposerButNotSameSourceInspection() {
+    val finding = UnifiedFinding(title = "Lost update")
+    val project = SwitchProjectIdentity("project", "revision", "/tmp/project")
+    val draft = SwitchDraftIdentity(null, null, null)
+    val source =
+        DesktopWorkflowPresenter.FindingIntent(
+            finding, false, project, draft, null, EditorNavigationTarget("other.go"))
+    val prepare = source.copy(prepare = true)
+    assertFalse(findingRequiresDiscard(source, "", ""))
+    assertTrue(findingRequiresDiscard(source, "typed request", "keep constraints"))
+    assertTrue(findingRequiresDiscard(prepare, "typed request", ""))
+    val withDraft = source.copy(draft = draft.copy(editor = editableDraftForFindingTest()))
+    assertTrue(findingRequiresDiscard(withDraft, "", ""))
+    assertTrue(findingRequiresDiscard(withDraft.copy(prepare = true), "", ""))
+    assertFalse(
+        findingRequiresDiscard(
+            withDraft.copy(selectedFile = creationFile().copy(path = "other.go")), "", ""))
+  }
+
+  @Test
+  fun findingDiscardDialogEscapeAndKeepLeaveApprovalUnused() {
+    var dismissed = 0
+    var confirmed = 0
+    ComposeVisualFixture(480, 360) {
+          DraftDiscardDialog(
+              CurrentEditIdentity(ChatEditMode.ReplaceSymbol, "main.go", "Run", true),
+              "open other.go",
+              { confirmed++ },
+              { dismissed++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Discard current draft?"))
+          assertTrue(fixture.pressKey(Key.Escape))
+          assertEquals(1, dismissed)
+          assertEquals(0, confirmed)
+          fixture.clickText("Keep draft")
+          assertEquals(2, dismissed)
+          assertEquals(0, confirmed)
+        }
+  }
+
+  private fun editableDraftForFindingTest(): EditableDraftState =
+      editableDraft(
+          DeclarationDraft(
+              id = "draft",
+              projectId = "project",
+              projectRevision = "revision",
+              baseFileHash = "hash",
+              targetPath = "main.go",
+              mode = "replace_symbol",
+              targetSymbol = "Run",
+              declaration = "func Run() {}",
+              revision = 1,
+              hash = "draft-hash"))
+
+  @Test
   fun requestFailureAppearsBesideItsTargetWithoutExecutingAnotherRequest() {
     val target = ChatTarget(ChatEditMode.CreateSymbol, "Build")
     listOf(target, target.copy(symbol = "Other")).forEach { selected ->
