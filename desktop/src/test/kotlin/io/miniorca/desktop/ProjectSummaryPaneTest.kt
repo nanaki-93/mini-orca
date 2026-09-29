@@ -399,7 +399,7 @@ class ProjectSummaryPaneTest {
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("Saved details unavailable · 0 reported"))
-          assertTrue(fixture.hasText("Paused by user"))
+          assertTrue(fixture.hasText("Stop reason · Paused by user"))
           assertFalse(fixture.hasText("No results"))
         }
   }
