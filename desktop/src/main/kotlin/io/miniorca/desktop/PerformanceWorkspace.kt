@@ -93,7 +93,8 @@ internal fun PerformanceWorkspacePane(
 internal data class PerformanceResult(
     val report: PerformanceFileReport,
     val finding: PerformanceFinding,
-    val stale: Boolean
+    val stale: Boolean,
+    val page: AnalysisResultPageState,
 ) {
   fun row() =
       ResultRowPresentation(
@@ -116,7 +117,7 @@ internal fun performanceResults(page: AnalysisResultPageState): List<Performance
         }
         .flatMap { report ->
           report.findings.map {
-            PerformanceResult(report, it, page.stale || report.status == "stale")
+            PerformanceResult(report, it, page.stale || report.status == "stale", page)
           }
         }
         .sortedWith(
@@ -128,24 +129,91 @@ internal fun performanceResults(page: AnalysisResultPageState): List<Performance
                 .thenBy { it.finding.startLine }
                 .thenBy { it.finding.id })
 
-internal fun performanceCanPrepare(result: PerformanceResult, index: ProjectIndex?): Boolean {
-  if (index == null ||
-      result.stale ||
-      result.report.projectId != index.projectId ||
-      result.report.projectRevision != index.projectRevision ||
-      result.report.status !in setOf("completed", "partial"))
-      return false
-  val file =
-      index.files.firstOrNull {
-        it.path == result.report.path && it.contentHash == result.report.contentHash
-      } ?: return false
-  val declaration =
-      file.symbols.singleOrNull {
-        it.name == result.finding.symbol && it.atomicTarget && it.confidence == "exact"
-      } ?: return false
-  return file.language == "Go" &&
-      result.finding.startLine in declaration.startLine..declaration.endLine
+internal sealed interface PerformancePreparationDecision {
+  data class Eligible(
+      val projectId: String,
+      val projectRevision: String,
+      val path: String,
+      val contentHash: String,
+      val declaration: SymbolInfo,
+  ) : PerformancePreparationDecision
+
+  data class Blocked(val reason: String) : PerformancePreparationDecision
 }
+
+/** Indexed evidence is only a preflight; preparation must recheck the loaded file and symbols. */
+internal fun performancePreparationDecision(
+    result: PerformanceResult,
+    index: ProjectIndex?,
+): PerformancePreparationDecision {
+  fun blocked(reason: String) = PerformancePreparationDecision.Blocked(reason)
+  val page = result.page
+  val project = page.project
+  val run = page.run
+  if (project == null ||
+      run == null ||
+      index == null ||
+      project.projectId.isBlank() ||
+      project.projectRevision.isBlank() ||
+      run.identity.projectId != project.projectId ||
+      run.identity.projectRevision != project.projectRevision ||
+      index.projectId != project.projectId ||
+      index.projectRevision != project.projectRevision)
+      return blocked(
+          "Load the current project index and Performance results before preparing a fix.")
+  if (result.report.projectId != project.projectId ||
+      result.report.projectRevision != project.projectRevision ||
+      page.results?.performance?.count { report ->
+        report == result.report && report.findings.count { it == result.finding } == 1
+      } != 1)
+      return blocked(
+          "This opportunity is missing or ambiguous in the current Performance results. Refresh the analysis.")
+  if (result.stale || page.stale)
+      return blocked("Analyze again to prepare a fix from current source.")
+  if (result.report.status !in setOf("completed", "partial"))
+      return blocked("Wait for a completed or partial Performance report before preparing a fix.")
+  if (result.report.path.isBlank())
+      return blocked("The report must identify an indexed target file path.")
+  val files = index.files.filter { it.path == result.report.path }
+  if (files.size != 1)
+      return blocked("The target file is missing or ambiguous in the project index.")
+  val file = files.single()
+  if (result.report.contentHash.isBlank() ||
+      file.contentHash.isBlank() ||
+      result.report.contentHash != file.contentHash)
+      return blocked(
+          "The report's file hash is missing or no longer matches the indexed source. Reanalyze the file.")
+  if (result.finding.symbol.isBlank())
+      return blocked("The opportunity must name one indexed declaration.")
+  val declarations = file.symbols.filter { it.name == result.finding.symbol }
+  if (declarations.size != 1)
+      return blocked("The opportunity must identify one unambiguous indexed declaration.")
+  val declaration = declarations.single()
+  if (result.finding.startLine <= 0 ||
+      result.finding.startLine !in declaration.startLine..declaration.endLine)
+      return blocked(
+          "The reported source line must fall within the indexed declaration. Reanalyze the file.")
+  val eligibility =
+      symbolEditEligibility(
+          ProjectFileInfo(
+              file.path,
+              file.contentHash,
+              file.path.substringAfterLast('/'),
+              language = file.language,
+              sizeBytes = file.sizeBytes,
+              lineCount = file.lineCount,
+              modifiedAt = file.modifiedAt,
+              binary = file.binary),
+          file.symbols,
+          declaration)
+  if (!eligibility.eligible) return blocked(eligibility.blockedReason)
+  return PerformancePreparationDecision.Eligible(
+      project.projectId, project.projectRevision, file.path, file.contentHash, declaration)
+}
+
+// The existing presenter still consumes a Boolean until typed action wiring moves to the decision.
+internal fun performanceCanPrepare(result: PerformanceResult, index: ProjectIndex?): Boolean =
+    performancePreparationDecision(result, index) is PerformancePreparationDecision.Eligible
 
 @Composable
 private fun PerformanceFindingDetails(
@@ -154,6 +222,7 @@ private fun PerformanceFindingDetails(
     actions: PerformanceWorkspaceActions
 ) {
   val finding = result.finding
+  val preparation = performancePreparationDecision(result, index)
   var technical by remember(result.row().key) { mutableStateOf(false) }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
     ResultDetailHeader(result.row())
@@ -166,17 +235,13 @@ private fun PerformanceFindingDetails(
     Row(horizontalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact)) {
       MiniOrcaButton(
           onClick = { actions.prepareOptimization(result.report.path, finding) },
-          enabled = performanceCanPrepare(result, index),
+          enabled = preparation is PerformancePreparationDecision.Eligible,
           tone = ActionTone.Primary) {
             Text("Prepare fix")
           }
     }
-    if (!performanceCanPrepare(result, index))
-        Text(
-            if (result.stale) "Analyze again to prepare a fix from current source."
-            else "Fix preparation requires a matching indexed Go declaration.",
-            color = SecondaryText,
-            style = IdeTypography.compactBody)
+    if (preparation is PerformancePreparationDecision.Blocked)
+        Text(preparation.reason, color = SecondaryText, style = IdeTypography.compactBody)
     IdeDisclosureHeader(
         "Workload, trade-offs and verification", technical, { technical = !technical })
     if (technical) {
