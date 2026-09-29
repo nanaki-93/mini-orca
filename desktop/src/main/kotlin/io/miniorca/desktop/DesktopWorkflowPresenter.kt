@@ -156,6 +156,7 @@ class DesktopWorkflowPresenter(
   private var verifiedScanActionGeneration = 0L
   private var activeTask: WorkflowTaskIdentity? = null
   private var activeDraft: WorkflowDraftIdentity? = null
+  private var preparationSelectionGeneration = 0L
 
   val snapshot: StateFlow<DesktopWorkflowSnapshot> = mutableSnapshot.asStateFlow()
 
@@ -185,6 +186,11 @@ class DesktopWorkflowPresenter(
   }
 
   fun dispatch(event: DesktopEvent) {
+    if (event is DesktopEvent.SymbolSelected ||
+        event is DesktopEvent.EditorContextSelected ||
+        event is DesktopEvent.SourceLineSelected ||
+        event is DesktopEvent.WorkspaceSelected)
+        preparationSelectionGeneration++
     val before = selectedDeclarationTarget(controller.state)
     analysisWorkflow.beforeEvent(event)
     benchmarkWorkflow.beforeEvent(event)
@@ -395,6 +401,7 @@ class DesktopWorkflowPresenter(
       editorTarget: EditorNavigationTarget? = null,
       preparedFixRequest: String? = null,
       preparedTaskSpec: BugTaskSpec? = null,
+      preparationFinding: UnifiedFinding? = null,
   ) {
     clearSecurityReviewRemoteConfirmation()
     benchmarkWorkflow.invalidate()
@@ -410,6 +417,15 @@ class DesktopWorkflowPresenter(
     activeTask = null
     activeDraft = null
     val request = controller.beginFileLoad(path) ?: return
+    val selectionGeneration = preparationSelectionGeneration
+    fun obsoletePreparation(): Boolean {
+      if (preparationFinding == null) return false
+      if (selectionGeneration != preparationSelectionGeneration) return true
+      val latest = preparationDecision(preparationFinding)
+      return latest !is FindingPreparationDecision.Eligible ||
+          latest.target != editorTarget ||
+          latest.task != preparedTaskSpec
+    }
     publish()
     fileFreshnessJob?.cancel()
     fileJob?.cancel()
@@ -417,30 +433,68 @@ class DesktopWorkflowPresenter(
     fileJob =
         scope.launch {
           try {
-            val (file, symbols) = io { api.fileInfo(path) to api.symbols(path).symbols }
+            val (file, symbolResponse) = io { api.fileInfo(path) to api.symbols(path) }
+            val symbols = symbolResponse.symbols
+            if (obsoletePreparation()) {
+              if (controller.cancelFileLoad(request)) publish()
+              return@launch
+            }
+            if (preparationFinding != null &&
+                (file.path != path ||
+                    symbolResponse.path != path ||
+                    symbolResponse.projectId != request.projectId ||
+                    symbolResponse.projectRevision != request.projectRevision)) {
+              if (controller.fileFailed(request, "Loaded declarations belong to another source."))
+                  publish()
+              return@launch
+            }
+            val prepared =
+                if (preparationFinding != null) {
+                  val latest =
+                      preparationDecision(preparationFinding) as FindingPreparationDecision.Eligible
+                  when (val validated =
+                      loadedFindingPreparationDecision(
+                          latest, file, symbols, preparationFinding.fileHash)) {
+                    is FindingPreparationDecision.Blocked -> {
+                      if (controller.fileFailed(request, validated.reason)) publish()
+                      return@launch
+                    }
+                    is FindingPreparationDecision.Eligible -> validated
+                  }
+                } else null
             if (!controller.fileLoaded(request, file, symbols)) return@launch
             publish()
-            editorTarget?.let { target ->
-              val selection = resolveEditorNavigation(symbols, target)
-              dispatch(DesktopEvent.EditorContextSelected(selection.symbol, selection.focusLine))
-            }
-            preparedFixRequest?.let { requestText ->
+            if (prepared != null) {
+              val symbol = symbols.single { it.name == prepared.task.targetSymbol }
+              dispatch(DesktopEvent.EditorContextSelected(symbol, symbol.startLine))
               dispatch(
                   DesktopEvent.SuggestionPrepared(
-                      "fix",
-                      requestText,
-                      editorTarget?.let { resolveEditorNavigation(symbols, it).symbol },
-                      preparedTaskSpec))
+                      "fix", findingTaskRequirement(prepared.task), symbol, prepared.task))
+            } else {
+              editorTarget?.let { target ->
+                val selection = resolveEditorNavigation(symbols, target)
+                dispatch(DesktopEvent.EditorContextSelected(selection.symbol, selection.focusLine))
+              }
+              preparedFixRequest?.let { requestText ->
+                dispatch(
+                    DesktopEvent.SuggestionPrepared(
+                        "fix",
+                        requestText,
+                        editorTarget?.let { resolveEditorNavigation(symbols, it).symbol },
+                        preparedTaskSpec))
+              }
             }
             val loaded = controller.currentFileRequest() ?: return@launch
             loadFileEnrichments(loaded)
           } catch (_: CancellationException) {
-            controller.cancelFileLoad(request)
-            publish()
+            if (controller.cancelFileLoad(request)) publish()
           } catch (error: Exception) {
-            if (controller.fileFailed(
-                request, error.message?.takeIf(String::isNotBlank) ?: "File load failed"))
-                publish()
+            if (obsoletePreparation()) {
+              if (controller.cancelFileLoad(request)) publish()
+            } else if (controller.fileFailed(
+                request, error.message?.takeIf(String::isNotBlank) ?: "File load failed")) {
+              publish()
+            }
           }
         }
   }
@@ -516,6 +570,20 @@ class DesktopWorkflowPresenter(
   }
 
   fun prepareFinding(finding: UnifiedFinding) {
+    when (val decision = preparationDecision(finding)) {
+      is FindingPreparationDecision.Blocked -> dispatch(DesktopEvent.Failed(decision.reason))
+      is FindingPreparationDecision.Eligible -> {
+        dispatch(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
+        selectFile(
+            decision.target.path,
+            decision.target,
+            preparationFinding = finding,
+            preparedTaskSpec = decision.task)
+      }
+    }
+  }
+
+  private fun preparationDecision(finding: UnifiedFinding): FindingPreparationDecision {
     val state = snapshot.value.state
     val findings =
         when (finding.category) {
@@ -525,16 +593,7 @@ class DesktopWorkflowPresenter(
           "security" -> state.analysisResultPage(finding.category).semantic
           else -> emptyList()
         }
-    when (val decision =
-        findingPreparationDecision(finding, state.project, findings, state.index)) {
-      is FindingPreparationDecision.Blocked -> dispatch(DesktopEvent.Failed(decision.reason))
-      is FindingPreparationDecision.Eligible ->
-          openFileInEditor(
-              decision.target.path,
-              decision.target,
-              findingTaskRequirement(decision.task),
-              decision.task)
-    }
+    return findingPreparationDecision(finding, state.project, findings, state.index)
   }
 
   fun viewAnalysisResults(category: String, path: String) {

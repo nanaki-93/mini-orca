@@ -42,6 +42,8 @@ class DesktopWorkflowControllerTest {
     val controller = loadedController()
     val canceled = controller.beginFileLoad("canceled.go")!!
     assertTrue(controller.cancelFileLoad(canceled))
+    assertFalse(controller.state.jobs.loading)
+    assertNull(controller.currentFileRequest())
     assertFalse(controller.fileLoaded(canceled, file("canceled.go", "canceled-hash"), emptyList()))
 
     val request = controller.beginFileLoad("main.go")!!
