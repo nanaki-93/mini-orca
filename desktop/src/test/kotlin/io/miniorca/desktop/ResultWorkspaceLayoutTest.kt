@@ -1543,19 +1543,91 @@ class ResultWorkspaceLayoutTest {
               BugsWorkspacePaneState(
                   emptyList(),
                   GoScanReport(
+                      projectId = "project",
+                      projectRevision = "revision",
                       status = "failed",
                       phases = listOf(GoScanPhase("go vet", "failed", output = diagnostic))),
-                  false),
+                  false,
+                  project = resultProjectFixture(),
+                  scanState = VerifiedScanState(read = VerifiedScanRead.Loaded)),
               BugsWorkspaceActions(FindingActions({}, { _, _ -> }, {}), { starts++ }, {}))
         }
         .use { fixture ->
           fixture.render("bugs-checks-long-diagnostic-800-400-150")
-          fixture.assertTextFits("Verified checks")
+          fixture.assertTextFits("Verified Go scan")
           fixture.assertTextFits("Trust project-code execution & run checks")
           fixture.clickText("Command and output")
           fixture.render()
           assertTrue(fixture.hasText(sanitizedOutputText(diagnostic)))
           assertEquals(0, starts)
+        }
+  }
+
+  @Test
+  fun scanProgressAndRecoveryRemainAvailableWithDetailsCollapsed() {
+    val project = resultProjectFixture()
+    val report = GoScanReport(project.projectId, project.projectRevision, "running")
+    val page = resultPageFixture("bugs")
+    var scanState by mutableStateOf(VerifiedScanState(read = VerifiedScanRead.Loaded))
+    val requests = mutableListOf<String>()
+    ComposeVisualFixture(800, 400, 1.5f) {
+          BugsWorkspacePane(
+              BugsWorkspacePaneState(
+                  emptyList(), report, false, page, project = project, scanState = scanState),
+              BugsWorkspaceActions(
+                  FindingActions({}, { _, _ -> }, {}),
+                  { requests += "start" },
+                  { requests += "cancel" },
+                  refreshScanStatus = { requests += "status" }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Running"))
+          assertTrue(fixture.hasText("Cancel checks"))
+          assertTrue(fixture.hasText("Refresh scan status"))
+          assertTrue(fixture.hasText("Command and output"))
+          scanState = scanState.copy(operation = VerifiedScanOperation.Starting)
+          fixture.render()
+          assertTrue(fixture.hasText("Starting"))
+          assertFalse(fixture.hasText("Refresh scan status"))
+          scanState =
+              scanState.copy(
+                  operation = VerifiedScanOperation.Idle, read = VerifiedScanRead.Reading)
+          fixture.render()
+          assertTrue(fixture.hasText("Reading status"))
+          assertFalse(fixture.hasText("Refresh scan status"))
+          scanState =
+              scanState.copy(
+                  read = VerifiedScanRead.Loaded,
+                  operation = VerifiedScanOperation.CancellationRequested)
+          fixture.render()
+          assertTrue(fixture.hasText("Cancellation requested"))
+          assertTrue(fixture.isDisabled("Trust project-code execution & run checks"))
+          assertFalse(fixture.hasText("Refresh scan status"))
+          scanState =
+              scanState.copy(
+                  operation =
+                      VerifiedScanOperation.CancellationUnconfirmed(
+                          "Cancel timed out; refresh scan status."))
+          fixture.render()
+          assertTrue(fixture.hasText("Cancel timed out; refresh scan status."))
+          fixture.clickText("Refresh scan status")
+          assertEquals(listOf("status"), requests)
+          scanState =
+              scanState.copy(
+                  operation = VerifiedScanOperation.Idle,
+                  read = VerifiedScanRead.PollUnavailable("Poll timed out"),
+                  findingsRefresh = VerifiedScanFindingsRefresh.Unavailable("Findings read failed"))
+          fixture.render()
+          assertTrue(fixture.hasText("Poll timed out"))
+          scanState = scanState.copy(read = VerifiedScanRead.Unavailable("Status read failed"))
+          fixture.render()
+          assertTrue(fixture.hasText("Status read failed"))
+          assertTrue(
+              fixture.hasText(
+                  "Tool findings unavailable: Findings read failed. Previously loaded findings may be stale."))
+          assertTrue(fixture.hasText("Refresh scan status"))
+          assertEquals(listOf("status"), requests)
         }
   }
 

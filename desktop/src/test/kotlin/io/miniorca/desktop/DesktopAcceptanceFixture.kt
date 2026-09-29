@@ -263,6 +263,7 @@ private fun NativeRoundedWorkspace(terminal: DesktopTerminalWorkspace, directory
                 cancelAnalysis = { record("Cancel") },
                 startScan = { record("Scan") },
                 cancelScan = { record("Cancel scan") },
+                refreshScanStatus = { record("Refresh scan status") },
                 preparePerformanceFinding = { _, _ -> record("Performance finding") },
                 openPerformanceSource = { _, _ -> record("Performance source") },
                 loadGoBenchmarks = { record("Benchmarks") },

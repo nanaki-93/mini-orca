@@ -261,6 +261,7 @@ internal data class DesktopShellAnalysisActions(
     val cancelAnalysis: () -> Unit,
     val startScan: () -> Unit,
     val cancelScan: () -> Unit,
+    val refreshScanStatus: () -> Unit,
     val preparePerformanceFinding: (PerformanceResult, () -> Boolean) -> Unit,
     val openPerformanceSource: (PerformanceResult, () -> Boolean) -> Unit,
     val loadGoBenchmarks: () -> Unit,
@@ -1407,7 +1408,9 @@ private fun DesktopCanvas(
                             appState.loading,
                             appState.analysisResultPage("bugs"),
                             resultBrowsers.stateFor(appState.analysisResultPage("bugs")),
-                            appState.index),
+                            appState.index,
+                            appState.project,
+                            appState.verifiedScan),
                     performance =
                         PerformanceWorkspacePaneState(
                             page = performancePage,
@@ -1442,6 +1445,7 @@ private fun DesktopCanvas(
                     findingActions = findingActions,
                     startScan = analysisActions.startScan,
                     cancelScan = analysisActions.cancelScan,
+                    refreshScanStatus = analysisActions.refreshScanStatus,
                     openAnalysis = { onWorkspaceSelected(Workspace.Analysis) },
                     retryResults = { analysisActions.retryResults("bugs", "") },
                 ),

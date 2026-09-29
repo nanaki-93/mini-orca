@@ -85,11 +85,16 @@ fun verifiedScanStatusLabel(scan: GoScanReport?): String =
  * Eligibility uses the current project's identity and the last confirmed status, never old evidence
  * alone.
  */
-fun verifiedScanProgress(state: DesktopState): VerifiedScanProgress {
-  val project = state.project
-  val read = state.verifiedScan.read
-  val operation = state.verifiedScan.operation
-  val report = state.findings.scan
+fun verifiedScanProgress(state: DesktopState): VerifiedScanProgress =
+    verifiedScanProgress(state.project, state.verifiedScan, state.findings.scan)
+
+internal fun verifiedScanProgress(
+    project: ProjectAnalysis?,
+    scanState: VerifiedScanState,
+    report: GoScanReport?,
+): VerifiedScanProgress {
+  val read = scanState.read
+  val operation = scanState.operation
   val availability =
       when {
         project == null -> "Load a project before running verified Go checks."
@@ -184,36 +189,6 @@ fun verifiedScanProgress(state: DesktopState): VerifiedScanProgress {
         }
   }
 }
-
-// The existing Bugs pane still uses its report-only input until scan-local state is wired in.
-fun verifiedScanProgress(scan: GoScanReport?): VerifiedScanProgress =
-    when {
-      scan == null ->
-          VerifiedScanProgress(
-              verifiedScanStatusLabel(scan),
-              "No verified checks have run. Importing or reindexing never starts them automatically.",
-              VerifiedScanAction.Start)
-      scan.status.equals("running", ignoreCase = true) ->
-          VerifiedScanProgress(
-              verifiedScanStatusLabel(scan),
-              "Verified checks are running in a temporary copied workspace; source remains unchanged.",
-              VerifiedScanAction.Cancel)
-      shouldPollVerifiedScan(scan) ->
-          VerifiedScanProgress(
-              verifiedScanStatusLabel(scan),
-              "Verified checks are ${scan.status.lowercase()} in a temporary copied workspace; source remains unchanged.",
-              VerifiedScanAction.Waiting)
-      scan.status.lowercase() in setOf("completed", "failed", "canceled", "cancelled") ->
-          VerifiedScanProgress(
-              verifiedScanStatusLabel(scan),
-              "Verified checks ${scan.status.lowercase()}; results, command and output remain available.",
-              VerifiedScanAction.Start)
-      else ->
-          VerifiedScanProgress(
-              "Status unknown",
-              "Refresh scan status before another action.",
-              VerifiedScanAction.Waiting)
-    }
 
 sealed interface FindingPreparationDecision {
   data class Eligible(val target: EditorNavigationTarget, val task: BugTaskSpec) :

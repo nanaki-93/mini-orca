@@ -1679,6 +1679,7 @@ class DesktopKeyboardNavigationTest {
                 cancelAnalysis = onOperation,
                 startScan = onOperation,
                 cancelScan = onOperation,
+                refreshScanStatus = onOperation,
                 preparePerformanceFinding = { _, _ -> onOperation() },
                 openPerformanceSource = { _, _ -> onOperation() },
                 loadGoBenchmarks = onOperation,
