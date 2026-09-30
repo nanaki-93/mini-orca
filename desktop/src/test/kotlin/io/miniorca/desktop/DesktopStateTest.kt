@@ -244,6 +244,99 @@ class DesktopStateTest {
   }
 
   @Test
+  fun refreshAndCandidateInvalidationRetainMeasurementsButRevokeCurrentClaims() {
+    val draft =
+        DeclarationDraft(
+            id = "draft",
+            revision = 1,
+            hash = "candidate",
+            projectId = "project",
+            projectRevision = "revision",
+            baseFileHash = "base",
+            targetPath = "main.go",
+            validation =
+                DeclarationValidation(
+                    true, "strict_symbol", diff = UnifiedDiff("main.go", "main.go")))
+    val choice = GoBenchmarkChoice("BenchmarkRun", listOf("go", "test"), "scope")
+    val catalog =
+        GoBenchmarkCatalog(
+            draftId = draft.id,
+            draftRevision = draft.revision,
+            draftHash = draft.hash,
+            projectId = draft.projectId,
+            projectRevision = draft.projectRevision,
+            baseFileHash = draft.baseFileHash,
+            targetPath = draft.targetPath,
+            available = true,
+            benchmarks = listOf(choice))
+    val comparison =
+        GoBenchmarkComparison(
+            draftId = draft.id,
+            draftRevision = draft.revision,
+            draftHash = draft.hash,
+            projectId = draft.projectId,
+            projectRevision = draft.projectRevision,
+            baseFileHash = draft.baseFileHash,
+            targetPath = draft.targetPath,
+            benchmark = choice.name,
+            scope = choice.scope,
+            command = choice.command,
+            status = "completed",
+            base = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(10, 100.0, 10, 1) }),
+            candidate = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(10, 90.0, 10, 1) }))
+    val original =
+        projectState()
+            .copy(
+                selection = FileSelectionState(selectedFile = file("main.go", "base")),
+                review = DraftReviewState(draft = draft, editor = editableDraft(draft)))
+            .reduce(DesktopEvent.GoBenchmarkCatalogLoaded(catalog))
+            .reduce(DesktopEvent.GoBenchmarkSelected(choice))
+            .reduce(DesktopEvent.GoBenchmarkComparisonLoaded(comparison))
+    fun presentation(state: DesktopState): PerformanceBenchmarkPresentation {
+      val eligibility = benchmarkEligibility(state)
+      return performanceBenchmarkPresentation(
+          state.review.benchmark.comparison!!,
+          (eligibility.candidate as? BenchmarkCandidateDecision.Ready)
+              ?.draft
+              ?.let(::goBenchmarkComparisonIdentity),
+          state.review.benchmark.selected.takeIf { eligibility.canCompare })
+    }
+    assertTrue(presentation(original).isMeasured)
+    val refreshed = original.reduce(DesktopEvent.GoBenchmarkDiscoveryStarted)
+    val selectionCleared = original.reduce(DesktopEvent.GoBenchmarkCatalogLoaded(catalog))
+    val invalidated = original.reduce(DesktopEvent.GoBenchmarkDiscoveryInvalidated)
+    val invalidCandidate =
+        original.reduce(
+            DesktopEvent.DraftLoaded(
+                draft.copy(validation = draft.validation!!.copy(applicable = false))))
+    val reselectedInvalidCandidate =
+        invalidCandidate
+            .reduce(DesktopEvent.GoBenchmarkCatalogLoaded(catalog))
+            .reduce(DesktopEvent.GoBenchmarkSelected(choice))
+    for (state in
+        listOf(
+            refreshed,
+            selectionCleared,
+            invalidated,
+            invalidCandidate,
+            reselectedInvalidCandidate)) {
+      assertEquals(comparison, state.review.benchmark.comparison)
+      assertFalse(benchmarkEligibility(state).canCompare)
+      val stale = presentation(state)
+      assertTrue(stale.isStale)
+      assertFalse(stale.isMeasured)
+      assertEquals(100.0, stale.metrics.first().base.median)
+      assertEquals(90.0, stale.metrics.first().candidate.median)
+      assertTrue(stale.rows.single { it.first == "ns/op" }.second.contains("Historical change"))
+    }
+    for (workspace in Workspace.entries) {
+      val navigated = original.reduce(DesktopEvent.WorkspaceSelected(workspace))
+      assertEquals(original.review.benchmark, navigated.review.benchmark)
+      assertTrue(presentation(navigated).isMeasured)
+    }
+  }
+
+  @Test
   fun checkAttemptsIgnoreUnrelatedLoadingAndLateOutcomes() {
     val draft =
         DeclarationDraft(

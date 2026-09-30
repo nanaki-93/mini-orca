@@ -46,11 +46,13 @@ internal fun PerformanceWorkspacePane(
 ) {
   val results = performanceResults(state.page)
   val semantic = state.page.semantic
+  val currentBenchmarkChoice =
+      state.selectedBenchmark.takeIf { state.benchmarkEligibility.canCompare }
   val benchmarkStatus =
       performanceBenchmarkStatusPresentation(
           state.benchmarkComparison,
           state.expectedBenchmarkIdentity,
-          state.selectedBenchmark,
+          currentBenchmarkChoice,
           state.benchmarkDiscovery,
           state.benchmarkAdmission,
           state.benchmarkEligibility,
@@ -109,7 +111,7 @@ internal fun PerformanceWorkspacePane(
                     PerformanceBenchmarkEvidence(
                         comparison,
                         state.expectedBenchmarkIdentity,
-                        state.selectedBenchmark,
+                        currentBenchmarkChoice,
                         benchmarkStatus.priorEvidence)
               }
             }
@@ -416,7 +418,9 @@ private fun PerformanceBenchmarkEvidence(
       performanceBenchmarkPresentation(comparison, expectedIdentity, expectedChoice, priorEvidence)
   Column(Modifier.fillMaxWidth()) {
     IdePaneHeader(
-        title = if (priorEvidence) "Prior benchmark evidence" else "Benchmark evidence",
+        title =
+            if (priorEvidence || presentation.isStale) "Prior benchmark evidence"
+            else "Benchmark evidence",
         icon = DesktopIcon.Performance,
         stateLabel = presentation.stateLabel,
         stateTint =
@@ -443,7 +447,8 @@ private fun PerformanceBenchmarkEvidence(
             modifier = Modifier.padding(top = 6.dp))
         if (presentation.insights.isNotEmpty()) {
           Text(
-              if (priorEvidence) "Prior measured trade-offs" else "Measured trade-offs",
+              if (priorEvidence || presentation.isStale) "Prior measured trade-offs"
+              else "Measured trade-offs",
               color = SecondaryText,
               fontSize = 10.sp,
               modifier = Modifier.padding(top = 8.dp))
@@ -538,12 +543,18 @@ internal fun performanceBenchmarkStatusPresentation(
     discovery == BenchmarkDiscoveryOutcome.Loaded && eligibility?.canCompare == false ->
         current("Comparison blocked", eligibility.comparisonBlockedReason!!)
     comparison != null ->
-        performanceBenchmarkPresentation(comparison, expectedIdentity, expectedChoice).let {
-          PerformanceBenchmarkStatusPresentation(
-              it.stateLabel,
-              "Benchmark evidence is candidate-specific and does not measure this model suggestion.",
-              priorEvidence = it.isStale)
-        }
+        performanceBenchmarkPresentation(
+                comparison,
+                expectedIdentity,
+                expectedChoice.takeIf { eligibility?.canCompare == true })
+            .let {
+              PerformanceBenchmarkStatusPresentation(
+                  it.stateLabel,
+                  if (it.isStale) it.summary
+                  else
+                      "Benchmark evidence is candidate-specific and does not measure this model suggestion.",
+                  priorEvidence = it.isStale)
+            }
     else ->
         PerformanceBenchmarkStatusPresentation(
             "Not measured · explicit local execution",
@@ -887,15 +898,6 @@ internal fun goBenchmarkComparisonIdentity(
           )
         }
 
-internal fun benchmarkEvidenceIdentity(
-    review: DraftReviewState,
-): GoBenchmarkComparisonIdentity? =
-    review.draft
-        ?.takeIf {
-          review.editor?.status == DraftEditorStatus.Valid && it.validation?.applicable == true
-        }
-        ?.let(::goBenchmarkComparisonIdentity)
-
 internal data class PerformanceBenchmarkPresentation(
     val stateLabel: String,
     val rows: List<Pair<String, String>>,
@@ -927,6 +929,7 @@ internal fun performanceBenchmarkPresentation(
   return if (priorEvidence)
       assessment.copy(
           stateLabel = "Prior evidence · ${assessment.stateLabel}",
+          rows = benchmarkHistoricalRows(assessment),
           summary =
               "Prior comparison only; it does not confirm the latest attempt. Recorded assessment: ${assessment.summary}",
           insights = assessment.insights.map { "Prior observation: $it" },
@@ -948,21 +951,33 @@ private fun benchmarkFreshnessPresentation(
         comparison.identityOrNull() != expectedIdentity ->
             "Stale · candidate identity changed" to
                 "This comparison is for a different draft or source revision and is not usable."
-        expectedChoice != null &&
-            (comparison.benchmark != expectedChoice.name ||
-                comparison.scope != expectedChoice.scope) ->
+        expectedChoice == null ->
+            "Stale · no current benchmark selection" to
+                "This comparison is retained, but no eligible catalog selection can verify it. Refresh compatible benchmarks and select a current choice."
+        comparison.benchmark != expectedChoice.name ||
+            comparison.scope != expectedChoice.scope ||
+            comparison.command != expectedChoice.command ->
             "Stale · selected benchmark changed" to
                 "This comparison is for a different benchmark selection and is not usable."
         else -> null
       } ?: return assessment
   return assessment.copy(
       stateLabel = stale.first,
-      summary = "${stale.second} Recorded assessment: ${assessment.summary}",
+      rows = benchmarkHistoricalRows(assessment),
+      summary = "${stale.second} Historical assessment: ${assessment.summary}",
       insights = assessment.insights.map { "Historical observation: $it" },
       isMeasured = false,
       isStale = true,
       inconclusive = true)
 }
+
+private fun benchmarkHistoricalRows(
+    assessment: PerformanceBenchmarkPresentation,
+): List<Pair<String, String>> =
+    assessment.rows.map { row ->
+      val metric = assessment.metrics.firstOrNull { it.label == row.first }
+      if (metric == null) row else row.first to metric.display(historical = true)
+    }
 
 private fun benchmarkMeasurementPresentation(
     comparison: GoBenchmarkComparison,
@@ -1117,11 +1132,13 @@ internal data class BenchmarkMetricRow(
             relativeRange(base.validValues, base.median!!),
             relativeRange(candidate.validValues, candidate.median!!))
 
-  fun display(): String =
-      if (isComplete)
-          "${formatMetric(base.median!!)} → ${formatMetric(candidate.median!!)} · ${metricChangeLabel(base.median!!, candidate.median!!)}"
-      else
-          "Baseline median: ${base.display()} · Candidate median: ${candidate.display()} · change unavailable: incomplete evidence"
+  fun display(historical: Boolean = false): String {
+    val changeLabel = if (historical) "Historical change: " else ""
+    return if (isComplete)
+        "${formatMetric(base.median!!)} → ${formatMetric(candidate.median!!)} · $changeLabel${metricChangeLabel(base.median!!, candidate.median!!)}"
+    else
+        "Baseline median: ${base.display()} · Candidate median: ${candidate.display()} · ${if (historical) "Historical change" else "change"} unavailable: incomplete evidence"
+  }
 
   fun invalidRows(): List<Pair<String, String>> = buildList {
     for ((side, evidence) in listOf("Baseline" to base, "Candidate" to candidate)) {
