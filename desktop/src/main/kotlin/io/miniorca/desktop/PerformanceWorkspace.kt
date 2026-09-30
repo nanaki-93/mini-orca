@@ -1,23 +1,41 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.awt.datatransfer.StringSelection
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -566,7 +584,10 @@ private fun PerformanceBenchmarkControls(
           onClick = actions.loadBenchmarks,
           enabled = eligibility.canDiscover && !active,
           tone = ActionTone.Neutral,
-          modifier = Modifier.padding(top = 6.dp)) {
+          modifier =
+              Modifier.padding(top = 6.dp).testTag("benchmark-discovery").semantics {
+                eligibility.discoveryBlockedReason?.let { stateDescription = it }
+              }) {
             Text(
                 if (discovery == BenchmarkDiscoveryOutcome.NotRequested)
                     "List compatible benchmarks"
@@ -597,11 +618,21 @@ private fun PerformanceBenchmarkControls(
           color = SecondaryText,
           fontSize = 11.sp,
           lineHeight = 16.sp)
-      catalog.benchmarks.forEach { choice ->
+      catalog.benchmarks.forEachIndexed { index, choice ->
         ChromeButton(
             onClick = { actions.selectBenchmark(choice) },
             selected = choice == selected,
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            role = Role.RadioButton,
+            accessibleName = "Select benchmark ${choice.name.ifBlank { "Unnamed benchmark" }}",
+            tooltip = null,
+            modifier =
+                Modifier.fillMaxWidth()
+                    .padding(top = 4.dp)
+                    .testTag("benchmark-choice-$index")
+                    .semantics {
+                      this.selected = choice == selected
+                      stateDescription = if (choice == selected) "Selected" else "Not selected"
+                    }) {
               Text(
                   "${if (choice == selected) "Selected" else "Select"} · ${choice.name.ifBlank { "Unnamed benchmark" }}",
                   fontSize = 11.sp,
@@ -614,7 +645,10 @@ private fun PerformanceBenchmarkControls(
             onClick = actions.runBenchmark,
             enabled = eligibility.canCompare && !active,
             tone = ActionTone.Primary,
-            modifier = Modifier.padding(top = 6.dp)) {
+            modifier =
+                Modifier.padding(top = 6.dp).testTag("benchmark-run").semantics {
+                  eligibility.comparisonBlockedReason?.let { stateDescription = it }
+                }) {
               Text(
                   if (admission == BenchmarkAdmissionOutcome.Admitting) "Checking execution trust…"
                   else if (admission == BenchmarkAdmissionOutcome.Running) "Comparing benchmark…"
@@ -651,57 +685,125 @@ internal fun performanceBenchmarkArgv(command: List<String>): String =
         .mapIndexed { index, argument -> "argv[$index] = ${Json.encodeToString(argument)}" }
         .joinToString("\n")
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun PerformanceBenchmarkAdmissionDisclosure(
     choice: GoBenchmarkChoice,
     candidate: BenchmarkCandidateDecision,
     trusted: Boolean,
 ) {
-  SelectionContainer {
-    Column(
-        Modifier.fillMaxWidth().padding(top = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)) {
-          performanceBenchmarkAdmissionRows(choice, candidate).forEach { (label, value) ->
-            Text("$label: $value", color = SecondaryText, style = IdeTypography.compactBody)
+  Column(
+      Modifier.fillMaxWidth().padding(top = 6.dp),
+      verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        SelectionContainer {
+          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            performanceBenchmarkAdmissionRows(choice, candidate).forEach { (label, value) ->
+              Text("$label: $value", color = SecondaryText, style = IdeTypography.compactBody)
+            }
+            Text(
+                "The working directory is relative to the project root; . means project root. The scope guard is opaque identity metadata, not a directory.",
+                color = SecondaryText,
+                style = IdeTypography.compactBody)
           }
-          Text(
-              "The working directory is relative to the project root; . means project root. The scope guard is opaque identity metadata, not a directory.",
-              color = SecondaryText,
-              style = IdeTypography.compactBody)
-          Text(
-              "Daemon-returned argv (read-only)",
-              color = PrimaryText,
-              style = IdeTypography.compactBody)
-          performanceBenchmarkArgv(choice.command)
-              .ifEmpty { "No argv returned; execution is blocked." }
-              .lines()
-              .forEach { argument ->
-                Text(argument, color = SecondaryText, fontSize = 10.sp, lineHeight = 16.sp)
-              }
-          Text(
-              "Each JSON-quoted entry is one argument, not a shell command. No shell parsing or editable command is used.",
-              color = SecondaryText,
-              style = IdeTypography.compactBody)
-          listOf(
-                  "Running benchmarks executes imported project code.",
-                  "Execution may have external effects, including file and network access.",
-                  "Baseline and candidate use copied workspaces; these are not a security sandbox.")
-              .forEach { Text(it, color = Warning, style = IdeTypography.compactBody) }
-          Text(
-              if (trusted) "The catalog reports session execution trust for this project/revision."
-              else
-                  "Trust and run grants session execution trust for this project/revision, then runs the selected benchmark.",
-              color = SecondaryText,
-              style = IdeTypography.compactBody)
-          listOf(
-                  "Trust contract (separate from selected argv): go test ./...",
-                  "This is broader than benchmark-only permission.",
-                  "Trust lasts for this project revision in the daemon session.",
-                  "Granting trust does not execute “go test ./...”.",
-                  "The combined action requests the selected benchmark separately.")
-              .forEach { Text(it, color = Warning, style = IdeTypography.compactBody) }
         }
-  }
+        val clipboard = LocalClipboard.current
+        val copyScope = rememberCoroutineScope()
+        var copyFeedback by remember(choice) { mutableStateOf<String?>(null) }
+        var copyFocused by remember { mutableStateOf(false) }
+        val copyReveal = remember { BringIntoViewRequester() }
+        LaunchedEffect(copyFocused, copyFeedback) {
+          if (copyFocused) {
+            withFrameNanos {}
+            copyReveal.bringIntoView()
+          }
+        }
+        ChromeButton(
+            onClick = {
+              copyFeedback = null
+              copyScope.launch {
+                try {
+                  clipboard.setClipEntry(
+                      ClipEntry(StringSelection(performanceBenchmarkArgv(choice.command))))
+                  copyFeedback = "Selected benchmark argv copied."
+                } catch (cancelled: CancellationException) {
+                  throw cancelled
+                } catch (exception: Exception) {
+                  copyFeedback =
+                      "Could not copy selected benchmark argv: ${exception.message ?: "Clipboard unavailable"}"
+                }
+              }
+            },
+            accessibleName = "Copy selected benchmark argv",
+            tooltip = null,
+            modifier =
+                Modifier.testTag("benchmark-copy-argv")
+                    .bringIntoViewRequester(copyReveal)
+                    .onFocusChanged { copyFocused = it.isFocused }) {
+              Text("Copy argv", style = IdeTypography.compactBody)
+            }
+        copyFeedback?.let { Text(it, color = SecondaryText, style = IdeTypography.compactBody) }
+        var commandFocused by remember { mutableStateOf(false) }
+        val commandReveal = remember { BringIntoViewRequester() }
+        // Reveal the same bounds used by selection focus, after layout has incorporated
+        // selection/copy feedback. A child requester can compete with the automatic focus reveal.
+        LaunchedEffect(commandFocused, copyFeedback) {
+          if (commandFocused) {
+            withFrameNanos {}
+            commandReveal.bringIntoView()
+          }
+        }
+        // Keep this passive focus target scoped to argv, not the entire consent disclosure.
+        SelectionContainer(
+            Modifier.fillMaxWidth()
+                .testTag("benchmark-argv")
+                .bringIntoViewRequester(commandReveal)
+                .onFocusChanged { commandFocused = it.hasFocus }
+                .border(if (commandFocused) 2.dp else 0.dp, FocusAccent, MiniOrcaShapes.control)
+                .semantics {
+                  contentDescription = "Selected benchmark argv"
+                  stateDescription = "Read-only"
+                }) {
+              Column {
+                Text(
+                    "Daemon-returned argv (read-only)",
+                    color = PrimaryText,
+                    style = IdeTypography.compactBody)
+                performanceBenchmarkArgv(choice.command)
+                    .ifEmpty { "No argv returned; execution is blocked." }
+                    .lines()
+                    .forEach { argument ->
+                      Text(argument, color = SecondaryText, fontSize = 10.sp, lineHeight = 16.sp)
+                    }
+              }
+            }
+        SelectionContainer {
+          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                "Each JSON-quoted entry is one argument, not a shell command. No shell parsing or editable command is used.",
+                color = SecondaryText,
+                style = IdeTypography.compactBody)
+            listOf(
+                    "Running benchmarks executes imported project code.",
+                    "Execution may have external effects, including file and network access.",
+                    "Baseline and candidate use copied workspaces; these are not a security sandbox.")
+                .forEach { Text(it, color = Warning, style = IdeTypography.compactBody) }
+            Text(
+                if (trusted)
+                    "The catalog reports session execution trust for this project/revision."
+                else
+                    "Trust and run grants session execution trust for this project/revision, then runs the selected benchmark.",
+                color = SecondaryText,
+                style = IdeTypography.compactBody)
+            listOf(
+                    "Trust contract (separate from selected argv): go test ./...",
+                    "This is broader than benchmark-only permission.",
+                    "Trust lasts for this project revision in the daemon session.",
+                    "Granting trust does not execute “go test ./...”.",
+                    "The combined action requests the selected benchmark separately.")
+                .forEach { Text(it, color = Warning, style = IdeTypography.compactBody) }
+          }
+        }
+      }
 }
 
 internal data class PerformanceWorkspacePaneState(

@@ -3,6 +3,7 @@ package io.miniorca.desktop
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.key.Key
 import java.net.http.HttpTimeoutException
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
@@ -94,7 +95,7 @@ class DesktopBenchmarkWorkflowTest {
       var snapshot by mutableStateOf(harness.state)
       val page = performancePageFixture()
       val browser = newResultBrowserState(page)
-      ComposeVisualFixture(1600, 1000) {
+      ComposeVisualFixture(1600, 1000, frameDurationNanos = 16_000_000) {
             val evidence = snapshot.review.benchmark
             PerformanceWorkspacePane(
                 PerformanceWorkspacePaneState(
@@ -130,8 +131,12 @@ class DesktopBenchmarkWorkflowTest {
                 positions.sorted(),
                 positions,
                 "Choices retain daemon order rather than sorting by name")
-            fixture.revealTextFullyWithin("Select · ${choice.name}", "result-overview")
-            fixture.clickText("Select · ${choice.name}")
+            assertTrue(fixture.requestFocus("Refresh compatible benchmarks"))
+            tabToBenchmarkControl(fixture, "benchmark-choice-0")
+            assertNull(snapshot.review.benchmark.selected)
+            tabToBenchmarkControl(fixture, "benchmark-choice-1")
+            assertNull(snapshot.review.benchmark.selected)
+            assertTrue(fixture.pressKey(Key.Spacebar))
             assertEquals(choice, snapshot.review.benchmark.selected)
             fixture.render()
             assertTrue(fixture.hasText("Selected · ${choice.name}"))
@@ -146,7 +151,13 @@ class DesktopBenchmarkWorkflowTest {
               fixture.revealTextFullyWithin(text, "result-overview")
               assertTrue(fixture.copyTextByDragging(text, expectedText = text).isNotEmpty())
             }
-            fixture.clickDescription("Collapse Explore benchmark evidence")
+            fixture.resize(800, 650)
+            fixture.render()
+            assertTrue(fixture.requestDescriptionFocus("Selected benchmark argv"))
+            fixture.render()
+            tabToBenchmarkControl(fixture, "benchmark-run")
+            assertTrue(fixture.requestDescriptionFocus("Collapse Explore benchmark evidence"))
+            assertTrue(fixture.pressKey(Key.Enter))
             fixture.render()
             harness.completeRequest()
             assertEquals(
@@ -154,6 +165,65 @@ class DesktopBenchmarkWorkflowTest {
                 harness.methods,
                 "Disclosure, copying and local selection cannot trust, compare, contact providers or write source")
           }
+    }
+  }
+
+  @Test
+  fun keyboardRecoveryRetriesOnlyReadOnlyDiscoveryAndNeverAdmitsExecution() {
+    for (activation in listOf(Key.Enter, Key.Spacebar)) {
+      Harness().use { harness ->
+        harness.transportFailure = HttpTimeoutException("Lookup timed out; retry explicitly.")
+        harness.workflow.loadGoBenchmarks()
+        harness.completeRequest()
+        harness.transportFailure = null
+        var snapshot by mutableStateOf(harness.state)
+        var privileged = 0
+        val page = performancePageFixture()
+        val browser = newResultBrowserState(page)
+        browser.choose(performanceResults(page).single().row().key)
+        ComposeVisualFixture(800, 650, 1.5f, frameDurationNanos = 16_000_000) {
+              val evidence = snapshot.review.benchmark
+              PerformanceWorkspacePane(
+                  PerformanceWorkspacePaneState(
+                      page,
+                      null,
+                      browser = browser,
+                      benchmarkDiscovery = evidence.discovery,
+                      benchmarkEligibility = benchmarkEligibility(snapshot)),
+                  PerformanceWorkspaceActions(
+                      { privileged++ },
+                      {},
+                      FindingActions({ privileged++ }, { _, _ -> privileged++ }, {}),
+                      {},
+                      loadBenchmarks = {
+                        harness.workflow.loadGoBenchmarks()
+                        snapshot = harness.state
+                      },
+                      selectBenchmark = harness.workflow::selectGoBenchmark,
+                      runBenchmark = harness.workflow::compareSelectedGoBenchmark))
+            }
+            .use { fixture ->
+              fixture.render()
+              assertTrue(fixture.requestDescriptionFocus("Expand Explore benchmark evidence"))
+              assertTrue(fixture.pressKey(activation))
+              fixture.render()
+              assertTrue(fixture.hasText("Lookup timed out; retry explicitly."))
+              tabToBenchmarkControl(fixture, "benchmark-discovery")
+              assertEquals(listOf("GET"), harness.methods, "Focus is not discovery")
+              fixture.render("f21-keyboard-recovery-$activation")
+              assertTrue(fixture.pressKey(activation))
+              assertEquals(BenchmarkDiscoveryOutcome.Loading, snapshot.review.benchmark.discovery)
+              fixture.render("f21-keyboard-recovery-loading-$activation")
+              assertTrue(fixture.hasText("Listing · read-only discovery"))
+              assertTrue(fixture.isDisabled("Refresh compatible benchmarks"))
+              harness.completeRequest()
+              assertEquals(listOf("GET", "GET"), harness.methods)
+              assertTrue(harness.requests.all { it.second.contains("/benchmarks?") })
+              assertNull(harness.state.review.benchmark.selected)
+              assertEquals(0, privileged)
+              assertTrue(harness.events.none { it == DesktopEvent.GoBenchmarkComparisonStarted })
+            }
+      }
     }
   }
 

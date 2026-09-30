@@ -22,6 +22,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -3673,42 +3674,75 @@ class DesktopWorkflowPresenterTest {
         val started = CountDownLatch(1)
         val interrupted = CountDownLatch(1)
         val release = CountDownLatch(1)
-        val presenter = presenter { method, path, _ ->
-          check(path.contains("/benchmarks"))
-          if (comparing && method == "GET") {
-            response(benchmarkCatalogJson(trusted = true))
-          } else {
-            started.countDown()
-            try {
-              release.await(2, TimeUnit.SECONDS)
-            } catch (error: InterruptedException) {
-              interrupted.countDown()
-              throw error
+        val main = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        val io = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + main)
+        val methods = Collections.synchronizedList(mutableListOf<String>())
+        val presenter =
+            presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+              check(path.contains("/benchmarks"))
+              methods += method
+              if (comparing && method == "GET") {
+                response(benchmarkCatalogJson(trusted = true))
+              } else {
+                started.countDown()
+                try {
+                  // Only cancellation or cleanup releases the request, never elapsed time.
+                  release.await()
+                } catch (error: InterruptedException) {
+                  interrupted.countDown()
+                  throw error
+                }
+                response(if (comparing) benchmarkComparisonJson() else benchmarkCatalogJson())
+              }
             }
-            response(if (comparing) benchmarkComparisonJson() else benchmarkCatalogJson())
-          }
-        }
         try {
-          loadFile(presenter)
-          presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
-          presenter.loadGoBenchmarks()
-          if (comparing) {
-            eventually { presenter.snapshot.value.state.review.benchmark.catalog != null }
-            presenter.selectGoBenchmark(
-                presenter.snapshot.value.state.review.benchmark.catalog!!.benchmarks.single())
-            presenter.compareSelectedGoBenchmark()
+          // Production confines presentation to the UI dispatcher. Observing catalog publication
+          // on a Default worker did not wait for its trailing Status dispatch, which could race
+          // selection/admission on the test thread and overwrite the selected choice.
+          runBlocking(main) {
+            loadFile(presenter)
+            presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+            presenter.loadGoBenchmarks()
+            if (comparing) {
+              val catalog =
+                  withTimeout(1_000) {
+                        presenter.snapshot.first { it.state.review.benchmark.catalog != null }
+                      }
+                      .state
+                      .review
+                      .benchmark
+                      .catalog!!
+              presenter.selectGoBenchmark(catalog.benchmarks.single())
+              assertTrue(benchmarkEligibility(presenter.snapshot.value.state).canCompare)
+              presenter.compareSelectedGoBenchmark()
+              assertEquals(
+                  BenchmarkAdmissionOutcome.Running,
+                  presenter.snapshot.value.state.review.benchmark.admission)
+            }
           }
-          assertTrue(started.await(1, TimeUnit.SECONDS))
-          if (closing) presenter.close()
-          else
-              presenter.dispatch(
-                  DesktopEvent.ProjectLoaded(project("other", "new"), ProjectIndex("other", "new")))
-          assertTrue(interrupted.await(1, TimeUnit.SECONDS))
-          assertFalse(presenter.snapshot.value.state.review.benchmark.running)
-          assertNull(presenter.snapshot.value.state.review.benchmark.comparison)
+          assertTrue(started.await(1, TimeUnit.SECONDS), "Benchmark request must enter transport")
+          assertEquals(if (comparing) listOf("GET", "POST") else listOf("GET"), methods.toList())
+          runBlocking(main) {
+            if (closing) presenter.close()
+            else
+                presenter.dispatch(
+                    DesktopEvent.ProjectLoaded(
+                        project("other", "new"), ProjectIndex("other", "new")))
+          }
+          assertTrue(
+              interrupted.await(1, TimeUnit.SECONDS), "Cancellation must interrupt transport")
+          runBlocking(main) {
+            assertFalse(presenter.snapshot.value.state.review.benchmark.running)
+            assertNull(presenter.snapshot.value.state.review.benchmark.catalog)
+            assertNull(presenter.snapshot.value.state.review.benchmark.comparison)
+          }
         } finally {
           release.countDown()
-          presenter.close()
+          runBlocking(main) { presenter.close() }
+          scope.cancel()
+          io.close()
+          main.close()
         }
       }
     }

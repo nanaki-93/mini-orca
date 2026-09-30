@@ -9732,6 +9732,7 @@ internal class ComposeVisualFixture(
     private var height: Int,
     private val fontScale: Float = 1f,
     densityScale: Float = 1f,
+    private val frameDurationNanos: Long = 80_000_000,
     content: @Composable () -> Unit,
 ) : AutoCloseable {
   private val clipboard =
@@ -9798,7 +9799,7 @@ internal class ComposeVisualFixture(
     repeat(3) {
       surface.canvas.clear(AppBackground.toArgb())
       scene.render(surface.canvas.asComposeCanvas(), frameTime)
-      frameTime += 80_000_000
+      frameTime += frameDurationNanos
     }
     if (name != null)
         System.getProperty("miniOrca.visualOutput")?.let { output ->
