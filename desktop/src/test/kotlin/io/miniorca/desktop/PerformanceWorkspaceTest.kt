@@ -688,11 +688,75 @@ class PerformanceWorkspaceTest {
             }
             assertEquals(0, requests, "Rendering and disclosure do not activate an action")
             if (eligibility.canCompare) {
+              fixture.revealTextFullyWithin("Run selected benchmark", "benchmark-discovery-scroll")
               fixture.clickText("Run selected benchmark")
               assertEquals(1, requests)
             }
           }
     }
+  }
+
+  @Test
+  fun admissionIdentifiesTheValidatedCandidateAndDerivesOnlyTheWorkingDirectory() {
+    val current = benchmarkCandidateFixture()
+    val candidate = benchmarkEligibility(current).candidate as BenchmarkCandidateDecision.Ready
+    val choice =
+        GoBenchmarkChoice("BenchmarkWork", listOf("go", "test", "."), "opaque:not/a/directory")
+    for ((path, directory) in
+        listOf(
+            "work.go" to ".", "internal/work.go" to "internal", "pkg/日本語/work.go" to "pkg/日本語")) {
+      val rows =
+          performanceBenchmarkAdmissionRows(
+                  choice, candidate.copy(draft = candidate.draft.copy(targetPath = path)))
+              .toMap()
+      assertEquals(choice.name, rows["Selected benchmark"])
+      assertEquals(candidate.draft.projectId, rows["Project ID"])
+      assertEquals(candidate.draft.projectRevision, rows["Project revision"])
+      assertEquals(path, rows["Target path"])
+      assertEquals(candidate.draft.revision.toString(), rows["Validated draft revision"])
+      assertEquals(directory, rows["Package working directory"])
+      assertEquals(choice.scope, rows["Opaque scope guard (identity metadata)"])
+    }
+    assertFalse(
+        performanceBenchmarkAdmissionRows(
+                choice, BenchmarkCandidateDecision.Blocked("Validate again"))
+            .any { it.first == "Validated draft revision" },
+        "Blocked candidates must not be described as validated")
+  }
+
+  @Test
+  fun argvDisclosurePreservesEveryArgumentBoundaryWithoutShellReconstruction() {
+    val command =
+        listOf(
+            "go",
+            "test",
+            ".",
+            "-run",
+            "^$",
+            "-bench",
+            "^BenchmarkWork$",
+            "-count",
+            "5",
+            "-benchtime",
+            "100ms",
+            "-benchmem",
+            "-timeout",
+            "15s",
+            "",
+            "one argument with spaces",
+            "quote\" and \\ slash",
+            "line\nfeed\tand tab",
+            "日本語",
+            "$(not-a-shell); *")
+    val rendered = performanceBenchmarkArgv(command).lines()
+    assertEquals(command.size, rendered.size)
+    assertEquals(
+        command,
+        rendered.mapIndexed { index, line ->
+          assertTrue(line.startsWith("argv[$index] = "))
+          Json.decodeFromString<String>(line.substringAfter(" = "))
+        })
+    assertEquals("", performanceBenchmarkArgv(emptyList()))
   }
 
   @Test

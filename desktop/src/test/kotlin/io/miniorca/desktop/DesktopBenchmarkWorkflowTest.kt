@@ -138,13 +138,21 @@ class DesktopBenchmarkWorkflowTest {
             assertTrue(fixture.hasText("Select · BenchmarkZ"))
             assertTrue(fixture.hasText("Select · BenchmarkA"))
             assertEquals(choice, snapshot.review.benchmark.selected)
+            for (text in
+                listOf(
+                    performanceBenchmarkArgv(choice.command).lines().first(),
+                    performanceBenchmarkArgv(choice.command).lines().last(),
+                    "Opaque scope guard (identity metadata): ${choice.scope}")) {
+              fixture.revealTextFullyWithin(text, "benchmark-discovery-scroll")
+              assertTrue(fixture.copyTextByDragging(text, expectedText = text).isNotEmpty())
+            }
             fixture.clickDescription("Collapse Explore benchmark evidence")
             fixture.render()
             harness.completeRequest()
             assertEquals(
                 listOf("GET"),
                 harness.methods,
-                "Disclosure and local selection cannot trust, compare, contact providers or write source")
+                "Disclosure, copying and local selection cannot trust, compare, contact providers or write source")
           }
     }
   }
