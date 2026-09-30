@@ -45,6 +45,73 @@ class BugsWorkspaceStateTest {
   }
 
   @Test
+  fun expandedScanOutputInsideBugsKeepsTheRecordedTailReachable() {
+    val project = resultProjectFixture()
+    val output = "recorded evidence\n".repeat(400) + "end of recorded evidence"
+    val report =
+        GoScanReport(
+            project.projectId,
+            project.projectRevision,
+            "failed",
+            phases =
+                listOf(
+                    GoScanPhase("workspace", "failed", output = "workspace error"),
+                    GoScanPhase("tests", "failed", listOf("go", "test", "./..."), output, 1)))
+    ComposeVisualFixture(800, 650, 1.5f) {
+          BugsWorkspacePane(
+              BugsWorkspacePaneState(
+                  emptyList(),
+                  report,
+                  false,
+                  project = project,
+                  scanState = VerifiedScanState(read = VerifiedScanRead.Loaded)),
+              BugsWorkspaceActions(FindingActions({}, { _, _ -> }, {}), {}, {}))
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("Command and output")
+          fixture.render()
+          assertTrue(fixture.hasText("workspace error"))
+          assertFalse(fixture.hasText(output))
+          fixture.clickDescription("Expand available diagnostic output")
+          fixture.render()
+          assertTrue(fixture.hasText(output))
+          assertFalse(fixture.hasText("Daemon output limit reached"))
+        }
+  }
+
+  @Test
+  fun terminalScanSummaryDoesNotConfuseCompletionWithSuccessfulChecks() {
+    val project = resultProjectFixture()
+    val report =
+        GoScanReport(
+            project.projectId,
+            project.projectRevision,
+            "completed",
+            phases =
+                listOf(
+                    GoScanPhase("parse", "passed"),
+                    GoScanPhase("go vet", "failed", listOf("go", "vet", "./..."), exitCode = 1),
+                    GoScanPhase("go test", "skipped"),
+                    GoScanPhase("future phase", "partial")))
+    val progress =
+        verifiedScanProgress(project, VerifiedScanState(read = VerifiedScanRead.Loaded), report)
+    assertEquals("Completed", progress.statusLabel)
+    assertEquals(VerifiedScanAction.Start, progress.action)
+    assertTrue(
+        progress.summary.contains(
+            "Reported phases: parse — Passed; go vet — Failed; go test — Skipped; future phase — Partial"))
+    assertTrue(progress.summary.contains("Completion is not proof that every phase passed."))
+    assertTrue(
+        verifiedScanProgress(
+                project,
+                VerifiedScanState(read = VerifiedScanRead.Loaded),
+                report.copy(phases = emptyList()))
+            .summary
+            .contains("No phases reported; no check outcome is available."))
+  }
+
+  @Test
   fun scanScopeAndTrustStayVisibleBeforeActivationAndPassiveInspectionIsInert() {
     val project = resultProjectFixture()
     val report = GoScanReport(project.projectId, project.projectRevision, "completed")

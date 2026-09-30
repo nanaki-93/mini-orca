@@ -81,6 +81,16 @@ fun shouldPollVerifiedScan(scan: GoScanReport?): Boolean =
 fun verifiedScanStatusLabel(scan: GoScanReport?): String =
     scan?.status?.takeIf { it.isNotBlank() }?.let(::analysisStatusLabel) ?: "Not run"
 
+/** Lifecycle completion does not attest to the outcome of any individual phase. */
+internal fun verifiedScanPhaseSummary(report: GoScanReport): String =
+    if (report.phases.isEmpty()) "No phases reported; no check outcome is available."
+    else
+        "Reported phases: " +
+            report.phases.joinToString("; ") { phase ->
+              "${phase.name.ifBlank { "Unnamed scan phase" }} — ${phase.state.takeIf { it.isNotBlank() }?.let(::analysisStatusLabel) ?: "State unavailable"}"
+            } +
+            ". Review command and output for details."
+
 /**
  * Eligibility uses the current project's identity and the last confirmed status, never old evidence
  * alone.
@@ -177,7 +187,10 @@ internal fun verifiedScanProgress(
                   "cancelled" ->
                       VerifiedScanProgress(
                           verifiedScanStatusLabel(report),
-                          "Verified checks ${report.status.lowercase()}; results, command and output remain available.",
+                          "Verified checks ${report.status.lowercase()}; ${verifiedScanPhaseSummary(report)}" +
+                              if (report.status.equals("completed", ignoreCase = true))
+                                  " Completion is not proof that every phase passed."
+                              else "",
                           VerifiedScanAction.Start)
                   else ->
                       VerifiedScanProgress(

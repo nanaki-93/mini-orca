@@ -198,8 +198,10 @@ internal fun BugsWorkspacePane(state: BugsWorkspacePaneState, actions: BugsWorks
                 Modifier.fillMaxWidth()
                     .heightIn(max = 180.dp)
                     .verticalScroll(rememberScrollState())
+                    .testTag("scan-diagnostics")
                     .padding(8.dp)) {
                   state.scan?.let { VerifiedScanDiagnostics(it) }
+                      ?: Text("No scan report available.", style = IdeTypography.compactBody)
                 }
       }) { key ->
         visible
@@ -304,6 +306,8 @@ private fun VerifiedChecksActionRow(
 
 @Composable
 internal fun VerifiedScanDiagnostics(scan: GoScanReport) {
+  if (scan.phases.isEmpty())
+      Text("No phases reported; no check outcome is available.", style = IdeTypography.compactBody)
   scan.phases.forEach { phase ->
     IdeHorizontalSeparator(Modifier.padding(vertical = 8.dp))
     SelectionContainer {
@@ -312,10 +316,42 @@ internal fun VerifiedScanDiagnostics(scan: GoScanReport) {
           color = PrimaryText,
           style = IdeTypography.resultHeading)
     }
-    IdeLabelBadge(analysisStatusLabel(phase.state), evidenceColor(checkStatus(phase.state)))
-    if (phase.command.isNotEmpty())
-        DiagnosticText("\$ ${phase.command.joinToString(" ")}", color = SecondaryText)
-    DiagnosticText(phase.output.ifBlank { "No output reported for this phase." })
+    IdeLabelBadge(
+        phase.state.takeIf { it.isNotBlank() }?.let(::analysisStatusLabel) ?: "State unavailable",
+        evidenceColor(checkStatus(phase.state)))
+    if (phase.command.isEmpty())
+        Text(
+            "No command reported for this phase.",
+            style = IdeTypography.compactBody,
+            color = SecondaryText)
+    else {
+      DiagnosticText("\$ ${phase.command.joinToString(" ")}", color = SecondaryText)
+      // Zero is also the wire default when a command never produced an exit result.
+      if (phase.exitCode != 0 &&
+          phase.state.lowercase() in setOf("failed", "canceled", "cancelled"))
+          Text(
+              "Exit code: ${phase.exitCode}",
+              style = IdeTypography.compactBody,
+              color = SecondaryText)
+    }
+    if (phase.output.isBlank())
+        Text(
+            "No output reported for this phase.",
+            style = IdeTypography.compactBody,
+            color = SecondaryText)
+    else {
+      if (phase.output.trimEnd().endsWith("\n[output truncated]"))
+          Text(
+              "Daemon output limit reached; text beyond the recorded output is unavailable.",
+              style = IdeTypography.compactBody,
+              color = Warning)
+      if (diagnosticOutputPreviewTruncated(phase.output))
+          Text(
+              "UI previews are limited; Show full available output reveals all recorded text.",
+              style = IdeTypography.compactBody,
+              color = SecondaryText)
+      DiagnosticText(phase.output)
+    }
   }
 }
 
