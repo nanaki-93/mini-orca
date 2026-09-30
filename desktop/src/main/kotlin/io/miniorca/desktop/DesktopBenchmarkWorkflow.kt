@@ -20,12 +20,10 @@ internal sealed interface BenchmarkCandidateDecision {
 
 internal data class BenchmarkEligibility(
     val candidate: BenchmarkCandidateDecision,
+    val discoveryBlockedReason: String?,
     val selectionBlockedReason: String?,
     val comparisonBlockedReason: String?,
 ) {
-  val discoveryBlockedReason: String?
-    get() = (candidate as? BenchmarkCandidateDecision.Blocked)?.reason
-
   val canDiscover: Boolean
     get() = discoveryBlockedReason == null
 
@@ -39,6 +37,11 @@ internal fun benchmarkEligibility(
     choice: GoBenchmarkChoice? = state.review.benchmark.selected,
 ): BenchmarkEligibility {
   val candidate = benchmarkCandidateDecision(state)
+  val discoveryReason =
+      (candidate as? BenchmarkCandidateDecision.Blocked)?.reason
+          ?: if (state.review.benchmark.discovery == BenchmarkDiscoveryOutcome.Loading)
+              "Compatible benchmark lookup is already in progress."
+          else null
   val selectionReason =
       when (candidate) {
         is BenchmarkCandidateDecision.Blocked -> candidate.reason
@@ -54,7 +57,7 @@ internal fun benchmarkEligibility(
             choice.command.isEmpty() -> "The selected benchmark has no argv; refresh the catalog."
             else -> null
           }
-  return BenchmarkEligibility(candidate, selectionReason, comparisonReason)
+  return BenchmarkEligibility(candidate, discoveryReason, selectionReason, comparisonReason)
 }
 
 private fun benchmarkCandidateDecision(state: DesktopState): BenchmarkCandidateDecision {
@@ -161,6 +164,8 @@ internal class DesktopBenchmarkWorkflow(
     benchmarkCatalogJob = null
     benchmarkJob?.cancel()
     benchmarkJob = null
+    if (state().review.benchmark.discovery == BenchmarkDiscoveryOutcome.Loading)
+        dispatch(DesktopEvent.GoBenchmarkDiscoveryInvalidated)
   }
 
   fun stopComparison() {
@@ -175,6 +180,7 @@ internal class DesktopBenchmarkWorkflow(
 
   /** Lists trusted daemon-built benchmark choices. This GET never executes project code. */
   fun loadGoBenchmarks() {
+    if (state().review.benchmark.discovery == BenchmarkDiscoveryOutcome.Loading) return
     val decision = benchmarkEligibility(state())
     val candidate = decision.candidate as? BenchmarkCandidateDecision.Ready
     if (candidate == null) {
@@ -182,35 +188,47 @@ internal class DesktopBenchmarkWorkflow(
       return
     }
     val (draft, project, identity) = candidate
-    cancel()
+    invalidate()
     val generation = benchmarkActionGeneration
+    dispatch(DesktopEvent.GoBenchmarkDiscoveryStarted)
     benchmarkCatalogJob =
         scope.launch {
           try {
             val catalog = io {
               api.goBenchmarkCatalog(draft.id, project.projectRevision, draft.revision, draft.hash)
             }
-            if (isCurrentBenchmarkCatalogAction(identity, generation) &&
-                catalog.matches(identity)) {
-              dispatch(DesktopEvent.GoBenchmarkCatalogLoaded(catalog))
+            if (!isCurrentBenchmarkCatalogAction(identity, generation)) return@launch
+            if (catalog.available && !catalog.matches(identity)) {
               dispatch(
-                  DesktopEvent.Status(
-                      if (catalog.available) "Select a benchmark to compare."
-                      else catalog.reason.ifBlank { "No compatible benchmark is available." }))
+                  DesktopEvent.GoBenchmarkDiscoveryFailed(
+                      "Benchmark catalog does not match the current candidate; refresh compatible benchmarks."))
+              return@launch
             }
-          } catch (_: CancellationException) {
-            throw CancellationException()
+            // Sparse unavailable responses carry a reason, not reusable executable authority.
+            dispatch(
+                DesktopEvent.GoBenchmarkCatalogLoaded(
+                    if (catalog.available) catalog else catalog.copy(benchmarks = emptyList())))
+            dispatch(
+                DesktopEvent.Status(
+                    when {
+                      !catalog.available ->
+                          catalog.reason.ifBlank { "No compatible benchmark is available." }
+                      catalog.benchmarks.isEmpty() -> "No compatible benchmark is available."
+                      else -> "Select a benchmark to compare."
+                    }))
+          } catch (error: CancellationException) {
+            if (isCurrentBenchmarkCatalogAction(identity, generation))
+                dispatch(DesktopEvent.GoBenchmarkDiscoveryInvalidated)
+            throw error
           } catch (error: ApiException) {
             if (!isCurrentBenchmarkCatalogAction(identity, generation)) return@launch
             val message = error.message ?: "Benchmark lookup failed"
-            dispatch(DesktopEvent.GoBenchmarkDiscoveryFailed(message))
             if (error.status == 409) dispatch(DesktopEvent.DraftMarkedStale)
-            dispatch(DesktopEvent.Failed(message))
+            dispatch(DesktopEvent.GoBenchmarkDiscoveryFailed(message))
           } catch (error: Exception) {
             if (isCurrentBenchmarkCatalogAction(identity, generation)) {
               val message = error.message ?: "Benchmark lookup failed"
               dispatch(DesktopEvent.GoBenchmarkDiscoveryFailed(message))
-              dispatch(DesktopEvent.Failed(message))
             }
           }
         }
@@ -321,7 +339,9 @@ internal class DesktopBenchmarkWorkflow(
       identity: WorkflowDraftIdentity,
       generation: Long,
   ): Boolean =
-      generation == benchmarkActionGeneration && currentBenchmarkDraftIdentity() == identity
+      generation == benchmarkActionGeneration &&
+          state().review.benchmark.discovery == BenchmarkDiscoveryOutcome.Loading &&
+          currentBenchmarkDraftIdentity() == identity
 
   private fun benchmarkResponseMismatch(
       comparison: GoBenchmarkComparison,

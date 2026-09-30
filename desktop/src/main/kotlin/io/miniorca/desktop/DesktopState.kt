@@ -607,6 +607,8 @@ sealed interface DesktopEvent {
 
   data object GoBenchmarkDiscoveryStarted : DesktopEvent
 
+  data object GoBenchmarkDiscoveryInvalidated : DesktopEvent
+
   data class GoBenchmarkDiscoveryFailed(val message: String) : DesktopEvent
 
   data class GoBenchmarkCatalogLoaded(val catalog: GoBenchmarkCatalog) : DesktopEvent
@@ -810,6 +812,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       is DesktopEvent.ChecksStopped,
       is DesktopEvent.ChecksLoaded -> withCheckEvent(event)
       DesktopEvent.GoBenchmarkDiscoveryStarted,
+      DesktopEvent.GoBenchmarkDiscoveryInvalidated,
       is DesktopEvent.GoBenchmarkDiscoveryFailed,
       is DesktopEvent.GoBenchmarkCatalogLoaded,
       is DesktopEvent.GoBenchmarkSelected,
@@ -1119,7 +1122,14 @@ private fun DesktopState.withBenchmarkEvent(event: DesktopEvent): DesktopState {
   val updated =
       when (event) {
         DesktopEvent.GoBenchmarkDiscoveryStarted ->
-            benchmark.withoutCatalog().copy(discovery = BenchmarkDiscoveryOutcome.Loading)
+            benchmark
+                .withoutCatalog()
+                .copy(
+                    discovery = BenchmarkDiscoveryOutcome.Loading,
+                    admission =
+                        if (benchmark.running) BenchmarkAdmissionOutcome.Stopped
+                        else BenchmarkAdmissionOutcome.Idle)
+        DesktopEvent.GoBenchmarkDiscoveryInvalidated -> benchmark.withoutCatalog()
         is DesktopEvent.GoBenchmarkDiscoveryFailed ->
             benchmark
                 .withoutCatalog()

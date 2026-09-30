@@ -65,6 +65,30 @@ class DesktopStateTest {
   }
 
   @Test
+  fun discoveryRestartClearsObsoleteAdmissionFailureAndCancellationRetainsOnlyPriorEvidence() {
+    val prior = GoBenchmarkComparison(status = "completed", benchmark = "BenchmarkPrior")
+    val failed =
+        DesktopState()
+            .reduce(DesktopEvent.GoBenchmarkComparisonLoaded(prior))
+            .reduce(DesktopEvent.GoBenchmarkComparisonFailed("Old admission failed"))
+    val loading = failed.reduce(DesktopEvent.GoBenchmarkDiscoveryStarted)
+    assertEquals(BenchmarkAdmissionOutcome.Idle, loading.review.benchmark.admission)
+    assertEquals(BenchmarkDiscoveryOutcome.Loading, loading.review.benchmark.discovery)
+    val invalidated = loading.reduce(DesktopEvent.GoBenchmarkDiscoveryInvalidated)
+    assertEquals(BenchmarkDiscoveryOutcome.Invalidated, invalidated.review.benchmark.discovery)
+    assertEquals(prior, invalidated.review.benchmark.comparison)
+    assertNull(invalidated.review.benchmark.catalog)
+    assertNull(invalidated.review.benchmark.selected)
+    assertFalse(invalidated.review.benchmark.running)
+    assertEquals(
+        invalidated.review.benchmark,
+        invalidated.reduce(DesktopEvent.GoBenchmarkDiscoveryInvalidated).review.benchmark)
+    val retry = invalidated.reduce(DesktopEvent.GoBenchmarkDiscoveryStarted)
+    assertEquals(BenchmarkDiscoveryOutcome.Loading, retry.review.benchmark.discovery)
+    assertEquals(prior, retry.review.benchmark.comparison)
+  }
+
+  @Test
   fun benchmarkAdmissionStartCompletionStoppingAndFailureRetainTruthfulEvidence() {
     val prior =
         GoBenchmarkComparison(
