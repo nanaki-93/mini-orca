@@ -67,6 +67,9 @@ internal fun DiagnosticText(
 internal fun sanitizedOutputText(value: String, limit: Int = DIAGNOSTIC_PREVIEW_LIMIT): String =
     previewDiagnosticOutput(sanitizeDiagnosticOutput(value), limit)
 
+internal fun diagnosticOutputPreviewTruncated(value: String): Boolean =
+    sanitizeDiagnosticOutput(value).length > DIAGNOSTIC_PREVIEW_LIMIT
+
 private fun sanitizeDiagnosticOutput(value: String): String =
     value.replace(DIAGNOSTIC_CONTROL_CHARACTERS, " ").trim()
 

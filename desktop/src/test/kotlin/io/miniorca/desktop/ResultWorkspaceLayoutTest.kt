@@ -19,6 +19,168 @@ import kotlin.test.assertTrue
 
 class ResultWorkspaceLayoutTest {
   @Test
+  fun completedScanWithFailedPhaseShowsOutcomeAndProvenanceWithoutOpeningDetails() {
+    val project = resultProjectFixture()
+    val report =
+        GoScanReport(
+            project.projectId,
+            project.projectRevision,
+            "completed",
+            phases = listOf(GoScanPhase("go vet", "failed", output = "vet error", exitCode = 0)))
+    var executions = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          BugsWorkspacePane(
+              BugsWorkspacePaneState(
+                  emptyList(),
+                  report,
+                  false,
+                  project = project,
+                  scanState = VerifiedScanState(read = VerifiedScanRead.Loaded)),
+              BugsWorkspaceActions(
+                  FindingActions({}, { _, _ -> }, {}), { executions++ }, { executions++ }))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Completed"))
+          assertTrue(
+              fixture.hasText(
+                  "Verified checks completed; Reported phases: go vet — Failed. Review command and output for details. Completion is not proof that every phase passed."))
+          assertTrue(
+              fixture.hasText(
+                  "Local tool evidence is scoped to these checks, not a general safety assurance. Model suggestions are separate results below."))
+          assertFalse(fixture.hasText("vet error"))
+          fixture.clickText("Command and output")
+          fixture.render()
+          assertTrue(fixture.hasText("vet error"))
+          assertFalse(fixture.hasText("Exit code: 0"))
+          assertEquals(0, executions)
+        }
+  }
+
+  @Test
+  fun scanDiagnosticsRetainReportedOrderUnknownNamesAndOnlyMeaningfulExitCodes() {
+    val phases =
+        listOf(
+            GoScanPhase("workspace", "failed", output = "copy failed", exitCode = 7),
+            GoScanPhase("parse", "failed", exitCode = 3),
+            GoScanPhase("go vet", "failed", listOf("go", "vet", "./..."), "vet failed", 2),
+            GoScanPhase("go test", "skipped", listOf("go", "test", "./..."), exitCode = 9),
+            GoScanPhase("future phase", "unavailable", output = "unknown tool state"),
+            GoScanPhase("command failure", "failed", listOf("go", "test"), exitCode = -1),
+            GoScanPhase("cancellation", "canceled", listOf("go", "test", "./..."), exitCode = 143),
+            GoScanPhase("", ""))
+    val report = GoScanReport(status = "completed", phases = phases)
+    ComposeVisualFixture(800, 650, 1.5f) { VerifiedScanDiagnostics(report) }
+        .use { fixture ->
+          fixture.render()
+          phases
+              .filter { it.name.isNotBlank() }
+              .forEach { phase -> fixture.assertTextFits(phase.name) }
+          assertTrue(fixture.hasText("Unnamed scan phase"))
+          assertTrue(fixture.hasText("State unavailable"))
+          assertTrue(fixture.hasText("Failed"))
+          assertTrue(fixture.hasText("Skipped"))
+          assertTrue(fixture.hasText("Canceled"))
+          assertTrue(fixture.hasText("Unavailable"))
+          assertTrue(fixture.hasText("copy failed"))
+          assertTrue(fixture.hasText("$ go vet ./..."))
+          assertTrue(fixture.hasText("$ go test ./..."))
+          assertTrue(fixture.hasText("Exit code: 2"))
+          assertTrue(fixture.hasText("Exit code: -1"))
+          assertTrue(fixture.hasText("Exit code: 143"))
+          listOf(0, 3, 7, 9).forEach { assertFalse(fixture.hasText("Exit code: $it")) }
+          assertTrue(fixture.hasText("No output reported for this phase."))
+          assertTrue(fixture.hasText("No command reported for this phase."))
+          assertTrue(fixture.hasText("unknown tool state"))
+        }
+    ComposeVisualFixture(800, 650) { VerifiedScanDiagnostics(report.copy(phases = emptyList())) }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("No phases reported; no check outcome is available."))
+          assertFalse(fixture.hasText("Passed"))
+        }
+  }
+
+  @Test
+  fun scanOutputDistinguishesDaemonLimitFromUiPreviewAndRetainsAvailableText() {
+    val output = "recorded evidence\n".repeat(400) + "TAIL\n[output truncated]"
+    val report =
+        GoScanReport(
+            status = "failed",
+            phases =
+                listOf(GoScanPhase("go test", "failed", listOf("go", "test", "./..."), output, 1)))
+    ComposeVisualFixture(800, 650, 1.5f) { VerifiedScanDiagnostics(report) }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "Daemon output limit reached; text beyond the recorded output is unavailable."))
+          assertTrue(
+              fixture.hasText(
+                  "UI previews are limited; Show full available output reveals all recorded text."))
+          assertTrue(fixture.hasText("… output truncated"))
+          assertFalse(fixture.hasText(output))
+          fixture.clickDescription("Expand available diagnostic output")
+          fixture.render()
+          assertTrue(fixture.hasText(output))
+          assertTrue(fixture.hasText("Exit code: 1"))
+        }
+    ComposeVisualFixture(800, 650) {
+          VerifiedScanDiagnostics(
+              report.copy(
+                  phases =
+                      listOf(
+                          GoScanPhase(
+                              "go vet",
+                              "failed",
+                              listOf("go", "vet", "./..."),
+                              "short output\n[output truncated]",
+                              1))))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("short output\n[output truncated]"))
+          assertTrue(
+              fixture.hasText(
+                  "Daemon output limit reached; text beyond the recorded output is unavailable."))
+          assertFalse(fixture.hasText("UI previews are limited"))
+          assertFalse(fixture.hasText("Show full available output"))
+          assertFalse(fixture.hasText("… output truncated"))
+        }
+    ComposeVisualFixture(800, 650) {
+          VerifiedScanDiagnostics(
+              report.copy(phases = listOf(GoScanPhase("parse", "passed", output = "   "))))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("No output reported for this phase."))
+          assertFalse(fixture.hasText("Exit code: 0"))
+          assertTrue(fixture.hasText("No command reported for this phase."))
+          assertFalse(fixture.hasText("Daemon output limit reached"))
+        }
+    ComposeVisualFixture(800, 650) {
+          VerifiedScanDiagnostics(
+              report.copy(
+                  phases =
+                      listOf(
+                          GoScanPhase(
+                              "go vet",
+                              "failed",
+                              listOf("go", "vet", "./..."),
+                              "recorded text\n".repeat(400),
+                              1))))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("… output truncated"))
+          assertFalse(fixture.hasText("Daemon output limit reached"))
+          fixture.clickDescription("Expand available diagnostic output")
+          fixture.render()
+          assertTrue(fixture.hasText("recorded text\n".repeat(400).trim()))
+        }
+  }
+
+  @Test
   fun allResultPagesKeepListAndDetailReachableAcrossViewports() {
     listOf(
             Triple(1440, 900, 1f),
