@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 class DesktopWorkflowPresenterTest {
@@ -3443,6 +3444,114 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun nonCooperativeBenchmarkTerminalsCannotPublishAfterPresenterLifecycleActions() {
+    for (status in listOf("completed", "failed", "canceled", "unavailable")) {
+      for (action in listOf("validate", "apply", "undo", "refresh", "close")) {
+        val entered = CountDownLatch(1)
+        val interrupted = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val main = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        // Refresh and mutation requests can finish while the obsolete comparison stays blocked.
+        val io = Executors.newFixedThreadPool(2).asCoroutineDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + main)
+        val calls = Collections.synchronizedList(mutableListOf<Pair<String, String>>())
+        val prior = Json.decodeFromString<GoBenchmarkComparison>(benchmarkComparisonJson())
+        val terminal = prior.copy(status = status, reason = "Late $status")
+        val presenter =
+            presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+              calls += method to path
+              when {
+                path.endsWith("/benchmarks") -> {
+                  entered.countDown()
+                  while (true) {
+                    try {
+                      release.await()
+                      break
+                    } catch (_: InterruptedException) {
+                      interrupted.countDown()
+                    }
+                  }
+                  response(Json.encodeToString(terminal))
+                }
+                path.contains("files/info?") -> response(fileJson("main.go", "shell-edit"))
+                path.contains("files/symbols?") -> response(symbolsJson("main.go", "Run"))
+                else -> TransportResponse(503, """{"message":"Test mutation unavailable"}""")
+              }
+            }
+        try {
+          val lifetime = scope.coroutineContext[Job]!!.children.single()
+          val comparisonJob =
+              runBlocking(main) {
+                loadFile(presenter)
+                presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+                presenter.dispatch(
+                    DesktopEvent.ChecksLoaded(
+                        DraftCheckReport(
+                            "main.go",
+                            true,
+                            draftId = "draft",
+                            draftRevision = 1,
+                            draftHash = "draft-hash")))
+                if (action == "undo")
+                    presenter.dispatch(DesktopEvent.Applied(ApplyResult("next", "after", true)))
+                val catalog =
+                    Json.decodeFromString<GoBenchmarkCatalog>(benchmarkCatalogJson(trusted = true))
+                presenter.dispatch(DesktopEvent.GoBenchmarkCatalogLoaded(catalog))
+                presenter.selectGoBenchmark(catalog.benchmarks.single())
+                presenter.dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(prior))
+                val existing = lifetime.children.toSet()
+                presenter.compareSelectedGoBenchmark()
+                (lifetime.children.toSet() - existing).single()
+              }
+          assertTrue(entered.await(5, TimeUnit.SECONDS), "$status/$action: transport must start")
+          val actionJobs =
+              runBlocking(main) {
+                val existing = lifetime.children.toSet()
+                when (action) {
+                  "validate" -> presenter.validateEditableDraft()
+                  "apply" -> presenter.applyEditableDraft()
+                  "undo" -> presenter.undoAppliedDraft()
+                  "refresh" -> presenter.refreshSelectedFile()
+                  "close" -> presenter.close()
+                }
+                (lifetime.children.toSet() - existing)
+              }
+          runBlocking { withTimeout(5_000) { actionJobs.forEach { it.join() } } }
+          assertTrue(
+              interrupted.await(5, TimeUnit.SECONDS),
+              "$status/$action: cancellation must interrupt")
+          val replacement = runBlocking(main) { presenter.snapshot.value }
+          assertFalse(replacement.state.review.benchmark.running)
+          assertNull(replacement.state.review.benchmark.catalog)
+          assertNull(replacement.state.review.benchmark.selected)
+          assertEquals(prior, replacement.state.review.benchmark.comparison)
+          assertNull(replacement.state.review.benchmark.latestOutcome)
+          if (action == "refresh")
+              assertEquals("shell-edit", replacement.state.selectedFile?.contentHash)
+          release.countDown()
+          runBlocking { withTimeout(5_000) { comparisonJob.join() } }
+          runBlocking(main) {
+            assertEquals(
+                replacement, presenter.snapshot.value, "$status/$action: no late publication")
+          }
+          assertEquals(
+              listOf("POST"), calls.filter { it.second.endsWith("/benchmarks") }.map { it.first })
+          assertTrue(
+              calls.none { it.second.contains("execution-trust") }, "No automatic trust grant")
+          if (action == "apply") assertTrue(calls.any { it.second.endsWith("/apply") })
+          if (action == "undo") assertTrue(calls.any { it.second.endsWith("/undo") })
+        } finally {
+          release.countDown()
+          runBlocking(main) { presenter.close() }
+          scope.cancel()
+          io.close()
+          main.close()
+        }
+      }
+    }
+  }
+
+  @Test
   fun passivePerformanceNavigationSelectionAndDisclosureRetainUnchangedCandidateEvidence() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()
@@ -6627,7 +6736,7 @@ class DesktopWorkflowPresenterTest {
       """{"draft_id":"draft","draft_revision":1,"draft_hash":"draft-hash","project_id":"project","project_revision":"revision","base_file_hash":"base","target_path":"main.go","available":true,"trusted":$trusted,"benchmarks":[{"name":"BenchmarkRun","command":["go","test","-run","^$","-bench","^BenchmarkRun$","-benchtime","100ms","-benchmem"],"scope":"scope"}]}"""
 
   private fun benchmarkComparisonJson() =
-      """{"draft_id":"draft","draft_revision":1,"draft_hash":"draft-hash","project_id":"project","project_revision":"revision","base_file_hash":"base","target_path":"main.go","benchmark":"BenchmarkRun","scope":"scope","status":"completed","command":["go","test","-benchtime","100ms","-benchmem"],"base":{"samples":[{"iterations":1,"ns_per_op":100,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":100,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":100,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":100,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":100,"bytes_per_op":10,"allocs_per_op":1}]},"candidate":{"samples":[{"iterations":1,"ns_per_op":90,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":90,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":90,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":90,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":90,"bytes_per_op":10,"allocs_per_op":1}]}}"""
+      """{"draft_id":"draft","draft_revision":1,"draft_hash":"draft-hash","project_id":"project","project_revision":"revision","base_file_hash":"base","target_path":"main.go","benchmark":"BenchmarkRun","scope":"scope","status":"completed","command":["go","test","-run","^$","-bench","^BenchmarkRun$","-benchtime","100ms","-benchmem"],"base":{"samples":[{"iterations":1,"ns_per_op":100,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":100,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":100,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":100,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":100,"bytes_per_op":10,"allocs_per_op":1}]},"candidate":{"samples":[{"iterations":1,"ns_per_op":90,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":90,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":90,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":90,"bytes_per_op":10,"allocs_per_op":1},{"iterations":1,"ns_per_op":90,"bytes_per_op":10,"allocs_per_op":1}]}}"""
 
   private fun unavailableBenchmarkComparisonJson(scope: String) =
       """{"draft_id":"draft","draft_revision":1,"draft_hash":"draft-hash","project_id":"project","project_revision":"revision","base_file_hash":"base","target_path":"main.go","benchmark":"BenchmarkRun","scope":"$scope","status":"unavailable","reason":"displayed benchmark scope changed","command":["go","test","-benchtime","100ms","-benchmem"]}"""
