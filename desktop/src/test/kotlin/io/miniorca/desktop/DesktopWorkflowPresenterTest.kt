@@ -25,6 +25,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
 
 class DesktopWorkflowPresenterTest {
 
@@ -3605,7 +3606,8 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun unavailableBenchmarkResponseWithARecomputedScopeStopsAndPublishesStaleEvidence() {
+  fun unavailableBenchmarkResponseRevokesScopeAuthorityAndRetainsPriorEvidence() {
+    val prior = Json.decodeFromString<GoBenchmarkComparison>(benchmarkComparisonJson())
     val presenter = presenter { method, path, _ ->
       when (method to path) {
         "GET" to
@@ -3623,23 +3625,25 @@ class DesktopWorkflowPresenterTest {
       eventually { presenter.snapshot.value.state.review.benchmark.catalog != null }
       presenter.selectGoBenchmark(
           presenter.snapshot.value.state.review.benchmark.catalog!!.benchmarks.single())
+      presenter.dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(prior))
       presenter.compareSelectedGoBenchmark()
 
       eventually {
-        !presenter.snapshot.value.state.review.benchmark.running &&
-            presenter.snapshot.value.state.review.benchmark.comparison != null
+        presenter.snapshot.value.state.review.benchmark.admission is
+            BenchmarkAdmissionOutcome.Failed
       }
 
-      val comparison = presenter.snapshot.value.state.review.benchmark.comparison!!
-      assertEquals("unavailable", comparison.status)
-      assertEquals("recomputed-scope", comparison.scope)
+      val evidence = presenter.snapshot.value.state.review.benchmark
+      assertFalse(evidence.running)
+      assertEquals(prior, evidence.comparison)
+      assertNull(evidence.catalog)
+      assertNull(evidence.selected)
+      assertEquals(BenchmarkDiscoveryOutcome.Invalidated, evidence.discovery)
       assertEquals(
-          "Stale · selected benchmark changed",
-          performanceBenchmarkPresentation(
-                  comparison,
-                  goBenchmarkComparisonIdentity(presenter.snapshot.value.state.review.draft),
-                  presenter.snapshot.value.state.review.benchmark.selected)
-              .stateLabel)
+          BenchmarkAdmissionOutcome.Failed(
+              "displayed benchmark scope changed Refresh compatible benchmarks and select again."),
+          evidence.admission)
+      assertNull(presenter.snapshot.value.state.jobs.error)
     } finally {
       presenter.close()
     }

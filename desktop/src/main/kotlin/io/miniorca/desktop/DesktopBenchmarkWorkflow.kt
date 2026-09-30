@@ -125,6 +125,7 @@ private data class BenchmarkActionRequest(
     val project: WorkflowProjectIdentity,
     val draft: WorkflowDraftIdentity,
     val choice: GoBenchmarkChoice,
+    val catalog: GoBenchmarkCatalog,
     val generation: Long,
 )
 
@@ -252,6 +253,7 @@ internal class DesktopBenchmarkWorkflow(
    */
   fun compareSelectedGoBenchmark() {
     val current = state()
+    if (current.review.benchmark.running) return
     val decision = benchmarkEligibility(current)
     decision.comparisonBlockedReason?.let {
       dispatch(DesktopEvent.GoBenchmarkComparisonFailed(it))
@@ -266,74 +268,141 @@ internal class DesktopBenchmarkWorkflow(
             WorkflowProjectIdentity(project.projectId, project.projectRevision),
             identity,
             choice,
+            catalog,
             ++benchmarkActionGeneration,
         )
     benchmarkJob?.cancel()
-    dispatch(DesktopEvent.GoBenchmarkComparisonStarted)
+    dispatch(
+        if (catalog.trusted) DesktopEvent.GoBenchmarkComparisonStarted
+        else DesktopEvent.GoBenchmarkAdmissionStarted)
     dispatch(
         DesktopEvent.Status(
             if (catalog.trusted) "Comparing ${choice.name} in isolated copies…"
-            else "Trusting local execution, then comparing ${choice.name} in isolated copies…"))
+            else "Admitting local execution for ${choice.name}…"))
     benchmarkJob =
         scope.launch {
           try {
-            val comparison = io {
-              if (!catalog.trusted) {
-                val trust = api.executionTrust(project.projectRevision)
-                if (trust.projectId != project.projectId ||
-                    trust.projectRevision != project.projectRevision ||
-                    trust.commands != listOf(listOf("go", "test", "./...")))
-                    throw IllegalStateException(
-                        "Local execution trust scope changed; review the benchmark command again.")
-                api.trustProjectExecution(project.projectRevision)
-              }
-              api.compareGoBenchmark(
-                  draft.id, project.projectRevision, draft.revision, draft.hash, choice)
+            if (!catalog.trusted && !admitBenchmarkExecution(request)) return@launch
+            if (!isCurrentBenchmarkAction(request)) return@launch
+            if (!catalog.trusted) {
+              dispatch(DesktopEvent.GoBenchmarkComparisonStarted)
+              dispatch(DesktopEvent.Status("Comparing ${choice.name} in isolated copies…"))
             }
+            val comparison =
+                currentBenchmarkRequest(request) {
+                  api.compareGoBenchmark(
+                      draft.id, project.projectRevision, draft.revision, draft.hash, choice)
+                } ?: return@launch
             if (!isCurrentBenchmarkAction(request)) return@launch
             val responseMismatch = benchmarkResponseMismatch(comparison, draft, choice)
-            if (responseMismatch != null) {
-              dispatch(
-                  DesktopEvent.GoBenchmarkComparisonLoaded(
-                      comparison.copy(status = "unavailable", reason = responseMismatch)))
-              dispatch(DesktopEvent.Status(responseMismatch))
-              return@launch
+            when {
+              comparison.status == "unavailable" ->
+                  failBenchmarkAdmission(
+                      comparison.reason.ifBlank {
+                        responseMismatch ?: "Benchmark comparison is unavailable."
+                      },
+                      rediscover = true)
+              responseMismatch != null ->
+                  failBenchmarkAdmission(responseMismatch, rediscover = true)
+              comparison.status != "completed" ->
+                  failBenchmarkAdmission(
+                      comparison.reason.ifBlank {
+                        "Benchmark comparison did not produce measurements."
+                      })
+              else -> {
+                dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(comparison))
+                dispatch(DesktopEvent.Status("Benchmark evidence is ready for review."))
+              }
             }
-            dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(comparison))
-            dispatch(
-                DesktopEvent.Status(
-                    if (comparison.status == "completed") "Benchmark evidence is ready for review."
-                    else
-                        comparison.reason.ifBlank {
-                          "Benchmark comparison did not produce measurements."
-                        }))
-          } catch (_: CancellationException) {
+          } catch (error: CancellationException) {
             if (isCurrentBenchmarkAction(request))
                 dispatch(DesktopEvent.GoBenchmarkComparisonStopped)
-            throw CancellationException()
+            throw error
           } catch (error: ApiException) {
             if (!isCurrentBenchmarkAction(request)) return@launch
-            if (error.status == 409) dispatch(DesktopEvent.DraftMarkedStale)
-            val message = error.message ?: "Benchmark comparison failed"
-            dispatch(DesktopEvent.GoBenchmarkComparisonFailed(message))
-            dispatch(DesktopEvent.Failed(message))
+            if (error.status == 409) {
+              dispatch(DesktopEvent.DraftMarkedStale)
+              failBenchmarkAdmission(error.message ?: "Candidate changed; refresh and validate it.")
+            } else {
+              failBenchmarkAdmission(benchmarkTransportFailure(error))
+            }
           } catch (error: Exception) {
-            if (!isCurrentBenchmarkAction(request)) return@launch
-            val message = error.message ?: "Benchmark comparison failed"
-            dispatch(DesktopEvent.GoBenchmarkComparisonFailed(message))
-            dispatch(DesktopEvent.Failed(message))
+            if (isCurrentBenchmarkAction(request))
+                failBenchmarkAdmission(benchmarkTransportFailure(error))
           }
         }
   }
 
-  private fun isCurrentBenchmarkAction(request: BenchmarkActionRequest): Boolean =
-      request.generation == benchmarkActionGeneration &&
-          state().project?.let { WorkflowProjectIdentity(it.projectId, it.projectRevision) } ==
-              request.project &&
-          currentBenchmarkDraftIdentity() == request.draft &&
-          benchmarkEligibility(state()).canCompare &&
-          state().review.benchmark.catalog?.matches(request.draft) == true &&
-          state().review.benchmark.selected == request.choice
+  private suspend fun admitBenchmarkExecution(request: BenchmarkActionRequest): Boolean {
+    val trust =
+        currentBenchmarkRequest(request) { api.executionTrust(request.project.revision) }
+            ?: return false
+    if (!isCurrentBenchmarkAction(request)) return false
+    benchmarkTrustMismatch(trust, request, acknowledgment = false)?.let {
+      failBenchmarkAdmission(it, rediscover = true)
+      return false
+    }
+    val acknowledgment =
+        currentBenchmarkRequest(request) { api.trustProjectExecution(request.project.revision) }
+            ?: return false
+    if (!isCurrentBenchmarkAction(request)) return false
+    benchmarkTrustMismatch(acknowledgment, request, acknowledgment = true)?.let {
+      failBenchmarkAdmission(it, rediscover = true)
+      return false
+    }
+    return true
+  }
+
+  private fun benchmarkTrustMismatch(
+      trust: ExecutionTrust,
+      request: BenchmarkActionRequest,
+      acknowledgment: Boolean,
+  ): String? =
+      when {
+        trust.projectId.isBlank() ||
+            trust.projectRevision.isBlank() ||
+            trust.projectId != request.project.id ||
+            trust.projectRevision != request.project.revision ->
+            "Local execution trust identity changed."
+        trust.commands != listOf(listOf("go", "test", "./...")) ->
+            "Local execution trust scope changed."
+        acknowledgment && !trust.trusted -> "Local execution trust was not granted."
+        else -> null
+      }
+
+  private fun failBenchmarkAdmission(message: String, rediscover: Boolean = false) {
+    if (rediscover) dispatch(DesktopEvent.GoBenchmarkDiscoveryInvalidated)
+    dispatch(
+        DesktopEvent.GoBenchmarkComparisonFailed(
+            if (rediscover) "$message Refresh compatible benchmarks and select again."
+            else message))
+  }
+
+  private fun benchmarkTransportFailure(error: Exception): String {
+    val message = error.message ?: "Request failed"
+    return if (state().review.benchmark.admission == BenchmarkAdmissionOutcome.Running)
+        "$message Execution may have started; no new measurements were confirmed."
+    else "Local execution admission failed: $message"
+  }
+
+  // Guard both scheduling and actual transport entry: a queued I/O stage may become obsolete.
+  private suspend fun <T> currentBenchmarkRequest(
+      request: BenchmarkActionRequest,
+      block: () -> T,
+  ): T? {
+    if (!isCurrentBenchmarkAction(request)) return null
+    return io { if (isCurrentBenchmarkAction(request)) block() else null }
+  }
+
+  private fun isCurrentBenchmarkAction(request: BenchmarkActionRequest): Boolean {
+    val current = state()
+    val eligibility = benchmarkEligibility(current)
+    return request.generation == benchmarkActionGeneration &&
+        (eligibility.candidate as? BenchmarkCandidateDecision.Ready)?.identity == request.draft &&
+        eligibility.canCompare &&
+        current.review.benchmark.catalog == request.catalog &&
+        current.review.benchmark.selected == request.choice
+  }
 
   private fun isCurrentBenchmarkCatalogAction(
       identity: WorkflowDraftIdentity,
