@@ -119,21 +119,12 @@ with keyboard focus.
    native source-action check as pending until performed; presenter and
    component tests alone cannot establish native behavior.
 
-   With no candidate, Tab to **Explore benchmark evidence**, activate with
-   Enter/Space, and check expanded state, focus, scrolling and **Benchmark
-   comparison** reachability. Switch result/project and check the disclosure
-   resets. Merely selecting a row, opening the disclosure or **Measurement
-   details** must not list/select/run benchmarks, grant execution trust, send
-   to a provider or write source (observe the fake transport and any execution
-   log separately). Only **List compatible benchmarks** requests a read-only
-   catalog for a current candidate; choose a benchmark and inspect its command
-   before explicitly using **Run selected benchmark** or **Trust and run selected
-   benchmark** on a disposable project. Verify running, unavailable, failed,
-   canceled, stale, inconclusive and measured-candidate states stay distinct;
-   even a measured candidate must not label the selected hypothesis measured.
-   Record native focus, keyboard, copy and side-effect observations separately
-   from the automated Performance presenter, benchmark and production-component
-   tests; those tests do not establish native behavior.
+   Also perform the [benchmark discovery and admission native review](#benchmark-discovery-and-admission-native-review)
+   below. It covers explicit read-only listing/refresh, keyboard selection,
+   command/scope inspection and copying, project/revision trust, recovery and
+   invalidation during admission. Record those native observations separately
+   from fake-transport tests and offscreen fixtures; a measured candidate must
+   not label the selected Performance hypothesis measured.
 
    In Security, use disposable saved source-rule and AI results (and, if
    available, a mismatched source/evidence pair). At compact width and 125%/150%
@@ -269,6 +260,126 @@ with keyboard focus.
     record any clipping or unreachable actions. Color
     must supplement text labels for selection, severity and meaningful lifecycle
     states.
+
+## Benchmark discovery and admission native review
+
+This is a procedure, not completed native evidence. Use the
+[delivered Performance behavior](README.md#performance-hypotheses-and-benchmark-evidence)
+as the expected contract. Use a disposable root Go module, isolated preferences
+and a fake provider for any import or draft generation. Add a Go declaration to
+edit and at least two `func BenchmarkName(b *testing.B)` benchmarks in a same-package
+`*_test.go` file. For a long-catalog case, add at least 25 distinct benchmarks and
+include a long benchmark name; repeat with a long Unicode package/target path.
+Use only code and tests you trust, with no effects outside disposable data:
+copied workspaces are not a security sandbox. Prepare an isolated declaration
+draft in Editor and explicitly validate it; do not Apply during this procedure.
+
+Repeat at the sizes, text scales and densities listed above, especially 800×650
+and 1280×600 at 125%/150% text and on both sides of the result-browser reflow
+boundary. Record actual runtime, viewport, density, text scale and input method.
+Keep **Report metadata** and measurement details collapsed for required-information
+checks. For request/late-response cases, use a recording proxy or controlled test
+daemon if available, pointing the client at it with `MINI_ORCA_URL` as described
+in the [desktop guide](README.md). Record the setup and response delays used;
+there is no in-app delay/failure-injection control. Without controlled responses
+or request evidence, mark the corresponding observations pending rather than
+inferring safety from appearance. Ordinary automated tests remain fake-transport
+or action-counter tests, without real project execution.
+
+1. Without a draft, Tab to **Explore benchmark evidence**, activate with Enter
+   and Space in separate attempts, and verify expanded state, visible focus,
+   scrolling and **Benchmark comparison** reachability. Read the blocked reason
+   and disabled List action. Repeat with an edited, validating, invalid or stale
+   candidate where safely reproducible. These states must not request a catalog
+   or auto-validate. Switch result/project and check disclosure resets. With a
+   valid unchanged candidate, navigate away/back and select another finding:
+   retain candidate evidence; navigation/disclosure must not discover or execute.
+2. With the exact current draft validated, Tab to **List compatible benchmarks**
+   and activate once. Observe only a guarded catalog GET under the
+   [API contract](../docs/api-contract.md#live-routes): no trust POST, comparison
+   POST, provider request or source write. **Listing · read-only discovery**
+   must not imply project-code execution. Repeat activation during a delayed
+   lookup: only one lookup should be admitted. On success, check no choice is
+   selected. Tab/Shift+Tab through every choice, including the last of the long
+   catalog; focus must be visible and revealed by scrolling without selecting
+   or making requests. Activate a choice with Enter, then another with Space:
+   each selects once, with distinct focused and Selected/Not selected states.
+   Use a screen reader to check choice names and selection announcements; do
+   not credit offscreen semantics as spoken output.
+3. After selection, inspect and copy the complete benchmark name, project
+   ID/revision, target path, validated draft revision, **Package working directory**
+   and **Opaque scope guard (identity metadata)**. Repeat with root-level and
+   nested targets: `.` means project root, not the opaque scope. Tab to **Copy
+   argv** (accessible name **Copy selected benchmark argv**) and activate it;
+   paste into a separate scratch document and compare every indexed JSON-quoted
+   argument with the returned catalog, including the final argument. Check copy
+   feedback and read-only command focus, then select/copy the scope and long
+   path text. No dedicated scope-copy button is expected. Verify selection and
+   copying across reflow, native focus indication and screen-reader Read-only
+   state; typing must not edit argv or metadata. Clipboard observations require
+   an actual paste, not just a copied-message assertion. With optional details
+   collapsed, scroll to every command/scope value, execution warning, trust
+   explanation, blocked reason and run/recovery action at constrained sizes.
+4. Activate **Refresh compatible benchmarks** after selecting a choice. Check
+   catalog/selection authority is cleared immediately and the replacement requires
+   explicit selection again, even for the same benchmark. Exercise empty,
+   unavailable, lookup-failed and invalidated discovery where safely available;
+   read the current reason and keyboard-reach Refresh without a hidden optional
+   disclosure. With a missing/stale candidate, Refresh stays blocked until source
+   and draft are current and validated. A malformed name/scope/argv or foreign
+   catalog must never enable execution. Use controlled responses for states the
+   real daemon cannot reproduce, or record them as unobserved on the host.
+5. Before execution, read/copy the warning about imported project code, possible
+   external file/network effects and copied workspaces not being a sandbox.
+   Inspect the separate trust contract `go test ./...`: permission is broader
+   than benchmark-only, applies to this project/revision in the daemon session,
+   and granting it does not execute that command. Explicitly activate **Trust
+   and run selected benchmark** once on the disposable project. With recording
+   available, verify trust GET → validated trust POST (`confirm: true`) → comparison
+   POST for the exact selected name/scope and current candidate guards. Trust
+   responses must match project/revision, with the trust command list exactly
+   `[["go", "test", "./..."]]`; the acknowledgment must be trusted. Observe
+   **Admitting · execution trust** / **Checking execution trust…** separately
+   from **Running · explicit local
+   execution** / **Comparing benchmark…**. Run and discovery controls must be
+   disabled while active; repeated activation must not admit another operation.
+   Refresh explicitly, reselect, and repeat with catalog-reported trust: **Run
+   selected benchmark** must compare directly without silently granting trust.
+6. With controlled delays, repeat from a fresh validated candidate/selection,
+   holding trust GET, trust POST and comparison responses in separate attempts.
+   During each pending stage, edit the declaration/imports, restart validation,
+   change the selected benchmark, or explicitly discard/change target/project.
+   Confirm old authority and active indicators are revoked. Release the held
+   response: obsolete work must not initiate the next stage or publish evidence
+   for the replacement candidate/choice. Selecting a different choice must not
+   run it. A trust POST already sent may have granted trust; a comparison already
+   sent may have started code. Local stopping is not daemon-confirmed cancellation.
+   Record the stage, invalidating action, request order and late-response outcome
+   separately. Without deterministic delay control, leave those stage checks
+   pending; manually racing a fast response does not qualify them.
+7. Safely exercise trust rejection/expiry, changed scope, stale-draft conflict
+   and lookup/comparison transport failure using controlled responses where
+   needed. Trust request rejection must not reach comparison or retry automatically.
+   A mismatched/untrusted acknowledgment, daemon-reported expired trust or changed
+   scope revokes selection and requires explicit Refresh/reselection/re-admission,
+   not automatic trust renewal or substitution of a returned scope. A stale-draft
+   conflict requires source refresh and current validation. A comparison timeout
+   must not claim code never began or invent measurements. Retain an older
+   completed comparison while making a new request: pending/failure copy must
+   take precedence and **Prior measurement details** must remain clearly prior,
+   not execution authority or measured confirmation of a model hypothesis.
+   Inspect retained unavailable, failed, canceled, stale and inconclusive evidence
+   separately when supplied; absent cases are unobserved, not native passes.
+
+Throughout, observe request methods/routes, an execution log and disposable source
+hashes where available. Finding selection, focus movement, disclosure, copying,
+selection and resizing must produce no trust grant, comparison, provider request
+or source write; only explicit List/Refresh may request the catalog. Record each
+native focus, screen-reader, clipboard and side-effect check with its evidence path
+and result; unavailable recording or injection checks remain pending with a reason.
+Passing `PerformanceWorkspaceTest`, `DesktopKeyboardNavigationTest`, benchmark
+workflow tests or production-component renders is separate automated evidence,
+not a record of these native observations.
 
 ## Verified Go scan native review
 

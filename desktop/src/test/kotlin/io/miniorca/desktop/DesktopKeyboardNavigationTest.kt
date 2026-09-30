@@ -3099,7 +3099,8 @@ class DesktopKeyboardNavigationTest {
     var active by mutableStateOf(LeftToolWindow.Summary)
     var selections = 0
     var opens = 0
-    ComposeVisualFixture(180, 340) {
+    // Small frame steps exercise the intermediate, partially revealed control.
+    ComposeVisualFixture(180, 340, frameDurationNanos = 1_000_000) {
           ToolWindowBar(
               active,
               {

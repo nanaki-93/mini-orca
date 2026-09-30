@@ -612,14 +612,74 @@ action opens the indexed path and supplied line without preparing Assistant; if
 the path is unavailable in the index, the control is disabled with a reason.
 
 **Explore benchmark evidence** opens a local disclosure, without a candidate or
-catalog request. It does not list benchmarks, select one, grant trust, run code,
-contact a provider or write source. **List compatible benchmarks** explicitly
-requests the read-only catalog when a current candidate is available. Select a
-benchmark separately; only **Run selected benchmark** (or **Trust and run selected
-benchmark**) starts local execution, with trust required when not already granted.
-**Measurement details** shows the comparison for the candidate and selected
-benchmark, not a measured gain for a model hypothesis. Running, unavailable,
-failed, canceled, stale and inconclusive comparisons keep their own labels.
+catalog request. Discovery requires an open project, selected file and applicable
+validation for the exact current draft. Draft/editor text, project/revision,
+target path and base file hash must still match the open file. Missing, edited,
+validating, invalid or stale candidates show a blocked reason; listing does not
+automatically validate them.
+
+**List compatible benchmarks** explicitly requests the read-only daemon catalog;
+**Refresh compatible benchmarks** repeats discovery after a lookup. Listing shows
+**Listing · read-only discovery**, not execution, and suppresses duplicate lookups.
+Refresh immediately clears the old catalog and selection. All returned choices
+remain in daemon order, with none selected automatically; explicitly select one
+again after reviewing each refreshed catalog. Selection is local and must match
+the exact returned choice, including argv and scope. Empty, unavailable and failed
+lookups keep their own explanations and allow explicit Refresh when the candidate
+is eligible. An invalidated catalog or stale selection requires fresh discovery
+and selection. After a stale-draft conflict, refresh the source and validate the
+current draft before listing again.
+
+Before running, inspect **Selected benchmark**, **Project ID**, **Project revision**,
+**Target path**, **Validated draft revision**, **Package working directory** and
+**Opaque scope guard (identity metadata)**. The working directory is relative to
+the project root (`.` means the root); the opaque scope is an identity guard, not
+a directory. **Daemon-returned argv (read-only)** shows every argument separately
+as a JSON-quoted `argv[index]` entry, preserving argument boundaries rather than
+constructing a shell command. **Copy argv** copies those entries; path and scope
+text are also selectable/read-only. An incomplete name, scope or argv blocks
+execution with a reason. Required scope, warnings and recovery remain outside
+**Report metadata** and **Measurement details**.
+
+**Trust and run selected benchmark** first reads execution trust, then grants it
+only for matching project/revision and the exact trust contract `go test ./...`;
+the client requires a matching trusted acknowledgment before requesting the
+benchmark. This is current-daemon-session project/revision trust, **broader than
+benchmark-only permission** and separate from provider consent and Apply authority.
+Granting trust does not itself execute `go test ./...`; the combined action requests
+the selected benchmark separately. **Run selected benchmark** uses catalog-reported
+trust without silently renewing it. Benchmark execution runs imported project code
+in baseline/candidate copies and may have external file or network effects:
+**copied workspaces are not a security sandbox**. Only run code you trust.
+
+Admission shows **Admitting · execution trust** / **Checking execution trust…**
+separately from **Running · explicit local execution** / **Comparing benchmark…**.
+Repeat execution and discovery controls are disabled while admission/comparison
+is active. Project, file, draft, validation or choice changes invalidate obsolete
+work; a changed choice never runs automatically. Each request stage and result
+publication rechecks current identity. A mismatched or untrusted trust acknowledgment,
+scope change or daemon-reported trust expiry revokes reusable selection: explicitly
+Refresh and select again, then review trust before admitting another run. Admission
+request failures remain visible and never proceed to comparison or retry execution
+automatically. A comparison timeout may mean execution already started, with no
+new measurements confirmed. Local stopping/invalidation does not prove the daemon
+canceled code that already began.
+
+**Measurement details** shows evidence for the candidate and selected benchmark,
+not a measured gain for a model hypothesis. New discovery/admission progress and
+failures take precedence over retained evidence, which is labeled **Prior
+measurement details** when no longer the current outcome. Retained measurements
+cannot authorize another run; unavailable, failed, canceled, stale and inconclusive
+evidence retains its meaning. Benchmarks are not an unconditional Apply prerequisite.
+Navigation, finding selection, disclosure, copying and resizing do not list
+benchmarks, grant trust, execute code, contact a provider or write source.
+
+For native keyboard, focus, screen-reader and clipboard observations, follow the
+[benchmark native review](KEYBOARD_SMOKE_CHECKLIST.md#benchmark-discovery-and-admission-native-review).
+Ordinary automated tests use fake transport or action counters, without a running
+daemon, provider or project-code execution. Component fixtures qualify rendering
+and local interaction, not native-window behavior; unperformed native checks remain
+pending.
 
 ## New Go functions
 
