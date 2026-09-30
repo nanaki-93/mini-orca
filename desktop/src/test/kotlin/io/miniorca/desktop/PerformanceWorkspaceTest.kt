@@ -612,7 +612,10 @@ class PerformanceWorkspaceTest {
             fixture.render()
             fixture.clickDescription("Expand Explore benchmark evidence")
             fixture.render()
-            eligibility.discoveryBlockedReason?.let { assertTrue(fixture.hasText(it)) }
+            eligibility.discoveryBlockedReason?.let {
+              assertTrue(fixture.hasText(it))
+              assertEquals(it, fixture.stateDescription("List compatible benchmarks"))
+            }
             assertEquals(!eligibility.canDiscover, fixture.isDisabled("List compatible benchmarks"))
             assertEquals(0, requests)
             if (eligibility.canDiscover) {
@@ -680,7 +683,23 @@ class PerformanceWorkspaceTest {
             fixture.render()
             if (evidence.discovery == BenchmarkDiscoveryOutcome.Loaded) {
               assertEquals(!eligibility.canCompare, fixture.isDisabled("Run selected benchmark"))
-              eligibility.comparisonBlockedReason?.let { assertTrue(fixture.hasText(it)) }
+              eligibility.comparisonBlockedReason?.let {
+                assertTrue(fixture.hasText(it), "Blocked reasons remain outside optional details")
+                assertEquals(it, fixture.stateDescription("Run selected benchmark"))
+              }
+              evidence.catalog!!.benchmarks.forEach { choice ->
+                val label = "Select benchmark ${choice.name.ifBlank { "Unnamed benchmark" }}"
+                assertTrue(fixture.hasDescription(label))
+                assertEquals(choice == evidence.selected, fixture.isDescriptionSelected(label))
+                assertEquals(
+                    if (choice == evidence.selected) "Selected" else "Not selected",
+                    fixture.descriptionState(label))
+              }
+              assertTrue(fixture.hasDescription("Selected benchmark argv"))
+              assertEquals("Read-only", fixture.descriptionState("Selected benchmark argv"))
+              assertFalse(fixture.hasText("Finding ID"), "Optional report metadata is collapsed")
+              assertTrue(fixture.hasText("Running benchmarks executes imported project code."))
+              assertTrue(fixture.hasText("This is broader than benchmark-only permission."))
             } else {
               assertFalse(fixture.hasText("Run selected benchmark"))
               assertTrue(fixture.hasText("Discovery invalidated"))

@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusManager
@@ -274,6 +275,251 @@ class DesktopKeyboardNavigationTest {
           assertFalse(fixture.hasText("Benchmark comparison"))
           assertEquals(0, actions)
         }
+  }
+
+  @Test
+  fun benchmarkKeyboardTraversalRevealsChoicesCommandAndAdmissionWithoutImplicitActions() {
+    for (activation in listOf(Key.Enter, Key.Spacebar)) {
+      val page = performancePageFixture()
+      val project = page.project!!
+      val draft =
+          DeclarationDraft(
+              id = "draft",
+              revision = 1,
+              hash = "candidate",
+              projectId = project.projectId,
+              projectRevision = project.projectRevision,
+              targetPath = "main.go",
+              baseFileHash = "base",
+              declaration = "func Run() {}",
+              validation =
+                  DeclarationValidation(
+                      true, "strict_symbol", diff = UnifiedDiff("main.go", "main.go")))
+      val choices =
+          (1..24).map {
+            GoBenchmarkChoice(
+                "BenchmarkWork$it",
+                listOf("go", "test", ".", "-bench", "^BenchmarkWork$it$"),
+                "scope-$it")
+          }
+      val catalog =
+          GoBenchmarkCatalog(
+              draftId = draft.id,
+              draftRevision = draft.revision,
+              draftHash = draft.hash,
+              projectId = project.projectId,
+              projectRevision = project.projectRevision,
+              baseFileHash = draft.baseFileHash,
+              targetPath = draft.targetPath,
+              available = true,
+              trusted = activation == Key.Enter,
+              benchmarks = choices)
+      var snapshot by
+          mutableStateOf(
+              DesktopState(
+                  projectState = ProjectWorkspaceState(project),
+                  selection =
+                      FileSelectionState(
+                          selectedFile =
+                              ProjectFileInfo(
+                                  draft.targetPath,
+                                  draft.baseFileHash,
+                                  "main.go",
+                                  language = "Go",
+                                  sizeBytes = 1,
+                                  lineCount = 20,
+                                  modifiedAt = "",
+                                  binary = false)),
+                  review = DraftReviewState(draft = draft, editor = editableDraft(draft))))
+      val calls = mutableListOf<String>()
+      val browser = newResultBrowserState(page)
+      browser.choose(performanceResults(page).single().row().key)
+      // Keyboard qualification pumps real-sized frames through Compose's focus-scroll spring.
+      ComposeVisualFixture(800, 650, 1.5f, frameDurationNanos = 16_000_000) {
+            val evidence = snapshot.review.benchmark
+            PerformanceWorkspacePane(
+                PerformanceWorkspacePaneState(
+                    page,
+                    null,
+                    browser = browser,
+                    benchmarkCatalog = evidence.catalog,
+                    selectedBenchmark = evidence.selected,
+                    benchmarkDiscovery = evidence.discovery,
+                    benchmarkEligibility = benchmarkEligibility(snapshot)),
+                PerformanceWorkspaceActions(
+                    { calls += "provider" },
+                    { calls += "analysis" },
+                    FindingActions(
+                        { calls += "provider" },
+                        { _, _ -> calls += "write" },
+                        { calls += "source" }),
+                    { calls += "source" },
+                    loadBenchmarks = {
+                      calls += "discovery/read"
+                      snapshot =
+                          snapshot.copy(
+                              review =
+                                  snapshot.review.copy(
+                                      benchmark =
+                                          BenchmarkEvidenceState(
+                                              catalog = catalog,
+                                              discovery = BenchmarkDiscoveryOutcome.Loaded)))
+                    },
+                    selectBenchmark = {
+                      calls += "selection/local"
+                      snapshot =
+                          snapshot.copy(
+                              review =
+                                  snapshot.review.copy(
+                                      benchmark = snapshot.review.benchmark.copy(selected = it)))
+                    },
+                    runBenchmark = { calls += "admission" }))
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.requestDescriptionFocus("Expand Explore benchmark evidence"))
+            assertTrue(fixture.pressKey(activation))
+            fixture.render()
+            tabToBenchmarkControl(fixture, "benchmark-discovery")
+            fixture.assertColorVisible(FocusAccent)
+            assertTrue(calls.isEmpty())
+            assertTrue(fixture.pressKey(activation))
+            fixture.render()
+            assertEquals(listOf("discovery/read"), calls)
+            assertNull(snapshot.review.benchmark.selected)
+            choices.forEachIndexed { index, choice ->
+              val label = "Select benchmark ${choice.name}"
+              tabToBenchmarkControl(fixture, "benchmark-choice-$index")
+              fixture.awaitVisibleDescription(label)
+              assertFalse(fixture.isDescriptionSelected(label))
+              assertEquals("Not selected", fixture.descriptionState(label))
+              assertNull(snapshot.review.benchmark.selected, "Focus is not selection")
+            }
+            fixture.render("f21-keyboard-choice-focus-$activation")
+            fixture.assertColorVisible(FocusAccent)
+            assertEquals(listOf("discovery/read"), calls)
+            assertTrue(fixture.pressKey(activation))
+            fixture.render()
+            val selected = choices.last()
+            assertEquals(selected, snapshot.review.benchmark.selected)
+            assertEquals(listOf("discovery/read", "selection/local"), calls)
+            assertTrue(fixture.isDescriptionSelected("Select benchmark ${selected.name}"))
+            assertEquals("Selected", fixture.descriptionState("Select benchmark ${selected.name}"))
+            tabToBenchmarkControl(fixture, "benchmark-copy-argv")
+            awaitBenchmarkReveal(fixture, "benchmark-copy-argv", minimumHeight = 32f)
+            fixture.render("f21-keyboard-copy-focus-$activation")
+            fixture.awaitVisibleDescription("Copy selected benchmark argv")
+            assertTrue(fixture.pressKey(activation))
+            fixture.render()
+            assertEquals(performanceBenchmarkArgv(selected.command), fixture.clipboardText())
+            assertEquals(
+                listOf("discovery/read", "selection/local"), calls, "Copying is not admission")
+            tabToBenchmarkControl(fixture, "benchmark-argv")
+            fixture.render("f21-keyboard-command-focus-$activation")
+            awaitBenchmarkReveal(fixture, "benchmark-argv", minimumHeight = 140f)
+            val commandBounds = fixture.descriptionBounds("Selected benchmark argv")
+            val overviewBounds = fixture.taggedBounds("result-overview")
+            assertTrue(
+                commandBounds.top >= overviewBounds.top &&
+                    commandBounds.bottom <= overviewBounds.bottom,
+                "The focused command must be revealed within the overview: $commandBounds / $overviewBounds")
+            for (text in
+                listOf("Daemon-returned argv (read-only)") +
+                    performanceBenchmarkArgv(selected.command).lines()) {
+              val bounds = fixture.firstVisibleTextBounds(text)
+              assertTrue(
+                  bounds.height > 0f &&
+                      bounds.top >= overviewBounds.top &&
+                      bounds.bottom <= overviewBounds.bottom,
+                  "Focused command text must be fully available: $text / $bounds")
+            }
+            assertEquals("Read-only", fixture.descriptionState("Selected benchmark argv"))
+            fixture.assertColorVisible(FocusAccent)
+            val run =
+                if (catalog.trusted) "Run selected benchmark"
+                else "Trust and run selected benchmark"
+            tabToBenchmarkControl(fixture, "benchmark-run")
+            awaitBenchmarkReveal(fixture, "benchmark-run", minimumHeight = 32f)
+            fixture.render("f21-keyboard-run-focus-$activation")
+            val runBounds = fixture.taggedBounds("benchmark-run")
+            assertTrue(
+                runBounds.height > 0f &&
+                    runBounds.top >= overviewBounds.top &&
+                    runBounds.bottom <= overviewBounds.bottom)
+            assertTrue(fixture.isFocusedControl(run))
+            assertFalse(fixture.hasText("Finding ID"), "Optional report metadata stays collapsed")
+            assertFalse(
+                fixture.hasText("Benchmark evidence"), "Optional measurements stay collapsed")
+            for (required in
+                listOf(
+                    "Running benchmarks executes imported project code.",
+                    "Baseline and candidate use copied workspaces; these are not a security sandbox.",
+                    "Trust contract (separate from selected argv): go test ./...",
+                    "This is broader than benchmark-only permission.")) {
+              assertTrue(fixture.hasText(required), required)
+            }
+            // Revisit the disclosure from admission as well as from the selected choice.
+            // Pending copy feedback must not move the next focused target out of view.
+            repeat(3) {
+              tabToBenchmarkControl(fixture, "benchmark-argv", reverse = true)
+              awaitBenchmarkReveal(fixture, "benchmark-argv", minimumHeight = 140f)
+              fixture.assertColorVisible(FocusAccent)
+              tabToBenchmarkControl(fixture, "benchmark-copy-argv", reverse = true)
+              awaitBenchmarkReveal(fixture, "benchmark-copy-argv", minimumHeight = 32f)
+              fixture.awaitVisibleDescription("Copy selected benchmark argv")
+              tabToBenchmarkControl(fixture, "benchmark-run")
+              awaitBenchmarkReveal(fixture, "benchmark-run", minimumHeight = 32f)
+              assertEquals(listOf("discovery/read", "selection/local"), calls)
+            }
+            fixture.resize(1280, 600)
+            fixture.render()
+            assertTrue(fixture.isFocusedControl(run))
+            assertEquals(listOf("discovery/read", "selection/local"), calls)
+            assertTrue(fixture.pressKey(activation))
+            assertEquals(listOf("discovery/read", "selection/local", "admission"), calls)
+          }
+    }
+  }
+
+  @Test
+  fun benchmarkKeyboardBlockedReasonsRemainAccessibleWithoutActivatingDisabledRecovery() {
+    for (discovery in
+        listOf(
+            BenchmarkDiscoveryOutcome.Failed("Lookup timed out. Retry explicitly."),
+            BenchmarkDiscoveryOutcome.Unavailable("No compatible benchmark."),
+            BenchmarkDiscoveryOutcome.Invalidated)) {
+      val page = performancePageFixture()
+      var reads = 0
+      var privileged = 0
+      val blocked = benchmarkEligibility(DesktopState())
+      ComposeVisualFixture(800, 650, 1.5f, frameDurationNanos = 16_000_000) {
+            PerformanceWorkspacePane(
+                PerformanceWorkspacePaneState(
+                    page, null, benchmarkDiscovery = discovery, benchmarkEligibility = blocked),
+                PerformanceWorkspaceActions(
+                    { privileged++ },
+                    {},
+                    FindingActions({ privileged++ }, { _, _ -> privileged++ }, {}),
+                    {},
+                    loadBenchmarks = { reads++ },
+                    runBenchmark = { privileged++ }))
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.requestDescriptionFocus("Expand Explore benchmark evidence"))
+            assertTrue(fixture.pressKey(Key.Spacebar))
+            fixture.render()
+            assertTrue(fixture.hasText(blocked.discoveryBlockedReason!!))
+            assertTrue(fixture.isDisabled("Refresh compatible benchmarks"))
+            assertEquals(
+                blocked.discoveryBlockedReason,
+                fixture.stateDescription("Refresh compatible benchmarks"))
+            assertFalse(fixture.requestFocus("Refresh compatible benchmarks"))
+            fixture.pressKey(Key.Tab)
+            fixture.render()
+            assertEquals(0, reads + privileged)
+          }
+    }
   }
 
   @Test
@@ -2974,4 +3220,56 @@ class DesktopKeyboardNavigationTest {
         editorBreadcrumbSegments("very/long/project/path/main.go", "Run").map { it.label },
     )
   }
+}
+
+/** Selectable evidence has passive tab stops between actions; traverse rather than skipping it. */
+internal fun tabToBenchmarkControl(
+    fixture: ComposeVisualFixture,
+    tag: String,
+    reverse: Boolean = false,
+) {
+  repeat(12) {
+    assertTrue(fixture.pressKey(Key.Tab, shift = reverse))
+    awaitBenchmarkScrollSettled(fixture)
+    if (fixture.isTaggedNodeFocused(tag)) return
+  }
+  error("Keyboard traversal did not reach $tag")
+}
+
+// The offscreen scene uses Unconfined, while global snapshot notifications can arrive on
+// another dispatcher. Flush them on the fixture thread before pumping reveal animations;
+// a stable scroll value alone does not mean pending focus/layout state has been delivered.
+private fun awaitBenchmarkScrollSettled(fixture: ComposeVisualFixture) {
+  val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+  var previous = Float.NaN
+  var stableSince = System.nanoTime()
+  do {
+    Thread.sleep(20)
+    Snapshot.sendApplyNotifications()
+    fixture.render()
+    val scroll = fixture.verticalScrollValue("result-overview")
+    if (scroll != previous) stableSince = System.nanoTime()
+    previous = scroll
+    if (System.nanoTime() - stableSince >= TimeUnit.MILLISECONDS.toNanos(100)) return
+  } while (System.nanoTime() < deadline)
+  error("Benchmark overview reveal did not settle: $previous")
+}
+
+private fun awaitBenchmarkReveal(fixture: ComposeVisualFixture, tag: String, minimumHeight: Float) {
+  val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+  do {
+    Snapshot.sendApplyNotifications()
+    fixture.render()
+    val bounds = fixture.taggedBounds(tag)
+    val overview = fixture.taggedBounds("result-overview")
+    if (bounds.height >= minimumHeight &&
+        bounds.top >= overview.top &&
+        bounds.bottom <= overview.bottom &&
+        bounds.width > 0f)
+        return
+    Thread.sleep(20)
+  } while (System.nanoTime() < deadline)
+  fixture.render("f21-reveal-failure-$tag")
+  error(
+      "Keyboard focus did not reveal $tag: ${fixture.taggedBounds(tag)} / ${fixture.taggedBounds("result-overview")}; focused=${fixture.isTaggedNodeFocused(tag)}; header=${runCatching { fixture.firstVisibleTextBounds("Daemon-returned argv (read-only)") }}; last=${runCatching { fixture.firstVisibleTextBounds("argv[4] = \"^BenchmarkWork24$\"") }}")
 }
