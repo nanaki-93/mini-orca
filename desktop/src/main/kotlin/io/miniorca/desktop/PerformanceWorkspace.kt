@@ -54,7 +54,8 @@ internal fun PerformanceWorkspacePane(
           state.benchmarkDiscovery,
           state.benchmarkAdmission,
           state.benchmarkEligibility,
-          state.benchmarkCatalog)
+          state.benchmarkCatalog,
+          state.benchmarkLatestOutcome)
   AnalysisResultsPane(
       page = state.page,
       rows = results.map { it.row() } + semantic.map(::semanticResultRow),
@@ -411,7 +412,8 @@ private fun PerformanceBenchmarkEvidence(
     expectedChoice: GoBenchmarkChoice?,
     priorEvidence: Boolean,
 ) {
-  val presentation = performanceBenchmarkPresentation(comparison, expectedIdentity, expectedChoice)
+  val presentation =
+      performanceBenchmarkPresentation(comparison, expectedIdentity, expectedChoice, priorEvidence)
   Column(Modifier.fillMaxWidth()) {
     IdePaneHeader(
         title = if (priorEvidence) "Prior benchmark evidence" else "Benchmark evidence",
@@ -441,7 +443,7 @@ private fun PerformanceBenchmarkEvidence(
             modifier = Modifier.padding(top = 6.dp))
         if (presentation.insights.isNotEmpty()) {
           Text(
-              "Measured trade-offs",
+              if (priorEvidence) "Prior measured trade-offs" else "Measured trade-offs",
               color = SecondaryText,
               fontSize = 10.sp,
               modifier = Modifier.padding(top = 8.dp))
@@ -477,14 +479,11 @@ internal fun performanceBenchmarkStatusPresentation(
     admission: BenchmarkAdmissionOutcome = BenchmarkAdmissionOutcome.Idle,
     eligibility: BenchmarkEligibility? = null,
     catalog: GoBenchmarkCatalog? = null,
+    latestOutcome: BenchmarkComparisonOutcome? = null,
 ): PerformanceBenchmarkStatusPresentation {
-  fun current(label: String, summary: String) =
-      PerformanceBenchmarkStatusPresentation(label, summary, priorEvidence = comparison != null)
+  fun current(label: String, summary: String, prior: Boolean = comparison != null) =
+      PerformanceBenchmarkStatusPresentation(label, summary, priorEvidence = prior)
   return when {
-    discovery == BenchmarkDiscoveryOutcome.Loading ->
-        current(
-            "Listing · read-only discovery",
-            "Looking up compatible benchmarks. No project code is executed by discovery.")
     admission == BenchmarkAdmissionOutcome.Admitting ->
         current(
             "Admitting · execution trust", "Checking execution trust for the selected benchmark.")
@@ -492,8 +491,34 @@ internal fun performanceBenchmarkStatusPresentation(
         current(
             "Running · explicit local execution",
             "The selected benchmark is running in isolated copies for the current candidate.")
+    discovery == BenchmarkDiscoveryOutcome.Loading ->
+        current(
+            "Listing · read-only discovery",
+            "Looking up compatible benchmarks. No project code is executed by discovery.")
     admission is BenchmarkAdmissionOutcome.Failed ->
         current("Benchmark admission failed", admission.message)
+    admission == BenchmarkAdmissionOutcome.Stopped ->
+        current(
+            "Benchmark admission stopped",
+            "The local benchmark operation stopped. Prior evidence does not confirm this operation completed.")
+    latestOutcome != null &&
+        (latestOutcome.status != BenchmarkComparisonStatus.Completed ||
+            latestOutcome.response != comparison) ->
+        current(
+            benchmarkOutcomeLabel(latestOutcome),
+            latestOutcome.response.reason.ifBlank {
+              when (latestOutcome.status) {
+                BenchmarkComparisonStatus.Completed ->
+                    "The comparison completed without new measurements."
+                BenchmarkComparisonStatus.Canceled -> "The daemon canceled the comparison."
+                BenchmarkComparisonStatus.Failed -> "The daemon reported a comparison failure."
+                BenchmarkComparisonStatus.Unavailable ->
+                    "The comparison is unavailable. Refresh compatible benchmarks before trying again."
+                BenchmarkComparisonStatus.Unsupported ->
+                    "The daemon returned unsupported status ${latestOutcome.response.status.ifBlank { "(not recorded)" }}; no successful comparison is confirmed."
+              }
+            },
+            prior = comparison != null && latestOutcome.response != comparison)
     discovery is BenchmarkDiscoveryOutcome.Failed ->
         current("Benchmark lookup failed", discovery.message)
     discovery is BenchmarkDiscoveryOutcome.Unavailable ->
@@ -506,10 +531,6 @@ internal fun performanceBenchmarkStatusPresentation(
         current(
             "Discovery invalidated",
             "Benchmark catalog and selection are no longer current. Validate the candidate if needed, then refresh compatible benchmarks.")
-    admission == BenchmarkAdmissionOutcome.Stopped ->
-        current(
-            "Benchmark admission stopped",
-            "The local benchmark operation stopped. Prior evidence does not confirm this operation completed.")
     discovery == BenchmarkDiscoveryOutcome.Loaded && catalog?.benchmarks?.isEmpty() == true ->
         current(
             "No compatible benchmarks",
@@ -815,6 +836,7 @@ internal data class PerformanceWorkspacePaneState(
     val selectedBenchmark: GoBenchmarkChoice? = null,
     val benchmarkDiscovery: BenchmarkDiscoveryOutcome = BenchmarkDiscoveryOutcome.NotRequested,
     val benchmarkAdmission: BenchmarkAdmissionOutcome = BenchmarkAdmissionOutcome.Idle,
+    val benchmarkLatestOutcome: BenchmarkComparisonOutcome? = null,
     val benchmarkEligibility: BenchmarkEligibility = benchmarkEligibility(DesktopState()),
     val browser: ResultBrowserState = newResultBrowserState(page),
 )
@@ -893,6 +915,23 @@ internal fun performanceBenchmarkPresentation(
     comparison: GoBenchmarkComparison,
     expectedIdentity: GoBenchmarkComparisonIdentity? = null,
     expectedChoice: GoBenchmarkChoice? = null,
+    priorEvidence: Boolean = false,
+): PerformanceBenchmarkPresentation {
+  val assessment = benchmarkMeasurementPresentation(comparison, expectedIdentity, expectedChoice)
+  return if (priorEvidence)
+      assessment.copy(
+          stateLabel = "Prior evidence · ${assessment.stateLabel}",
+          summary =
+              "Prior comparison only; it does not confirm the latest attempt. Recorded assessment: ${assessment.summary}",
+          insights = assessment.insights.map { "Prior observation: $it" },
+          isMeasured = false)
+  else assessment
+}
+
+private fun benchmarkMeasurementPresentation(
+    comparison: GoBenchmarkComparison,
+    expectedIdentity: GoBenchmarkComparisonIdentity?,
+    expectedChoice: GoBenchmarkChoice?,
 ): PerformanceBenchmarkPresentation {
   val identity = comparison.identityOrNull()
   val rows = benchmarkIdentityRows(comparison)
@@ -1131,7 +1170,16 @@ private fun benchmarkTerminalLabel(comparison: GoBenchmarkComparison): String =
       "unavailable" -> "Not measured · unavailable"
       "canceled" -> "Not measured · canceled"
       "failed" -> "Not measured · failed"
-      else -> "Not measured · missing"
+      else -> "Not measured · unsupported status"
+    }
+
+private fun benchmarkOutcomeLabel(outcome: BenchmarkComparisonOutcome): String =
+    when (outcome.status) {
+      BenchmarkComparisonStatus.Completed -> "Completed · no new measurements"
+      BenchmarkComparisonStatus.Canceled -> "Comparison canceled · daemon"
+      BenchmarkComparisonStatus.Failed -> "Comparison failed · daemon"
+      BenchmarkComparisonStatus.Unavailable -> "Comparison unavailable · daemon"
+      BenchmarkComparisonStatus.Unsupported -> "Comparison unsupported · daemon status"
     }
 
 private fun validBenchmarkSamples(samples: List<GoBenchmarkSample>): Boolean =
