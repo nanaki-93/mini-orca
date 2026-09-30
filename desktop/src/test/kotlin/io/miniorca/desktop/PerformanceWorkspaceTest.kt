@@ -86,33 +86,31 @@ class PerformanceWorkspaceTest {
 
     assertEquals(
         "Not measured · explicit local execution",
-        performanceBenchmarkStatusPresentation(null, null, null, running = false).stateLabel)
+        performanceBenchmarkStatusPresentation(null, null, null).stateLabel)
     assertEquals(
         "Running · explicit local execution",
-        performanceBenchmarkStatusPresentation(null, comparison.identity(), null, running = true)
+        performanceBenchmarkStatusPresentation(
+                null, comparison.identity(), null, admission = BenchmarkAdmissionOutcome.Running)
             .stateLabel)
     assertEquals(
         "Measured · selected benchmark",
-        performanceBenchmarkStatusPresentation(
-                comparison, comparison.identity(), selectedChoice, false)
+        performanceBenchmarkStatusPresentation(comparison, comparison.identity(), selectedChoice)
             .stateLabel)
     assertTrue(
-        performanceBenchmarkStatusPresentation(
-                comparison, comparison.identity(), selectedChoice, false)
+        performanceBenchmarkStatusPresentation(comparison, comparison.identity(), selectedChoice)
             .summary
             .contains("does not measure this model suggestion"))
     assertEquals(
         "Stale · candidate identity changed",
         performanceBenchmarkStatusPresentation(
-                comparison, comparison.identity().copy(draftHash = "new-candidate"), null, false)
+                comparison, comparison.identity().copy(draftHash = "new-candidate"), null)
             .stateLabel)
     assertEquals(
         "Not measured · unavailable",
         performanceBenchmarkStatusPresentation(
                 comparison.copy(status = "unavailable", reason = "No compatible benchmark"),
                 comparison.identity(),
-                null,
-                false)
+                null)
             .stateLabel)
     for ((status, label) in
         listOf("failed" to "Not measured · failed", "canceled" to "Not measured · canceled")) {
@@ -120,8 +118,7 @@ class PerformanceWorkspaceTest {
           performanceBenchmarkStatusPresentation(
               comparison.copy(status = status, reason = "Execution $status"),
               comparison.identity(),
-              selectedChoice,
-              false)
+              selectedChoice)
       assertEquals(label, presentation.stateLabel)
       assertTrue(presentation.summary.contains("does not measure this model suggestion"))
     }
@@ -131,8 +128,7 @@ class PerformanceWorkspaceTest {
                 comparison.copy(
                     candidate = GoBenchmarkMeasurement(comparison.candidate!!.samples.take(4))),
                 comparison.identity(),
-                null,
-                false)
+                null)
             .stateLabel)
     assertEquals(
         "Inconclusive · incomplete memory evidence",
@@ -144,8 +140,7 @@ class PerformanceWorkspaceTest {
                               if (index == 0) sample.withoutMemoryMetrics() else sample
                             })),
                 comparison.identity(),
-                null,
-                false)
+                null)
             .stateLabel)
   }
 
@@ -578,6 +573,7 @@ class PerformanceWorkspaceTest {
         listOf(
             current.copy(projectState = ProjectWorkspaceState()),
             current.copy(selection = FileSelectionState()),
+            current.copy(review = DraftReviewState()),
             current.copy(
                 selection =
                     current.selection.copy(
@@ -673,6 +669,8 @@ class PerformanceWorkspaceTest {
                     expectedBenchmarkIdentity = goBenchmarkComparisonIdentity(draft),
                     benchmarkCatalog = evidence.catalog,
                     selectedBenchmark = evidence.selected,
+                    benchmarkDiscovery = evidence.discovery,
+                    benchmarkAdmission = evidence.admission,
                     benchmarkEligibility = eligibility),
                 benchmarkActions { requests++ })
           }
@@ -680,8 +678,14 @@ class PerformanceWorkspaceTest {
             fixture.render()
             fixture.clickDescription("Expand Explore benchmark evidence")
             fixture.render()
-            assertEquals(!eligibility.canCompare, fixture.isDisabled("Run selected benchmark"))
-            eligibility.comparisonBlockedReason?.let { assertTrue(fixture.hasText(it)) }
+            if (evidence.discovery == BenchmarkDiscoveryOutcome.Loaded) {
+              assertEquals(!eligibility.canCompare, fixture.isDisabled("Run selected benchmark"))
+              eligibility.comparisonBlockedReason?.let { assertTrue(fixture.hasText(it)) }
+            } else {
+              assertFalse(fixture.hasText("Run selected benchmark"))
+              assertTrue(fixture.hasText("Discovery invalidated"))
+              assertFalse(fixture.isDisabled("Refresh compatible benchmarks"))
+            }
             assertEquals(0, requests, "Rendering and disclosure do not activate an action")
             if (eligibility.canCompare) {
               fixture.clickText("Run selected benchmark")
@@ -690,6 +694,136 @@ class PerformanceWorkspaceTest {
           }
     }
   }
+
+  @Test
+  fun currentDiscoveryAndAdmissionOutcomesTakePrecedenceOverRetainedSuccess() {
+    val comparison = comparison()
+    val choice = GoBenchmarkChoice(comparison.benchmark, comparison.command, comparison.scope)
+    val cases =
+        listOf(
+            Triple(
+                BenchmarkDiscoveryOutcome.Loading,
+                BenchmarkAdmissionOutcome.Idle,
+                "Listing · read-only discovery"),
+            Triple(
+                BenchmarkDiscoveryOutcome.Unavailable("No matching benchmark"),
+                BenchmarkAdmissionOutcome.Idle,
+                "Discovery unavailable"),
+            Triple(
+                BenchmarkDiscoveryOutcome.Failed("Lookup timed out; retry discovery."),
+                BenchmarkAdmissionOutcome.Idle,
+                "Benchmark lookup failed"),
+            Triple(
+                BenchmarkDiscoveryOutcome.Invalidated,
+                BenchmarkAdmissionOutcome.Idle,
+                "Discovery invalidated"),
+            Triple(
+                BenchmarkDiscoveryOutcome.Loaded,
+                BenchmarkAdmissionOutcome.Admitting,
+                "Admitting · execution trust"),
+            Triple(
+                BenchmarkDiscoveryOutcome.Loaded,
+                BenchmarkAdmissionOutcome.Running,
+                "Running · explicit local execution"),
+            Triple(
+                BenchmarkDiscoveryOutcome.Loaded,
+                BenchmarkAdmissionOutcome.Failed("Comparison timed out; execution may have begun."),
+                "Benchmark admission failed"),
+            Triple(
+                BenchmarkDiscoveryOutcome.Loaded,
+                BenchmarkAdmissionOutcome.Stopped,
+                "Benchmark admission stopped"))
+    cases.forEach { (discovery, admission, label) ->
+      val status =
+          performanceBenchmarkStatusPresentation(
+              comparison, comparison.identity(), choice, discovery, admission)
+      assertEquals(label, status.stateLabel)
+      assertTrue(status.priorEvidence)
+      assertFalse(status.summary.contains("does not measure this model suggestion"))
+      if (discovery is BenchmarkDiscoveryOutcome.Failed)
+          assertEquals(discovery.message, status.summary)
+      if (admission is BenchmarkAdmissionOutcome.Failed)
+          assertEquals(admission.message, status.summary)
+    }
+  }
+
+  @Test
+  fun discoveryOutcomesKeepExplicitReadOnlyRecoveryAvailableWithoutSelectingOrRunning() {
+    val current = benchmarkCandidateFixture()
+    val cases =
+        listOf(
+            BenchmarkEvidenceState(discovery = BenchmarkDiscoveryOutcome.Loading) to
+                "Listing · read-only discovery",
+            BenchmarkEvidenceState(
+                catalog = benchmarkCatalogFixture(current),
+                discovery = BenchmarkDiscoveryOutcome.Loaded) to "No compatible benchmarks",
+            BenchmarkEvidenceState(
+                discovery =
+                    BenchmarkDiscoveryOutcome.Unavailable(
+                        "Daemon cannot discover this candidate.")) to
+                "Daemon cannot discover this candidate.",
+            BenchmarkEvidenceState(
+                discovery =
+                    BenchmarkDiscoveryOutcome.Failed("Lookup timeout; retry explicitly.")) to
+                "Lookup timeout; retry explicitly.",
+            BenchmarkEvidenceState(discovery = BenchmarkDiscoveryOutcome.Invalidated) to
+                "Discovery invalidated")
+    cases.forEach { (evidence, text) ->
+      var lookups = 0
+      var selections = 0
+      var runs = 0
+      val eligibility =
+          benchmarkEligibility(current.copy(review = current.review.copy(benchmark = evidence)))
+      ComposeVisualFixture(1600, 1000) {
+            PerformanceWorkspacePane(
+                PerformanceWorkspacePaneState(
+                    performancePageFixture(),
+                    null,
+                    benchmarkCatalog = evidence.catalog,
+                    benchmarkDiscovery = evidence.discovery,
+                    benchmarkAdmission = evidence.admission,
+                    benchmarkEligibility = eligibility),
+                benchmarkActions {}
+                    .copy(
+                        loadBenchmarks = { lookups++ },
+                        selectBenchmark = { selections++ },
+                        runBenchmark = { runs++ }))
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.clickDescription("Expand Explore benchmark evidence")
+            fixture.render()
+            assertTrue(fixture.hasText(text))
+            assertFalse(fixture.hasText("Run selected benchmark"))
+            assertFalse(fixture.hasText("Trust and run selected benchmark"))
+            assertEquals(0, lookups)
+            assertEquals(0, selections)
+            assertEquals(0, runs)
+            assertEquals(
+                !eligibility.canDiscover, fixture.isDisabled("Refresh compatible benchmarks"))
+            if (eligibility.canDiscover) {
+              fixture.clickText("Refresh compatible benchmarks")
+              assertEquals(1, lookups)
+            }
+            assertEquals(0, selections)
+            assertEquals(0, runs)
+          }
+    }
+  }
+
+  private fun benchmarkCatalogFixture(current: DesktopState) =
+      current.review.draft!!.let { draft ->
+        GoBenchmarkCatalog(
+            draftId = draft.id,
+            draftRevision = draft.revision,
+            draftHash = draft.hash,
+            projectId = draft.projectId,
+            projectRevision = draft.projectRevision,
+            baseFileHash = draft.baseFileHash,
+            targetPath = draft.targetPath,
+            available = true,
+            trusted = true)
+      }
 
   private fun benchmarkActions(action: () -> Unit) =
       PerformanceWorkspaceActions(

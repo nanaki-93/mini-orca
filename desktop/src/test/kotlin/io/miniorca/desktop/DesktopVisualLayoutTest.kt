@@ -4281,6 +4281,192 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun benchmarkDiscoveryOutcomesAndRecoveryRemainVisibleWithMeasurementDetailsCollapsed() {
+    val draft =
+        DeclarationDraft(
+            id = "draft",
+            revision = 1,
+            hash = "candidate",
+            projectId = "project",
+            projectRevision = "revision",
+            baseFileHash = "base",
+            targetPath = "main.go",
+            declaration = "func Run() {}",
+            validation =
+                DeclarationValidation(
+                    true, "strict_symbol", diff = UnifiedDiff("main.go", "main.go")))
+    val choice = GoBenchmarkChoice("BenchmarkRun", listOf("go", "test", "."), "scope")
+    val catalog =
+        GoBenchmarkCatalog(
+            draftId = draft.id,
+            draftRevision = draft.revision,
+            draftHash = draft.hash,
+            projectId = draft.projectId,
+            projectRevision = draft.projectRevision,
+            baseFileHash = draft.baseFileHash,
+            targetPath = draft.targetPath,
+            available = true,
+            trusted = true,
+            benchmarks = listOf(choice))
+    val comparison =
+        GoBenchmarkComparison(
+            draftId = draft.id,
+            draftRevision = draft.revision,
+            draftHash = draft.hash,
+            projectId = draft.projectId,
+            projectRevision = draft.projectRevision,
+            baseFileHash = draft.baseFileHash,
+            targetPath = draft.targetPath,
+            benchmark = choice.name,
+            scope = choice.scope,
+            status = "completed",
+            command = choice.command,
+            base = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1, 100.0, 10, 1) }),
+            candidate = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1, 90.0, 10, 1) }))
+    val current =
+        DesktopState(
+            projectState =
+                ProjectWorkspaceState(
+                    project =
+                        performancePageFixture()
+                            .project!!
+                            .copy(projectId = "project", projectRevision = "revision")),
+            selection =
+                FileSelectionState(
+                    selectedFile =
+                        ProjectFileInfo(
+                            "main.go",
+                            "base",
+                            "main.go",
+                            language = "Go",
+                            sizeBytes = 1,
+                            lineCount = 1,
+                            modifiedAt = "",
+                            binary = false)),
+            review =
+                DraftReviewState(
+                    draft = draft,
+                    editor = editableDraft(draft),
+                    benchmark = BenchmarkEvidenceState(comparison = comparison)))
+    fun withEvidence(evidence: BenchmarkEvidenceState) =
+        current.copy(
+            review = current.review.copy(benchmark = evidence.copy(comparison = comparison)))
+    val cases =
+        listOf(
+            "missing" to current.copy(projectState = ProjectWorkspaceState()),
+            "dirty" to
+                current.copy(
+                    review =
+                        current.review.copy(
+                            editor =
+                                current.review.editor!!.copy(status = DraftEditorStatus.Dirty))),
+            "loading" to
+                withEvidence(BenchmarkEvidenceState(discovery = BenchmarkDiscoveryOutcome.Loading)),
+            "empty" to
+                withEvidence(
+                    BenchmarkEvidenceState(
+                        catalog = catalog.copy(benchmarks = emptyList()),
+                        discovery = BenchmarkDiscoveryOutcome.Loaded)),
+            "unavailable" to
+                withEvidence(
+                    BenchmarkEvidenceState(
+                        discovery =
+                            BenchmarkDiscoveryOutcome.Unavailable(
+                                "The candidate has no compatible benchmark."))),
+            "failed" to
+                withEvidence(
+                    BenchmarkEvidenceState(
+                        discovery =
+                            BenchmarkDiscoveryOutcome.Failed(
+                                "Read-only lookup timed out. Refresh to retry."))),
+            "stale-selection" to
+                withEvidence(
+                    BenchmarkEvidenceState(
+                        catalog = catalog,
+                        selected = choice.copy(scope = "old-scope"),
+                        discovery = BenchmarkDiscoveryOutcome.Loaded)),
+            "admission-failed" to
+                withEvidence(
+                    BenchmarkEvidenceState(
+                        catalog = catalog,
+                        selected = choice,
+                        discovery = BenchmarkDiscoveryOutcome.Loaded,
+                        admission =
+                            BenchmarkAdmissionOutcome.Failed(
+                                "Comparison timed out; project execution may have begun."))))
+    for ((name, snapshot) in cases) {
+      for ((width, height, scale) in listOf(Triple(1440, 900, 1f), Triple(800, 650, 1.5f))) {
+        val evidence = snapshot.review.benchmark
+        val eligibility = benchmarkEligibility(snapshot)
+        val identity =
+            benchmarkEvidenceIdentity(snapshot.review).takeIf {
+              eligibility.candidate is BenchmarkCandidateDecision.Ready
+            }
+        val status =
+            performanceBenchmarkStatusPresentation(
+                comparison,
+                identity,
+                evidence.selected,
+                evidence.discovery,
+                evidence.admission,
+                eligibility,
+                evidence.catalog)
+        var actions = 0
+        ComposeVisualFixture(width, height, scale) {
+              PerformanceWorkspacePane(
+                  PerformanceWorkspacePaneState(
+                      performancePageFixture(),
+                      resultIndexFixture(),
+                      benchmarkComparison = comparison,
+                      expectedBenchmarkIdentity = identity,
+                      benchmarkCatalog = evidence.catalog,
+                      selectedBenchmark = evidence.selected,
+                      benchmarkDiscovery = evidence.discovery,
+                      benchmarkAdmission = evidence.admission,
+                      benchmarkEligibility = eligibility),
+                  PerformanceWorkspaceActions(
+                      {},
+                      {},
+                      FindingActions({}, { _, _ -> }, {}),
+                      openSource = {},
+                      loadBenchmarks = { actions++ },
+                      selectBenchmark = { actions++ },
+                      runBenchmark = { actions++ }))
+            }
+            .use { fixture ->
+              fixture.render()
+              assertTrue(fixture.hasText(status.stateLabel))
+              fixture.clickDescription("Expand Explore benchmark evidence")
+              fixture.render("f21-discovery-$name-$width-$height-$scale")
+              assertTrue(fixture.hasText(status.summary))
+              assertTrue(
+                  status.priorEvidence, "Retained success must be identified as prior for $name")
+              assertTrue(fixture.hasText("Prior measurement details"))
+              assertFalse(
+                  fixture.hasText("Prior benchmark evidence"),
+                  "Measurement details are optional and collapsed")
+              eligibility.discoveryBlockedReason?.let { assertTrue(fixture.hasText(it)) }
+              val recovery =
+                  if (evidence.discovery == BenchmarkDiscoveryOutcome.NotRequested)
+                      "List compatible benchmarks"
+                  else "Refresh compatible benchmarks"
+              assertEquals(!eligibility.canDiscover, fixture.isDisabled(recovery))
+              fixture.revealTextFullyWithin(recovery, "benchmark-discovery-scroll")
+              fixture.assertTextFits(recovery)
+              fixture.revealTextFullyWithin(
+                  "Prior measurement details", "benchmark-discovery-scroll")
+              fixture.clickText("Prior measurement details")
+              fixture.render("f21-prior-$name-$width-$height-$scale")
+              assertTrue(fixture.hasText("Prior benchmark evidence"))
+              assertTrue(
+                  fixture.hasText("BenchmarkRun"), "Retained measurement values remain readable")
+              assertEquals(0, actions, "Rendering and disclosure must not discover, select or run")
+            }
+      }
+    }
+  }
+
+  @Test
   fun formattedResponseListsUseOnlyTheOriginalLineBreaks() {
     val response = "Summary.\n\n- First item\n- Second item\n\nNext paragraph.\n1. Last item"
     ComposeVisualFixture(480, 600, 1.5f) { ModelResultContent(response) }

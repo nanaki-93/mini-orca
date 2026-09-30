@@ -17,6 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
@@ -33,7 +34,10 @@ internal fun PerformanceWorkspacePane(
           state.benchmarkComparison,
           state.expectedBenchmarkIdentity,
           state.selectedBenchmark,
-          state.benchmarkRunning)
+          state.benchmarkDiscovery,
+          state.benchmarkAdmission,
+          state.benchmarkEligibility,
+          state.benchmarkCatalog)
   AnalysisResultsPane(
       page = state.page,
       rows = results.map { it.row() } + semantic.map(::semanticResultRow),
@@ -62,27 +66,35 @@ internal fun PerformanceWorkspacePane(
             Column(
                 Modifier.fillMaxWidth()
                     .heightIn(max = 260.dp)
+                    .testTag("benchmark-discovery-scroll")
                     .verticalScroll(rememberScrollState())) {
-                  Text(
-                      benchmarkStatus.summary,
-                      color = SecondaryText,
-                      style = IdeTypography.compactBody,
-                      modifier = Modifier.padding(top = 4.dp))
+                  SelectionContainer {
+                    Text(
+                        benchmarkStatus.summary,
+                        color = SecondaryText,
+                        style = IdeTypography.compactBody,
+                        modifier = Modifier.padding(top = 4.dp))
+                  }
                   PerformanceBenchmarkControls(
                       state.benchmarkCatalog,
                       state.selectedBenchmark,
                       state.benchmarkEligibility,
-                      state.benchmarkRunning,
+                      state.benchmarkDiscovery,
+                      state.benchmarkAdmission,
                       actions)
                   state.benchmarkComparison?.let { comparison ->
                     IdeDisclosureHeader(
-                        "Measurement details",
+                        if (benchmarkStatus.priorEvidence) "Prior measurement details"
+                        else "Measurement details",
                         measurementDetailsExpanded,
                         { measurementDetailsExpanded = !measurementDetailsExpanded },
                         stateLabel = benchmarkStatus.stateLabel)
                     if (measurementDetailsExpanded)
                         PerformanceBenchmarkEvidence(
-                            comparison, state.expectedBenchmarkIdentity, state.selectedBenchmark)
+                            comparison,
+                            state.expectedBenchmarkIdentity,
+                            state.selectedBenchmark,
+                            benchmarkStatus.priorEvidence)
                   }
                 }
       }) { key ->
@@ -382,11 +394,12 @@ private fun PerformanceBenchmarkEvidence(
     comparison: GoBenchmarkComparison,
     expectedIdentity: GoBenchmarkComparisonIdentity?,
     expectedChoice: GoBenchmarkChoice?,
+    priorEvidence: Boolean,
 ) {
   val presentation = performanceBenchmarkPresentation(comparison, expectedIdentity, expectedChoice)
   Column(Modifier.fillMaxWidth()) {
     IdePaneHeader(
-        title = "Benchmark evidence",
+        title = if (priorEvidence) "Prior benchmark evidence" else "Benchmark evidence",
         icon = DesktopIcon.Performance,
         stateLabel = presentation.stateLabel,
         stateTint =
@@ -434,6 +447,7 @@ private fun PerformanceBenchmarkEvidence(
 internal data class PerformanceBenchmarkStatusPresentation(
     val stateLabel: String,
     val summary: String,
+    val priorEvidence: Boolean = false,
 )
 
 /**
@@ -444,24 +458,62 @@ internal fun performanceBenchmarkStatusPresentation(
     comparison: GoBenchmarkComparison?,
     expectedIdentity: GoBenchmarkComparisonIdentity?,
     expectedChoice: GoBenchmarkChoice?,
-    running: Boolean,
-): PerformanceBenchmarkStatusPresentation =
-    when {
-      running ->
+    discovery: BenchmarkDiscoveryOutcome = BenchmarkDiscoveryOutcome.NotRequested,
+    admission: BenchmarkAdmissionOutcome = BenchmarkAdmissionOutcome.Idle,
+    eligibility: BenchmarkEligibility? = null,
+    catalog: GoBenchmarkCatalog? = null,
+): PerformanceBenchmarkStatusPresentation {
+  fun current(label: String, summary: String) =
+      PerformanceBenchmarkStatusPresentation(label, summary, priorEvidence = comparison != null)
+  return when {
+    discovery == BenchmarkDiscoveryOutcome.Loading ->
+        current(
+            "Listing · read-only discovery",
+            "Looking up compatible benchmarks. No project code is executed by discovery.")
+    admission == BenchmarkAdmissionOutcome.Admitting ->
+        current(
+            "Admitting · execution trust", "Checking execution trust for the selected benchmark.")
+    admission == BenchmarkAdmissionOutcome.Running ->
+        current(
+            "Running · explicit local execution",
+            "The selected benchmark is running in isolated copies for the current candidate.")
+    admission is BenchmarkAdmissionOutcome.Failed ->
+        current("Benchmark admission failed", admission.message)
+    discovery is BenchmarkDiscoveryOutcome.Failed ->
+        current("Benchmark lookup failed", discovery.message)
+    discovery is BenchmarkDiscoveryOutcome.Unavailable ->
+        current(
+            "Discovery unavailable",
+            discovery.reason.ifBlank {
+              "No compatible benchmark is available for this candidate. Refresh the catalog to check again."
+            })
+    discovery == BenchmarkDiscoveryOutcome.Invalidated ->
+        current(
+            "Discovery invalidated",
+            "Benchmark catalog and selection are no longer current. Validate the candidate if needed, then refresh compatible benchmarks.")
+    admission == BenchmarkAdmissionOutcome.Stopped ->
+        current(
+            "Benchmark admission stopped",
+            "The local benchmark operation stopped. Prior evidence does not confirm this operation completed.")
+    discovery == BenchmarkDiscoveryOutcome.Loaded && catalog?.benchmarks?.isEmpty() == true ->
+        current(
+            "No compatible benchmarks",
+            "No compatible benchmarks were found for this candidate. Refresh to check again; no benchmark is selected.")
+    discovery == BenchmarkDiscoveryOutcome.Loaded && eligibility?.canCompare == false ->
+        current("Comparison blocked", eligibility.comparisonBlockedReason!!)
+    comparison != null ->
+        performanceBenchmarkPresentation(comparison, expectedIdentity, expectedChoice).let {
           PerformanceBenchmarkStatusPresentation(
-              "Running · explicit local execution",
-              "The selected benchmark is running in isolated copies for the current candidate.")
-      comparison != null ->
-          performanceBenchmarkPresentation(comparison, expectedIdentity, expectedChoice).let {
-            PerformanceBenchmarkStatusPresentation(
-                it.stateLabel,
-                "Benchmark evidence is candidate-specific and does not measure this model suggestion.")
-          }
-      else ->
-          PerformanceBenchmarkStatusPresentation(
-              "Not measured · explicit local execution",
-              "No benchmark evidence is available for the current candidate. Listing is read-only; running a benchmark requires explicit local execution.")
-    }
+              it.stateLabel,
+              "Benchmark evidence is candidate-specific and does not measure this model suggestion.",
+              priorEvidence = it.isStale)
+        }
+    else ->
+        PerformanceBenchmarkStatusPresentation(
+            "Not measured · explicit local execution",
+            "No benchmark evidence is available for the current candidate. Listing is read-only; running a benchmark requires explicit local execution.")
+  }
+}
 
 /** Listing a catalog is read-only; only the explicitly labeled run action can execute code. */
 @Composable
@@ -469,19 +521,27 @@ private fun PerformanceBenchmarkControls(
     catalog: GoBenchmarkCatalog?,
     selected: GoBenchmarkChoice?,
     eligibility: BenchmarkEligibility,
-    running: Boolean,
+    discovery: BenchmarkDiscoveryOutcome,
+    admission: BenchmarkAdmissionOutcome,
     actions: PerformanceWorkspaceActions,
 ) {
+  val active =
+      admission == BenchmarkAdmissionOutcome.Admitting ||
+          admission == BenchmarkAdmissionOutcome.Running
   Column(Modifier.fillMaxWidth()) {
     IdePaneHeader(
         title = "Benchmark comparison",
         icon = DesktopIcon.Performance,
         stateLabel =
             when {
-              running -> "Running in isolated copies"
-              catalog == null && eligibility.canDiscover -> "List existing benchmarks"
-              catalog == null -> "Validate a current candidate first"
+              discovery == BenchmarkDiscoveryOutcome.Loading -> "Read-only lookup in progress"
+              admission == BenchmarkAdmissionOutcome.Admitting -> "Checking execution trust"
+              admission == BenchmarkAdmissionOutcome.Running -> "Running in isolated copies"
+              eligibility.candidate is BenchmarkCandidateDecision.Blocked -> "Candidate unavailable"
+              discovery != BenchmarkDiscoveryOutcome.Loaded || catalog == null ->
+                  "Read-only discovery"
               !catalog.available -> "Not available"
+              catalog.benchmarks.isEmpty() -> "No compatible benchmarks"
               selected == null -> "Select one benchmark"
               !eligibility.canCompare -> "Comparison blocked"
               catalog.trusted -> "Ready to run"
@@ -491,27 +551,32 @@ private fun PerformanceBenchmarkControls(
             if (catalog?.available == false || !eligibility.canDiscover) Warning else SecondaryText,
     )
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-      val blockedReason =
-          if (catalog == null) eligibility.discoveryBlockedReason
-          else eligibility.comparisonBlockedReason
-      blockedReason?.let {
+      Text(
+          if (eligibility.candidate is BenchmarkCandidateDecision.Ready)
+              "Current validated candidate."
+          else "A current validated candidate is required.",
+          color = SecondaryText,
+          style = IdeTypography.compactBody)
+      eligibility.discoveryBlockedReason?.let {
         SelectionContainer { Text(it, color = Warning, fontSize = 11.sp, lineHeight = 16.sp) }
       }
-      if (catalog == null) {
-        Text(
-            "Listing compatible benchmarks is read-only and does not execute project code.",
-            color = SecondaryText,
-            fontSize = 11.sp,
-            lineHeight = 16.sp)
-        MiniOrcaButton(
-            onClick = actions.loadBenchmarks,
-            enabled = eligibility.canDiscover && !running,
-            tone = ActionTone.Neutral,
-            modifier = Modifier.padding(top = 6.dp)) {
-              Text("List compatible benchmarks", fontSize = 11.sp)
-            }
-        return@Column
-      }
+      Text(
+          "Listing compatible benchmarks is read-only and does not execute project code. Refresh clears the selection; select again after reviewing the returned catalog.",
+          color = SecondaryText,
+          fontSize = 11.sp,
+          lineHeight = 16.sp)
+      MiniOrcaButton(
+          onClick = actions.loadBenchmarks,
+          enabled = eligibility.canDiscover && !active,
+          tone = ActionTone.Neutral,
+          modifier = Modifier.padding(top = 6.dp)) {
+            Text(
+                if (discovery == BenchmarkDiscoveryOutcome.NotRequested)
+                    "List compatible benchmarks"
+                else "Refresh compatible benchmarks",
+                fontSize = 11.sp)
+          }
+      if (discovery != BenchmarkDiscoveryOutcome.Loaded || catalog == null) return@Column
       if (!catalog.available) {
         Text(
             catalog.reason.ifBlank { "No compatible benchmark is available for this candidate." },
@@ -519,6 +584,16 @@ private fun PerformanceBenchmarkControls(
             fontSize = 11.sp,
             lineHeight = 16.sp)
         return@Column
+      }
+      if (catalog.benchmarks.isEmpty()) {
+        Text(
+            "No compatible benchmarks were found for this candidate. Refresh to check again; no benchmark is selected.",
+            color = Warning,
+            style = IdeTypography.compactBody)
+        return@Column
+      }
+      eligibility.comparisonBlockedReason?.let {
+        SelectionContainer { Text(it, color = Warning, fontSize = 11.sp, lineHeight = 16.sp) }
       }
       Text(
           "Select one existing benchmark. The daemon-built argv below is the only command this action can run.",
@@ -530,7 +605,10 @@ private fun PerformanceBenchmarkControls(
             onClick = { actions.selectBenchmark(choice) },
             selected = choice == selected,
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-              Text(choice.name, fontSize = 11.sp, modifier = Modifier.weight(1f))
+              Text(
+                  "${if (choice == selected) "Selected" else "Select"} · ${choice.name.ifBlank { "Unnamed benchmark" }}",
+                  fontSize = 11.sp,
+                  modifier = Modifier.weight(1f))
             }
       }
       selected?.let { choice ->
@@ -544,11 +622,12 @@ private fun PerformanceBenchmarkControls(
         }
         MiniOrcaButton(
             onClick = actions.runBenchmark,
-            enabled = eligibility.canCompare && !running,
+            enabled = eligibility.canCompare && !active,
             tone = ActionTone.Primary,
             modifier = Modifier.padding(top = 6.dp)) {
               Text(
-                  if (running) "Comparing benchmark…"
+                  if (admission == BenchmarkAdmissionOutcome.Admitting) "Checking execution trust…"
+                  else if (admission == BenchmarkAdmissionOutcome.Running) "Comparing benchmark…"
                   else if (catalog.trusted) "Run selected benchmark"
                   else "Trust and run selected benchmark",
                   fontSize = 11.sp)
@@ -565,7 +644,8 @@ internal data class PerformanceWorkspacePaneState(
     val expectedBenchmarkIdentity: GoBenchmarkComparisonIdentity? = null,
     val benchmarkCatalog: GoBenchmarkCatalog? = null,
     val selectedBenchmark: GoBenchmarkChoice? = null,
-    val benchmarkRunning: Boolean = false,
+    val benchmarkDiscovery: BenchmarkDiscoveryOutcome = BenchmarkDiscoveryOutcome.NotRequested,
+    val benchmarkAdmission: BenchmarkAdmissionOutcome = BenchmarkAdmissionOutcome.Idle,
     val benchmarkEligibility: BenchmarkEligibility = benchmarkEligibility(DesktopState()),
     val browser: ResultBrowserState = newResultBrowserState(page),
 )
