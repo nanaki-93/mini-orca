@@ -4444,7 +4444,20 @@ class DesktopVisualLayoutTest {
                         discovery = BenchmarkDiscoveryOutcome.Loaded,
                         admission =
                             BenchmarkAdmissionOutcome.Failed(
-                                "Comparison timed out; project execution may have begun."))))
+                                "Comparison timed out; project execution may have begun.")))) +
+            listOf("completed", "canceled", "failed", "unavailable", "future-status").map { status
+              ->
+              "terminal-$status" to
+                  withEvidence(
+                      BenchmarkEvidenceState(
+                          catalog = catalog,
+                          selected = choice,
+                          discovery = BenchmarkDiscoveryOutcome.Loaded,
+                          latestOutcome =
+                              BenchmarkComparisonOutcome(
+                                  GoBenchmarkComparison(
+                                      status = status, reason = "Recorded $status reason"))))
+            }
     for ((name, snapshot) in cases) {
       for ((width, height, scale) in listOf(Triple(1440, 900, 1f), Triple(800, 650, 1.5f))) {
         val evidence = snapshot.review.benchmark
@@ -4461,7 +4474,8 @@ class DesktopVisualLayoutTest {
                 evidence.discovery,
                 evidence.admission,
                 eligibility,
-                evidence.catalog)
+                evidence.catalog,
+                evidence.latestOutcome)
         var actions = 0
         ComposeVisualFixture(width, height, scale) {
               PerformanceWorkspacePane(
@@ -4474,6 +4488,7 @@ class DesktopVisualLayoutTest {
                       selectedBenchmark = evidence.selected,
                       benchmarkDiscovery = evidence.discovery,
                       benchmarkAdmission = evidence.admission,
+                      benchmarkLatestOutcome = evidence.latestOutcome,
                       benchmarkEligibility = eligibility),
                   PerformanceWorkspaceActions(
                       {},
@@ -4564,6 +4579,18 @@ class DesktopVisualLayoutTest {
                       else "Benchmark evidence"))
               assertTrue(
                   fixture.hasText("BenchmarkRun"), "Retained measurement values remain readable")
+              val assessment =
+                  performanceBenchmarkPresentation(
+                      comparison, identity, evidence.selected, status.priorEvidence)
+              assertTrue(fixture.hasText(assessment.stateLabel))
+              fixture.revealTextFullyWithin(assessment.summary, "result-overview")
+              fixture.assertTextFits(assessment.summary, maxLines = 15)
+              if (status.priorEvidence) {
+                assertFalse(fixture.hasText("Measured · selected benchmark"))
+                assertFalse(fixture.hasText("CPU is lower for the selected benchmark."))
+                assertFalse(fixture.hasText("Measured trade-offs"))
+              }
+              fixture.render("f22-outcome-details-$name-$width-$height-$scale")
               assertEquals(0, actions, "Rendering and disclosure must not discover, select or run")
             }
       }

@@ -400,11 +400,33 @@ sealed interface BenchmarkAdmissionOutcome {
   data class Failed(val message: String) : BenchmarkAdmissionOutcome
 }
 
-/** Catalog authority and retained comparison evidence have independent lifecycles. */
+enum class BenchmarkComparisonStatus {
+  Completed,
+  Canceled,
+  Failed,
+  Unavailable,
+  Unsupported,
+}
+
+/** The daemon response is recorded verbatim, independently of retained measurements. */
+data class BenchmarkComparisonOutcome(val response: GoBenchmarkComparison) {
+  val status: BenchmarkComparisonStatus
+    get() =
+        when (response.status) {
+          "completed" -> BenchmarkComparisonStatus.Completed
+          "canceled" -> BenchmarkComparisonStatus.Canceled
+          "failed" -> BenchmarkComparisonStatus.Failed
+          "unavailable" -> BenchmarkComparisonStatus.Unavailable
+          else -> BenchmarkComparisonStatus.Unsupported
+        }
+}
+
+/** Catalog authority, latest outcome and retained measurements have independent lifecycles. */
 data class BenchmarkEvidenceState(
     val catalog: GoBenchmarkCatalog? = null,
     val selected: GoBenchmarkChoice? = null,
     val comparison: GoBenchmarkComparison? = null,
+    val latestOutcome: BenchmarkComparisonOutcome? = null,
     val discovery: BenchmarkDiscoveryOutcome = BenchmarkDiscoveryOutcome.NotRequested,
     val admission: BenchmarkAdmissionOutcome = BenchmarkAdmissionOutcome.Idle,
 ) {
@@ -881,14 +903,14 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                       editor = editableDraft(event.draft),
                       checks = null,
                       checkAttempt = null,
-                      benchmark = review.benchmark.withoutCatalog()),
+                      benchmark =
+                          if (review.draft?.id == event.draft.id) review.benchmark.withoutCatalog()
+                          else BenchmarkEvidenceState()),
               jobs = jobs.copy(loading = false))
       DesktopEvent.DraftDiscarded ->
           copy(
               chat = ChatState(),
-              review =
-                  DraftReviewState(
-                      applied = review.applied, benchmark = review.benchmark.withoutCatalog()),
+              review = DraftReviewState(applied = review.applied),
               jobs = jobs.copy(loading = false, error = null))
       is DesktopEvent.Applied ->
           copy(
@@ -1160,21 +1182,20 @@ private fun DesktopState.withBenchmarkEvent(event: DesktopEvent): DesktopState {
                         if (benchmark.running) BenchmarkAdmissionOutcome.Stopped
                         else BenchmarkAdmissionOutcome.Idle)
         DesktopEvent.GoBenchmarkAdmissionStarted ->
-            benchmark.copy(admission = BenchmarkAdmissionOutcome.Admitting)
+            benchmark.copy(admission = BenchmarkAdmissionOutcome.Admitting, latestOutcome = null)
         DesktopEvent.GoBenchmarkComparisonStarted ->
-            benchmark.copy(admission = BenchmarkAdmissionOutcome.Running)
+            benchmark.copy(admission = BenchmarkAdmissionOutcome.Running, latestOutcome = null)
         is DesktopEvent.GoBenchmarkComparisonFailed ->
             benchmark.copy(admission = BenchmarkAdmissionOutcome.Failed(event.message))
         is DesktopEvent.GoBenchmarkComparisonLoaded ->
             benchmark.copy(
-                comparison = event.comparison,
-                admission =
-                    if (event.comparison.status == "completed") BenchmarkAdmissionOutcome.Idle
-                    else
-                        BenchmarkAdmissionOutcome.Failed(
-                            event.comparison.reason.ifBlank {
-                              "Benchmark comparison did not produce measurements."
-                            }))
+                comparison =
+                    if (event.comparison.base?.samples?.isNotEmpty() == true ||
+                        event.comparison.candidate?.samples?.isNotEmpty() == true)
+                        event.comparison
+                    else benchmark.comparison,
+                latestOutcome = BenchmarkComparisonOutcome(event.comparison),
+                admission = BenchmarkAdmissionOutcome.Idle)
         DesktopEvent.GoBenchmarkComparisonStopped ->
             benchmark.copy(admission = BenchmarkAdmissionOutcome.Stopped)
         else -> return this

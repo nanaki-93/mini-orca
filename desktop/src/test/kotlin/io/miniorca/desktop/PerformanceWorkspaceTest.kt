@@ -79,6 +79,116 @@ class PerformanceWorkspaceTest {
   }
 
   @Test
+  fun latestComparisonOutcomesRemainPrimaryOverRetainedMeasurements() {
+    val prior = comparison()
+    val choice = GoBenchmarkChoice(prior.benchmark, prior.command, prior.scope)
+    val initial = DesktopState().reduce(DesktopEvent.GoBenchmarkComparisonLoaded(prior))
+    for ((status, label) in
+        listOf(
+            "completed" to "Completed · no new measurements",
+            "canceled" to "Comparison canceled · daemon",
+            "failed" to "Comparison failed · daemon",
+            "unavailable" to "Comparison unavailable · daemon",
+            "future-status" to "Comparison unsupported · daemon status")) {
+      val response = GoBenchmarkComparison(status = status, reason = "Recorded $status reason")
+      val terminal =
+          initial
+              .reduce(DesktopEvent.GoBenchmarkComparisonStarted)
+              .reduce(DesktopEvent.GoBenchmarkComparisonLoaded(response))
+              .review
+              .benchmark
+      val presentation =
+          performanceBenchmarkStatusPresentation(
+              terminal.comparison,
+              prior.identity(),
+              choice,
+              discovery = BenchmarkDiscoveryOutcome.Invalidated,
+              admission = terminal.admission,
+              latestOutcome = terminal.latestOutcome)
+      assertEquals(label, presentation.stateLabel)
+      assertEquals(response.reason, presentation.summary)
+      assertTrue(presentation.priorEvidence)
+      val withoutPrior =
+          performanceBenchmarkStatusPresentation(
+              null, null, null, latestOutcome = terminal.latestOutcome)
+      assertEquals(label, withoutPrior.stateLabel)
+      assertEquals(response.reason, withoutPrior.summary)
+      assertFalse(withoutPrior.priorEvidence)
+      for ((admission, activeLabel) in
+          listOf(
+              BenchmarkAdmissionOutcome.Admitting to "Admitting · execution trust",
+              BenchmarkAdmissionOutcome.Running to "Running · explicit local execution",
+              BenchmarkAdmissionOutcome.Stopped to "Benchmark admission stopped",
+              BenchmarkAdmissionOutcome.Failed("Local transport uncertainty") to
+                  "Benchmark admission failed")) {
+        val active =
+            performanceBenchmarkStatusPresentation(
+                prior,
+                prior.identity(),
+                choice,
+                admission = admission,
+                latestOutcome = terminal.latestOutcome)
+        assertEquals(activeLabel, active.stateLabel)
+        assertTrue(active.priorEvidence)
+      }
+    }
+    val unsupported =
+        performanceBenchmarkStatusPresentation(
+            prior,
+            prior.identity(),
+            choice,
+            latestOutcome = BenchmarkComparisonOutcome(GoBenchmarkComparison(status = "future")))
+    assertTrue(unsupported.summary.contains("unsupported status future"))
+    val completed =
+        performanceBenchmarkStatusPresentation(
+            prior, prior.identity(), choice, latestOutcome = initial.review.benchmark.latestOutcome)
+    assertEquals("Measured · selected benchmark", completed.stateLabel)
+    assertFalse(completed.priorEvidence)
+    val partialResponse =
+        prior.copy(status = "failed", candidate = null, reason = "Candidate failed")
+    val partialOutcome =
+        initial.reduce(DesktopEvent.GoBenchmarkComparisonLoaded(partialResponse)).review.benchmark
+    val partial =
+        performanceBenchmarkStatusPresentation(
+            partialOutcome.comparison,
+            prior.identity(),
+            choice,
+            latestOutcome = partialOutcome.latestOutcome)
+    assertEquals("Comparison failed · daemon", partial.stateLabel)
+    assertFalse(
+        partial.priorEvidence, "Measurements returned by this attempt are not prior evidence")
+    for (admission in
+        listOf(BenchmarkAdmissionOutcome.Admitting, BenchmarkAdmissionOutcome.Running)) {
+      val active =
+          performanceBenchmarkStatusPresentation(
+              prior,
+              prior.identity(),
+              choice,
+              discovery = BenchmarkDiscoveryOutcome.Loading,
+              admission = admission)
+      assertTrue(
+          active.stateLabel.startsWith(
+              if (admission == BenchmarkAdmissionOutcome.Running) "Running" else "Admitting"))
+    }
+  }
+
+  @Test
+  fun priorMeasurementDetailsQualifyTheirAssessmentAndKeepRecordedValues() {
+    val comparison = comparison()
+    val choice = GoBenchmarkChoice(comparison.benchmark, comparison.command, comparison.scope)
+    val current = performanceBenchmarkPresentation(comparison, comparison.identity(), choice)
+    val prior =
+        performanceBenchmarkPresentation(
+            comparison, comparison.identity(), choice, priorEvidence = true)
+    assertEquals("Prior evidence · Measured · selected benchmark", prior.stateLabel)
+    assertTrue(
+        prior.summary.startsWith("Prior comparison only; it does not confirm the latest attempt."))
+    assertTrue(prior.insights.all { it.startsWith("Prior observation:") })
+    assertEquals(current.rows, prior.rows)
+    assertFalse(prior.isMeasured)
+  }
+
+  @Test
   fun recommendationAndBenchmarkStatusKeepPotentialAndMeasuredEvidenceSeparate() {
     val comparison = comparison()
     val selectedChoice =
