@@ -374,13 +374,46 @@ data class DraftReviewState(
     val checkAttempt: CheckAttempt? = null,
 )
 
-/** Catalog lookups and a completed comparison stay tied to their exact reviewed draft. */
+sealed interface BenchmarkDiscoveryOutcome {
+  data object NotRequested : BenchmarkDiscoveryOutcome
+
+  data object Loading : BenchmarkDiscoveryOutcome
+
+  data object Loaded : BenchmarkDiscoveryOutcome
+
+  data class Unavailable(val reason: String) : BenchmarkDiscoveryOutcome
+
+  data class Failed(val message: String) : BenchmarkDiscoveryOutcome
+
+  data object Invalidated : BenchmarkDiscoveryOutcome
+}
+
+sealed interface BenchmarkAdmissionOutcome {
+  data object Idle : BenchmarkAdmissionOutcome
+
+  data object Admitting : BenchmarkAdmissionOutcome
+
+  data object Running : BenchmarkAdmissionOutcome
+
+  data object Stopped : BenchmarkAdmissionOutcome
+
+  data class Failed(val message: String) : BenchmarkAdmissionOutcome
+}
+
+/** Catalog authority and retained comparison evidence have independent lifecycles. */
 data class BenchmarkEvidenceState(
     val catalog: GoBenchmarkCatalog? = null,
     val selected: GoBenchmarkChoice? = null,
     val comparison: GoBenchmarkComparison? = null,
-    val running: Boolean = false,
-)
+    val discovery: BenchmarkDiscoveryOutcome = BenchmarkDiscoveryOutcome.NotRequested,
+    val admission: BenchmarkAdmissionOutcome = BenchmarkAdmissionOutcome.Idle,
+) {
+  /** Admission is active before execution starts as well as while comparison is running. */
+  val running: Boolean
+    get() =
+        admission == BenchmarkAdmissionOutcome.Admitting ||
+            admission == BenchmarkAdmissionOutcome.Running
+}
 
 data class ConnectionState(
     val label: String = "Connecting",
@@ -572,11 +605,19 @@ sealed interface DesktopEvent {
       val message: String,
   ) : DesktopEvent
 
+  data object GoBenchmarkDiscoveryStarted : DesktopEvent
+
+  data class GoBenchmarkDiscoveryFailed(val message: String) : DesktopEvent
+
   data class GoBenchmarkCatalogLoaded(val catalog: GoBenchmarkCatalog) : DesktopEvent
 
   data class GoBenchmarkSelected(val choice: GoBenchmarkChoice) : DesktopEvent
 
+  data object GoBenchmarkAdmissionStarted : DesktopEvent
+
   data object GoBenchmarkComparisonStarted : DesktopEvent
+
+  data class GoBenchmarkComparisonFailed(val message: String) : DesktopEvent
 
   data class GoBenchmarkComparisonLoaded(val comparison: GoBenchmarkComparison) : DesktopEvent
 
@@ -768,35 +809,15 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       is DesktopEvent.ChecksCompleted,
       is DesktopEvent.ChecksStopped,
       is DesktopEvent.ChecksLoaded -> withCheckEvent(event)
-      is DesktopEvent.GoBenchmarkCatalogLoaded ->
-          copy(
-              review =
-                  review.copy(
-                      benchmark =
-                          review.benchmark.copy(
-                              catalog = event.catalog, selected = null, running = false)),
-              jobs = jobs.copy(loading = false, error = null))
-      is DesktopEvent.GoBenchmarkSelected ->
-          copy(
-              review =
-                  review.copy(
-                      benchmark = review.benchmark.copy(selected = event.choice, running = false)),
-              jobs = jobs.copy(loading = false))
-      DesktopEvent.GoBenchmarkComparisonStarted ->
-          copy(
-              review = review.copy(benchmark = review.benchmark.copy(running = true)),
-              jobs = jobs.copy(loading = true, error = null))
-      is DesktopEvent.GoBenchmarkComparisonLoaded ->
-          copy(
-              review =
-                  review.copy(
-                      benchmark =
-                          review.benchmark.copy(comparison = event.comparison, running = false)),
-              jobs = jobs.copy(loading = false, error = null))
-      DesktopEvent.GoBenchmarkComparisonStopped ->
-          copy(
-              review = review.copy(benchmark = review.benchmark.copy(running = false)),
-              jobs = jobs.copy(loading = false))
+      DesktopEvent.GoBenchmarkDiscoveryStarted,
+      is DesktopEvent.GoBenchmarkDiscoveryFailed,
+      is DesktopEvent.GoBenchmarkCatalogLoaded,
+      is DesktopEvent.GoBenchmarkSelected,
+      DesktopEvent.GoBenchmarkAdmissionStarted,
+      DesktopEvent.GoBenchmarkComparisonStarted,
+      is DesktopEvent.GoBenchmarkComparisonFailed,
+      is DesktopEvent.GoBenchmarkComparisonLoaded,
+      DesktopEvent.GoBenchmarkComparisonStopped -> withBenchmarkEvent(event)
       is DesktopEvent.ChatRequestFailed ->
           copy(
               chat = chat.copy(failure = event.failure),
@@ -1093,8 +1114,71 @@ private fun DesktopState.withValidationStopped(
                                   ValidationAttempt(event.requestId, event.status, event.message))))
         } ?: this
 
+private fun DesktopState.withBenchmarkEvent(event: DesktopEvent): DesktopState {
+  val benchmark = review.benchmark
+  val updated =
+      when (event) {
+        DesktopEvent.GoBenchmarkDiscoveryStarted ->
+            benchmark.withoutCatalog().copy(discovery = BenchmarkDiscoveryOutcome.Loading)
+        is DesktopEvent.GoBenchmarkDiscoveryFailed ->
+            benchmark
+                .withoutCatalog()
+                .copy(discovery = BenchmarkDiscoveryOutcome.Failed(event.message))
+        is DesktopEvent.GoBenchmarkCatalogLoaded ->
+            benchmark.copy(
+                catalog = event.catalog,
+                selected = null,
+                discovery =
+                    if (event.catalog.available) BenchmarkDiscoveryOutcome.Loaded
+                    else BenchmarkDiscoveryOutcome.Unavailable(event.catalog.reason),
+                admission =
+                    if (benchmark.running) BenchmarkAdmissionOutcome.Stopped
+                    else BenchmarkAdmissionOutcome.Idle)
+        is DesktopEvent.GoBenchmarkSelected ->
+            benchmark.copy(
+                selected = event.choice,
+                admission =
+                    if (benchmark.running) BenchmarkAdmissionOutcome.Stopped
+                    else BenchmarkAdmissionOutcome.Idle)
+        DesktopEvent.GoBenchmarkAdmissionStarted ->
+            benchmark.copy(admission = BenchmarkAdmissionOutcome.Admitting)
+        DesktopEvent.GoBenchmarkComparisonStarted ->
+            benchmark.copy(admission = BenchmarkAdmissionOutcome.Running)
+        is DesktopEvent.GoBenchmarkComparisonFailed ->
+            benchmark.copy(admission = BenchmarkAdmissionOutcome.Failed(event.message))
+        is DesktopEvent.GoBenchmarkComparisonLoaded ->
+            benchmark.copy(
+                comparison = event.comparison,
+                admission =
+                    if (event.comparison.status == "completed") BenchmarkAdmissionOutcome.Idle
+                    else
+                        BenchmarkAdmissionOutcome.Failed(
+                            event.comparison.reason.ifBlank {
+                              "Benchmark comparison did not produce measurements."
+                            }))
+        DesktopEvent.GoBenchmarkComparisonStopped ->
+            benchmark.copy(admission = BenchmarkAdmissionOutcome.Stopped)
+        else -> return this
+      }
+  val clearsError =
+      event is DesktopEvent.GoBenchmarkCatalogLoaded ||
+          event == DesktopEvent.GoBenchmarkAdmissionStarted ||
+          event == DesktopEvent.GoBenchmarkComparisonStarted ||
+          event is DesktopEvent.GoBenchmarkComparisonLoaded
+  return copy(
+      review = review.copy(benchmark = updated),
+      jobs = jobs.copy(loading = updated.running, error = if (clearsError) null else jobs.error))
+}
+
 private fun BenchmarkEvidenceState.withoutCatalog(): BenchmarkEvidenceState =
-    copy(catalog = null, selected = null, running = false)
+    copy(
+        catalog = null,
+        selected = null,
+        discovery =
+            if (discovery == BenchmarkDiscoveryOutcome.NotRequested)
+                BenchmarkDiscoveryOutcome.NotRequested
+            else BenchmarkDiscoveryOutcome.Invalidated,
+        admission = if (running) BenchmarkAdmissionOutcome.Stopped else admission)
 
 private fun DesktopState.withProjectIndexingEvent(event: DesktopEvent): DesktopState =
     when (event) {

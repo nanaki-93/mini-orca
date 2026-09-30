@@ -62,6 +62,8 @@ class DesktopBenchmarkWorkflowTest {
       harness.workflow.loadGoBenchmarks()
       harness.completeRequest()
       assertEquals(listOf("GET"), harness.methods)
+      assertEquals(BenchmarkDiscoveryOutcome.Loaded, harness.state.review.benchmark.discovery)
+      assertEquals(BenchmarkAdmissionOutcome.Idle, harness.state.review.benchmark.admission)
       assertNull(harness.state.review.benchmark.selected)
       harness.workflow.compareSelectedGoBenchmark()
       harness.completeRequest()
@@ -96,6 +98,7 @@ class DesktopBenchmarkWorkflowTest {
       assertTrue(harness.state.review.benchmark.running)
       harness.workflow.cancel()
       assertFalse(harness.state.review.benchmark.running)
+      assertEquals(BenchmarkAdmissionOutcome.Stopped, harness.state.review.benchmark.admission)
       harness.completeRequest()
       assertTrue(harness.methods.isEmpty())
       assertNull(harness.state.review.benchmark.comparison)
@@ -177,6 +180,59 @@ class DesktopBenchmarkWorkflowTest {
       assertEquals(listOf("GET"), harness.methods)
       assertFalse(harness.state.review.benchmark.running)
       assertTrue(harness.state.jobs.error.orEmpty().contains("trust scope changed"))
+      assertEquals(
+          BenchmarkAdmissionOutcome.Failed(harness.state.jobs.error!!),
+          harness.state.review.benchmark.admission)
+    }
+  }
+
+  @Test
+  fun catalogUnavailabilityAndLookupFailureRemainDistinctWithPriorEvidence() {
+    Harness().use { harness ->
+      harness.dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(comparison))
+      harness.response =
+          TransportResponse(
+              200,
+              Json.encodeToString(
+                  catalog.copy(available = false, reason = "No compatible benchmark")))
+      harness.workflow.loadGoBenchmarks()
+      harness.completeRequest()
+      assertEquals(
+          BenchmarkDiscoveryOutcome.Unavailable("No compatible benchmark"),
+          harness.state.review.benchmark.discovery)
+      assertEquals(comparison, harness.state.review.benchmark.comparison)
+      harness.response = TransportResponse(500, """{"message":"Lookup failed"}""")
+      harness.workflow.loadGoBenchmarks()
+      harness.completeRequest()
+      assertEquals(
+          BenchmarkDiscoveryOutcome.Failed("Lookup failed"),
+          harness.state.review.benchmark.discovery)
+      assertNull(harness.state.review.benchmark.catalog)
+      assertNull(harness.state.review.benchmark.selected)
+      assertEquals(comparison, harness.state.review.benchmark.comparison)
+      assertEquals(listOf("GET", "GET"), harness.methods)
+    }
+  }
+
+  @Test
+  fun comparisonCompletionAndFailureEndActiveStateWithoutInventingMeasurements() {
+    Harness().use { harness ->
+      harness.selectBenchmark()
+      harness.response = TransportResponse(200, Json.encodeToString(comparison))
+      harness.workflow.compareSelectedGoBenchmark()
+      assertEquals(BenchmarkAdmissionOutcome.Running, harness.state.review.benchmark.admission)
+      harness.completeRequest()
+      assertEquals(BenchmarkAdmissionOutcome.Idle, harness.state.review.benchmark.admission)
+      assertEquals(comparison, harness.state.review.benchmark.comparison)
+      harness.response = TransportResponse(500, """{"message":"Comparison failed"}""")
+      harness.workflow.compareSelectedGoBenchmark()
+      harness.completeRequest()
+      assertEquals(
+          BenchmarkAdmissionOutcome.Failed("Comparison failed"),
+          harness.state.review.benchmark.admission)
+      assertFalse(harness.state.review.benchmark.running)
+      assertEquals(comparison, harness.state.review.benchmark.comparison)
+      assertEquals(listOf("POST", "POST"), harness.methods)
     }
   }
 
