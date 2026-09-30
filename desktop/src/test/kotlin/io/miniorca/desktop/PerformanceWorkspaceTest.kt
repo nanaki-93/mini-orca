@@ -477,7 +477,7 @@ class PerformanceWorkspaceTest {
   }
 
   @Test
-  fun benchmarkPresentationParsesCompactComparableEvidenceAndKeepsMemoryTradeoffsVisible() {
+  fun benchmarkPresentationParsesComparableMediansAndKeepsMemoryTradeoffsVisible() {
     val comparison =
         Json.decodeFromString<GoBenchmarkComparison>(
             """{
@@ -658,8 +658,11 @@ class PerformanceWorkspaceTest {
         performanceBenchmarkPresentation(
             zeroToPositive, zeroToPositive.identity(), zeroToPositive.choice())
 
-    assertEquals("0 → 0 · no change from zero", unchanged.rows.single { it.first == "B/op" }.second)
-    assertEquals("0 → 4 · from zero to 4", increased.rows.single { it.first == "B/op" }.second)
+    assertEquals("0 B/op", unchanged.metrics[1].base.medianLabel("B/op"))
+    assertEquals("0 B/op", unchanged.metrics[1].candidate.medianLabel("B/op"))
+    assertEquals("4 B/op", increased.metrics[1].candidate.medianLabel("B/op"))
+    assertEquals("Observed change: no change from zero", unchanged.metrics[1].changeLabel())
+    assertEquals("Observed change: from zero to 4", increased.metrics[1].changeLabel())
     assertTrue(
         (unchanged.rows + increased.rows).none { "NaN" in it.second || "Infinity" in it.second })
   }
@@ -856,7 +859,7 @@ class PerformanceWorkspaceTest {
   }
 
   @Test
-  fun partialMediansRemainReadableInTheExistingProductionEvidenceView() {
+  fun partialMediansRemainReadableWithExplicitSideUnitAndAvailabilityLabels() {
     val partial =
         comparison()
             .copy(
@@ -881,13 +884,65 @@ class PerformanceWorkspaceTest {
           fixture.render()
           fixture.clickDescription("Expand Measurement details")
           fixture.render("f22-partial-median-evidence")
-          val rows =
-              performanceBenchmarkPresentation(partial, partial.identity(), partial.choice()).rows
-          assertTrue(fixture.hasText(rows.single { it.first == "ns/op" }.second))
-          assertTrue(fixture.hasText(rows.single { it.first == "B/op" }.second))
+          for (text in
+              listOf(
+                  "Metric",
+                  "Baseline median",
+                  "Candidate median",
+                  "Change / availability",
+                  "Baseline samples: 5",
+                  "Candidate samples: 2",
+                  "Time (ns/op)",
+                  "100 ns/op",
+                  "85 ns/op",
+                  "Bytes (B/op)",
+                  "10 B/op",
+                  "0 B/op",
+                  "Allocations (allocs/op)",
+                  "1 allocs/op",
+                  "0 allocs/op",
+                  "complete; 5/5 valid observations; 5 required",
+                  "partial; 2/2 valid observations; 5 required",
+                  "Observed change unavailable: incomplete evidence")) {
+            assertTrue(fixture.hasText(text), text)
+          }
           assertTrue(fixture.hasText("Inconclusive · incomplete measurement evidence"))
           assertEquals(0, requests)
         }
+  }
+
+  @Test
+  fun medianCellLabelsPreserveUnitsAndEveryAvailabilityState() {
+    val full = comparison()
+    val candidates =
+        listOf(
+            null to "measurement not returned",
+            GoBenchmarkMeasurement() to "empty samples; 0/0 valid observations; 5 required",
+            GoBenchmarkMeasurement(
+                List(5) { benchmarkSample(90.0, 0, 0).withoutMemoryMetrics() }) to
+                "unavailable; 0/5 valid observations; 5 required",
+            GoBenchmarkMeasurement(List(2) { benchmarkSample(90.0, 0, 0) }) to
+                "partial; 2/2 valid observations; 5 required",
+            GoBenchmarkMeasurement(
+                List(4) { benchmarkSample(90.0, 0, 0) } + benchmarkSample(90.0, -1, 0)) to
+                "invalid samples; 4/5 valid observations; 5 required",
+            GoBenchmarkMeasurement(List(5) { benchmarkSample(90.0, 0, 0) }) to
+                "complete; 5/5 valid observations; 5 required")
+    for ((measurement, label) in candidates) {
+      val evidence = full.copy(candidate = measurement)
+      val metric =
+          performanceBenchmarkPresentation(evidence, full.identity(), full.choice()).metrics[1]
+      assertEquals("10 B/op", metric.base.medianLabel("B/op"))
+      assertEquals("complete; 5/5 valid observations; 5 required", metric.base.availabilityLabel())
+      assertEquals(label, metric.candidate.availabilityLabel())
+      assertEquals(
+          if (metric.candidate.validValues.isEmpty()) "Unavailable (B/op)" else "0 B/op",
+          metric.candidate.medianLabel("B/op"))
+      assertTrue(metric.display().contains("Baseline median: 10"))
+      assertTrue(metric.display().contains("Candidate median:"))
+      assertFalse(metric.display().contains("→"))
+      assertTrue(metric.changeLabel(historical = true).startsWith("Historical change"))
+    }
   }
 
   @Test
