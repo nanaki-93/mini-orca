@@ -4925,7 +4925,12 @@ class DesktopWorkflowPresenterTest {
       assertNull(presenter.snapshot.value.state.jobs.error)
       releaseInitialPoll.countDown()
       releaseTerminalPoll.countDown()
-      eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
+      // The terminal report and cancellation settlement are published as separate events.
+      eventually {
+        val state = presenter.snapshot.value.state
+        state.findings.scan?.status == "canceled" &&
+            state.verifiedScan.operation == VerifiedScanOperation.Idle
+      }
 
       assertEquals(2, polls.get())
       assertNull(presenter.snapshot.value.state.jobs.error)

@@ -9834,13 +9834,15 @@ internal class ComposeVisualFixture(
         nodes().any { node ->
           node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true &&
               node.config.getOrNull(SemanticsActions.OnClick) != null &&
-              node.boundsInRoot.let { bounds ->
-                bounds.width > 0 &&
-                    bounds.height > 0 &&
-                    bounds.left >= 0 &&
-                    bounds.top >= 0 &&
-                    bounds.right <= width &&
-                    bounds.bottom <= height
+              // boundsInRoot is clipped: a sliver of the button can be visible while its label
+              // is still outside the viewport. Wait for the complete layout to be revealed.
+              node.positionInRoot.let { position ->
+                node.size.width > 0 &&
+                    node.size.height > 0 &&
+                    position.x >= 0 &&
+                    position.y >= 0 &&
+                    position.x + node.size.width <= width &&
+                    position.y + node.size.height <= height
               }
         }
     val deadline = System.nanoTime() + 20_000_000_000L
