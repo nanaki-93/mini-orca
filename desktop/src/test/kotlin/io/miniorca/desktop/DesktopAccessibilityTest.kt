@@ -13,6 +13,59 @@ import kotlin.test.assertTrue
 
 class DesktopAccessibilityTest {
   @Test
+  fun scanControlsExposeNamesDisabledReasonsAndDisclosureStates() {
+    val cases = verifiedScanLayoutCases().filter { it.first != "long-output" }
+    for ((name, state) in cases) {
+      var starts = 0
+      var cancels = 0
+      var reads = 0
+      ComposeVisualFixture(800, 650, 1.5f) {
+            BugsWorkspacePane(
+                state,
+                BugsWorkspaceActions(
+                    FindingActions({}, { _, _ -> }, {}),
+                    { starts++ },
+                    { cancels++ },
+                    refreshScanStatus = { reads++ }))
+          }
+          .use { fixture ->
+            fixture.render()
+            val progress = verifiedScanProgress(state.project, state.scanState, state.scan)
+            fixture.revealTextFullyWithin(progress.summary, "result-overview")
+            assertTrue(fixture.hasText(progress.summary), name)
+            val action =
+                if (progress.action == VerifiedScanAction.Cancel) "Cancel checks"
+                else "Trust project-code execution & run checks"
+            fixture.revealTextFullyWithin(action, "result-overview")
+            assertTrue(fixture.hasText(action), name)
+            if (progress.action == VerifiedScanAction.Waiting) {
+              assertTrue(fixture.isDisabled(action), name)
+              assertFalse(
+                  fixture.requestFocus(action), "Disabled execution must not accept focus: $name")
+              assertEquals(0, starts)
+              assertEquals(0, cancels)
+            } else {
+              assertFalse(fixture.isDisabled(action), name)
+              assertTrue(fixture.requestFocus(action), name)
+              fixture.render()
+              assertTrue(fixture.isFocusedControl(action), name)
+              assertTrue(fixture.pressKey(Key.Enter), name)
+              assertEquals(if (progress.action == VerifiedScanAction.Start) 1 else 0, starts)
+              assertEquals(if (progress.action == VerifiedScanAction.Cancel) 1 else 0, cancels)
+            }
+            assertEquals(0, reads)
+            fixture.revealTextFullyWithin("Command and output", "result-overview")
+            assertEquals("Collapsed", fixture.descriptionState("Expand Command and output"))
+            assertTrue(fixture.requestDescriptionFocus("Expand Command and output"))
+            assertTrue(fixture.pressKey(Key.Spacebar))
+            fixture.render()
+            assertEquals("Expanded", fixture.descriptionState("Collapse Command and output"))
+            assertEquals(0, reads)
+          }
+    }
+  }
+
+  @Test
   fun bugsSelectionAndBlockedPreparationExposeDistinctAccessibleStates() {
     val page = resultPageFixture("bugs")
     val finding =
