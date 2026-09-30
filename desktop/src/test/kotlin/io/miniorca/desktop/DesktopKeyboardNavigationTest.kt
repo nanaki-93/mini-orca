@@ -4,11 +4,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusManager
@@ -18,7 +20,11 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.Clipboard
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.asAwtTransferable
 import androidx.compose.ui.unit.dp
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
@@ -477,6 +483,116 @@ class DesktopKeyboardNavigationTest {
             assertEquals(listOf("discovery/read", "selection/local"), calls)
             assertTrue(fixture.pressKey(activation))
             assertEquals(listOf("discovery/read", "selection/local", "admission"), calls)
+          }
+    }
+  }
+
+  @OptIn(ExperimentalComposeUiApi::class)
+  @Test
+  fun recordedBenchmarkKeyboardInspectionAndCopyFailureStayLocal() {
+    for (activation in listOf(Key.Enter, Key.Spacebar)) {
+      val page = performancePageFixture()
+      val comparison =
+          GoBenchmarkComparison(
+              benchmark = "BenchmarkRun",
+              status = "completed",
+              command = listOf("go", "test", ".", "-count=5", "-benchtime=100ms", "-benchmem"),
+              base = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1000, 100.0, 10, 1) }),
+              candidate =
+                  GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1000, 80.0, 0, null) }))
+      val clipboard =
+          object : Clipboard {
+            override val nativeClipboard = java.awt.datatransfer.Clipboard("benchmark-keyboard")
+            var fail = true
+
+            override suspend fun getClipEntry(): ClipEntry? =
+                nativeClipboard.getContents(null)?.let(::ClipEntry)
+
+            override suspend fun setClipEntry(clipEntry: ClipEntry?) {
+              if (fail) error("Clipboard unavailable")
+              nativeClipboard.setContents(clipEntry?.asAwtTransferable, null)
+            }
+          }
+      var actions = 0
+      ComposeVisualFixture(800, 650, 1.5f, frameDurationNanos = 16_000_000) {
+            CompositionLocalProvider(LocalClipboard provides clipboard) {
+              PerformanceWorkspacePane(
+                  PerformanceWorkspacePaneState(page, null, benchmarkComparison = comparison),
+                  PerformanceWorkspaceActions(
+                      { actions++ },
+                      { actions++ },
+                      FindingActions({ actions++ }, { _, _ -> actions++ }, { actions++ }),
+                      { actions++ },
+                      loadBenchmarks = { actions++ },
+                      selectBenchmark = { actions++ },
+                      runBenchmark = { actions++ }))
+            }
+          }
+          .use { fixture ->
+            fixture.render()
+            for (label in
+                listOf(
+                    "Explore benchmark evidence",
+                    "Prior measurement details",
+                    "Recorded conditions & identity",
+                    "Returned sample details")) {
+              fixture.revealTextFullyWithin(label, "result-overview")
+              assertTrue(fixture.requestDescriptionFocus("Expand $label"))
+              fixture.render()
+              assertTrue(fixture.isFocusedControl("Expand $label"))
+              fixture.assertColorVisible(FocusAccent)
+              assertEquals("Collapsed", fixture.descriptionState("Expand $label"))
+              assertEquals(0, actions, "Focus is not execution")
+              assertTrue(fixture.pressKey(activation))
+              fixture.render()
+              assertTrue(fixture.isFocusedControl("Collapse $label"))
+              assertEquals("Expanded", fixture.descriptionState("Collapse $label"))
+            }
+            val assessment =
+                performanceBenchmarkPresentation(comparison, null, null, priorEvidence = true)
+            for (metric in assessment.metrics) {
+              for ((side, values) in
+                  listOf("Baseline" to metric.base, "Candidate" to metric.candidate)) {
+                assertTrue(
+                    fixture.hasDescription("${metric.label}, $side median: ${values.display()}"))
+              }
+            }
+            assertTrue(
+                fixture.hasText(
+                    "Candidate sample 1: iterations=1000; ns/op=80.0; B/op=0; allocs/op=unavailable"))
+            assertFalse(fixture.hasEditableText(withinTag = "benchmark-measurement-evidence"))
+            tabToBenchmarkControl(fixture, "benchmark-copy-evidence")
+            awaitBenchmarkReveal(fixture, "benchmark-copy-evidence", 32f)
+            fixture.assertColorVisible(FocusAccent)
+            assertTrue(fixture.isFocusedControl("Copy displayed benchmark evidence"))
+            assertEquals(0, actions)
+            assertTrue(fixture.pressKey(activation))
+            fixture.render()
+            assertTrue(fixture.hasText("Could not copy benchmark evidence: Clipboard unavailable"))
+            assertEquals(0, actions, "Clipboard failure is not a workflow failure")
+            clipboard.fail = false
+            assertTrue(fixture.pressKey(activation))
+            fixture.render()
+            assertEquals(
+                performanceBenchmarkCopyText(comparison, assessment, true, true, true),
+                clipboard.nativeClipboard.getData(java.awt.datatransfer.DataFlavor.stringFlavor))
+            assertFalse(fixture.hasText("Could not copy benchmark evidence: Clipboard unavailable"))
+            fixture.resize(1280, 600)
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Copy displayed benchmark evidence"))
+            assertTrue(fixture.hasDescription("Collapse Returned sample details"))
+            for (label in
+                listOf(
+                    "Returned sample details",
+                    "Recorded conditions & identity",
+                    "Prior measurement details")) {
+              fixture.revealTextFullyWithin(label, "result-overview")
+              assertTrue(fixture.requestDescriptionFocus("Collapse $label"))
+              assertTrue(fixture.pressKey(if (activation == Key.Enter) Key.Spacebar else Key.Enter))
+              fixture.render()
+              assertEquals("Collapsed", fixture.descriptionState("Expand $label"))
+            }
+            assertEquals(0, actions, "Inspection, selection/copy and resize remain passive")
           }
     }
   }

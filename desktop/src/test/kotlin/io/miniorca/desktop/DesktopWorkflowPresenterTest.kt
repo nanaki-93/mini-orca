@@ -1,5 +1,6 @@
 package io.miniorca.desktop
 
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.input.TextFieldValue
 import java.net.http.HttpTimeoutException
 import java.util.Collections
@@ -3629,6 +3630,46 @@ class DesktopWorkflowPresenterTest {
               fixture.render()
               fixture.clickDescription("Expand Explore benchmark evidence")
               fixture.render()
+              for (label in
+                  listOf(
+                      "Measurement details",
+                      "Recorded conditions & identity",
+                      "Returned sample details")) {
+                fixture.revealTextFullyWithin(label, "result-overview")
+                assertTrue(fixture.requestDescriptionFocus("Expand $label"))
+                assertTrue(fixture.pressKey(Key.Enter))
+                fixture.render()
+                assertEquals("Expanded", fixture.descriptionState("Collapse $label"))
+              }
+              val sampleLine =
+                  performanceBenchmarkSampleRows(retained.benchmark.comparison!!)
+                      .first { it.first == "Baseline sample 1" }
+                      .let { "${it.first}: ${it.second}" }
+              fixture.revealTextFullyWithin(sampleLine, "result-overview")
+              val selectedText = fixture.copyTextByDragging(sampleLine, expectedText = sampleLine)
+              assertTrue(selectedText.isNotEmpty())
+              assertTrue(sampleLine.contains(selectedText))
+              fixture.revealTextFullyWithin("Copy displayed benchmark evidence", "result-overview")
+              assertTrue(fixture.requestDescriptionFocus("Copy displayed benchmark evidence"))
+              assertTrue(fixture.pressKey(Key.Spacebar))
+              fixture.render()
+              val comparison = retained.benchmark.comparison
+              assertEquals(
+                  performanceBenchmarkCopyText(
+                      comparison,
+                      performanceBenchmarkPresentation(
+                          comparison,
+                          goBenchmarkComparisonIdentity(retained.draft!!),
+                          retained.benchmark.selected),
+                      false,
+                      true,
+                      true),
+                  fixture.clipboardText())
+              fixture.resize(1280, 600)
+              fixture.render()
+              fixture.resize(800, 650)
+              fixture.render()
+              fixture.revealTextFullyWithin("Explore benchmark evidence", "result-overview")
               fixture.clickDescription("Collapse Explore benchmark evidence")
               fixture.render()
               assertEquals(retained, presenter.snapshot.value.state.review)
@@ -5530,6 +5571,74 @@ class DesktopWorkflowPresenterTest {
       assertFalse(sessionBodies.last().contains("\"task_spec\""))
     } finally {
       presenter.close()
+    }
+  }
+
+  @Test
+  fun benchmarkOutcomesNeitherAuthorizeApplyNorBlockAnOtherwiseCheckedCandidate() {
+    for (outcome in listOf("absent", "completed", "inconclusive", "failed", "stale")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val calls = mutableListOf<Pair<String, String>>()
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { method, path, body ->
+            calls += method to path
+            if (path.endsWith("/apply")) {
+              assertTrue(body.orEmpty().contains("\"draft_id\":\"draft\""))
+              response(
+                  """{"project_revision":"next","post_apply_hash":"after","undo_available":true}""")
+            } else TransportResponse(503, """{"message":"Source reload unavailable"}""")
+          }
+      try {
+        loadFile(presenter)
+        presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+        if (outcome != "absent") {
+          var comparison = Json.decodeFromString<GoBenchmarkComparison>(benchmarkComparisonJson())
+          comparison =
+              when (outcome) {
+                "inconclusive" -> comparison.copy(candidate = GoBenchmarkMeasurement())
+                "failed" ->
+                    comparison.copy(
+                        status = "failed",
+                        base = null,
+                        candidate = null,
+                        reason = "Execution failed")
+                "stale" -> comparison.copy(draftHash = "older-candidate")
+                else -> comparison
+              }
+          presenter.dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(comparison))
+        }
+        presenter.applyEditableDraft()
+        repeat(3) {
+          main.runPending()
+          io.runPending()
+        }
+        assertTrue(calls.isEmpty(), "$outcome cannot bypass missing checks: $calls")
+        presenter.dispatch(
+            DesktopEvent.ChecksLoaded(
+                DraftCheckReport(
+                    "main.go",
+                    true,
+                    draftId = "draft",
+                    draftRevision = 1,
+                    draftHash = "draft-hash")))
+        presenter.applyEditableDraft()
+        repeat(4) {
+          main.runPending()
+          io.runPending()
+        }
+        assertEquals(1, calls.count { it == "POST" to "/api/projects/current/apply" }, outcome)
+        assertEquals("after", presenter.snapshot.value.state.review.applied?.postApplyHash, outcome)
+        assertTrue(
+            calls.none {
+              it.second.contains("benchmarks") || it.second.contains("execution-trust")
+            },
+            outcome)
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
     }
   }
 
