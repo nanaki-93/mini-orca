@@ -845,7 +845,19 @@ class DesktopBenchmarkWorkflowTest {
             DesktopEvent.DraftLoaded(draft().copy(projectRevision = "other")),
             DesktopEvent.DraftLoaded(draft().copy(targetPath = "other.go")),
             DesktopEvent.DraftLoaded(draft().copy(baseFileHash = "other")),
+            DesktopEvent.DraftLoaded(draft().copy(validation = null)),
+            DesktopEvent.DraftEdited(declaration = "func Run() { println(1) }"),
+            DesktopEvent.DraftEdited(imports = listOf("fmt")),
+            DesktopEvent.DraftValidationStarted(1),
+            DesktopEvent.DraftMarkedStale,
+            DesktopEvent.DraftDiscarded,
+            DesktopEvent.SelectedFileRefreshed(file().copy(contentHash = "other"), emptyList()),
+            DesktopEvent.SelectedFileUnavailable("File was removed"),
+            DesktopEvent.IndexRefreshed(ProjectIndex("project", "next")),
+            DesktopEvent.Applied(ApplyResult("next", "after", true)),
             DesktopEvent.FileLoaded(file().copy(contentHash = "other"), emptyList()),
+            DesktopEvent.FileLoaded(file().copy(path = "other.go"), emptyList()),
+            DesktopEvent.ProjectLoaded(project(revision = "next"), ProjectIndex("project", "next")),
             DesktopEvent.ProjectLoaded(project("other"), ProjectIndex("other", "revision")),
             DesktopEvent.GoBenchmarkCatalogLoaded(catalog.copy(reason = "replacement")),
             DesktopEvent.GoBenchmarkSelected(choice.copy(command = listOf("other"))),
@@ -866,8 +878,199 @@ class DesktopBenchmarkWorkflowTest {
           assertEquals(stage + 1, harness.requests.size, "$stage: $change")
           assertTrue(harness.events.none { it is DesktopEvent.GoBenchmarkComparisonLoaded })
           assertTrue(harness.events.none { it is DesktopEvent.GoBenchmarkComparisonFailed })
+          assertFalse(harness.state.review.benchmark.running, "$stage: $change")
         }
       }
+    }
+  }
+
+  @Test
+  fun lifecycleEventsCancelEveryAdmissionStageAndRevokeAuthorityImmediately() {
+    val changes =
+        listOf<DesktopEvent>(
+            DesktopEvent.DraftValidationStarted(1),
+            DesktopEvent.DraftEdited(declaration = "func Run() { println(1) }"),
+            DesktopEvent.DraftEdited(imports = listOf("fmt")),
+            DesktopEvent.DraftLoaded(draft().copy(validation = null)),
+            DesktopEvent.DraftLoaded(draft()),
+            DesktopEvent.DraftDiscarded,
+            DesktopEvent.DraftMarkedStale,
+            DesktopEvent.FileLoaded(file().copy(path = "other.go"), emptyList()),
+            DesktopEvent.FileLoaded(file().copy(contentHash = "other"), emptyList()),
+            DesktopEvent.SelectedFileRefreshed(file().copy(contentHash = "other"), emptyList()),
+            DesktopEvent.SelectedFileUnavailable("File was removed"),
+            DesktopEvent.ProjectLoaded(project("other"), ProjectIndex("other", "revision")),
+            DesktopEvent.ProjectLoaded(project(revision = "next"), ProjectIndex("project", "next")),
+            DesktopEvent.IndexRefreshed(ProjectIndex("project", "next")),
+            DesktopEvent.Applied(ApplyResult("next", "after", true)))
+    for (stage in 0..2) {
+      for (completed in listOf(false, true)) {
+        for (change in changes) {
+          Harness().use { harness ->
+            harness.selectBenchmark(trusted = false)
+            harness.enqueueAdmission()
+            harness.workflow.compareSelectedGoBenchmark()
+            repeat(stage) { harness.runStage() }
+            harness.main.runPending()
+            val job = harness.scope.coroutineContext[Job]!!.children.single()
+            if (completed) harness.io.runPending()
+            harness.dispatch(change)
+            assertTrue(job.isCancelled, "$stage/$completed: $change")
+            assertFalse(harness.state.review.benchmark.running, "$stage/$completed: $change")
+            assertNull(harness.state.review.benchmark.catalog)
+            assertNull(harness.state.review.benchmark.selected)
+            harness.completeRequest()
+            assertEquals(stage + if (completed) 1 else 0, harness.requests.size)
+            assertNull(harness.state.review.benchmark.comparison)
+            assertTrue(harness.events.none { it is DesktopEvent.GoBenchmarkComparisonLoaded })
+            assertTrue(harness.events.none { it is DesktopEvent.GoBenchmarkComparisonFailed })
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun catalogReplacementCancelsPendingDiscoveryAndRejectsItsLateResponse() {
+    for (completed in listOf(false, true)) {
+      Harness().use { harness ->
+        harness.workflow.loadGoBenchmarks()
+        harness.main.runPending()
+        val job = harness.scope.coroutineContext[Job]!!.children.single()
+        if (completed) harness.io.runPending()
+        val replacement = catalog.copy(reason = "Replacement catalog")
+        harness.dispatch(DesktopEvent.GoBenchmarkCatalogLoaded(replacement))
+        assertTrue(job.isCancelled)
+        harness.completeRequest()
+        assertEquals(replacement, harness.state.review.benchmark.catalog)
+        assertEquals(BenchmarkDiscoveryOutcome.Loaded, harness.state.review.benchmark.discovery)
+        assertEquals(
+            1, harness.events.filterIsInstance<DesktopEvent.GoBenchmarkCatalogLoaded>().size)
+        assertEquals(if (completed) 1 else 0, harness.requests.size)
+        assertNull(harness.state.review.benchmark.selected)
+      }
+    }
+  }
+
+  @Test
+  fun acceptedIndexingCompletionCancelsEachAdmissionStageButIgnoredCompletionsDoNot() {
+    val attempt = ProjectIndexingAttempt(1, "project", "revision", "/tmp/project")
+    for (stage in 0..2) {
+      for (accepted in listOf(false, true)) {
+        Harness().use { harness ->
+          harness.selectBenchmark(trusted = false)
+          harness.dispatch(DesktopEvent.ProjectIndexingStarted(attempt))
+          harness.enqueueAdmission()
+          harness.workflow.compareSelectedGoBenchmark()
+          repeat(stage) { harness.runStage() }
+          harness.main.runPending()
+          harness.io.runPending()
+          val job = harness.scope.coroutineContext[Job]!!.children.single()
+          harness.dispatch(
+              DesktopEvent.ProjectIndexingCompleted(
+                  if (accepted) attempt else attempt.copy(generation = 99),
+                  ProjectIndex("project", "next")))
+          assertEquals(accepted, job.isCancelled)
+          assertEquals(!accepted, harness.state.review.benchmark.running)
+          harness.completeRequest()
+          assertEquals(if (accepted) stage + 1 else 3, harness.requests.size)
+          assertEquals(
+              if (accepted) null else comparison, harness.state.review.benchmark.comparison)
+          if (accepted) {
+            assertEquals(DraftEditorStatus.Stale, harness.state.review.editor?.status)
+            assertNull(harness.state.review.benchmark.catalog)
+            assertNull(harness.state.review.benchmark.selected)
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun catalogReplacementCancelsAdmissionEvenWhenTheExactCatalogAndChoiceAreRestored() {
+    for (stage in 0..2) {
+      Harness().use { harness ->
+        harness.selectBenchmark(trusted = false)
+        harness.enqueueAdmission()
+        harness.workflow.compareSelectedGoBenchmark()
+        repeat(stage) { harness.runStage() }
+        harness.main.runPending()
+        harness.io.runPending()
+        val job = harness.scope.coroutineContext[Job]!!.children.single()
+        harness.dispatch(DesktopEvent.GoBenchmarkCatalogLoaded(catalog.copy(trusted = false)))
+        assertTrue(job.isCancelled)
+        assertNull(harness.state.review.benchmark.selected)
+        harness.workflow.selectGoBenchmark(choice)
+        harness.completeRequest()
+        assertEquals(stage + 1, harness.requests.size)
+        assertEquals(choice, harness.state.review.benchmark.selected)
+        assertFalse(harness.state.review.benchmark.running)
+        assertNull(harness.state.review.benchmark.comparison)
+      }
+    }
+  }
+
+  @Test
+  fun sameChoiceIsANoOpButChangingChoiceStopsEachStageWithoutRunningTheReplacement() {
+    val other = choice.copy(name = "BenchmarkOther", scope = "other-scope")
+    for (stage in 0..2) {
+      for (same in listOf(false, true)) {
+        Harness().use { harness ->
+          harness.dispatch(
+              DesktopEvent.GoBenchmarkCatalogLoaded(
+                  catalog.copy(trusted = false, benchmarks = listOf(choice, other))))
+          harness.workflow.selectGoBenchmark(choice)
+          harness.enqueueAdmission()
+          harness.workflow.compareSelectedGoBenchmark()
+          repeat(stage) { harness.runStage() }
+          harness.main.runPending()
+          harness.io.runPending()
+          val job = harness.scope.coroutineContext[Job]!!.children.single()
+          val before = harness.state.review.benchmark
+          val eventCount = harness.events.size
+          harness.workflow.selectGoBenchmark(if (same) choice else other)
+          assertEquals(!same, job.isCancelled)
+          if (same) {
+            assertEquals(before, harness.state.review.benchmark)
+            assertEquals(eventCount, harness.events.size)
+          } else {
+            assertEquals(other, harness.state.review.benchmark.selected)
+            assertEquals(
+                BenchmarkAdmissionOutcome.Stopped, harness.state.review.benchmark.admission)
+          }
+          harness.completeRequest()
+          assertEquals(if (same) 3 else stage + 1, harness.requests.size)
+          assertEquals(if (same) comparison else null, harness.state.review.benchmark.comparison)
+          assertFalse(harness.state.review.benchmark.running)
+        }
+      }
+    }
+  }
+
+  @Test
+  fun ignoredRefreshAndObsoleteValidationEventsPreserveCurrentAdmission() {
+    val ignored =
+        listOf<DesktopEvent>(
+            DesktopEvent.SelectedFileRefreshed(file(), emptyList()),
+            DesktopEvent.SelectedFileRefreshed(file().copy(path = "other.go"), emptyList()),
+            DesktopEvent.IndexRefreshed(ProjectIndex("project", "revision")),
+            DesktopEvent.IndexRefreshed(ProjectIndex("other", "next")),
+            DesktopEvent.DraftValidationUpdated(99, draft().copy(validation = null)),
+            DesktopEvent.DraftValidationStopped(99, ValidationAttemptStatus.Failed, "Old failure"))
+    Harness().use { harness ->
+      harness.selectBenchmark(trusted = false)
+      harness.enqueueAdmission()
+      harness.workflow.compareSelectedGoBenchmark()
+      harness.main.runPending()
+      harness.io.runPending()
+      val before = harness.state.review.benchmark
+      val job = harness.scope.coroutineContext[Job]!!.children.single()
+      ignored.forEach { harness.dispatch(it) }
+      assertEquals(before, harness.state.review.benchmark)
+      assertFalse(job.isCancelled)
+      harness.completeRequest()
+      assertEquals(3, harness.requests.size)
+      assertEquals(comparison, harness.state.review.benchmark.comparison)
     }
   }
 
