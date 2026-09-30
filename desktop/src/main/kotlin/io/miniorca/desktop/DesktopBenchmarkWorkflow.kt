@@ -86,11 +86,16 @@ internal class DesktopBenchmarkWorkflow(
             throw CancellationException()
           } catch (error: ApiException) {
             if (!isCurrentBenchmarkCatalogAction(identity, generation)) return@launch
+            val message = error.message ?: "Benchmark lookup failed"
+            dispatch(DesktopEvent.GoBenchmarkDiscoveryFailed(message))
             if (error.status == 409) dispatch(DesktopEvent.DraftMarkedStale)
-            dispatch(DesktopEvent.Failed(error.message ?: "Benchmark lookup failed"))
+            dispatch(DesktopEvent.Failed(message))
           } catch (error: Exception) {
-            if (isCurrentBenchmarkCatalogAction(identity, generation))
-                dispatch(DesktopEvent.Failed(error.message ?: "Benchmark lookup failed"))
+            if (isCurrentBenchmarkCatalogAction(identity, generation)) {
+              val message = error.message ?: "Benchmark lookup failed"
+              dispatch(DesktopEvent.GoBenchmarkDiscoveryFailed(message))
+              dispatch(DesktopEvent.Failed(message))
+            }
           }
         }
   }
@@ -171,12 +176,14 @@ internal class DesktopBenchmarkWorkflow(
           } catch (error: ApiException) {
             if (!isCurrentBenchmarkAction(request)) return@launch
             if (error.status == 409) dispatch(DesktopEvent.DraftMarkedStale)
-            dispatch(DesktopEvent.GoBenchmarkComparisonStopped)
-            dispatch(DesktopEvent.Failed(error.message ?: "Benchmark comparison failed"))
+            val message = error.message ?: "Benchmark comparison failed"
+            dispatch(DesktopEvent.GoBenchmarkComparisonFailed(message))
+            dispatch(DesktopEvent.Failed(message))
           } catch (error: Exception) {
             if (!isCurrentBenchmarkAction(request)) return@launch
-            dispatch(DesktopEvent.GoBenchmarkComparisonStopped)
-            dispatch(DesktopEvent.Failed(error.message ?: "Benchmark comparison failed"))
+            val message = error.message ?: "Benchmark comparison failed"
+            dispatch(DesktopEvent.GoBenchmarkComparisonFailed(message))
+            dispatch(DesktopEvent.Failed(message))
           }
         }
   }

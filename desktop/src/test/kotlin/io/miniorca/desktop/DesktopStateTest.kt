@@ -10,6 +10,135 @@ import kotlinx.serialization.json.Json
 
 class DesktopStateTest {
   @Test
+  fun benchmarkDiscoveryOutcomesAreIndependentOfRetainedMeasurements() {
+    val initial = DesktopState()
+    assertEquals(BenchmarkDiscoveryOutcome.NotRequested, initial.review.benchmark.discovery)
+    assertEquals(BenchmarkAdmissionOutcome.Idle, initial.review.benchmark.admission)
+    assertFalse(initial.review.benchmark.running)
+    assertNull(initial.review.benchmark.catalog)
+    assertNull(initial.review.benchmark.selected)
+    assertNull(initial.review.benchmark.comparison)
+
+    val prior =
+        GoBenchmarkComparison(
+            status = "completed",
+            benchmark = "BenchmarkRun",
+            base = GoBenchmarkMeasurement(listOf(GoBenchmarkSample(10, 100.0))),
+            candidate = GoBenchmarkMeasurement(listOf(GoBenchmarkSample(10, 80.0))))
+    val choice = GoBenchmarkChoice("BenchmarkRun", listOf("go", "test"), "scope")
+    val selected =
+        initial
+            .reduce(DesktopEvent.GoBenchmarkComparisonLoaded(prior))
+            .reduce(
+                DesktopEvent.GoBenchmarkCatalogLoaded(
+                    GoBenchmarkCatalog(available = true, benchmarks = listOf(choice))))
+            .reduce(DesktopEvent.GoBenchmarkSelected(choice))
+            .reduce(DesktopEvent.GoBenchmarkAdmissionStarted)
+    val loading = selected.reduce(DesktopEvent.GoBenchmarkDiscoveryStarted)
+    assertEquals(BenchmarkDiscoveryOutcome.Loading, loading.review.benchmark.discovery)
+    assertEquals(BenchmarkAdmissionOutcome.Stopped, loading.review.benchmark.admission)
+    assertNull(loading.review.benchmark.catalog)
+    assertNull(loading.review.benchmark.selected)
+    assertEquals(prior, loading.review.benchmark.comparison)
+    assertFalse(loading.review.benchmark.running)
+
+    val empty =
+        loading.reduce(DesktopEvent.GoBenchmarkCatalogLoaded(GoBenchmarkCatalog(available = true)))
+    assertEquals(BenchmarkDiscoveryOutcome.Loaded, empty.review.benchmark.discovery)
+    assertTrue(empty.review.benchmark.catalog!!.benchmarks.isEmpty())
+    val unavailable =
+        loading.reduce(
+            DesktopEvent.GoBenchmarkCatalogLoaded(
+                GoBenchmarkCatalog(available = false, reason = "No compatible benchmark")))
+    assertEquals(
+        BenchmarkDiscoveryOutcome.Unavailable("No compatible benchmark"),
+        unavailable.review.benchmark.discovery)
+    val failed = loading.reduce(DesktopEvent.GoBenchmarkDiscoveryFailed("Lookup timed out"))
+    assertEquals(
+        BenchmarkDiscoveryOutcome.Failed("Lookup timed out"), failed.review.benchmark.discovery)
+    assertNull(failed.review.benchmark.catalog)
+    listOf(empty, unavailable, failed).forEach {
+      assertEquals(prior, it.review.benchmark.comparison)
+      assertNull(it.review.benchmark.selected)
+      assertFalse(it.review.benchmark.running)
+    }
+  }
+
+  @Test
+  fun benchmarkAdmissionStartCompletionStoppingAndFailureRetainTruthfulEvidence() {
+    val prior =
+        GoBenchmarkComparison(
+            status = "completed",
+            benchmark = "BenchmarkPrior",
+            base = GoBenchmarkMeasurement(listOf(GoBenchmarkSample(10, 100.0))),
+            candidate = GoBenchmarkMeasurement(listOf(GoBenchmarkSample(10, 80.0))))
+    val initial = DesktopState().reduce(DesktopEvent.GoBenchmarkComparisonLoaded(prior))
+    val admitting = initial.reduce(DesktopEvent.GoBenchmarkAdmissionStarted)
+    assertEquals(BenchmarkAdmissionOutcome.Admitting, admitting.review.benchmark.admission)
+    assertTrue(admitting.review.benchmark.running)
+    assertEquals(prior, admitting.review.benchmark.comparison)
+    val running = admitting.reduce(DesktopEvent.GoBenchmarkComparisonStarted)
+    assertEquals(BenchmarkAdmissionOutcome.Running, running.review.benchmark.admission)
+    assertTrue(running.review.benchmark.running)
+    val completed = prior.copy(benchmark = "BenchmarkNew")
+    val loaded = running.reduce(DesktopEvent.GoBenchmarkComparisonLoaded(completed))
+    assertEquals(BenchmarkAdmissionOutcome.Idle, loaded.review.benchmark.admission)
+    assertEquals(completed, loaded.review.benchmark.comparison)
+    assertFalse(loaded.review.benchmark.running)
+    for (active in listOf(admitting, running)) {
+      val stopped = active.reduce(DesktopEvent.GoBenchmarkComparisonStopped)
+      assertEquals(BenchmarkAdmissionOutcome.Stopped, stopped.review.benchmark.admission)
+      val failed = active.reduce(DesktopEvent.GoBenchmarkComparisonFailed("Comparison timed out"))
+      assertEquals(
+          BenchmarkAdmissionOutcome.Failed("Comparison timed out"),
+          failed.review.benchmark.admission)
+      listOf(stopped, failed).forEach {
+        assertEquals(prior, it.review.benchmark.comparison)
+        assertFalse(it.review.benchmark.running)
+        assertFalse(it.loading)
+      }
+    }
+    val unavailable = prior.copy(status = "unavailable", reason = "Scope changed")
+    val rejected = running.reduce(DesktopEvent.GoBenchmarkComparisonLoaded(unavailable))
+    assertEquals(
+        BenchmarkAdmissionOutcome.Failed("Scope changed"), rejected.review.benchmark.admission)
+    assertEquals(unavailable, rejected.review.benchmark.comparison)
+    assertFalse(rejected.review.benchmark.running)
+  }
+
+  @Test
+  fun replacingCandidateInvalidatesEveryRequestedDiscoveryOutcomeButNotAnUnrequestedOne() {
+    val prior =
+        GoBenchmarkComparison(
+            status = "completed",
+            base = GoBenchmarkMeasurement(listOf(GoBenchmarkSample(10, 100.0))),
+            candidate = GoBenchmarkMeasurement(listOf(GoBenchmarkSample(10, 80.0))))
+    val original = DesktopState().reduce(DesktopEvent.GoBenchmarkComparisonLoaded(prior))
+    val states =
+        listOf(
+            original,
+            original.reduce(DesktopEvent.GoBenchmarkDiscoveryStarted),
+            original.reduce(
+                DesktopEvent.GoBenchmarkCatalogLoaded(GoBenchmarkCatalog(available = true))),
+            original.reduce(
+                DesktopEvent.GoBenchmarkCatalogLoaded(GoBenchmarkCatalog(reason = "Unavailable"))),
+            original.reduce(DesktopEvent.GoBenchmarkDiscoveryFailed("Failed")))
+    states.forEach { state ->
+      val replaced = state.reduce(DesktopEvent.DraftLoaded(DeclarationDraft(id = "replacement")))
+      assertEquals(
+          if (state.review.benchmark.discovery == BenchmarkDiscoveryOutcome.NotRequested)
+              BenchmarkDiscoveryOutcome.NotRequested
+          else BenchmarkDiscoveryOutcome.Invalidated,
+          replaced.review.benchmark.discovery)
+      assertEquals(prior, replaced.review.benchmark.comparison)
+      assertNull(replaced.review.benchmark.catalog)
+      assertNull(replaced.review.benchmark.selected)
+      assertEquals(
+          replaced.review.benchmark, replaced.reduce(DesktopEvent.DraftDiscarded).review.benchmark)
+    }
+  }
+
+  @Test
   fun checkAttemptsIgnoreUnrelatedLoadingAndLateOutcomes() {
     val draft =
         DeclarationDraft(
@@ -87,7 +216,8 @@ class DesktopStateTest {
                 review =
                     DraftReviewState(
                         draft = DeclarationDraft(id = "draft"),
-                        benchmark = BenchmarkEvidenceState(running = true)),
+                        benchmark =
+                            BenchmarkEvidenceState(admission = BenchmarkAdmissionOutcome.Running)),
                 jobs = JobState(loading = true),
             )
             .reduce(DesktopEvent.ProjectLoaded(project, index))
@@ -231,7 +361,10 @@ class DesktopStateTest {
                         project = project().copy(projectId = "id"),
                         index = ProjectIndex("id", "revision")),
                 selection = FileSelectionState(selectedFile = selected),
-                review = DraftReviewState(benchmark = BenchmarkEvidenceState(running = true)),
+                review =
+                    DraftReviewState(
+                        benchmark =
+                            BenchmarkEvidenceState(admission = BenchmarkAdmissionOutcome.Running)),
                 jobs = JobState(loading = true))
             .reduce(DesktopEvent.IndexRefreshed(refreshed))
     assertEquals(selected, state.selectedFile)
@@ -374,6 +507,8 @@ class DesktopStateTest {
             targetPath = draft.targetPath,
             benchmark = "BenchmarkRun",
             status = "completed",
+            base = GoBenchmarkMeasurement(listOf(GoBenchmarkSample(10, 100.0))),
+            candidate = GoBenchmarkMeasurement(listOf(GoBenchmarkSample(10, 80.0))),
         )
     val updated =
         DesktopState(
@@ -388,14 +523,21 @@ class DesktopStateTest {
                                         draftId = draft.id,
                                         draftRevision = draft.revision,
                                         draftHash = draft.hash),
+                                selected =
+                                    GoBenchmarkChoice(
+                                        "BenchmarkRun", listOf("go", "test"), "scope"),
                                 comparison = comparison,
-                                running = true),
+                                discovery = BenchmarkDiscoveryOutcome.Loaded,
+                                admission = BenchmarkAdmissionOutcome.Running),
                     ),
                 jobs = JobState(loading = true))
             .reduce(DesktopEvent.DraftEdited(declaration = "func Run() int { return 1 }"))
 
     assertEquals(comparison, updated.review.benchmark.comparison)
     assertNull(updated.review.benchmark.catalog)
+    assertNull(updated.review.benchmark.selected)
+    assertEquals(BenchmarkDiscoveryOutcome.Invalidated, updated.review.benchmark.discovery)
+    assertEquals(BenchmarkAdmissionOutcome.Stopped, updated.review.benchmark.admission)
     assertFalse(updated.review.benchmark.running)
     assertFalse(updated.loading)
     assertEquals(DraftEditorStatus.Dirty, updated.review.editor?.status)
@@ -415,18 +557,27 @@ class DesktopStateTest {
         DesktopState(
             review =
                 DraftReviewState(
-                    benchmark = BenchmarkEvidenceState(catalog = catalog, running = true)),
+                    benchmark =
+                        BenchmarkEvidenceState(
+                            catalog = catalog,
+                            selected = catalog.benchmarks.single(),
+                            discovery = BenchmarkDiscoveryOutcome.Loaded,
+                            admission = BenchmarkAdmissionOutcome.Running)),
             jobs = JobState(loading = true),
         )
     val loaded = running.reduce(DesktopEvent.GoBenchmarkCatalogLoaded(catalog))
 
     assertEquals(catalog, loaded.review.benchmark.catalog)
+    assertEquals(BenchmarkDiscoveryOutcome.Loaded, loaded.review.benchmark.discovery)
+    assertEquals(BenchmarkAdmissionOutcome.Stopped, loaded.review.benchmark.admission)
     assertNull(loaded.review.benchmark.selected)
     assertNull(loaded.review.benchmark.comparison)
     assertFalse(loaded.review.benchmark.running)
     assertFalse(loaded.loading)
 
     val selected = loaded.reduce(DesktopEvent.GoBenchmarkSelected(catalog.benchmarks.single()))
+    assertEquals(catalog.benchmarks.single(), selected.review.benchmark.selected)
+    assertEquals(BenchmarkAdmissionOutcome.Idle, selected.review.benchmark.admission)
     assertFalse(selected.review.benchmark.running)
     assertFalse(selected.loading)
   }
@@ -448,7 +599,14 @@ class DesktopStateTest {
                 DraftReviewState(
                     draft = draft,
                     editor = editableDraft(draft),
-                    benchmark = BenchmarkEvidenceState(catalog = catalog, running = true)),
+                    benchmark =
+                        BenchmarkEvidenceState(
+                            catalog = catalog,
+                            selected =
+                                GoBenchmarkChoice("BenchmarkRun", listOf("go", "test"), "scope"),
+                            comparison = GoBenchmarkComparison(status = "completed"),
+                            discovery = BenchmarkDiscoveryOutcome.Loaded,
+                            admission = BenchmarkAdmissionOutcome.Admitting)),
             jobs = JobState(loading = true),
         )
 
@@ -459,6 +617,10 @@ class DesktopStateTest {
     listOf(validating, replaced, discarded).forEach {
       assertFalse(it.review.benchmark.running)
       assertNull(it.review.benchmark.catalog)
+      assertNull(it.review.benchmark.selected)
+      assertEquals(active.review.benchmark.comparison, it.review.benchmark.comparison)
+      assertEquals(BenchmarkDiscoveryOutcome.Invalidated, it.review.benchmark.discovery)
+      assertEquals(BenchmarkAdmissionOutcome.Stopped, it.review.benchmark.admission)
       assertFalse(it.loading)
     }
   }
