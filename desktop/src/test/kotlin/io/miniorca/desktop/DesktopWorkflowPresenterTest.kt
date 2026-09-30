@@ -4337,33 +4337,46 @@ class DesktopWorkflowPresenterTest {
 
   @Test
   fun failedInitialWorkspaceScanReadIsUnavailableNotAbsent() {
-    val presenter = presenter { method, path, _ ->
-      when (method to path) {
-        "POST" to "/api/projects/current/reindex" -> response(indexJson())
-        "GET" to
-            "/api/projects/current/analysis/run?project_id=project&project_revision=revision" ->
-            TransportResponse(204, "")
-        "GET" to "/api/projects/current/analysis/selection?project_revision=revision",
-        "GET" to "/api/projects/current/overview?project_revision=revision",
-        "GET" to "/api/projects/current/findings?project_revision=revision" -> response("{}")
-        "GET" to "/api/projects/current/scan?project_revision=revision" ->
-            TransportResponse(503, "status unavailable")
-        else -> error("Unexpected $method $path")
-      }
-    }
+    // Confine reducer updates as in the UI, independently of transport continuations.
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          when (method to path) {
+            "POST" to "/api/projects/current/reindex" -> response(indexJson())
+            "GET" to
+                "/api/projects/current/analysis/run?project_id=project&project_revision=revision" ->
+                TransportResponse(204, "")
+            "GET" to "/api/projects/current/analysis/selection?project_revision=revision",
+            "GET" to "/api/projects/current/overview?project_revision=revision",
+            "GET" to "/api/projects/current/findings?project_revision=revision" -> response("{}")
+            "GET" to "/api/projects/current/scan?project_revision=revision" ->
+                TransportResponse(503, "status unavailable")
+            else -> error("Unexpected $method $path")
+          }
+        }
     try {
       loadProject(presenter)
       assertEquals(VerifiedScanRead.Unread, presenter.snapshot.value.state.verifiedScan.read)
       val retained = GoScanReport("project", "revision", status = "completed")
       presenter.dispatch(DesktopEvent.GoScanLoaded(retained))
       presenter.reindexProject()
-      eventually {
-        presenter.snapshot.value.state.verifiedScan.read is VerifiedScanRead.Unavailable
-      }
-      assertEquals(retained, presenter.snapshot.value.state.findings.scan)
-      assertNull(presenter.snapshot.value.state.jobs.error)
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(VerifiedScanRead.Reading, presenter.snapshot.value.state.verifiedScan.read)
+      io.runPending()
+      main.runPending()
+      val state = presenter.snapshot.value.state
+      val unavailable = state.verifiedScan.read as VerifiedScanRead.Unavailable
+      assertTrue(unavailable.message.contains("Daemon returned 503"))
+      assertTrue(state.projectState.detailsOutcome is ProjectDetailsOutcome.Unavailable)
+      assertEquals(retained, state.findings.scan)
+      assertNull(state.jobs.error)
     } finally {
       presenter.close()
+      scope.cancel()
     }
   }
 

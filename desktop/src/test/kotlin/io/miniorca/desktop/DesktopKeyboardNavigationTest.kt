@@ -2961,7 +2961,7 @@ class DesktopKeyboardNavigationTest {
             assertTrue(fixture.pressKey(Key.DirectionDown))
             fixture.render()
           }
-          assertTrue(fixture.hasDescription("Editor tool window, not selected, focused"))
+          fixture.awaitVisibleDescription("Editor tool window, not selected, focused")
           val editor = fixture.firstVisibleTextBounds("Editor")
           assertTrue(editor.top >= 0 && editor.bottom <= 220, "Focus must reveal the last label")
           assertEquals(LeftToolWindow.Summary, active)

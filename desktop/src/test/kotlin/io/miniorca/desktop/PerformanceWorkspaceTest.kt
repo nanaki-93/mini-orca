@@ -552,7 +552,12 @@ class PerformanceWorkspaceTest {
     assertEquals("Inconclusive · incomplete memory evidence", presentation.stateLabel)
     assertTrue(presentation.inconclusive)
     assertFalse(presentation.isMeasured)
-    assertTrue(presentation.rows.any { it == ("B/op" to "incomplete: 5 base · 4 candidate") })
+    val bytes = presentation.metrics.single { it.label == "B/op" }
+    assertEquals(BenchmarkMetricAvailability.Complete, bytes.base.availability)
+    assertEquals(BenchmarkMetricAvailability.Partial, bytes.candidate.availability)
+    assertEquals(12.0, bytes.candidate.median)
+    assertTrue(
+        presentation.rows.any { it.first == "B/op" && "4/5 valid observations" in it.second })
     assertTrue(presentation.summary.contains("B/op"))
     assertTrue(presentation.insights.single().contains("cannot establish a performance win"))
   }
@@ -576,8 +581,16 @@ class PerformanceWorkspaceTest {
     assertEquals("Inconclusive · incomplete memory evidence", presentation.stateLabel)
     assertFalse(presentation.isMeasured)
     assertTrue(presentation.inconclusive)
-    assertTrue(presentation.rows.any { it == ("B/op" to "incomplete: 0 base · 0 candidate") })
-    assertTrue(presentation.rows.any { it == ("allocs/op" to "incomplete: 0 base · 0 candidate") })
+    for (metric in presentation.metrics.drop(1)) {
+      assertEquals(BenchmarkMetricAvailability.Unavailable, metric.base.availability)
+      assertEquals(BenchmarkMetricAvailability.Unavailable, metric.candidate.availability)
+      assertEquals(null, metric.base.median)
+      assertEquals(null, metric.candidate.median)
+      assertTrue(
+          presentation.rows.any {
+            it.first == metric.label && "0/5 valid observations" in it.second
+          })
+    }
     assertFalse(presentation.summary.contains("CPU is lower"))
   }
 
@@ -622,6 +635,220 @@ class PerformanceWorkspaceTest {
     assertEquals("0 → 4 · from zero to 4", increased.rows.single { it.first == "B/op" }.second)
     assertTrue(
         (unchanged.rows + increased.rows).none { "NaN" in it.second || "Infinity" in it.second })
+  }
+
+  @Test
+  fun partialMeasurementsKeepPerSideCoverageAndConventionalMedians() {
+    val full = comparison()
+    for ((values, median) in
+        listOf(
+            listOf(80.0) to 80.0,
+            listOf(80.0, 90.0) to 85.0,
+            listOf(90.0, 80.0, 100.0) to 90.0,
+            listOf(110.0, 80.0, 100.0, 90.0) to 95.0,
+            List(6) { 90.0 } to 90.0)) {
+      for (partialBase in listOf(false, true)) {
+        val partial = GoBenchmarkMeasurement(values.map { benchmarkSample(it, 10, 1) })
+        val evidence =
+            if (partialBase) full.copy(base = partial) else full.copy(candidate = partial)
+        val presentation = performanceBenchmarkPresentation(evidence, full.identity())
+        val time = presentation.metrics.first()
+        val side = if (partialBase) time.base else time.candidate
+        assertEquals(BenchmarkMetricAvailability.Partial, side.availability)
+        assertEquals(values.size, side.sampleCount)
+        assertEquals(median, side.median)
+        assertEquals(
+            BenchmarkMetricAvailability.Complete,
+            (if (partialBase) time.candidate else time.base).availability)
+        assertFalse(presentation.isMeasured)
+        assertTrue(presentation.inconclusive)
+        assertTrue(
+            presentation.rows.any {
+              it.first == "ns/op" &&
+                  "${values.size}/${values.size} valid observations" in it.second &&
+                  "partial" in it.second
+            })
+        assertTrue(
+            presentation.rows.any { it.first == "ns/op" && "${median.toInt()}" in it.second })
+        assertFalse(presentation.summary.contains("CPU is lower"))
+      }
+    }
+  }
+
+  @Test
+  fun missingMeasurementEmptySamplesAndMissingMetricsStayDistinct() {
+    val full = comparison()
+    for (missingBase in listOf(false, true)) {
+      for (measurement in listOf(null, GoBenchmarkMeasurement())) {
+        val evidence =
+            if (missingBase) full.copy(base = measurement) else full.copy(candidate = measurement)
+        val presentation = performanceBenchmarkPresentation(evidence, full.identity())
+        val expected =
+            if (measurement == null) BenchmarkMetricAvailability.MissingMeasurement
+            else BenchmarkMetricAvailability.EmptySamples
+        for (metric in presentation.metrics) {
+          val side = if (missingBase) metric.base else metric.candidate
+          assertEquals(expected, side.availability)
+          assertEquals(measurement?.samples?.size, side.sampleCount)
+          assertEquals(null, side.median)
+          assertEquals(
+              BenchmarkMetricAvailability.Complete,
+              (if (missingBase) metric.candidate else metric.base).availability)
+        }
+        assertFalse(presentation.isMeasured)
+        assertTrue(presentation.inconclusive)
+        val text = presentation.rows.single { it.first == "ns/op" }.second
+        assertTrue(
+            text.contains(if (measurement == null) "measurement not returned" else "empty samples"))
+        assertTrue(
+            text.contains(if (missingBase) "Candidate median: 90" else "Baseline median: 100"))
+      }
+    }
+  }
+
+  @Test
+  fun independentlyMissingMemoryMetricsRetainObservedPartialMediansIncludingZero() {
+    val evidence =
+        comparison()
+            .copy(
+                candidate =
+                    GoBenchmarkMeasurement(
+                        listOf(
+                            benchmarkSample(90.0, 0, 2),
+                            benchmarkSample(90.0, 2, 4),
+                            benchmarkSample(90.0, 6, 6).copy(bytesPerOperation = null),
+                            benchmarkSample(90.0, 6, 8).copy(allocationsPerOperation = null),
+                            benchmarkSample(90.0, 6, 10).withoutMemoryMetrics())))
+    val presentation = performanceBenchmarkPresentation(evidence, evidence.identity())
+    val bytes = presentation.metrics.single { it.label == "B/op" }.candidate
+    val allocations = presentation.metrics.single { it.label == "allocs/op" }.candidate
+    assertEquals(listOf(0.0, 2.0, 6.0), bytes.validValues)
+    assertEquals(2.0, bytes.median)
+    assertEquals(listOf(2.0, 4.0, 6.0), allocations.validValues)
+    assertEquals(4.0, allocations.median)
+    assertEquals(BenchmarkMetricAvailability.Partial, bytes.availability)
+    assertEquals(BenchmarkMetricAvailability.Partial, allocations.availability)
+    assertFalse(presentation.isMeasured)
+    assertTrue(presentation.inconclusive)
+    assertTrue(presentation.insights.single().contains("cannot establish a performance win"))
+  }
+
+  @Test
+  fun invalidObservationsRemainInspectableAndCannotBecomeCompleteEvidence() {
+    val full = comparison()
+    val valid = benchmarkSample(90.0, 10, 1)
+    for (invalid in
+        listOf(
+            valid.copy(iterations = 0),
+            valid.copy(iterations = -1),
+            valid.copy(nanosecondsPerOperation = 0.0),
+            valid.copy(nanosecondsPerOperation = -1.0),
+            valid.copy(nanosecondsPerOperation = Double.NaN),
+            valid.copy(nanosecondsPerOperation = Double.POSITIVE_INFINITY),
+            valid.copy(nanosecondsPerOperation = Double.NEGATIVE_INFINITY),
+            valid.copy(bytesPerOperation = -1),
+            valid.copy(allocationsPerOperation = -1))) {
+      for (invalidBase in listOf(false, true)) {
+        val samples = GoBenchmarkMeasurement(List(4) { valid } + invalid)
+        val evidence =
+            if (invalidBase) full.copy(base = samples) else full.copy(candidate = samples)
+        val presentation = performanceBenchmarkPresentation(evidence, full.identity())
+        assertEquals("Inconclusive · invalid samples", presentation.stateLabel)
+        assertFalse(presentation.isMeasured)
+        assertTrue(presentation.inconclusive)
+        val invalidMetrics =
+            presentation.metrics.filter {
+              (if (invalidBase) it.base else it.candidate).availability ==
+                  BenchmarkMetricAvailability.Invalid
+            }
+        assertTrue(invalidMetrics.isNotEmpty())
+        for (metric in invalidMetrics) {
+          val side = if (invalidBase) metric.base else metric.candidate
+          assertEquals(5, side.sampleCount)
+          assertEquals(4, side.validValues.size)
+          assertEquals(invalid, side.invalidSamples.single().value)
+          assertEquals(4, side.invalidSamples.single().index)
+        }
+        assertTrue(
+            presentation.rows.any {
+              "invalid" in it.first &&
+                  "sample 5" in it.first &&
+                  "iterations=${invalid.iterations}" in it.second &&
+                  "ns/op=${invalid.nanosecondsPerOperation}" in it.second &&
+                  "B/op=${invalid.bytesPerOperation}" in it.second &&
+                  "allocs/op=${invalid.allocationsPerOperation}" in it.second
+            })
+      }
+    }
+    val allInvalid =
+        full.copy(candidate = GoBenchmarkMeasurement(List(5) { valid.copy(iterations = 0) }))
+    val unavailable = performanceBenchmarkPresentation(allInvalid, full.identity())
+    assertTrue(unavailable.metrics.all { it.candidate.median == null })
+    assertFalse(unavailable.isMeasured)
+  }
+
+  @Test
+  fun tenPercentRelativeRangeIsInclusiveButGreaterRangesAreInconclusive() {
+    val boundary = comparison(listOf(95.0, 100.0, 100.0, 100.0, 105.0))
+    val noisy = comparison(listOf(95.0, 100.0, 100.0, 100.0, 105.01))
+    assertTrue(performanceBenchmarkPresentation(boundary, boundary.identity()).isMeasured)
+    assertEquals(
+        "Inconclusive · noisy samples",
+        performanceBenchmarkPresentation(noisy, noisy.identity()).stateLabel)
+  }
+
+  @Test
+  fun freshnessAndTerminalStatusDoNotPreventMeasurementExtraction() {
+    val full = comparison()
+    val partial = full.copy(candidate = GoBenchmarkMeasurement(full.candidate!!.samples.take(2)))
+    val current = performanceBenchmarkPresentation(partial, full.identity())
+    for (identity in listOf(null, full.identity().copy(draftHash = "changed"))) {
+      val stale = performanceBenchmarkPresentation(partial, identity)
+      assertEquals(current.metrics, stale.metrics)
+      assertEquals(current.rows, stale.rows)
+      assertFalse(stale.isMeasured)
+      assertTrue(stale.isStale)
+      assertTrue(stale.summary.contains("Recorded assessment"))
+    }
+    for (status in listOf("failed", "canceled", "unavailable", "unknown")) {
+      val terminal =
+          performanceBenchmarkPresentation(partial.copy(status = status), full.identity())
+      assertEquals(current.metrics, terminal.metrics)
+      assertEquals(current.rows, terminal.rows)
+      assertFalse(terminal.isMeasured)
+    }
+  }
+
+  @Test
+  fun partialMediansRemainReadableInTheExistingProductionEvidenceView() {
+    val partial =
+        comparison()
+            .copy(
+                candidate =
+                    GoBenchmarkMeasurement(
+                        listOf(benchmarkSample(80.0, 0, 0), benchmarkSample(90.0, 0, 0))))
+    var requests = 0
+    ComposeVisualFixture(1600, 1000) {
+          PerformanceWorkspacePane(
+              PerformanceWorkspacePaneState(
+                  performancePageFixture(),
+                  null,
+                  benchmarkComparison = partial,
+                  expectedBenchmarkIdentity = partial.identity()),
+              benchmarkActions { requests++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Expand Explore benchmark evidence")
+          fixture.render()
+          fixture.clickDescription("Expand Measurement details")
+          fixture.render("f22-partial-median-evidence")
+          val rows = performanceBenchmarkPresentation(partial, partial.identity()).rows
+          assertTrue(fixture.hasText(rows.single { it.first == "ns/op" }.second))
+          assertTrue(fixture.hasText(rows.single { it.first == "B/op" }.second))
+          assertTrue(fixture.hasText("Inconclusive · incomplete measurement evidence"))
+          assertEquals(0, requests)
+        }
   }
 
   @Test
