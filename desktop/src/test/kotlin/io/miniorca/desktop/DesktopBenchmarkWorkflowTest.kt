@@ -5,6 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import java.net.http.HttpTimeoutException
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -1071,8 +1075,9 @@ class DesktopBenchmarkWorkflowTest {
   }
 
   @Test
-  fun comparisonIdentityAndScopeMismatchesRetainOnlyPriorEvidenceAndRequireRediscovery() {
-    listOf(
+  fun comparisonAssociationMismatchesRetainOnlyPriorEvidenceAndRequireRediscovery() {
+    val mismatches =
+        listOf(
             comparison.copy(draftId = "other"),
             comparison.copy(draftRevision = 2),
             comparison.copy(draftHash = "other"),
@@ -1082,9 +1087,25 @@ class DesktopBenchmarkWorkflowTest {
             comparison.copy(targetPath = "other.go"),
             comparison.copy(benchmark = "other"),
             comparison.copy(scope = "new-scope"),
-            comparison.copy(status = "unavailable", scope = "recomputed-scope"),
-            comparison.copy(status = "unavailable", projectId = "other"))
-        .forEach { rejected ->
+            comparison.copy(command = emptyList()),
+            comparison.copy(command = choice.command.reversed()),
+            comparison.copy(command = choice.command + "-benchmem"))
+    for (status in listOf("completed", "failed", "canceled", "unavailable")) {
+      // Even empty measurement objects require strict association, not the sparse exception.
+      for (sides in listOf("both", "base", "candidate", "empty")) {
+        mismatches.forEach { mismatch ->
+          val rejected =
+              mismatch.copy(
+                  status = status,
+                  base =
+                      when (sides) {
+                        "candidate" -> null
+                        "empty" -> GoBenchmarkMeasurement(emptyList())
+                        else -> mismatch.base
+                      },
+                  candidate =
+                      if (sides == "both" || sides == "candidate") mismatch.candidate else null)
+
           Harness().use { harness ->
             harness.selectBenchmark()
             harness.dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(comparison))
@@ -1092,6 +1113,10 @@ class DesktopBenchmarkWorkflowTest {
             harness.workflow.compareSelectedGoBenchmark()
             harness.completeRequest()
             assertTrue(harness.admissionFailure().contains("Refresh compatible benchmarks"))
+            assertTrue(harness.admissionFailure().contains("Benchmark response"))
+            if (mismatch.command != choice.command)
+                assertTrue(harness.admissionFailure().contains("argv"))
+            assertNull(harness.state.jobs.error, "Association failures stay benchmark-local")
             assertNull(harness.state.review.benchmark.latestOutcome)
             assertEquals(comparison, harness.state.review.benchmark.comparison)
             assertNull(harness.state.review.benchmark.catalog)
@@ -1102,38 +1127,18 @@ class DesktopBenchmarkWorkflowTest {
                 harness.events.none {
                   it is DesktopEvent.GoBenchmarkComparisonLoaded && it.comparison == rejected
                 })
+            harness.workflow.compareSelectedGoBenchmark()
+            harness.completeRequest()
+            assertEquals(listOf("POST"), harness.methods, "Rediscovery/selection must be explicit")
           }
         }
+      }
+    }
   }
 
   @Test
   fun completedStagesRecheckCandidateCatalogAndSelectionWithoutRelyingOnCancellation() {
-    val changes =
-        listOf<DesktopEvent>(
-            DesktopEvent.DraftLoaded(draft().copy(id = "other")),
-            DesktopEvent.DraftLoaded(draft().copy(revision = 2)),
-            DesktopEvent.DraftLoaded(draft().copy(hash = "other")),
-            DesktopEvent.DraftLoaded(draft().copy(projectId = "other")),
-            DesktopEvent.DraftLoaded(draft().copy(projectRevision = "other")),
-            DesktopEvent.DraftLoaded(draft().copy(targetPath = "other.go")),
-            DesktopEvent.DraftLoaded(draft().copy(baseFileHash = "other")),
-            DesktopEvent.DraftLoaded(draft().copy(validation = null)),
-            DesktopEvent.DraftEdited(declaration = "func Run() { println(1) }"),
-            DesktopEvent.DraftEdited(imports = listOf("fmt")),
-            DesktopEvent.DraftValidationStarted(1),
-            DesktopEvent.DraftMarkedStale,
-            DesktopEvent.DraftDiscarded,
-            DesktopEvent.SelectedFileRefreshed(file().copy(contentHash = "other"), emptyList()),
-            DesktopEvent.SelectedFileUnavailable("File was removed"),
-            DesktopEvent.IndexRefreshed(ProjectIndex("project", "next")),
-            DesktopEvent.Applied(ApplyResult("next", "after", true)),
-            DesktopEvent.FileLoaded(file().copy(contentHash = "other"), emptyList()),
-            DesktopEvent.FileLoaded(file().copy(path = "other.go"), emptyList()),
-            DesktopEvent.ProjectLoaded(project(revision = "next"), ProjectIndex("project", "next")),
-            DesktopEvent.ProjectLoaded(project("other"), ProjectIndex("other", "revision")),
-            DesktopEvent.GoBenchmarkCatalogLoaded(catalog.copy(reason = "replacement")),
-            DesktopEvent.GoBenchmarkSelected(choice.copy(command = listOf("other"))),
-            DesktopEvent.GoBenchmarkSelected(choice.copy(scope = "other")))
+    val changes = publicationInvalidations()
     for (stage in 0..2) {
       for (change in changes) {
         Harness().use { harness ->
@@ -1152,6 +1157,98 @@ class DesktopBenchmarkWorkflowTest {
           assertTrue(harness.events.none { it is DesktopEvent.GoBenchmarkComparisonFailed })
           assertFalse(harness.state.review.benchmark.running, "$stage: $change")
         }
+      }
+    }
+  }
+
+  @Test
+  fun nonCooperativeTerminalResponsesCannotPublishAfterCandidateOrAuthorityChanges() {
+    val executor = Executors.newSingleThreadExecutor()
+    try {
+      val terminals =
+          listOf("completed", "failed", "canceled", "unavailable").map {
+            comparison.copy(status = it, reason = "Late $it")
+          } + GoBenchmarkComparison(status = "unavailable", reason = "Late sparse unavailable")
+      for (terminal in terminals) {
+        for (change in publicationInvalidations()) {
+          for (cancelThroughLifecycle in listOf(false, true)) {
+            Harness().use { harness ->
+              harness.selectBenchmark()
+              harness.dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(comparison))
+              val entered = CountDownLatch(1)
+              val interrupted = CountDownLatch(1)
+              val release = CountDownLatch(1)
+              harness.responses.addLast {
+                entered.countDown()
+                // Deliberately return a terminal response even after transport interruption.
+                while (true) {
+                  try {
+                    release.await()
+                    break
+                  } catch (_: InterruptedException) {
+                    interrupted.countDown()
+                  }
+                }
+                TransportResponse(200, Json.encodeToString(terminal))
+              }
+              harness.workflow.compareSelectedGoBenchmark()
+              harness.main.runPending()
+              val job = harness.scope.coroutineContext[Job]!!.children.single()
+              val transport = executor.submit { harness.io.runPending() }
+              try {
+                assertTrue(entered.await(5, TimeUnit.SECONDS), "Transport must start")
+                if (cancelThroughLifecycle) harness.dispatch(change)
+                else harness.controller.dispatch(change) // Exercise guards without cancellation.
+                if (change is DesktopEvent.GoBenchmarkCatalogLoaded) {
+                  if (cancelThroughLifecycle) harness.workflow.selectGoBenchmark(choice)
+                  else harness.controller.dispatch(DesktopEvent.GoBenchmarkSelected(choice))
+                }
+                if (cancelThroughLifecycle) {
+                  assertTrue(job.isCancelled, change.toString())
+                  assertTrue(
+                      interrupted.await(5, TimeUnit.SECONDS), "Transport ignores interruption")
+                } else assertFalse(job.isCancelled)
+                val replacement = harness.state
+                val eventCount = harness.events.size
+                release.countDown()
+                transport.get(5, TimeUnit.SECONDS)
+                harness.completeRequest()
+                assertEquals(replacement, harness.state, "${terminal.status}: $change")
+                assertEquals(eventCount, harness.events.size, "No obsolete outcome or diagnostic")
+                assertEquals(listOf("POST"), harness.methods, "No trust grant, switch or retry")
+                assertTrue(job.isCompleted)
+              } finally {
+                release.countDown()
+                transport.get(5, TimeUnit.SECONDS)
+              }
+            }
+          }
+        }
+      }
+    } finally {
+      executor.shutdownNow()
+    }
+  }
+
+  @Test
+  fun everyLateTerminalIsRejectedWhenCatalogAndChoiceReturnToTheCapturedValues() {
+    for (status in listOf("completed", "failed", "canceled", "unavailable")) {
+      Harness().use { harness ->
+        harness.selectBenchmark()
+        harness.enqueue(comparison.copy(status = status))
+        harness.workflow.compareSelectedGoBenchmark()
+        harness.main.runPending()
+        harness.io.runPending()
+        harness.dispatch(DesktopEvent.GoBenchmarkCatalogLoaded(catalog))
+        harness.workflow.selectGoBenchmark(choice)
+        val replacement = comparison.copy(reason = "Replacement evidence")
+        harness.dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(replacement))
+        val snapshot = harness.state
+        val eventCount = harness.events.size
+        harness.completeRequest()
+        assertEquals(snapshot, harness.state, status)
+        assertEquals(eventCount, harness.events.size, status)
+        assertEquals(listOf("POST"), harness.methods)
       }
     }
   }
@@ -1456,6 +1553,34 @@ class DesktopBenchmarkWorkflowTest {
     }
   }
 
+  private fun publicationInvalidations(): List<DesktopEvent> =
+      listOf(
+          DesktopEvent.DraftLoaded(draft().copy(id = "other")),
+          DesktopEvent.DraftLoaded(draft().copy(revision = 2)),
+          DesktopEvent.DraftLoaded(draft().copy(hash = "other")),
+          DesktopEvent.DraftLoaded(draft().copy(projectId = "other")),
+          DesktopEvent.DraftLoaded(draft().copy(projectRevision = "other")),
+          DesktopEvent.DraftLoaded(draft().copy(targetPath = "other.go")),
+          DesktopEvent.DraftLoaded(draft().copy(baseFileHash = "other")),
+          DesktopEvent.DraftLoaded(draft().copy(validation = null)),
+          DesktopEvent.DraftEdited(declaration = "func Run() { println(1) }"),
+          DesktopEvent.DraftEdited(imports = listOf("fmt")),
+          DesktopEvent.DraftValidationStarted(1),
+          DesktopEvent.DraftMarkedStale,
+          DesktopEvent.DraftDiscarded,
+          DesktopEvent.SelectedFileRefreshed(file().copy(contentHash = "other"), emptyList()),
+          DesktopEvent.SelectedFileUnavailable("File was removed"),
+          DesktopEvent.IndexRefreshed(ProjectIndex("project", "next")),
+          DesktopEvent.Applied(ApplyResult("next", "after", true)),
+          DesktopEvent.FileLoaded(file().copy(contentHash = "other"), emptyList()),
+          DesktopEvent.FileLoaded(file().copy(path = "other.go"), emptyList()),
+          DesktopEvent.ProjectLoaded(project(revision = "next"), ProjectIndex("project", "next")),
+          DesktopEvent.ProjectLoaded(project("other"), ProjectIndex("other", "revision")),
+          DesktopEvent.GoBenchmarkCatalogLoaded(catalog.copy(reason = "replacement")),
+          DesktopEvent.GoBenchmarkSelected(choice.copy(name = "BenchmarkOther")),
+          DesktopEvent.GoBenchmarkSelected(choice.copy(command = listOf("other"))),
+          DesktopEvent.GoBenchmarkSelected(choice.copy(scope = "other")))
+
   private fun candidateState(): DesktopState {
     val controller = DesktopWorkflowController()
     controller.dispatch(DesktopEvent.ProjectLoaded(project(), ProjectIndex("project", "revision")))
@@ -1542,16 +1667,16 @@ class DesktopBenchmarkWorkflowTest {
   }
 
   private class QueuedDispatcher : CoroutineDispatcher() {
-    private val pending = ArrayDeque<Runnable>()
+    private val pending = ConcurrentLinkedQueue<Runnable>()
     val hasPending: Boolean
       get() = pending.isNotEmpty()
 
     override fun dispatch(context: CoroutineContext, block: Runnable) {
-      pending.addLast(block)
+      pending.add(block)
     }
 
     fun runPending() {
-      while (pending.isNotEmpty()) pending.removeFirst().run()
+      while (true) (pending.poll() ?: return).run()
     }
   }
 
@@ -1583,6 +1708,7 @@ class DesktopBenchmarkWorkflowTest {
           benchmark = choice.name,
           scope = choice.scope,
           status = "completed",
+          command = choice.command,
           base = GoBenchmarkMeasurement(listOf(GoBenchmarkSample(10, 100.0))),
           candidate = GoBenchmarkMeasurement(listOf(GoBenchmarkSample(10, 80.0))))
 

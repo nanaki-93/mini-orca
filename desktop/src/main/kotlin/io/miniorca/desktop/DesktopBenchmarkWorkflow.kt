@@ -467,6 +467,8 @@ internal class DesktopBenchmarkWorkflow(
             "Benchmark response is stale because the selected benchmark changed."
         comparison.scope != choice.scope ->
             "Benchmark response is unavailable because the displayed benchmark scope changed."
+        comparison.command != choice.command ->
+            "Benchmark response is stale because the recorded argv does not match the selected benchmark command."
         else -> null
       }
 
