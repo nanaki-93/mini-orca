@@ -1694,6 +1694,7 @@ class DesktopWorkflowPresenter(
       dispatch(DesktopEvent.Failed(eligibility.reason))
       return
     }
+    benchmarkWorkflow.invalidate()
     dispatch(DesktopEvent.Loading)
     dispatch(DesktopEvent.Status("Applying reviewed declaration draft…"))
     scope.launch {
@@ -1718,6 +1719,7 @@ class DesktopWorkflowPresenter(
     val result = state.review.applied ?: return
     val file = state.selectedFile ?: return
     val identity = file.identity(project)
+    benchmarkWorkflow.invalidate()
     dispatch(DesktopEvent.Loading)
     dispatch(DesktopEvent.Status("Undoing the applied declaration draft…"))
     scope.launch {

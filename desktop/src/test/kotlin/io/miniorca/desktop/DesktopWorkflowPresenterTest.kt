@@ -3361,6 +3361,181 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun benchmarkAdmissionIsRevokedAtValidationApplyUndoAndDisposalEntryPoints() {
+    for (stage in 0..2) {
+      for (action in listOf("validate", "apply", "undo", "close")) {
+        val main = QueuedDispatcher()
+        val io = QueuedDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + main)
+        val calls = mutableListOf<Pair<String, String>>()
+        val presenter =
+            presenter(parentScope = scope, ioDispatcher = io, interceptTrust = false) {
+                method,
+                path,
+                _ ->
+              calls += method to path
+              when {
+                path.contains("execution-trust") ->
+                    response(
+                        """{"project_id":"project","project_revision":"revision","trusted":true,"commands":[["go","test","./..."]]}""")
+                path.endsWith("/benchmarks") -> response(benchmarkComparisonJson())
+                else -> TransportResponse(503, """{"message":"Test mutation unavailable"}""")
+              }
+            }
+        try {
+          loadFile(presenter)
+          presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+          presenter.dispatch(
+              DesktopEvent.ChecksLoaded(
+                  DraftCheckReport(
+                      "main.go",
+                      true,
+                      draftId = "draft",
+                      draftRevision = 1,
+                      draftHash = "draft-hash")))
+          if (action == "undo")
+              presenter.dispatch(DesktopEvent.Applied(ApplyResult("next", "after", true)))
+          val catalog = Json.decodeFromString<GoBenchmarkCatalog>(benchmarkCatalogJson())
+          val prior = Json.decodeFromString<GoBenchmarkComparison>(benchmarkComparisonJson())
+          presenter.dispatch(DesktopEvent.GoBenchmarkCatalogLoaded(catalog))
+          presenter.selectGoBenchmark(catalog.benchmarks.single())
+          presenter.dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(prior))
+          presenter.compareSelectedGoBenchmark()
+          repeat(stage) {
+            main.runPending()
+            io.runPending()
+            main.runPending()
+          }
+          main.runPending()
+          io.runPending() // A completed stage still waiting to resume on the presenter dispatcher.
+          when (action) {
+            "validate" -> presenter.validateEditableDraft()
+            "apply" -> presenter.applyEditableDraft()
+            "undo" -> presenter.undoAppliedDraft()
+            "close" -> presenter.close()
+          }
+          val evidence = presenter.snapshot.value.state.review.benchmark
+          assertFalse(evidence.running, "$stage: $action")
+          assertNull(evidence.catalog)
+          assertNull(evidence.selected)
+          assertEquals(prior, evidence.comparison)
+          repeat(6) {
+            main.runPending()
+            io.runPending()
+          }
+          assertEquals(
+              stage + 1,
+              calls.count {
+                it.second.contains("execution-trust") || it.second.endsWith("/benchmarks")
+              },
+              "$stage: $action")
+          assertEquals(prior, presenter.snapshot.value.state.review.benchmark.comparison)
+          assertFalse(presenter.snapshot.value.state.review.benchmark.running)
+          if (action == "apply") assertTrue(calls.any { it.second.endsWith("/apply") })
+          if (action == "undo") assertTrue(calls.any { it.second.endsWith("/undo") })
+        } finally {
+          presenter.close()
+          scope.cancel()
+        }
+      }
+    }
+  }
+
+  @Test
+  fun passivePerformanceNavigationSelectionAndDisclosureRetainUnchangedCandidateEvidence() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<Pair<String, String>>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          calls += method to path
+          assertTrue(path.contains("/benchmarks"))
+          response(if (method == "GET") benchmarkCatalogJson(true) else benchmarkComparisonJson())
+        }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      presenter.loadGoBenchmarks()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      presenter.selectGoBenchmark(
+          presenter.snapshot.value.state.review.benchmark.catalog!!.benchmarks.single())
+      presenter.compareSelectedGoBenchmark()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      val retained = presenter.snapshot.value.state.review
+      assertEquals("completed", retained.benchmark.comparison?.status)
+      calls.clear()
+      Workspace.entries.forEach { presenter.dispatch(DesktopEvent.WorkspaceSelected(it)) }
+      presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Performance))
+      val original = performancePageFixture()
+      val report = original.results!!.performance.single()
+      val page =
+          original.copy(
+              section =
+                  original.section.copy(
+                      results =
+                          original.results!!.copy(
+                              performance =
+                                  listOf(
+                                      report.copy(
+                                          findings =
+                                              report.findings +
+                                                  report.findings.single().copy(id = "other"))))))
+      val browser = newResultBrowserState(page)
+      var sourceActions = 0
+      ComposeVisualFixture(800, 650) {
+            val state = presenter.snapshot.value.state
+            PerformanceWorkspacePane(
+                PerformanceWorkspacePaneState(
+                    page,
+                    state.index,
+                    benchmarkComparison = state.review.benchmark.comparison,
+                    expectedBenchmarkIdentity = benchmarkEvidenceIdentity(state.review),
+                    benchmarkCatalog = state.review.benchmark.catalog,
+                    selectedBenchmark = state.review.benchmark.selected,
+                    benchmarkEligibility = benchmarkEligibility(state),
+                    browser = browser),
+                PerformanceWorkspaceActions(
+                    prepareOptimization = { sourceActions++ },
+                    openAnalysis = { sourceActions++ },
+                    semanticActions =
+                        FindingActions(
+                            { sourceActions++ }, { _, _ -> sourceActions++ }, { sourceActions++ }),
+                    openSource = { sourceActions++ },
+                    loadBenchmarks = presenter::loadGoBenchmarks,
+                    selectBenchmark = presenter::selectGoBenchmark,
+                    runBenchmark = presenter::compareSelectedGoBenchmark))
+          }
+          .use { fixture ->
+            performanceResults(page).forEach { result ->
+              browser.choose(result.row().key)
+              fixture.render()
+              fixture.clickDescription("Expand Explore benchmark evidence")
+              fixture.render()
+              fixture.clickDescription("Collapse Explore benchmark evidence")
+              fixture.render()
+              assertEquals(retained, presenter.snapshot.value.state.review)
+            }
+          }
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertTrue(
+          calls.isEmpty(),
+          "Passive interactions must not request discovery, trust, providers or source writes: $calls")
+      assertEquals(0, sourceActions)
+      assertEquals(retained, presenter.snapshot.value.state.review)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun benchmarkComparisonUsesAnExplicitReadOnlyCatalogThenRetainsExactEvidence() {
     val catalogCalls = AtomicInteger()
     val comparisonCalls = AtomicInteger()

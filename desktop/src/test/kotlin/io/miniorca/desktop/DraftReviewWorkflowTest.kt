@@ -226,6 +226,98 @@ class DraftReviewWorkflowTest {
     assertFalse(changed.projectState.sourceChangeObserved)
   }
 
+  @Test
+  fun benchmarkInvalidationPreservesReviewEligibilityAndPriorEvidenceUntilSourceActuallyChanges() {
+    val validated =
+        draft(
+            2,
+            "validated",
+            DeclarationValidation(
+                true, "symbol_plus_imports", diff = UnifiedDiff("main.go", "main.go")),
+            "replace_symbol")
+    val checks =
+        DraftCheckReport(
+            "main.go", true, draftId = "draft", draftRevision = 2, draftHash = "validated")
+    val choice = GoBenchmarkChoice("BenchmarkRun", listOf("go", "test", "."), "scope")
+    val catalog =
+        GoBenchmarkCatalog(
+            draftId = validated.id,
+            draftRevision = validated.revision,
+            draftHash = validated.hash,
+            projectId = "project",
+            projectRevision = "revision",
+            baseFileHash = "base",
+            targetPath = "main.go",
+            available = true,
+            benchmarks = listOf(choice))
+    val comparison =
+        GoBenchmarkComparison(
+            draftId = validated.id,
+            draftRevision = validated.revision,
+            draftHash = validated.hash,
+            projectId = "project",
+            projectRevision = "revision",
+            baseFileHash = "base",
+            targetPath = "main.go",
+            benchmark = choice.name,
+            scope = choice.scope,
+            status = "completed")
+    val original =
+        DesktopState(
+            projectState = ProjectWorkspaceState(project = project()),
+            selection = FileSelectionState(selectedFile = file()),
+            review =
+                DraftReviewState(
+                    draft = validated,
+                    editor = editableDraft(validated),
+                    checks = checks,
+                    benchmark =
+                        BenchmarkEvidenceState(
+                            catalog = catalog,
+                            selected = choice,
+                            comparison = comparison,
+                            discovery = BenchmarkDiscoveryOutcome.Loaded,
+                            admission = BenchmarkAdmissionOutcome.Admitting)))
+    val unchanged = original.reduce(DesktopEvent.SelectedFileRefreshed(file(), emptyList()))
+    assertEquals(original.review, unchanged.review)
+    val applied = original.reduce(DesktopEvent.Applied(ApplyResult("next", "after", true)))
+    val stopped = original.reduce(DesktopEvent.GoBenchmarkDiscoveryInvalidated)
+    for (state in listOf(applied, stopped)) {
+      assertEquals(validated, state.review.draft)
+      assertEquals(original.review.editor, state.review.editor)
+      assertEquals(checks, state.review.checks)
+      assertEquals(comparison, state.review.benchmark.comparison)
+      assertNull(state.review.benchmark.catalog)
+      assertNull(state.review.benchmark.selected)
+      assertFalse(state.review.benchmark.running)
+      assertTrue(
+          draftReviewEligibility(
+                  state.review.editor,
+                  state.review.draft,
+                  state.checks,
+                  state.selectedFile,
+                  state.project)
+              .eligible,
+          "Benchmarks must not become an unconditional Review/Apply prerequisite")
+    }
+    val changed =
+        original.reduce(
+            DesktopEvent.SelectedFileRefreshed(file().copy(contentHash = "after"), emptyList()))
+    assertEquals(DraftEditorStatus.Stale, changed.review.editor?.status)
+    assertEquals(comparison, changed.review.benchmark.comparison)
+    assertNull(changed.review.benchmark.catalog)
+    assertNull(changed.review.benchmark.selected)
+    assertFalse(changed.review.benchmark.running)
+    assertFalse(
+        draftReviewEligibility(
+                changed.review.editor,
+                changed.review.draft,
+                changed.checks,
+                changed.selectedFile,
+                changed.project)
+            .eligible)
+  }
+
   private fun draft(
       revision: Long,
       hash: String,

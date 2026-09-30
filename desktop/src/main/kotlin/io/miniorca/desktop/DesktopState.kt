@@ -890,7 +890,12 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
                   DraftReviewState(
                       applied = review.applied, benchmark = review.benchmark.withoutCatalog()),
               jobs = jobs.copy(loading = false, error = null))
-      is DesktopEvent.Applied -> copy(review = review.copy(applied = event.result))
+      is DesktopEvent.Applied ->
+          copy(
+              review =
+                  review.copy(
+                      applied = event.result, benchmark = review.benchmark.withoutCatalog()),
+              jobs = jobs.copy(loading = false))
       is DesktopEvent.Failed -> copy(jobs = jobs.copy(loading = false, error = event.message))
       is DesktopEvent.Status -> copy(jobs = jobs.copy(status = event.message))
     }
@@ -1127,7 +1132,9 @@ private fun DesktopState.withBenchmarkEvent(event: DesktopEvent): DesktopState {
                 .copy(
                     discovery = BenchmarkDiscoveryOutcome.Loading,
                     admission =
-                        if (benchmark.running) BenchmarkAdmissionOutcome.Stopped
+                        if (benchmark.running ||
+                            benchmark.admission == BenchmarkAdmissionOutcome.Stopped)
+                            BenchmarkAdmissionOutcome.Stopped
                         else BenchmarkAdmissionOutcome.Idle)
         DesktopEvent.GoBenchmarkDiscoveryInvalidated -> benchmark.withoutCatalog()
         is DesktopEvent.GoBenchmarkDiscoveryFailed ->
@@ -1145,11 +1152,13 @@ private fun DesktopState.withBenchmarkEvent(event: DesktopEvent): DesktopState {
                     if (benchmark.running) BenchmarkAdmissionOutcome.Stopped
                     else BenchmarkAdmissionOutcome.Idle)
         is DesktopEvent.GoBenchmarkSelected ->
-            benchmark.copy(
-                selected = event.choice,
-                admission =
-                    if (benchmark.running) BenchmarkAdmissionOutcome.Stopped
-                    else BenchmarkAdmissionOutcome.Idle)
+            if (benchmark.selected == event.choice) benchmark
+            else
+                benchmark.copy(
+                    selected = event.choice,
+                    admission =
+                        if (benchmark.running) BenchmarkAdmissionOutcome.Stopped
+                        else BenchmarkAdmissionOutcome.Idle)
         DesktopEvent.GoBenchmarkAdmissionStarted ->
             benchmark.copy(admission = BenchmarkAdmissionOutcome.Admitting)
         DesktopEvent.GoBenchmarkComparisonStarted ->

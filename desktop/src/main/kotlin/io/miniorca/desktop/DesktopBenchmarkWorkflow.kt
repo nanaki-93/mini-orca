@@ -144,9 +144,31 @@ internal class DesktopBenchmarkWorkflow(
   private var benchmarkActionGeneration = 0L
 
   fun beforeEvent(event: DesktopEvent) {
-    val indexChanged =
-        event is DesktopEvent.IndexRefreshed &&
-            state().project?.projectRevision != event.index.projectRevision
+    val current = state()
+    // Use the reducer's acceptance rules: ignored refreshes and obsolete validation events
+    // must not cancel work for an unchanged candidate.
+    val lifecycleChanged =
+        when (event) {
+          is DesktopEvent.IndexRefreshed,
+          is DesktopEvent.ProjectIndexingCompleted ->
+              current.reduce(event).project?.projectRevision != current.project?.projectRevision
+          is DesktopEvent.SelectedFileRefreshed ->
+              current.reduce(event).selectedFile != current.selectedFile
+          is DesktopEvent.DraftValidationStarted,
+          is DesktopEvent.DraftValidationUpdated,
+          is DesktopEvent.DraftValidationStopped ->
+              current.reduce(event).review.editor != current.review.editor
+          else -> false
+        }
+    if (event is DesktopEvent.GoBenchmarkCatalogLoaded) {
+      benchmarkCatalogJob?.cancel()
+      benchmarkCatalogJob = null
+    }
+    if (event is DesktopEvent.GoBenchmarkCatalogLoaded ||
+        event is DesktopEvent.GoBenchmarkSelected &&
+            event.choice != current.review.benchmark.selected) {
+      cancelPendingComparison()
+    }
     if (event is DesktopEvent.DraftEdited ||
         event is DesktopEvent.ChatProposalLoaded ||
         event is DesktopEvent.DraftLoaded ||
@@ -154,7 +176,9 @@ internal class DesktopBenchmarkWorkflow(
         event == DesktopEvent.DraftDiscarded ||
         event is DesktopEvent.FileLoaded ||
         event is DesktopEvent.ProjectLoaded ||
-        indexChanged) {
+        event is DesktopEvent.SelectedFileUnavailable ||
+        event is DesktopEvent.Applied ||
+        lifecycleChanged) {
       invalidate()
     }
   }
@@ -165,8 +189,13 @@ internal class DesktopBenchmarkWorkflow(
     benchmarkCatalogJob = null
     benchmarkJob?.cancel()
     benchmarkJob = null
-    if (state().review.benchmark.discovery == BenchmarkDiscoveryOutcome.Loading)
-        dispatch(DesktopEvent.GoBenchmarkDiscoveryInvalidated)
+    dispatch(DesktopEvent.GoBenchmarkDiscoveryInvalidated)
+  }
+
+  private fun cancelPendingComparison() {
+    benchmarkActionGeneration++
+    benchmarkJob?.cancel()
+    benchmarkJob = null
   }
 
   fun stopComparison() {
@@ -174,10 +203,7 @@ internal class DesktopBenchmarkWorkflow(
     dispatch(DesktopEvent.GoBenchmarkComparisonStopped)
   }
 
-  fun cancel() {
-    invalidate()
-    if (state().review.benchmark.running) dispatch(DesktopEvent.GoBenchmarkComparisonStopped)
-  }
+  fun cancel() = invalidate()
 
   /** Lists trusted daemon-built benchmark choices. This GET never executes project code. */
   fun loadGoBenchmarks() {
@@ -205,6 +231,8 @@ internal class DesktopBenchmarkWorkflow(
                       "Benchmark catalog does not match the current candidate; refresh compatible benchmarks."))
               return@launch
             }
+            // The lookup is complete; catalog replacement must only cancel other pending work.
+            benchmarkCatalogJob = null
             // Sparse unavailable responses carry a reason, not reusable executable authority.
             dispatch(
                 DesktopEvent.GoBenchmarkCatalogLoaded(
@@ -243,8 +271,7 @@ internal class DesktopBenchmarkWorkflow(
       return
     }
     if (current.review.benchmark.selected == choice) return
-    benchmarkActionGeneration++
-    benchmarkJob?.cancel()
+    cancelPendingComparison()
     dispatch(DesktopEvent.GoBenchmarkSelected(choice))
   }
 
