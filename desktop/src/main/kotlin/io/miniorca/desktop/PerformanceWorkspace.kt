@@ -423,6 +423,7 @@ private fun PerformanceFindingDetails(
 /**
  * Displays already captured PERF-02 evidence. It has no benchmark action or process side effect.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun PerformanceBenchmarkEvidence(
     comparison: GoBenchmarkComparison,
@@ -432,6 +433,12 @@ private fun PerformanceBenchmarkEvidence(
 ) {
   val presentation =
       performanceBenchmarkPresentation(comparison, expectedIdentity, expectedChoice, priorEvidence)
+  var conditionsExpanded by remember(comparison) { mutableStateOf(false) }
+  var samplesExpanded by remember(comparison) { mutableStateOf(false) }
+  val clipboard = LocalClipboard.current
+  val copyScope = rememberCoroutineScope()
+  var copyFeedback by remember(comparison) { mutableStateOf<String?>(null) }
+  val historical = priorEvidence || presentation.isStale
   Column(Modifier.fillMaxWidth()) {
     IdePaneHeader(
         title =
@@ -482,6 +489,49 @@ private fun PerformanceBenchmarkEvidence(
             fontSize = 11.sp,
             lineHeight = 16.sp,
             modifier = Modifier.padding(top = 6.dp))
+      }
+    }
+    IdeDisclosureHeader(
+        "Recorded conditions & identity",
+        conditionsExpanded,
+        { conditionsExpanded = !conditionsExpanded })
+    if (conditionsExpanded) RecordedBenchmarkRows(performanceBenchmarkRecordedRows(comparison))
+    IdeDisclosureHeader(
+        "Returned sample details", samplesExpanded, { samplesExpanded = !samplesExpanded })
+    if (samplesExpanded) RecordedBenchmarkRows(performanceBenchmarkSampleRows(comparison))
+    ChromeButton(
+        onClick = {
+          val payload =
+              performanceBenchmarkCopyText(
+                  comparison, presentation, historical, conditionsExpanded, samplesExpanded)
+          copyFeedback = null
+          copyScope.launch {
+            try {
+              clipboard.setClipEntry(ClipEntry(StringSelection(payload)))
+              copyFeedback = "Displayed benchmark evidence copied."
+            } catch (cancelled: CancellationException) {
+              throw cancelled
+            } catch (exception: Exception) {
+              copyFeedback =
+                  "Could not copy benchmark evidence: ${exception.message ?: "Clipboard unavailable"}"
+            }
+          }
+        },
+        accessibleName = "Copy displayed benchmark evidence",
+        tooltip = null,
+        modifier = Modifier.testTag("benchmark-copy-evidence")) {
+          Text("Copy displayed benchmark evidence", style = IdeTypography.compactBody)
+        }
+    copyFeedback?.let { Text(it, color = SecondaryText, style = IdeTypography.compactBody) }
+  }
+}
+
+@Composable
+private fun RecordedBenchmarkRows(rows: List<Pair<String, String>>) {
+  SelectionContainer {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+      rows.forEach { (label, value) ->
+        Text("$label: $value", color = SecondaryText, style = IdeTypography.compactBody)
       }
     }
   }
@@ -1279,23 +1329,109 @@ private fun benchmarkIdentityRows(comparison: GoBenchmarkComparison): List<Pair<
       comparison.baseFileHash.takeIf(String::isNotBlank)?.let { add("Base file" to it) }
     }
 
-private fun benchmarkConditions(comparison: GoBenchmarkComparison): String {
-  val duration =
-      comparison.command
-          .zipWithNext()
-          .firstOrNull { (argument, _) -> argument == "-benchtime" }
-          ?.second
-          ?: comparison.command
-              .firstOrNull { it.startsWith("-benchtime=") }
-              ?.removePrefix("-benchtime=")
-  val conditions = buildList {
-    duration?.let { add("Target duration per sample: $it") }
-    if (comparison.command.contains("-benchmem")) add("benchmem enabled")
-    if (comparison.command.isNotEmpty()) add("fixed argv")
-  }
-  return if (conditions.isEmpty()) "Test conditions were not recorded."
-  else conditions.joinToString(" · ")
+private fun recordedBenchmarkFlag(command: List<String>, flag: String): String {
+  val index = command.indexOfFirst { it == flag || it.startsWith("$flag=") }
+  if (index < 0) return "not recorded"
+  val argument = command[index]
+  if (argument.startsWith("$flag=")) return argument.substringAfter('=').ifBlank { "not recorded" }
+  val next = command.getOrNull(index + 1)?.takeUnless { it.startsWith('-') }
+  return if (flag == "-benchmem") next?.takeIf { it == "true" || it == "false" } ?: "true"
+  else next?.ifBlank { "not recorded" } ?: "not recorded"
 }
+
+internal fun performanceBenchmarkRecordedRows(
+    comparison: GoBenchmarkComparison
+): List<Pair<String, String>> {
+  fun recorded(value: String) = value.ifBlank { "not recorded" }
+  return listOf(
+      "Benchmark" to recorded(comparison.benchmark),
+      "Target path" to recorded(comparison.targetPath),
+      "Project ID" to recorded(comparison.projectId),
+      "Project revision" to recorded(comparison.projectRevision),
+      "Draft ID" to recorded(comparison.draftId),
+      "Draft revision" to
+          comparison.draftRevision.takeIf { it > 0 }?.toString().orEmpty().let(::recorded),
+      "Draft hash" to recorded(comparison.draftHash),
+      "Base file hash" to recorded(comparison.baseFileHash),
+      "Opaque scope guard" to recorded(comparison.scope),
+      "Recorded -count" to recordedBenchmarkFlag(comparison.command, "-count"),
+      "Recorded -benchtime" to recordedBenchmarkFlag(comparison.command, "-benchtime"),
+      "Recorded -benchmem" to recordedBenchmarkFlag(comparison.command, "-benchmem"),
+      "Recorded comparison argv (read-only)" to
+          performanceBenchmarkArgv(comparison.command).ifEmpty { "not recorded" })
+}
+
+internal fun performanceBenchmarkSampleRows(
+    comparison: GoBenchmarkComparison
+): List<Pair<String, String>> = buildList {
+  for ((side, measurement) in
+      listOf("Baseline" to comparison.base, "Candidate" to comparison.candidate)) {
+    add(
+        "$side returned samples" to
+            (measurement?.samples?.size?.toString() ?: "unavailable · measurement not returned"))
+    measurement?.samples?.forEachIndexed { index, sample ->
+      add(
+          "$side sample ${index + 1}" to
+              "iterations=${sample.iterations}; ns/op=${sample.nanosecondsPerOperation}; B/op=${sample.bytesPerOperation ?: "unavailable"}; allocs/op=${sample.allocationsPerOperation ?: "unavailable"}")
+    }
+  }
+}
+
+internal fun performanceBenchmarkCopyText(
+    comparison: GoBenchmarkComparison,
+    presentation: PerformanceBenchmarkPresentation,
+    historical: Boolean,
+    conditionsExpanded: Boolean,
+    samplesExpanded: Boolean,
+): String =
+    buildList {
+          add(if (historical) "Prior benchmark evidence" else "Benchmark evidence")
+          add(presentation.stateLabel)
+          add(presentation.summary)
+          if (presentation.insights.isNotEmpty()) {
+            add(if (historical) "Prior measured trade-offs" else "Measured trade-offs")
+            addAll(presentation.insights)
+          }
+          add("Metric | Baseline median | Candidate median | Change / availability")
+          presentation.metrics.firstOrNull()?.let {
+            add("Baseline samples: ${it.base.sampleCount ?: "not returned"}")
+            add("Candidate samples: ${it.candidate.sampleCount ?: "not returned"}")
+          }
+          presentation.metrics.forEach {
+            val label =
+                when (it.label) {
+                  "ns/op" -> "Time (ns/op)"
+                  "B/op" -> "Bytes (B/op)"
+                  else -> "Allocations (allocs/op)"
+                }
+            add(
+                "$label | ${it.base.medianLabel(it.label)} · ${it.base.availabilityLabel()} | ${it.candidate.medianLabel(it.label)} · ${it.candidate.availabilityLabel()} | ${it.changeLabel(historical)}")
+          }
+          presentation.rows
+              .filter { row ->
+                presentation.metrics.none { it.label == row.first } && row.first != "Samples"
+              }
+              .forEach { (label, value) -> add("$label: $value") }
+          add(presentation.conditions)
+          if (conditionsExpanded) {
+            add("Recorded conditions & identity")
+            performanceBenchmarkRecordedRows(comparison).forEach { (label, value) ->
+              add("$label: $value")
+            }
+          }
+          if (samplesExpanded) {
+            add("Returned sample details")
+            performanceBenchmarkSampleRows(comparison).forEach { (label, value) ->
+              add("$label: $value")
+            }
+          }
+        }
+        .joinToString("\n")
+
+private fun benchmarkConditions(comparison: GoBenchmarkComparison): String =
+    listOf("-count", "-benchtime", "-benchmem").joinToString(" · ") {
+      "Recorded $it: ${recordedBenchmarkFlag(comparison.command, it)}"
+    }
 
 private fun benchmarkTerminalLabel(comparison: GoBenchmarkComparison): String =
     when (comparison.status) {
