@@ -130,7 +130,7 @@ class DesktopBenchmarkWorkflowTest {
                 positions.sorted(),
                 positions,
                 "Choices retain daemon order rather than sorting by name")
-            fixture.revealTextFullyWithin("Select · ${choice.name}", "benchmark-discovery-scroll")
+            fixture.revealTextFullyWithin("Select · ${choice.name}", "result-overview")
             fixture.clickText("Select · ${choice.name}")
             assertEquals(choice, snapshot.review.benchmark.selected)
             fixture.render()
@@ -143,7 +143,7 @@ class DesktopBenchmarkWorkflowTest {
                     performanceBenchmarkArgv(choice.command).lines().first(),
                     performanceBenchmarkArgv(choice.command).lines().last(),
                     "Opaque scope guard (identity metadata): ${choice.scope}")) {
-              fixture.revealTextFullyWithin(text, "benchmark-discovery-scroll")
+              fixture.revealTextFullyWithin(text, "result-overview")
               assertTrue(fixture.copyTextByDragging(text, expectedText = text).isNotEmpty())
             }
             fixture.clickDescription("Collapse Explore benchmark evidence")
