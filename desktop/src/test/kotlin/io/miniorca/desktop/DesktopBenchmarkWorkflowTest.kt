@@ -1,5 +1,8 @@
 package io.miniorca.desktop
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import java.net.http.HttpTimeoutException
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
@@ -43,11 +46,10 @@ class DesktopBenchmarkWorkflowTest {
             fixture.clickDescription("Expand Explore benchmark evidence")
             fixture.render()
             assertTrue(
-                fixture.hasText(
-                    performanceBenchmarkStatusPresentation(null, null, null, false).summary))
+                fixture.hasText(performanceBenchmarkStatusPresentation(null, null, null).summary))
             assertTrue(
                 fixture.hasText(
-                    "Listing compatible benchmarks is read-only and does not execute project code."))
+                    "Listing compatible benchmarks is read-only and does not execute project code. Refresh clears the selection; select again after reviewing the returned catalog."))
             assertTrue(fixture.isDisabled("List compatible benchmarks"))
             harness.completeRequest()
             assertTrue(
@@ -77,6 +79,73 @@ class DesktopBenchmarkWorkflowTest {
       harness.completeRequest()
       assertEquals(listOf("GET"), harness.methods)
       assertEquals(choice, harness.state.review.benchmark.selected)
+    }
+  }
+
+  @Test
+  fun renderedCatalogPreservesDaemonOrderAndLocalSelectionWithoutPrivilegedRequests() {
+    Harness().use { harness ->
+      val choices =
+          listOf(choice.copy(name = "BenchmarkZ"), choice, choice.copy(name = "BenchmarkA"))
+      harness.response =
+          TransportResponse(200, Json.encodeToString(catalog.copy(benchmarks = choices)))
+      harness.workflow.loadGoBenchmarks()
+      harness.completeRequest()
+      var snapshot by mutableStateOf(harness.state)
+      val page = performancePageFixture()
+      val browser = newResultBrowserState(page)
+      ComposeVisualFixture(1600, 1000) {
+            val evidence = snapshot.review.benchmark
+            PerformanceWorkspacePane(
+                PerformanceWorkspacePaneState(
+                    page,
+                    null,
+                    browser = browser,
+                    benchmarkCatalog = evidence.catalog,
+                    selectedBenchmark = evidence.selected,
+                    benchmarkDiscovery = evidence.discovery,
+                    benchmarkAdmission = evidence.admission,
+                    benchmarkEligibility = benchmarkEligibility(snapshot)),
+                PerformanceWorkspaceActions(
+                    {},
+                    {},
+                    FindingActions({}, { _, _ -> }, {}),
+                    openSource = {},
+                    loadBenchmarks = harness.workflow::loadGoBenchmarks,
+                    selectBenchmark = {
+                      harness.workflow.selectGoBenchmark(it)
+                      snapshot = harness.state
+                    },
+                    runBenchmark = harness.workflow::compareSelectedGoBenchmark))
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.clickDescription("Expand Explore benchmark evidence")
+            fixture.render()
+            assertTrue(fixture.hasText("Select one listed benchmark before comparing."))
+            assertNull(snapshot.review.benchmark.selected)
+            val positions =
+                choices.map { fixture.firstVisibleTextBounds("Select · ${it.name}").top }
+            assertEquals(
+                positions.sorted(),
+                positions,
+                "Choices retain daemon order rather than sorting by name")
+            fixture.revealTextFullyWithin("Select · ${choice.name}", "benchmark-discovery-scroll")
+            fixture.clickText("Select · ${choice.name}")
+            assertEquals(choice, snapshot.review.benchmark.selected)
+            fixture.render()
+            assertTrue(fixture.hasText("Selected · ${choice.name}"))
+            assertTrue(fixture.hasText("Select · BenchmarkZ"))
+            assertTrue(fixture.hasText("Select · BenchmarkA"))
+            assertEquals(choice, snapshot.review.benchmark.selected)
+            fixture.clickDescription("Collapse Explore benchmark evidence")
+            fixture.render()
+            harness.completeRequest()
+            assertEquals(
+                listOf("GET"),
+                harness.methods,
+                "Disclosure and local selection cannot trust, compare, contact providers or write source")
+          }
     }
   }
 
