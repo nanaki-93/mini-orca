@@ -455,6 +455,77 @@ preview. Verified Go scans, performance hypotheses, measured benchmarks, source
 rules and model hypotheses retain distinct evidence and execution requirements
 without routine badge labels.
 
+### Verified Go scan
+
+Bugs contains a separate **Verified Go scan** tool section. Starting is available
+only for a detected root Go module with a current, nonblank project identity and
+revision, confirmed scan absence or a known terminal report, and no unresolved
+scan operation. Other languages, unknown project types, missing identity and
+unread/unavailable/unknown status have a disabled action with an adjacent
+explanation; retained diagnostics remain
+inspectable. The daemon reports toolchain, platform and execution failures.
+
+Before activation, the section shows project ID/revision and whole-project scope,
+independent of the **Analysis → Files** selection:
+
+- Parser inspection of indexed Go source (`parse`), with no subprocess command.
+- `go vet ./...` (`vet`), argv `["go", "vet", "./..."]`.
+- `go test ./...` (`tests`), argv `["go", "test", "./..."]`.
+
+There is no formatting phase. Commands run in a temporary copied workspace; the
+scan workflow does not edit original source. Tests and package initialization can
+execute project code, however: **a copied workspace is not a security sandbox**
+and does not prevent arbitrary effects from that code. Only run a project you
+trust.
+
+**Trust project-code execution & run checks** explicitly reads execution scope,
+grants current-daemon-session trust for this project/revision, then starts the
+scan. The client checks both trust responses against the current identity and
+exact project-code argv `["go", "test", "./..."]`, and requires a trusted
+acknowledgment before starting. Changed identity or scope blocks subsequent
+requests. Trust is in memory and clears on project replacement, restore or
+re-index. It is separate from model/provider confirmation and from Review/Apply
+authority; scans do not request a model. Import, restore, re-index,
+Bugs navigation, finding selection, diagnostic disclosure and copying do not
+grant trust or start a scan. The [API contract](../docs/api-contract.md#live-routes)
+owns the execution-trust and scan routes.
+
+**Starting** appears immediately, even with an older completed report retained;
+repeated activation cannot start another pending scan. A running scan offers
+**Cancel checks**. **Cancellation requested** means the request is pending or the
+daemon still reports active work, not that cancellation succeeded. Only a matching
+terminal report settles the outcome; it may finish before cancellation takes
+effect. A failed or timed-out start says **Start unconfirmed** if execution may
+have begun; a failed cancel says **Cancellation unconfirmed**. Neither retries
+execution automatically or erases prior evidence.
+
+Use **Refresh scan status** after a read/operation failure or uncertain outcome.
+It reads scan status without granting trust, starting again or resending Cancel;
+a matching active report resumes polling. It is unavailable during a status read,
+Start or pending cancellation. Unread, confirmed absence, unavailable status and
+failed live polling stay distinct. Accepted terminal reports refresh tool
+findings; enrichment failure retains diagnostics and prior rows with a visible
+unavailable/stale warning rather than claiming current or zero findings. Foreign
+or obsolete responses cannot replace current scan evidence.
+
+**Command and output** reveals every returned phase in order, including
+`workspace` failures and unknown phases, with its reported state, command and
+selectable, read-only sanitized output. **Completed** describes the report
+lifecycle, not a pass for every phase. Failed, skipped and canceled phases retain
+their labels; missing phases have no reported outcome, and **No output reported
+for this phase** does not mean Passed. The UI shows nonzero exit codes for failed
+or canceled command phases, not an invented parser/default-zero success.
+**Show full available output** expands the UI preview to all recorded sanitized
+text; **Daemon output limit reached** means omitted text is unavailable
+and cannot be recovered by expanding. Disclosure resets on project/revision or
+report replacement. Scope, trust warning, status, failures and recovery remain
+outside optional diagnostics. Tool evidence is scoped to these checks, distinct
+from model suggestions, and is not a general safety or bug-free assurance.
+
+For native focus, action reachability and diagnostic selection/copy, follow the
+[scan review procedure](KEYBOARD_SMOKE_CHECKLIST.md#verified-go-scan-native-review).
+Offscreen fixtures do not establish those native observations.
+
 ### Security evidence and advisory review
 
 Security uses the shared results browser for loaded source-rule matches, model
