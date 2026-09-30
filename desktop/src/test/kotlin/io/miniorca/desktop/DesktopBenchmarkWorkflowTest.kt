@@ -1,13 +1,16 @@
 package io.miniorca.desktop
 
+import java.net.http.HttpTimeoutException
 import kotlin.coroutines.CoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.serialization.encodeToString
@@ -106,16 +109,264 @@ class DesktopBenchmarkWorkflowTest {
   }
 
   @Test
-  fun newerCatalogReplacesPendingPublicationForTheSameDraft() {
+  fun duplicateLookupIsSuppressedEvenWhenTheResponseIsReadyToPublish() {
     Harness().use { harness ->
+      harness.workflow.loadGoBenchmarks()
+      assertEquals(BenchmarkDiscoveryOutcome.Loading, harness.state.review.benchmark.discovery)
+      assertFalse(benchmarkEligibility(harness.state).canDiscover)
+      assertTrue(harness.methods.isEmpty(), "Loading must precede scheduling the GET")
       harness.workflow.loadGoBenchmarks()
       harness.main.runPending()
       harness.io.runPending()
       harness.response = TransportResponse(200, Json.encodeToString(catalog.copy(reason = "newer")))
       harness.workflow.loadGoBenchmarks()
       harness.completeRequest()
-      assertEquals("newer", harness.state.review.benchmark.catalog?.reason)
+      assertEquals(catalog, harness.state.review.benchmark.catalog)
+      assertEquals(listOf("GET"), harness.methods)
+      assertEquals(1, harness.events.count { it == DesktopEvent.GoBenchmarkDiscoveryStarted })
       assertEquals(1, harness.events.filterIsInstance<DesktopEvent.GoBenchmarkCatalogLoaded>().size)
+    }
+  }
+
+  @Test
+  fun refreshImmediatelyRevokesSelectionAndAdmissionButRetainsMeasurements() {
+    Harness().use { harness ->
+      harness.selectBenchmark()
+      harness.dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(comparison))
+      harness.workflow.compareSelectedGoBenchmark()
+      harness.workflow.loadGoBenchmarks()
+      assertEquals(BenchmarkDiscoveryOutcome.Loading, harness.state.review.benchmark.discovery)
+      assertEquals(BenchmarkAdmissionOutcome.Stopped, harness.state.review.benchmark.admission)
+      assertNull(harness.state.review.benchmark.catalog)
+      assertNull(harness.state.review.benchmark.selected)
+      assertEquals(comparison, harness.state.review.benchmark.comparison)
+      assertFalse(benchmarkEligibility(harness.state).canCompare)
+      harness.workflow.compareSelectedGoBenchmark()
+      harness.workflow.loadGoBenchmarks()
+      harness.completeRequest()
+      assertEquals(listOf("GET"), harness.methods)
+      assertEquals(catalog, harness.state.review.benchmark.catalog)
+      assertNull(harness.state.review.benchmark.selected)
+      assertEquals(comparison, harness.state.review.benchmark.comparison)
+      assertEquals(BenchmarkAdmissionOutcome.Idle, harness.state.review.benchmark.admission)
+    }
+  }
+
+  @Test
+  fun invalidationAllowsReplacementLookupForTheSameCandidateAndRejectsLatePublication() {
+    Harness().use { harness ->
+      harness.workflow.loadGoBenchmarks()
+      harness.main.runPending()
+      harness.io.runPending()
+      harness.workflow.invalidate()
+      assertEquals(BenchmarkDiscoveryOutcome.Invalidated, harness.state.review.benchmark.discovery)
+      assertTrue(benchmarkEligibility(harness.state).canDiscover)
+      val replacement = catalog.copy(benchmarks = listOf(choice.copy(name = "BenchmarkNew")))
+      harness.response = TransportResponse(200, Json.encodeToString(replacement))
+      harness.workflow.loadGoBenchmarks()
+      harness.completeRequest()
+      assertEquals(replacement, harness.state.review.benchmark.catalog)
+      assertEquals(listOf("GET", "GET"), harness.methods)
+      assertEquals(1, harness.events.filterIsInstance<DesktopEvent.GoBenchmarkCatalogLoaded>().size)
+      assertNull(harness.state.review.benchmark.selected)
+    }
+  }
+
+  @Test
+  fun successfulCatalogPreservesDaemonOrderWithoutSelectingAndEmptySuccessCanRefresh() {
+    Harness().use { harness ->
+      val choices =
+          listOf(choice.copy(name = "BenchmarkZ"), choice, choice.copy(name = "BenchmarkA"))
+      harness.response =
+          TransportResponse(200, Json.encodeToString(catalog.copy(benchmarks = choices)))
+      harness.workflow.loadGoBenchmarks()
+      harness.completeRequest()
+      assertEquals(choices, harness.state.review.benchmark.catalog!!.benchmarks)
+      assertNull(harness.state.review.benchmark.selected)
+      harness.response =
+          TransportResponse(200, Json.encodeToString(catalog.copy(benchmarks = emptyList())))
+      harness.workflow.loadGoBenchmarks()
+      harness.completeRequest()
+      assertEquals(BenchmarkDiscoveryOutcome.Loaded, harness.state.review.benchmark.discovery)
+      assertTrue(harness.state.review.benchmark.catalog!!.benchmarks.isEmpty())
+      assertTrue(benchmarkEligibility(harness.state).canDiscover)
+      assertFalse(benchmarkEligibility(harness.state).canCompare)
+      harness.workflow.compareSelectedGoBenchmark()
+      harness.completeRequest()
+      assertEquals(listOf("GET", "GET"), harness.methods)
+      harness.response = TransportResponse(200, Json.encodeToString(catalog))
+      harness.workflow.loadGoBenchmarks()
+      harness.completeRequest()
+      assertEquals(catalog, harness.state.review.benchmark.catalog)
+      assertNull(harness.state.review.benchmark.selected)
+    }
+  }
+
+  @Test
+  fun sparseUnavailableCatalogPublishesReasonButNeverExecutableChoices() {
+    Harness().use { harness ->
+      harness.dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(comparison))
+      harness.response =
+          TransportResponse(
+              200,
+              Json.encodeToString(
+                  GoBenchmarkCatalog(reason = "Candidate is invalid", benchmarks = listOf(choice))))
+      harness.workflow.loadGoBenchmarks()
+      harness.completeRequest()
+      assertEquals(
+          BenchmarkDiscoveryOutcome.Unavailable("Candidate is invalid"),
+          harness.state.review.benchmark.discovery)
+      assertEquals(
+          GoBenchmarkCatalog(reason = "Candidate is invalid"),
+          harness.state.review.benchmark.catalog)
+      assertEquals(comparison, harness.state.review.benchmark.comparison)
+      assertTrue(benchmarkEligibility(harness.state).canDiscover)
+      assertFalse(benchmarkEligibility(harness.state).canCompare)
+      harness.workflow.selectGoBenchmark(choice)
+      harness.workflow.compareSelectedGoBenchmark()
+      harness.completeRequest()
+      assertNull(harness.state.review.benchmark.selected)
+      assertEquals(listOf("GET"), harness.methods)
+    }
+  }
+
+  @Test
+  fun lateSparseUnavailabilityCannotOverwriteReplacementDiscovery() {
+    Harness().use { harness ->
+      harness.response =
+          TransportResponse(
+              200, Json.encodeToString(GoBenchmarkCatalog(reason = "Old candidate is invalid")))
+      harness.workflow.loadGoBenchmarks()
+      harness.main.runPending()
+      harness.io.runPending()
+      harness.workflow.invalidate()
+      harness.response = TransportResponse(200, Json.encodeToString(catalog))
+      harness.workflow.loadGoBenchmarks()
+      harness.completeRequest()
+      assertEquals(BenchmarkDiscoveryOutcome.Loaded, harness.state.review.benchmark.discovery)
+      assertEquals(catalog, harness.state.review.benchmark.catalog)
+      assertEquals(1, harness.events.filterIsInstance<DesktopEvent.GoBenchmarkCatalogLoaded>().size)
+    }
+  }
+
+  @Test
+  fun everyAvailableCatalogIdentityMismatchEndsLoadingWithRetryableLocalFailure() {
+    listOf(
+            catalog.copy(draftId = "other"),
+            catalog.copy(draftRevision = 2),
+            catalog.copy(draftHash = "other"),
+            catalog.copy(projectId = "other"),
+            catalog.copy(projectRevision = "other"),
+            catalog.copy(baseFileHash = "other"),
+            catalog.copy(targetPath = "other.go"),
+            GoBenchmarkCatalog(available = true, benchmarks = listOf(choice)),
+        )
+        .forEach { foreign ->
+          Harness().use { harness ->
+            harness.response = TransportResponse(200, Json.encodeToString(foreign))
+            harness.workflow.loadGoBenchmarks()
+            harness.completeRequest()
+            val outcome = harness.state.review.benchmark.discovery
+            assertTrue(outcome is BenchmarkDiscoveryOutcome.Failed, foreign.toString())
+            assertTrue(outcome.message.contains("does not match the current candidate"))
+            assertTrue(benchmarkEligibility(harness.state).canDiscover)
+            assertFalse(benchmarkEligibility(harness.state).canCompare)
+            assertNull(harness.state.review.benchmark.catalog)
+            assertNull(harness.state.review.benchmark.selected)
+            assertNull(harness.state.jobs.error, "Lookup failures stay benchmark-local")
+            harness.response = TransportResponse(200, Json.encodeToString(catalog))
+            harness.workflow.loadGoBenchmarks()
+            harness.completeRequest()
+            assertEquals(BenchmarkDiscoveryOutcome.Loaded, harness.state.review.benchmark.discovery)
+            assertEquals(listOf("GET", "GET"), harness.methods)
+          }
+        }
+  }
+
+  @Test
+  fun lookupTimeoutIsLocalRetainsPriorMeasurementsAndRequiresExplicitRetry() {
+    Harness().use { harness ->
+      harness.selectBenchmark()
+      harness.dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(comparison))
+      harness.transportFailure = HttpTimeoutException("Benchmark lookup timed out")
+      harness.workflow.loadGoBenchmarks()
+      harness.completeRequest()
+      assertEquals(
+          BenchmarkDiscoveryOutcome.Failed("Benchmark lookup timed out"),
+          harness.state.review.benchmark.discovery)
+      assertEquals(comparison, harness.state.review.benchmark.comparison)
+      assertNull(harness.state.review.benchmark.catalog)
+      assertNull(harness.state.review.benchmark.selected)
+      assertNull(harness.state.jobs.error)
+      assertTrue(benchmarkEligibility(harness.state).canDiscover)
+      harness.completeRequest()
+      assertEquals(listOf("GET"), harness.methods, "Timeout must not automatically retry")
+      harness.transportFailure = null
+      harness.workflow.loadGoBenchmarks()
+      harness.completeRequest()
+      assertEquals(BenchmarkDiscoveryOutcome.Loaded, harness.state.review.benchmark.discovery)
+      assertEquals(listOf("GET", "GET"), harness.methods)
+    }
+  }
+
+  @Test
+  fun lookupConflictMarksDraftStaleAndKeepsALocalExplanationWithoutCatalogAuthority() {
+    Harness().use { harness ->
+      harness.selectBenchmark()
+      harness.response = TransportResponse(409, """{"message":"Candidate changed"}""")
+      harness.workflow.loadGoBenchmarks()
+      harness.completeRequest()
+      assertEquals(DraftEditorStatus.Stale, harness.state.review.editor!!.status)
+      assertEquals(
+          BenchmarkDiscoveryOutcome.Failed("Candidate changed"),
+          harness.state.review.benchmark.discovery)
+      assertNull(harness.state.review.benchmark.catalog)
+      assertNull(harness.state.review.benchmark.selected)
+      assertFalse(benchmarkEligibility(harness.state).canDiscover)
+      assertTrue(harness.events.contains(DesktopEvent.DraftMarkedStale))
+      assertEquals(listOf("GET"), harness.methods)
+    }
+  }
+
+  @Test
+  fun lookupCancellationPropagatesWithoutFabricatingFailureAndAllowsExplicitRetry() {
+    Harness().use { harness ->
+      val cancellation = CancellationException("Lookup cancelled")
+      harness.transportFailure = cancellation
+      harness.workflow.loadGoBenchmarks()
+      harness.main.runPending()
+      val request = harness.scope.coroutineContext[Job]!!.children.single()
+      var completion: Throwable? = null
+      request.invokeOnCompletion { completion = it }
+      harness.io.runPending()
+      harness.main.runPending()
+      assertTrue(request.isCancelled)
+      assertTrue(completion is CancellationException)
+      assertEquals(cancellation.message, completion?.message)
+      assertEquals(BenchmarkDiscoveryOutcome.Invalidated, harness.state.review.benchmark.discovery)
+      assertNull(harness.state.review.benchmark.catalog)
+      assertNull(harness.state.jobs.error)
+      assertTrue(harness.events.none { it is DesktopEvent.GoBenchmarkDiscoveryFailed })
+      assertTrue(benchmarkEligibility(harness.state).canDiscover)
+      harness.transportFailure = null
+      harness.workflow.loadGoBenchmarks()
+      harness.completeRequest()
+      assertEquals(BenchmarkDiscoveryOutcome.Loaded, harness.state.review.benchmark.discovery)
+    }
+  }
+
+  @Test
+  fun discoverySendsOnlyTheGuardedGetWithoutTrustOrExecution() {
+    Harness().use { harness ->
+      harness.workflow.loadGoBenchmarks()
+      harness.completeRequest()
+      assertEquals(
+          listOf(
+              Triple<String, String, String?>(
+                  "GET",
+                  "/api/projects/current/drafts/draft/benchmarks?project_revision=revision&expected_revision=1&expected_hash=draft-hash",
+                  null)),
+          harness.requests)
     }
   }
 
@@ -130,7 +381,8 @@ class DesktopBenchmarkWorkflowTest {
       harness.controller.dispatch(DesktopEvent.DraftLoaded(draft().copy(hash = "new-hash")))
       harness.main.runPending()
       assertNull(harness.state.review.benchmark.catalog)
-      assertTrue(harness.events.isEmpty())
+      assertTrue(harness.events.none { it is DesktopEvent.GoBenchmarkCatalogLoaded })
+      assertEquals(BenchmarkDiscoveryOutcome.Invalidated, harness.state.review.benchmark.discovery)
     }
   }
 
@@ -378,7 +630,8 @@ class DesktopBenchmarkWorkflowTest {
     cases.forEach { (label, benchmark) ->
       Harness(valid.copy(review = valid.review.copy(benchmark = benchmark))).use { harness ->
         val decision = benchmarkEligibility(harness.state)
-        assertTrue(decision.canDiscover, label)
+        assertEquals(
+            benchmark.discovery != BenchmarkDiscoveryOutcome.Loading, decision.canDiscover, label)
         assertFalse(decision.canCompare, label)
         assertTrue(decision.comparisonBlockedReason!!.isNotBlank(), label)
         harness.workflow.compareSelectedGoBenchmark()
@@ -444,20 +697,25 @@ class DesktopBenchmarkWorkflowTest {
   private inner class Harness(initial: DesktopState = candidateState()) : AutoCloseable {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()
-    private val scope = CoroutineScope(SupervisorJob() + main)
+    val scope = CoroutineScope(SupervisorJob() + main)
     val controller = DesktopWorkflowController(initial)
     val state
       get() = controller.state
 
-    val methods = mutableListOf<String>()
+    val requests = mutableListOf<Triple<String, String, String?>>()
+    val methods
+      get() = requests.map { it.first }
+
     val events = mutableListOf<DesktopEvent>()
     var response = TransportResponse(200, Json.encodeToString(catalog))
+    var transportFailure: Exception? = null
     val workflow =
         DesktopBenchmarkWorkflow(
             ApiClient(
                 transport =
-                    DaemonTransport { method, _, _ ->
-                      methods.add(method)
+                    DaemonTransport { method, path, body ->
+                      requests.add(Triple(method, path, body))
+                      transportFailure?.let { throw it }
                       response
                     }),
             scope,

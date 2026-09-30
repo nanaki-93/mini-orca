@@ -189,6 +189,34 @@ class ApiClientContractTest {
   }
 
   @Test
+  fun discoveryDecodesSparseUnavailabilityAndAvailableEmptyWithoutOtherRequests() {
+    val requests = mutableListOf<Triple<String, String, String?>>()
+    var response = """{"available":false,"reason":"Candidate is invalid"}"""
+    val client =
+        ApiClient(
+            transport =
+                DaemonTransport { method, path, body ->
+                  requests.add(Triple(method, path, body))
+                  TransportResponse(200, response)
+                })
+    val unavailable = client.goBenchmarkCatalog("draft-1", "revision", 2, "candidate-hash")
+    assertEquals(GoBenchmarkCatalog(reason = "Candidate is invalid"), unavailable)
+    response =
+        """{"draft_id":"draft-1","draft_revision":2,"draft_hash":"candidate-hash","available":true,"benchmarks":[]}"""
+    val empty = client.goBenchmarkCatalog("draft-1", "revision", 2, "candidate-hash")
+    assertTrue(empty.available)
+    assertTrue(empty.benchmarks.isEmpty())
+    assertEquals(
+        List(2) {
+          Triple<String, String, String?>(
+              "GET",
+              "/api/projects/current/drafts/draft-1/benchmarks?project_revision=revision&expected_revision=2&expected_hash=candidate-hash",
+              null)
+        },
+        requests)
+  }
+
+  @Test
   fun executionTrustUsesASeparateCurrentSessionConsentContract() {
     val client =
         ApiClient(
