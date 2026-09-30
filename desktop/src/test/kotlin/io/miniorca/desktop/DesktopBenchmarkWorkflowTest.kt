@@ -249,11 +249,203 @@ class DesktopBenchmarkWorkflowTest {
     }
   }
 
-  private inner class Harness : AutoCloseable {
+  @Test
+  fun missingInvalidAndMismatchedCandidatesBlockExplicitActionsWithLocalReasons() {
+    val valid = candidateState()
+    val cases = mutableListOf<Pair<String, DesktopState>>()
+    cases += "project" to valid.copy(projectState = ProjectWorkspaceState())
+    cases += "file" to valid.copy(selection = FileSelectionState())
+    cases += "draft" to valid.copy(review = DraftReviewState())
+    cases += "editor" to valid.copy(review = valid.review.copy(editor = null))
+    DraftEditorStatus.entries
+        .filter { it != DraftEditorStatus.Valid }
+        .forEach { status ->
+          cases +=
+              status.name to
+                  valid.copy(
+                      review =
+                          valid.review.copy(editor = valid.review.editor!!.copy(status = status)))
+        }
+    val draftChanges =
+        listOf(
+            draft().copy(id = ""),
+            draft().copy(revision = 0),
+            draft().copy(hash = " "),
+            draft().copy(projectId = ""),
+            draft().copy(projectRevision = ""),
+            draft().copy(targetPath = ""),
+            draft().copy(baseFileHash = ""),
+            draft().copy(projectId = "other"),
+            draft().copy(projectRevision = "other"),
+            draft().copy(targetPath = "other.go"),
+            draft().copy(baseFileHash = "other"),
+            draft().copy(validation = null),
+            draft().copy(validation = draft().validation!!.copy(applicable = false)))
+    draftChanges.forEachIndexed { index, changed ->
+      cases +=
+          "draft prerequisite $index" to
+              valid.copy(
+                  review = valid.review.copy(draft = changed, editor = editableDraft(changed)))
+    }
+    listOf(
+            draft().copy(id = "other"),
+            draft().copy(revision = 2),
+            draft().copy(hash = "other"),
+            draft().copy(projectId = "other"),
+            draft().copy(projectRevision = "other"),
+            draft().copy(targetPath = "other.go"),
+            draft().copy(baseFileHash = "other"))
+        .forEachIndexed { index, changed ->
+          cases +=
+              "editor identity $index" to
+                  valid.copy(review = valid.review.copy(editor = editableDraft(changed)))
+        }
+    cases +=
+        "unreported declaration edit" to
+            valid.copy(
+                review =
+                    valid.review.copy(
+                        editor = valid.review.editor!!.copy(declaration = "func Other() {}")))
+    cases +=
+        "unreported import edit" to
+            valid.copy(
+                review =
+                    valid.review.copy(editor = valid.review.editor!!.copy(imports = listOf("fmt"))))
+    cases.forEach { (label, snapshot) ->
+      Harness(snapshot).use { harness ->
+        val decision = benchmarkEligibility(harness.state)
+        assertFalse(decision.canDiscover, label)
+        assertFalse(decision.canCompare, label)
+        assertTrue(harness.events.isEmpty(), "Eligibility must be side-effect-free: $label")
+        harness.workflow.loadGoBenchmarks()
+        assertEquals(
+            BenchmarkDiscoveryOutcome.Failed(decision.discoveryBlockedReason!!),
+            harness.state.review.benchmark.discovery,
+            label)
+        harness.workflow.compareSelectedGoBenchmark()
+        assertEquals(
+            BenchmarkAdmissionOutcome.Failed(decision.comparisonBlockedReason!!),
+            harness.state.review.benchmark.admission,
+            label)
+        harness.completeRequest()
+        assertTrue(harness.methods.isEmpty(), label)
+      }
+    }
+  }
+
+  @Test
+  fun comparisonRequiresLoadedAvailableExactCatalogIdentityAndExecutableSelection() {
+    val valid = candidateState()
+    val evidence =
+        BenchmarkEvidenceState(
+            catalog = catalog, selected = choice, discovery = BenchmarkDiscoveryOutcome.Loaded)
+    val foreignCatalogs =
+        listOf(
+            catalog.copy(draftId = "other"),
+            catalog.copy(draftRevision = 2),
+            catalog.copy(draftHash = "other"),
+            catalog.copy(projectId = "other"),
+            catalog.copy(projectRevision = "other"),
+            catalog.copy(baseFileHash = "other"),
+            catalog.copy(targetPath = "other.go"))
+    val cases = mutableListOf<Pair<String, BenchmarkEvidenceState>>()
+    foreignCatalogs.forEachIndexed { index, foreign ->
+      cases += "catalog identity $index" to evidence.copy(catalog = foreign)
+    }
+    listOf(
+            BenchmarkDiscoveryOutcome.NotRequested,
+            BenchmarkDiscoveryOutcome.Loading,
+            BenchmarkDiscoveryOutcome.Invalidated,
+            BenchmarkDiscoveryOutcome.Failed("lookup"),
+            BenchmarkDiscoveryOutcome.Unavailable("unavailable"))
+        .forEach { outcome -> cases += "discovery $outcome" to evidence.copy(discovery = outcome) }
+    cases += "missing catalog" to evidence.copy(catalog = null)
+    cases += "unavailable catalog" to evidence.copy(catalog = catalog.copy(available = false))
+    cases += "empty catalog" to evidence.copy(catalog = catalog.copy(benchmarks = emptyList()))
+    cases += "no explicit selection" to evidence.copy(selected = null)
+    cases += "same name different scope" to evidence.copy(selected = choice.copy(scope = "other"))
+    cases +=
+        "same name different argv" to
+            evidence.copy(selected = choice.copy(command = listOf("other")))
+    listOf(choice.copy(name = " "), choice.copy(scope = " "), choice.copy(command = emptyList()))
+        .forEachIndexed { index, incomplete ->
+          cases +=
+              "incomplete executable $index" to
+                  evidence.copy(
+                      catalog = catalog.copy(benchmarks = listOf(incomplete)),
+                      selected = incomplete)
+        }
+    cases.forEach { (label, benchmark) ->
+      Harness(valid.copy(review = valid.review.copy(benchmark = benchmark))).use { harness ->
+        val decision = benchmarkEligibility(harness.state)
+        assertTrue(decision.canDiscover, label)
+        assertFalse(decision.canCompare, label)
+        assertTrue(decision.comparisonBlockedReason!!.isNotBlank(), label)
+        harness.workflow.compareSelectedGoBenchmark()
+        harness.completeRequest()
+        assertTrue(harness.methods.isEmpty(), label)
+        assertEquals(
+            BenchmarkAdmissionOutcome.Failed(decision.comparisonBlockedReason),
+            harness.state.review.benchmark.admission,
+            label)
+      }
+    }
+  }
+
+  @Test
+  fun exactChoiceAuthorizesComparisonWithoutChangingMeasurementIdentity() {
+    Harness().use { harness ->
+      harness.selectBenchmark()
+      val decision = benchmarkEligibility(harness.state)
+      assertTrue(decision.canDiscover)
+      assertTrue(decision.canCompare)
+      assertEquals(
+          goBenchmarkComparisonIdentity(draft()), benchmarkEvidenceIdentity(harness.state.review))
+      harness.response = TransportResponse(200, Json.encodeToString(comparison))
+      harness.workflow.compareSelectedGoBenchmark()
+      harness.completeRequest()
+      assertEquals(listOf("POST"), harness.methods)
+      assertEquals(comparison, harness.state.review.benchmark.comparison)
+    }
+  }
+
+  @Test
+  fun changedOpenFileRejectsCatalogAndComparisonPublicationWithoutLifecycleCancellation() {
+    Harness().use { harness ->
+      harness.workflow.loadGoBenchmarks()
+      harness.main.runPending()
+      harness.io.runPending()
+      harness.controller.dispatch(
+          DesktopEvent.FileLoaded(file().copy(contentHash = "other"), emptyList()))
+      harness.main.runPending()
+      assertNull(harness.state.review.benchmark.catalog)
+    }
+    Harness().use { harness ->
+      harness.selectBenchmark()
+      harness.response = TransportResponse(200, Json.encodeToString(comparison))
+      harness.workflow.compareSelectedGoBenchmark()
+      harness.main.runPending()
+      harness.io.runPending()
+      harness.controller.dispatch(
+          DesktopEvent.FileLoaded(file().copy(path = "other.go"), emptyList()))
+      harness.main.runPending()
+      assertNull(harness.state.review.benchmark.comparison)
+    }
+  }
+
+  private fun candidateState(): DesktopState {
+    val controller = DesktopWorkflowController()
+    controller.dispatch(DesktopEvent.ProjectLoaded(project(), ProjectIndex("project", "revision")))
+    controller.dispatch(DesktopEvent.FileLoaded(file(), emptyList()))
+    controller.dispatch(DesktopEvent.DraftLoaded(draft()))
+    return controller.state
+  }
+
+  private inner class Harness(initial: DesktopState = candidateState()) : AutoCloseable {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()
     private val scope = CoroutineScope(SupervisorJob() + main)
-    val controller = DesktopWorkflowController()
+    val controller = DesktopWorkflowController(initial)
     val state
       get() = controller.state
 
@@ -272,13 +464,6 @@ class DesktopBenchmarkWorkflowTest {
             io,
             { controller.state },
             ::dispatch)
-
-    init {
-      controller.dispatch(
-          DesktopEvent.ProjectLoaded(project(), ProjectIndex("project", "revision")))
-      controller.dispatch(DesktopEvent.FileLoaded(file(), emptyList()))
-      controller.dispatch(DesktopEvent.DraftLoaded(draft()))
-    }
 
     fun dispatch(event: DesktopEvent) {
       workflow.beforeEvent(event)
