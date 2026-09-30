@@ -4230,7 +4230,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun performanceBenchmarkStatusAndMeasurementDetailsRemainReadableAcrossLayouts() {
+  fun benchmarkMedianColumnsAndCollapsedLimitationsRenderAcrossEvidenceOutcomes() {
     val choice =
         GoBenchmarkChoice("BenchmarkRun", listOf("go", "test", "-bench", "^BenchmarkRun$"), "scope")
     val identity =
@@ -4299,33 +4299,192 @@ class DesktopVisualLayoutTest {
                             selected = choice,
                             discovery = BenchmarkDiscoveryOutcome.Loaded,
                             comparison = comparison)))
-    listOf(Triple(1440, 900, 1f), Triple(800, 400, 1.5f)).forEach { (width, height, scale) ->
-      ComposeVisualFixture(width, height, scale) {
-            PerformanceWorkspacePane(
-                PerformanceWorkspacePaneState(
-                    performancePageFixture(),
-                    resultIndexFixture(),
-                    benchmarkComparison = comparison,
-                    expectedBenchmarkIdentity = identity,
-                    selectedBenchmark = choice,
-                    benchmarkEligibility = benchmarkEligibility(snapshot)),
-                PerformanceWorkspaceActions(
-                    {}, {}, FindingActions({}, { _, _ -> }, {}), openSource = {}))
-          }
-          .use { fixture ->
-            fixture.render("performance-benchmark-$width-$height-$scale")
-            assertTrue(fixture.hasText("Measured · selected benchmark"))
-            fixture.clickText("Explore benchmark evidence")
-            fixture.render("performance-benchmark-expanded-$width-$height-$scale")
-            assertTrue(
-                fixture.hasText(
-                    "Benchmark evidence is candidate-specific and does not measure this model suggestion."))
-            fixture.clickText("Measurement details")
-            fixture.render("performance-benchmark-details-$width-$height-$scale")
-            fixture.assertTextFits("Benchmark evidence")
-            assertTrue(fixture.hasText("Measured trade-offs"))
-            assertTrue(fixture.hasText("BenchmarkRun"))
-          }
+    val current =
+        PerformanceWorkspacePaneState(
+            performancePageFixture(),
+            resultIndexFixture(),
+            benchmarkComparison =
+                comparison.copy(
+                    candidate =
+                        GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1, 90.0, 10, 1) })),
+            expectedBenchmarkIdentity = identity,
+            selectedBenchmark = choice,
+            benchmarkEligibility = benchmarkEligibility(snapshot))
+    val cases =
+        listOf(
+            Triple("measured", current, listOf("90 ns/op", "Observed change: -10.0%")),
+            Triple(
+                "trade-off",
+                current.copy(benchmarkComparison = comparison),
+                listOf("12 B/op", "Observed change: +20.0%")),
+            Triple(
+                "partial",
+                current.copy(
+                    benchmarkComparison =
+                        comparison.copy(
+                            candidate =
+                                GoBenchmarkMeasurement(
+                                    listOf(
+                                        GoBenchmarkSample(1, 80.0, 0, 0),
+                                        GoBenchmarkSample(1, 90.0, 0, 0))))),
+                listOf(
+                    "85 ns/op",
+                    "Candidate samples: 2",
+                    "partial; 2/2 valid observations; 5 required")),
+            Triple(
+                "missing-memory",
+                current.copy(
+                    benchmarkComparison =
+                        comparison.copy(
+                            candidate =
+                                GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1, 90.0) }))),
+                listOf(
+                    "90 ns/op",
+                    "Unavailable (B/op)",
+                    "Unavailable (allocs/op)",
+                    "unavailable; 0/5 valid observations; 5 required")),
+            Triple(
+                "missing-side",
+                current.copy(benchmarkComparison = comparison.copy(candidate = null)),
+                listOf(
+                    "Candidate samples: not returned",
+                    "Unavailable (ns/op)",
+                    "measurement not returned")),
+            Triple(
+                "empty-side",
+                current.copy(
+                    benchmarkComparison = comparison.copy(candidate = GoBenchmarkMeasurement())),
+                listOf(
+                    "Candidate samples: 0",
+                    "Unavailable (ns/op)",
+                    "empty samples; 0/0 valid observations; 5 required")),
+            Triple(
+                "noisy",
+                current.copy(
+                    benchmarkComparison =
+                        comparison.copy(
+                            candidate =
+                                GoBenchmarkMeasurement(
+                                    listOf(80.0, 80.0, 80.0, 80.0, 120.0).map {
+                                      GoBenchmarkSample(1, it, 10, 1)
+                                    }))),
+                listOf("80 ns/op", "Observed change: -20.0%")),
+            Triple(
+                "stale",
+                current.copy(expectedBenchmarkIdentity = identity.copy(draftHash = "changed")),
+                listOf("90 ns/op", "Historical change: -10.0%")),
+            Triple(
+                "running-prior",
+                current.copy(benchmarkAdmission = BenchmarkAdmissionOutcome.Running),
+                listOf("90 ns/op", "Historical change: -10.0%"))) +
+            listOf("canceled", "failed", "unavailable", "future-status").flatMap { status ->
+              val terminal =
+                  GoBenchmarkComparison(
+                      status = status, reason = "Recorded $status reason; refresh to recover.")
+              listOf(
+                  Triple(
+                      "$status-prior",
+                      current.copy(benchmarkLatestOutcome = BenchmarkComparisonOutcome(terminal)),
+                      listOf("90 ns/op", "Historical change: -10.0%")),
+                  Triple(
+                      "$status-no-measurements",
+                      current.copy(
+                          benchmarkComparison = null,
+                          benchmarkLatestOutcome = BenchmarkComparisonOutcome(terminal)),
+                      emptyList()))
+            }
+    for ((name, state, observations) in cases) {
+      for ((width, height, scale) in listOf(Triple(1440, 900, 1f), Triple(800, 650, 1.5f))) {
+        val status =
+            performanceBenchmarkStatusPresentation(
+                state.benchmarkComparison,
+                state.expectedBenchmarkIdentity,
+                state.selectedBenchmark,
+                admission = state.benchmarkAdmission,
+                eligibility = state.benchmarkEligibility,
+                latestOutcome = state.benchmarkLatestOutcome)
+        var requests = 0
+        ComposeVisualFixture(width, height, scale) {
+              PerformanceWorkspacePane(
+                  state,
+                  PerformanceWorkspaceActions(
+                      {},
+                      {},
+                      FindingActions({}, { _, _ -> }, {}),
+                      openSource = {},
+                      loadBenchmarks = { requests++ },
+                      selectBenchmark = { requests++ },
+                      runBenchmark = { requests++ }))
+            }
+            .use { fixture ->
+              fixture.render()
+              assertTrue(fixture.hasText(status.stateLabel), name)
+              assertTrue(
+                  fixture.hasText(status.summary),
+                  "Essential reason survives all collapsed details: $name")
+              assertFalse(fixture.hasText("Baseline median"))
+              fixture.clickDescription("Expand Explore benchmark evidence")
+              fixture.render("f22-medians-$name-collapsed-$width-$height-$scale")
+              fixture.revealTextFullyWithin(status.summary, "result-overview")
+              fixture.assertTextFits(status.summary, maxLines = 30)
+              when (name) {
+                "trade-off" ->
+                    assertTrue(status.summary.contains("trade-off, not an unconditional win"))
+                "partial",
+                "missing-side",
+                "empty-side" -> assertTrue(status.summary.contains("five valid samples per side"))
+                "missing-memory" ->
+                    assertTrue(status.summary.contains("cannot establish a performance win"))
+                "noisy" -> assertTrue(status.summary.contains("too variable"))
+                "stale" -> assertTrue(status.summary.contains("different draft or source revision"))
+                "running-prior" -> assertTrue(status.summary.contains("is running"))
+              }
+              state.benchmarkLatestOutcome?.let { assertEquals(it.response.reason, status.summary) }
+              assertFalse(
+                  fixture.hasText("Baseline median"), "Optional measurements start collapsed")
+              state.benchmarkComparison?.let { evidence ->
+                val assessment =
+                    performanceBenchmarkPresentation(
+                        evidence,
+                        state.expectedBenchmarkIdentity,
+                        state.selectedBenchmark,
+                        status.priorEvidence)
+                if (status.priorEvidence) {
+                  fixture.revealTextFullyWithin(assessment.summary, "result-overview")
+                  fixture.assertTextFits(assessment.summary, maxLines = 30)
+                  assertFalse(fixture.hasText("CPU is lower for the selected benchmark."))
+                }
+                val details =
+                    if (status.priorEvidence) "Prior measurement details" else "Measurement details"
+                fixture.revealTextFullyWithin(details, "result-overview")
+                fixture.clickText(details)
+                fixture.render()
+                fixture.revealTextFullyWithin("Baseline median", "result-overview")
+                for (text in
+                    listOf(
+                        "Metric",
+                        "Baseline median",
+                        "Candidate median",
+                        "Change / availability",
+                        "Time (ns/op)",
+                        "Bytes (B/op)",
+                        "Allocations (allocs/op)",
+                        "Baseline samples: 5",
+                        "100 ns/op",
+                        "10 B/op",
+                        "1 allocs/op") + observations) {
+                  fixture.revealTextFullyWithin(text, "result-overview")
+                  fixture.assertTextFits(text, maxLines = 20)
+                }
+                fixture.render("f22-medians-$name-expanded-$width-$height-$scale")
+                if (status.priorEvidence) {
+                  assertTrue(fixture.hasText("Prior benchmark evidence"))
+                  assertFalse(fixture.hasText("Measured · selected benchmark"))
+                }
+              }
+              assertEquals(0, requests, "Inspection is passive: $name")
+            }
+      }
     }
   }
 

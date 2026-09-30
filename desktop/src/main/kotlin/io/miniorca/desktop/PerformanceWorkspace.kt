@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -82,17 +83,17 @@ internal fun PerformanceWorkspacePane(
             benchmarksExpanded,
             { benchmarksExpanded = !benchmarksExpanded },
             stateLabel = benchmarkStatus.stateLabel)
+        SelectionContainer {
+          Text(
+              benchmarkStatus.summary,
+              color = SecondaryText,
+              style = IdeTypography.compactBody,
+              modifier = Modifier.padding(top = 4.dp))
+        }
         // Use the bounded result overview's scroll owner so long catalogs and required admission
         // text do not compete with a second fixed-height viewport.
         if (benchmarksExpanded)
             Column(Modifier.fillMaxWidth().testTag("benchmark-discovery-content")) {
-              SelectionContainer {
-                Text(
-                    benchmarkStatus.summary,
-                    color = SecondaryText,
-                    style = IdeTypography.compactBody,
-                    modifier = Modifier.padding(top = 4.dp))
-              }
               PerformanceBenchmarkControls(
                   state.benchmarkCatalog,
                   state.selectedBenchmark,
@@ -101,6 +102,21 @@ internal fun PerformanceWorkspacePane(
                   state.benchmarkAdmission,
                   actions)
               state.benchmarkComparison?.let { comparison ->
+                val presentation =
+                    performanceBenchmarkPresentation(
+                        comparison,
+                        state.expectedBenchmarkIdentity,
+                        currentBenchmarkChoice,
+                        benchmarkStatus.priorEvidence)
+                if (benchmarkStatus.priorEvidence) {
+                  SelectionContainer {
+                    Text(
+                        presentation.summary,
+                        color = Warning,
+                        style = IdeTypography.compactBody,
+                        modifier = Modifier.padding(vertical = 4.dp))
+                  }
+                }
                 IdeDisclosureHeader(
                     if (benchmarkStatus.priorEvidence) "Prior measurement details"
                     else "Measurement details",
@@ -432,13 +448,6 @@ private fun PerformanceBenchmarkEvidence(
     )
     SelectionContainer {
       Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-        CompactKeyValueRows(presentation.rows)
-        Text(
-            presentation.conditions,
-            color = SecondaryText,
-            fontSize = 11.sp,
-            lineHeight = 16.sp,
-            modifier = Modifier.padding(top = 6.dp))
         Text(
             presentation.summary,
             color = if (presentation.inconclusive || presentation.isStale) Warning else PrimaryText,
@@ -461,8 +470,89 @@ private fun PerformanceBenchmarkEvidence(
                 modifier = Modifier.padding(top = 2.dp))
           }
         }
+        PerformanceBenchmarkMedians(
+            presentation.metrics, historical = priorEvidence || presentation.isStale)
+        CompactKeyValueRows(
+            presentation.rows.filter { row ->
+              presentation.metrics.none { it.label == row.first } && row.first != "Samples"
+            })
+        Text(
+            presentation.conditions,
+            color = SecondaryText,
+            fontSize = 11.sp,
+            lineHeight = 16.sp,
+            modifier = Modifier.padding(top = 6.dp))
       }
     }
+  }
+}
+
+@Composable
+private fun PerformanceBenchmarkMedians(
+    metrics: List<BenchmarkMetricRow>,
+    historical: Boolean,
+) {
+  Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Text("Metric", Modifier.weight(0.8f), color = SecondaryText, style = IdeTypography.compactBody)
+    Text(
+        "Baseline median",
+        Modifier.weight(1.5f),
+        color = SecondaryText,
+        style = IdeTypography.compactBody)
+    Text(
+        "Candidate median",
+        Modifier.weight(1.5f),
+        color = SecondaryText,
+        style = IdeTypography.compactBody)
+    Text(
+        "Change / availability",
+        Modifier.weight(1.3f),
+        color = SecondaryText,
+        style = IdeTypography.compactBody)
+  }
+  for ((label, side) in
+      listOf("Baseline" to metrics.first().base, "Candidate" to metrics.first().candidate)) {
+    Text(
+        "$label samples: ${side.sampleCount ?: "not returned"}",
+        color = SecondaryText,
+        style = IdeTypography.compactBody,
+        modifier = Modifier.padding(top = 4.dp))
+  }
+  metrics.forEach { metric ->
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          Text(
+              when (metric.label) {
+                "ns/op" -> "Time (ns/op)"
+                "B/op" -> "Bytes (B/op)"
+                else -> "Allocations (allocs/op)"
+              },
+              Modifier.weight(0.8f),
+              color = PrimaryText,
+              style = IdeTypography.compactBody)
+          for ((label, side) in
+              listOf("Baseline" to metric.base, "Candidate" to metric.candidate)) {
+            Column(
+                Modifier.weight(1.5f).semantics {
+                  contentDescription = "${metric.label}, $label median: ${side.display()}"
+                }) {
+                  Text(
+                      side.medianLabel(metric.label),
+                      color = PrimaryText,
+                      style = IdeTypography.compactBody)
+                  Text(
+                      side.availabilityLabel(),
+                      color = SecondaryText,
+                      style = IdeTypography.compactBody)
+                }
+          }
+          Text(
+              metric.changeLabel(historical),
+              Modifier.weight(1.3f),
+              color = if (metric.isComplete) SecondaryText else Warning,
+              style = IdeTypography.compactBody)
+        }
   }
 }
 
@@ -550,9 +640,10 @@ internal fun performanceBenchmarkStatusPresentation(
             .let {
               PerformanceBenchmarkStatusPresentation(
                   it.stateLabel,
-                  if (it.isStale) it.summary
-                  else
-                      "Benchmark evidence is candidate-specific and does not measure this model suggestion.",
+                  (listOf(it.summary) +
+                          it.insights +
+                          "Benchmark evidence is candidate-specific and does not measure this model suggestion.")
+                      .joinToString("\n"),
                   priorEvidence = it.isStale)
             }
     else ->
@@ -1096,7 +1187,10 @@ internal data class BenchmarkMetricSide(
   val median: Double?
     get() = benchmarkMedian(validValues)
 
-  fun display(): String {
+  fun medianLabel(unit: String): String =
+      median?.let { "${formatMetric(it)} $unit" } ?: "Unavailable ($unit)"
+
+  fun availabilityLabel(): String {
     val coverage =
         when (availability) {
           BenchmarkMetricAvailability.MissingMeasurement -> "measurement not returned"
@@ -1112,8 +1206,10 @@ internal data class BenchmarkMetricSide(
               "; ${validValues.size}/$it valid observations; $benchmarkRequiredSamples required"
             }
             .orEmpty()
-    return "${median?.let(::formatMetric) ?: "unavailable"} ($coverage$count)"
+    return "$coverage$count"
   }
+
+  fun display(): String = "${median?.let(::formatMetric) ?: "unavailable"} (${availabilityLabel()})"
 }
 
 internal data class BenchmarkMetricRow(
@@ -1132,13 +1228,14 @@ internal data class BenchmarkMetricRow(
             relativeRange(base.validValues, base.median!!),
             relativeRange(candidate.validValues, candidate.median!!))
 
-  fun display(historical: Boolean = false): String {
-    val changeLabel = if (historical) "Historical change: " else ""
-    return if (isComplete)
-        "${formatMetric(base.median!!)} → ${formatMetric(candidate.median!!)} · $changeLabel${metricChangeLabel(base.median!!, candidate.median!!)}"
-    else
-        "Baseline median: ${base.display()} · Candidate median: ${candidate.display()} · ${if (historical) "Historical change" else "change"} unavailable: incomplete evidence"
+  fun changeLabel(historical: Boolean = false): String {
+    val label = if (historical) "Historical change" else "Observed change"
+    return if (isComplete) "$label: ${metricChangeLabel(base.median!!, candidate.median!!)}"
+    else "$label unavailable: incomplete evidence"
   }
+
+  fun display(historical: Boolean = false): String =
+      "Baseline median: ${base.display()} · Candidate median: ${candidate.display()} · ${changeLabel(historical)}"
 
   fun invalidRows(): List<Pair<String, String>> = buildList {
     for ((side, evidence) in listOf("Baseline" to base, "Candidate" to candidate)) {
