@@ -19,6 +19,114 @@ import kotlin.test.assertTrue
 
 class ResultWorkspaceLayoutTest {
   @Test
+  fun scanDisclosureResetsOnProjectRevisionAndReportReplacementButNotReadFeedback() {
+    var state by
+        mutableStateOf(verifiedScanLayoutCases().first { it.first == "failed-phase" }.second)
+    var calls = 0
+    ComposeVisualFixture(800, 400, 1.5f) {
+          BugsWorkspacePane(
+              state,
+              BugsWorkspaceActions(FindingActions({}, { _, _ -> }, {}), { calls++ }, { calls++ }))
+        }
+        .use { fixture ->
+          fixture.render()
+          fun expand() {
+            fixture.revealTextFullyWithin("Command and output", "result-overview")
+            fixture.clickDescription("Expand Command and output")
+            fixture.render()
+            assertEquals("Expanded", fixture.descriptionState("Collapse Command and output"))
+            assertTrue(fixture.hasText("main.go:7: vet diagnostic"))
+          }
+          expand()
+          state =
+              state.copy(
+                  scanState =
+                      state.scanState.copy(
+                          read = VerifiedScanRead.PollUnavailable("Status read failed")))
+          fixture.render()
+          assertTrue(fixture.hasDescription("Collapse Command and output"))
+          for (replacement in listOf("report", "revision", "project")) {
+            state =
+                when (replacement) {
+                  "report" -> state.copy(scan = state.scan!!.copy(completedAt = "replacement"))
+                  "revision" ->
+                      state.copy(project = state.project!!.copy(projectRevision = "next-revision"))
+                  else -> state.copy(project = state.project!!.copy(projectId = "next-project"))
+                }
+            fixture.render()
+            assertEquals("Collapsed", fixture.descriptionState("Expand Command and output"))
+            assertFalse(fixture.hasText("main.go:7: vet diagnostic"))
+            expand()
+          }
+          assertEquals(0, calls)
+        }
+  }
+
+  @Test
+  fun scanFullAvailableOutputAndLongCommandRemainScrollableAndSelectableAtReducedHeight() {
+    for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (kind in listOf("output", "command")) {
+        val original = verifiedScanLayoutCases().first { it.first == "long-output" }.second
+        val command =
+            listOf("go", "test", "./" + "deeply/nested/日本語/".repeat(260) + "FINAL_PACKAGE")
+        val phase = original.scan!!.phases.single()
+        val state =
+            if (kind == "output") original
+            else
+                original.copy(
+                    scan =
+                        original.scan.copy(
+                            phases =
+                                listOf(
+                                    phase.copy(
+                                        command = command, output = "Recorded command failure"))))
+        val available = if (kind == "output") phase.output else "$ " + command.joinToString(" ")
+        var calls = 0
+        ComposeVisualFixture(800, 400, scale) {
+              BugsWorkspacePane(
+                  state,
+                  BugsWorkspaceActions(
+                      FindingActions({}, { _, _ -> }, {}), { calls++ }, { calls++ }))
+            }
+            .use { fixture ->
+              fixture.render()
+              fixture.revealTextFullyWithin("Command and output", "result-overview")
+              fixture.clickDescription("Expand Command and output")
+              fixture.render()
+              fixture.scrollBy(100_000f, "result-overview")
+              fixture.render()
+              fixture.revealTextFullyWithin("Show full available output", "scan-diagnostics")
+              fixture.clickDescription("Expand available diagnostic output")
+              fixture.render()
+              assertTrue(fixture.hasText(available))
+              assertFalse(fixture.hasEditableText(withinTag = "scan-diagnostics"))
+              fixture.scrollBy(100_000f, "scan-diagnostics")
+              fixture.render()
+              fixture.scrollTagged(
+                  "diagnostic-output-scroll", horizontal = false, pixels = 100_000f)
+              assertEquals(
+                  fixture.scrollMaximum("diagnostic-output-scroll", false),
+                  fixture.scrollPosition("diagnostic-output-scroll", false))
+              fixture.render("f20-$kind-full-tail-800-400-$scale")
+              fixture.revealTextFullyWithin("Show preview", "scan-diagnostics")
+              fixture.clickDescription("Collapse available diagnostic output")
+              fixture.render()
+              assertFalse(fixture.hasText(available))
+              // Exercise the DiagnosticText clipboard, not an editable field or phase heading.
+              val selectable =
+                  if (kind == "output") "$ go vet ./..." else "Recorded command failure"
+              fixture.scrollBy(if (kind == "output") -100_000f else 100_000f, "scan-diagnostics")
+              fixture.render()
+              fixture.revealTextFullyWithin(selectable, "result-overview")
+              fixture.revealTextFullyWithin(selectable, "scan-diagnostics")
+              assertTrue(fixture.copyTextByDragging(selectable, selectable).isNotBlank())
+              assertEquals(0, calls)
+            }
+      }
+    }
+  }
+
+  @Test
   fun completedScanWithFailedPhaseShowsOutcomeAndProvenanceWithoutOpeningDetails() {
     val project = resultProjectFixture()
     val report =

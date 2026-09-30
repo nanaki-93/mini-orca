@@ -32,6 +32,63 @@ import kotlinx.coroutines.CompletableDeferred
 
 class DesktopKeyboardNavigationTest {
   @Test
+  fun scanKeyboardDisclosureAndOutputExpansionKeepVisibleFocusWithoutDispatchingWork() {
+    val state = verifiedScanLayoutCases().first { it.first == "long-output" }.second
+    val calls = mutableListOf<String>()
+    ComposeVisualFixture(800, 400, 1.5f) {
+          BugsWorkspacePane(
+              state,
+              BugsWorkspaceActions(
+                  FindingActions(
+                      { calls += "prepare" }, { _, _ -> calls += "write" }, { calls += "source" }),
+                  { calls += "trust/start" },
+                  { calls += "cancel" },
+                  { calls += "analysis" },
+                  { calls += "results/read" },
+                  { calls += "status/read" }))
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.revealTextFullyWithin("Command and output", "result-overview")
+          assertTrue(fixture.requestDescriptionFocus("Expand Command and output"))
+          fixture.render("f20-keyboard-disclosure-focused")
+          assertTrue(fixture.isFocusedControl("Expand Command and output"))
+          fixture.assertColorVisible(FocusAccent)
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Collapse Command and output"))
+          assertEquals("Expanded", fixture.descriptionState("Collapse Command and output"))
+          fixture.scrollBy(100_000f, "result-overview")
+          fixture.render()
+          fixture.revealTextFullyWithin("Show full available output", "scan-diagnostics")
+          assertTrue(fixture.requestDescriptionFocus("Expand available diagnostic output"))
+          fixture.render("f20-keyboard-output-focused")
+          fixture.assertColorVisible(FocusAccent)
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals("Expanded", fixture.descriptionState("Collapse available diagnostic output"))
+          assertTrue(fixture.hasText(state.scan!!.phases.single().output))
+          fixture.revealTextFullyWithin("Show preview", "scan-diagnostics")
+          assertTrue(fixture.requestDescriptionFocus("Collapse available diagnostic output"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertFalse(fixture.hasText(state.scan.phases.single().output))
+          fixture.revealTextFullyWithin("Command and output", "result-overview")
+          assertTrue(fixture.requestDescriptionFocus("Collapse Command and output"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals("Collapsed", fixture.descriptionState("Expand Command and output"))
+          assertEquals(0, fixture.tagCount("scan-diagnostics"))
+          fixture.revealTextFullyWithin("Refresh scan status", "result-overview")
+          assertTrue(fixture.requestFocus("Refresh scan status"))
+          fixture.render("f20-keyboard-recovery-focused")
+          fixture.assertColorVisible(FocusAccent)
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(listOf("status/read"), calls, "Only explicit recovery emits a read intent")
+        }
+  }
+
+  @Test
   fun securityKeyboardBrowseSearchAndDisclosureDoNotDispatchWork() {
     val original = securityPageFixture()
     val report = original.results!!.security.first()

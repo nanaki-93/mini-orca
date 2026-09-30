@@ -75,6 +75,75 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun f20ScanScopeWarningsRecoveryAndActionsStayReachableWithDiagnosticsCollapsed() {
+    val viewports = listOf(1440 to 900, 1600 to 1000, 800 to 400, 800 to 650)
+    for ((width, height) in viewports) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        for ((name, state) in verifiedScanLayoutCases()) {
+          var calls = 0
+          val label = "f20-$name-$width-$height-$scale-${density}x"
+          ComposeVisualFixture(
+                  (width * density).toInt(), (height * density).toInt(), scale, density) {
+                    BugsWorkspacePane(
+                        state,
+                        BugsWorkspaceActions(
+                            FindingActions({ calls++ }, { _, _ -> calls++ }, { calls++ }),
+                            { calls++ },
+                            { calls++ },
+                            { calls++ },
+                            { calls++ },
+                            { calls++ }))
+                  }
+              .use { fixture ->
+                fixture.render("$label-collapsed")
+                fixture.revealTextFullyWithin("Verified Go scan", "result-overview")
+                fixture.assertTextFits("Verified Go scan")
+                val progress = verifiedScanProgress(state.project, state.scanState, state.scan)
+                for (text in
+                    listOf(verifiedScanScopeCopy, verifiedScanTrustCopy, progress.summary)) {
+                  fixture.revealTextFullyWithin(text, "result-overview")
+                  fixture.assertTextFits(text, maxLines = 12)
+                }
+                val action =
+                    if (progress.action == VerifiedScanAction.Cancel) "Cancel checks"
+                    else "Trust project-code execution & run checks"
+                fixture.revealTextFullyWithin(action, "result-overview")
+                fixture.assertTextFits(action)
+                assertEquals(
+                    progress.action == VerifiedScanAction.Waiting, fixture.isDisabled(action))
+                fixture.render("$label-action")
+                if (state.scanState.operation !in
+                    listOf(
+                        VerifiedScanOperation.Starting,
+                        VerifiedScanOperation.CancellationRequested)) {
+                  fixture.revealTextFullyWithin("Refresh scan status", "result-overview")
+                  fixture.assertTextFits("Refresh scan status")
+                } else assertFalse(fixture.hasText("Refresh scan status"))
+                fixture.revealTextFullyWithin(verifiedScanEvidenceCopy, "result-overview")
+                fixture.assertTextFits(verifiedScanEvidenceCopy, maxLines = 12)
+                fixture.revealTextFullyWithin("Command and output", "result-overview")
+                assertEquals("Collapsed", fixture.descriptionState("Expand Command and output"))
+                assertEquals(0, fixture.tagCount("scan-diagnostics"))
+                fixture.clickDescription("Expand Command and output")
+                fixture.render("$label-expanded")
+                if (state.scan == null) assertTrue(fixture.hasText("No scan report available."))
+                else
+                    state.scan.phases.forEach { phase ->
+                      assertTrue(fixture.hasText(phase.name))
+                      assertTrue(fixture.hasText(phase.output.take(4096).trimEnd()))
+                    }
+                assertFalse(fixture.hasEditableText(withinTag = "scan-diagnostics"))
+                assertFalse(fixture.hasText("Formatting"))
+                assertFalse(fixture.hasText("gofmt"))
+                assertEquals(
+                    0, calls, "Passive reflow and inspection must not dispatch work: $label")
+              }
+        }
+      }
+    }
+  }
+
+  @Test
   fun f17BugsProductionStatesAndActionsRemainReachableAtResponsiveTextAndDensity() {
     val base = resultPageFixture("bugs")
     val path = "internal/" + "deeply/nested/日本語/".repeat(5) + "handler.go"
@@ -9062,6 +9131,107 @@ class DesktopVisualLayoutTest {
   }
 }
 
+internal const val verifiedScanScopeCopy =
+    "Whole-project checks, independent of the Analysis file selection: parser inspection of indexed Go source; go vet ./...; go test ./..."
+internal const val verifiedScanTrustCopy =
+    "Checks run in a temporary copied workspace; the scan does not edit original source. Tests and package initialization can execute project code. A copy is not a security sandbox."
+internal const val verifiedScanEvidenceCopy =
+    "Local tool evidence is scoped to these checks, not a general safety assurance. Model suggestions are separate results below."
+
+internal fun verifiedScanLayoutCases(): List<Pair<String, BugsWorkspacePaneState>> {
+  val original = resultPageFixture("bugs")
+  val finding =
+      original.semantic
+          .first()
+          .copy(
+              title = "Review unchecked input",
+              confidence = "suggested",
+              source = "file_analysis",
+              severity = "high",
+              message = "Model suggestion; inspect source before preparing a fix.")
+  val page =
+      original.copy(
+          section =
+              original.section.copy(results = original.results!!.copy(semantic = listOf(finding))))
+  val project = requireNotNull(page.project).copy(type = "go")
+  val phase =
+      GoScanPhase("go vet", "failed", listOf("go", "vet", "./..."), "main.go:7: vet diagnostic", 1)
+  val report =
+      GoScanReport(project.projectId, project.projectRevision, "completed", phases = listOf(phase))
+  val base =
+      BugsWorkspacePaneState(
+          page.semantic,
+          null,
+          false,
+          page.copy(project = project),
+          project = project,
+          scanState = VerifiedScanState(read = VerifiedScanRead.Absent))
+  val loaded =
+      base.copy(scan = report, scanState = VerifiedScanState(read = VerifiedScanRead.Loaded))
+  return listOf(
+      "supported" to base,
+      "unsupported" to loaded.copy(project = project.copy(type = "python")),
+      "unknown-type" to loaded.copy(project = project.copy(type = "unknown")),
+      "pending" to
+          loaded.copy(
+              scanState = loaded.scanState.copy(operation = VerifiedScanOperation.Starting)),
+      "running" to loaded.copy(scan = report.copy(status = "running")),
+      "cancel-pending" to
+          loaded.copy(
+              scan = report.copy(status = "running"),
+              scanState =
+                  loaded.scanState.copy(operation = VerifiedScanOperation.CancellationRequested)),
+      "canceled" to
+          loaded.copy(
+              scan =
+                  report.copy(
+                      status = "canceled",
+                      phases = listOf(phase.copy(state = "canceled", exitCode = 143)))),
+      "failed-phase" to loaded,
+      "command-failure" to loaded.copy(scan = report.copy(status = "failed")),
+      "unavailable" to
+          loaded.copy(
+              scanState =
+                  loaded.scanState.copy(
+                      read =
+                          VerifiedScanRead.PollUnavailable(
+                              "Live status read failed; retained evidence is not current."))),
+      "initial-unavailable" to
+          base.copy(
+              scanState =
+                  VerifiedScanState(
+                      read =
+                          VerifiedScanRead.Unavailable(
+                              "Initial status read failed; no report is known."))),
+      "start-unconfirmed" to
+          loaded.copy(
+              scanState =
+                  loaded.scanState.copy(
+                      operation =
+                          VerifiedScanOperation.StartUncertain(
+                              "Start timed out; acceptance is unknown. Refresh scan status."))),
+      "cancel-unconfirmed" to
+          loaded.copy(
+              scanState =
+                  loaded.scanState.copy(
+                      operation =
+                          VerifiedScanOperation.CancellationUnconfirmed(
+                              "Cancel timed out; cancellation is not confirmed. Refresh scan status."))),
+      "long-output" to
+          loaded.copy(
+              scan =
+                  report.copy(
+                      phases =
+                          listOf(
+                              phase.copy(
+                                  output =
+                                      "internal/" +
+                                          "deeply/nested/日本語/".repeat(12) +
+                                          "handler.go:83: diagnostic\n" +
+                                          "recorded evidence\n".repeat(400) +
+                                          "FINAL AVAILABLE LINE\n[output truncated]")))))
+}
+
 /** This test-only adapter is tied to the Compose version pinned in build.gradle.kts. */
 @OptIn(ExperimentalComposeUiApi::class, InternalComposeUiApi::class)
 internal class ComposeVisualFixture(
@@ -9707,9 +9877,10 @@ internal class ComposeVisualFixture(
     if (visible()) return
     scrollBy(-100_000f, scrollTag)
     render()
-    repeat(100) {
+    val step = scrollTag?.let { minOf(160f, taggedBounds(it).height / 3f) } ?: 160f
+    repeat(300) {
       if (visible()) return
-      scrollBy(160f, scrollTag)
+      scrollBy(step, scrollTag)
       render()
     }
     error("$label must be reachable by scrolling")
