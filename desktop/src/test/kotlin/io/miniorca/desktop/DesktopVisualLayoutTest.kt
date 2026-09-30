@@ -4251,6 +4251,54 @@ class DesktopVisualLayoutTest {
             command = choice.command,
             base = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1, 100.0, 10, 1) }),
             candidate = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1, 90.0, 12, 1) }))
+    val draft =
+        DeclarationDraft(
+            id = identity.draftId,
+            revision = identity.draftRevision,
+            hash = identity.draftHash,
+            projectId = identity.projectId,
+            projectRevision = identity.projectRevision,
+            baseFileHash = identity.baseFileHash,
+            targetPath = identity.targetPath,
+            validation =
+                DeclarationValidation(
+                    true, "strict_symbol", diff = UnifiedDiff("main.go", "main.go")))
+    val catalog =
+        GoBenchmarkCatalog(
+            draftId = draft.id,
+            draftRevision = draft.revision,
+            draftHash = draft.hash,
+            projectId = draft.projectId,
+            projectRevision = draft.projectRevision,
+            baseFileHash = draft.baseFileHash,
+            targetPath = draft.targetPath,
+            available = true,
+            benchmarks = listOf(choice))
+    val snapshot =
+        DesktopState(
+            projectState = ProjectWorkspaceState(project = performancePageFixture().project),
+            selection =
+                FileSelectionState(
+                    selectedFile =
+                        ProjectFileInfo(
+                            "main.go",
+                            "base",
+                            "main.go",
+                            language = "Go",
+                            sizeBytes = 1,
+                            lineCount = 1,
+                            modifiedAt = "",
+                            binary = false)),
+            review =
+                DraftReviewState(
+                    draft = draft,
+                    editor = editableDraft(draft),
+                    benchmark =
+                        BenchmarkEvidenceState(
+                            catalog = catalog,
+                            selected = choice,
+                            discovery = BenchmarkDiscoveryOutcome.Loaded,
+                            comparison = comparison)))
     listOf(Triple(1440, 900, 1f), Triple(800, 400, 1.5f)).forEach { (width, height, scale) ->
       ComposeVisualFixture(width, height, scale) {
             PerformanceWorkspacePane(
@@ -4259,7 +4307,8 @@ class DesktopVisualLayoutTest {
                     resultIndexFixture(),
                     benchmarkComparison = comparison,
                     expectedBenchmarkIdentity = identity,
-                    selectedBenchmark = choice),
+                    selectedBenchmark = choice,
+                    benchmarkEligibility = benchmarkEligibility(snapshot)),
                 PerformanceWorkspaceActions(
                     {}, {}, FindingActions({}, { _, _ -> }, {}), openSource = {}))
           }
@@ -4372,6 +4421,28 @@ class DesktopVisualLayoutTest {
     val cases =
         listOf(
             "missing" to current.copy(projectState = ProjectWorkspaceState()),
+            "file-mismatch" to
+                current.copy(
+                    selection =
+                        current.selection.copy(
+                            selectedFile = current.selectedFile!!.copy(contentHash = "changed"))),
+            "project-mismatch" to
+                current.copy(
+                    projectState =
+                        current.projectState.copy(
+                            project = current.project!!.copy(projectRevision = "changed"))),
+            "selection-cleared" to
+                withEvidence(
+                    BenchmarkEvidenceState(
+                        catalog = catalog, discovery = BenchmarkDiscoveryOutcome.Loaded)),
+            "argv-changed" to
+                withEvidence(
+                    BenchmarkEvidenceState(
+                        catalog =
+                            catalog.copy(
+                                benchmarks = listOf(choice.copy(command = choice.command + "-v"))),
+                        selected = choice.copy(command = choice.command + "-v"),
+                        discovery = BenchmarkDiscoveryOutcome.Loaded)),
             "dirty" to
                 current.copy(
                     review =
@@ -4463,9 +4534,9 @@ class DesktopVisualLayoutTest {
         val evidence = snapshot.review.benchmark
         val eligibility = benchmarkEligibility(snapshot)
         val identity =
-            benchmarkEvidenceIdentity(snapshot.review).takeIf {
-              eligibility.candidate is BenchmarkCandidateDecision.Ready
-            }
+            (eligibility.candidate as? BenchmarkCandidateDecision.Ready)
+                ?.draft
+                ?.let(::goBenchmarkComparisonIdentity)
         val status =
             performanceBenchmarkStatusPresentation(
                 comparison,
@@ -4581,7 +4652,10 @@ class DesktopVisualLayoutTest {
                   fixture.hasText("BenchmarkRun"), "Retained measurement values remain readable")
               val assessment =
                   performanceBenchmarkPresentation(
-                      comparison, identity, evidence.selected, status.priorEvidence)
+                      comparison,
+                      identity,
+                      evidence.selected.takeIf { eligibility.canCompare },
+                      status.priorEvidence)
               assertTrue(fixture.hasText(assessment.stateLabel))
               fixture.revealTextFullyWithin(assessment.summary, "result-overview")
               fixture.assertTextFits(assessment.summary, maxLines = 15)

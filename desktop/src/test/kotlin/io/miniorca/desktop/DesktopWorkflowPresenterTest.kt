@@ -3604,7 +3604,10 @@ class DesktopWorkflowPresenterTest {
                     page,
                     state.index,
                     benchmarkComparison = state.review.benchmark.comparison,
-                    expectedBenchmarkIdentity = benchmarkEvidenceIdentity(state.review),
+                    expectedBenchmarkIdentity =
+                        (benchmarkEligibility(state).candidate as? BenchmarkCandidateDecision.Ready)
+                            ?.draft
+                            ?.let(::goBenchmarkComparisonIdentity),
                     benchmarkCatalog = state.review.benchmark.catalog,
                     selectedBenchmark = state.review.benchmark.selected,
                     benchmarkEligibility = benchmarkEligibility(state),

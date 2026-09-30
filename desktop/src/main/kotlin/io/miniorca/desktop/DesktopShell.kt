@@ -1373,6 +1373,7 @@ private fun DesktopCanvas(
   val workspace = appState.workspace
   val performancePage = appState.analysisResultPage("performance")
   val performanceBrowser = resultBrowsers.stateFor(performancePage)
+  val benchmarkDecision = benchmarkEligibility(appState)
   EditorArea(
       content = {
         ContentPane(
@@ -1416,13 +1417,16 @@ private fun DesktopCanvas(
                             page = performancePage,
                             index = appState.index,
                             benchmarkComparison = appState.review.benchmark.comparison,
-                            expectedBenchmarkIdentity = benchmarkEvidenceIdentity(appState.review),
+                            expectedBenchmarkIdentity =
+                                (benchmarkDecision.candidate as? BenchmarkCandidateDecision.Ready)
+                                    ?.draft
+                                    ?.let(::goBenchmarkComparisonIdentity),
                             benchmarkCatalog = appState.review.benchmark.catalog,
                             selectedBenchmark = appState.review.benchmark.selected,
                             benchmarkDiscovery = appState.review.benchmark.discovery,
                             benchmarkAdmission = appState.review.benchmark.admission,
                             benchmarkLatestOutcome = appState.review.benchmark.latestOutcome,
-                            benchmarkEligibility = benchmarkEligibility(appState),
+                            benchmarkEligibility = benchmarkDecision,
                             browser = performanceBrowser),
                     security =
                         SecurityWorkspacePaneState(

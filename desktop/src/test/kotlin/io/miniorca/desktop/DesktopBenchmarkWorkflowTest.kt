@@ -916,7 +916,10 @@ class DesktopBenchmarkWorkflowTest {
       assertTrue(decision.canDiscover)
       assertTrue(decision.canCompare)
       assertEquals(
-          goBenchmarkComparisonIdentity(draft()), benchmarkEvidenceIdentity(harness.state.review))
+          goBenchmarkComparisonIdentity(draft()),
+          (decision.candidate as? BenchmarkCandidateDecision.Ready)
+              ?.draft
+              ?.let(::goBenchmarkComparisonIdentity))
       harness.response = TransportResponse(200, Json.encodeToString(comparison))
       harness.workflow.compareSelectedGoBenchmark()
       harness.completeRequest()

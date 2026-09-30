@@ -141,7 +141,11 @@ class PerformanceWorkspaceTest {
     assertTrue(unsupported.summary.contains("unsupported status future"))
     val completed =
         performanceBenchmarkStatusPresentation(
-            prior, prior.identity(), choice, latestOutcome = initial.review.benchmark.latestOutcome)
+            prior,
+            prior.identity(),
+            choice,
+            eligibility = benchmarkEligibility(benchmarkCandidateFixture(prior)),
+            latestOutcome = initial.review.benchmark.latestOutcome)
     assertEquals("Measured · selected benchmark", completed.stateLabel)
     assertFalse(completed.priorEvidence)
     val partialResponse =
@@ -184,7 +188,9 @@ class PerformanceWorkspaceTest {
     assertTrue(
         prior.summary.startsWith("Prior comparison only; it does not confirm the latest attempt."))
     assertTrue(prior.insights.all { it.startsWith("Prior observation:") })
-    assertEquals(current.rows, prior.rows)
+    current.metrics.forEach { metric ->
+      assertTrue(prior.rows.contains(metric.label to metric.display(historical = true)))
+    }
     assertFalse(prior.isMeasured)
   }
 
@@ -193,6 +199,7 @@ class PerformanceWorkspaceTest {
     val comparison = comparison()
     val selectedChoice =
         GoBenchmarkChoice(comparison.benchmark, comparison.command, comparison.scope)
+    val eligibility = benchmarkEligibility(benchmarkCandidateFixture(comparison))
 
     assertEquals(
         "Not measured · explicit local execution",
@@ -204,10 +211,12 @@ class PerformanceWorkspaceTest {
             .stateLabel)
     assertEquals(
         "Measured · selected benchmark",
-        performanceBenchmarkStatusPresentation(comparison, comparison.identity(), selectedChoice)
+        performanceBenchmarkStatusPresentation(
+                comparison, comparison.identity(), selectedChoice, eligibility = eligibility)
             .stateLabel)
     assertTrue(
-        performanceBenchmarkStatusPresentation(comparison, comparison.identity(), selectedChoice)
+        performanceBenchmarkStatusPresentation(
+                comparison, comparison.identity(), selectedChoice, eligibility = eligibility)
             .summary
             .contains("does not measure this model suggestion"))
     assertEquals(
@@ -220,7 +229,8 @@ class PerformanceWorkspaceTest {
         performanceBenchmarkStatusPresentation(
                 comparison.copy(status = "unavailable", reason = "No compatible benchmark"),
                 comparison.identity(),
-                null)
+                selectedChoice,
+                eligibility = eligibility)
             .stateLabel)
     for ((status, label) in
         listOf("failed" to "Not measured · failed", "canceled" to "Not measured · canceled")) {
@@ -228,7 +238,8 @@ class PerformanceWorkspaceTest {
           performanceBenchmarkStatusPresentation(
               comparison.copy(status = status, reason = "Execution $status"),
               comparison.identity(),
-              selectedChoice)
+              selectedChoice,
+              eligibility = eligibility)
       assertEquals(label, presentation.stateLabel)
       assertTrue(presentation.summary.contains("does not measure this model suggestion"))
     }
@@ -238,7 +249,8 @@ class PerformanceWorkspaceTest {
                 comparison.copy(
                     candidate = GoBenchmarkMeasurement(comparison.candidate!!.samples.take(4))),
                 comparison.identity(),
-                null)
+                selectedChoice,
+                eligibility = eligibility)
             .stateLabel)
     assertEquals(
         "Inconclusive · incomplete memory evidence",
@@ -250,7 +262,8 @@ class PerformanceWorkspaceTest {
                               if (index == 0) sample.withoutMemoryMetrics() else sample
                             })),
                 comparison.identity(),
-                null)
+                selectedChoice,
+                eligibility = eligibility)
             .stateLabel)
   }
 
@@ -488,7 +501,8 @@ class PerformanceWorkspaceTest {
             }"""
                 .trimIndent())
 
-    val presentation = performanceBenchmarkPresentation(comparison, comparison.identity())
+    val presentation =
+        performanceBenchmarkPresentation(comparison, comparison.identity(), comparison.choice())
 
     assertEquals("Measured · selected benchmark", presentation.stateLabel)
     assertTrue(presentation.isMeasured)
@@ -504,7 +518,8 @@ class PerformanceWorkspaceTest {
   @Test
   fun benchmarkPresentationMarksNoisyAndIncompleteEvidenceAsInconclusive() {
     val noisy = comparison(candidateNanoseconds = listOf(80.0, 80.0, 80.0, 80.0, 120.0))
-    val noisyPresentation = performanceBenchmarkPresentation(noisy, noisy.identity())
+    val noisyPresentation =
+        performanceBenchmarkPresentation(noisy, noisy.identity(), noisy.choice())
 
     assertEquals("Inconclusive · noisy samples", noisyPresentation.stateLabel)
     assertTrue(noisyPresentation.inconclusive)
@@ -514,7 +529,8 @@ class PerformanceWorkspaceTest {
 
     val incomplete =
         noisy.copy(candidate = GoBenchmarkMeasurement(noisy.candidate!!.samples.take(4)))
-    val incompletePresentation = performanceBenchmarkPresentation(incomplete, incomplete.identity())
+    val incompletePresentation =
+        performanceBenchmarkPresentation(incomplete, incomplete.identity(), incomplete.choice())
 
     assertEquals(
         "Inconclusive · incomplete measurement evidence", incompletePresentation.stateLabel)
@@ -530,7 +546,9 @@ class PerformanceWorkspaceTest {
                     List(5) { benchmarkSample(100.0, bytes = 0, allocations = 0) }),
         )
     assertFalse(
-        performanceBenchmarkPresentation(zeroAllocation, zeroAllocation.identity()).inconclusive)
+        performanceBenchmarkPresentation(
+                zeroAllocation, zeroAllocation.identity(), zeroAllocation.choice())
+            .inconclusive)
   }
 
   @Test
@@ -547,7 +565,9 @@ class PerformanceWorkspaceTest {
 
     val presentation =
         performanceBenchmarkPresentation(
-            memoryRegressionWithMissingSample, memoryRegressionWithMissingSample.identity())
+            memoryRegressionWithMissingSample,
+            memoryRegressionWithMissingSample.identity(),
+            memoryRegressionWithMissingSample.choice())
 
     assertEquals("Inconclusive · incomplete memory evidence", presentation.stateLabel)
     assertTrue(presentation.inconclusive)
@@ -576,7 +596,8 @@ class PerformanceWorkspaceTest {
             )
 
     val presentation =
-        performanceBenchmarkPresentation(missingMemoryEvidence, missingMemoryEvidence.identity())
+        performanceBenchmarkPresentation(
+            missingMemoryEvidence, missingMemoryEvidence.identity(), missingMemoryEvidence.choice())
 
     assertEquals("Inconclusive · incomplete memory evidence", presentation.stateLabel)
     assertFalse(presentation.isMeasured)
@@ -604,7 +625,10 @@ class PerformanceWorkspaceTest {
             )
 
     val presentation =
-        performanceBenchmarkPresentation(opposingMemoryEvidence, opposingMemoryEvidence.identity())
+        performanceBenchmarkPresentation(
+            opposingMemoryEvidence,
+            opposingMemoryEvidence.identity(),
+            opposingMemoryEvidence.choice())
 
     assertEquals("Inconclusive · opposing memory signals", presentation.stateLabel)
     assertFalse(presentation.isMeasured)
@@ -628,8 +652,11 @@ class PerformanceWorkspaceTest {
             candidate = GoBenchmarkMeasurement(List(5) { benchmarkSample(90.0, 4, 0) }),
         )
 
-    val unchanged = performanceBenchmarkPresentation(zeroToZero, zeroToZero.identity())
-    val increased = performanceBenchmarkPresentation(zeroToPositive, zeroToPositive.identity())
+    val unchanged =
+        performanceBenchmarkPresentation(zeroToZero, zeroToZero.identity(), zeroToZero.choice())
+    val increased =
+        performanceBenchmarkPresentation(
+            zeroToPositive, zeroToPositive.identity(), zeroToPositive.choice())
 
     assertEquals("0 → 0 · no change from zero", unchanged.rows.single { it.first == "B/op" }.second)
     assertEquals("0 → 4 · from zero to 4", increased.rows.single { it.first == "B/op" }.second)
@@ -651,7 +678,8 @@ class PerformanceWorkspaceTest {
         val partial = GoBenchmarkMeasurement(values.map { benchmarkSample(it, 10, 1) })
         val evidence =
             if (partialBase) full.copy(base = partial) else full.copy(candidate = partial)
-        val presentation = performanceBenchmarkPresentation(evidence, full.identity())
+        val presentation =
+            performanceBenchmarkPresentation(evidence, full.identity(), full.choice())
         val time = presentation.metrics.first()
         val side = if (partialBase) time.base else time.candidate
         assertEquals(BenchmarkMetricAvailability.Partial, side.availability)
@@ -682,7 +710,8 @@ class PerformanceWorkspaceTest {
       for (measurement in listOf(null, GoBenchmarkMeasurement())) {
         val evidence =
             if (missingBase) full.copy(base = measurement) else full.copy(candidate = measurement)
-        val presentation = performanceBenchmarkPresentation(evidence, full.identity())
+        val presentation =
+            performanceBenchmarkPresentation(evidence, full.identity(), full.choice())
         val expected =
             if (measurement == null) BenchmarkMetricAvailability.MissingMeasurement
             else BenchmarkMetricAvailability.EmptySamples
@@ -719,7 +748,8 @@ class PerformanceWorkspaceTest {
                             benchmarkSample(90.0, 6, 6).copy(bytesPerOperation = null),
                             benchmarkSample(90.0, 6, 8).copy(allocationsPerOperation = null),
                             benchmarkSample(90.0, 6, 10).withoutMemoryMetrics())))
-    val presentation = performanceBenchmarkPresentation(evidence, evidence.identity())
+    val presentation =
+        performanceBenchmarkPresentation(evidence, evidence.identity(), evidence.choice())
     val bytes = presentation.metrics.single { it.label == "B/op" }.candidate
     val allocations = presentation.metrics.single { it.label == "allocs/op" }.candidate
     assertEquals(listOf(0.0, 2.0, 6.0), bytes.validValues)
@@ -752,7 +782,8 @@ class PerformanceWorkspaceTest {
         val samples = GoBenchmarkMeasurement(List(4) { valid } + invalid)
         val evidence =
             if (invalidBase) full.copy(base = samples) else full.copy(candidate = samples)
-        val presentation = performanceBenchmarkPresentation(evidence, full.identity())
+        val presentation =
+            performanceBenchmarkPresentation(evidence, full.identity(), full.choice())
         assertEquals("Inconclusive · invalid samples", presentation.stateLabel)
         assertFalse(presentation.isMeasured)
         assertTrue(presentation.inconclusive)
@@ -782,7 +813,7 @@ class PerformanceWorkspaceTest {
     }
     val allInvalid =
         full.copy(candidate = GoBenchmarkMeasurement(List(5) { valid.copy(iterations = 0) }))
-    val unavailable = performanceBenchmarkPresentation(allInvalid, full.identity())
+    val unavailable = performanceBenchmarkPresentation(allInvalid, full.identity(), full.choice())
     assertTrue(unavailable.metrics.all { it.candidate.median == null })
     assertFalse(unavailable.isMeasured)
   }
@@ -791,28 +822,33 @@ class PerformanceWorkspaceTest {
   fun tenPercentRelativeRangeIsInclusiveButGreaterRangesAreInconclusive() {
     val boundary = comparison(listOf(95.0, 100.0, 100.0, 100.0, 105.0))
     val noisy = comparison(listOf(95.0, 100.0, 100.0, 100.0, 105.01))
-    assertTrue(performanceBenchmarkPresentation(boundary, boundary.identity()).isMeasured)
+    assertTrue(
+        performanceBenchmarkPresentation(boundary, boundary.identity(), boundary.choice())
+            .isMeasured)
     assertEquals(
         "Inconclusive · noisy samples",
-        performanceBenchmarkPresentation(noisy, noisy.identity()).stateLabel)
+        performanceBenchmarkPresentation(noisy, noisy.identity(), noisy.choice()).stateLabel)
   }
 
   @Test
   fun freshnessAndTerminalStatusDoNotPreventMeasurementExtraction() {
     val full = comparison()
     val partial = full.copy(candidate = GoBenchmarkMeasurement(full.candidate!!.samples.take(2)))
-    val current = performanceBenchmarkPresentation(partial, full.identity())
+    val current = performanceBenchmarkPresentation(partial, full.identity(), full.choice())
     for (identity in listOf(null, full.identity().copy(draftHash = "changed"))) {
-      val stale = performanceBenchmarkPresentation(partial, identity)
+      val stale = performanceBenchmarkPresentation(partial, identity, full.choice())
       assertEquals(current.metrics, stale.metrics)
-      assertEquals(current.rows, stale.rows)
+      current.metrics.forEach { metric ->
+        assertTrue(stale.rows.contains(metric.label to metric.display(historical = true)))
+      }
       assertFalse(stale.isMeasured)
       assertTrue(stale.isStale)
-      assertTrue(stale.summary.contains("Recorded assessment"))
+      assertTrue(stale.summary.contains("Historical assessment"))
     }
     for (status in listOf("failed", "canceled", "unavailable", "unknown")) {
       val terminal =
-          performanceBenchmarkPresentation(partial.copy(status = status), full.identity())
+          performanceBenchmarkPresentation(
+              partial.copy(status = status), full.identity(), full.choice())
       assertEquals(current.metrics, terminal.metrics)
       assertEquals(current.rows, terminal.rows)
       assertFalse(terminal.isMeasured)
@@ -834,7 +870,9 @@ class PerformanceWorkspaceTest {
                   performancePageFixture(),
                   null,
                   benchmarkComparison = partial,
-                  expectedBenchmarkIdentity = partial.identity()),
+                  expectedBenchmarkIdentity = partial.identity(),
+                  selectedBenchmark = partial.choice(),
+                  benchmarkEligibility = benchmarkEligibility(benchmarkCandidateFixture(partial))),
               benchmarkActions { requests++ })
         }
         .use { fixture ->
@@ -843,7 +881,8 @@ class PerformanceWorkspaceTest {
           fixture.render()
           fixture.clickDescription("Expand Measurement details")
           fixture.render("f22-partial-median-evidence")
-          val rows = performanceBenchmarkPresentation(partial, partial.identity()).rows
+          val rows =
+              performanceBenchmarkPresentation(partial, partial.identity(), partial.choice()).rows
           assertTrue(fixture.hasText(rows.single { it.first == "ns/op" }.second))
           assertTrue(fixture.hasText(rows.single { it.first == "B/op" }.second))
           assertTrue(fixture.hasText("Inconclusive · incomplete measurement evidence"))
@@ -856,7 +895,7 @@ class PerformanceWorkspaceTest {
     val comparison = comparison()
     val staleIdentity = comparison.identity().copy(draftHash = "new-candidate-hash")
 
-    val stale = performanceBenchmarkPresentation(comparison, staleIdentity)
+    val stale = performanceBenchmarkPresentation(comparison, staleIdentity, comparison.choice())
     assertEquals("Stale · candidate identity changed", stale.stateLabel)
     assertTrue(stale.isStale)
     assertFalse(stale.isMeasured)
@@ -877,30 +916,183 @@ class PerformanceWorkspaceTest {
     val unavailable =
         performanceBenchmarkPresentation(
             comparison.copy(status = "unavailable", reason = "No compatible benchmark"),
-            comparison.identity())
+            comparison.identity(),
+            comparison.choice())
     assertEquals("Not measured · unavailable", unavailable.stateLabel)
     assertEquals("No compatible benchmark", unavailable.summary)
     assertFalse(unavailable.isMeasured)
   }
 
   @Test
-  fun benchmarkEvidenceIdentityRequiresAnApplicableValidatedDraft() {
-    val applicable =
-        comparison()
-            .identityDraft(
-                DeclarationValidation(
-                    applicable = true,
-                    scopeMode = "strict_symbol",
-                    diff = UnifiedDiff("internal/work.go", "internal/work.go")))
-    val unavailable = applicable.copy(validation = applicable.validation?.copy(applicable = false))
+  fun currentClaimsRequireFullCandidateAndExactSelectedBenchmarkIdentity() {
+    val comparison = comparison()
+    val current =
+        performanceBenchmarkPresentation(comparison, comparison.identity(), comparison.choice())
+    assertTrue(current.isMeasured)
+    val identity = comparison.identity()
+    val changedIdentities =
+        listOf(
+            identity.copy(draftId = "other"),
+            identity.copy(draftRevision = identity.draftRevision + 1),
+            identity.copy(draftHash = "other"),
+            identity.copy(projectId = "other"),
+            identity.copy(projectRevision = "other"),
+            identity.copy(baseFileHash = "other"),
+            identity.copy(targetPath = "other.go"))
+    for (changed in changedIdentities) {
+      val stale = performanceBenchmarkPresentation(comparison, changed, comparison.choice())
+      assertTrue(stale.isStale)
+      assertFalse(stale.isMeasured)
+      assertEquals(current.metrics, stale.metrics)
+    }
+    for (choice in
+        listOf(
+            null,
+            comparison.choice().copy(name = "BenchmarkOther"),
+            comparison.choice().copy(scope = "other-scope"),
+            comparison.choice().copy(command = comparison.command + "-v"))) {
+      val stale = performanceBenchmarkPresentation(comparison, identity, choice)
+      assertTrue(stale.isStale)
+      assertFalse(stale.isMeasured)
+      assertEquals(current.metrics, stale.metrics)
+      current.metrics.forEach { metric ->
+        assertTrue(stale.rows.contains(metric.label to metric.display(historical = true)))
+      }
+      assertTrue(stale.summary.contains("Historical assessment"))
+      assertTrue(stale.insights.all { it.startsWith("Historical observation:") })
+    }
+  }
 
-    assertNotNull(
-        benchmarkEvidenceIdentity(
-            DraftReviewState(draft = applicable, editor = editableDraft(applicable))))
-    assertEquals(
-        null,
-        benchmarkEvidenceIdentity(
-            DraftReviewState(draft = unavailable, editor = editableDraft(unavailable))))
+  @Test
+  fun authoritativeEligibilityRevokesCurrentClaimsWithoutHidingRetainedValues() {
+    val comparison = comparison()
+    val current = benchmarkCandidateFixture(comparison)
+    val draft = current.review.draft!!
+    val catalog = current.review.benchmark.catalog!!
+    val cases =
+        listOf(
+            current.copy(selection = FileSelectionState()),
+            current.copy(
+                selection =
+                    current.selection.copy(
+                        selectedFile = current.selectedFile!!.copy(path = "other.go"))),
+            current.copy(
+                selection =
+                    current.selection.copy(
+                        selectedFile = current.selectedFile!!.copy(contentHash = "changed"))),
+            current.copy(
+                projectState =
+                    current.projectState.copy(
+                        project = current.project!!.copy(projectId = "other"))),
+            current.copy(
+                projectState =
+                    current.projectState.copy(
+                        project = current.project!!.copy(projectRevision = "other"))),
+            current.copy(
+                review =
+                    current.review.copy(
+                        editor = current.review.editor!!.copy(status = DraftEditorStatus.Dirty))),
+            current
+                .reduce(
+                    DesktopEvent.DraftLoaded(
+                        draft.copy(validation = draft.validation!!.copy(applicable = false))))
+                .reduce(DesktopEvent.GoBenchmarkSelected(comparison.choice())),
+            current.reduce(DesktopEvent.GoBenchmarkDiscoveryStarted),
+            current.reduce(DesktopEvent.GoBenchmarkDiscoveryInvalidated),
+            current.reduce(DesktopEvent.GoBenchmarkCatalogLoaded(catalog)),
+            current.copy(
+                review =
+                    current.review.copy(
+                        benchmark =
+                            current.review.benchmark.copy(
+                                catalog = catalog.copy(draftHash = "foreign")))),
+            current.copy(
+                review =
+                    current.review.copy(
+                        benchmark =
+                            current.review.benchmark.copy(
+                                selected = comparison.choice().copy(command = listOf("other"))))))
+    for (snapshot in cases) {
+      val eligibility = benchmarkEligibility(snapshot)
+      assertFalse(eligibility.canCompare)
+      val identity =
+          (eligibility.candidate as? BenchmarkCandidateDecision.Ready)
+              ?.draft
+              ?.let(::goBenchmarkComparisonIdentity)
+      val stale =
+          performanceBenchmarkPresentation(
+              snapshot.review.benchmark.comparison!!,
+              identity,
+              snapshot.review.benchmark.selected.takeIf { eligibility.canCompare })
+      assertTrue(stale.isStale)
+      assertFalse(stale.isMeasured)
+      assertEquals(100.0, stale.metrics.first().base.median)
+      assertEquals(90.0, stale.metrics.first().candidate.median)
+      if (eligibility.candidate is BenchmarkCandidateDecision.Blocked) {
+        assertEquals(null, identity)
+        assertEquals("Stale · no current candidate", stale.stateLabel)
+      }
+    }
+    for (workspace in Workspace.entries) {
+      val navigated = current.reduce(DesktopEvent.WorkspaceSelected(workspace))
+      assertEquals(benchmarkEligibility(current), benchmarkEligibility(navigated))
+      assertEquals(current.review.benchmark, navigated.review.benchmark)
+    }
+  }
+
+  @Test
+  fun selectingAnotherPerformanceFindingPreservesCurrentBenchmarkClaimsWithoutRequests() {
+    val comparison = comparison()
+    val snapshot = benchmarkCandidateFixture(comparison)
+    val initialPage = performancePageFixture()
+    val report = initialPage.results!!.performance.single()
+    val page =
+        initialPage.copy(
+            section =
+                initialPage.section.copy(
+                    results =
+                        initialPage.results!!.copy(
+                            performance =
+                                listOf(
+                                    report.copy(
+                                        findings =
+                                            report.findings +
+                                                report.findings
+                                                    .single()
+                                                    .copy(
+                                                        id = "other",
+                                                        title = "Other recommendation"))))))
+    val browser = newResultBrowserState(page)
+    var requests = 0
+    ComposeVisualFixture(1600, 1000) {
+          PerformanceWorkspacePane(
+              PerformanceWorkspacePaneState(
+                  page,
+                  null,
+                  benchmarkComparison = comparison,
+                  expectedBenchmarkIdentity = comparison.identity(),
+                  selectedBenchmark = comparison.choice(),
+                  benchmarkEligibility = benchmarkEligibility(snapshot),
+                  browser = browser),
+              benchmarkActions { requests++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Inspect Avoid repeated allocation")
+          fixture.render()
+          assertTrue(fixture.hasText("Measured · selected benchmark"))
+          fixture.clickDescription("Inspect Other recommendation")
+          fixture.render()
+          assertTrue(fixture.hasText("Measured · selected benchmark"))
+          fixture.clickDescription("Expand Explore benchmark evidence")
+          fixture.render()
+          fixture.clickDescription("Expand Measurement details")
+          fixture.render("f22-finding-selection-current-evidence")
+          assertTrue(fixture.hasText("Benchmark evidence"))
+          assertTrue(fixture.hasText("CPU is lower for the selected benchmark."))
+          assertFalse(fixture.hasText("Prior benchmark evidence"))
+          assertEquals(0, requests)
+        }
   }
 
   @Test
@@ -1255,14 +1447,11 @@ class PerformanceWorkspaceTest {
           selectBenchmark = { action() },
           runBenchmark = action)
 
-  private fun benchmarkCandidateFixture(): DesktopState {
+  private fun benchmarkCandidateFixture(evidence: GoBenchmarkComparison? = null): DesktopState {
     val draft =
-        comparison()
-            .identityDraft(
-                DeclarationValidation(
-                    true,
-                    "strict_symbol",
-                    diff = UnifiedDiff("internal/work.go", "internal/work.go")))
+        (evidence ?: comparison()).identityDraft(
+            DeclarationValidation(
+                true, "strict_symbol", diff = UnifiedDiff("internal/work.go", "internal/work.go")))
     return DesktopState(
         projectState =
             ProjectWorkspaceState(
@@ -1283,8 +1472,31 @@ class PerformanceWorkspaceTest {
                         lineCount = 1,
                         modifiedAt = "",
                         binary = false)),
-        review = DraftReviewState(draft = draft, editor = editableDraft(draft)))
+        review =
+            DraftReviewState(
+                draft = draft,
+                editor = editableDraft(draft),
+                benchmark =
+                    if (evidence == null) BenchmarkEvidenceState()
+                    else
+                        BenchmarkEvidenceState(
+                            catalog =
+                                GoBenchmarkCatalog(
+                                    draftId = draft.id,
+                                    draftRevision = draft.revision,
+                                    draftHash = draft.hash,
+                                    projectId = draft.projectId,
+                                    projectRevision = draft.projectRevision,
+                                    baseFileHash = draft.baseFileHash,
+                                    targetPath = draft.targetPath,
+                                    available = true,
+                                    benchmarks = listOf(evidence.choice())),
+                            selected = evidence.choice(),
+                            comparison = evidence,
+                            discovery = BenchmarkDiscoveryOutcome.Loaded)))
   }
+
+  private fun GoBenchmarkComparison.choice() = GoBenchmarkChoice(benchmark, command, scope)
 
   private fun GoBenchmarkComparison.identity(): GoBenchmarkComparisonIdentity =
       assertNotNull(goBenchmarkComparisonIdentity(identityDraft()))
@@ -1313,6 +1525,7 @@ class PerformanceWorkspaceTest {
           baseFileHash = "base-hash",
           targetPath = "internal/work.go",
           benchmark = "BenchmarkWork",
+          scope = "work-scope",
           status = "completed",
           command = listOf("go", "test", "-benchtime", "100ms", "-benchmem"),
           base = GoBenchmarkMeasurement(List(5) { benchmarkSample(100.0, 10, 1) }),
