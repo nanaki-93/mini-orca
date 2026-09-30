@@ -3817,13 +3817,13 @@ class DesktopWorkflowPresenterTest {
   @Test
   fun unavailableBenchmarkResponseRevokesScopeAuthorityAndRetainsPriorEvidence() {
     val prior = Json.decodeFromString<GoBenchmarkComparison>(benchmarkComparisonJson())
+    val unavailable = unavailableBenchmarkComparisonJson(scope = "recomputed-scope")
     val presenter = presenter { method, path, _ ->
       when (method to path) {
         "GET" to
             "/api/projects/current/drafts/draft/benchmarks?project_revision=revision&expected_revision=1&expected_hash=draft-hash" ->
             response(benchmarkCatalogJson(trusted = true))
-        "POST" to "/api/projects/current/drafts/draft/benchmarks" ->
-            response(unavailableBenchmarkComparisonJson(scope = "recomputed-scope"))
+        "POST" to "/api/projects/current/drafts/draft/benchmarks" -> response(unavailable)
         else -> error("unexpected request $method $path")
       }
     }
@@ -3838,8 +3838,8 @@ class DesktopWorkflowPresenterTest {
       presenter.compareSelectedGoBenchmark()
 
       eventually {
-        presenter.snapshot.value.state.review.benchmark.admission is
-            BenchmarkAdmissionOutcome.Failed
+        presenter.snapshot.value.state.review.benchmark.latestOutcome?.status ==
+            BenchmarkComparisonStatus.Unavailable
       }
 
       val evidence = presenter.snapshot.value.state.review.benchmark
@@ -3848,10 +3848,12 @@ class DesktopWorkflowPresenterTest {
       assertNull(evidence.catalog)
       assertNull(evidence.selected)
       assertEquals(BenchmarkDiscoveryOutcome.Invalidated, evidence.discovery)
+      assertEquals(BenchmarkAdmissionOutcome.Idle, evidence.admission)
       assertEquals(
-          BenchmarkAdmissionOutcome.Failed(
-              "displayed benchmark scope changed Refresh compatible benchmarks and select again."),
-          evidence.admission)
+          Json.decodeFromString<GoBenchmarkComparison>(unavailable),
+          evidence.latestOutcome?.response)
+      assertFalse(benchmarkEligibility(presenter.snapshot.value.state).canCompare)
+      assertFalse(presenter.snapshot.value.state.loading)
       assertNull(presenter.snapshot.value.state.jobs.error)
     } finally {
       presenter.close()
