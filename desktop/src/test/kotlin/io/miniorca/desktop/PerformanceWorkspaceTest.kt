@@ -340,6 +340,63 @@ class PerformanceWorkspaceTest {
   }
 
   @Test
+  fun recordedDetailsPreserveSparseIdentityFlagsAndRawMissingVersusZero() {
+    val sparse = GoBenchmarkComparison()
+    val rows = performanceBenchmarkRecordedRows(sparse).toMap()
+    assertTrue(rows.values.all { it == "not recorded" })
+    assertEquals(
+        "unavailable · measurement not returned",
+        performanceBenchmarkSampleRows(sparse).toMap()["Baseline returned samples"])
+    for (command in
+        listOf(
+            listOf("go", "test", "-count", "5", "-benchtime", "100ms", "-benchmem", "false"),
+            listOf("go", "test", "-count=5", "-benchtime=100ms", "-benchmem=false"))) {
+      val recorded = performanceBenchmarkRecordedRows(sparse.copy(command = command)).toMap()
+      assertEquals("5", recorded["Recorded -count"])
+      assertEquals("100ms", recorded["Recorded -benchtime"])
+      assertEquals("false", recorded["Recorded -benchmem"])
+      assertEquals(
+          performanceBenchmarkArgv(command), recorded["Recorded comparison argv (read-only)"])
+    }
+    assertEquals(
+        "true",
+        performanceBenchmarkRecordedRows(sparse.copy(command = listOf("-benchmem")))
+            .toMap()["Recorded -benchmem"])
+    val samples =
+        performanceBenchmarkSampleRows(
+                sparse.copy(
+                    base =
+                        GoBenchmarkMeasurement(
+                            listOf(GoBenchmarkSample(7, 12.5), GoBenchmarkSample(0, 0.0, 0, 0))),
+                    candidate = GoBenchmarkMeasurement()))
+            .toMap()
+    assertEquals(
+        "iterations=7; ns/op=12.5; B/op=unavailable; allocs/op=unavailable",
+        samples["Baseline sample 1"])
+    assertEquals("iterations=0; ns/op=0.0; B/op=0; allocs/op=0", samples["Baseline sample 2"])
+    assertEquals("0", samples["Candidate returned samples"])
+  }
+
+  @Test
+  fun copiedEvidenceIncludesOnlyDisplayedRecordedDetailsNotReplacementCommand() {
+    val evidence =
+        GoBenchmarkComparison(
+            command = listOf("go", "test", "", "a b"),
+            base = GoBenchmarkMeasurement(listOf(GoBenchmarkSample(2, 10.0, 0, null))))
+    val replacement = GoBenchmarkChoice("Other", listOf("replacement"), "other")
+    val presentation = performanceBenchmarkPresentation(evidence, null, replacement)
+    val collapsed = performanceBenchmarkCopyText(evidence, presentation, true, false, false)
+    assertFalse(collapsed.contains("argv["))
+    assertFalse(collapsed.contains("Baseline sample 1:"))
+    val expanded = performanceBenchmarkCopyText(evidence, presentation, true, true, true)
+    (performanceBenchmarkRecordedRows(evidence) + performanceBenchmarkSampleRows(evidence))
+        .forEach { (label, value) -> assertTrue(expanded.contains("$label: $value")) }
+    assertTrue(expanded.startsWith("Prior benchmark evidence"))
+    assertTrue(expanded.contains(performanceBenchmarkArgv(evidence.command)))
+    assertFalse(expanded.contains("replacement"))
+  }
+
+  @Test
   fun preparationExplainsMissingStaleAndAmbiguousEvidence() {
     val result = performanceResults(performancePageFixture()).single()
     val index = resultIndexFixture()
@@ -507,7 +564,7 @@ class PerformanceWorkspaceTest {
     assertEquals("Measured · selected benchmark", presentation.stateLabel)
     assertTrue(presentation.isMeasured)
     assertFalse(presentation.inconclusive)
-    assertTrue(presentation.conditions.contains("Target duration per sample: 100ms"))
+    assertTrue(presentation.conditions.contains("Recorded -benchtime: 100ms"))
     assertTrue(presentation.rows.contains("Workload" to "BenchmarkWork"))
     assertTrue(presentation.rows.any { it.first == "ns/op" && it.second.contains("-10.0%") })
     assertTrue(presentation.rows.any { it.first == "B/op" && it.second.contains("+20.0%") })

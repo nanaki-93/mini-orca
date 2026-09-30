@@ -4476,6 +4476,40 @@ class DesktopVisualLayoutTest {
                   fixture.revealTextFullyWithin(text, "result-overview")
                   fixture.assertTextFits(text, maxLines = 20)
                 }
+                if (name == "trade-off" && width == 1440) {
+                  assertFalse(fixture.hasText("Project ID: ${evidence.projectId}"))
+                  fixture.revealTextFullyWithin("Recorded conditions & identity", "result-overview")
+                  fixture.clickText("Recorded conditions & identity")
+                  fixture.render()
+                  performanceBenchmarkRecordedRows(evidence).forEach { (label, value) ->
+                    assertTrue(fixture.hasText("$label: $value"), label)
+                  }
+                  fixture.revealTextFullyWithin("Returned sample details", "result-overview")
+                  fixture.clickText("Returned sample details")
+                  fixture.render()
+                  performanceBenchmarkSampleRows(evidence).forEach { (label, value) ->
+                    assertTrue(fixture.hasText("$label: $value"), label)
+                  }
+                  fixture.revealTextFullyWithin(
+                      "Copy displayed benchmark evidence", "result-overview")
+                  fixture.clickText("Copy displayed benchmark evidence")
+                  fixture.render("f22-recorded-details-$width-$height-$scale")
+                  assertTrue(fixture.hasText("Displayed benchmark evidence copied."))
+                  assertEquals(
+                      performanceBenchmarkCopyText(
+                          evidence,
+                          assessment,
+                          status.priorEvidence || assessment.isStale,
+                          true,
+                          true),
+                      fixture.clipboardText())
+                  fixture.failClipboardWrites = true
+                  fixture.clickText("Copy displayed benchmark evidence")
+                  fixture.render()
+                  assertTrue(
+                      fixture.hasText("Could not copy benchmark evidence: Clipboard unavailable"))
+                  assertEquals(0, requests, "Clipboard failure remains local")
+                }
                 fixture.render("f22-medians-$name-expanded-$width-$height-$scale")
                 if (status.priorEvidence) {
                   assertTrue(fixture.hasText("Prior benchmark evidence"))
@@ -9995,6 +10029,7 @@ internal class ComposeVisualFixture(
     private val frameDurationNanos: Long = 80_000_000,
     content: @Composable () -> Unit,
 ) : AutoCloseable {
+  var failClipboardWrites = false
   private val clipboard =
       object : Clipboard {
         override val nativeClipboard = java.awt.datatransfer.Clipboard("visual-test")
@@ -10003,6 +10038,7 @@ internal class ComposeVisualFixture(
             nativeClipboard.getContents(null)?.let(::ClipEntry)
 
         override suspend fun setClipEntry(clipEntry: ClipEntry?) {
+          if (failClipboardWrites) throw IllegalStateException("Clipboard unavailable")
           nativeClipboard.setContents(clipEntry?.asAwtTransferable, null)
         }
       }
