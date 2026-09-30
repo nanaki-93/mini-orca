@@ -84,8 +84,9 @@ with keyboard focus.
    cannot open or prepare the new target. Same-target source inspection should
    retain the draft. Check that failed source reads cannot prefill. Keep triage
    separate. Performance hypotheses never claim measured speedup; Security rule
-   matches and model hypotheses remain distinct in their evidence. Bugs keeps
-   separately trusted verified Go scans.
+   matches and model hypotheses remain distinct in their evidence. For Bugs
+   execution and diagnostics, also perform the separate
+   [Verified Go scan native review](#verified-go-scan-native-review) below.
 
    In Performance, keyboard-select a typed opportunity and scroll the detail
    independently of the result list. At 800×650 and 1280×600, 125%/150% text,
@@ -268,6 +269,80 @@ with keyboard focus.
     record any clipping or unreachable actions. Color
     must supplement text labels for selection, severity and meaningful lifecycle
     states.
+
+## Verified Go scan native review
+
+This is a procedure to perform, not a record of completed observations. Use the
+[delivered scan behavior](README.md#verified-go-scan) as the expected contract.
+Use only a disposable root Go module whose code and tests you trust, isolated
+preferences and a fake provider for any import/Analysis work; no live provider is
+needed for the scan. Include an intentional test failure, a slow cancelable test
+and long diagnostic output in disposable cases. A copied workspace is not a
+sandbox: do not use untrusted code or tests with effects outside disposable data.
+
+Repeat the affected Bugs surface at standard/wide sizes and approximately
+800×400 and 800×650, at 100%, 125% and 150% text where the host permits. Record
+actual viewport, display density, text scale, runtime and input method; these are
+review conditions, not new app settings. Test with **Command and output** both
+collapsed and expanded, and scroll each nested diagnostic region at short height.
+
+1. Open Bugs without running checks. Read/copy the project ID/revision,
+   whole-project parser scope, `go vet ./...`, `go test ./...` and copied-workspace
+   execution warning. Exclude a file in **Analysis → Files** and return: the scan
+   still describes whole-project scope, not selected-file scope. Scope, warning,
+   status, blocked reasons and recovery must remain reachable with details
+   collapsed. Repeat with non-Go/unknown project metadata: the trust-and-run
+   action is disabled with a root-Go-module explanation, not an apparently valid
+   Start. If missing-identity or unread-status states cannot be produced on the
+   host, record them unobserved rather than treating fixture coverage as native.
+2. Tab/Shift+Tab to enabled scan actions and **Command and output**. Check visible
+   focus, Enter/Space activation and, with an enabled screen reader, names and
+   expanded/disabled states. Inspect retained diagnostics even when starting is
+   blocked. Expand/collapse by keyboard; switch project or replace the report and
+   check that obsolete expansion resets. No disclosure or focus change should
+   activate Start, Cancel, fix preparation or source editing.
+3. Select a finding, search/filter, navigate away/back, expand diagnostics and
+   select/copy output without activating execution. Observe request methods/routes
+   and an execution log when available: these passive actions must produce no
+   execution-trust POST, scan POST/DELETE, provider request or source write. Status
+   polling for a previously active scan may continue; read-only GETs are not a new
+   admission. Record how side effects were checked; if no transport/execution
+   evidence is available, mark that check unverified, not passed by appearance.
+4. Explicitly activate **Trust project-code execution & run checks** once. With
+   request recording available, verify execution-trust GET → execution-trust POST
+   (`confirm: true`) → scan POST for the current revision, with trust responses
+   matching project/revision and exactly `["go", "test", "./..."]`. No separate
+   checkbox or mock formatting control is expected. Check **Starting** immediately,
+   including with an old completed report, and no duplicate admission on repeated
+   activation. While running, keyboard-reach **Cancel checks**, activate once and
+   inspect **Cancellation requested** until a matching terminal report arrives;
+   do not label cancellation confirmed merely because DELETE returned.
+5. Inspect the intentional failure and canceled/partial evidence. **Completed**
+   must not hide a failed phase. Expand **Command and output**, inspect every
+   returned phase/state/argv, and select/copy the full available sanitized command
+   and output. Parser inspection must have no invented command exit result;
+   empty output and absent phases must not claim success. Use **Show full available
+   output**, reach the end by scrolling, copy text beyond the preview and return
+   with **Show preview**. Distinguish the UI preview limit from daemon truncation:
+   the latter's omitted text cannot be recovered. Long paths, commands and all
+   available text must remain reachable after resize. Tool evidence must remain
+   distinct from model suggestions and carry no general safety assurance.
+6. Where failures can be induced safely, inspect **Start unconfirmed**,
+   **Cancellation unconfirmed**, **Status unavailable** and **Live status
+   unavailable** beside retained evidence. Keyboard-activate **Refresh scan
+   status** when offered: it must read status, not grant trust, start again or
+   resend Cancel. Matching active status resumes polling; terminal status can
+   trigger a read-only findings refresh. Check enrichment failure retains rows
+   with an unavailable/stale warning. Record unknown phases, skipped outcomes,
+   workspace failures and foreign/obsolete responses as unobserved on the host
+   unless actually supplied and inspected; automated fake-response tests cover
+   these states separately without establishing native interaction.
+
+Record each actual observation and evidence path separately from offscreen
+renders and fake-transport tests. Mark unavailable native focus, clipboard,
+screen-reader, failure-injection or request-recording checks pending with their
+reason. Do not report a live-daemon, native-window or provider observation solely
+because fixtures rendered.
 
 Use Escape to dismiss only the top transient surface before canceling a request.
 With no transient surface or active request, Escape leaves source unchanged.
