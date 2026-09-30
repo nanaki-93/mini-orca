@@ -322,24 +322,17 @@ internal class DesktopBenchmarkWorkflow(
                 } ?: return@launch
             if (!isCurrentBenchmarkAction(request)) return@launch
             val responseMismatch = benchmarkResponseMismatch(comparison, draft, choice)
-            when {
-              comparison.status == "unavailable" ->
-                  failBenchmarkAdmission(
-                      comparison.reason.ifBlank {
-                        responseMismatch ?: "Benchmark comparison is unavailable."
-                      },
-                      rediscover = true)
-              responseMismatch != null ->
-                  failBenchmarkAdmission(responseMismatch, rediscover = true)
-              comparison.status != "completed" ->
-                  failBenchmarkAdmission(
-                      comparison.reason.ifBlank {
-                        "Benchmark comparison did not produce measurements."
-                      })
-              else -> {
-                dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(comparison))
-                dispatch(DesktopEvent.Status("Benchmark evidence is ready for review."))
-              }
+            // Sparse unavailability explains this current request without establishing evidence
+            // identity. Responses carrying measurements still require the normal association
+            // checks.
+            val sparseUnavailable =
+                comparison.status == "unavailable" &&
+                    comparison.base == null &&
+                    comparison.candidate == null
+            if (responseMismatch != null && !sparseUnavailable) {
+              failBenchmarkAdmission(responseMismatch, rediscover = true)
+            } else {
+              publishBenchmarkOutcome(comparison)
             }
           } catch (error: CancellationException) {
             if (isCurrentBenchmarkAction(request))
@@ -358,6 +351,29 @@ internal class DesktopBenchmarkWorkflow(
                 failBenchmarkAdmission(benchmarkTransportFailure(error))
           }
         }
+  }
+
+  private fun publishBenchmarkOutcome(comparison: GoBenchmarkComparison) {
+    val outcome = BenchmarkComparisonOutcome(comparison)
+    if (outcome.status == BenchmarkComparisonStatus.Unavailable)
+        dispatch(DesktopEvent.GoBenchmarkDiscoveryInvalidated)
+    dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(comparison))
+    val message =
+        when (outcome.status) {
+          BenchmarkComparisonStatus.Completed -> "Benchmark evidence is ready for review."
+          BenchmarkComparisonStatus.Canceled ->
+              comparison.reason.ifBlank { "The daemon canceled the benchmark comparison." }
+          BenchmarkComparisonStatus.Failed ->
+              comparison.reason.ifBlank {
+                "The daemon failed to complete the benchmark comparison."
+              }
+          BenchmarkComparisonStatus.Unavailable ->
+              "${comparison.reason.ifBlank { "Benchmark comparison is unavailable." }} Refresh compatible benchmarks and select again."
+          BenchmarkComparisonStatus.Unsupported ->
+              "Unsupported benchmark status ${comparison.status.ifBlank { "(not recorded)" }}; no successful comparison is confirmed." +
+                  comparison.reason.takeIf { it.isNotBlank() }?.let { " $it" }.orEmpty()
+        }
+    dispatch(DesktopEvent.Status(message))
   }
 
   private suspend fun admitBenchmarkExecution(request: BenchmarkActionRequest): Boolean {

@@ -624,6 +624,8 @@ class DesktopBenchmarkWorkflowTest {
       harness.completeRequest()
       assertEquals(BenchmarkAdmissionOutcome.Idle, harness.state.review.benchmark.admission)
       assertEquals(comparison, harness.state.review.benchmark.comparison)
+      assertEquals(
+          BenchmarkComparisonOutcome(comparison), harness.state.review.benchmark.latestOutcome)
       harness.response = TransportResponse(500, """{"message":"Comparison failed"}""")
       harness.workflow.compareSelectedGoBenchmark()
       harness.completeRequest()
@@ -633,7 +635,115 @@ class DesktopBenchmarkWorkflowTest {
           harness.state.review.benchmark.admission)
       assertFalse(harness.state.review.benchmark.running)
       assertEquals(comparison, harness.state.review.benchmark.comparison)
+      assertNull(
+          harness.state.review.benchmark.latestOutcome, "Transport failure is not a daemon outcome")
+      harness.completeRequest()
       assertEquals(listOf("POST", "POST"), harness.methods)
+    }
+  }
+
+  @Test
+  fun daemonTerminalOutcomesRemainDistinctAfterTrustedAndStagedAdmission() {
+    val statuses =
+        listOf(
+            "completed" to BenchmarkComparisonStatus.Completed,
+            "canceled" to BenchmarkComparisonStatus.Canceled,
+            "failed" to BenchmarkComparisonStatus.Failed,
+            "unavailable" to BenchmarkComparisonStatus.Unavailable,
+            "future-status" to BenchmarkComparisonStatus.Unsupported)
+    for (trusted in listOf(false, true)) {
+      for ((status, expected) in statuses) {
+        for (reason in listOf("", "Recorded daemon reason for $status")) {
+          Harness().use { harness ->
+            harness.selectBenchmark(trusted)
+            harness.dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(comparison))
+            val terminal =
+                comparison.copy(status = status, reason = reason, base = null, candidate = null)
+            if (!trusted) {
+              harness.enqueue(trust.copy(trusted = false))
+              harness.enqueue(trust)
+            }
+            harness.enqueue(terminal)
+            harness.workflow.compareSelectedGoBenchmark()
+            assertNull(harness.state.review.benchmark.latestOutcome)
+            harness.completeRequest()
+            val evidence = harness.state.review.benchmark
+            assertEquals(expected, evidence.latestOutcome?.status)
+            assertEquals(terminal, evidence.latestOutcome?.response)
+            assertEquals(
+                comparison, evidence.comparison, "No measurements must retain prior evidence")
+            assertEquals(BenchmarkAdmissionOutcome.Idle, evidence.admission)
+            assertFalse(evidence.running)
+            assertFalse(harness.state.loading)
+            assertNull(harness.state.jobs.error)
+            assertTrue(harness.events.none { it is DesktopEvent.GoBenchmarkComparisonFailed })
+            val message = harness.events.filterIsInstance<DesktopEvent.Status>().last().message
+            if (status != "completed" && reason.isNotBlank()) assertTrue(message.contains(reason))
+            if (expected == BenchmarkComparisonStatus.Unsupported) {
+              assertTrue(message.contains("Unsupported benchmark status future-status"))
+              assertTrue(message.contains("no successful comparison is confirmed"))
+            }
+            if (expected == BenchmarkComparisonStatus.Unavailable) {
+              assertNull(evidence.catalog)
+              assertNull(evidence.selected)
+              assertFalse(benchmarkEligibility(harness.state).canCompare)
+              assertTrue(message.contains("Refresh compatible benchmarks and select again."))
+            } else {
+              assertEquals(choice, evidence.selected)
+            }
+            harness.completeRequest()
+            assertEquals(
+                if (trusted) listOf("POST") else listOf("GET", "POST", "POST"), harness.methods)
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun sparseUnavailableExplainsCurrentAttemptWithoutFillingIdentityOrReplacingMeasurements() {
+    val responses =
+        listOf(
+            GoBenchmarkComparison(status = "unavailable", reason = "Candidate is invalid"),
+            comparison.copy(
+                status = "unavailable",
+                reason = "Workspace scope changed",
+                projectId = "",
+                baseFileHash = "",
+                scope = "recomputed-scope",
+                base = null,
+                candidate = null))
+    for (prior in listOf(null, comparison)) {
+      for (terminal in responses) {
+        Harness().use { harness ->
+          harness.selectBenchmark()
+          if (prior != null) harness.dispatch(DesktopEvent.GoBenchmarkComparisonLoaded(prior))
+          harness.enqueue(terminal)
+          harness.workflow.compareSelectedGoBenchmark()
+          harness.completeRequest()
+          val evidence = harness.state.review.benchmark
+          assertEquals(BenchmarkComparisonStatus.Unavailable, evidence.latestOutcome?.status)
+          assertEquals(terminal, evidence.latestOutcome?.response, "Recorded metadata stays sparse")
+          assertEquals(prior, evidence.comparison)
+          assertEquals(BenchmarkAdmissionOutcome.Idle, evidence.admission)
+          assertEquals(BenchmarkDiscoveryOutcome.Invalidated, evidence.discovery)
+          assertNull(evidence.catalog)
+          assertNull(evidence.selected)
+          assertFalse(benchmarkEligibility(harness.state).canCompare)
+          assertTrue(harness.events.none { it is DesktopEvent.GoBenchmarkComparisonFailed })
+          assertTrue(
+              harness.events
+                  .filterIsInstance<DesktopEvent.Status>()
+                  .last()
+                  .message
+                  .contains(terminal.reason))
+          harness.workflow.compareSelectedGoBenchmark()
+          harness.completeRequest()
+          assertEquals(
+              listOf("POST"), harness.methods, "Recovery cannot renew trust or retry implicitly")
+          assertEquals(terminal, harness.state.review.benchmark.latestOutcome?.response)
+        }
+      }
     }
   }
 
@@ -899,6 +1009,8 @@ class DesktopBenchmarkWorkflowTest {
           assertNull(harness.state.review.benchmark.catalog)
           assertNull(harness.state.review.benchmark.selected)
           assertEquals(comparison, harness.state.review.benchmark.comparison)
+          assertNull(
+              harness.state.review.benchmark.latestOutcome, "Trust failure is not a daemon outcome")
           assertNull(harness.state.jobs.error)
           harness.workflow.compareSelectedGoBenchmark()
           harness.completeRequest()
@@ -926,15 +1038,29 @@ class DesktopBenchmarkWorkflowTest {
   fun trustedCatalogRunsDirectlyOnceAndExpiredTrustNeverRenewsImplicitly() {
     Harness().use { harness ->
       harness.selectBenchmark()
-      harness.enqueue(
-          comparison.copy(status = "unavailable", reason = "Execution trust is required"))
+      val unavailable =
+          comparison.copy(
+              status = "unavailable",
+              reason = "Execution trust is required",
+              base = null,
+              candidate = null)
+      harness.enqueue(unavailable)
       harness.workflow.compareSelectedGoBenchmark()
       harness.workflow.compareSelectedGoBenchmark()
       harness.completeRequest()
       assertEquals(listOf("POST"), harness.methods)
       assertTrue(harness.requests.single().second.endsWith("/drafts/draft/benchmarks"))
-      assertTrue(harness.admissionFailure().contains("Execution trust is required"))
-      assertTrue(harness.admissionFailure().contains("Refresh compatible benchmarks"))
+      assertEquals(
+          BenchmarkComparisonStatus.Unavailable,
+          harness.state.review.benchmark.latestOutcome?.status)
+      assertEquals(unavailable, harness.state.review.benchmark.latestOutcome?.response)
+      assertEquals(BenchmarkAdmissionOutcome.Idle, harness.state.review.benchmark.admission)
+      assertTrue(
+          harness.events
+              .filterIsInstance<DesktopEvent.Status>()
+              .last()
+              .message
+              .contains("Refresh compatible benchmarks"))
       assertNull(harness.state.review.benchmark.catalog)
       assertNull(harness.state.review.benchmark.selected)
       assertNull(harness.state.review.benchmark.comparison)
@@ -956,8 +1082,8 @@ class DesktopBenchmarkWorkflowTest {
             comparison.copy(targetPath = "other.go"),
             comparison.copy(benchmark = "other"),
             comparison.copy(scope = "new-scope"),
-            comparison.copy(status = "unavailable", reason = "Workspace scope changed"),
-            GoBenchmarkComparison(status = "unavailable", reason = "Candidate is invalid"))
+            comparison.copy(status = "unavailable", scope = "recomputed-scope"),
+            comparison.copy(status = "unavailable", projectId = "other"))
         .forEach { rejected ->
           Harness().use { harness ->
             harness.selectBenchmark()
@@ -966,8 +1092,7 @@ class DesktopBenchmarkWorkflowTest {
             harness.workflow.compareSelectedGoBenchmark()
             harness.completeRequest()
             assertTrue(harness.admissionFailure().contains("Refresh compatible benchmarks"))
-            if (rejected.status == "unavailable")
-                assertTrue(harness.admissionFailure().contains(rejected.reason))
+            assertNull(harness.state.review.benchmark.latestOutcome)
             assertEquals(comparison, harness.state.review.benchmark.comparison)
             assertNull(harness.state.review.benchmark.catalog)
             assertNull(harness.state.review.benchmark.selected)
@@ -1273,6 +1398,8 @@ class DesktopBenchmarkWorkflowTest {
         val failure = harness.admissionFailure()
         assertTrue(failure.contains("Stage timed out"))
         assertEquals(stage == 2, failure.contains("Execution may have started"))
+        assertEquals(stage == 2, failure.contains("no new measurements were confirmed"))
+        assertNull(harness.state.review.benchmark.latestOutcome, "Timeout is not a daemon outcome")
         assertEquals(comparison, harness.state.review.benchmark.comparison)
         assertFalse(harness.state.review.benchmark.running)
         assertNull(harness.state.jobs.error)
@@ -1320,6 +1447,9 @@ class DesktopBenchmarkWorkflowTest {
         assertEquals(cancellation.message, completion?.message)
         assertEquals(BenchmarkAdmissionOutcome.Stopped, harness.state.review.benchmark.admission)
         assertNull(harness.state.review.benchmark.comparison)
+        assertNull(
+            harness.state.review.benchmark.latestOutcome,
+            "Local cancellation is not a daemon outcome")
         assertTrue(harness.events.none { it is DesktopEvent.GoBenchmarkComparisonFailed })
         assertEquals(stage + 1, harness.requests.size)
       }
