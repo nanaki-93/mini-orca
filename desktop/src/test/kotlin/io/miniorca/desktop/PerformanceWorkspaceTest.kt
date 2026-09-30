@@ -571,6 +571,167 @@ class PerformanceWorkspaceTest {
             DraftReviewState(draft = unavailable, editor = editableDraft(unavailable))))
   }
 
+  @Test
+  fun controlsUseCandidateEligibilityRatherThanRetainedMeasurementIdentity() {
+    val current = benchmarkCandidateFixture()
+    val cases =
+        listOf(
+            current.copy(projectState = ProjectWorkspaceState()),
+            current.copy(selection = FileSelectionState()),
+            current.copy(
+                selection =
+                    current.selection.copy(
+                        selectedFile = current.selectedFile!!.copy(contentHash = "changed"))),
+            current.copy(
+                review =
+                    current.review.copy(
+                        editor = current.review.editor!!.copy(status = DraftEditorStatus.Dirty))),
+            current.copy(
+                review =
+                    current.review.copy(
+                        editor =
+                            current.review.editor!!.copy(status = DraftEditorStatus.Validating))),
+            current.copy(
+                review =
+                    current.review.copy(
+                        editor = current.review.editor!!.copy(status = DraftEditorStatus.Invalid))),
+            current.copy(
+                review =
+                    current.review.copy(
+                        editor = current.review.editor!!.copy(status = DraftEditorStatus.Stale)))) +
+            current
+    cases.forEach { snapshot ->
+      val eligibility = benchmarkEligibility(snapshot)
+      var requests = 0
+      ComposeVisualFixture(1600, 1000) {
+            PerformanceWorkspacePane(
+                PerformanceWorkspacePaneState(
+                    performancePageFixture(),
+                    null,
+                    expectedBenchmarkIdentity = goBenchmarkComparisonIdentity(current.review.draft),
+                    benchmarkEligibility = eligibility),
+                benchmarkActions { requests++ })
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.clickDescription("Expand Explore benchmark evidence")
+            fixture.render()
+            eligibility.discoveryBlockedReason?.let { assertTrue(fixture.hasText(it)) }
+            assertEquals(!eligibility.canDiscover, fixture.isDisabled("List compatible benchmarks"))
+            assertEquals(0, requests)
+            if (eligibility.canDiscover) {
+              fixture.clickText("List compatible benchmarks")
+              assertEquals(1, requests)
+            }
+          }
+    }
+  }
+
+  @Test
+  fun controlsBlockStaleOrIncompleteExactChoicesAndEnableOnlyAuthoritativeReadiness() {
+    val current = benchmarkCandidateFixture()
+    val draft = current.review.draft!!
+    val choice = GoBenchmarkChoice("BenchmarkWork", listOf("go", "test", "."), "scope")
+    val catalog =
+        GoBenchmarkCatalog(
+            draftId = draft.id,
+            draftRevision = draft.revision,
+            draftHash = draft.hash,
+            projectId = draft.projectId,
+            projectRevision = draft.projectRevision,
+            baseFileHash = draft.baseFileHash,
+            targetPath = draft.targetPath,
+            available = true,
+            trusted = true,
+            benchmarks = listOf(choice))
+    val ready =
+        BenchmarkEvidenceState(
+            catalog = catalog, selected = choice, discovery = BenchmarkDiscoveryOutcome.Loaded)
+    val cases =
+        listOf(
+            ready.copy(selected = choice.copy(command = listOf("other"))),
+            ready.copy(selected = choice.copy(scope = "other")),
+            ready.copy(catalog = catalog.copy(projectRevision = "other")),
+            ready.copy(discovery = BenchmarkDiscoveryOutcome.Invalidated)) +
+            listOf(
+                    choice.copy(name = " "),
+                    choice.copy(scope = " "),
+                    choice.copy(command = emptyList()))
+                .map {
+                  ready.copy(catalog = catalog.copy(benchmarks = listOf(it)), selected = it)
+                } +
+            ready
+    cases.forEach { evidence ->
+      val eligibility =
+          benchmarkEligibility(current.copy(review = current.review.copy(benchmark = evidence)))
+      var requests = 0
+      ComposeVisualFixture(1600, 1000) {
+            PerformanceWorkspacePane(
+                PerformanceWorkspacePaneState(
+                    performancePageFixture(),
+                    null,
+                    expectedBenchmarkIdentity = goBenchmarkComparisonIdentity(draft),
+                    benchmarkCatalog = evidence.catalog,
+                    selectedBenchmark = evidence.selected,
+                    benchmarkEligibility = eligibility),
+                benchmarkActions { requests++ })
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.clickDescription("Expand Explore benchmark evidence")
+            fixture.render()
+            assertEquals(!eligibility.canCompare, fixture.isDisabled("Run selected benchmark"))
+            eligibility.comparisonBlockedReason?.let { assertTrue(fixture.hasText(it)) }
+            assertEquals(0, requests, "Rendering and disclosure do not activate an action")
+            if (eligibility.canCompare) {
+              fixture.clickText("Run selected benchmark")
+              assertEquals(1, requests)
+            }
+          }
+    }
+  }
+
+  private fun benchmarkActions(action: () -> Unit) =
+      PerformanceWorkspaceActions(
+          prepareOptimization = {},
+          openAnalysis = {},
+          semanticActions = FindingActions({}, { _, _ -> }, {}),
+          openSource = {},
+          loadBenchmarks = action,
+          selectBenchmark = { action() },
+          runBenchmark = action)
+
+  private fun benchmarkCandidateFixture(): DesktopState {
+    val draft =
+        comparison()
+            .identityDraft(
+                DeclarationValidation(
+                    true,
+                    "strict_symbol",
+                    diff = UnifiedDiff("internal/work.go", "internal/work.go")))
+    return DesktopState(
+        projectState =
+            ProjectWorkspaceState(
+                project =
+                    performancePageFixture()
+                        .project!!
+                        .copy(
+                            projectId = draft.projectId, projectRevision = draft.projectRevision)),
+        selection =
+            FileSelectionState(
+                selectedFile =
+                    ProjectFileInfo(
+                        draft.targetPath,
+                        draft.baseFileHash,
+                        "work.go",
+                        language = "Go",
+                        sizeBytes = 1,
+                        lineCount = 1,
+                        modifiedAt = "",
+                        binary = false)),
+        review = DraftReviewState(draft = draft, editor = editableDraft(draft)))
+  }
+
   private fun GoBenchmarkComparison.identity(): GoBenchmarkComparisonIdentity =
       assertNotNull(goBenchmarkComparisonIdentity(identityDraft()))
 

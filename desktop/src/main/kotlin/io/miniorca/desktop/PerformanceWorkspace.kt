@@ -71,7 +71,7 @@ internal fun PerformanceWorkspacePane(
                   PerformanceBenchmarkControls(
                       state.benchmarkCatalog,
                       state.selectedBenchmark,
-                      state.expectedBenchmarkIdentity != null,
+                      state.benchmarkEligibility,
                       state.benchmarkRunning,
                       actions)
                   state.benchmarkComparison?.let { comparison ->
@@ -468,7 +468,7 @@ internal fun performanceBenchmarkStatusPresentation(
 private fun PerformanceBenchmarkControls(
     catalog: GoBenchmarkCatalog?,
     selected: GoBenchmarkChoice?,
-    candidateAvailable: Boolean,
+    eligibility: BenchmarkEligibility,
     running: Boolean,
     actions: PerformanceWorkspaceActions,
 ) {
@@ -479,17 +479,24 @@ private fun PerformanceBenchmarkControls(
         stateLabel =
             when {
               running -> "Running in isolated copies"
-              catalog == null && candidateAvailable -> "List existing benchmarks"
+              catalog == null && eligibility.canDiscover -> "List existing benchmarks"
               catalog == null -> "Validate a current candidate first"
               !catalog.available -> "Not available"
               selected == null -> "Select one benchmark"
+              !eligibility.canCompare -> "Comparison blocked"
               catalog.trusted -> "Ready to run"
               else -> "Local execution needs trust"
             },
         stateTint =
-            if (catalog?.available == false || !candidateAvailable) Warning else SecondaryText,
+            if (catalog?.available == false || !eligibility.canDiscover) Warning else SecondaryText,
     )
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+      val blockedReason =
+          if (catalog == null) eligibility.discoveryBlockedReason
+          else eligibility.comparisonBlockedReason
+      blockedReason?.let {
+        SelectionContainer { Text(it, color = Warning, fontSize = 11.sp, lineHeight = 16.sp) }
+      }
       if (catalog == null) {
         Text(
             "Listing compatible benchmarks is read-only and does not execute project code.",
@@ -498,7 +505,7 @@ private fun PerformanceBenchmarkControls(
             lineHeight = 16.sp)
         MiniOrcaButton(
             onClick = actions.loadBenchmarks,
-            enabled = candidateAvailable && !running,
+            enabled = eligibility.canDiscover && !running,
             tone = ActionTone.Neutral,
             modifier = Modifier.padding(top = 6.dp)) {
               Text("List compatible benchmarks", fontSize = 11.sp)
@@ -537,7 +544,7 @@ private fun PerformanceBenchmarkControls(
         }
         MiniOrcaButton(
             onClick = actions.runBenchmark,
-            enabled = candidateAvailable && !running,
+            enabled = eligibility.canCompare && !running,
             tone = ActionTone.Primary,
             modifier = Modifier.padding(top = 6.dp)) {
               Text(
@@ -559,6 +566,7 @@ internal data class PerformanceWorkspacePaneState(
     val benchmarkCatalog: GoBenchmarkCatalog? = null,
     val selectedBenchmark: GoBenchmarkChoice? = null,
     val benchmarkRunning: Boolean = false,
+    val benchmarkEligibility: BenchmarkEligibility = benchmarkEligibility(DesktopState()),
     val browser: ResultBrowserState = newResultBrowserState(page),
 )
 

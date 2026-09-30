@@ -1420,6 +1420,7 @@ private fun DesktopCanvas(
                             benchmarkCatalog = appState.review.benchmark.catalog,
                             selectedBenchmark = appState.review.benchmark.selected,
                             benchmarkRunning = appState.review.benchmark.running,
+                            benchmarkEligibility = benchmarkEligibility(appState),
                             browser = performanceBrowser),
                     security =
                         SecurityWorkspacePaneState(

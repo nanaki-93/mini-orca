@@ -8,6 +8,116 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 
+internal sealed interface BenchmarkCandidateDecision {
+  data class Ready(
+      val draft: DeclarationDraft,
+      val project: ProjectAnalysis,
+      val identity: WorkflowDraftIdentity,
+  ) : BenchmarkCandidateDecision
+
+  data class Blocked(val reason: String) : BenchmarkCandidateDecision
+}
+
+internal data class BenchmarkEligibility(
+    val candidate: BenchmarkCandidateDecision,
+    val selectionBlockedReason: String?,
+    val comparisonBlockedReason: String?,
+) {
+  val discoveryBlockedReason: String?
+    get() = (candidate as? BenchmarkCandidateDecision.Blocked)?.reason
+
+  val canDiscover: Boolean
+    get() = discoveryBlockedReason == null
+
+  val canCompare: Boolean
+    get() = comparisonBlockedReason == null
+}
+
+/** The same read-only decision authorizes explicit actions and explains disabled controls. */
+internal fun benchmarkEligibility(
+    state: DesktopState,
+    choice: GoBenchmarkChoice? = state.review.benchmark.selected,
+): BenchmarkEligibility {
+  val candidate = benchmarkCandidateDecision(state)
+  val selectionReason =
+      when (candidate) {
+        is BenchmarkCandidateDecision.Blocked -> candidate.reason
+        is BenchmarkCandidateDecision.Ready ->
+            benchmarkSelectionBlockedReason(state.review.benchmark, candidate.identity, choice)
+      }
+  val comparisonReason =
+      selectionReason
+          ?: when {
+            choice!!.name.isBlank() -> "The selected benchmark has no name; refresh the catalog."
+            choice.scope.isBlank() ->
+                "The selected benchmark has no scope guard; refresh the catalog."
+            choice.command.isEmpty() -> "The selected benchmark has no argv; refresh the catalog."
+            else -> null
+          }
+  return BenchmarkEligibility(candidate, selectionReason, comparisonReason)
+}
+
+private fun benchmarkCandidateDecision(state: DesktopState): BenchmarkCandidateDecision {
+  val project =
+      state.project
+          ?: return BenchmarkCandidateDecision.Blocked("Open a project before listing benchmarks.")
+  val file =
+      state.selectedFile
+          ?: return BenchmarkCandidateDecision.Blocked(
+              "Select the candidate file before listing benchmarks.")
+  val draft =
+      state.review.draft
+          ?: return BenchmarkCandidateDecision.Blocked(
+              "Prepare and validate a draft before listing benchmarks.")
+  val editor = state.review.editor
+  val reason =
+      when {
+        editor?.status != DraftEditorStatus.Valid || draft.validation?.applicable != true ->
+            "Validate the exact current draft before listing or comparing benchmarks."
+        goBenchmarkComparisonIdentity(draft) == null ->
+            "The candidate identity is incomplete; refresh and validate the draft."
+        editor.serverDraft != draft ||
+            editor.declaration != draft.declaration ||
+            editor.imports != draft.imports ->
+            "The draft and editor candidate differ; validate the current draft again."
+        !draftEditorMatchesOpenFile(editor, file, project) ->
+            "The candidate does not match the current project, revision, file path or base hash; refresh and validate the draft."
+        else -> null
+      }
+  if (reason != null) return BenchmarkCandidateDecision.Blocked(reason)
+  return BenchmarkCandidateDecision.Ready(
+      draft,
+      project,
+      WorkflowDraftIdentity(
+          WorkflowFileIdentity(
+              WorkflowProjectIdentity(project.projectId, project.projectRevision),
+              file.path,
+              file.contentHash),
+          draft.id,
+          draft.revision,
+          draft.hash))
+}
+
+private fun benchmarkSelectionBlockedReason(
+    evidence: BenchmarkEvidenceState,
+    identity: WorkflowDraftIdentity,
+    choice: GoBenchmarkChoice?,
+): String? =
+    when {
+      evidence.discovery != BenchmarkDiscoveryOutcome.Loaded || evidence.catalog == null ->
+          "List compatible benchmarks for the current candidate before selecting or comparing."
+      !evidence.catalog.available ->
+          evidence.catalog.reason.ifBlank {
+            "No compatible benchmark is available; refresh the catalog."
+          }
+      !evidence.catalog.matches(identity) ->
+          "Benchmark catalog is stale; list compatible benchmarks again."
+      choice == null -> "Select one listed benchmark before comparing."
+      choice !in evidence.catalog.benchmarks ->
+          "Benchmark selection is stale; list compatible benchmarks and select an exact returned choice."
+      else -> null
+    }
+
 private data class BenchmarkActionRequest(
     val project: WorkflowProjectIdentity,
     val draft: WorkflowDraftIdentity,
@@ -65,8 +175,13 @@ internal class DesktopBenchmarkWorkflow(
 
   /** Lists trusted daemon-built benchmark choices. This GET never executes project code. */
   fun loadGoBenchmarks() {
-    val (draft, project, file) = currentBenchmarkDraft() ?: return
-    val identity = draftIdentity(draft, project, file)
+    val decision = benchmarkEligibility(state())
+    val candidate = decision.candidate as? BenchmarkCandidateDecision.Ready
+    if (candidate == null) {
+      dispatch(DesktopEvent.GoBenchmarkDiscoveryFailed(decision.discoveryBlockedReason!!))
+      return
+    }
+    val (draft, project, identity) = candidate
     cancel()
     val generation = benchmarkActionGeneration
     benchmarkCatalogJob =
@@ -75,7 +190,8 @@ internal class DesktopBenchmarkWorkflow(
             val catalog = io {
               api.goBenchmarkCatalog(draft.id, project.projectRevision, draft.revision, draft.hash)
             }
-            if (isCurrentBenchmarkCatalogAction(identity, generation) && catalog.matches(draft)) {
+            if (isCurrentBenchmarkCatalogAction(identity, generation) &&
+                catalog.matches(identity)) {
               dispatch(DesktopEvent.GoBenchmarkCatalogLoaded(catalog))
               dispatch(
                   DesktopEvent.Status(
@@ -101,11 +217,13 @@ internal class DesktopBenchmarkWorkflow(
   }
 
   fun selectGoBenchmark(choice: GoBenchmarkChoice) {
-    val state = state()
-    val catalog = state.review.benchmark.catalog ?: return
-    val draft = state.review.draft ?: return
-    if (!catalog.matches(draft) || choice !in catalog.benchmarks) return
-    if (state.review.benchmark.selected == choice) return
+    val current = state()
+    val decision = benchmarkEligibility(current, choice)
+    decision.selectionBlockedReason?.let {
+      dispatch(DesktopEvent.GoBenchmarkComparisonFailed(it))
+      return
+    }
+    if (current.review.benchmark.selected == choice) return
     benchmarkActionGeneration++
     benchmarkJob?.cancel()
     dispatch(DesktopEvent.GoBenchmarkSelected(choice))
@@ -115,18 +233,20 @@ internal class DesktopBenchmarkWorkflow(
    * The explicit action may trust local execution only after the displayed fixed argv is selected.
    */
   fun compareSelectedGoBenchmark() {
-    val (draft, project, file) = currentBenchmarkDraft() ?: return
-    val catalog = state().review.benchmark.catalog ?: return
-    val choice = state().review.benchmark.selected ?: return
-    if (!catalog.available || !catalog.matches(draft) || choice !in catalog.benchmarks) {
-      dispatch(
-          DesktopEvent.Failed("Benchmark selection is stale; list compatible benchmarks again."))
+    val current = state()
+    val decision = benchmarkEligibility(current)
+    decision.comparisonBlockedReason?.let {
+      dispatch(DesktopEvent.GoBenchmarkComparisonFailed(it))
       return
     }
+    val candidate = decision.candidate as BenchmarkCandidateDecision.Ready
+    val (draft, project, identity) = candidate
+    val catalog = current.review.benchmark.catalog!!
+    val choice = current.review.benchmark.selected!!
     val request =
         BenchmarkActionRequest(
             WorkflowProjectIdentity(project.projectId, project.projectRevision),
-            draftIdentity(draft, project, file),
+            identity,
             choice,
             ++benchmarkActionGeneration,
         )
@@ -193,6 +313,7 @@ internal class DesktopBenchmarkWorkflow(
           state().project?.let { WorkflowProjectIdentity(it.projectId, it.projectRevision) } ==
               request.project &&
           currentBenchmarkDraftIdentity() == request.draft &&
+          benchmarkEligibility(state()).canCompare &&
           state().review.benchmark.catalog?.matches(request.draft) == true &&
           state().review.benchmark.selected == request.choice
 
@@ -217,64 +338,21 @@ internal class DesktopBenchmarkWorkflow(
         else -> null
       }
 
-  private fun currentBenchmarkDraft(): Triple<DeclarationDraft, ProjectAnalysis, ProjectFileInfo>? {
-    val state = state()
-    val draft = state.review.draft ?: return null
-    val project = state.project ?: return null
-    val file = state.selectedFile ?: return null
-    if (state.review.editor?.status != DraftEditorStatus.Valid ||
-        draft.validation?.applicable != true ||
-        !draftEditorMatchesOpenFile(state.review.editor, file, project)) {
-      dispatch(DesktopEvent.Failed("Validate the current draft before comparing a benchmark."))
-      return null
-    }
-    return Triple(draft, project, file)
-  }
-
   private fun currentBenchmarkDraftIdentity(): WorkflowDraftIdentity? =
-      currentDraftIdentity()?.takeIf {
-        val draft = state().review.draft
-        state().review.editor?.status == DraftEditorStatus.Valid &&
-            draft?.validation?.applicable == true
-      }
-
-  private fun currentDraftIdentity(): WorkflowDraftIdentity? {
-    val current = state()
-    val draft = current.review.draft ?: return null
-    val project = current.project ?: return null
-    val file = current.selectedFile ?: return null
-    return draftIdentity(draft, project, file)
-  }
-
-  private fun draftIdentity(
-      draft: DeclarationDraft,
-      project: ProjectAnalysis,
-      file: ProjectFileInfo,
-  ): WorkflowDraftIdentity =
-      WorkflowDraftIdentity(
-          WorkflowFileIdentity(
-              WorkflowProjectIdentity(project.projectId, project.projectRevision),
-              file.path,
-              file.contentHash),
-          draft.id,
-          draft.revision,
-          draft.hash)
+      (benchmarkEligibility(state()).candidate as? BenchmarkCandidateDecision.Ready)?.identity
 
   private suspend fun <T> io(block: () -> T): T =
       withContext(ioDispatcher) { runInterruptible { block() } }
 }
 
-private fun GoBenchmarkCatalog.matches(draft: DeclarationDraft): Boolean =
-    draftId == draft.id &&
-        draftRevision == draft.revision &&
-        draftHash == draft.hash &&
-        projectId == draft.projectId &&
-        projectRevision == draft.projectRevision &&
-        baseFileHash == draft.baseFileHash &&
-        targetPath == draft.targetPath
-
 private fun GoBenchmarkCatalog.matches(identity: WorkflowDraftIdentity): Boolean =
-    draftId == identity.id && draftRevision == identity.revision && draftHash == identity.hash
+    draftId == identity.id &&
+        draftRevision == identity.revision &&
+        draftHash == identity.hash &&
+        projectId == identity.file.project.id &&
+        projectRevision == identity.file.project.revision &&
+        baseFileHash == identity.file.contentHash &&
+        targetPath == identity.file.path
 
 private fun GoBenchmarkComparison.matches(draft: DeclarationDraft): Boolean =
     draftId == draft.id &&
