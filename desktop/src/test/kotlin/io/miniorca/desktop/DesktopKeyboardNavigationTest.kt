@@ -2867,7 +2867,7 @@ class DesktopKeyboardNavigationTest {
           fixture.render()
           assertTrue(fixture.hasText("Models"))
           assertTrue(fixture.requestDescriptionFocus("Models · Configured model details"))
-          fixture.render()
+          fixture.awaitVisibleDescription("Models · Configured model details")
           val label = fixture.firstVisibleTextBounds("Models")
           assertTrue(label.top >= 0 && label.bottom <= 340)
           assertTrue(fixture.pressKey(Key.Enter))

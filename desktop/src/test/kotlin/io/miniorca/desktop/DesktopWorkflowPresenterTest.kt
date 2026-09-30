@@ -4509,12 +4509,14 @@ class DesktopWorkflowPresenterTest {
           presenter.snapshot.value.state.verifiedScan.operation)
       releasePoll.countDown()
       eventually {
-        presenter.snapshot.value.state.verifiedScan.read is VerifiedScanRead.PollUnavailable
+        presenter.snapshot.value.state.verifiedScan.read is VerifiedScanRead.PollUnavailable &&
+            presenter.snapshot.value.state.verifiedScan.operation is
+                VerifiedScanOperation.CancellationUnconfirmed
       }
       assertEquals(retained, presenter.snapshot.value.state.findings.scan)
-      assertEquals(
-          VerifiedScanOperation.CancellationRequested,
-          presenter.snapshot.value.state.verifiedScan.operation)
+      assertTrue(
+          presenter.snapshot.value.state.verifiedScan.operation
+              is VerifiedScanOperation.CancellationUnconfirmed)
       assertTrue(
           (presenter.snapshot.value.state.verifiedScan.read as VerifiedScanRead.PollUnavailable)
               .message
@@ -4527,6 +4529,101 @@ class DesktopWorkflowPresenterTest {
       releaseCancel.countDown()
       presenter.close()
       scope.cancel()
+    }
+  }
+
+  @Test
+  fun admittedScanWithLostCancellationObservationRecoversWithoutRepeatingMutation() {
+    for (lostStatus in
+        listOf(
+            TransportResponse(503, "poll offline"),
+            TransportResponse(204, ""),
+            response(
+                """{"project_id":"project","project_revision":"revision","status":"unknown"}"""),
+            response(
+                """{"project_id":"foreign","project_revision":"revision","status":"canceled"}"""))) {
+      val initialPoll = CountDownLatch(1)
+      val releaseInitialPoll = CountDownLatch(1)
+      val reads = AtomicInteger()
+      val requests = Collections.synchronizedList(mutableListOf<String>())
+      val presenter =
+          presenter(interceptTrust = false) { method, path, body ->
+            requests += "$method $path"
+            when (method to path) {
+              "GET" to "/api/projects/current/execution-trust?project_revision=revision" ->
+                  response(
+                      """{"project_id":"project","project_revision":"revision","trusted":false,"commands":[["go","test","./..."]]}""")
+              "POST" to "/api/projects/current/execution-trust" -> {
+                assertTrue(body.orEmpty().contains("\"confirm\":true"))
+                response(
+                    """{"project_id":"project","project_revision":"revision","trusted":true,"commands":[["go","test","./..."]]}""")
+              }
+              "POST" to "/api/projects/current/scan",
+              "DELETE" to "/api/projects/current/scan?project_revision=revision" ->
+                  response(
+                      """{"project_id":"project","project_revision":"revision","status":"running"}""")
+              "GET" to "/api/projects/current/scan?project_revision=revision" ->
+                  when (reads.incrementAndGet()) {
+                    1 -> {
+                      initialPoll.countDown()
+                      assertTrue(releaseInitialPoll.await(5, TimeUnit.SECONDS))
+                      response(
+                          """{"project_id":"project","project_revision":"revision","status":"running"}""")
+                    }
+                    2 -> lostStatus
+                    3 ->
+                        response(
+                            """{"project_id":"project","project_revision":"revision","status":"canceled","phases":[{"name":"tests","state":"canceled","command":["go","test","./..."],"output":"partial test output","exit_code":143}]}""")
+                    else -> error("Unexpected duplicate poll")
+                  }
+              "GET" to "/api/projects/current/findings?project_revision=revision" ->
+                  response(
+                      """{"findings":[{"id":"tool","category":"bugs","project_id":"project","project_revision":"revision","confidence":"tool_reported","location":{"path":"main.go"}}]}""")
+              else -> error("Unexpected $method $path")
+            }
+          }
+      try {
+        loadProject(presenter)
+        presenter.dispatch(DesktopEvent.VerifiedScanReadUpdated(VerifiedScanRead.Absent))
+        presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Bugs))
+        assertTrue(requests.isEmpty())
+        presenter.runVerifiedScan()
+        assertTrue(initialPoll.await(2, TimeUnit.SECONDS))
+        presenter.cancelVerifiedScan()
+        eventually {
+          presenter.snapshot.value.state.verifiedScan.operation is
+              VerifiedScanOperation.CancellationUnconfirmed
+        }
+        assertEquals(2, reads.get())
+        assertTrue(presenter.snapshot.value.state.findings.scan != null)
+        presenter.refreshVerifiedScanStatus()
+        eventually {
+          presenter.snapshot.value.state.findings.scan?.status == "canceled" &&
+              presenter.snapshot.value.state.verifiedScan.findingsRefresh ==
+                  VerifiedScanFindingsRefresh.Current
+        }
+        assertEquals(
+            VerifiedScanOperation.Idle, presenter.snapshot.value.state.verifiedScan.operation)
+        assertEquals(
+            "partial test output",
+            presenter.snapshot.value.state.findings.scan!!.phases.single().output)
+        assertEquals("tool", presenter.snapshot.value.state.projectBugFindings().single().id)
+        assertEquals(
+            listOf(
+                "GET /api/projects/current/execution-trust?project_revision=revision",
+                "POST /api/projects/current/execution-trust",
+                "POST /api/projects/current/scan",
+                "GET /api/projects/current/scan?project_revision=revision",
+                "DELETE /api/projects/current/scan?project_revision=revision",
+                "GET /api/projects/current/scan?project_revision=revision",
+                "GET /api/projects/current/scan?project_revision=revision",
+                "GET /api/projects/current/findings?project_revision=revision"),
+            requests.toList())
+        assertNull(presenter.snapshot.value.state.jobs.error)
+      } finally {
+        releaseInitialPoll.countDown()
+        presenter.close()
+      }
     }
   }
 

@@ -503,9 +503,13 @@ Use **Refresh scan status** after a read/operation failure or uncertain outcome.
 It reads scan status without granting trust, starting again or resending Cancel;
 a matching active report resumes polling. It is unavailable during a status read,
 Start or pending cancellation. Unread, confirmed absence, unavailable status and
-failed live polling stay distinct. Accepted terminal reports refresh tool
-findings; enrichment failure retains diagnostics and prior rows with a visible
-unavailable/stale warning rather than claiming current or zero findings. Foreign
+failed live polling stay distinct. If cancellation polling fails or ends without a
+matching terminal report (including absent, unknown or foreign status), cancellation
+becomes unconfirmed and status recovery is available; it does not resend Cancel.
+Read failures remain visible beside cancellation or unsupported-project explanations.
+Accepted terminal reports refresh tool findings; enrichment failure retains
+diagnostics and prior rows with a visible unavailable/stale warning rather than
+claiming current or zero findings. Foreign
 or obsolete responses cannot replace current scan evidence.
 
 **Command and output** reveals every returned phase in order, including

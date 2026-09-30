@@ -19,6 +19,49 @@ import kotlin.test.assertTrue
 
 class ResultWorkspaceLayoutTest {
   @Test
+  fun scanReadFailureRemainsVisibleBesideCancellationAndUnsupportedAvailability() {
+    val base = verifiedScanLayoutCases().first { it.first == "running" }.second
+    val message = "Live scan status could not be read: poll offline"
+    val states =
+        listOf(
+            base.copy(
+                scanState =
+                    base.scanState.copy(operation = VerifiedScanOperation.CancellationRequested)),
+            base.copy(
+                scanState =
+                    base.scanState.copy(
+                        operation =
+                            VerifiedScanOperation.CancellationUnconfirmed("Cancel timed out"))),
+            base.copy(project = base.project!!.copy(type = "python")))
+    for ((index, state) in states.withIndex()) {
+      var calls = 0
+      ComposeVisualFixture(800, 400, 1.5f) {
+            BugsWorkspacePane(
+                state.copy(
+                    scanState =
+                        state.scanState.copy(read = VerifiedScanRead.PollUnavailable(message))),
+                BugsWorkspaceActions(
+                    FindingActions({}, { _, _ -> }, {}),
+                    { calls++ },
+                    { calls++ },
+                    refreshScanStatus = { calls++ }))
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.revealTextFullyWithin("Live status unavailable: $message", "result-overview")
+            fixture.assertTextFits("Live status unavailable: $message", maxLines = 12)
+            assertEquals("Collapsed", fixture.descriptionState("Expand Command and output"))
+            if (state.scanState.operation != VerifiedScanOperation.CancellationRequested) {
+              fixture.revealTextFullyWithin("Refresh scan status", "result-overview")
+              fixture.assertTextFits("Refresh scan status")
+            }
+            fixture.render("f20-combined-read-error-$index-800-400-1.5")
+            assertEquals(0, calls)
+          }
+    }
+  }
+
+  @Test
   fun scanDisclosureResetsOnProjectRevisionAndReportReplacementButNotReadFeedback() {
     var state by
         mutableStateOf(verifiedScanLayoutCases().first { it.first == "failed-phase" }.second)
