@@ -318,6 +318,94 @@ class DraftReviewWorkflowTest {
             .eligible)
   }
 
+  @Test
+  fun optionalBenchmarkEvidenceDoesNotChangeCandidateCheckOrSourceReviewGuards() {
+    val validated =
+        draft(
+            2,
+            "validated",
+            DeclarationValidation(
+                true, "symbol_plus_imports", diff = UnifiedDiff("main.go", "main.go")),
+            "replace_symbol")
+    val checks =
+        DraftCheckReport(
+            "main.go",
+            true,
+            draftId = validated.id,
+            draftRevision = validated.revision,
+            draftHash = validated.hash)
+    val samples = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1000, 100.0, 10, 1) })
+    val completed =
+        GoBenchmarkComparison(
+            draftId = validated.id,
+            draftRevision = validated.revision,
+            draftHash = validated.hash,
+            projectId = validated.projectId,
+            projectRevision = validated.projectRevision,
+            targetPath = validated.targetPath,
+            baseFileHash = validated.baseFileHash,
+            benchmark = "BenchmarkRun",
+            status = "completed",
+            base = samples,
+            candidate = samples)
+    for ((label, evidence) in
+        listOf(
+            "absent" to BenchmarkEvidenceState(),
+            "completed" to BenchmarkEvidenceState(comparison = completed),
+            "inconclusive" to
+                BenchmarkEvidenceState(
+                    comparison = completed.copy(candidate = GoBenchmarkMeasurement())),
+            "failed" to
+                BenchmarkEvidenceState(
+                    comparison = completed,
+                    latestOutcome =
+                        BenchmarkComparisonOutcome(
+                            completed.copy(status = "failed", base = null, candidate = null))),
+            "stale" to BenchmarkEvidenceState(comparison = completed.copy(draftHash = "older")))) {
+      val ready =
+          DesktopState(
+              projectState = ProjectWorkspaceState(project()),
+              selection = FileSelectionState(selectedFile = file()),
+              review =
+                  DraftReviewState(
+                      draft = validated,
+                      editor = editableDraft(validated),
+                      checks = checks,
+                      benchmark = evidence))
+      fun eligible(state: DesktopState) =
+          draftReviewEligibility(
+                  state.review.editor,
+                  state.review.draft,
+                  state.review.checks,
+                  state.selectedFile,
+                  state.project,
+                  state.review.checkAttempt)
+              .eligible
+      assertTrue(eligible(ready), "$label is optional evidence")
+      val blocked =
+          listOf(
+              ready.reduce(
+                  DesktopEvent.DraftEdited(declaration = "func Run() error { return nil }")),
+              ready.copy(review = ready.review.copy(checks = null)),
+              ready.copy(review = ready.review.copy(checks = checks.copy(draftHash = "other"))),
+              ready.copy(
+                  review =
+                      ready.review.copy(
+                          draft = validated.copy(validation = null),
+                          editor = editableDraft(validated.copy(validation = null)))),
+              ready.copy(
+                  selection =
+                      ready.selection.copy(selectedFile = file().copy(contentHash = "changed"))),
+              ready.copy(
+                  projectState =
+                      ready.projectState.copy(project = project().copy(projectRevision = "next"))),
+              ready.reduce(DesktopEvent.ChecksStarted(1, CheckCandidate(validated))))
+      blocked.forEachIndexed { index, state ->
+        assertFalse(eligible(state), "$label cannot bypass guard $index")
+      }
+    }
+  }
+
   private fun draft(
       revision: Long,
       hash: String,
