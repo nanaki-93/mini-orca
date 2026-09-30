@@ -4516,13 +4516,13 @@ class DesktopVisualLayoutTest {
                         "Package working directory: .",
                         "Opaque scope guard (identity metadata): ${evidence.selected.scope}")
                 required.forEach { text ->
-                  fixture.revealTextFullyWithin(text, "benchmark-discovery-scroll")
+                  fixture.revealTextFullyWithin(text, "result-overview")
                   fixture.assertTextFits(text, maxLines = 3)
                 }
                 val argv = performanceBenchmarkArgv(evidence.selected.command)
                 if (argv.isNotEmpty()) {
                   argv.lines().forEach { argument ->
-                    fixture.revealTextFullyWithin(argument, "benchmark-discovery-scroll")
+                    fixture.revealTextFullyWithin(argument, "result-overview")
                     fixture.assertTextFits(argument, maxLines = 3)
                   }
                 } else {
@@ -4538,7 +4538,7 @@ class DesktopVisualLayoutTest {
                         "Trust lasts for this project revision in the daemon session.",
                         "Granting trust does not execute “go test ./...”.",
                         "The combined action requests the selected benchmark separately.")) {
-                  fixture.revealTextFullyWithin(text, "benchmark-discovery-scroll")
+                  fixture.revealTextFullyWithin(text, "result-overview")
                   fixture.assertTextFits(text, maxLines = 15)
                 }
                 val runLabel =
@@ -4549,13 +4549,13 @@ class DesktopVisualLayoutTest {
                           if (evidence.catalog!!.trusted) "Run selected benchmark"
                           else "Trust and run selected benchmark"
                     }
-                fixture.revealTextFullyWithin(runLabel, "benchmark-discovery-scroll")
+                fixture.revealTextFullyWithin(runLabel, "result-overview")
                 assertEquals(!eligibility.canCompare || active, fixture.isDisabled(runLabel))
                 fixture.render("f21-admission-$name-$width-$height-$scale")
               }
-              fixture.revealTextFullyWithin(recovery, "benchmark-discovery-scroll")
+              fixture.revealTextFullyWithin(recovery, "result-overview")
               fixture.assertTextFits(recovery)
-              fixture.revealTextFullyWithin(detailsLabel, "benchmark-discovery-scroll")
+              fixture.revealTextFullyWithin(detailsLabel, "result-overview")
               fixture.clickText(detailsLabel)
               fixture.render("f21-prior-$name-$width-$height-$scale")
               assertTrue(
@@ -4566,6 +4566,209 @@ class DesktopVisualLayoutTest {
                   fixture.hasText("BenchmarkRun"), "Retained measurement values remain readable")
               assertEquals(0, actions, "Rendering and disclosure must not discover, select or run")
             }
+      }
+    }
+  }
+
+  @Test
+  fun longBenchmarkCatalogAdmissionAndDiagnosticsUseOneReachableOverview() {
+    val path = "internal/" + "日本語-équipe-δοκιμή/".repeat(10) + "work.go"
+    val draft =
+        DeclarationDraft(
+            id = "draft",
+            revision = 7,
+            hash = "candidate",
+            projectId = "project-" + "équipe日本語".repeat(12),
+            projectRevision = "revision-" + "abcdef0123456789".repeat(12),
+            baseFileHash = "base",
+            targetPath = path,
+            declaration = "func Run() {}",
+            validation =
+                DeclarationValidation(true, "strict_symbol", diff = UnifiedDiff(path, path)))
+    val choices =
+        List(24) { number ->
+          val name = "Benchmark${number}_" + "日本語Workload".repeat(10)
+          GoBenchmarkChoice(
+              name,
+              listOf(
+                  "go",
+                  "test",
+                  ".",
+                  "-run",
+                  "^$",
+                  "-bench",
+                  "^$name$",
+                  "-count",
+                  "5",
+                  "-benchtime",
+                  "100ms",
+                  "-benchmem",
+                  "-timeout",
+                  "15s",
+                  "long argument with spaces 日本語-équipe ".repeat(12)),
+              "opaque:" + "日本語abcdef0123456789".repeat(12))
+        }
+    val catalog =
+        GoBenchmarkCatalog(
+            draftId = draft.id,
+            draftRevision = draft.revision,
+            draftHash = draft.hash,
+            projectId = draft.projectId,
+            projectRevision = draft.projectRevision,
+            baseFileHash = draft.baseFileHash,
+            targetPath = path,
+            available = true,
+            benchmarks = choices)
+    val current =
+        DesktopState(
+            projectState =
+                ProjectWorkspaceState(
+                    project =
+                        performancePageFixture()
+                            .project!!
+                            .copy(
+                                projectId = draft.projectId,
+                                projectRevision = draft.projectRevision)),
+            selection =
+                FileSelectionState(
+                    selectedFile =
+                        ProjectFileInfo(
+                            path,
+                            "base",
+                            "work.go",
+                            language = "Go",
+                            sizeBytes = 1,
+                            lineCount = 1,
+                            modifiedAt = "",
+                            binary = false)),
+            review =
+                DraftReviewState(
+                    draft = draft,
+                    editor = editableDraft(draft),
+                    benchmark =
+                        BenchmarkEvidenceState(
+                            catalog = catalog, discovery = BenchmarkDiscoveryOutcome.Loaded)))
+    val diagnostic =
+        "Comparison timed out; execution may have begun.\n" +
+            (1..18).joinToString("\n") {
+              "Diagnostic $it · 日本語-équipe · retry only after reviewing the current candidate."
+            } +
+            "\nRefresh compatible benchmarks to review the scope again."
+    for ((width, height) in
+        listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        for (density in
+            if (scale == 1.5f && width in listOf(800, 1280)) listOf(1f, 2f) else listOf(1f)) {
+          var snapshot by mutableStateOf(current)
+          var selections = 0
+          var discoveries = 0
+          var executions = 0
+          val label = "f21-long-$width-$height-$scale-${density}x"
+          val page = performancePageFixture()
+          val browser = newResultBrowserState(page)
+          ComposeVisualFixture(
+                  (width * density).toInt(), (height * density).toInt(), scale, density) {
+                    val evidence = snapshot.review.benchmark
+                    PerformanceWorkspacePane(
+                        PerformanceWorkspacePaneState(
+                            performancePageFixture(),
+                            resultIndexFixture(),
+                            expectedBenchmarkIdentity = goBenchmarkComparisonIdentity(draft),
+                            benchmarkCatalog = evidence.catalog,
+                            selectedBenchmark = evidence.selected,
+                            benchmarkDiscovery = evidence.discovery,
+                            benchmarkAdmission = evidence.admission,
+                            benchmarkEligibility = benchmarkEligibility(snapshot),
+                            browser = browser),
+                        PerformanceWorkspaceActions(
+                            { error("Layout prepared a fix") },
+                            { error("Layout opened analysis") },
+                            FindingActions(
+                                { error("Layout prepared a fix") },
+                                { _, _ -> error("Layout changed triage") },
+                                { error("Layout opened source") }),
+                            openSource = { error("Layout opened source") },
+                            loadBenchmarks = { discoveries++ },
+                            selectBenchmark = { choice ->
+                              selections++
+                              snapshot =
+                                  snapshot.copy(
+                                      review =
+                                          snapshot.review.copy(
+                                              benchmark =
+                                                  snapshot.review.benchmark.copy(
+                                                      selected = choice)))
+                            },
+                            runBenchmark = { executions++ }))
+                  }
+              .use { fixture ->
+                fixture.render()
+                fixture.clickDescription("Expand Explore benchmark evidence")
+                fixture.render("$label-catalog")
+                assertTrue(fixture.hasText("Select one listed benchmark before comparing."))
+                assertFalse(fixture.hasText("Daemon-returned argv (read-only)"))
+                fixture.assertTextOrder(choices.map { "Select · ${it.name}" })
+                for (choice in choices) {
+                  fixture.revealTextFullyWithin("Select · ${choice.name}", "result-overview")
+                  fixture.assertTextFits("Select · ${choice.name}", maxLines = 10)
+                }
+                assertEquals(0, selections, "Scrolling does not select")
+                fixture.clickText("Select · ${choices.last().name}")
+                fixture.render("$label-selected")
+                assertEquals(1, selections)
+                val required =
+                    performanceBenchmarkAdmissionRows(
+                            choices.last(), benchmarkEligibility(snapshot).candidate)
+                        .map { (key, value) -> "$key: $value" } +
+                        performanceBenchmarkArgv(choices.last().command).lines() +
+                        listOf(
+                            "Running benchmarks executes imported project code.",
+                            "Execution may have external effects, including file and network access.",
+                            "Baseline and candidate use copied workspaces; these are not a security sandbox.",
+                            "Trust contract (separate from selected argv): go test ./...",
+                            "This is broader than benchmark-only permission.",
+                            "Granting trust does not execute “go test ./...”.")
+                required.forEach { fixture.assertEveryTextLineReachable(it, "result-overview") }
+                fixture.revealTextFullyWithin("Trust and run selected benchmark", "result-overview")
+                fixture.assertTextFits("Trust and run selected benchmark")
+                assertFalse(fixture.isDisabled("Trust and run selected benchmark"))
+                fixture.render("$label-untrusted-action")
+                snapshot =
+                    snapshot.copy(
+                        review =
+                            snapshot.review.copy(
+                                benchmark =
+                                    snapshot.review.benchmark.copy(
+                                        catalog = catalog.copy(trusted = true))))
+                fixture.render()
+                fixture.revealTextFullyWithin("Run selected benchmark", "result-overview")
+                assertFalse(fixture.isDisabled("Run selected benchmark"))
+                fixture.render("$label-trusted-action")
+                snapshot =
+                    snapshot.copy(
+                        review =
+                            snapshot.review.copy(
+                                benchmark =
+                                    snapshot.review.benchmark.copy(
+                                        admission = BenchmarkAdmissionOutcome.Failed(diagnostic))))
+                fixture.render()
+                fixture.assertEveryTextLineReachable(diagnostic, "result-overview")
+                fixture.render("$label-diagnostic-tail")
+                fixture.revealTextFullyWithin("Refresh compatible benchmarks", "result-overview")
+                assertFalse(fixture.isDisabled("Refresh compatible benchmarks"))
+                fixture.render("$label-recovery")
+                fixture.resize((1024 * density).toInt(), (768 * density).toInt())
+                fixture.render()
+                fixture.revealTextFullyWithin("Run selected benchmark", "result-overview")
+                fixture.render("$label-resized-action")
+                assertFalse(
+                    fixture.hasText("Benchmark evidence"),
+                    "Optional measurement help stays collapsed")
+                assertEquals(1, selections)
+                assertEquals(0, discoveries, "Disclosure, scrolling and resize are read-only")
+                assertEquals(0, executions, "Reachability must not activate execution")
+              }
+        }
       }
     }
   }
@@ -10189,6 +10392,46 @@ internal class ComposeVisualFixture(
       render()
     }
     error("$label must fit within $scrollTag after scrolling")
+  }
+
+  fun assertTextOrder(labels: List<String>) {
+    val positions = labels.map { textNodes(it).single().positionInRoot.y }
+    positions.zipWithNext().forEach { (first, second) ->
+      assertTrue(first < second, "All choices must retain their returned order")
+    }
+  }
+
+  fun assertEveryTextLineReachable(label: String, scrollTag: String) {
+    fun node() =
+        textNodes(label)
+            .also { assertEquals(1, it.size, "Full text must be present: $label") }
+            .single()
+    val layouts = mutableListOf<TextLayoutResult>()
+    requireNotNull(node().config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action)
+        .invoke(layouts)
+    val layout = layouts.single()
+    assertEquals(
+        label.length,
+        layout.getLineEnd(layout.lineCount - 1),
+        "The complete value must be laid out")
+    assertFalse(layout.didOverflowWidth, "$label must wrap within the available width")
+    for (line in 0 until layout.lineCount) {
+      assertFalse(layout.isLineEllipsized(line), "$label line $line must not be truncated")
+      val viewport = taggedBounds(scrollTag)
+      repeat(10) {
+        val top = node().positionInRoot.y + layout.getLineTop(line)
+        val bottom = node().positionInRoot.y + layout.getLineBottom(line)
+        if (top < viewport.top || bottom > viewport.bottom) {
+          scrollBy((top + bottom) / 2f - viewport.center.y, scrollTag)
+          render()
+        }
+      }
+      val visibleTop = node().positionInRoot.y + layout.getLineTop(line)
+      val visibleBottom = node().positionInRoot.y + layout.getLineBottom(line)
+      assertTrue(
+          visibleTop >= viewport.top - 1f && visibleBottom <= viewport.bottom + 1f,
+          "$label line $line must be reachable inside $scrollTag: $visibleTop..$visibleBottom in $viewport")
+    }
   }
 
   fun assertTextWrapsAndTailIsReachable(label: String, scrollTag: String) {

@@ -5,11 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -64,41 +61,39 @@ internal fun PerformanceWorkspacePane(
             benchmarksExpanded,
             { benchmarksExpanded = !benchmarksExpanded },
             stateLabel = benchmarkStatus.stateLabel)
+        // Use the bounded result overview's scroll owner so long catalogs and required admission
+        // text do not compete with a second fixed-height viewport.
         if (benchmarksExpanded)
-            Column(
-                Modifier.fillMaxWidth()
-                    .heightIn(max = 260.dp)
-                    .testTag("benchmark-discovery-scroll")
-                    .verticalScroll(rememberScrollState())) {
-                  SelectionContainer {
-                    Text(
-                        benchmarkStatus.summary,
-                        color = SecondaryText,
-                        style = IdeTypography.compactBody,
-                        modifier = Modifier.padding(top = 4.dp))
-                  }
-                  PerformanceBenchmarkControls(
-                      state.benchmarkCatalog,
-                      state.selectedBenchmark,
-                      state.benchmarkEligibility,
-                      state.benchmarkDiscovery,
-                      state.benchmarkAdmission,
-                      actions)
-                  state.benchmarkComparison?.let { comparison ->
-                    IdeDisclosureHeader(
-                        if (benchmarkStatus.priorEvidence) "Prior measurement details"
-                        else "Measurement details",
-                        measurementDetailsExpanded,
-                        { measurementDetailsExpanded = !measurementDetailsExpanded },
-                        stateLabel = benchmarkStatus.stateLabel)
-                    if (measurementDetailsExpanded)
-                        PerformanceBenchmarkEvidence(
-                            comparison,
-                            state.expectedBenchmarkIdentity,
-                            state.selectedBenchmark,
-                            benchmarkStatus.priorEvidence)
-                  }
-                }
+            Column(Modifier.fillMaxWidth().testTag("benchmark-discovery-content")) {
+              SelectionContainer {
+                Text(
+                    benchmarkStatus.summary,
+                    color = SecondaryText,
+                    style = IdeTypography.compactBody,
+                    modifier = Modifier.padding(top = 4.dp))
+              }
+              PerformanceBenchmarkControls(
+                  state.benchmarkCatalog,
+                  state.selectedBenchmark,
+                  state.benchmarkEligibility,
+                  state.benchmarkDiscovery,
+                  state.benchmarkAdmission,
+                  actions)
+              state.benchmarkComparison?.let { comparison ->
+                IdeDisclosureHeader(
+                    if (benchmarkStatus.priorEvidence) "Prior measurement details"
+                    else "Measurement details",
+                    measurementDetailsExpanded,
+                    { measurementDetailsExpanded = !measurementDetailsExpanded },
+                    stateLabel = benchmarkStatus.stateLabel)
+                if (measurementDetailsExpanded)
+                    PerformanceBenchmarkEvidence(
+                        comparison,
+                        state.expectedBenchmarkIdentity,
+                        state.selectedBenchmark,
+                        benchmarkStatus.priorEvidence)
+              }
+            }
       }) { key ->
         val result = results.firstOrNull { it.row().key == key }
         if (result != null) PerformanceFindingDetails(result, state.index, actions)

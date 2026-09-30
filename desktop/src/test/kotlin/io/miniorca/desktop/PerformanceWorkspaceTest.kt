@@ -688,7 +688,7 @@ class PerformanceWorkspaceTest {
             }
             assertEquals(0, requests, "Rendering and disclosure do not activate an action")
             if (eligibility.canCompare) {
-              fixture.revealTextFullyWithin("Run selected benchmark", "benchmark-discovery-scroll")
+              fixture.revealTextFullyWithin("Run selected benchmark", "result-overview")
               fixture.clickText("Run selected benchmark")
               assertEquals(1, requests)
             }
