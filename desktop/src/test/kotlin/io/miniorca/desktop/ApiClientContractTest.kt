@@ -238,8 +238,38 @@ class ApiClientContractTest {
                   }
                 })
 
-    assertFalse(client.executionTrust("revision").trusted)
-    assertTrue(client.trustProjectExecution("revision").trusted)
+    assertEquals(
+        ExecutionTrust("project", "revision", false, listOf(listOf("go", "test", "./..."))),
+        client.executionTrust("revision"))
+    assertEquals(
+        ExecutionTrust("project", "revision", true, listOf(listOf("go", "test", "./..."))),
+        client.trustProjectExecution("revision"))
+  }
+
+  @Test
+  fun trustPostPreservesIncompleteOrRejectedAcknowledgmentsForAdmissionValidation() {
+    listOf(
+            """{}""" to ExecutionTrust(),
+            """{"project_id":"foreign","project_revision":"other","commands":[["go","test","."]]}""" to
+                ExecutionTrust("foreign", "other", false, listOf(listOf("go", "test", "."))))
+        .forEach { (response, expected) ->
+          val requests = mutableListOf<Triple<String, String, String?>>()
+          val client =
+              ApiClient(
+                  transport =
+                      DaemonTransport { method, path, body ->
+                        requests.add(Triple(method, path, body))
+                        TransportResponse(200, response)
+                      })
+          assertEquals(expected, client.trustProjectExecution("revision"))
+          assertEquals(
+              listOf(
+                  Triple<String, String, String?>(
+                      "POST",
+                      "/api/projects/current/execution-trust",
+                      """{"project_revision":"revision","confirm":true}""")),
+              requests)
+        }
   }
 
   @Test
