@@ -2,6 +2,7 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -25,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -439,7 +441,7 @@ private fun PerformanceBenchmarkEvidence(
   val copyScope = rememberCoroutineScope()
   var copyFeedback by remember(comparison) { mutableStateOf<String?>(null) }
   val historical = priorEvidence || presentation.isStale
-  Column(Modifier.fillMaxWidth()) {
+  Column(Modifier.fillMaxWidth().testTag("benchmark-measurement-evidence")) {
     IdePaneHeader(
         title =
             if (priorEvidence || presentation.isStale) "Prior benchmark evidence"
@@ -542,67 +544,107 @@ private fun PerformanceBenchmarkMedians(
     metrics: List<BenchmarkMetricRow>,
     historical: Boolean,
 ) {
-  Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-    Text("Metric", Modifier.weight(0.8f), color = SecondaryText, style = IdeTypography.compactBody)
-    Text(
-        "Baseline median",
-        Modifier.weight(1.5f),
-        color = SecondaryText,
-        style = IdeTypography.compactBody)
-    Text(
-        "Candidate median",
-        Modifier.weight(1.5f),
-        color = SecondaryText,
-        style = IdeTypography.compactBody)
-    Text(
-        "Change / availability",
-        Modifier.weight(1.3f),
-        color = SecondaryText,
-        style = IdeTypography.compactBody)
-  }
-  for ((label, side) in
-      listOf("Baseline" to metrics.first().base, "Candidate" to metrics.first().candidate)) {
-    Text(
-        "$label samples: ${side.sampleCount ?: "not returned"}",
-        color = SecondaryText,
-        style = IdeTypography.compactBody,
-        modifier = Modifier.padding(top = 4.dp))
-  }
-  metrics.forEach { metric ->
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          Text(
-              when (metric.label) {
-                "ns/op" -> "Time (ns/op)"
-                "B/op" -> "Bytes (B/op)"
-                else -> "Allocations (allocs/op)"
-              },
-              Modifier.weight(0.8f),
-              color = PrimaryText,
-              style = IdeTypography.compactBody)
-          for ((label, side) in
-              listOf("Baseline" to metric.base, "Candidate" to metric.candidate)) {
-            Column(
-                Modifier.weight(1.5f).semantics {
-                  contentDescription = "${metric.label}, $label median: ${side.display()}"
-                }) {
-                  Text(
-                      side.medianLabel(metric.label),
-                      color = PrimaryText,
-                      style = IdeTypography.compactBody)
-                  Text(
-                      side.availabilityLabel(),
-                      color = SecondaryText,
-                      style = IdeTypography.compactBody)
-                }
+  BoxWithConstraints(Modifier.fillMaxWidth()) {
+    // Budget for side medians and coverage text, not just the short numeric values. Use the
+    // actual pane width in dp so density and larger text do not leave cramped columns.
+    val stacked = maxWidth < 640.dp * LocalDensity.current.fontScale
+    Column(
+        Modifier.fillMaxWidth()
+            .testTag(if (stacked) "benchmark-medians-stacked" else "benchmark-medians-columns")) {
+          if (!stacked) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              Text(
+                  "Metric",
+                  Modifier.weight(0.8f),
+                  color = SecondaryText,
+                  style = IdeTypography.compactBody)
+              Text(
+                  "Baseline median",
+                  Modifier.weight(1.5f),
+                  color = SecondaryText,
+                  style = IdeTypography.compactBody)
+              Text(
+                  "Candidate median",
+                  Modifier.weight(1.5f),
+                  color = SecondaryText,
+                  style = IdeTypography.compactBody)
+              Text(
+                  "Change / availability",
+                  Modifier.weight(1.3f),
+                  color = SecondaryText,
+                  style = IdeTypography.compactBody)
+            }
           }
-          Text(
-              metric.changeLabel(historical),
-              Modifier.weight(1.3f),
-              color = if (metric.isComplete) SecondaryText else Warning,
-              style = IdeTypography.compactBody)
+          metrics.firstOrNull()?.let { first ->
+            for ((label, side) in
+                listOf("Baseline" to first.base, "Candidate" to first.candidate)) {
+              Text(
+                  "$label samples: ${side.sampleCount ?: "not returned"}",
+                  color = SecondaryText,
+                  style = IdeTypography.compactBody,
+                  modifier = Modifier.padding(top = 4.dp))
+            }
+          }
+          metrics.forEach { metric ->
+            val label =
+                when (metric.label) {
+                  "ns/op" -> "Time (ns/op)"
+                  "B/op" -> "Bytes (B/op)"
+                  else -> "Allocations (allocs/op)"
+                }
+            val rowModifier =
+                Modifier.fillMaxWidth()
+                    .padding(vertical = 6.dp)
+                    .testTag("benchmark-metric-${metric.label}")
+            if (stacked) {
+              Column(rowModifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(label, color = PrimaryText, style = IdeTypography.compactBody)
+                BenchmarkMedianSide(metric.label, "Baseline", metric.base, labeled = true)
+                BenchmarkMedianSide(metric.label, "Candidate", metric.candidate, labeled = true)
+                Text(
+                    "Change / availability",
+                    color = SecondaryText,
+                    style = IdeTypography.compactBody)
+                Text(
+                    metric.changeLabel(historical),
+                    color = if (metric.isComplete) SecondaryText else Warning,
+                    style = IdeTypography.compactBody)
+              }
+            } else {
+              Row(rowModifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    label,
+                    Modifier.weight(0.8f),
+                    color = PrimaryText,
+                    style = IdeTypography.compactBody)
+                BenchmarkMedianSide(
+                    metric.label, "Baseline", metric.base, modifier = Modifier.weight(1.5f))
+                BenchmarkMedianSide(
+                    metric.label, "Candidate", metric.candidate, modifier = Modifier.weight(1.5f))
+                Text(
+                    metric.changeLabel(historical),
+                    Modifier.weight(1.3f),
+                    color = if (metric.isComplete) SecondaryText else Warning,
+                    style = IdeTypography.compactBody)
+              }
+            }
+          }
         }
+  }
+}
+
+@Composable
+private fun BenchmarkMedianSide(
+    unit: String,
+    label: String,
+    side: BenchmarkMetricSide,
+    modifier: Modifier = Modifier,
+    labeled: Boolean = false,
+) {
+  Column(modifier.semantics { contentDescription = "$unit, $label median: ${side.display()}" }) {
+    if (labeled) Text("$label median", color = SecondaryText, style = IdeTypography.compactBody)
+    Text(side.medianLabel(unit), color = PrimaryText, style = IdeTypography.compactBody)
+    Text(side.availabilityLabel(), color = SecondaryText, style = IdeTypography.compactBody)
   }
 }
 

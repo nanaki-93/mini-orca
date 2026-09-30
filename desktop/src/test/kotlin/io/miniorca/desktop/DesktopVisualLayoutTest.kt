@@ -4462,7 +4462,6 @@ class DesktopVisualLayoutTest {
                 fixture.revealTextFullyWithin("Baseline median", "result-overview")
                 for (text in
                     listOf(
-                        "Metric",
                         "Baseline median",
                         "Candidate median",
                         "Change / availability",
@@ -4518,6 +4517,268 @@ class DesktopVisualLayoutTest {
               }
               assertEquals(0, requests, "Inspection is passive: $name")
             }
+      }
+    }
+  }
+
+  @Test
+  fun benchmarkInspectionWrapsLongEvidenceAcrossViewportTextDensityAndResize() {
+    val path = "internal/" + "解析/日本語/évidence/".repeat(12) + "測定.go"
+    val hash = "abc0123456789".repeat(12)
+    val choice =
+        GoBenchmarkChoice(
+            "Benchmark解析_" + "日本語".repeat(12),
+            listOf(
+                "go",
+                "test",
+                "./$path",
+                "-bench",
+                "^Benchmark解析$",
+                "-count=5",
+                "-benchtime",
+                "100ms",
+                "-benchmem"),
+            "opaque-" + hash)
+    val comparison =
+        GoBenchmarkComparison(
+            draftId = "draft-" + hash,
+            draftRevision = 2,
+            draftHash = hash,
+            projectId = "project",
+            projectRevision = "revision-" + hash,
+            baseFileHash = hash,
+            targetPath = path,
+            benchmark = choice.name,
+            scope = choice.scope,
+            status = "completed",
+            command = choice.command,
+            base = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1000, 100.0, 10, 1) }),
+            candidate = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1000, 90.0, 10, 1) }))
+    val draft =
+        DeclarationDraft(
+            id = comparison.draftId,
+            revision = comparison.draftRevision,
+            hash = hash,
+            projectId = comparison.projectId,
+            projectRevision = comparison.projectRevision,
+            baseFileHash = hash,
+            targetPath = path,
+            validation =
+                DeclarationValidation(true, "strict_symbol", diff = UnifiedDiff(path, path)))
+    val catalog =
+        GoBenchmarkCatalog(
+            draftId = draft.id,
+            draftRevision = draft.revision,
+            draftHash = hash,
+            projectId = draft.projectId,
+            projectRevision = draft.projectRevision,
+            baseFileHash = hash,
+            targetPath = path,
+            available = true,
+            benchmarks = listOf(choice))
+    val page = performancePageFixture()
+    val snapshot =
+        DesktopState(
+            projectState =
+                ProjectWorkspaceState(
+                    project = page.project!!.copy(projectRevision = draft.projectRevision)),
+            selection =
+                FileSelectionState(
+                    selectedFile =
+                        ProjectFileInfo(
+                            path,
+                            hash,
+                            "測定.go",
+                            language = "Go",
+                            sizeBytes = 1,
+                            lineCount = 1,
+                            modifiedAt = "",
+                            binary = false)),
+            review =
+                DraftReviewState(
+                    draft = draft,
+                    editor = editableDraft(draft),
+                    benchmark =
+                        BenchmarkEvidenceState(
+                            catalog = catalog,
+                            selected = choice,
+                            discovery = BenchmarkDiscoveryOutcome.Loaded,
+                            comparison = comparison)))
+    val eligibility = benchmarkEligibility(snapshot)
+    assertTrue(eligibility.canCompare)
+    val current =
+        PerformanceWorkspacePaneState(
+            page,
+            resultIndexFixture(),
+            benchmarkComparison = comparison,
+            expectedBenchmarkIdentity = goBenchmarkComparisonIdentity(draft),
+            selectedBenchmark = choice,
+            benchmarkCatalog = catalog,
+            benchmarkDiscovery = BenchmarkDiscoveryOutcome.Loaded,
+            benchmarkEligibility = eligibility)
+    val reason =
+        "Daemon could not finish " +
+            "解析対象/évidence/".repeat(14) +
+            "; no new measurements were confirmed. Refresh to recover."
+    val variants =
+        listOf(
+            "current" to current,
+            "running-prior" to current.copy(benchmarkAdmission = BenchmarkAdmissionOutcome.Running),
+            "failed-prior" to
+                current.copy(
+                    benchmarkLatestOutcome =
+                        BenchmarkComparisonOutcome(
+                            GoBenchmarkComparison(status = "failed", reason = reason))),
+            "stale" to
+                current.copy(
+                    expectedBenchmarkIdentity =
+                        goBenchmarkComparisonIdentity(draft.copy(hash = "changed"))))
+    var caseIndex = 0
+    for ((width, height) in
+        listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        for (density in listOf(1f, 2f)) {
+          val (name, state) = variants[caseIndex++ % variants.size]
+          val status =
+              performanceBenchmarkStatusPresentation(
+                  comparison,
+                  state.expectedBenchmarkIdentity,
+                  choice,
+                  state.benchmarkDiscovery,
+                  state.benchmarkAdmission,
+                  eligibility,
+                  catalog,
+                  state.benchmarkLatestOutcome)
+          val assessment =
+              performanceBenchmarkPresentation(
+                  comparison, state.expectedBenchmarkIdentity, choice, status.priorEvidence)
+          val prefix = "f22-responsive-$name-$width-$height-$scale-${density}x"
+          var requests = 0
+          ComposeVisualFixture(width, height, scale, density) {
+                PerformanceWorkspacePane(
+                    state,
+                    PerformanceWorkspaceActions(
+                        {},
+                        {},
+                        FindingActions({}, { _, _ -> }, {}),
+                        openSource = {},
+                        loadBenchmarks = { requests++ },
+                        selectBenchmark = { requests++ },
+                        runBenchmark = { requests++ }))
+              }
+              .use { fixture ->
+                fixture.render("$prefix-collapsed")
+                fixture.assertEveryTextLineReachable(status.summary, "result-overview")
+                assertFalse(fixture.hasText("Baseline median"))
+                val scrollOwners = fixture.scrollableContentCount()
+                fixture.revealTextFullyWithin("Explore benchmark evidence", "result-overview")
+                fixture.clickText("Explore benchmark evidence")
+                fixture.render()
+                val details =
+                    if (status.priorEvidence) "Prior measurement details" else "Measurement details"
+                fixture.revealTextFullyWithin(details, "result-overview")
+                fixture.clickText(details)
+                fixture.render()
+                assertEquals(
+                    scrollOwners,
+                    fixture.scrollableContentCount(),
+                    "Inspection reuses the overview scroll owner")
+                fixture.assertEveryTextLineReachable(
+                    assessment.summary, "result-overview", "benchmark-measurement-evidence")
+                fun checkMetrics() {
+                  val stacked = !fixture.hasText("Metric")
+                  for (metric in assessment.metrics) {
+                    val tag = "benchmark-metric-${metric.label}"
+                    for ((label, side) in
+                        listOf("Baseline" to metric.base, "Candidate" to metric.candidate)) {
+                      assertTrue(
+                          fixture.hasDescription(
+                              "${metric.label}, $label median: ${side.display()}"))
+                      if (stacked) assertEquals(1, fixture.taggedTextCount(tag, "$label median"))
+                      fixture.assertEveryTextLineReachable(
+                          side.medianLabel(metric.label), "result-overview", tag, label)
+                      fixture.assertEveryTextLineReachable(
+                          side.availabilityLabel(), "result-overview", tag, label)
+                    }
+                    fixture.assertEveryTextLineReachable(
+                        metric.changeLabel(status.priorEvidence || assessment.isStale),
+                        "result-overview",
+                        tag)
+                  }
+                }
+                checkMetrics()
+                fixture.revealTextFullyWithin("Time (ns/op)", "result-overview")
+                fixture.scrollBy(
+                    fixture.firstVisibleTextBounds("Time (ns/op)").top -
+                        fixture.taggedBounds("result-overview").top,
+                    "result-overview")
+                fixture.render("$prefix-medians")
+                for (disclosure in
+                    listOf("Recorded conditions & identity", "Returned sample details")) {
+                  fixture.revealTextFullyWithin(disclosure, "result-overview")
+                  fixture.clickText(disclosure)
+                  fixture.render()
+                }
+                for ((label, value) in
+                    performanceBenchmarkRecordedRows(comparison) +
+                        performanceBenchmarkSampleRows(comparison)) {
+                  fixture.assertEveryTextLineReachable(
+                      "$label: $value", "result-overview", "benchmark-measurement-evidence")
+                }
+                fixture.assertEveryTextLineReachable(
+                    "Opaque scope guard: ${comparison.scope}",
+                    "result-overview",
+                    "benchmark-measurement-evidence")
+                fixture.render("$prefix-identity")
+                fixture.revealTextFullyWithin(
+                    "Copy displayed benchmark evidence", "result-overview")
+                fixture.assertTextFits("Copy displayed benchmark evidence", maxLines = 4)
+                fixture.clickText("Copy displayed benchmark evidence")
+                fixture.render("$prefix-copy")
+                val copied =
+                    performanceBenchmarkCopyText(
+                        comparison,
+                        assessment,
+                        status.priorEvidence || assessment.isStale,
+                        true,
+                        true)
+                assertEquals(copied, fixture.clipboardText())
+                // Resize the same composition with disclosures open and unchanged evidence.
+                // The pane gutters consume 64 dp; density scales pixels, not the text budget.
+                for (offset in listOf(-2, 2)) {
+                  val breakpointWidth = ((640 * scale + 64 + offset) * density).toInt()
+                  fixture.resize(breakpointWidth, height)
+                  fixture.render()
+                  assertEquals(offset < 0, !fixture.hasText("Metric"))
+                  checkMetrics()
+                  fixture.revealTextFullyWithin("Time (ns/op)", "result-overview")
+                  fixture.scrollBy(
+                      fixture.firstVisibleTextBounds("Time (ns/op)").top -
+                          fixture.taggedBounds("result-overview").top,
+                      "result-overview")
+                  fixture.render("$prefix-breakpoint-$offset")
+                  assertTrue(
+                      fixture.hasText("Project ID: project"),
+                      "Resize retains conditions disclosure")
+                  assertTrue(
+                      fixture.hasText(
+                          "Baseline sample 1: iterations=1000; ns/op=100.0; B/op=10; allocs/op=1"))
+                  fixture.revealTextFullyWithin(
+                      "Copy displayed benchmark evidence", "result-overview")
+                  fixture.clickText("Copy displayed benchmark evidence")
+                  fixture.render()
+                  assertEquals(
+                      copied,
+                      fixture.clipboardText(),
+                      "Resizing cannot change evidence or its qualification")
+                  assertEquals(scrollOwners, fixture.scrollableContentCount())
+                }
+                fixture.resize(width, height)
+                fixture.render()
+                checkMetrics()
+                assertEquals(0, requests, "Disclosure, copy and resizing are local: $prefix")
+              }
+        }
       }
     }
   }
@@ -10700,9 +10961,27 @@ internal class ComposeVisualFixture(
     }
   }
 
-  fun assertEveryTextLineReachable(label: String, scrollTag: String) {
+  fun assertEveryTextLineReachable(
+      label: String,
+      scrollTag: String,
+      withinTag: String? = null,
+      medianSide: String? = null,
+  ) {
     fun node() =
         textNodes(label)
+            .filter { node ->
+              (withinTag == null ||
+                  generateSequence(node) { it.parent }
+                      .any { it.config.getOrNull(SemanticsProperties.TestTag) == withinTag }) &&
+                  (medianSide == null ||
+                      generateSequence(node) { it.parent }
+                          .any {
+                            it.config.getOrNull(SemanticsProperties.ContentDescription)?.any {
+                                description ->
+                              description.contains("$medianSide median:")
+                            } == true
+                          })
+            }
             .also { assertEquals(1, it.size, "Full text must be present: $label") }
             .single()
     val layouts = mutableListOf<TextLayoutResult>()
