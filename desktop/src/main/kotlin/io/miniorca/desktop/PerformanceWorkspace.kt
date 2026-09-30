@@ -21,6 +21,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 @Composable
 internal fun PerformanceWorkspacePane(
@@ -612,14 +614,7 @@ private fun PerformanceBenchmarkControls(
             }
       }
       selected?.let { choice ->
-        SelectionContainer {
-          Text(
-              choice.command.joinToString(" "),
-              color = SecondaryText,
-              fontSize = 10.sp,
-              lineHeight = 16.sp,
-              modifier = Modifier.padding(top = 6.dp))
-        }
+        PerformanceBenchmarkAdmissionDisclosure(choice, eligibility.candidate, catalog.trusted)
         MiniOrcaButton(
             onClick = actions.runBenchmark,
             enabled = eligibility.canCompare && !active,
@@ -634,6 +629,83 @@ private fun PerformanceBenchmarkControls(
             }
       }
     }
+  }
+}
+
+/** Values are taken from the current validated candidate, not retained measurement evidence. */
+internal fun performanceBenchmarkAdmissionRows(
+    choice: GoBenchmarkChoice,
+    candidate: BenchmarkCandidateDecision,
+): List<Pair<String, String>> = buildList {
+  add("Selected benchmark" to choice.name)
+  (candidate as? BenchmarkCandidateDecision.Ready)?.draft?.let { draft ->
+    add("Project ID" to draft.projectId)
+    add("Project revision" to draft.projectRevision)
+    add("Target path" to draft.targetPath)
+    add("Validated draft revision" to draft.revision.toString())
+    add(
+        "Package working directory" to
+            draft.targetPath.substringBeforeLast('/', "").ifEmpty { "." })
+  }
+  add("Opaque scope guard (identity metadata)" to choice.scope)
+}
+
+/** JSON quoting keeps empty arguments, whitespace and control characters unambiguous. */
+internal fun performanceBenchmarkArgv(command: List<String>): String =
+    command
+        .mapIndexed { index, argument -> "argv[$index] = ${Json.encodeToString(argument)}" }
+        .joinToString("\n")
+
+@Composable
+private fun PerformanceBenchmarkAdmissionDisclosure(
+    choice: GoBenchmarkChoice,
+    candidate: BenchmarkCandidateDecision,
+    trusted: Boolean,
+) {
+  SelectionContainer {
+    Column(
+        Modifier.fillMaxWidth().padding(top = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          performanceBenchmarkAdmissionRows(choice, candidate).forEach { (label, value) ->
+            Text("$label: $value", color = SecondaryText, style = IdeTypography.compactBody)
+          }
+          Text(
+              "The working directory is relative to the project root; . means project root. The scope guard is opaque identity metadata, not a directory.",
+              color = SecondaryText,
+              style = IdeTypography.compactBody)
+          Text(
+              "Daemon-returned argv (read-only)",
+              color = PrimaryText,
+              style = IdeTypography.compactBody)
+          performanceBenchmarkArgv(choice.command)
+              .ifEmpty { "No argv returned; execution is blocked." }
+              .lines()
+              .forEach { argument ->
+                Text(argument, color = SecondaryText, fontSize = 10.sp, lineHeight = 16.sp)
+              }
+          Text(
+              "Each JSON-quoted entry is one argument, not a shell command. No shell parsing or editable command is used.",
+              color = SecondaryText,
+              style = IdeTypography.compactBody)
+          listOf(
+                  "Running benchmarks executes imported project code.",
+                  "Execution may have external effects, including file and network access.",
+                  "Baseline and candidate use copied workspaces; these are not a security sandbox.")
+              .forEach { Text(it, color = Warning, style = IdeTypography.compactBody) }
+          Text(
+              if (trusted) "The catalog reports session execution trust for this project/revision."
+              else
+                  "Trust and run grants session execution trust for this project/revision, then runs the selected benchmark.",
+              color = SecondaryText,
+              style = IdeTypography.compactBody)
+          listOf(
+                  "Trust contract (separate from selected argv): go test ./...",
+                  "This is broader than benchmark-only permission.",
+                  "Trust lasts for this project revision in the daemon session.",
+                  "Granting trust does not execute “go test ./...”.",
+                  "The combined action requests the selected benchmark separately.")
+              .forEach { Text(it, color = Warning, style = IdeTypography.compactBody) }
+        }
   }
 }
 

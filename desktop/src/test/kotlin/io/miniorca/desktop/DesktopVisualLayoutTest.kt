@@ -4295,7 +4295,25 @@ class DesktopVisualLayoutTest {
             validation =
                 DeclarationValidation(
                     true, "strict_symbol", diff = UnifiedDiff("main.go", "main.go")))
-    val choice = GoBenchmarkChoice("BenchmarkRun", listOf("go", "test", "."), "scope")
+    val choice =
+        GoBenchmarkChoice(
+            "BenchmarkRun",
+            listOf(
+                "go",
+                "test",
+                ".",
+                "-run",
+                "^$",
+                "-bench",
+                "^BenchmarkRun$",
+                "-count",
+                "5",
+                "-benchtime",
+                "100ms",
+                "-benchmem",
+                "-timeout",
+                "15s"),
+            "opaque:scope-guard")
     val catalog =
         GoBenchmarkCatalog(
             draftId = draft.id,
@@ -4379,6 +4397,39 @@ class DesktopVisualLayoutTest {
                         discovery =
                             BenchmarkDiscoveryOutcome.Failed(
                                 "Read-only lookup timed out. Refresh to retry."))),
+            "trusted" to
+                withEvidence(
+                    BenchmarkEvidenceState(
+                        catalog = catalog,
+                        selected = choice,
+                        discovery = BenchmarkDiscoveryOutcome.Loaded)),
+            "untrusted" to
+                withEvidence(
+                    BenchmarkEvidenceState(
+                        catalog = catalog.copy(trusted = false),
+                        selected = choice,
+                        discovery = BenchmarkDiscoveryOutcome.Loaded)),
+            "incomplete-choice" to
+                withEvidence(
+                    BenchmarkEvidenceState(
+                        catalog =
+                            catalog.copy(benchmarks = listOf(choice.copy(command = emptyList()))),
+                        selected = choice.copy(command = emptyList()),
+                        discovery = BenchmarkDiscoveryOutcome.Loaded)),
+            "admitting" to
+                withEvidence(
+                    BenchmarkEvidenceState(
+                        catalog = catalog.copy(trusted = false),
+                        selected = choice,
+                        discovery = BenchmarkDiscoveryOutcome.Loaded,
+                        admission = BenchmarkAdmissionOutcome.Admitting)),
+            "running" to
+                withEvidence(
+                    BenchmarkEvidenceState(
+                        catalog = catalog,
+                        selected = choice,
+                        discovery = BenchmarkDiscoveryOutcome.Loaded,
+                        admission = BenchmarkAdmissionOutcome.Running)),
             "stale-selection" to
                 withEvidence(
                     BenchmarkEvidenceState(
@@ -4439,25 +4490,78 @@ class DesktopVisualLayoutTest {
               fixture.clickDescription("Expand Explore benchmark evidence")
               fixture.render("f21-discovery-$name-$width-$height-$scale")
               assertTrue(fixture.hasText(status.summary))
-              assertTrue(
-                  status.priorEvidence, "Retained success must be identified as prior for $name")
-              assertTrue(fixture.hasText("Prior measurement details"))
+              assertEquals(name !in listOf("trusted", "untrusted"), status.priorEvidence)
+              val detailsLabel =
+                  if (status.priorEvidence) "Prior measurement details" else "Measurement details"
+              assertTrue(fixture.hasText(detailsLabel))
               assertFalse(
-                  fixture.hasText("Prior benchmark evidence"),
+                  fixture.hasText("Prior benchmark evidence") ||
+                      fixture.hasText("Benchmark evidence"),
                   "Measurement details are optional and collapsed")
               eligibility.discoveryBlockedReason?.let { assertTrue(fixture.hasText(it)) }
               val recovery =
                   if (evidence.discovery == BenchmarkDiscoveryOutcome.NotRequested)
                       "List compatible benchmarks"
                   else "Refresh compatible benchmarks"
-              assertEquals(!eligibility.canDiscover, fixture.isDisabled(recovery))
+              val active = evidence.running
+              assertEquals(!eligibility.canDiscover || active, fixture.isDisabled(recovery))
+              if (evidence.selected != null) {
+                val required =
+                    listOf(
+                        "Selected benchmark: BenchmarkRun",
+                        "Project ID: project",
+                        "Project revision: revision",
+                        "Target path: main.go",
+                        "Validated draft revision: 1",
+                        "Package working directory: .",
+                        "Opaque scope guard (identity metadata): ${evidence.selected.scope}")
+                required.forEach { text ->
+                  fixture.revealTextFullyWithin(text, "benchmark-discovery-scroll")
+                  fixture.assertTextFits(text, maxLines = 3)
+                }
+                val argv = performanceBenchmarkArgv(evidence.selected.command)
+                if (argv.isNotEmpty()) {
+                  argv.lines().forEach { argument ->
+                    fixture.revealTextFullyWithin(argument, "benchmark-discovery-scroll")
+                    fixture.assertTextFits(argument, maxLines = 3)
+                  }
+                } else {
+                  assertTrue(fixture.hasText("No argv returned; execution is blocked."))
+                }
+                for (text in
+                    listOf(
+                        "Running benchmarks executes imported project code.",
+                        "Execution may have external effects, including file and network access.",
+                        "Baseline and candidate use copied workspaces; these are not a security sandbox.",
+                        "Trust contract (separate from selected argv): go test ./...",
+                        "This is broader than benchmark-only permission.",
+                        "Trust lasts for this project revision in the daemon session.",
+                        "Granting trust does not execute “go test ./...”.",
+                        "The combined action requests the selected benchmark separately.")) {
+                  fixture.revealTextFullyWithin(text, "benchmark-discovery-scroll")
+                  fixture.assertTextFits(text, maxLines = 15)
+                }
+                val runLabel =
+                    when (evidence.admission) {
+                      BenchmarkAdmissionOutcome.Admitting -> "Checking execution trust…"
+                      BenchmarkAdmissionOutcome.Running -> "Comparing benchmark…"
+                      else ->
+                          if (evidence.catalog!!.trusted) "Run selected benchmark"
+                          else "Trust and run selected benchmark"
+                    }
+                fixture.revealTextFullyWithin(runLabel, "benchmark-discovery-scroll")
+                assertEquals(!eligibility.canCompare || active, fixture.isDisabled(runLabel))
+                fixture.render("f21-admission-$name-$width-$height-$scale")
+              }
               fixture.revealTextFullyWithin(recovery, "benchmark-discovery-scroll")
               fixture.assertTextFits(recovery)
-              fixture.revealTextFullyWithin(
-                  "Prior measurement details", "benchmark-discovery-scroll")
-              fixture.clickText("Prior measurement details")
+              fixture.revealTextFullyWithin(detailsLabel, "benchmark-discovery-scroll")
+              fixture.clickText(detailsLabel)
               fixture.render("f21-prior-$name-$width-$height-$scale")
-              assertTrue(fixture.hasText("Prior benchmark evidence"))
+              assertTrue(
+                  fixture.hasText(
+                      if (status.priorEvidence) "Prior benchmark evidence"
+                      else "Benchmark evidence"))
               assertTrue(
                   fixture.hasText("BenchmarkRun"), "Retained measurement values remain readable")
               assertEquals(0, actions, "Rendering and disclosure must not discover, select or run")
