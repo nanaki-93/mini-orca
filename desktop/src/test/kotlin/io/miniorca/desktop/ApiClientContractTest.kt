@@ -189,6 +189,67 @@ class ApiClientContractTest {
   }
 
   @Test
+  fun benchmarkComparisonDecodingPreservesOmittedNullAndZeroMemoryMetrics() {
+    val response =
+        """{
+      "status":"completed","benchmark":"BenchmarkRun",
+      "base":{"samples":[
+        {"iterations":1,"ns_per_op":100},
+        {"iterations":2,"ns_per_op":101,"bytes_per_op":null,"allocs_per_op":null},
+        {"iterations":3,"ns_per_op":102,"bytes_per_op":0,"allocs_per_op":0},
+        {"iterations":4,"ns_per_op":103,"bytes_per_op":4,"allocs_per_op":2}]},
+      "candidate":{"samples":[
+        {"iterations":5,"ns_per_op":90,"bytes_per_op":null,"allocs_per_op":0},
+        {"iterations":6,"ns_per_op":91,"bytes_per_op":0,"allocs_per_op":null},
+        {"iterations":7,"ns_per_op":92,"allocs_per_op":1},
+        {"iterations":8,"ns_per_op":93,"bytes_per_op":2}]}
+    }"""
+    val client =
+        ApiClient(
+            transport =
+                DaemonTransport { method, path, _ ->
+                  assertEquals("POST", method)
+                  assertEquals("/api/projects/current/drafts/draft-1/benchmarks", path)
+                  TransportResponse(200, response)
+                })
+    val comparison =
+        client.compareGoBenchmark(
+            "draft-1",
+            "revision",
+            2,
+            "candidate-hash",
+            GoBenchmarkChoice("BenchmarkRun", scope = "scope"))
+    val base = requireNotNull(comparison.base).samples
+    val candidate = requireNotNull(comparison.candidate).samples
+    assertEquals(listOf(null, null, 0L, 4L), base.map { it.bytesPerOperation })
+    assertEquals(listOf(null, null, 0L, 2L), base.map { it.allocationsPerOperation })
+    assertEquals(listOf(null, 0L, null, 2L), candidate.map { it.bytesPerOperation })
+    assertEquals(listOf(0L, null, 1L, null), candidate.map { it.allocationsPerOperation })
+    assertEquals(listOf(1L, 2L, 3L, 4L), base.map { it.iterations })
+    assertEquals(listOf(90.0, 91.0, 92.0, 93.0), candidate.map { it.nanosecondsPerOperation })
+  }
+
+  @Test
+  fun benchmarkComparisonDecodingKeepsMissingMeasurementsSeparateFromEmptySamples() {
+    for (response in
+        listOf(
+            """{"status":"completed","candidate":{"samples":[]}}""",
+            """{"status":"completed","base":null,"candidate":{}}""")) {
+      val client =
+          ApiClient(transport = DaemonTransport { _, _, _ -> TransportResponse(200, response) })
+      val comparison =
+          client.compareGoBenchmark(
+              "draft-1",
+              "revision",
+              2,
+              "candidate-hash",
+              GoBenchmarkChoice("BenchmarkRun", scope = "scope"))
+      assertNull(comparison.base)
+      assertEquals(GoBenchmarkMeasurement(emptyList()), comparison.candidate)
+    }
+  }
+
+  @Test
   fun discoveryDecodesSparseUnavailabilityAndAvailableEmptyWithoutOtherRequests() {
     val requests = mutableListOf<Triple<String, String, String?>>()
     var response = """{"available":false,"reason":"Candidate is invalid"}"""

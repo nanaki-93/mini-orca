@@ -905,6 +905,7 @@ internal data class PerformanceBenchmarkPresentation(
     val isMeasured: Boolean,
     val isStale: Boolean,
     val inconclusive: Boolean,
+    val metrics: List<BenchmarkMetricRow>,
 )
 
 /**
@@ -917,7 +918,12 @@ internal fun performanceBenchmarkPresentation(
     expectedChoice: GoBenchmarkChoice? = null,
     priorEvidence: Boolean = false,
 ): PerformanceBenchmarkPresentation {
-  val assessment = benchmarkMeasurementPresentation(comparison, expectedIdentity, expectedChoice)
+  val assessment =
+      benchmarkFreshnessPresentation(
+          comparison,
+          benchmarkMeasurementPresentation(comparison),
+          expectedIdentity,
+          expectedChoice)
   return if (priorEvidence)
       assessment.copy(
           stateLabel = "Prior evidence · ${assessment.stateLabel}",
@@ -928,111 +934,88 @@ internal fun performanceBenchmarkPresentation(
   else assessment
 }
 
-private fun benchmarkMeasurementPresentation(
+private fun benchmarkFreshnessPresentation(
     comparison: GoBenchmarkComparison,
+    assessment: PerformanceBenchmarkPresentation,
     expectedIdentity: GoBenchmarkComparisonIdentity?,
     expectedChoice: GoBenchmarkChoice?,
 ): PerformanceBenchmarkPresentation {
-  val identity = comparison.identityOrNull()
-  val rows = benchmarkIdentityRows(comparison)
-  val conditions = benchmarkConditions(comparison)
-  if (expectedIdentity == null)
-      return PerformanceBenchmarkPresentation(
-          stateLabel = "Stale · no current candidate",
-          rows = rows,
-          conditions = conditions,
-          summary = "This comparison is retained, but no current draft identity can verify it.",
-          insights = emptyList(),
-          isMeasured = false,
-          isStale = true,
-          inconclusive = true,
-      )
-  if (identity != expectedIdentity)
-      return PerformanceBenchmarkPresentation(
-          stateLabel = "Stale · candidate identity changed",
-          rows = rows,
-          conditions = conditions,
-          summary =
-              "This comparison is for a different draft or source revision and is not usable.",
-          insights = emptyList(),
-          isMeasured = false,
-          isStale = true,
-          inconclusive = true,
-      )
-  if (expectedChoice != null &&
-      (comparison.benchmark != expectedChoice.name || comparison.scope != expectedChoice.scope))
-      return PerformanceBenchmarkPresentation(
-          stateLabel = "Stale · selected benchmark changed",
-          rows = rows,
-          conditions = conditions,
-          summary = "This comparison is for a different benchmark selection and is not usable.",
-          insights = emptyList(),
-          isMeasured = false,
-          isStale = true,
-          inconclusive = true,
-      )
-  if (comparison.status != "completed")
-      return PerformanceBenchmarkPresentation(
-          stateLabel = benchmarkTerminalLabel(comparison),
-          rows = rows,
-          conditions = conditions,
-          summary = comparison.reason.ifBlank { "No benchmark measurements are available." },
-          insights = emptyList(),
-          isMeasured = false,
-          isStale = false,
-          inconclusive = comparison.status != "unavailable",
-      )
+  val stale =
+      when {
+        expectedIdentity == null ->
+            "Stale · no current candidate" to
+                "This comparison is retained, but no current draft identity can verify it."
+        comparison.identityOrNull() != expectedIdentity ->
+            "Stale · candidate identity changed" to
+                "This comparison is for a different draft or source revision and is not usable."
+        expectedChoice != null &&
+            (comparison.benchmark != expectedChoice.name ||
+                comparison.scope != expectedChoice.scope) ->
+            "Stale · selected benchmark changed" to
+                "This comparison is for a different benchmark selection and is not usable."
+        else -> null
+      } ?: return assessment
+  return assessment.copy(
+      stateLabel = stale.first,
+      summary = "${stale.second} Recorded assessment: ${assessment.summary}",
+      insights = assessment.insights.map { "Historical observation: $it" },
+      isMeasured = false,
+      isStale = true,
+      inconclusive = true)
+}
 
-  val base = comparison.base?.samples.orEmpty()
-  val candidate = comparison.candidate?.samples.orEmpty()
-  if (comparison.benchmark.isBlank() ||
-      !validBenchmarkSamples(base) ||
-      !validBenchmarkSamples(candidate))
-      return PerformanceBenchmarkPresentation(
+private fun benchmarkMeasurementPresentation(
+    comparison: GoBenchmarkComparison,
+): PerformanceBenchmarkPresentation {
+  val metrics = benchmarkMetricRows(comparison)
+  val presentation =
+      PerformanceBenchmarkPresentation(
           stateLabel = "Inconclusive · incomplete measurement evidence",
-          rows = rows + ("Samples" to "${base.size} base · ${candidate.size} candidate"),
-          conditions = conditions,
-          summary = "The selected benchmark did not return a complete comparable measurement.",
+          rows =
+              benchmarkIdentityRows(comparison) +
+                  ("Samples" to
+                      "${benchmarkSampleCount(comparison.base)} base · ${benchmarkSampleCount(comparison.candidate)} candidate") +
+                  metrics.map { it.label to it.display() } +
+                  metrics.flatMap { it.invalidRows() }.distinct(),
+          conditions = benchmarkConditions(comparison),
+          summary =
+              "The selected benchmark did not return a complete comparable measurement; five valid samples per side are required.",
           insights = emptyList(),
           isMeasured = false,
           isStale = false,
           inconclusive = true,
-      )
-
-  val optionalMetrics = benchmarkOptionalMetricCoverage(base, candidate)
-  val incompleteMemoryMetrics = optionalMetrics.filter { it.isIncomplete }
-  if (incompleteMemoryMetrics.isNotEmpty())
-      return PerformanceBenchmarkPresentation(
-          stateLabel = "Inconclusive · incomplete memory evidence",
-          rows =
-              rows +
-                  ("Samples" to "${base.size} base · ${candidate.size} candidate") +
-                  listOf(
-                          benchmarkMetricRow(
-                              "ns/op",
-                              base.map { it.nanosecondsPerOperation },
-                              candidate.map { it.nanosecondsPerOperation }))
-                      .map { it.label to it.display() } +
-                  optionalMetrics.map { it.presentationRow() },
-          conditions = conditions,
+          metrics = metrics)
+  if (comparison.status != "completed")
+      return presentation.copy(
+          stateLabel = benchmarkTerminalLabel(comparison),
+          summary = comparison.reason.ifBlank { "No completed comparison is available." },
+          inconclusive = comparison.status != "unavailable")
+  if (metrics.any {
+    it.base.availability == BenchmarkMetricAvailability.Invalid ||
+        it.candidate.availability == BenchmarkMetricAvailability.Invalid
+  })
+      return presentation.copy(
+          stateLabel = "Inconclusive · invalid samples",
           summary =
-              "Inconclusive: ${incompleteMemoryMetrics.joinToString { it.label }} is missing " +
-                  "from some samples or one side of the comparison.",
+              "Invalid observations remain inspectable; only valid observations contribute to the displayed medians. No complete comparison is established.")
+  if (comparison.benchmark.isBlank() || !metrics.first().isComplete) return presentation
+
+  val incompleteMemoryMetrics = metrics.drop(1).filter { !it.isComplete }
+  if (incompleteMemoryMetrics.isNotEmpty())
+      return presentation.copy(
+          stateLabel = "Inconclusive · incomplete memory evidence",
+          summary =
+              "Inconclusive: ${incompleteMemoryMetrics.joinToString { it.label }} is missing from some samples or one side of the comparison.",
           insights =
               listOf(
-                  "CPU measurements cannot establish a performance win until memory evidence is complete."),
-          isMeasured = false,
-          isStale = false,
-          inconclusive = true,
-      )
+                  "CPU measurements cannot establish a performance win until memory evidence is complete."))
 
-  val metrics = benchmarkMetricRows(base, candidate, optionalMetrics)
   val variableMetrics = metrics.filter { it.variability > benchmarkVariabilityLimit }
-  val cpu = metrics.first { it.label == "ns/op" }
-  val memoryRegressions = metrics.filter { it.label != "ns/op" && it.candidate > it.base }
-  val memoryImprovements = metrics.filter { it.label != "ns/op" && it.candidate < it.base }
+  val cpu = metrics.first()
+  val memoryRegressions = metrics.drop(1).filter { it.candidate.median!! > it.base.median!! }
+  val memoryImprovements = metrics.drop(1).filter { it.candidate.median!! < it.base.median!! }
   val opposingMemorySignals = memoryRegressions.isNotEmpty() && memoryImprovements.isNotEmpty()
-  val cpuImproved = cpu.candidate < cpu.base
+  val cpuImproved = cpu.candidate.median!! < cpu.base.median!!
   val insights = buildList {
     if (opposingMemorySignals)
         add(
@@ -1062,58 +1045,93 @@ private fun benchmarkMeasurementPresentation(
         cpuImproved -> "CPU is lower for the selected benchmark."
         else -> "The candidate did not lower CPU median for the selected benchmark."
       }
-  return PerformanceBenchmarkPresentation(
+  return presentation.copy(
       stateLabel =
           when {
             opposingMemorySignals -> "Inconclusive · opposing memory signals"
             inconclusive -> "Inconclusive · noisy samples"
             else -> "Measured · selected benchmark"
           },
-      rows =
-          rows +
-              ("Samples" to "${base.size} base · ${candidate.size} candidate") +
-              metrics.map { it.label to it.display() } +
-              ("Variability" to variabilityLabel(variableMetrics)),
-      conditions = conditions,
+      rows = presentation.rows + ("Variability" to variabilityLabel(variableMetrics)),
       summary = summary,
       insights = insights,
       isMeasured = !inconclusive,
-      isStale = false,
       inconclusive = inconclusive,
   )
 }
 
 private const val benchmarkVariabilityLimit = 0.10
+private const val benchmarkRequiredSamples = 5
 
-private data class BenchmarkMetricRow(
-    val label: String,
-    val base: Double,
-    val candidate: Double,
-    val variability: Double,
-) {
-  fun display(): String =
-      "${formatMetric(base)} → ${formatMetric(candidate)} · ${metricChangeLabel(base, candidate)}"
+internal enum class BenchmarkMetricAvailability {
+  MissingMeasurement,
+  EmptySamples,
+  Unavailable,
+  Partial,
+  Invalid,
+  Complete,
 }
 
-private data class OptionalBenchmarkMetricCoverage(
+internal data class BenchmarkMetricSide(
+    val availability: BenchmarkMetricAvailability,
+    val sampleCount: Int?,
+    val validValues: List<Double>,
+    val invalidSamples: List<IndexedValue<GoBenchmarkSample>>,
+) {
+  val median: Double?
+    get() = benchmarkMedian(validValues)
+
+  fun display(): String {
+    val coverage =
+        when (availability) {
+          BenchmarkMetricAvailability.MissingMeasurement -> "measurement not returned"
+          BenchmarkMetricAvailability.EmptySamples -> "empty samples"
+          BenchmarkMetricAvailability.Unavailable -> "unavailable"
+          BenchmarkMetricAvailability.Partial -> "partial"
+          BenchmarkMetricAvailability.Invalid -> "invalid samples"
+          BenchmarkMetricAvailability.Complete -> "complete"
+        }
+    val count =
+        sampleCount
+            ?.let {
+              "; ${validValues.size}/$it valid observations; $benchmarkRequiredSamples required"
+            }
+            .orEmpty()
+    return "${median?.let(::formatMetric) ?: "unavailable"} ($coverage$count)"
+  }
+}
+
+internal data class BenchmarkMetricRow(
     val label: String,
-    val base: List<Double>,
-    val candidate: List<Double>,
-    val baseSampleCount: Int,
-    val candidateSampleCount: Int,
+    val base: BenchmarkMetricSide,
+    val candidate: BenchmarkMetricSide,
 ) {
   val isComplete: Boolean
-    get() = base.size == baseSampleCount && candidate.size == candidateSampleCount
+    get() =
+        base.availability == BenchmarkMetricAvailability.Complete &&
+            candidate.availability == BenchmarkMetricAvailability.Complete
 
-  val isIncomplete: Boolean
-    get() = !isComplete
+  val variability: Double
+    get() =
+        maxOf(
+            relativeRange(base.validValues, base.median!!),
+            relativeRange(candidate.validValues, candidate.median!!))
 
-  fun incompleteCoverageLabel(): String =
-      "incomplete: ${base.size} base · ${candidate.size} candidate"
+  fun display(): String =
+      if (isComplete)
+          "${formatMetric(base.median!!)} → ${formatMetric(candidate.median!!)} · ${metricChangeLabel(base.median!!, candidate.median!!)}"
+      else
+          "Baseline median: ${base.display()} · Candidate median: ${candidate.display()} · change unavailable: incomplete evidence"
 
-  fun presentationRow(): Pair<String, String> =
-      if (isComplete) benchmarkMetricRow(label, base, candidate).let { it.label to it.display() }
-      else label to incompleteCoverageLabel()
+  fun invalidRows(): List<Pair<String, String>> = buildList {
+    for ((side, evidence) in listOf("Baseline" to base, "Candidate" to candidate)) {
+      evidence.invalidSamples.forEach { (index, sample) ->
+        add(
+            "$side invalid sample ${index + 1}" to
+                "iterations=${sample.iterations}; ns/op=${sample.nanosecondsPerOperation}; B/op=${sample.bytesPerOperation ?: "unavailable"}; allocs/op=${sample.allocationsPerOperation ?: "unavailable"}")
+      }
+    }
+  }
 }
 
 private fun GoBenchmarkComparison.identityOrNull(): GoBenchmarkComparisonIdentity? =
@@ -1182,69 +1200,58 @@ private fun benchmarkOutcomeLabel(outcome: BenchmarkComparisonOutcome): String =
       BenchmarkComparisonStatus.Unsupported -> "Comparison unsupported · daemon status"
     }
 
-private fun validBenchmarkSamples(samples: List<GoBenchmarkSample>): Boolean =
-    samples.size == 5 &&
-        samples.all {
-          it.iterations > 0 &&
-              it.nanosecondsPerOperation.isFinite() &&
-              it.nanosecondsPerOperation > 0 &&
-              (it.bytesPerOperation == null || it.bytesPerOperation >= 0) &&
-              (it.allocationsPerOperation == null || it.allocationsPerOperation >= 0)
-        }
+private fun benchmarkSampleCount(measurement: GoBenchmarkMeasurement?): String =
+    measurement?.samples?.size?.toString() ?: "not returned"
 
-private fun benchmarkMetricRows(
-    base: List<GoBenchmarkSample>,
-    candidate: List<GoBenchmarkSample>,
-    optionalMetrics: List<OptionalBenchmarkMetricCoverage>,
-): List<BenchmarkMetricRow> = buildList {
-  add(
-      benchmarkMetricRow(
-          "ns/op",
-          base.map { it.nanosecondsPerOperation },
-          candidate.map { it.nanosecondsPerOperation }))
-  optionalMetrics
-      .filter { !it.isIncomplete && it.base.isNotEmpty() && it.candidate.isNotEmpty() }
-      .forEach { add(benchmarkMetricRow(it.label, it.base, it.candidate)) }
+private fun benchmarkMetricRows(comparison: GoBenchmarkComparison): List<BenchmarkMetricRow> {
+  fun row(label: String, metric: (GoBenchmarkSample) -> Double?) =
+      BenchmarkMetricRow(
+          label,
+          benchmarkMetricSide(comparison.base, metric),
+          benchmarkMetricSide(comparison.candidate, metric))
+  return listOf(
+      row("ns/op") { it.nanosecondsPerOperation },
+      row("B/op") { it.bytesPerOperation?.toDouble() },
+      row("allocs/op") { it.allocationsPerOperation?.toDouble() })
 }
 
-private fun benchmarkOptionalMetricCoverage(
-    base: List<GoBenchmarkSample>,
-    candidate: List<GoBenchmarkSample>,
-): List<OptionalBenchmarkMetricCoverage> =
-    listOf(
-        optionalBenchmarkMetricCoverage("B/op", base, candidate) { it.bytesPerOperation },
-        optionalBenchmarkMetricCoverage("allocs/op", base, candidate) {
-          it.allocationsPerOperation
-        },
-    )
+private fun benchmarkMetricSide(
+    measurement: GoBenchmarkMeasurement?,
+    metric: (GoBenchmarkSample) -> Double?,
+): BenchmarkMetricSide {
+  if (measurement == null)
+      return BenchmarkMetricSide(
+          BenchmarkMetricAvailability.MissingMeasurement, null, emptyList(), emptyList())
+  val validValues = mutableListOf<Double>()
+  val invalidSamples = mutableListOf<IndexedValue<GoBenchmarkSample>>()
+  measurement.samples.withIndex().forEach { observation ->
+    val sample = observation.value
+    val value = metric(sample)
+    if (sample.iterations <= 0 ||
+        !sample.nanosecondsPerOperation.isFinite() ||
+        sample.nanosecondsPerOperation <= 0 ||
+        (value != null && (!value.isFinite() || value < 0)))
+        invalidSamples.add(observation)
+    else if (value != null) validValues.add(value)
+  }
+  val availability =
+      when {
+        measurement.samples.isEmpty() -> BenchmarkMetricAvailability.EmptySamples
+        invalidSamples.isNotEmpty() -> BenchmarkMetricAvailability.Invalid
+        validValues.isEmpty() -> BenchmarkMetricAvailability.Unavailable
+        measurement.samples.size != benchmarkRequiredSamples ||
+            validValues.size != benchmarkRequiredSamples -> BenchmarkMetricAvailability.Partial
+        else -> BenchmarkMetricAvailability.Complete
+      }
+  return BenchmarkMetricSide(availability, measurement.samples.size, validValues, invalidSamples)
+}
 
-private fun optionalBenchmarkMetricCoverage(
-    label: String,
-    base: List<GoBenchmarkSample>,
-    candidate: List<GoBenchmarkSample>,
-    metric: (GoBenchmarkSample) -> Long?,
-): OptionalBenchmarkMetricCoverage =
-    OptionalBenchmarkMetricCoverage(
-        label = label,
-        base = base.mapNotNull(metric).map(Long::toDouble),
-        candidate = candidate.mapNotNull(metric).map(Long::toDouble),
-        baseSampleCount = base.size,
-        candidateSampleCount = candidate.size,
-    )
-
-private fun benchmarkMetricRow(
-    label: String,
-    base: List<Double>,
-    candidate: List<Double>,
-): BenchmarkMetricRow {
-  val baseMedian = base.sorted()[base.size / 2]
-  val candidateMedian = candidate.sorted()[candidate.size / 2]
-  return BenchmarkMetricRow(
-      label,
-      baseMedian,
-      candidateMedian,
-      maxOf(relativeRange(base, baseMedian), relativeRange(candidate, candidateMedian)),
-  )
+private fun benchmarkMedian(values: List<Double>): Double? {
+  if (values.isEmpty()) return null
+  val sorted = values.sorted()
+  val middle = sorted.size / 2
+  return if (sorted.size % 2 == 1) sorted[middle]
+  else sorted[middle - 1] + (sorted[middle] - sorted[middle - 1]) / 2
 }
 
 private fun relativeRange(values: List<Double>, median: Double): Double =
