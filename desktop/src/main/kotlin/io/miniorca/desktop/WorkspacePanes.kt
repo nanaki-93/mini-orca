@@ -249,6 +249,19 @@ private fun VerifiedChecksActionRow(
                 style = IdeTypography.compactBody,
                 color = Warning)
             Text(progress.summary, style = IdeTypography.compactBody, color = SecondaryText)
+            // Admission, cancellation and availability can take precedence over read progress,
+            // but must not hide a separate status failure beside retained evidence.
+            val readFailure =
+                when (val read = state.scanState.read) {
+                  is VerifiedScanRead.Unavailable -> "Status unavailable" to read.message
+                  is VerifiedScanRead.PollUnavailable -> "Live status unavailable" to read.message
+                  else -> null
+                }
+            if (readFailure != null && readFailure.second != progress.summary)
+                Text(
+                    "${readFailure.first}: ${readFailure.second}",
+                    style = IdeTypography.compactBody,
+                    color = Warning)
             when (val refresh = state.scanState.findingsRefresh) {
               is VerifiedScanFindingsRefresh.Unavailable ->
                   Text(

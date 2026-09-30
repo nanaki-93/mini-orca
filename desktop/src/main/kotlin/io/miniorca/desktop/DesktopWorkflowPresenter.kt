@@ -2092,6 +2092,12 @@ class DesktopWorkflowPresenter(
               (operation == VerifiedScanOperation.CancellationRequested ||
                   operation is VerifiedScanOperation.CancellationUnconfirmed))
               dispatch(DesktopEvent.VerifiedScanOperationUpdated(VerifiedScanOperation.Idle))
+          else if (!shouldPollVerifiedScan(updated) &&
+              operation == VerifiedScanOperation.CancellationRequested)
+              dispatch(
+                  DesktopEvent.VerifiedScanOperationUpdated(
+                      VerifiedScanOperation.CancellationUnconfirmed(
+                          "Cancellation is not confirmed by a terminal report. Refresh scan status to check the outcome.")))
           true
         },
         onSeedTerminal = {
@@ -2107,12 +2113,19 @@ class DesktopWorkflowPresenter(
         },
         fetch = { io { api.goScan(identity.revision) } },
         onFailure = { error ->
-          if (isCurrentVerifiedScanAction(identity, actionGeneration) || isCurrentCancelPoll())
-              dispatch(
-                  DesktopEvent.VerifiedScanReadUpdated(
-                      VerifiedScanRead.PollUnavailable(
-                          "Live scan status could not be read: " +
-                              (error.message?.takeIf(String::isNotBlank) ?: "read unavailable"))))
+          if (isCurrentVerifiedScanAction(identity, actionGeneration) || isCurrentCancelPoll()) {
+            dispatch(
+                DesktopEvent.VerifiedScanReadUpdated(
+                    VerifiedScanRead.PollUnavailable(
+                        "Live scan status could not be read: " +
+                            (error.message?.takeIf(String::isNotBlank) ?: "read unavailable"))))
+            if (snapshot.value.state.verifiedScan.operation ==
+                VerifiedScanOperation.CancellationRequested)
+                dispatch(
+                    DesktopEvent.VerifiedScanOperationUpdated(
+                        VerifiedScanOperation.CancellationUnconfirmed(
+                            "Live status is unavailable; cancellation is not confirmed. Refresh scan status to check the outcome.")))
+          }
         })
   }
 
@@ -2132,6 +2145,13 @@ class DesktopWorkflowPresenter(
           DesktopEvent.VerifiedScanReadUpdated(
               if (polling) VerifiedScanRead.PollUnavailable(message)
               else VerifiedScanRead.Unavailable(message)))
+      if (polling &&
+          snapshot.value.state.verifiedScan.operation ==
+              VerifiedScanOperation.CancellationRequested)
+          dispatch(
+              DesktopEvent.VerifiedScanOperationUpdated(
+                  VerifiedScanOperation.CancellationUnconfirmed(
+                      "Cancellation is not confirmed by a matching report. Refresh scan status to check the outcome.")))
     }
     return true
   }
