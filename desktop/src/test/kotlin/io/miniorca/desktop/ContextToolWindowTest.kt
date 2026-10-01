@@ -136,11 +136,239 @@ class ContextToolWindowTest {
           assertFalse(fixture.hasText("model-a"))
           assertEquals(1, fixture.scrollableContentCount())
           assertFalse(fixture.hasText("Explanation source"))
-          assertFalse(fixture.hasText("Current explanation"))
+          assertTrue(fixture.hasText("Current explanation"))
+          assertTrue(
+              fixture.hasText(
+                  "On-demand · matches the selected loaded source and declaration; not a disk check."))
           state = state.copy(result = result.copy(summary = "Replacement explanation."))
           fixture.render()
           assertFalse(fixture.hasText("model-a"))
           assertTrue(fixture.hasText("Replacement explanation."))
+        }
+  }
+
+  @Test
+  fun explanationRequiresMatchingRequestAndResponseIdentityBeforeShowingProse() {
+    val source = file()
+    val selected = symbol()
+    val project =
+        ProjectAnalysis(
+            "project",
+            "revision",
+            "fixture",
+            "/tmp/fixture",
+            "go",
+            fileCount = 1,
+            sourceFileCount = 1,
+            totalLines = 18,
+            summary = "",
+            aiStatus = "missing",
+            analyzedAt = "")
+    val target =
+        DeclarationExplanationTarget(
+            WorkflowFileIdentity(
+                WorkflowProjectIdentity("project", "revision"), source.path, source.contentHash),
+            selected.name,
+            selected.signature,
+            selected.startLine,
+            selected.endLine)
+    val result =
+        DeclarationExplanation(
+            "v1",
+            "project",
+            "revision",
+            source.contentHash,
+            DeclarationSourceAnchor(
+                source.path,
+                selected.name,
+                selected.signature,
+                selected.startLine,
+                selected.endLine),
+            "**Safe summary**",
+            contextManifest = ContextManifest())
+    val analysis =
+        FileAnalysis(source.path, "fresh", symbolExplanations = mapOf("Run" to "Saved prose"))
+    val inspector =
+        symbolInspectorUiState(
+            source,
+            listOf(selected),
+            selected,
+            analysis,
+            false,
+            InspectorProviderState(false, false),
+            null,
+            project)!!
+    var state by
+        mutableStateOf(
+            ContextToolWindowState(
+                inspector,
+                ScopedModel(),
+                false,
+                null,
+                null,
+                fileAnalysis = analysis,
+                project = project,
+                declarationExplanation =
+                    DeclarationExplanationState(
+                        DeclarationExplanationStatus.Current, target, result)))
+    ComposeVisualFixture(320, 460, 1.5f) {
+          ContextToolWindow(state, ContextToolWindowActions({}, {}, {}, {}, {}))
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Current explanation"))
+          assertTrue(fixture.hasText("Safe summary"))
+          assertFalse(fixture.hasText("Saved prose"))
+          val foreignResults =
+              listOf(
+                  result.copy(projectId = "other"),
+                  result.copy(projectRevision = "other"),
+                  result.copy(baseFileHash = "other"),
+                  result.copy(anchor = result.anchor.copy(path = "other")),
+                  result.copy(anchor = result.anchor.copy(symbol = "other")),
+                  result.copy(anchor = result.anchor.copy(signature = "other")),
+                  result.copy(anchor = result.anchor.copy(startLine = 3)),
+                  result.copy(anchor = result.anchor.copy(endLine = 10)))
+          foreignResults.forEach { foreign ->
+            state =
+                state.copy(
+                    declarationExplanation = state.declarationExplanation.copy(result = foreign))
+            fixture.render()
+            assertFalse(fixture.hasText("Current explanation"))
+            assertFalse(fixture.hasText("Safe summary"))
+            assertTrue(fixture.hasText("Explanation needs refresh"))
+            assertTrue(fixture.hasText("Saved file analysis · Fresh"))
+          }
+          state =
+              state.copy(
+                  declarationExplanation = state.declarationExplanation.copy(result = result))
+          listOf(
+                  target.copy(
+                      file =
+                          target.file.copy(project = WorkflowProjectIdentity("other", "revision"))),
+                  target.copy(
+                      file =
+                          target.file.copy(project = WorkflowProjectIdentity("project", "other"))),
+                  target.copy(file = target.file.copy(contentHash = "other")),
+                  target.copy(file = target.file.copy(path = "other")),
+                  target.copy(symbol = "other"),
+                  target.copy(signature = "other"),
+                  target.copy(startLine = 3),
+                  target.copy(endLine = 10))
+              .forEach { foreign ->
+                state =
+                    state.copy(
+                        declarationExplanation =
+                            state.declarationExplanation.copy(target = foreign))
+                fixture.render()
+                assertFalse(fixture.hasText("Current explanation"))
+                assertFalse(fixture.hasText("Safe summary"))
+              }
+        }
+  }
+
+  @Test
+  fun lifecycleKeepsAttemptVisibleAndLabelsSavedProseWithoutTreatingItAsCurrent() {
+    val source = file()
+    val selected = symbol()
+    val analysis =
+        FileAnalysis(source.path, "stale", symbolExplanations = mapOf("Run" to "Saved prose"))
+    val project =
+        ProjectAnalysis(
+            "project",
+            "revision",
+            "fixture",
+            "/tmp/fixture",
+            "go",
+            fileCount = 1,
+            sourceFileCount = 1,
+            totalLines = 18,
+            summary = "",
+            aiStatus = "missing",
+            analyzedAt = "")
+    val inspector =
+        symbolInspectorUiState(
+            source,
+            listOf(selected),
+            selected,
+            analysis,
+            false,
+            InspectorProviderState(false, false),
+            null,
+            project)!!
+    val target =
+        DeclarationExplanationTarget(
+            WorkflowFileIdentity(
+                WorkflowProjectIdentity("project", "revision"), source.path, source.contentHash),
+            selected.name,
+            selected.signature,
+            selected.startLine,
+            selected.endLine)
+    var state by
+        mutableStateOf(
+            ContextToolWindowState(
+                inspector,
+                ScopedModel(),
+                false,
+                null,
+                null,
+                fileAnalysis = analysis,
+                project = project))
+    val actions = ContextToolWindowActions({}, {}, {}, {}, {})
+    ComposeVisualFixture(320, 420, 1.5f) { ContextToolWindow(state, actions) }
+        .use { fixture ->
+          listOf(
+                  Triple(
+                      DeclarationExplanationStatus.Unavailable,
+                      "No explanation yet",
+                      "No on-demand explanation has been requested."),
+                  Triple(DeclarationExplanationStatus.Loading, "Explaining…", "Explaining Run…"),
+                  Triple(
+                      DeclarationExplanationStatus.Stale,
+                      "Explanation needs refresh",
+                      "The project changed. Request a fresh explanation."),
+                  Triple(
+                      DeclarationExplanationStatus.Canceled,
+                      "Explanation canceled",
+                      "Explanation canceled."),
+                  Triple(
+                      DeclarationExplanationStatus.Failed,
+                      "Explanation failed",
+                      "Provider unavailable. Retry."))
+              .forEach { (status, label, message) ->
+                state =
+                    state.copy(
+                        declarationExplanation =
+                            DeclarationExplanationState(status, target, message = message))
+                fixture.render()
+                assertTrue(fixture.hasText(label))
+                assertTrue(fixture.hasText(message))
+                assertTrue(fixture.hasText("Saved file analysis · Stale"))
+                assertTrue(
+                    fixture.hasText(
+                        "Source/index comparison unavailable · not an on-demand explanation"))
+                assertTrue(fixture.hasText("Saved prose"))
+                assertTrue(
+                    fixture.hasText(
+                        if (status == DeclarationExplanationStatus.Loading) "Cancel explanation"
+                        else "Explain declaration"))
+              }
+          state =
+              state.copy(
+                  inspector =
+                      inspector.copy(
+                          analysisStatus = InspectorAnalysisStatus.Fresh,
+                          sourceIndexCorrespondence = SourceIndexCorrespondence.Changed),
+                  fileAnalysis = analysis.copy(status = "fresh"),
+                  declarationExplanation = DeclarationExplanationState())
+          fixture.render()
+          assertTrue(fixture.hasText("Saved file analysis · Fresh"))
+          assertTrue(
+              fixture.hasText(
+                  "Loaded source differs from indexed source · not an on-demand explanation"))
+          state = state.copy(fileAnalysis = analysis.copy(path = "other"))
+          fixture.render()
+          assertFalse(fixture.hasText("Saved prose"))
         }
   }
 

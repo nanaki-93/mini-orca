@@ -236,7 +236,7 @@ private fun ContextTabs(active: ContextTab, onSelect: (ContextTab) -> Unit) {
 private fun ContextDeclaration(state: ContextToolWindowState, actions: ContextToolWindowActions) {
   val inspector = requireNotNull(state.inspector)
   val symbol = requireNotNull(inspector.selectedSymbol)
-  val explanation = state.declarationExplanation
+  val explanation = explanationForSelection(state)
   val actionPresentation = declarationActionPresentation(explanation)
   var detailsExpanded by
       rememberSaveable(
@@ -275,14 +275,19 @@ private fun ContextDeclaration(state: ContextToolWindowState, actions: ContextTo
         }
       }
   Spacer(Modifier.height(8.dp))
-  if (explanation.status == DeclarationExplanationStatus.Unavailable &&
-      symbol.explanation != null) {
+  val visibleExplanation = explanationForSelection(state)
+  DeclarationExplanationDetails(visibleExplanation)
+  if (visibleExplanation.status != DeclarationExplanationStatus.Current &&
+      state.fileAnalysis?.path == inspector.file.path &&
+      state.fileAnalysis.symbolExplanations[symbol.symbol.name] == symbol.explanation &&
+      !symbol.explanation.isNullOrBlank()) {
+    Spacer(Modifier.height(8.dp))
+    IdeLabelBadge("Saved file analysis · ${inspector.analysisStatus.label}", SecondaryText)
+    Text(
+        "${inspector.sourceIndexCorrespondence.label} · not an on-demand explanation",
+        color = SecondaryText,
+        style = IdeTypography.compactBody)
     ModelResultContent(symbol.explanation)
-    if (inspector.analysisStatus != InspectorAnalysisStatus.Fresh) {
-      StatusBadge(inspector.analysisStatus.label, Modifier.padding(top = 4.dp))
-    }
-  } else {
-    DeclarationExplanationDetails(explanation)
   }
   Spacer(Modifier.height(8.dp))
   ExplanationAction(state, actions, actionPresentation.explanationTone)
@@ -364,7 +369,8 @@ private fun ExplanationAction(
   if (!symbol.editEligibility.eligible) {
     return
   }
-  val loading = state.declarationExplanation.status == DeclarationExplanationStatus.Loading
+  val explanation = explanationForSelection(state)
+  val loading = explanation.status == DeclarationExplanationStatus.Loading
   if (state.functionModel.remoteProvider && !state.functionRemoteProviderConfirmed && !loading) {
     RemoteProviderConfirmation(
         ModelScope.Function,
@@ -378,7 +384,7 @@ private fun ExplanationAction(
           loading || !state.functionModel.remoteProvider || state.functionRemoteProviderConfirmed,
       tone = tone,
       modifier = Modifier.fillMaxWidth()) {
-        Text(explanationActionLabel(state.declarationExplanation), style = IdeTypography.action)
+        Text(explanationActionLabel(explanation), style = IdeTypography.action)
       }
 }
 
@@ -481,6 +487,51 @@ internal data class ContextToolWindowActions(
     val openFile: (() -> Unit)? = null,
 )
 
+// Do not rely on the presenter's lifecycle alone: Context may render a selection while a
+// previous request is being invalidated. Only the full request and response identity can be
+// Current.
+internal fun explanationForSelection(state: ContextToolWindowState): DeclarationExplanationState {
+  val explanation = state.declarationExplanation
+  if (explanation.status == DeclarationExplanationStatus.Unavailable) return explanation
+  val file = state.inspector?.file
+  val symbol = state.inspector?.selectedSymbol?.symbol
+  val project = state.project
+  val target = explanation.target
+  val matches =
+      project != null &&
+          file != null &&
+          symbol != null &&
+          target != null &&
+          target.file.project.id == project.projectId &&
+          target.file.project.revision == project.projectRevision &&
+          target.file.path == file.path &&
+          target.file.contentHash == file.contentHash &&
+          target.symbol == symbol.name &&
+          target.signature == symbol.signature &&
+          target.startLine == symbol.startLine &&
+          target.endLine == symbol.endLine
+  if (!matches)
+      return DeclarationExplanationState(
+          status = DeclarationExplanationStatus.Stale,
+          message = "The selected declaration changed. Request a new explanation.")
+  val result = explanation.result
+  if (explanation.status == DeclarationExplanationStatus.Current &&
+      (result == null ||
+          result.projectId != project.projectId ||
+          result.projectRevision != project.projectRevision ||
+          result.baseFileHash != file.contentHash ||
+          result.anchor.path != file.path ||
+          result.anchor.symbol != symbol.name ||
+          result.anchor.signature != symbol.signature ||
+          result.anchor.startLine != symbol.startLine ||
+          result.anchor.endLine != symbol.endLine))
+      return DeclarationExplanationState(
+          status = DeclarationExplanationStatus.Stale,
+          message =
+              "The explanation does not match the selected declaration. Request a new explanation.")
+  return explanation
+}
+
 internal fun explanationActionLabel(state: DeclarationExplanationState): String =
     when (state.status) {
       DeclarationExplanationStatus.Loading -> "Cancel explanation"
@@ -554,22 +605,56 @@ private fun ContextFileDetails(inspector: SymbolInspectorUiState) {
 @Composable
 internal fun DeclarationExplanationDetails(state: DeclarationExplanationState) {
   Column(Modifier.fillMaxWidth()) {
-    if (state.status != DeclarationExplanationStatus.Current) {
-      val status = explanationStatusStyle(state.status)
-      IdeLabelBadge(status.label, status.color)
-    }
-    if (state.status == DeclarationExplanationStatus.Failed) {
-      Text(
-          state.message,
-          color = Error,
-          style = IdeTypography.body,
-          modifier = Modifier.padding(top = 4.dp))
+    val status = explanationStatusStyle(state.status)
+    IdeLabelBadge(status.label, status.color)
+    val message = explanationStatusMessage(state)
+    Text(
+        message,
+        color = if (state.status == DeclarationExplanationStatus.Failed) Error else SecondaryText,
+        style = IdeTypography.compactBody,
+        modifier = Modifier.padding(top = 4.dp))
+    val recovery = explanationRecoveryAction(state.status)
+    if (recovery.isNotEmpty() && !message.contains(recovery, ignoreCase = true)) {
+      Text(recovery, color = SecondaryText, style = IdeTypography.compactBody)
     }
     state.result
         ?.takeIf { state.status == DeclarationExplanationStatus.Current }
         ?.let { result -> ModelResultContent(result.summary) }
   }
 }
+
+private fun explanationStatusMessage(state: DeclarationExplanationState): String {
+  if (state.status == DeclarationExplanationStatus.Current)
+      return "On-demand · matches the selected loaded source and declaration; not a disk check."
+  return state.message.takeUnless {
+    it.isBlank() ||
+        (state.status != DeclarationExplanationStatus.Unavailable &&
+            (it == "No on-demand explanation has been requested." ||
+                it.startsWith("Current explanation ·")))
+  } ?: explanationRecoveryMessage(state.status)
+}
+
+private fun explanationRecoveryAction(status: DeclarationExplanationStatus): String =
+    when (status) {
+      DeclarationExplanationStatus.Loading -> "Cancel to stop this request."
+      DeclarationExplanationStatus.Stale,
+      DeclarationExplanationStatus.Canceled,
+      DeclarationExplanationStatus.Failed -> "Select Explain to retry."
+      else -> ""
+    }
+
+private fun explanationRecoveryMessage(status: DeclarationExplanationStatus): String =
+    when (status) {
+      DeclarationExplanationStatus.Unavailable ->
+          "No on-demand explanation yet. Select Explain to request one."
+      DeclarationExplanationStatus.Loading ->
+          "Explanation in progress. Cancel to stop this request."
+      DeclarationExplanationStatus.Stale ->
+          "Source or selection changed. Request a new explanation."
+      DeclarationExplanationStatus.Canceled -> "Request canceled. Select Explain to retry."
+      DeclarationExplanationStatus.Failed -> "Explanation failed. Select Explain to retry."
+      DeclarationExplanationStatus.Current -> ""
+    }
 
 internal fun explanationStatusStyle(status: DeclarationExplanationStatus): StatusBadgeStyle =
     when (status) {
