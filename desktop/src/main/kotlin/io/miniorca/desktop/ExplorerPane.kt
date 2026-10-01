@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,7 +20,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,6 +46,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.focused
@@ -92,103 +96,114 @@ internal fun ExplorerPane(
       listState.scrollToItem(index)
     }
   }
-  Column(modifier = modifier.background(Panel).padding(horizontal = 8.dp, vertical = 4.dp)) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      Text(
-          "Files",
-          color = PrimaryText,
-          fontSize = 12.sp,
-          fontWeight = FontWeight.SemiBold,
-          modifier = Modifier.weight(1f))
-      ChromeButton(
-          onClick = actions.collapseAll,
-      ) {
-        DesktopLineIcon(DesktopIcon.ChevronRight, "Collapse all folders", iconSize = 16.dp)
-      }
-      Spacer(Modifier.width(4.dp))
-      ChromeButton(
-          onClick = actions.revealActiveFile,
-          enabled = state.selectedPath != null,
-      ) {
-        DesktopLineIcon(DesktopIcon.File, "Reveal active file", iconSize = 16.dp)
-      }
-    }
-    Spacer(Modifier.height(6.dp))
-    CompactSingleLineField(
-        value = state.filter,
-        onValueChange = actions.updateFilter,
-        label = "Filter indexed files",
-        showLabel = false,
-        modifier =
-            Modifier.fillMaxWidth().semantics {
-              contentDescription = "Filter indexed relative file paths"
-            },
-    )
-    Spacer(Modifier.height(6.dp))
-    fileReadUiState(state.pendingFilePath, state.failedFilePath, state.readError)?.let { read ->
-      FileReadFeedback(
-          read,
-          retainingFile = state.selectedPath != null,
-          onOpenFile = actions.selectFile,
-          modifier = Modifier)
-      Spacer(Modifier.height(6.dp))
-    }
-    when {
-      state.index == null && state.loading -> LoadingRows("Loading indexed files")
-      state.index == null && !state.projectAvailable ->
-          SystemStateMessage(
-              "No project open",
-              "Open a project to browse safe, indexed relative paths.",
-              action =
-                  actions.openProject?.let { open ->
-                    { MiniOrcaButton(onClick = open) { Text("Open project") } }
-                  })
-      state.index == null ->
-          SystemStateMessage("Indexed files unavailable", "Project file data is not available.")
-      state.index.files.isEmpty() ->
-          SystemStateMessage("No indexed files", "This project's index contains no files.")
-      rows.isEmpty() ->
-          SystemStateMessage(
-              "No matching files", "Change the filter to view indexed relative paths.")
-      else ->
-          LazyColumn(
-              modifier =
-                  Modifier.weight(1f)
-                      .semantics { contentDescription = "Indexed file tree" }
-                      .focusRequester(treeFocusRequester)
-                      .onFocusChanged { treeHasFocus = it.isFocused }
-                      .onPreviewKeyEvent { event ->
-                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                        val interaction =
-                            explorerTreeInteraction(
-                                rows,
-                                focusedPath,
-                                state.collapsedDirectories,
-                                explorerTreeKey(event.key),
-                            ) ?: return@onPreviewKeyEvent false
-                        focusedPath = interaction.focusedPath
-                        interaction.toggleDirectory?.let(actions.toggleDirectory)
-                        interaction.selectFile?.let(actions.selectFile)
-                        true
-                      }
-                      .focusable(),
-              state = listState) {
-                items(rows, key = { it.path }) { row ->
-                  ExplorerItem(
-                      row = row,
-                      selected = !row.directory && row.path == state.selectedPath,
-                      focused = treeHasFocus && row.path == focusedPath,
-                      expanded =
-                          state.filter.isNotBlank() || row.path !in state.collapsedDirectories,
-                      onActivate = {
-                        focusedPath = row.path
-                        treeFocusRequester.requestFocus()
-                        if (row.directory) actions.toggleDirectory(row.path)
-                        else actions.selectFile(row.path)
-                      },
-                  )
-                }
+  BoxWithConstraints(modifier.background(Panel).padding(horizontal = 8.dp, vertical = 4.dp)) {
+    val headerMaxHeight = maxHeight * 0.6f
+    Column {
+      // Keep destination feedback scrollable without squeezing the indexed tree out of view.
+      Column(
+          Modifier.fillMaxWidth()
+              .heightIn(max = headerMaxHeight)
+              .verticalScroll(rememberScrollState())
+              .testTag("explorer-header-scroll")) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Text(
+                  "Files",
+                  color = PrimaryText,
+                  fontSize = 12.sp,
+                  fontWeight = FontWeight.SemiBold,
+                  modifier = Modifier.weight(1f))
+              ChromeButton(
+                  onClick = actions.collapseAll,
+              ) {
+                DesktopLineIcon(DesktopIcon.ChevronRight, "Collapse all folders", iconSize = 16.dp)
               }
+              Spacer(Modifier.width(4.dp))
+              ChromeButton(
+                  onClick = actions.revealActiveFile,
+                  enabled = state.selectedPath != null,
+              ) {
+                DesktopLineIcon(DesktopIcon.File, "Reveal active file", iconSize = 16.dp)
+              }
+            }
+            Spacer(Modifier.height(6.dp))
+            CompactSingleLineField(
+                value = state.filter,
+                onValueChange = actions.updateFilter,
+                label = "Filter indexed files",
+                showLabel = false,
+                modifier =
+                    Modifier.fillMaxWidth().semantics {
+                      contentDescription = "Filter indexed relative file paths"
+                    },
+            )
+            Spacer(Modifier.height(6.dp))
+            fileReadUiState(state.pendingFilePath, state.failedFilePath, state.readError)?.let {
+                read ->
+              FileReadFeedback(
+                  read,
+                  retainingFile = state.selectedPath != null,
+                  onOpenFile = actions.selectFile,
+                  modifier = Modifier)
+              Spacer(Modifier.height(6.dp))
+            }
+          }
+      when {
+        state.index == null && state.loading -> LoadingRows("Loading indexed files")
+        state.index == null && !state.projectAvailable ->
+            SystemStateMessage(
+                "No project open",
+                "Open a project to browse safe, indexed relative paths.",
+                action =
+                    actions.openProject?.let { open ->
+                      { MiniOrcaButton(onClick = open) { Text("Open project") } }
+                    })
+        state.index == null ->
+            SystemStateMessage("Indexed files unavailable", "Project file data is not available.")
+        state.index.files.isEmpty() ->
+            SystemStateMessage("No indexed files", "This project's index contains no files.")
+        rows.isEmpty() ->
+            SystemStateMessage(
+                "No matching files", "Change the filter to view indexed relative paths.")
+        else ->
+            LazyColumn(
+                modifier =
+                    Modifier.weight(1f)
+                        .semantics { contentDescription = "Indexed file tree" }
+                        .focusRequester(treeFocusRequester)
+                        .onFocusChanged { treeHasFocus = it.isFocused }
+                        .onPreviewKeyEvent { event ->
+                          if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                          val interaction =
+                              explorerTreeInteraction(
+                                  rows,
+                                  focusedPath,
+                                  state.collapsedDirectories,
+                                  explorerTreeKey(event.key),
+                              ) ?: return@onPreviewKeyEvent false
+                          focusedPath = interaction.focusedPath
+                          interaction.toggleDirectory?.let(actions.toggleDirectory)
+                          interaction.selectFile?.let(actions.selectFile)
+                          true
+                        }
+                        .focusable(),
+                state = listState) {
+                  items(rows, key = { it.path }) { row ->
+                    ExplorerItem(
+                        row = row,
+                        selected = !row.directory && row.path == state.selectedPath,
+                        focused = treeHasFocus && row.path == focusedPath,
+                        expanded =
+                            state.filter.isNotBlank() || row.path !in state.collapsedDirectories,
+                        onActivate = {
+                          focusedPath = row.path
+                          treeFocusRequester.requestFocus()
+                          if (row.directory) actions.toggleDirectory(row.path)
+                          else actions.selectFile(row.path)
+                        },
+                    )
+                  }
+                }
+      }
     }
   }
 }
