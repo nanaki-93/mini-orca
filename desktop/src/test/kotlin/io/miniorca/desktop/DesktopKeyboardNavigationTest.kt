@@ -1234,7 +1234,21 @@ class DesktopKeyboardNavigationTest {
             editor,
             actions,
             switchPending,
-            DesktopShellEditorActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}),
+            DesktopShellEditorActions(
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                retryContext = {},
+                cancelContext = {}),
             DesktopShellPaletteActions({}, {}, {}, {}, {}, {}, {}),
             onDismissTransient = { false },
             onWorkspaceSelected = {},
@@ -1882,7 +1896,7 @@ class DesktopKeyboardNavigationTest {
               it.copy(
                   app = it.app.copy(workspace = Workspace.Editor),
                   layout = it.layout.copy(lastFocusedRegion = DesktopFocusRegion.RightToolWindow),
-                  context = it.context.copy(manifest = ContextManifest()))
+                  context = it.context.copy(inspection = ContextInspectionState()))
             })
     ComposeVisualFixture(1_280, 800) {
           FocusTestShell(state, onState = { state = it }, onOperation = { operations++ })
@@ -1894,7 +1908,12 @@ class DesktopKeyboardNavigationTest {
             assertTrue(fixture.requestDescriptionFocus("Search files, symbols, commands"))
             fixture.render()
             assertFalse(fixture.isTaggedNodeFocused("desktop-canvas-focus"))
-            state = state.copy(context = state.context.copy(visible = true))
+            state =
+                state.copy(
+                    context =
+                        state.context.copy(
+                            inspection =
+                                ContextInspectionState(status = ContextInspectionStatus.Loading)))
             fixture.render()
             assertTrue(fixture.hasText("Context inspector · read-only"))
             state = state.copy(app = state.app.copy(workspace = Workspace.Summary))
@@ -2377,7 +2396,7 @@ class DesktopKeyboardNavigationTest {
                   generating = false),
           context =
               DesktopShellContextState(
-                  false, null, ScopedModel(), false, ScopedModel(), false, false),
+                  ContextInspectionState(), ScopedModel(), false, ScopedModel(), false, false),
           palette = DesktopShellPaletteState(PaletteMode.Files, "", false),
           statusProviders =
               DesktopShellStatusProviders(ScopedModel(), ScopedModel(), ScopedModel()))
@@ -2407,9 +2426,13 @@ class DesktopKeyboardNavigationTest {
                 generate = onOperation,
                 cancelGeneration = onOperation,
                 dismissContext = {
-                  onState(state.copy(context = state.context.copy(visible = false)))
+                  onState(
+                      state.copy(
+                          context = state.context.copy(inspection = ContextInspectionState())))
                 },
-                createDeclaration = onOperation),
+                createDeclaration = onOperation,
+                retryContext = onOperation,
+                cancelContext = onOperation),
         analysisActions =
             DesktopShellAnalysisActions(
                 refreshStatus = onOperation,

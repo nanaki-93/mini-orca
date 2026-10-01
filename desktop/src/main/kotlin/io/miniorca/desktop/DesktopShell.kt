@@ -208,14 +208,16 @@ internal data class DesktopShellEditorState(
 )
 
 internal data class DesktopShellContextState(
-    val visible: Boolean,
-    val manifest: ContextManifest?,
+    val inspection: ContextInspectionState,
     val bugModel: ScopedModel,
     val bugProviderConfirmed: Boolean,
     val analyzeModel: ScopedModel,
     val analyzeProviderConfirmed: Boolean,
     val securityReviewRemoteConfirmed: Boolean,
-)
+) {
+  val visible: Boolean
+    get() = inspection.status != ContextInspectionStatus.Closed
+}
 
 internal data class DesktopShellPaletteState(
     val mode: PaletteMode,
@@ -249,6 +251,8 @@ internal data class DesktopShellEditorActions(
     val dismissContext: () -> Unit,
     val createDeclaration: () -> Unit,
     val openFile: ((String) -> Unit)? = null,
+    val retryContext: () -> Unit,
+    val cancelContext: () -> Unit,
 )
 
 internal data class DesktopShellAnalysisActions(
@@ -865,7 +869,10 @@ internal fun DesktopShell(
       }
       if (context.visible)
           ContextInspectorDialog(
-              context.manifest ?: ContextManifest(), ::dismissContextAndRestoreFocus)
+              context.inspection,
+              ::dismissContextAndRestoreFocus,
+              editorActions.retryContext,
+              editorActions.cancelContext)
     }
   }
 }
@@ -1614,73 +1621,105 @@ internal fun contextManifestSummary(manifest: ContextManifest): String =
     "${manifest.included.size} included · ${manifest.excluded.size} excluded · ${manifest.estimatedTokens?.toString() ?: "unavailable"} estimated tokens · ${truncationLabel(manifest.truncated)}"
 
 @Composable
-private fun ContextInspectorDialog(manifest: ContextManifest, onDismiss: () -> Unit) {
+internal fun ContextInspectorDialog(
+    inspection: ContextInspectionState,
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit,
+    onCancel: () -> Unit,
+) {
   IdeDialog(
       onDismissRequest = onDismiss,
       title = { Text("Context inspector · read-only") },
       content = {
         Column {
-          Column(Modifier.fillMaxWidth()) {
-            IdePaneHeader("Destination")
-            val scope =
-                ModelScope.entries.firstOrNull { it.wireValue == manifest.scope }?.label
-                    ?: manifest.scope.ifBlank { "unavailable scope" }
-            val provider =
-                when (manifest.remoteProvider) {
-                  true -> "remote provider · confirmation required before sending project context"
-                  false -> "local provider · project context stays on this machine"
-                  null -> "provider classification unavailable"
-                }
-            Text(
-                "$scope: ${manifest.model.ifBlank { "unavailable model" }} · ${manifest.providerOrigin.ifBlank { "unavailable destination" }} · $provider",
-                color = if (manifest.remoteProvider == true) Warning else SecondaryText,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(top = 5.dp))
-          }
-          IdeHorizontalSeparator(Modifier.padding(top = 10.dp))
-          Text(
-              contextManifestSummary(manifest),
-              color = PrimaryText,
-              fontSize = 12.sp,
-              modifier = Modifier.padding(top = 10.dp))
-          Text(
-              "Token limit: ${manifest.tokenLimit?.takeIf { it > 0 }?.toString() ?: "unavailable"}",
-              color = SecondaryText,
-              fontSize = 11.sp)
-          Text(
-              "Byte limit: ${manifest.byteLimit?.takeIf { it > 0 }?.let { formatBytes(it.toLong()) } ?: "unavailable"}",
-              color = SecondaryText,
-              fontSize = 11.sp)
           SelectionContainer {
-            Column {
+            Text(contextInspectionLabel(inspection), color = PrimaryText, fontSize = 12.sp)
+          }
+          val manifest =
+              inspection.manifest.takeIf { inspection.status == ContextInspectionStatus.Ready }
+          if (manifest != null) {
+            Column(Modifier.fillMaxWidth()) {
+              IdePaneHeader("Destination")
+              val scope =
+                  ModelScope.entries.firstOrNull { it.wireValue == manifest.scope }?.label
+                      ?: manifest.scope.ifBlank { "unavailable scope" }
+              val provider =
+                  when (manifest.remoteProvider) {
+                    true -> "remote provider · confirmation required before sending project context"
+                    false -> "local provider · project context stays on this machine"
+                    null -> "provider classification unavailable"
+                  }
               Text(
-                  "Included",
-                  color = PrimaryText,
-                  fontWeight = FontWeight.SemiBold,
-                  modifier = Modifier.padding(top = 10.dp))
-              if (manifest.included.isEmpty())
-                  Text("No files included.", color = SecondaryText, fontSize = 11.sp)
-              manifest.included.forEach {
+                  "$scope: ${manifest.model.ifBlank { "unavailable model" }} · ${manifest.providerOrigin.ifBlank { "unavailable destination" }} · $provider",
+                  color = if (manifest.remoteProvider == true) Warning else SecondaryText,
+                  fontSize = 12.sp,
+                  modifier = Modifier.padding(top = 5.dp))
+            }
+            IdeHorizontalSeparator(Modifier.padding(top = 10.dp))
+            Text(
+                contextManifestSummary(manifest),
+                color = PrimaryText,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 10.dp))
+            Text(
+                "Token limit: ${manifest.tokenLimit?.takeIf { it > 0 }?.toString() ?: "unavailable"}",
+                color = SecondaryText,
+                fontSize = 11.sp)
+            Text(
+                "Byte limit: ${manifest.byteLimit?.takeIf { it > 0 }?.let { formatBytes(it.toLong()) } ?: "unavailable"}",
+                color = SecondaryText,
+                fontSize = 11.sp)
+            SelectionContainer {
+              Column {
                 Text(
-                    "${it.path} · ${formatBytes(it.sizeBytes)} · ${it.estimatedTokens?.toString() ?: "unavailable"} estimated tokens · ${truncationLabel(it.truncated)}",
-                    color = SecondaryText,
-                    fontSize = 11.sp)
-              }
-              Text(
-                  "Excluded",
-                  color = PrimaryText,
-                  fontWeight = FontWeight.SemiBold,
-                  modifier = Modifier.padding(top = 10.dp))
-              if (manifest.excluded.isEmpty())
-                  Text("No files excluded.", color = SecondaryText, fontSize = 11.sp)
-              manifest.excluded.forEach {
-                Text("${it.path} · ${it.reason}", color = SecondaryText, fontSize = 11.sp)
+                    "Included",
+                    color = PrimaryText,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 10.dp))
+                if (manifest.included.isEmpty())
+                    Text("No files included.", color = SecondaryText, fontSize = 11.sp)
+                manifest.included.forEach {
+                  Text(
+                      "${it.path} · ${formatBytes(it.sizeBytes)} · ${it.estimatedTokens?.toString() ?: "unavailable"} estimated tokens · ${truncationLabel(it.truncated)}",
+                      color = SecondaryText,
+                      fontSize = 11.sp)
+                }
+                Text(
+                    "Excluded",
+                    color = PrimaryText,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 10.dp))
+                if (manifest.excluded.isEmpty())
+                    Text("No files excluded.", color = SecondaryText, fontSize = 11.sp)
+                manifest.excluded.forEach {
+                  Text("${it.path} · ${it.reason}", color = SecondaryText, fontSize = 11.sp)
+                }
               }
             }
           }
         }
       },
       actions = {
+        when (inspection.status) {
+          ContextInspectionStatus.Loading ->
+              MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Cancel") }
+          ContextInspectionStatus.Ready,
+          ContextInspectionStatus.Failed,
+          ContextInspectionStatus.Stale,
+          ContextInspectionStatus.Canceled ->
+              MiniOrcaButton(onClick = onRetry, tone = ActionTone.Neutral) { Text("Retry") }
+          ContextInspectionStatus.Closed -> Unit
+        }
         MiniOrcaButton(onClick = onDismiss, tone = ActionTone.Neutral) { Text("Close") }
       })
 }
+
+internal fun contextInspectionLabel(inspection: ContextInspectionState): String =
+    when (inspection.status) {
+      ContextInspectionStatus.Closed -> "Context inspection closed"
+      ContextInspectionStatus.Loading -> "Loading context preview…"
+      ContextInspectionStatus.Ready -> "Context preview ready"
+      ContextInspectionStatus.Failed -> "Context preview failed: ${inspection.message}"
+      ContextInspectionStatus.Stale -> "Context preview stale: ${inspection.message}"
+      ContextInspectionStatus.Canceled -> "Context preview canceled: ${inspection.message}"
+    }
