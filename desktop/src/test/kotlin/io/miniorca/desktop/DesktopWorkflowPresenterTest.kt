@@ -1093,6 +1093,228 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun ordinaryNavigationValidatesMetadataAndRetainsWorkOnReadFailure() {
+    for (outcome in
+        listOf(
+            "file path",
+            "symbols path",
+            "symbols project",
+            "symbols revision",
+            "symbols failure",
+            "empty")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+            when {
+              path.contains("files/info?path=other.go") ->
+                  response(
+                      fileJson(if (outcome == "file path") "foreign.go" else "other.go", "other"))
+              path.contains("files/symbols?path=other.go") -> {
+                val symbols =
+                    symbolsJson(
+                        if (outcome == "symbols path") "foreign.go" else "other.go",
+                        if (outcome == "empty") "" else "Foreign")
+                when (outcome) {
+                  "symbols project" ->
+                      response(
+                          symbols.replace(
+                              "\"project_id\":\"project\"", "\"project_id\":\"foreign\""))
+                  "symbols revision" ->
+                      response(
+                          symbols.replace(
+                              "\"project_revision\":\"revision\"",
+                              "\"project_revision\":\"foreign\""))
+                  "symbols failure" ->
+                      TransportResponse(403, """{"message":"Declarations read denied"}""")
+                  else -> response(symbols)
+                }
+              }
+              else -> creationFileResponse(path) ?: response("{}")
+            }
+          }
+      fun drain() {
+        repeat(5) {
+          main.runPending()
+          io.runPending()
+        }
+        main.runPending()
+      }
+      try {
+        loadProject(presenter)
+        presenter.selectFile("main.go")
+        drain()
+        presenter.dispatch(
+            DesktopEvent.ChatLoaded(
+                ChatSession("session", "project", "revision", "base", "main.go")))
+        presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+        presenter.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() { changed() }"))
+        val previous = presenter.snapshot.value.state
+        presenter.openFileInEditor("other.go")
+        drain()
+        val state = presenter.snapshot.value.state
+        assertNull(state.selection.pendingFilePath, outcome)
+        assertFalse(state.jobs.loading, outcome)
+        if (outcome == "empty") {
+          assertEquals("other.go", state.selectedFile?.path)
+          assertEquals("package main", state.selectedFile?.content)
+          assertTrue(state.symbols.isEmpty())
+          assertNull(state.selectedSymbol)
+          assertNull(state.selection.fileReadError)
+        } else {
+          assertEquals(previous.selectedFile, state.selectedFile, outcome)
+          assertEquals(previous.symbols, state.symbols, outcome)
+          assertEquals(previous.chat, state.chat, outcome)
+          assertEquals(previous.review, state.review, outcome)
+          assertEquals("other.go", state.selection.failedFilePath, outcome)
+          assertTrue(
+              state.selection.fileReadError?.contains(
+                  if (outcome == "symbols failure") "Declarations read denied"
+                  else "Could not open other.go:") == true,
+              outcome)
+        }
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun completedOrdinaryReadCannotPublishAfterProjectRevisionOrInventoryChanges() {
+    for (change in listOf("project", "revision", "removed destination", "foreign index")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+            when {
+              path.contains("files/info?") -> response(fileJson("other.go", "other"))
+              path.contains("files/symbols?") -> response(symbolsJson("other.go", "Other"))
+              else -> response("{}")
+            }
+          }
+      try {
+        loadFile(presenter)
+        presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+        if (change == "foreign index") {
+          val index = presenter.snapshot.value.state.index!!
+          presenter.dispatch(
+              DesktopEvent.ProjectLoaded(project(), index.copy(projectId = "foreign")))
+        }
+        presenter.openFileInEditor("other.go")
+        main.runPending()
+        io.runPending() // Read completed; its UI publication is still deferred.
+        val previous = presenter.snapshot.value.state
+        val index = previous.index!!
+        when (change) {
+          "project" ->
+              presenter.dispatch(
+                  DesktopEvent.ProjectLoaded(project("new"), index.copy(projectId = "new")))
+          "revision" ->
+              presenter.dispatch(DesktopEvent.IndexRefreshed(index.copy(projectRevision = "next")))
+          "removed destination" ->
+              presenter.dispatch(
+                  DesktopEvent.IndexRefreshed(
+                      index.copy(files = index.files.filterNot { it.path == "other.go" })))
+        }
+        main.runPending()
+        assertTrue(presenter.snapshot.value.state.selectedFile?.path != "other.go", change)
+        assertTrue(presenter.snapshot.value.state.symbols.none { it.name == "Other" }, change)
+        if (change == "removed destination" || change == "foreign index") {
+          val state = presenter.snapshot.value.state
+          assertEquals(previous.selectedFile, state.selectedFile)
+          assertEquals(previous.review, state.review)
+          assertEquals("other.go", state.selection.failedFilePath)
+          assertTrue(state.selection.fileReadError?.contains("no longer indexed") == true)
+        }
+        assertNull(presenter.snapshot.value.state.selection.pendingFilePath, change)
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun nonCooperativeSupersededTransportCannotReplaceNewSourceOrClearNewFailure() {
+    for (lateFailure in listOf(false, true)) {
+      for (newFailure in listOf(false, true)) {
+        val entered = CountDownLatch(1)
+        val ignoredCancellation = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val main = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        val io = Executors.newFixedThreadPool(2).asCoroutineDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + main)
+        val presenter =
+            presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+              when {
+                path.contains("files/info?path=other.go") -> response(fileJson("other.go", "late"))
+                path.contains("files/symbols?path=other.go") -> {
+                  entered.countDown()
+                  while (true) {
+                    try {
+                      release.await()
+                      break
+                    } catch (_: InterruptedException) {
+                      ignoredCancellation.countDown()
+                    }
+                  }
+                  if (lateFailure) TransportResponse(403, """{"message":"Late read failure"}""")
+                  else response(symbolsJson("other.go", "Late"))
+                }
+                path.contains("files/symbols?path=main.go") ->
+                    if (newFailure) TransportResponse(403, """{"message":"Current read failure"}""")
+                    else response(symbolsJson("main.go", "Current"))
+                else -> creationFileResponse(path) ?: response("{}")
+              }
+            }
+        try {
+          runBlocking(main) {
+            loadFile(presenter)
+            presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+            presenter.openFileInEditor("other.go")
+          }
+          assertTrue(entered.await(2, TimeUnit.SECONDS))
+          val newer =
+              runBlocking(main) {
+                presenter.openFileInEditor("main.go")
+                withTimeout(2_000) {
+                      presenter.snapshot.first {
+                        it.state.selection.fileReadError == "Current read failure" ||
+                            it.state.symbols.any { symbol -> symbol.name == "Current" }
+                      }
+                    }
+                    .state
+              }
+          assertTrue(ignoredCancellation.await(2, TimeUnit.SECONDS))
+          release.countDown()
+          runBlocking(main) {
+            val lifetime = scope.coroutineContext[Job]!!.children.single()
+            presenter.close()
+            withTimeout(2_000) { lifetime.join() }
+            val state = presenter.snapshot.value.state
+            assertEquals(newer.selectedFile, state.selectedFile)
+            assertEquals(newer.symbols, state.symbols)
+            assertEquals(newer.review, state.review)
+            assertEquals(newer.selection.fileReadError, state.selection.fileReadError)
+            assertEquals(newer.selection.failedFilePath, state.selection.failedFilePath)
+            assertNull(state.selection.pendingFilePath)
+            assertTrue(state.symbols.none { it.name == "Late" })
+          }
+        } finally {
+          release.countDown()
+          presenter.close()
+          scope.cancel()
+          io.close()
+          main.close()
+        }
+      }
+    }
+  }
+
+  @Test
   fun closingCancelsPendingReplacementEvenBeforeItsCoroutineStarts() {
     for (started in listOf(false, true)) {
       val main = QueuedDispatcher()
@@ -4376,6 +4598,15 @@ class DesktopWorkflowPresenterTest {
     }
     try {
       loadProject(presenter)
+      presenter.dispatch(
+          DesktopEvent.IndexRefreshed(
+              ProjectIndex(
+                  "project",
+                  "revision",
+                  files =
+                      listOf("first.go", "second.go").map {
+                        IndexedFile(it, "base", "Go", false)
+                      })))
       presenter.selectFile("first.go")
       assertTrue(firstStarted.await(1, TimeUnit.SECONDS))
       presenter.selectFile("second.go")
@@ -6003,7 +6234,11 @@ class DesktopWorkflowPresenterTest {
           presenter.snapshot.value.state.verifiedScan.operation)
       assertEquals("running", presenter.snapshot.value.state.findings.scan?.status)
       releasePoll.countDown()
-      eventually { presenter.snapshot.value.state.findings.scan?.status == "canceled" }
+      eventually {
+        val state = presenter.snapshot.value.state
+        state.findings.scan?.status == "canceled" &&
+            state.verifiedScan.operation == VerifiedScanOperation.Idle
+      }
       assertEquals(
           VerifiedScanOperation.Idle, presenter.snapshot.value.state.verifiedScan.operation)
       assertEquals(1, cancels.get())
@@ -6990,7 +7225,14 @@ class DesktopWorkflowPresenterTest {
   }
 
   private fun loadProject(presenter: DesktopWorkflowPresenter) {
-    presenter.dispatch(DesktopEvent.ProjectLoaded(project(), ProjectIndex("project", "revision")))
+    presenter.dispatch(
+        DesktopEvent.ProjectLoaded(
+            project(),
+            ProjectIndex(
+                "project",
+                "revision",
+                files =
+                    listOf("main.go", "other.go").map { IndexedFile(it, "base", "Go", false) })))
   }
 
   private fun loadFile(presenter: DesktopWorkflowPresenter) {

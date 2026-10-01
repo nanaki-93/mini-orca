@@ -1383,7 +1383,16 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
         event is DesktopEvent.FileLoaded) {
       draftRequest = 0
     }
-    return state.reduce(event).also { state = it }
+    val previousProject = state.project
+    state = state.reduce(event)
+    if (event is DesktopEvent.ProjectLoaded ||
+        previousProject?.projectId != state.project?.projectId ||
+        previousProject?.projectRevision != state.project?.projectRevision) {
+      fileRequest = null
+      pendingFileRequest = null
+      state = state.copy(selection = state.selection.copy(pendingFilePath = null))
+    }
+    return state
   }
 
   fun beginProjectLoad(
@@ -1468,8 +1477,7 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
       symbols: List<SymbolInfo>
   ): Boolean {
     val resolved = request.copy(contentHash = file.contentHash)
-    if (!matchesProject(request) || pendingFileRequest != request || file.path != request.path)
-        return false
+    if (!isCurrentFileLoad(request) || file.path != request.path) return false
     pendingFileRequest = null
     fileRequest = resolved
     analysisRequest = 0
@@ -1479,13 +1487,13 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
   }
 
   fun fileFailed(request: RequestIdentity, message: String): Boolean =
-      if (pendingFileRequest == request && matchesProject(request)) {
+      if (isCurrentFileLoad(request)) {
         pendingFileRequest = null
         accept(DesktopEvent.FileLoadFailed(message, request.path))
       } else false
 
   fun cancelFileLoad(request: RequestIdentity): Boolean =
-      if (pendingFileRequest == request && matchesProject(request)) {
+      if (isCurrentFileLoad(request)) {
         pendingFileRequest = null
         dispatch(DesktopEvent.Status("File load canceled"))
         state =
@@ -1678,6 +1686,9 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
   fun currentFileRequest(): RequestIdentity? = fileRequest
 
   fun currentPendingFileRequest(): RequestIdentity? = pendingFileRequest
+
+  internal fun isCurrentFileLoad(request: RequestIdentity): Boolean =
+      pendingFileRequest == request && matchesProject(request)
 
   private fun matchesProject(request: RequestIdentity): Boolean =
       state.project?.let {

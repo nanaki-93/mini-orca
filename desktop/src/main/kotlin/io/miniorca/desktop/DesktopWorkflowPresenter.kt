@@ -456,17 +456,27 @@ class DesktopWorkflowPresenter(
           try {
             val (file, symbolResponse) = io { api.fileInfo(path) to api.symbols(path) }
             val symbols = symbolResponse.symbols
+            if (!controller.isCurrentFileLoad(request)) return@launch
             if (obsoletePreparation()) {
               if (controller.cancelFileLoad(request)) publish()
               return@launch
             }
-            if ((preparationFinding != null || inspectionResult != null) &&
-                (file.path != path ||
-                    symbolResponse.path != path ||
-                    symbolResponse.projectId != request.projectId ||
-                    symbolResponse.projectRevision != request.projectRevision)) {
-              if (controller.fileFailed(request, "Loaded declarations belong to another source."))
-                  publish()
+            val index = controller.state.index
+            val readFailure =
+                when {
+                  index?.projectId != request.projectId ||
+                      index.projectRevision != request.projectRevision ||
+                      index.files.none { it.path == path } ->
+                      "The destination is no longer indexed in the active project."
+                  file.path != path -> "The file response belongs to another source."
+                  symbolResponse.path != path -> "Loaded declarations belong to another source."
+                  symbolResponse.projectId != request.projectId ||
+                      symbolResponse.projectRevision != request.projectRevision ->
+                      "Loaded declarations belong to another project or revision."
+                  else -> null
+                }
+            if (readFailure != null) {
+              if (controller.fileFailed(request, "Could not open $path: $readFailure")) publish()
               return@launch
             }
             val prepared =
