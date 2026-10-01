@@ -5205,6 +5205,265 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun sameTargetRetryAndRapidReplacementPublishOnlyTheLastExplanation() {
+    val first = DelayedExplanation()
+    val second = DelayedExplanation()
+    val calls = AtomicInteger()
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val presenter =
+        presenter(parentScope = scope) { method, path, _ ->
+          assertEquals("POST" to "/api/projects/current/files/explanation", method to path)
+          when (calls.incrementAndGet()) {
+            1 -> first.respond(explanationJson("Run").replace("Explains Run.", "Old."))
+            2 -> second.respond(explanationJson("Run").replace("Explains Run.", "Middle."))
+            else -> response(explanationJson("Run").replace("Explains Run.", "Latest."))
+          }
+        }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      val before = presenter.snapshot.value
+      val firstJob = explanationRequestJob(scope) { presenter.explainSelectedDeclaration() }
+      first.awaitStarted()
+      val secondJob =
+          explanationRequestJob(scope) {
+            presenter
+                .explainSelectedDeclaration() // Same target, while the first transport is blocked.
+          }
+      second.awaitStarted()
+      presenter.explainSelectedDeclaration() // Rapid replacement of the second request.
+      eventually { presenter.snapshot.value.declarationExplanation.result?.summary == "Latest." }
+      second.release()
+      first.release()
+      awaitExplanationCompletion(secondJob)
+      awaitExplanationCompletion(firstJob)
+      assertEquals(3, calls.get())
+      assertEquals("Latest.", presenter.snapshot.value.declarationExplanation.result?.summary)
+      assertEquals(
+          DeclarationExplanationStatus.Current,
+          presenter.snapshot.value.declarationExplanation.status)
+      assertExplanationPreservesEditState(before, presenter.snapshot.value)
+    } finally {
+      first.release()
+      second.release()
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun explicitExplanationCancelSurvivesLateCompletionAndAllowsExplicitRetry() {
+    val delayed = DelayedExplanation()
+    val calls = AtomicInteger()
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val presenter =
+        presenter(parentScope = scope) { method, path, _ ->
+          assertEquals("POST" to "/api/projects/current/files/explanation", method to path)
+          if (calls.incrementAndGet() == 1) delayed.respond(explanationJson("Run"))
+          else response(explanationJson("Run").replace("Explains Run.", "Retried."))
+        }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      val before = presenter.snapshot.value
+      val requestJob = explanationRequestJob(scope) { presenter.explainSelectedDeclaration() }
+      delayed.awaitStarted()
+      assertEquals(
+          DeclarationExplanationStatus.Loading,
+          presenter.snapshot.value.declarationExplanation.status)
+      presenter.cancelDeclarationExplanation()
+      delayed.release()
+      awaitExplanationCompletion(requestJob)
+      assertEquals(
+          DeclarationExplanationStatus.Canceled,
+          presenter.snapshot.value.declarationExplanation.status)
+      assertNull(presenter.snapshot.value.declarationExplanation.result)
+      assertEquals(1, calls.get()) // No background retry.
+      assertExplanationPreservesEditState(before, presenter.snapshot.value)
+      presenter.explainSelectedDeclaration()
+      eventually { presenter.snapshot.value.declarationExplanation.result?.summary == "Retried." }
+      assertEquals(2, calls.get())
+    } finally {
+      delayed.release()
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun projectAndFileIdentityChangesRejectDelayedExplanation() {
+    for (change in listOf("project", "hash")) {
+      val delayed = DelayedExplanation()
+      val calls = AtomicInteger()
+      val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+      val presenter =
+          presenter(parentScope = scope) { method, path, _ ->
+            assertEquals("POST" to "/api/projects/current/files/explanation", method to path)
+            calls.incrementAndGet()
+            delayed.respond(explanationJson("Run"))
+          }
+      try {
+        loadFile(presenter)
+        val requestJob = explanationRequestJob(scope) { presenter.explainSelectedDeclaration() }
+        delayed.awaitStarted()
+        val symbol = presenter.snapshot.value.state.selectedSymbol!!
+        if (change == "project") {
+          presenter.dispatch(
+              DesktopEvent.ProjectLoaded(
+                  project("new-project"), ProjectIndex("new-project", "revision")))
+          presenter.dispatch(DesktopEvent.FileLoaded(file(), listOf(symbol)))
+        } else {
+          presenter.dispatch(
+              DesktopEvent.FileLoaded(file().copy(contentHash = "new-hash"), listOf(symbol)))
+        }
+        presenter.dispatch(DesktopEvent.SymbolSelected(symbol))
+        assertEquals(
+            DeclarationExplanationStatus.Stale,
+            presenter.snapshot.value.declarationExplanation.status,
+            change)
+        delayed.release()
+        awaitExplanationCompletion(requestJob)
+        assertEquals(
+            DeclarationExplanationStatus.Stale,
+            presenter.snapshot.value.declarationExplanation.status,
+            change)
+        assertNull(presenter.snapshot.value.declarationExplanation.result, change)
+        assertEquals(1, calls.get(), change)
+      } finally {
+        delayed.release()
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun signatureAndRangeChangesRejectDelayedExplanationEvenForTheSameSymbol() {
+    for (change in listOf("signature", "range")) {
+      val delayed = DelayedExplanation()
+      val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+      val presenter =
+          presenter(parentScope = scope) { method, path, _ ->
+            assertEquals("POST" to "/api/projects/current/files/explanation", method to path)
+            delayed.respond(explanationJson("Run", "func Run()", 2, 4))
+          }
+      try {
+        loadFile(presenter)
+        val original =
+            SymbolInfo(
+                "Run", "function", "func Run()", 2, 4, confidence = "exact", atomicTarget = true)
+        presenter.dispatch(DesktopEvent.FileLoaded(file(), listOf(original)))
+        presenter.dispatch(DesktopEvent.SymbolSelected(original))
+        val requestJob = explanationRequestJob(scope) { presenter.explainSelectedDeclaration() }
+        delayed.awaitStarted()
+        val changed =
+            if (change == "signature") original.copy(signature = "func Run(x int)")
+            else original.copy(startLine = 3, endLine = 5)
+        presenter.dispatch(DesktopEvent.FileLoaded(file(), listOf(changed)))
+        presenter.dispatch(DesktopEvent.SymbolSelected(changed))
+        assertEquals(
+            DeclarationExplanationStatus.Stale,
+            presenter.snapshot.value.declarationExplanation.status,
+            change)
+        delayed.release()
+        awaitExplanationCompletion(requestJob)
+        assertNull(presenter.snapshot.value.declarationExplanation.result, change)
+        assertEquals(
+            DeclarationExplanationStatus.Stale,
+            presenter.snapshot.value.declarationExplanation.status,
+            change)
+      } finally {
+        delayed.release()
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun rejectedReplacementCannotLeaveAnOlderExplanationRunning() {
+    val delayed = DelayedExplanation()
+    val calls = AtomicInteger()
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val presenter =
+        presenter(parentScope = scope) { method, path, _ ->
+          assertEquals("POST" to "/api/projects/current/files/explanation", method to path)
+          calls.incrementAndGet()
+          delayed.respond(explanationJson("Run"))
+        }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      val requestJob = explanationRequestJob(scope) { presenter.explainSelectedDeclaration() }
+      delayed.awaitStarted()
+      presenter.dispatch(DesktopEvent.FileLoaded(file(), emptyList()))
+      val before = presenter.snapshot.value
+      presenter.explainSelectedDeclaration()
+      assertEquals(
+          DeclarationExplanationStatus.Unavailable,
+          presenter.snapshot.value.declarationExplanation.status)
+      delayed.release()
+      awaitExplanationCompletion(requestJob)
+      assertEquals(
+          DeclarationExplanationStatus.Unavailable,
+          presenter.snapshot.value.declarationExplanation.status)
+      assertNull(presenter.snapshot.value.declarationExplanation.result)
+      assertEquals(1, calls.get())
+      assertExplanationPreservesEditState(before, presenter.snapshot.value)
+    } finally {
+      delayed.release()
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  // Capture the launched job before releasing the fake transport; a transport return alone does
+  // not mean the presenter has finished decoding and publishing (or rejecting) its response.
+  private fun explanationRequestJob(scope: CoroutineScope, request: () -> Unit): Job {
+    val lifetime = scope.coroutineContext[Job]!!.children.single()
+    val before = lifetime.children.toSet()
+    request()
+    return (lifetime.children.toSet() - before).single()
+  }
+
+  private fun awaitExplanationCompletion(job: Job) = runBlocking {
+    withTimeout(5_000) { job.join() }
+  }
+
+  private fun assertExplanationPreservesEditState(
+      before: DesktopWorkflowSnapshot,
+      after: DesktopWorkflowSnapshot,
+  ) {
+    assertEquals(before.state.review, after.state.review)
+    assertEquals(before.state.checks, after.state.checks)
+    assertEquals(before.generating, after.generating)
+    assertEquals(before.draftValidationInProgress, after.draftValidationInProgress)
+  }
+
+  private class DelayedExplanation {
+    private val started = CountDownLatch(1)
+    private val released = CountDownLatch(1)
+
+    fun respond(body: String): TransportResponse {
+      started.countDown()
+      // Simulate a transport that ignores interruption until its response is available.
+      while (true) {
+        try {
+          if (released.await(5, TimeUnit.SECONDS)) break
+          error("Timed out waiting to release the explanation response")
+        } catch (_: InterruptedException) {
+          // An interrupted HTTP call can still return a response; generation guards must win.
+        }
+      }
+      return TransportResponse(200, body)
+    }
+
+    fun awaitStarted() = assertTrue(started.await(2, TimeUnit.SECONDS), "Request did not start")
+
+    fun release() = released.countDown()
+  }
+
+  @Test
   fun cachedSymbolExplanationRemainsAvailableWithoutAProviderRequest() {
     val calls = AtomicInteger()
     val presenter = presenter { _, _, _ -> calls.incrementAndGet().let { response("{}") } }
@@ -5382,20 +5641,26 @@ class DesktopWorkflowPresenterTest {
     }
     try {
       loadFile(conflictPresenter)
+      conflictPresenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      val beforeConflict = conflictPresenter.snapshot.value
       conflictPresenter.explainSelectedDeclaration()
       eventually {
         conflictPresenter.snapshot.value.declarationExplanation.status ==
             DeclarationExplanationStatus.Stale
       }
       assertEquals(null, conflictPresenter.snapshot.value.declarationExplanation.result)
+      assertExplanationPreservesEditState(beforeConflict, conflictPresenter.snapshot.value)
 
       loadFile(failedPresenter)
+      failedPresenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      val beforeFailure = failedPresenter.snapshot.value
       failedPresenter.explainSelectedDeclaration()
       eventually {
         failedPresenter.snapshot.value.declarationExplanation.status ==
             DeclarationExplanationStatus.Failed
       }
       assertEquals(null, failedPresenter.snapshot.value.declarationExplanation.result)
+      assertExplanationPreservesEditState(beforeFailure, failedPresenter.snapshot.value)
     } finally {
       conflictPresenter.close()
       failedPresenter.close()
