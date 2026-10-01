@@ -251,6 +251,80 @@ class EditorInspectionStateTest {
             .eligible)
   }
 
+  @Test
+  fun displayRangesUseLoadedTextWithoutChangingIndexedSymbolsOrEditEligibility() {
+    val loaded = file().copy(content = "package demo\n\nfunc Run() {\n  work()\n}", lineCount = 999)
+    val exact =
+        SymbolInfo(
+            "Run",
+            "function",
+            startLine = 3,
+            endLine = 5,
+            confidence = "exact",
+            atomicTarget = true)
+    val cases =
+        listOf(
+            exact to "Lines 3–5",
+            exact.copy(endLine = Int.MAX_VALUE) to "Lines 3–5",
+            exact.copy(startLine = 0) to "Line range unavailable",
+            exact.copy(startLine = -1) to "Line range unavailable",
+            exact.copy(endLine = 2) to "Line range unavailable",
+            exact.copy(startLine = 6, endLine = 8) to "Line range unavailable",
+            exact.copy(confidence = "approximate") to "Lines 3–5",
+        )
+    cases.forEach { (symbol, label) ->
+      val eligibility = symbolEditEligibility(loaded, listOf(symbol), symbol)
+      val inspector =
+          requireNotNull(
+              symbolInspectorUiState(
+                  loaded,
+                  listOf(symbol),
+                  symbol,
+                  null,
+                  false,
+                  InspectorProviderState(false, false),
+                  null))
+      assertEquals(label, inspector.selectedSymbol?.rangeLabel)
+      assertEquals(symbol, inspector.selectedSymbol?.symbol, "Clamping is presentation-only")
+      assertEquals(eligibility, inspector.selectedSymbol?.editEligibility)
+      assertEquals(SourceLineEmphasis.None, sourceLineEmphasis(6, symbol, 6, 5))
+      if (label == "Line range unavailable") {
+        (1..5).forEach {
+          assertEquals(SourceLineEmphasis.None, sourceLineEmphasis(it, symbol, 0, 5))
+        }
+        assertTrue(sourceGutterMarkers(loaded.path, symbol, 0, emptyList(), 5).isEmpty())
+      } else {
+        assertEquals(SourceLineEmphasis.SelectedSymbol, sourceLineEmphasis(5, symbol, 0, 5))
+        assertEquals(SourceLineEmphasis.None, sourceLineEmphasis(2, symbol, 0, 5))
+      }
+    }
+    val approximate = cases.last().first
+    assertFalse(symbolEditEligibility(loaded, listOf(approximate), approximate).eligible)
+    listOf(loaded.copy(content = ""), loaded.copy(binary = true)).forEach {
+      assertEquals("Line range unavailable", symbolRangeLabel(exact, it))
+    }
+  }
+
+  @Test
+  fun overlappingSymbolResolutionStillPrefersShortRangesThenExactTargetsThenIndexOrder() {
+    val approximate =
+        SymbolInfo(
+            "Approximate",
+            "function",
+            startLine = 2,
+            endLine = 4,
+            confidence = "approximate",
+            atomicTarget = false)
+    val exact = approximate.copy(name = "Exact", confidence = "exact", atomicTarget = true)
+    val secondExact = exact.copy(name = "SecondExact")
+    val outer = exact.copy(name = "Outer", startLine = 1, endLine = 10)
+    val invalid = exact.copy(name = "Invalid", startLine = 0, endLine = 4)
+    assertEquals(exact, symbolAtLine(listOf(outer, approximate, invalid, exact, secondExact), 3))
+    assertEquals(secondExact, symbolAtLine(listOf(secondExact, exact), 3))
+    assertEquals(approximate, symbolAtLine(listOf(outer, approximate), 3))
+    assertEquals(null, symbolAtLine(listOf(exact.copy(endLine = 1), invalid), 3))
+  }
+
   private fun file() =
       ProjectFileInfo(
           path = "internal/main.go",

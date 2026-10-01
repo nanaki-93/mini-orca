@@ -116,7 +116,7 @@ internal fun sourceGutterMarkers(
         )
   }
   selectedSymbol
-      ?.takeIf { inRange(it.startLine) }
+      ?.takeIf { it.sourceDisplayRange(lineCount) != null }
       ?.let { symbol ->
         markers +=
             SourceGutterMarker(
@@ -144,17 +144,18 @@ internal fun sourceGutterMarkers(
 fun sourceLineEmphasis(
     line: Int,
     selectedSymbol: SymbolInfo?,
-    focusedLine: Int
-): SourceLineEmphasis =
-    when {
-      selectedSymbol != null &&
-          line in selectedSymbol.startLine..selectedSymbol.endLine &&
-          line == focusedLine -> SourceLineEmphasis.FocusedSelectedSymbol
-      selectedSymbol != null && line in selectedSymbol.startLine..selectedSymbol.endLine ->
-          SourceLineEmphasis.SelectedSymbol
-      line == focusedLine && focusedLine > 0 -> SourceLineEmphasis.FocusedLocation
-      else -> SourceLineEmphasis.None
-    }
+    focusedLine: Int,
+    lineCount: Int = Int.MAX_VALUE,
+): SourceLineEmphasis {
+  if (line !in 1..lineCount) return SourceLineEmphasis.None
+  val inDeclaration = selectedSymbol?.sourceDisplayRange(lineCount)?.contains(line) == true
+  return when {
+    inDeclaration && line == focusedLine -> SourceLineEmphasis.FocusedSelectedSymbol
+    inDeclaration -> SourceLineEmphasis.SelectedSymbol
+    line == focusedLine -> SourceLineEmphasis.FocusedLocation
+    else -> SourceLineEmphasis.None
+  }
+}
 
 internal fun sourceLineDescription(line: Int, emphasis: SourceLineEmphasis): String =
     when (emphasis) {
@@ -212,7 +213,7 @@ internal fun SourceEditorPane(
         else ->
             "Select Import to analyze a project. Mini-Orca indexes only policy-eligible project files."
       }
-  val canSelectSource = selected != null && !selected.binary
+  val canSelectSource = selected != null && !selected.binary && selected.content.isNotEmpty()
   val rows =
       remember(source, selected?.path, selected?.contentHash, canSelectSource, symbols) {
         sourceViewportRows(
@@ -222,11 +223,15 @@ internal fun SourceEditorPane(
             symbols = symbols,
         )
       }
+  val displayLineCount = if (canSelectSource) rows.size else 0
+  val displaySymbol = selectedSymbol.takeIf { displayLineCount > 0 }
+  val displayFocusedLine = focusedLine.takeIf { it in 1..displayLineCount } ?: 0
   val markersByLine =
-      remember(selected?.path, selectedSymbol, focusedLine, findings, rows.size) {
-        sourceGutterMarkers(selected?.path, selectedSymbol, focusedLine, findings, rows.size)
+      remember(selected?.path, displaySymbol, displayFocusedLine, findings, displayLineCount) {
+        sourceGutterMarkers(
+            selected?.path, displaySymbol, displayFocusedLine, findings, displayLineCount)
       }
-  val focusLine = focusedLine.takeIf { it in 1..rows.size }
+  val focusLine = displayFocusedLine.takeIf { it > 0 }
   val focusLineRequester = remember { BringIntoViewRequester() }
   LaunchedEffect(selected?.path, selected?.contentHash, focusLine) {
     if (focusLine != null) focusLineRequester.bringIntoView()
@@ -247,8 +252,8 @@ internal fun SourceEditorPane(
       Row(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         SourceGutter(
             rows = rows,
-            selectedSymbol = selectedSymbol,
-            focusedLine = focusedLine,
+            selectedSymbol = displaySymbol,
+            focusedLine = displayFocusedLine,
             markersByLine = markersByLine,
             onSourceLineSelected = onSourceLineSelected,
             modifier = Modifier.width(gutterWidth),
@@ -258,7 +263,9 @@ internal fun SourceEditorPane(
         Column(
             Modifier.weight(1f).horizontalScroll(rememberScrollState()).width(IntrinsicSize.Max)) {
               rows.forEach { row ->
-                val emphasis = sourceLineEmphasis(row.line, selectedSymbol, focusedLine)
+                val emphasis =
+                    sourceLineEmphasis(
+                        row.line, displaySymbol, displayFocusedLine, displayLineCount)
                 val declarationSymbol = row.selection?.symbol
                 Box(
                     Modifier.fillMaxWidth()
@@ -308,10 +315,11 @@ private fun SourceGutter(
 ) {
   Column(modifier.background(EditorCanvas)) {
     rows.forEach { row ->
-      val emphasis = sourceLineEmphasis(row.line, selectedSymbol, focusedLine)
+      val emphasis = sourceLineEmphasis(row.line, selectedSymbol, focusedLine, rows.size)
       Row(
           Modifier.fillMaxWidth()
               .height(rowHeight)
+              .testTag("source-gutter-${row.line}")
               .background(sourceLineBackground(emphasis))
               .sourceLineSelectionTap(row.selection) {
                 onSourceLineSelected(requireNotNull(row.selection))
@@ -375,9 +383,9 @@ internal fun EditorPane(
 
 private fun sourceLineBackground(emphasis: SourceLineEmphasis): Color =
     when (emphasis) {
-      SourceLineEmphasis.FocusedSelectedSymbol -> SelectionSurface.copy(alpha = 0.72f)
-      SourceLineEmphasis.FocusedLocation -> SelectionSurface.copy(alpha = 0.52f)
-      SourceLineEmphasis.SelectedSymbol,
+      SourceLineEmphasis.FocusedSelectedSymbol -> SelectionAccent.copy(alpha = 0.18f)
+      SourceLineEmphasis.FocusedLocation -> FocusAccent.copy(alpha = 0.14f)
+      SourceLineEmphasis.SelectedSymbol -> SelectionSurface
       SourceLineEmphasis.None -> Color.Transparent
     }
 
