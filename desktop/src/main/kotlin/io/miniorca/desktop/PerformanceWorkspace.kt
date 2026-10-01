@@ -80,6 +80,9 @@ internal fun PerformanceWorkspacePane(
             remember(state.browser.identity, selected, selectedResult, selectedSemantic) {
               mutableStateOf(false)
             }
+        val latestResponse =
+            state.benchmarkLatestOutcome?.response?.takeUnless { it == state.benchmarkComparison }
+        var responseDetailsExpanded by remember(latestResponse) { mutableStateOf(false) }
         IdeDisclosureHeader(
             "Explore benchmark evidence",
             benchmarksExpanded,
@@ -103,6 +106,24 @@ internal fun PerformanceWorkspacePane(
                   state.benchmarkDiscovery,
                   state.benchmarkAdmission,
                   actions)
+              latestResponse?.let { response ->
+                IdeDisclosureHeader(
+                    "Latest response details",
+                    responseDetailsExpanded,
+                    { responseDetailsExpanded = !responseDetailsExpanded })
+                if (responseDetailsExpanded) {
+                  Column(Modifier.fillMaxWidth().testTag("benchmark-latest-response")) {
+                    IdePaneHeader("Latest comparison response", icon = DesktopIcon.Performance)
+                    RecordedBenchmarkRows(performanceBenchmarkResponseRows(response))
+                    PerformanceBenchmarkRecordedDetails(
+                        response,
+                        copyLabel = "Copy displayed response details",
+                        copyTag = "benchmark-copy-response") { conditions, samples ->
+                          performanceBenchmarkResponseCopyText(response, conditions, samples)
+                        }
+                  }
+                }
+              }
               state.benchmarkComparison?.let { comparison ->
                 val presentation =
                     performanceBenchmarkPresentation(
@@ -425,7 +446,6 @@ private fun PerformanceFindingDetails(
 /**
  * Displays already captured PERF-02 evidence. It has no benchmark action or process side effect.
  */
-@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun PerformanceBenchmarkEvidence(
     comparison: GoBenchmarkComparison,
@@ -435,11 +455,6 @@ private fun PerformanceBenchmarkEvidence(
 ) {
   val presentation =
       performanceBenchmarkPresentation(comparison, expectedIdentity, expectedChoice, priorEvidence)
-  var conditionsExpanded by remember(comparison) { mutableStateOf(false) }
-  var samplesExpanded by remember(comparison) { mutableStateOf(false) }
-  val clipboard = LocalClipboard.current
-  val copyScope = rememberCoroutineScope()
-  var copyFeedback by remember(comparison) { mutableStateOf<String?>(null) }
   val historical = priorEvidence || presentation.isStale
   Column(Modifier.fillMaxWidth().testTag("benchmark-measurement-evidence")) {
     IdePaneHeader(
@@ -493,6 +508,26 @@ private fun PerformanceBenchmarkEvidence(
             modifier = Modifier.padding(top = 6.dp))
       }
     }
+    PerformanceBenchmarkRecordedDetails(comparison) { conditions, samples ->
+      performanceBenchmarkCopyText(comparison, presentation, historical, conditions, samples)
+    }
+  }
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun PerformanceBenchmarkRecordedDetails(
+    comparison: GoBenchmarkComparison,
+    copyLabel: String = "Copy displayed benchmark evidence",
+    copyTag: String = "benchmark-copy-evidence",
+    copyText: (conditionsExpanded: Boolean, samplesExpanded: Boolean) -> String,
+) {
+  var conditionsExpanded by remember(comparison) { mutableStateOf(false) }
+  var samplesExpanded by remember(comparison) { mutableStateOf(false) }
+  val clipboard = LocalClipboard.current
+  val copyScope = rememberCoroutineScope()
+  var copyFeedback by remember(comparison) { mutableStateOf<String?>(null) }
+  Column(Modifier.fillMaxWidth()) {
     IdeDisclosureHeader(
         "Recorded conditions & identity",
         conditionsExpanded,
@@ -503,9 +538,7 @@ private fun PerformanceBenchmarkEvidence(
     if (samplesExpanded) RecordedBenchmarkRows(performanceBenchmarkSampleRows(comparison))
     ChromeButton(
         onClick = {
-          val payload =
-              performanceBenchmarkCopyText(
-                  comparison, presentation, historical, conditionsExpanded, samplesExpanded)
+          val payload = copyText(conditionsExpanded, samplesExpanded)
           copyFeedback = null
           copyScope.launch {
             try {
@@ -519,10 +552,10 @@ private fun PerformanceBenchmarkEvidence(
             }
           }
         },
-        accessibleName = "Copy displayed benchmark evidence",
+        accessibleName = copyLabel,
         tooltip = null,
-        modifier = Modifier.testTag("benchmark-copy-evidence")) {
-          Text("Copy displayed benchmark evidence", style = IdeTypography.compactBody)
+        modifier = Modifier.testTag(copyTag)) {
+          Text(copyLabel, style = IdeTypography.compactBody)
         }
     copyFeedback?.let { Text(it, color = SecondaryText, style = IdeTypography.compactBody) }
   }
@@ -1418,6 +1451,38 @@ internal fun performanceBenchmarkSampleRows(
     }
   }
 }
+
+private fun performanceBenchmarkResponseRows(
+    response: GoBenchmarkComparison
+): List<Pair<String, String>> =
+    listOf(
+        "Daemon status" to response.status.ifBlank { "not recorded" },
+        "Daemon reason" to response.reason.ifBlank { "not recorded" })
+
+internal fun performanceBenchmarkResponseCopyText(
+    response: GoBenchmarkComparison,
+    conditionsExpanded: Boolean,
+    samplesExpanded: Boolean,
+): String =
+    buildList {
+          add("Latest comparison response")
+          performanceBenchmarkResponseRows(response).forEach { (label, value) ->
+            add("$label: $value")
+          }
+          if (conditionsExpanded) {
+            add("Recorded conditions & identity")
+            performanceBenchmarkRecordedRows(response).forEach { (label, value) ->
+              add("$label: $value")
+            }
+          }
+          if (samplesExpanded) {
+            add("Returned sample details")
+            performanceBenchmarkSampleRows(response).forEach { (label, value) ->
+              add("$label: $value")
+            }
+          }
+        }
+        .joinToString("\n")
 
 internal fun performanceBenchmarkCopyText(
     comparison: GoBenchmarkComparison,
