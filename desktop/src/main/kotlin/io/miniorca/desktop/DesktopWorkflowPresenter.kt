@@ -429,15 +429,25 @@ class DesktopWorkflowPresenter(
       editorTarget: EditorNavigationTarget? = null,
       preparedFixRequest: String? = null,
       preparedTaskSpec: BugTaskSpec? = null,
+  ) = openFileInEditor(path, editorTarget, preparedFixRequest, preparedTaskSpec)
+
+  private fun loadFile(
+      path: String,
+      editorTarget: EditorNavigationTarget? = null,
+      preparedFixRequest: String? = null,
+      preparedTaskSpec: BugTaskSpec? = null,
       preparationFinding: UnifiedFinding? = null,
       inspectionResult: PerformanceResult? = null,
       inspectionCurrent: () -> Boolean = { true },
       onInspectionLoaded: (() -> Unit)? = null,
+      navigationCurrent: () -> Boolean = { true },
+      navigationIdentity: FileNavigationIdentity? = null,
   ) {
     cancelFileReadJob()
     val request = controller.beginFileLoad(path) ?: return
     val selectionGeneration = preparationSelectionGeneration
     fun obsoletePreparation(): Boolean {
+      if (!navigationCurrent()) return true
       if (inspectionResult != null &&
           (selectionGeneration != preparationSelectionGeneration ||
               !inspectionCurrent() ||
@@ -454,6 +464,11 @@ class DesktopWorkflowPresenter(
     fileJob =
         scope.launch {
           try {
+            if (!controller.isCurrentFileLoad(request)) return@launch
+            if (obsoletePreparation()) {
+              if (controller.cancelFileLoad(request)) publish()
+              return@launch
+            }
             val (file, symbolResponse) = io { api.fileInfo(path) to api.symbols(path) }
             val symbols = symbolResponse.symbols
             if (!controller.isCurrentFileLoad(request)) return@launch
@@ -493,10 +508,14 @@ class DesktopWorkflowPresenter(
                     is FindingPreparationDecision.Eligible -> validated
                   }
                 } else null
-            if (!controller.fileLoaded(request, file, symbols)) return@launch
+            val published =
+                if (navigationIdentity != null)
+                    controller.fileNavigationLoaded(request, file, symbols, navigationIdentity)
+                else controller.fileLoaded(request, file, symbols)
+            if (!published) return@launch
             invalidateFileSelectionWork()
             publish()
-            if (inspectionResult != null) onInspectionLoaded?.invoke()
+            onInspectionLoaded?.invoke()
             if (prepared != null) {
               val symbol = symbols.single { it.name == prepared.task.targetSymbol }
               dispatch(DesktopEvent.EditorContextSelected(symbol, symbol.startLine))
@@ -587,14 +606,96 @@ class DesktopWorkflowPresenter(
       preparedFixRequest: String? = null,
       preparedTaskSpec: BugTaskSpec? = null,
   ) {
-    if (snapshot.value.state.index?.files?.any { it.path == path } != true) {
+    val intent = fileNavigationIntent(path, editorTarget, preparedFixRequest, preparedTaskSpec)
+    if (intent == null) {
       dispatch(
           DesktopEvent.Failed(
               "This file no longer points to an indexed file in the active project."))
       return
     }
+    if (intent.identity.selectedFile?.path != path && intent.hasWork) {
+      dispatch(
+          DesktopEvent.Failed(
+              "Review and confirm discarding the current work before opening this file."))
+      return
+    }
+    confirmFileNavigationIntent(intent)
+  }
+
+  internal data class FileNavigationIntent(
+      val path: String,
+      val editorTarget: EditorNavigationTarget?,
+      val preparedFixRequest: String?,
+      val preparedTaskSpec: BugTaskSpec?,
+      val identity: FileNavigationIdentity,
+      val generating: Boolean,
+      val composerHasWork: Boolean,
+      val composerCurrent: () -> Boolean,
+  ) {
+    val hasWork: Boolean
+      get() =
+          identity.draft.hasWork || identity.chatRequestId != 0L || generating || composerHasWork
+  }
+
+  private var pendingFileNavigationIntent: FileNavigationIntent? = null
+
+  internal fun fileNavigationIntent(
+      path: String,
+      editorTarget: EditorNavigationTarget? = null,
+      preparedFixRequest: String? = null,
+      preparedTaskSpec: BugTaskSpec? = null,
+      composerHasWork: Boolean = false,
+      composerCurrent: () -> Boolean = { true },
+  ): FileNavigationIntent? {
+    // Even an invalid new action revokes an older dialog callback.
+    pendingFileNavigationIntent = null
+    val identity = controller.state.fileNavigationIdentity(path) ?: return null
+    if (editorTarget != null && editorTarget.path != path || !composerCurrent()) return null
+    return FileNavigationIntent(
+            path,
+            editorTarget,
+            preparedFixRequest,
+            preparedTaskSpec,
+            identity,
+            snapshot.value.generating,
+            composerHasWork,
+            composerCurrent)
+        .also { pendingFileNavigationIntent = it }
+  }
+
+  private fun currentFileNavigation(intent: FileNavigationIntent): Boolean =
+      controller.state.matchesFileNavigation(intent.path, intent.identity) &&
+          snapshot.value.generating == intent.generating &&
+          intent.composerCurrent()
+
+  internal fun confirmFileNavigationIntent(
+      intent: FileNavigationIntent,
+      onLoaded: (() -> Unit)? = null,
+  ): Boolean {
+    val pending = pendingFileNavigationIntent
+    if (pending === intent) pendingFileNavigationIntent = null
+    if (pending !== intent || !currentFileNavigation(intent)) {
+      dispatch(DesktopEvent.Failed("The file or current work changed. Choose Open file again."))
+      return false
+    }
     dispatch(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
-    selectFile(path, editorTarget, preparedFixRequest, preparedTaskSpec)
+    if (intent.identity.selectedFile?.path == intent.path) {
+      cancelFileReadJob()
+      intent.editorTarget?.let { target ->
+        val selection = resolveEditorNavigation(controller.state.symbols, target)
+        dispatch(DesktopEvent.EditorContextSelected(selection.symbol, selection.focusLine))
+      }
+      return true
+    }
+    loadFile(
+        intent.path,
+        intent.editorTarget,
+        intent.preparedFixRequest,
+        intent.preparedTaskSpec,
+        navigationCurrent = { currentFileNavigation(intent) },
+        navigationIdentity = intent.identity,
+        onInspectionLoaded = onLoaded)
+    return true
   }
 
   /** An approval is bound to the observed project, finding, target and complete draft buffer. */
@@ -677,7 +778,7 @@ class DesktopWorkflowPresenter(
     val target = approvedFindingIntent(finding, true) ?: return
     val decision = preparationDecision(finding) as? FindingPreparationDecision.Eligible ?: return
     dispatch(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
-    selectFile(target.path, target, preparationFinding = finding, preparedTaskSpec = decision.task)
+    loadFile(target.path, target, preparationFinding = finding, preparedTaskSpec = decision.task)
   }
 
   private fun preparationDecision(finding: UnifiedFinding): FindingPreparationDecision {
@@ -780,7 +881,7 @@ class DesktopWorkflowPresenter(
       dispatch(DesktopEvent.EditorContextSelected(null, intent.target.line))
     } else {
       dispatch(DesktopEvent.WorkspaceSelected(fileInspectionWorkspace()))
-      selectFile(
+      loadFile(
           intent.target.path,
           intent.target,
           inspectionResult = result,
