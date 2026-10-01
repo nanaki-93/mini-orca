@@ -12899,12 +12899,7 @@ internal fun AdaptiveProductionEditorFixture(
                 EditorArea(
                     {
                       EditorWorkspace(
-                          editorChromeUiState(
-                              file,
-                              symbol,
-                              selectedSurface,
-                              progress,
-                              draft),
+                          editorChromeUiState(file, symbol, selectedSurface, progress, draft),
                           evidence,
                           onSurface,
                           onCreate,

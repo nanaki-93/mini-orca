@@ -59,6 +59,13 @@ internal sealed interface PendingDraftDiscard {
   data class Create(
       override val currentDraft: CurrentEditIdentity,
       val kind: DeclarationCreationKind,
+      val project: ProjectAnalysis?,
+      val index: ProjectIndex?,
+      val file: ProjectFileInfo,
+      val review: DraftReviewState,
+      val chat: ChatState,
+      val message: TextFieldValue,
+      val constraints: TextFieldValue,
   ) : PendingDraftDiscard {
     override val nextLabel: String = "create a ${kind.noun}"
   }
@@ -470,7 +477,13 @@ internal fun MiniOrcaApp(
   }
 
   fun requestCreateDeclaration(kind: DeclarationCreationKind) {
-    routeCreationRequest(workflow, kind, ::startCreateDeclaration) { pendingDraftDiscard = it }
+    routeCreationRequest(
+        workflow,
+        kind,
+        ::startCreateDeclaration,
+        { pendingDraftDiscard = it },
+        chatMessage,
+        advancedConstraints)
   }
 
   fun sendComposerMessage() {
@@ -1023,10 +1036,8 @@ private fun continueAfterDraftDiscard(
       presenter.discardDraft()
       replace(pending.request)
     }
-    is PendingDraftDiscard.Create -> {
-      presenter.discardDraft()
-      create(pending.kind)
-    }
+    is PendingDraftDiscard.Create ->
+        confirmCreationDiscard(pending, presenter, currentInput, create)
     is PendingDraftDiscard.FileNavigation ->
         confirmFileNavigationDiscard(presenter, pending, currentInput, clearComposer)
     is PendingDraftDiscard.PerformancePreparation ->
@@ -1050,6 +1061,27 @@ private fun continueAfterDraftDiscard(
         confirmFindingDiscard(presenter, pending, message, constraints, clearComposer)
     null -> Unit
   }
+}
+
+internal fun confirmCreationDiscard(
+    pending: PendingDraftDiscard.Create,
+    presenter: DesktopWorkflowPresenter,
+    currentInput: () -> Pair<TextFieldValue, TextFieldValue>,
+    create: (DeclarationCreationKind) -> Unit,
+) {
+  val workflow = presenter.snapshot.value
+  val state = workflow.state
+  if (state.project != pending.project ||
+      state.index != pending.index ||
+      state.selectedFile != pending.file ||
+      state.review != pending.review ||
+      state.chat != pending.chat ||
+      currentEditIdentity(state) != pending.currentDraft ||
+      currentInput() != (pending.message to pending.constraints) ||
+      declarationCreationBlockedReason(state.selectedFile, workflow.creationInProgress) != null)
+      return
+  presenter.discardDraft()
+  create(pending.kind)
 }
 
 internal fun sourceLineSelectionAction(
@@ -1454,13 +1486,26 @@ internal fun routeCreationRequest(
     kind: DeclarationCreationKind,
     start: (DeclarationCreationKind) -> Unit,
     confirmDiscard: (PendingDraftDiscard.Create) -> Unit,
+    message: TextFieldValue = TextFieldValue(),
+    constraints: TextFieldValue = TextFieldValue(),
 ) {
-  if (declarationCreationBlockedReason(workflow.state.selectedFile, workflow.creationInProgress) !=
-      null)
+  val state = workflow.state
+  if (declarationCreationBlockedReason(state.selectedFile, workflow.creationInProgress) != null)
       return
-  val currentDraft = currentEditIdentity(workflow.state)?.takeIf { it.hasDraft }
+  val currentDraft = currentEditIdentity(state)?.takeIf { it.hasDraft }
   if (currentDraft == null) start(kind)
-  else confirmDiscard(PendingDraftDiscard.Create(currentDraft, kind))
+  else
+      confirmDiscard(
+          PendingDraftDiscard.Create(
+              currentDraft,
+              kind,
+              state.project,
+              state.index,
+              requireNotNull(state.selectedFile),
+              state.review,
+              state.chat,
+              message,
+              constraints))
 }
 
 private fun submitComposerMessage(
