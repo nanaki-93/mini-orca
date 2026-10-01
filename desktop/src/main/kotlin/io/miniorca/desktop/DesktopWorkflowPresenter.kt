@@ -224,11 +224,19 @@ class DesktopWorkflowPresenter(
   }
 
   fun setProviderConfirmation(scope: ModelScope, confirmed: Boolean) {
+    val previous = mutableSnapshot.value
     mutableSnapshot.value =
-        mutableSnapshot.value.copy(
+        previous.copy(
             providerConfirmations =
-                mutableSnapshot.value.providerConfirmations.withConfirmation(scope, confirmed),
+                previous.providerConfirmations.withConfirmation(scope, confirmed),
         )
+    if (scope == ModelScope.Function &&
+        !confirmed &&
+        previous.providerConfirmed(scope) &&
+        previous.model(scope).remoteProvider &&
+        previous.declarationExplanation.status == DeclarationExplanationStatus.Loading)
+        invalidateDeclarationExplanation(
+            "Function model consent was revoked. Request a new explanation after confirming the destination.")
   }
 
   /** Security review uses a per-request confirmation, independent of other Analyze operations. */
@@ -244,6 +252,7 @@ class DesktopWorkflowPresenter(
           try {
             val (status, catalog) = io { api.status() to api.modelCatalog() }
             val previous = mutableSnapshot.value
+            val function = catalog.forScope(ModelScope.Function)
             val confirmations =
                 if (previous.modelCatalog.identity() == catalog.identity())
                     previous.providerConfirmations
@@ -256,10 +265,12 @@ class DesktopWorkflowPresenter(
                         previous.securityReviewRemoteConfirmed.takeIf {
                           previous.modelCatalog.identity() == catalog.identity()
                         } ?: false)
-            if (previous.modelCatalog.identity() != catalog.identity())
-                analysisWorkflow.providerChanged()
-            else analysisWorkflow.refresh()
-            val function = catalog.forScope(ModelScope.Function)
+            if (previous.modelCatalog.identity() != catalog.identity()) {
+              analysisWorkflow.providerChanged()
+              if (previous.declarationExplanation.status == DeclarationExplanationStatus.Loading)
+                  invalidateDeclarationExplanation(
+                      "Model catalog changed; Function confirmation was reset. Request a new explanation.")
+            } else analysisWorkflow.refresh()
             dispatch(
                 DesktopEvent.ConnectionUpdated(
                     ConnectionState(
@@ -1382,16 +1393,12 @@ class DesktopWorkflowPresenter(
       analysisWorkflow.retryResults(category, path)
 
   fun explainSelectedDeclaration() {
-    val state = snapshot.value.state
+    val admitted = snapshot.value
+    val state = admitted.state
     val project = state.project ?: return
     val file = state.selectedFile ?: return
-    val symbol = state.selectedSymbol
     val target = selectedDeclarationTarget(state)
-    if (symbol == null ||
-        target == null ||
-        file.language != "Go" ||
-        !symbol.atomicTarget ||
-        symbol.confidence != "exact") {
+    if (target == null) {
       mutableSnapshot.value =
           mutableSnapshot.value.copy(
               declarationExplanation =
@@ -1400,8 +1407,9 @@ class DesktopWorkflowPresenter(
                       message = "Select one exact atomic Go declaration to explain."))
       return
     }
-    if (snapshot.value.model(ModelScope.Function).remoteProvider &&
-        !snapshot.value.providerConfirmed(ModelScope.Function)) {
+    val functionDestination = admitted.model(ModelScope.Function)
+    val confirmRemoteProvider = admitted.providerConfirmed(ModelScope.Function)
+    if (functionDestination.remoteProvider && !confirmRemoteProvider) {
       mutableSnapshot.value =
           mutableSnapshot.value.copy(
               declarationExplanation =
@@ -1420,18 +1428,24 @@ class DesktopWorkflowPresenter(
                 DeclarationExplanationState(
                     status = DeclarationExplanationStatus.Loading,
                     target = target,
-                    message = "Explaining ${symbol.name}…"))
+                    message = "Explaining ${target.symbol}…"))
     declarationExplanationJob =
         scope.launch {
           try {
             val result = io {
+              val current = snapshot.value
+              if (current.model(ModelScope.Function) != functionDestination ||
+                  (functionDestination.remoteProvider &&
+                      !current.providerConfirmed(ModelScope.Function)) ||
+                  generation != declarationExplanationGeneration)
+                  throw CancellationException()
               api.explainDeclaration(
                   project.projectId,
                   project.projectRevision,
                   file.contentHash,
                   file.path,
-                  symbol.name,
-                  snapshot.value.providerConfirmed(ModelScope.Function))
+                  target.symbol,
+                  confirmRemoteProvider)
             }
             if (generation != declarationExplanationGeneration ||
                 selectedDeclarationTarget(snapshot.value.state) != target)
@@ -2439,7 +2453,7 @@ private fun selectedDeclarationTarget(state: DesktopState): DeclarationExplanati
   val project = state.project ?: return null
   val file = state.selectedFile ?: return null
   val symbol = state.selectedSymbol ?: return null
-  if (file.language != "Go" || !symbol.atomicTarget || symbol.confidence != "exact") return null
+  if (!symbolEditEligibility(file, state.symbols, symbol).eligible) return null
   return DeclarationExplanationTarget(
       file.identity(project), symbol.name, symbol.signature, symbol.startLine, symbol.endLine)
 }
