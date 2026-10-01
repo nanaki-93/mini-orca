@@ -191,6 +191,500 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun inspectionInvalidatesFileHashRevisionAndDeclarationWithoutChangingEditEvidence() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = AtomicInteger()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, _, _ ->
+          calls.incrementAndGet()
+          response("{}")
+        }
+    try {
+      loadFile(presenter)
+      val other = SymbolInfo("Other", "function", confidence = "exact", atomicTarget = true)
+      val changes: List<(DesktopWorkflowPresenter) -> Unit> =
+          listOf(
+              { it.dispatch(DesktopEvent.SymbolSelected(other)) },
+              {
+                it.dispatch(
+                    DesktopEvent.SelectedFileRefreshed(
+                        file().copy(contentHash = "new"), listOf(other)))
+              },
+              { it.dispatch(DesktopEvent.IndexRefreshed(ProjectIndex("project", "next"))) },
+              {
+                it.dispatch(DesktopEvent.FileLoaded(file().copy(path = "other.go"), listOf(other)))
+              },
+          )
+      for (change in changes) {
+        loadFile(presenter)
+        presenter.inspectContext("fix")
+        val captured = presenter.snapshot.value.contextInspection.identity
+        main.runPending()
+        io.runPending() // Completion waits on the presenter dispatcher.
+        change(presenter)
+        val stale = presenter.snapshot.value.contextInspection
+        assertEquals(ContextInspectionStatus.Stale, stale.status)
+        assertEquals(captured, stale.identity)
+        val evidence =
+            presenter.snapshot.value.let {
+              Triple(it.state.chat, it.state.review, it.providerConfirmations)
+            }
+        val beforeRetry = calls.get()
+        presenter.retryContextInspection()
+        main.runPending()
+        assertEquals(
+            ContextInspectionStatus.Stale, presenter.snapshot.value.contextInspection.status)
+        assertEquals(beforeRetry, calls.get())
+        assertEquals(
+            evidence,
+            presenter.snapshot.value.let {
+              Triple(it.state.chat, it.state.review, it.providerConfirmations)
+            })
+        presenter.inspectContext("fix") // A new explicit activation captures the changed target.
+        assertEquals(
+            ContextInspectionStatus.Loading, presenter.snapshot.value.contextInspection.status)
+        presenter.closeContextInspection()
+      }
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(
+          ContextInspectionStatus.Closed, presenter.snapshot.value.contextInspection.status)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun samePathFileLoadWithNewHashStalesReadyInspectionAndRejectsRetry() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val contextCalls = AtomicInteger()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          require(method == "GET")
+          when {
+            path.startsWith("/api/projects/current/context?") -> {
+              contextCalls.incrementAndGet()
+              response("{}")
+            }
+            path.contains("files/info?path=main.go") -> response(fileJson("main.go", "new"))
+            path.contains("files/symbols?path=main.go") ->
+                response(symbolsJson("main.go", "Run", "func Run()", 2, 10))
+            path.contains("files/analysis") -> response("""{"path":"main.go","status":"missing"}""")
+            path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+            path.contains("/git") -> response("""{"available":false}""")
+            else -> error("Unexpected $path")
+          }
+        }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(
+          DesktopEvent.SymbolSelected(
+              SymbolInfo("Run", "function", "func Run()", 2, 10, "exact", true)))
+      val index =
+          resultIndexFixture()
+              .copy(files = resultIndexFixture().files.map { it.copy(contentHash = "new") })
+      presenter.dispatch(DesktopEvent.IndexRefreshed(index))
+      val run = analysisRunFixture()
+      val finding =
+          UnifiedFinding(
+              id = "updated",
+              category = "bugs",
+              projectId = "project",
+              projectRevision = "revision",
+              fileHash = "new",
+              freshness = "fresh",
+              location = FindingLocation("main.go", symbol = "Run"),
+              taskSpec = BugTaskSpec("1", "main.go", "Run", "func Run()", listOf("Fix Run.")))
+      presenter.dispatch(
+          DesktopEvent.AnalysisRunUpdated(
+              ProjectAnalysisRunState(
+                  run = run,
+                  sections =
+                      mapOf(
+                          AnalysisResultKey("bugs") to
+                              AnalysisSectionState(
+                                  results =
+                                      analysisResultsFixture(run, "bugs")
+                                          .copy(semantic = listOf(finding)))))))
+      presenter.inspectContext("fix", ChatEditMode.CreateSymbol, "Fresh", "type")
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      val captured = presenter.snapshot.value.contextInspection.identity
+      assertEquals(ContextInspectionStatus.Ready, presenter.snapshot.value.contextInspection.status)
+      assertEquals("base", captured?.file?.contentHash)
+
+      presenter.prepareFinding(finding) // Reloads main.go rather than navigating to another path.
+      assertEquals(ContextInspectionStatus.Ready, presenter.snapshot.value.contextInspection.status)
+      main.runPending()
+      assertEquals(ContextInspectionStatus.Ready, presenter.snapshot.value.contextInspection.status)
+      io.runPending()
+      assertEquals(ContextInspectionStatus.Ready, presenter.snapshot.value.contextInspection.status)
+      main.runPending()
+      val inspection = presenter.snapshot.value.contextInspection
+      assertEquals("new", presenter.snapshot.value.state.selectedFile?.contentHash)
+      assertEquals(ContextInspectionStatus.Stale, inspection.status)
+      assertEquals(captured, inspection.identity)
+      assertEquals(1, contextCalls.get())
+      presenter.retryContextInspection()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(ContextInspectionStatus.Stale, presenter.snapshot.value.contextInspection.status)
+      assertEquals(1, contextCalls.get())
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun changedHashIsStaleAtFilePublicationBeforeNavigationSelection() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = AtomicInteger()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          require(method == "GET")
+          when {
+            path.startsWith("/api/projects/current/context?") -> {
+              calls.incrementAndGet()
+              response("{}")
+            }
+            path.contains("files/info?path=main.go") -> response(fileJson("main.go", "new"))
+            path.contains("files/symbols?path=main.go") -> response(symbolsJson("main.go"))
+            path.contains("files/analysis") -> response("""{"path":"main.go","status":"missing"}""")
+            path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+            path.contains("/git") -> response("""{"available":false}""")
+            else -> error("Unexpected $path")
+          }
+        }
+    try {
+      val page = performancePageFixture()
+      presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
+      presenter.dispatch(
+          DesktopEvent.AnalysisRunUpdated(
+              ProjectAnalysisRunState(
+                  run = page.run,
+                  sections = mapOf(AnalysisResultKey("performance") to page.section))))
+      val result =
+          performanceResults(presenter.snapshot.value.state.analysisResultPage("performance"))
+              .single()
+      var statusAtPublication: ContextInspectionStatus? = null
+      presenter.openPerformanceFinding(
+          result,
+          onLoaded = {
+            assertEquals("new", presenter.snapshot.value.state.selectedFile?.contentHash)
+            statusAtPublication = presenter.snapshot.value.contextInspection.status
+          })
+      main.runPending() // Start the file read before the inspection is admitted.
+      presenter.dispatch(DesktopEvent.FileLoaded(file(), emptyList()))
+      presenter.inspectContext("fix", ChatEditMode.CreateSymbol, "Fresh", "type")
+      val captured = presenter.snapshot.value.contextInspection.identity
+      main.runPending()
+      io.runLast() // Complete the inspection before the pending same-path file read.
+      main.runPending()
+      assertEquals(ContextInspectionStatus.Ready, presenter.snapshot.value.contextInspection.status)
+      io.runPending()
+      main.runPending()
+      assertEquals(ContextInspectionStatus.Stale, statusAtPublication)
+      assertEquals(captured, presenter.snapshot.value.contextInspection.identity)
+      presenter.retryContextInspection()
+      main.runPending()
+      io.runPending()
+      assertEquals(1, calls.get())
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun inspectionCreationTargetChangeRetainsCapturedIdentityAndRejectsRetry() {
+    val main = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = AtomicInteger()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = main) { _, _, _ ->
+          calls.incrementAndGet()
+          response("{}")
+        }
+    try {
+      loadFile(presenter)
+      presenter.inspectContext("fix", ChatEditMode.CreateSymbol, "NewType", "type")
+      val captured = presenter.snapshot.value.contextInspection.identity
+      presenter.contextCreationTargetChanged("OtherType", "type")
+      assertEquals(ContextInspectionStatus.Stale, presenter.snapshot.value.contextInspection.status)
+      assertEquals(captured, presenter.snapshot.value.contextInspection.identity)
+      presenter.retryContextInspection()
+      main.runPending()
+      assertEquals(0, calls.get())
+      presenter.inspectContext("fix", ChatEditMode.CreateSymbol, "OtherType", "type")
+      main.runPending()
+      assertEquals(ContextInspectionStatus.Ready, presenter.snapshot.value.contextInspection.status)
+      assertEquals(1, calls.get())
+      presenter.contextCreationTargetChanged("", "") // Switch back to declaration editing.
+      assertEquals(ContextInspectionStatus.Stale, presenter.snapshot.value.contextInspection.status)
+      presenter.retryContextInspection()
+      main.runPending()
+      assertEquals(1, calls.get())
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun changedDeclarationRejectsLateFailureEvenAfterFreshSameFileInspection() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var fail = true
+    val calls = AtomicInteger()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, _, _ ->
+          calls.incrementAndGet()
+          if (fail) TransportResponse(503, "") else response("{}")
+        }
+    try {
+      loadFile(presenter)
+      presenter.inspectContext("fix")
+      main.runPending()
+      io.runPending() // The error is waiting to publish.
+      presenter.dispatch(
+          DesktopEvent.SymbolSelected(
+              SymbolInfo("Other", "function", confidence = "exact", atomicTarget = true)))
+      assertEquals(ContextInspectionStatus.Stale, presenter.snapshot.value.contextInspection.status)
+      fail = false
+      presenter.inspectContext("fix")
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(2, calls.get())
+      assertEquals(ContextInspectionStatus.Ready, presenter.snapshot.value.contextInspection.status)
+      assertEquals("Other", presenter.snapshot.value.contextInspection.identity?.symbol?.name)
+      assertFalse(presenter.snapshot.value.state.status.contains("503"))
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun pendingFileNavigationInvalidatesInspectionBeforeTheReadCompletes() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val contextCalls = AtomicInteger()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          if (path.startsWith("/api/projects/current/context?")) {
+            contextCalls.incrementAndGet()
+            response("{}")
+          } else error("Unexpected $path")
+        }
+    try {
+      loadFile(presenter)
+      presenter.inspectContext("fix")
+      val captured = presenter.snapshot.value.contextInspection.identity
+      presenter.selectFile("other.go")
+      assertEquals(ContextInspectionStatus.Stale, presenter.snapshot.value.contextInspection.status)
+      assertEquals(captured, presenter.snapshot.value.contextInspection.identity)
+      presenter.retryContextInspection()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(0, contextCalls.get())
+      assertEquals(ContextInspectionStatus.Stale, presenter.snapshot.value.contextInspection.status)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun inspectionClosesOnProjectSwitchAndRejectsLateCompletion() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val presenter = presenter(parentScope = scope, ioDispatcher = io) { _, _, _ -> response("{}") }
+    try {
+      loadFile(presenter)
+      presenter.inspectContext("fix")
+      main.runPending()
+      io.runPending()
+      presenter.dispatch(
+          DesktopEvent.ProjectLoaded(project("other"), ProjectIndex("other", "revision")))
+      assertEquals(
+          ContextInspectionStatus.Closed, presenter.snapshot.value.contextInspection.status)
+      main.runPending()
+      assertEquals(
+          ContextInspectionStatus.Closed, presenter.snapshot.value.contextInspection.status)
+      presenter.retryContextInspection()
+      assertEquals(
+          ContextInspectionStatus.Closed, presenter.snapshot.value.contextInspection.status)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun staleInspectionClosesOnProjectSwitchInsteadOfRetainingTheOldOwner() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = AtomicInteger()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, _, _ ->
+          calls.incrementAndGet()
+          response("{}")
+        }
+    try {
+      loadFile(presenter)
+      presenter.inspectContext("fix")
+      val captured = presenter.snapshot.value.contextInspection.identity
+      main.runPending()
+      io.runPending() // Completion is still queued on the presenter dispatcher.
+      presenter.dispatch(
+          DesktopEvent.SymbolSelected(
+              SymbolInfo("Other", "function", confidence = "exact", atomicTarget = true)))
+      assertEquals(ContextInspectionStatus.Stale, presenter.snapshot.value.contextInspection.status)
+      assertEquals(captured, presenter.snapshot.value.contextInspection.identity)
+
+      presenter.dispatch(
+          DesktopEvent.ProjectLoaded(project("other"), ProjectIndex("other", "revision")))
+      assertEquals(
+          ContextInspectionStatus.Closed, presenter.snapshot.value.contextInspection.status)
+      assertNull(presenter.snapshot.value.contextInspection.identity)
+      main.runPending()
+      presenter.retryContextInspection()
+      main.runPending()
+      io.runPending()
+      assertEquals(
+          ContextInspectionStatus.Closed, presenter.snapshot.value.contextInspection.status)
+      assertEquals(1, calls.get())
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun reindexClosesInspectionBeforeCapturedRevisionChanges() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = AtomicInteger()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          when {
+            method == "POST" && path.endsWith("/reindex") ->
+                response("""{"project_id":"project","project_revision":"next"}""")
+            method == "GET" && path.startsWith("/api/projects/current/context?") -> {
+              calls.incrementAndGet()
+              response("{}")
+            }
+            method == "GET" && (path.contains("/analysis/run?") || path.contains("/scan?")) ->
+                TransportResponse(204, "")
+            method == "GET" &&
+                (path.contains("/overview?") ||
+                    path.contains("/findings?") ||
+                    path.contains("/analysis/selection?")) -> response("{}")
+            else -> error("Unexpected $method $path")
+          }
+        }
+    try {
+      loadFile(presenter)
+      presenter.inspectContext("fix")
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(ContextInspectionStatus.Ready, presenter.snapshot.value.contextInspection.status)
+      presenter.reindexProject()
+      assertEquals(
+          ContextInspectionStatus.Closed, presenter.snapshot.value.contextInspection.status)
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals("next", presenter.snapshot.value.state.project?.projectRevision)
+      assertEquals(
+          ContextInspectionStatus.Closed, presenter.snapshot.value.contextInspection.status)
+      assertNull(presenter.snapshot.value.contextInspection.identity)
+      presenter.retryContextInspection()
+      main.runPending()
+      io.runPending()
+      assertEquals(1, calls.get())
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun inspectionInvalidatesOnlyWhenItsRelevantModelChanges() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var function = "function-a"
+    var bug = "bug-a"
+    val calls = AtomicInteger()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          when (method to path) {
+            "GET" to "/status" -> response("""{"status":"ok","version":"v1"}""")
+            "GET" to "/api/models/current" ->
+                response(
+                    """{"scopes":{"function":{"scope":"function","model":"$function"},"bug":{"scope":"bug","model":"$bug"}}}""")
+            "GET" to "/api/projects/current/context?path=main.go&action=fix" -> {
+              calls.incrementAndGet()
+              response("{}")
+            }
+            else -> error("Unexpected $method $path")
+          }
+        }
+    fun drain() {
+      main.runPending()
+      io.runPending()
+      main.runPending()
+    }
+    try {
+      presenter.refreshConnection()
+      drain()
+      loadFile(presenter)
+      presenter.inspectContext("fix")
+      drain()
+      val captured = presenter.snapshot.value.contextInspection.identity
+      bug = "bug-b"
+      presenter.refreshConnection()
+      drain()
+      assertEquals(ContextInspectionStatus.Ready, presenter.snapshot.value.contextInspection.status)
+      function = "function-b"
+      presenter.refreshConnection()
+      drain()
+      assertEquals(ContextInspectionStatus.Stale, presenter.snapshot.value.contextInspection.status)
+      assertEquals(captured, presenter.snapshot.value.contextInspection.identity)
+      presenter.retryContextInspection()
+      drain()
+      assertEquals(1, calls.get())
+      presenter.inspectContext("fix")
+      drain()
+      assertEquals(ContextInspectionStatus.Ready, presenter.snapshot.value.contextInspection.status)
+      assertEquals(2, calls.get())
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun checkRerunUsesItsOwnAttemptAndNeverAppliesAnOlderPass() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()

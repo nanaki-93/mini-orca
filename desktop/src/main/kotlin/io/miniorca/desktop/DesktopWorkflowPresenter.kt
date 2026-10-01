@@ -237,6 +237,7 @@ class DesktopWorkflowPresenter(
         snapshot.value.state.project?.projectRevision != event.index.projectRevision) {
       controller.state.project?.identity()?.let(jobCoordinator::projectOpened)
     }
+    invalidateContextInspectionIfTargetChanged()
     val after = selectedDeclarationTarget(controller.state)
     if (before != after &&
         mutableSnapshot.value.declarationExplanation.status !=
@@ -294,6 +295,7 @@ class DesktopWorkflowPresenter(
                           previous.modelCatalog.identity() == catalog.identity()
                         } ?: false)
             if (previous.modelCatalog.identity() != catalog.identity()) {
+              invalidateContextInspectionIfTargetChanged()
               analysisWorkflow.providerChanged()
               if (previous.declarationExplanation.status == DeclarationExplanationStatus.Loading)
                   invalidateDeclarationExplanation(
@@ -484,6 +486,8 @@ class DesktopWorkflowPresenter(
   ) {
     cancelFileReadJob()
     val request = controller.beginFileLoad(path) ?: return
+    if (snapshot.value.contextInspection.identity?.file?.path != path)
+        invalidateContextInspectionIfTargetChanged(pendingPath = path)
     val selectionGeneration = preparationSelectionGeneration
     fun obsoletePreparation(): Boolean {
       if (!navigationCurrent()) return true
@@ -552,6 +556,7 @@ class DesktopWorkflowPresenter(
                     controller.fileNavigationLoaded(request, file, symbols, navigationIdentity)
                 else controller.fileLoaded(request, file, symbols)
             if (!published) return@launch
+            invalidateContextInspectionIfTargetChanged()
             invalidateFileSelectionWork()
             publish()
             onInspectionLoaded?.invoke()
@@ -1587,18 +1592,21 @@ class DesktopWorkflowPresenter(
     startContextInspection(identity)
   }
 
+  /**
+   * The composer owns creation input; changing it revokes the captured preview without requesting
+   * another.
+   */
+  fun contextCreationTargetChanged(name: String, kind: String) {
+    val current = mutableSnapshot.value.contextInspection.identity ?: return
+    if (current.creationKind != kind || (kind.isNotEmpty() && current.creationName != name))
+        invalidateContextInspectionIfTargetChanged(creationTargetChanged = true)
+  }
+
   fun retryContextInspection() {
     val identity = snapshot.value.contextInspection.identity ?: return
-    if (!isCurrentContextInspection(identity)) {
-      contextInspectionGeneration++
-      contextInspectionJob?.cancel()
-      mutableSnapshot.value =
-          mutableSnapshot.value.copy(
-              contextInspection =
-                  snapshot.value.contextInspection.copy(
-                      status = ContextInspectionStatus.Stale,
-                      generation = contextInspectionGeneration,
-                      message = "The inspection target changed. Inspect the current target again."))
+    if (snapshot.value.contextInspection.status == ContextInspectionStatus.Stale ||
+        !isCurrentContextInspection(identity)) {
+      invalidateContextInspectionIfTargetChanged()
       return
     }
     startContextInspection(identity)
@@ -1641,12 +1649,48 @@ class DesktopWorkflowPresenter(
   }
 
   private fun isCurrentContextInspection(identity: ContextInspectionIdentity): Boolean =
-      isCurrentFile(identity.file) &&
-          (identity.creationKind.isNotEmpty() ||
-              snapshot.value.state.selectedSymbol == identity.symbol) &&
-          snapshot.value.model(
+      isCurrentContextInspection(identity, controller.state)
+
+  private fun isCurrentContextInspection(
+      identity: ContextInspectionIdentity,
+      state: DesktopState,
+  ): Boolean =
+      state.project?.let { project ->
+        project.identity() == identity.file.project &&
+            state.selectedFile?.identity(project) == identity.file
+      } == true &&
+          (identity.creationKind.isNotEmpty() || state.selectedSymbol == identity.symbol) &&
+          mutableSnapshot.value.model(
               if (identity.action == "analyze_file") ModelScope.Bug else ModelScope.Function) ==
               identity.model
+
+  private fun invalidateContextInspectionIfTargetChanged(
+      pendingPath: String? = null,
+      creationTargetChanged: Boolean = false,
+  ) {
+    val current = mutableSnapshot.value.contextInspection
+    val identity = current.identity ?: return
+    val project = controller.state.project
+    if (project == null || project.projectId != identity.file.project.id) {
+      closeContextInspection()
+      return
+    }
+    if (current.status == ContextInspectionStatus.Stale ||
+        current.status == ContextInspectionStatus.Closed)
+        return
+    if (!creationTargetChanged && pendingPath == null && isCurrentContextInspection(identity))
+        return
+    if (!creationTargetChanged && pendingPath != null && pendingPath == identity.file.path) return
+    contextInspectionGeneration++
+    contextInspectionJob?.cancel()
+    mutableSnapshot.value =
+        mutableSnapshot.value.copy(
+            contextInspection =
+                current.copy(
+                    status = ContextInspectionStatus.Stale,
+                    generation = contextInspectionGeneration,
+                    message = "The inspection target changed. Inspect the current target again."))
+  }
 
   private fun canPublishContextInspection(
       generation: Long,

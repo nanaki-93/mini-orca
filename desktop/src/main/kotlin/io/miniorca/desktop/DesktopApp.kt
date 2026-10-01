@@ -374,7 +374,10 @@ internal fun MiniOrcaApp(
             ?: return@LaunchedEffect
     consumedPreparedRequestGeneration = appState.preparedRequestGeneration
     if (appState.preparedAction.isNotBlank()) contextAction = appState.preparedAction
-    if (appState.preparedTaskSpec != null) chatMode = ChatEditMode.ReplaceSymbol
+    if (appState.preparedTaskSpec != null) {
+      presenter.contextCreationTargetChanged("", "")
+      chatMode = ChatEditMode.ReplaceSymbol
+    }
     chatMessage = TextFieldValue(preparedRequest)
     layout = layoutForPreparedRequest(layout)
     composerRequested = true
@@ -433,6 +436,7 @@ internal fun MiniOrcaApp(
     presenter.clearPreparedSuggestion()
     if (appState.selectedSymbol != request.selectedSymbol)
         presenter.dispatch(DesktopEvent.SymbolSelected(request.selectedSymbol))
+    presenter.contextCreationTargetChanged("", "")
     chatMode = ChatEditMode.ReplaceSymbol
     newChatSymbol = ""
     clearComposerInput()
@@ -445,6 +449,7 @@ internal fun MiniOrcaApp(
 
   fun startCreateDeclaration(kind: DeclarationCreationKind) {
     presenter.clearPreparedSuggestion()
+    presenter.contextCreationTargetChanged("", kind.noun)
     chatMode = ChatEditMode.CreateSymbol
     creationKind = kind
     newChatSymbol = ""
@@ -710,7 +715,11 @@ internal fun MiniOrcaApp(
           conversationActions =
               AssistantConversationActions(
                   updateMessage = { chatMessage = TextFieldValue(it) },
-                  updateNewSymbol = { newChatSymbol = it },
+                  updateNewSymbol = {
+                    presenter.contextCreationTargetChanged(
+                        it, if (chatMode == ChatEditMode.CreateSymbol) creationKind.noun else "")
+                    newChatSymbol = it
+                  },
                   confirmRemoteProvider = {
                     presenter.setProviderConfirmation(ModelScope.Function, it)
                   },
