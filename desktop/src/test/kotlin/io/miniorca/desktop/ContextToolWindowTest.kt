@@ -703,6 +703,93 @@ class ContextToolWindowTest {
   }
 
   @Test
+  fun referencesShowOnlyMatchingLoadedEvidenceAndNeverDispatchOnDisclosure() {
+    val source = file()
+    val longPath = "internal/" + "nested/".repeat(16) + "caller.go"
+    val longReason = "Potential indexed relationship: " + "through an adapter ".repeat(5)
+    val rows =
+        listOf(
+            ImpactReference(longPath, "CallRun", "approximate", longReason),
+            ImpactReference("other/consumer.go", "", "exact", "Mentions the source file."))
+    var state by
+        mutableStateOf(
+            ContextToolWindowState(
+                inspector(source, selectedSymbol = symbol()), ScopedModel(), false, null, null))
+    var privilegedActions = 0
+    val actions =
+        ContextToolWindowActions(
+            { privilegedActions++ },
+            { privilegedActions++ },
+            { privilegedActions++ },
+            { privilegedActions++ },
+            { privilegedActions++ },
+            explainSelected = { privilegedActions++ },
+            cancelExplanation = { privilegedActions++ })
+    ComposeVisualFixture(320, 420, 1.5f) { ContextToolWindow(state, actions) }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Reference preview unavailable."))
+          assertFalse(fixture.hasText(longPath))
+          state = state.copy(impact = ImpactPreview(source.path, references = rows))
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "File-scoped reference preview · advisory indexed relationships, not runtime callers."))
+          assertFalse(fixture.hasText(longPath))
+          fixture.clickText("References")
+          fixture.render()
+          fixture.revealTextFullyWithin(longReason, "context-content")
+          fixture.assertTextWrapsWithoutClipping(longReason)
+          assertTrue(fixture.hasText(longPath))
+          assertTrue(fixture.hasText("CallRun"))
+          assertTrue(fixture.hasText("Confidence · approximate"))
+          assertTrue(fixture.hasText("other/consumer.go"))
+          assertTrue(fixture.hasText("Confidence · exact"))
+          assertTrue(fixture.hasText("Mentions the source file."))
+          fixture.render()
+          assertTrue(fixture.hasText(longReason))
+          assertTrue(fixture.requestDescriptionFocus("Collapse References"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertFalse(fixture.hasText(longReason))
+          state = state.copy(impact = ImpactPreview(source.path))
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "File-scoped reference preview has no indexed references; runtime callers are unknown."))
+          state = state.copy(impact = ImpactPreview("other.go", references = rows))
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "Reference preview does not match the selected file and declaration."))
+          assertFalse(fixture.hasText(longPath))
+          state = state.copy(impact = ImpactPreview(source.path, "Other", rows))
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "Reference preview does not match the selected file and declaration."))
+          assertFalse(fixture.hasText(longPath))
+          state = state.copy(impact = ImpactPreview(source.path, "Run", rows))
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "File-scoped reference preview · advisory indexed relationships, not runtime callers."))
+          fixture.clickText("References")
+          fixture.render()
+          assertTrue(fixture.hasText(longPath))
+          state =
+              state.copy(
+                  inspector = inspector(source, selectedSymbol = symbol().copy(name = "Stop")))
+          fixture.render()
+          assertFalse(fixture.hasText(longPath))
+          assertTrue(
+              fixture.hasText(
+                  "Reference preview does not match the selected file and declaration."))
+        }
+    assertEquals(0, privilegedActions)
+  }
+
+  @Test
   fun fileFallbackKeepsActionsAndDetailsWithoutMisreportingUnselectedSymbols() {
     var calls = 0
     val actions =
