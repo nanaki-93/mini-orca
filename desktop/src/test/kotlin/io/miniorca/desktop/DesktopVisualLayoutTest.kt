@@ -6175,6 +6175,60 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun indexedReferencesStayReachableInCompactContextWithoutDispatch() {
+    val path = "internal/" + "deep/".repeat(18) + "caller.go"
+    val reason = "Indexed relationship via " + "an adapter and a helper ".repeat(12)
+    for ((width, scale) in listOf(280 to 1f, 320 to 1.5f, 480 to 1.25f)) {
+      var actions = 0
+      val initial = contextVisualState()
+      val state =
+          initial.copy(
+              impact =
+                  ImpactPreview(
+                      initial.inspector!!.file.path,
+                      references =
+                          listOf(
+                              ImpactReference(path, "CallRun", "approximate", reason),
+                              ImpactReference("other/consumer.go", "", "exact", "Indexed use."))))
+      ComposeVisualFixture(width, 650, scale) {
+            ContextToolWindow(
+                state,
+                ContextToolWindowActions(
+                    { actions++ },
+                    { actions++ },
+                    { actions++ },
+                    { actions++ },
+                    { actions++ },
+                    explainSelected = { actions++ }))
+          }
+          .use { fixture ->
+            fixture.render("context-references-collapsed-$width-$scale")
+            assertTrue(
+                fixture.hasText(
+                    "File-scoped reference preview · advisory indexed relationships, not runtime callers."))
+            assertFalse(fixture.hasText(path))
+            fixture.revealText("References", "context-content")
+            fixture.clickText("References")
+            fixture.render("context-references-expanded-$width-$scale")
+            for (label in
+                listOf(
+                    path,
+                    "CallRun",
+                    "Confidence · approximate",
+                    reason,
+                    "other/consumer.go",
+                    "Confidence · exact",
+                    "Indexed use.")) {
+              fixture.revealText(label, "context-content")
+              assertTrue(fixture.hasText(label))
+            }
+            fixture.assertTextWrapsWithoutClipping(reason)
+            assertEquals(0, actions)
+          }
+    }
+  }
+
+  @Test
   fun declarationDescriptionPreservesConsentCancellationAndLifecycleEvidence() {
     var requests = 0
     var cancellations = 0

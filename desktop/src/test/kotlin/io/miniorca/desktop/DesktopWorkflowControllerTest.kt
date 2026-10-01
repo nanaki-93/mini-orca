@@ -39,6 +39,30 @@ class DesktopWorkflowControllerTest {
   }
 
   @Test
+  fun impactEnrichmentKeepsSuppliedScopeAndRejectsOtherFileOrSource() {
+    val controller = loadedController()
+    val first = controller.beginFileLoad("main.go")!!
+    assertTrue(controller.fileLoaded(first, file("main.go", "hash-a"), emptyList()))
+    val loaded = controller.currentFileRequest()!!
+    val preview =
+        ImpactPreview(
+            "main.go",
+            "Run",
+            listOf(ImpactReference("caller.go", "CallRun", "approximate", "Indexed mention")))
+    assertFalse(controller.impactLoaded(loaded, preview.copy(targetPath = "other.go")))
+    assertNull(controller.state.impact)
+    assertTrue(controller.impactLoaded(loaded, preview))
+    assertEquals(preview, controller.state.impact)
+    val replacement = controller.beginFileLoad("main.go")!!
+    assertTrue(controller.fileLoaded(replacement, file("main.go", "hash-b"), emptyList()))
+    assertNull(controller.state.impact)
+    assertFalse(controller.impactLoaded(loaded, preview))
+    assertNull(controller.state.impact)
+    assertTrue(controller.optionalLoadFailed(controller.currentFileRequest()!!))
+    assertNull(controller.state.impact)
+  }
+
+  @Test
   fun cancellationAndOptionalFailuresLeaveTheLoadedSourceAvailable() {
     val controller = loadedController()
     val canceled = controller.beginFileLoad("canceled.go")!!

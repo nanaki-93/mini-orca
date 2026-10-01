@@ -31,6 +31,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -181,6 +182,7 @@ internal fun ContextToolWindow(
                   Modifier.fillMaxWidth()
                       .weight(1f)
                       .verticalScroll(rememberScrollState())
+                      .testTag("context-content")
                       .padding(8.dp)) {
                     if (inspector.selectedSymbol != null) {
                       ContextDeclaration(state, actions)
@@ -312,7 +314,49 @@ private fun ContextDeclaration(state: ContextToolWindowState, actions: ContextTo
         modifier = Modifier.padding(top = 8.dp))
   }
   Spacer(Modifier.height(8.dp))
+  ContextReferences(state)
   ContextDetails(state, declarationSelected = true)
+}
+
+@Composable
+private fun ContextReferences(state: ContextToolWindowState) {
+  val inspector = requireNotNull(state.inspector)
+  val selected = requireNotNull(inspector.selectedSymbol).symbol.name
+  val impact = state.impact
+  val matches =
+      impact != null &&
+          impact.targetPath == inspector.file.path &&
+          (impact.targetSymbol.isBlank() || impact.targetSymbol == selected)
+  val status =
+      when {
+        impact == null -> "Reference preview unavailable."
+        !matches -> "Reference preview does not match the selected file and declaration."
+        impact.references.isEmpty() ->
+            "File-scoped reference preview has no indexed references; runtime callers are unknown."
+        else ->
+            "File-scoped reference preview · advisory indexed relationships, not runtime callers."
+      }
+  var expanded by remember { mutableStateOf(false) }
+  SelectionContainer { Text(status, color = SecondaryText, style = IdeTypography.compactBody) }
+  ContextSection("References", DesktopIcon.Branch, expanded, { expanded = !expanded }) {
+    if (matches) {
+      SelectionContainer {
+        Column(Modifier.fillMaxWidth()) {
+          impact.references.forEach { reference ->
+            Text(reference.path, color = PrimaryText, style = IdeTypography.compactBody)
+            if (reference.symbol.isNotBlank())
+                Text(reference.symbol, color = PrimaryText, style = IdeTypography.compactBody)
+            Text(
+                "Confidence · ${reference.confidence}",
+                color = SecondaryText,
+                style = IdeTypography.compactBody)
+            Text(reference.reason, color = SecondaryText, style = IdeTypography.compactBody)
+            Spacer(Modifier.height(8.dp))
+          }
+        }
+      }
+    }
+  }
 }
 
 @Composable
