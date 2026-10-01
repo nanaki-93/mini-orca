@@ -115,6 +115,95 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun assistantIntentsUseOnlySupportedPreviewActionsWithoutChangingConsentOrEditEvidence() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<Triple<String, String, String?>>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, body ->
+          calls += Triple(method, path, body)
+          response("{}")
+        }
+    try {
+      loadFile(presenter)
+      val before = presenter.snapshot.value
+      listOf("fix" to "Fix", "refactor" to "Refactor", "document" to "Document").forEach {
+          (operation, label) ->
+        presenter.inspectContext(operation)
+        assertEquals(label, presenter.snapshot.value.contextInspection.identity?.intent)
+        assertEquals("fix", presenter.snapshot.value.contextInspection.identity?.action)
+        main.runPending()
+        io.runPending()
+        main.runPending()
+      }
+      presenter.inspectContext("create", ChatEditMode.CreateSymbol, "Build", "function")
+      assertEquals("Create function", presenter.snapshot.value.contextInspection.identity?.intent)
+      assertEquals("Build", presenter.snapshot.value.contextInspection.identity?.creationName)
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      presenter.inspectContext("unsupported-preset")
+      assertEquals("fix", presenter.snapshot.value.contextInspection.identity?.action)
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(
+          List(5) {
+            Triple<String, String, String?>(
+                "GET", "/api/projects/current/context?path=main.go&action=fix", null)
+          },
+          calls)
+      presenter.inspectContext("analyze_file")
+      assertEquals("analyze_file", presenter.snapshot.value.contextInspection.identity?.action)
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(
+          Triple("GET", "/api/projects/current/context?path=main.go&action=analyze_file", null),
+          calls.last())
+      assertEquals(before.providerConfirmations, presenter.snapshot.value.providerConfirmations)
+      assertEquals(before.state.review, presenter.snapshot.value.state.review)
+      assertEquals(before.state.chat, presenter.snapshot.value.state.chat)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun contextInspectionWithoutProjectOrFileExplainsUnavailableWithoutRequest() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var requests = 0
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, _, _ ->
+          requests++
+          response("{}")
+        }
+    try {
+      presenter.inspectContext("refactor")
+      assertEquals(
+          ContextInspectionStatus.Failed, presenter.snapshot.value.contextInspection.status)
+      assertTrue(presenter.snapshot.value.contextInspection.message.contains("project"))
+      loadProject(presenter)
+      presenter.inspectContext("document")
+      assertEquals(
+          ContextInspectionStatus.Failed, presenter.snapshot.value.contextInspection.status)
+      assertTrue(presenter.snapshot.value.contextInspection.message.contains("file"))
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(0, requests)
+      assertNull(presenter.snapshot.value.contextInspection.manifest)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun contextInspectionReplacementAndDismissalRejectLateSuccessAndFailure() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()

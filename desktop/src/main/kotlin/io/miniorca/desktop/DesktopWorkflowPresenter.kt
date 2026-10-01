@@ -77,6 +77,7 @@ data class ContextInspectionIdentity(
     val creationName: String = "",
     val creationKind: String = "",
     val action: String,
+    val intent: String = "Fix",
     val model: ScopedModel,
 )
 
@@ -1575,17 +1576,44 @@ class DesktopWorkflowPresenter(
       creationKind: String = "",
   ) {
     val state = snapshot.value.state
-    val project = state.project ?: return
-    val file = state.selectedFile ?: return
+    val project = state.project
+    val file = state.selectedFile
+    if (project == null || file == null) {
+      contextInspectionGeneration++
+      contextInspectionJob?.cancel()
+      mutableSnapshot.value =
+          mutableSnapshot.value.copy(
+              contextInspection =
+                  ContextInspectionState(
+                      status = ContextInspectionStatus.Failed,
+                      generation = contextInspectionGeneration,
+                      message =
+                          if (project == null) "Open a project to inspect context."
+                          else "Open a file to inspect context."))
+      return
+    }
+    val previewAction =
+        if (mode != ChatEditMode.CreateSymbol && action == "analyze_file") "analyze_file" else "fix"
+    val intent =
+        if (mode == ChatEditMode.CreateSymbol) "Create $creationKind"
+        else
+            when (action) {
+              "fix" -> "Fix"
+              "refactor" -> "Refactor"
+              "document" -> "Document"
+              "analyze_file" -> "Analyze file"
+              else -> "Assistant request ($action)"
+            }
     val identity =
         ContextInspectionIdentity(
             file.identity(project),
             state.selectedSymbol.takeIf { mode == ChatEditMode.ReplaceSymbol },
             creationName.takeIf { mode == ChatEditMode.CreateSymbol }.orEmpty(),
             creationKind.takeIf { mode == ChatEditMode.CreateSymbol }.orEmpty(),
-            action.takeIf { it == "analyze_file" } ?: "fix",
+            previewAction,
+            intent,
             snapshot.value.model(
-                if (action == "analyze_file") ModelScope.Bug else ModelScope.Function))
+                if (previewAction == "analyze_file") ModelScope.Bug else ModelScope.Function))
     if (snapshot.value.contextInspection.status == ContextInspectionStatus.Loading &&
         snapshot.value.contextInspection.identity == identity)
         return

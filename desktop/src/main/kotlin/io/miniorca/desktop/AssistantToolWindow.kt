@@ -198,7 +198,7 @@ internal fun AssistantToolWindow(
                   conversationActions.confirmRemoteProvider)
               MiniOrcaButton(
                   onClick = conversationActions.inspectContext,
-                  enabled = state.selected != null && !state.sending,
+                  enabled = !state.sending,
                   tone = ActionTone.Neutral,
                   modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     Text("Inspect context")

@@ -1634,6 +1634,12 @@ internal fun ContextInspectorDialog(
         Column {
           SelectionContainer {
             Text(contextInspectionLabel(inspection), color = PrimaryText, fontSize = 12.sp)
+            inspection.identity?.let { identity ->
+              Text(
+                  "Assistant intent: ${identity.intent} · File preview action: ${identity.action}",
+                  color = SecondaryText,
+                  fontSize = 11.sp)
+            }
           }
           val manifest =
               inspection.manifest.takeIf { inspection.status == ContextInspectionStatus.Ready }
