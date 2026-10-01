@@ -3949,7 +3949,7 @@ class DesktopVisualLayoutTest {
               fixture.render("$label-explorer-read-failed")
               assertTrue(fixture.hasText("Could not open file"))
               fixture.assertTextFits("Open project")
-              assertFalse(fixture.hasText("No project open"))
+              fixture.assertTextAbove("Could not open file", "No project open")
               assertEquals(0, opens)
             }
         ComposeVisualFixture(pxWidth, pxHeight, scale, density) {

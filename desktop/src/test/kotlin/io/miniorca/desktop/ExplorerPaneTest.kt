@@ -14,6 +14,132 @@ import kotlin.test.assertTrue
 
 class ExplorerPaneTest {
   @Test
+  fun missingInventoryDistinguishesNoProjectLoadingAndUnavailableWithoutEmittingActions() {
+    val calls = mutableListOf<String>()
+    val actions =
+        ExplorerPaneActions(
+            { calls += "filter:$it" },
+            { calls += "toggle:$it" },
+            { calls += "collapse" },
+            { calls += "reveal" },
+            { calls += "open:$it" },
+            { calls += "project" })
+    val base = ExplorerPaneState(null, null, "", emptySet(), false)
+    val cases =
+        listOf(
+            base to "No project open",
+            base.copy(projectAvailable = true, loading = true) to "Loading indexed files…",
+            base.copy(projectAvailable = true) to "Indexed files unavailable")
+    for ((state, expected) in cases) {
+      ComposeVisualFixture(360, 500, 1.5f) { ExplorerPane(state, actions, Modifier.fillMaxSize()) }
+          .use { fixture ->
+            fixture.render(
+                "explorer-inventory-${expected.substringBefore(' ').lowercase()}-360-1.5")
+            fixture.assertTextFits(expected)
+            for (other in cases.map { it.second }.filter { it != expected }) {
+              assertFalse(fixture.hasText(other))
+            }
+            assertFalse(fixture.hasText("No indexed files"))
+            assertFalse(fixture.hasText("No matching files"))
+            assertFalse(fixture.hasDescription("Indexed file tree"))
+            assertEquals(if (state.projectAvailable) 0 else 1, fixture.textCount("Open project"))
+            assertTrue(calls.isEmpty(), "Rendering must not emit any action")
+          }
+    }
+  }
+
+  @Test
+  fun emptyInventoryNeverSuggestsChangingTheFilterAndFilterEditingRemainsLocal() {
+    var state by
+        mutableStateOf(
+            ExplorerPaneState(ProjectIndex("project", "revision"), null, "", emptySet(), false))
+    val calls = mutableListOf<String>()
+    ComposeVisualFixture(360, 500, 1.5f) {
+          ExplorerPane(
+              state,
+              ExplorerPaneActions(
+                  { state = state.copy(filter = it) },
+                  { calls += "toggle:$it" },
+                  { calls += "collapse" },
+                  { calls += "reveal" },
+                  { calls += "open:$it" },
+                  { calls += "project" }),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render("explorer-empty-inventory-360-1.5")
+          fun assertEmptyInventory() {
+            fixture.assertTextFits("No indexed files")
+            fixture.assertTextFits("This project's index contains no files.", maxLines = 2)
+            assertFalse(fixture.hasText("No matching files"))
+            assertFalse(fixture.hasText("Change the filter to view indexed relative paths."))
+            assertFalse(fixture.hasDescription("Indexed file tree"))
+            assertTrue(calls.isEmpty(), "Filtering must not open files or emit workflow actions")
+          }
+          assertEmptyInventory()
+          fixture.focusDescribedEditor("Filter indexed files")
+          assertTrue(fixture.typeCharacter(Key.Z, 'z'))
+          fixture.render("explorer-empty-inventory-filtered-360-1.5")
+          assertEquals("z", state.filter)
+          assertEmptyInventory()
+          fixture.pressKey(Key.Backspace)
+          fixture.render()
+          assertEquals("", state.filter)
+          assertEmptyInventory()
+        }
+  }
+
+  @Test
+  fun filteringRetainedInventoryKeepsFailureAndRecoveryAboveNoMatchAndRestoredRows() {
+    val files = listOf("main.go", "other.go").map { IndexedFile(it, "hash", "Go", false) }
+    var state by
+        mutableStateOf(
+            ExplorerPaneState(
+                ProjectIndex("project", "revision", files = files),
+                "main.go",
+                "",
+                emptySet(),
+                false,
+                readError = "Permission denied",
+                failedFilePath = "other.go"))
+    val calls = mutableListOf<String>()
+    ComposeVisualFixture(360, 650, 1.5f) {
+          ExplorerPane(
+              state,
+              ExplorerPaneActions(
+                  { state = state.copy(filter = it) },
+                  { calls += "toggle:$it" },
+                  { calls += "collapse" },
+                  { calls += "reveal" },
+                  { calls += "open:$it" }),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          val retained = "Go file main.go at main.go, Not analyzed, selected"
+          fixture.render()
+          fixture.assertTextAboveDescription("Retry opening file", retained)
+          fixture.focusDescribedEditor("Filter indexed files")
+          assertTrue(fixture.typeCharacter(Key.Z, 'z'))
+          fixture.render("explorer-retained-inventory-no-match-360-1.5")
+          fixture.assertTextFits("No matching files")
+          fixture.assertTextAbove("Retry opening file", "No matching files")
+          assertTrue(fixture.hasText("Change the filter to view indexed relative paths."))
+          assertFalse(fixture.hasText("No indexed files"))
+          assertFalse(fixture.hasDescription(retained))
+          assertTrue(fixture.hasDescription("Failed destination: other.go"))
+          assertTrue(fixture.hasDescription("Retry opening other.go"))
+          fixture.pressKey(Key.Backspace)
+          fixture.render()
+          assertEquals("", state.filter)
+          fixture.assertTextAboveDescription("Retry opening file", retained)
+          assertFalse(fixture.hasText("No matching files"))
+          assertTrue(calls.isEmpty(), "Rendering and filtering cannot retry the failed read")
+          fixture.clickText("Retry opening file")
+          assertEquals(listOf("open:other.go"), calls)
+        }
+  }
+
+  @Test
   fun treeFocusSurvivesExpansionAndReconcilesCollapsedFilteredAndRemovedPaths() {
     val files =
         listOf("src/a.go", "src/nested/b.go", "z.go").map { IndexedFile(it, "hash", "Go", false) }
@@ -238,6 +364,8 @@ class ExplorerPaneTest {
           fixture.render("explorer-initial-read-failure-360-1.5")
           fixture.assertTextFits("Retry opening file")
           assertTrue(fixture.hasDescription("Failed destination: main.go"))
+          fixture.assertTextAbove("Retry opening file", "Indexed files unavailable")
+          assertFalse(fixture.hasText("No indexed files"))
           assertFalse(fixture.hasText("The current file remains open."))
           assertEquals(emptyList(), selected)
           fixture.clickText("Retry opening file")
@@ -251,7 +379,11 @@ class ExplorerPaneTest {
     var opens = 0
     var selected = 0
     val actions = ExplorerPaneActions({}, {}, {}, {}, { selected++ }, { opens++ })
-    for (index in listOf(null, ProjectIndex("project", "revision", files = files))) {
+    for (index in
+        listOf(
+            null,
+            ProjectIndex("project", "revision"),
+            ProjectIndex("project", "revision", files = files))) {
       ComposeVisualFixture(360, 500, 1.5f) {
             ExplorerPane(
                 ExplorerPaneState(
@@ -268,12 +400,15 @@ class ExplorerPaneTest {
           .use { fixture ->
             fixture.render()
             assertTrue(fixture.hasText("Reading local file data failed. Permission denied"))
-            assertTrue(!fixture.hasText("No project open"))
             if (index == null) {
+              fixture.assertTextAbove("Could not open file", "No project open")
+              assertEquals(1, fixture.textCount("Open project"))
               fixture.clickText("Open project")
               assertEquals(1, opens)
             } else {
-              assertTrue(fixture.hasText("No matching files"))
+              val guidance = if (index.files.isEmpty()) "No indexed files" else "No matching files"
+              fixture.assertTextAbove("Could not open file", guidance)
+              assertEquals(index.files.isNotEmpty(), fixture.hasText("No matching files"))
             }
           }
     }

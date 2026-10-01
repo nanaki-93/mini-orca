@@ -130,18 +130,11 @@ internal fun ExplorerPane(
           read,
           retainingFile = state.selectedPath != null,
           onOpenFile = actions.selectFile,
-          modifier = Modifier,
-          fallbackAction =
-              if (state.index == null && !state.projectAvailable)
-                  actions.openProject?.let { open ->
-                    { MiniOrcaButton(onClick = open) { Text("Open project") } }
-                  }
-              else null)
+          modifier = Modifier)
       Spacer(Modifier.height(6.dp))
     }
     when {
       state.index == null && state.loading -> LoadingRows("Loading indexed files")
-      state.index == null && state.readError != null -> Unit
       state.index == null && !state.projectAvailable ->
           SystemStateMessage(
               "No project open",
@@ -152,6 +145,8 @@ internal fun ExplorerPane(
                   })
       state.index == null ->
           SystemStateMessage("Indexed files unavailable", "Project file data is not available.")
+      state.index.files.isEmpty() ->
+          SystemStateMessage("No indexed files", "This project's index contains no files.")
       rows.isEmpty() ->
           SystemStateMessage(
               "No matching files", "Change the filter to view indexed relative paths.")
