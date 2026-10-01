@@ -35,6 +35,162 @@ import kotlinx.serialization.json.Json
 class DesktopWorkflowPresenterTest {
 
   @Test
+  fun contextInspectionPublishesLoadingAndOnlyAResponseCanProduceReady() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<String>()
+    var fail = false
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          require(method == "GET" && path.startsWith("/api/projects/current/context?"))
+          calls += path
+          if (fail) TransportResponse(503, "") else response("{}")
+        }
+    try {
+      loadFile(presenter)
+      presenter.inspectContext("fix")
+      val loading = presenter.snapshot.value.contextInspection
+      assertEquals(ContextInspectionStatus.Loading, loading.status)
+      assertNull(loading.manifest)
+      assertEquals("main.go", loading.identity?.file?.path)
+      assertEquals("base", loading.identity?.file?.contentHash)
+      assertEquals("revision", loading.identity?.file?.project?.revision)
+      assertEquals("Run", loading.identity?.symbol?.name)
+      presenter.inspectContext("fix")
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(1, calls.size)
+      assertEquals(ContextInspectionStatus.Ready, presenter.snapshot.value.contextInspection.status)
+      assertEquals(emptyList(), presenter.snapshot.value.contextInspection.manifest?.included)
+
+      fail = true
+      presenter.retryContextInspection()
+      assertEquals(
+          ContextInspectionStatus.Loading, presenter.snapshot.value.contextInspection.status)
+      assertNull(presenter.snapshot.value.contextInspection.manifest)
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      val failed = presenter.snapshot.value.contextInspection
+      assertEquals(ContextInspectionStatus.Failed, failed.status)
+      assertTrue(failed.message.isNotBlank())
+      assertNull(failed.manifest)
+      assertEquals(2, calls.size)
+      assertFalse(presenter.snapshot.value.state.status.contains("503"))
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun contextInspectionCapturesCreationTargetAndUsesCanonicalPreviewAction() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          calls += path
+          response("{}")
+        }
+    try {
+      loadFile(presenter)
+      presenter.inspectContext("document", ChatEditMode.CreateSymbol, "NewType", "type")
+      val identity = presenter.snapshot.value.contextInspection.identity!!
+      assertEquals("fix", identity.action)
+      assertNull(identity.symbol)
+      assertEquals("NewType", identity.creationName)
+      assertEquals("type", identity.creationKind)
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(listOf("/api/projects/current/context?path=main.go&action=fix"), calls)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun contextInspectionReplacementAndDismissalRejectLateSuccessAndFailure() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var fail = false
+    var calls = 0
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, _, _ ->
+          calls++
+          if (fail) TransportResponse(503, "") else response("{}")
+        }
+    try {
+      loadFile(presenter)
+      presenter.inspectContext("fix")
+      main.runPending()
+      io.runPending() // The first result is waiting to publish on main.
+      presenter.retryContextInspection()
+      main.runPending()
+      assertEquals(
+          ContextInspectionStatus.Loading, presenter.snapshot.value.contextInspection.status)
+      io.runPending()
+      main.runPending()
+      assertEquals(ContextInspectionStatus.Ready, presenter.snapshot.value.contextInspection.status)
+      assertEquals(2, calls)
+
+      presenter.retryContextInspection()
+      main.runPending()
+      io.runPending() // A successful response is waiting when the dialog closes.
+      presenter.closeContextInspection()
+      main.runPending()
+      assertEquals(
+          ContextInspectionStatus.Closed, presenter.snapshot.value.contextInspection.status)
+      assertEquals(3, calls)
+
+      fail = true
+      presenter.inspectContext("fix")
+      main.runPending()
+      io.runPending() // The error is waiting to publish.
+      fail = false
+      presenter.retryContextInspection()
+      main.runPending()
+      assertEquals(
+          ContextInspectionStatus.Loading, presenter.snapshot.value.contextInspection.status)
+      io.runPending()
+      main.runPending()
+      assertEquals(ContextInspectionStatus.Ready, presenter.snapshot.value.contextInspection.status)
+      assertEquals(5, calls)
+      assertFalse(presenter.snapshot.value.state.status.contains("503"))
+
+      fail = true
+      presenter.inspectContext("fix")
+      main.runPending()
+      io.runPending() // The error is waiting to publish after dismissal.
+      presenter.closeContextInspection()
+      main.runPending()
+      assertEquals(
+          ContextInspectionStatus.Closed, presenter.snapshot.value.contextInspection.status)
+      assertNull(presenter.snapshot.value.contextInspection.manifest)
+      assertEquals(6, calls)
+      assertFalse(presenter.snapshot.value.state.status.contains("503"))
+
+      presenter.inspectContext("fix")
+      presenter.cancelContextInspection()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(
+          ContextInspectionStatus.Canceled, presenter.snapshot.value.contextInspection.status)
+      assertNull(presenter.snapshot.value.contextInspection.manifest)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun checkRerunUsesItsOwnAttemptAndNeverAppliesAnOlderPass() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()

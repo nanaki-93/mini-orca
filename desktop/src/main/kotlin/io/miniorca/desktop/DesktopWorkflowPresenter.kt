@@ -62,12 +62,38 @@ data class DeclarationExplanationState(
     val message: String = "No on-demand explanation has been requested.",
 )
 
+enum class ContextInspectionStatus {
+  Closed,
+  Loading,
+  Ready,
+  Failed,
+  Stale,
+  Canceled,
+}
+
+data class ContextInspectionIdentity(
+    val file: WorkflowFileIdentity,
+    val symbol: SymbolInfo?,
+    val creationName: String = "",
+    val creationKind: String = "",
+    val action: String,
+    val model: ScopedModel,
+)
+
+data class ContextInspectionState(
+    val status: ContextInspectionStatus = ContextInspectionStatus.Closed,
+    val identity: ContextInspectionIdentity? = null,
+    val generation: Long = 0,
+    val manifest: ContextManifest? = null,
+    val message: String = "",
+)
+
 data class DesktopWorkflowSnapshot(
     val state: DesktopState = DesktopState(),
     val modelCatalog: ModelCatalog = ModelCatalog(),
     val providerConfirmations: ScopedConfirmationState = ScopedConfirmationState(),
     val securityReviewRemoteConfirmed: Boolean = false,
-    val contextManifest: ContextManifest? = null,
+    val contextInspection: ContextInspectionState = ContextInspectionState(),
     val analysisInProgress: Boolean = false,
     val generating: Boolean = false,
     val draftValidationInProgress: Boolean = false,
@@ -149,6 +175,8 @@ class DesktopWorkflowPresenter(
   private var fileFreshnessJob: Job? = null
   private var enrichmentJobs: List<Job> = emptyList()
   private var declarationExplanationJob: Job? = null
+  private var contextInspectionJob: Job? = null
+  private var contextInspectionGeneration = 0L
   private var chatJob: Job? = null
   private var draftValidationJob: Job? = null
   private var draftChecksJob: Job? = null
@@ -1535,25 +1563,120 @@ class DesktopWorkflowPresenter(
     setOperation(validating = false)
   }
 
-  fun inspectContext(action: String) {
-    val file = snapshot.value.state.selectedFile ?: return
-    val identity = file.identity(snapshot.value.state.project ?: return)
-    scope.launch {
-      try {
-        val manifest = io { api.context(file.path, action) }
-        if (isCurrentFile(identity))
-            mutableSnapshot.value = mutableSnapshot.value.copy(contextManifest = manifest)
-      } catch (_: CancellationException) {
-        throw CancellationException()
-      } catch (error: Exception) {
-        if (isCurrentFile(identity))
-            dispatch(DesktopEvent.Failed(error.message ?: "Context preview failed"))
-      }
-    }
+  fun inspectContext(
+      action: String,
+      mode: ChatEditMode = ChatEditMode.ReplaceSymbol,
+      creationName: String = "",
+      creationKind: String = "",
+  ) {
+    val state = snapshot.value.state
+    val project = state.project ?: return
+    val file = state.selectedFile ?: return
+    val identity =
+        ContextInspectionIdentity(
+            file.identity(project),
+            state.selectedSymbol.takeIf { mode == ChatEditMode.ReplaceSymbol },
+            creationName.takeIf { mode == ChatEditMode.CreateSymbol }.orEmpty(),
+            creationKind.takeIf { mode == ChatEditMode.CreateSymbol }.orEmpty(),
+            action.takeIf { it == "analyze_file" } ?: "fix",
+            snapshot.value.model(
+                if (action == "analyze_file") ModelScope.Bug else ModelScope.Function))
+    if (snapshot.value.contextInspection.status == ContextInspectionStatus.Loading &&
+        snapshot.value.contextInspection.identity == identity)
+        return
+    startContextInspection(identity)
   }
 
-  fun clearContextManifest() {
-    mutableSnapshot.value = mutableSnapshot.value.copy(contextManifest = null)
+  fun retryContextInspection() {
+    val identity = snapshot.value.contextInspection.identity ?: return
+    if (!isCurrentContextInspection(identity)) {
+      contextInspectionGeneration++
+      contextInspectionJob?.cancel()
+      mutableSnapshot.value =
+          mutableSnapshot.value.copy(
+              contextInspection =
+                  snapshot.value.contextInspection.copy(
+                      status = ContextInspectionStatus.Stale,
+                      generation = contextInspectionGeneration,
+                      message = "The inspection target changed. Inspect the current target again."))
+      return
+    }
+    startContextInspection(identity)
+  }
+
+  private fun startContextInspection(identity: ContextInspectionIdentity) {
+    contextInspectionGeneration++
+    val generation = contextInspectionGeneration
+    contextInspectionJob?.cancel()
+    mutableSnapshot.value =
+        mutableSnapshot.value.copy(
+            contextInspection =
+                ContextInspectionState(ContextInspectionStatus.Loading, identity, generation))
+    contextInspectionJob =
+        scope.launch {
+          try {
+            val manifest = io { api.context(identity.file.path, identity.action) }
+            if (canPublishContextInspection(generation, identity))
+                mutableSnapshot.value =
+                    mutableSnapshot.value.copy(
+                        contextInspection =
+                            ContextInspectionState(
+                                ContextInspectionStatus.Ready, identity, generation, manifest))
+          } catch (canceled: CancellationException) {
+            throw canceled
+          } catch (error: Exception) {
+            if (canPublishContextInspection(generation, identity))
+                mutableSnapshot.value =
+                    mutableSnapshot.value.copy(
+                        contextInspection =
+                            ContextInspectionState(
+                                ContextInspectionStatus.Failed,
+                                identity,
+                                generation,
+                                message =
+                                    error.message?.takeIf(String::isNotBlank)
+                                        ?: "Context preview failed"))
+          }
+        }
+  }
+
+  private fun isCurrentContextInspection(identity: ContextInspectionIdentity): Boolean =
+      isCurrentFile(identity.file) &&
+          (identity.creationKind.isNotEmpty() ||
+              snapshot.value.state.selectedSymbol == identity.symbol) &&
+          snapshot.value.model(
+              if (identity.action == "analyze_file") ModelScope.Bug else ModelScope.Function) ==
+              identity.model
+
+  private fun canPublishContextInspection(
+      generation: Long,
+      identity: ContextInspectionIdentity,
+  ): Boolean =
+      generation == contextInspectionGeneration &&
+          snapshot.value.contextInspection.identity == identity &&
+          snapshot.value.contextInspection.status == ContextInspectionStatus.Loading &&
+          isCurrentContextInspection(identity)
+
+  fun cancelContextInspection() {
+    val current = snapshot.value.contextInspection
+    if (current.status != ContextInspectionStatus.Loading) return
+    contextInspectionGeneration++
+    contextInspectionJob?.cancel()
+    mutableSnapshot.value =
+        mutableSnapshot.value.copy(
+            contextInspection =
+                current.copy(
+                    status = ContextInspectionStatus.Canceled,
+                    generation = contextInspectionGeneration,
+                    message = "Context inspection canceled."))
+  }
+
+  fun closeContextInspection() {
+    contextInspectionGeneration++
+    contextInspectionJob?.cancel()
+    mutableSnapshot.value =
+        mutableSnapshot.value.copy(
+            contextInspection = ContextInspectionState(generation = contextInspectionGeneration))
   }
 
   fun sendChatMessage(
@@ -2049,6 +2172,7 @@ class DesktopWorkflowPresenter(
   }
 
   private fun cancelAll() {
+    closeContextInspection()
     invalidateJobActions()
     benchmarkWorkflow.cancel()
     analysisWorkflow.detach()

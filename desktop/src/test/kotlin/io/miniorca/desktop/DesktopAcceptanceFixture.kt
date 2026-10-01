@@ -228,7 +228,7 @@ private fun NativeRoundedWorkspace(terminal: DesktopTerminalWorkspace, directory
                     false,
                     false),
                 DesktopShellContextState(
-                    false, null, ScopedModel(), false, ScopedModel(), false, false),
+                    ContextInspectionState(), ScopedModel(), false, ScopedModel(), false, false),
                 palette,
                 DesktopShellStatusProviders(ScopedModel(), ScopedModel(), ScopedModel())),
         layoutActions = DesktopShellLayoutActions({ layout = it }, { layout = it }),
@@ -249,8 +249,10 @@ private fun NativeRoundedWorkspace(terminal: DesktopTerminalWorkspace, directory
                 runDraftChecks = { record("Checks") },
                 generate = { record("Generate") },
                 cancelGeneration = { record("Cancel generation") },
-                dismissContext = {},
-                createDeclaration = { record("New function") }),
+                dismissContext = { record("Close context") },
+                createDeclaration = { record("New function") },
+                retryContext = { record("Retry context") },
+                cancelContext = { record("Cancel context") }),
         analysisActions =
             DesktopShellAnalysisActions(
                 refreshStatus = { record("Refresh status") },

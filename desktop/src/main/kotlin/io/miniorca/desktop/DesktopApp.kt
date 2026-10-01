@@ -312,7 +312,6 @@ internal fun MiniOrcaApp(
   var filter by remember { mutableStateOf("") }
   var collapsedDirectories by remember { mutableStateOf(emptySet<String>()) }
   var contextAction by remember { mutableStateOf("fix") }
-  var showContext by remember { mutableStateOf(false) }
   var paletteMode by remember { mutableStateOf(PaletteMode.Files) }
   var paletteQuery by remember { mutableStateOf("") }
   var showPalette by remember { mutableStateOf(false) }
@@ -405,9 +404,6 @@ internal fun MiniOrcaApp(
   val activeDraftFieldValue =
       if (draftFieldKey == activeDraftFieldIdentity) draftFieldValue
       else TextFieldValue(appState.review.editor?.declaration.orEmpty())
-  LaunchedEffect(workflow.contextManifest) {
-    if (workflow.contextManifest != null) showContext = true
-  }
   LaunchedEffect(presenter) { presenter.start() }
   DisposableEffect(presenter, terminal) {
     terminal.onFocusLeft = { presenter.refreshSelectedFile() }
@@ -718,7 +714,10 @@ internal fun MiniOrcaApp(
                   confirmRemoteProvider = {
                     presenter.setProviderConfirmation(ModelScope.Function, it)
                   },
-                  inspectContext = { presenter.inspectContext(contextAction) },
+                  inspectContext = {
+                    presenter.inspectContext(
+                        contextAction, chatMode, newChatSymbol, creationKind.noun)
+                  },
                   send = ::sendComposerMessage,
                   cancel = presenter::cancelGeneration,
                   updateMessageValue = { chatMessage = it },
@@ -814,8 +813,7 @@ internal fun MiniOrcaApp(
                   ),
               context =
                   DesktopShellContextState(
-                      visible = showContext,
-                      manifest = workflow.contextManifest,
+                      inspection = workflow.contextInspection,
                       bugModel = bugModel,
                       bugProviderConfirmed = workflow.providerConfirmed(ModelScope.Bug),
                       analyzeModel = analyzeModel,
@@ -860,10 +858,9 @@ internal fun MiniOrcaApp(
               createDeclaration = { requestCreateDeclaration(DeclarationCreationKind.Function) },
               openFile = ::requestFileNavigation,
               cancelGeneration = presenter::cancelGeneration,
-              dismissContext = {
-                showContext = false
-                presenter.clearContextManifest()
-              },
+              dismissContext = presenter::closeContextInspection,
+              retryContext = presenter::retryContextInspection,
+              cancelContext = presenter::cancelContextInspection,
           ),
       analysisActions =
           DesktopShellAnalysisActions(

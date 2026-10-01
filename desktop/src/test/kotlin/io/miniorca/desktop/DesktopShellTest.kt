@@ -21,6 +21,49 @@ import kotlin.test.assertTrue
 
 class DesktopShellTest {
   @Test
+  fun inspectorDisplaysOnlyReturnedManifestAndOffersLifecycleRecovery() {
+    var inspection by
+        mutableStateOf(ContextInspectionState(status = ContextInspectionStatus.Loading))
+    var retries = 0
+    var cancels = 0
+    var closes = 0
+    ComposeVisualFixture(800, 650) {
+          ContextInspectorDialog(inspection, { closes++ }, { retries++ }, { cancels++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Loading context preview…"))
+          assertFalse(fixture.hasText("No files included."))
+          fixture.clickText("Cancel")
+          assertEquals(1, cancels)
+          inspection =
+              ContextInspectionState(
+                  status = ContextInspectionStatus.Canceled, message = "Canceled")
+          fixture.render()
+          assertTrue(fixture.hasText("Context preview canceled: Canceled"))
+          fixture.clickText("Retry")
+          assertEquals(1, retries)
+          inspection =
+              ContextInspectionState(
+                  status = ContextInspectionStatus.Failed, message = "Daemon unavailable")
+          fixture.render()
+          assertTrue(fixture.hasText("Context preview failed: Daemon unavailable"))
+          assertFalse(fixture.hasText("No files included."))
+          inspection =
+              ContextInspectionState(
+                  status = ContextInspectionStatus.Ready, manifest = ContextManifest())
+          fixture.render()
+          assertTrue(fixture.hasText("Context preview ready"))
+          assertTrue(fixture.hasText("No files included."))
+          inspection = ContextInspectionState(status = ContextInspectionStatus.Loading)
+          fixture.render()
+          assertFalse(fixture.hasText("No files included."))
+          fixture.clickText("Close")
+          assertEquals(1, closes)
+        }
+  }
+
+  @Test
   fun summaryActivationRevalidatesBeforeNavigationAndLeavesOtherBrowserPreferencesAlone() {
     val page = resultPageFixture("bugs")
     val app =
@@ -94,7 +137,12 @@ class DesktopShellTest {
                         generating = false),
                 context =
                     DesktopShellContextState(
-                        false, null, ScopedModel(), false, ScopedModel(), false, false),
+                        ContextInspectionState(),
+                        ScopedModel(),
+                        false,
+                        ScopedModel(),
+                        false,
+                        false),
                 palette = DesktopShellPaletteState(PaletteMode.Files, "", false),
                 statusProviders =
                     DesktopShellStatusProviders(ScopedModel(), ScopedModel(), ScopedModel())))
@@ -131,7 +179,9 @@ class DesktopShellTest {
                       cancelGeneration = { operations += "cancel generation" },
                       dismissContext = { operations += "dismiss context" },
                       createDeclaration = { operations += "create" },
-                      openFile = { operations += "open file $it" }),
+                      openFile = { operations += "open file $it" },
+                      retryContext = { operations += "retry context" },
+                      cancelContext = { operations += "cancel context" }),
               analysisActions =
                   DesktopShellAnalysisActions(
                       refreshStatus = { operations += "status read" },
