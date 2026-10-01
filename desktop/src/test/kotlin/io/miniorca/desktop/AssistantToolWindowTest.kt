@@ -109,6 +109,43 @@ class AssistantToolWindowTest {
   }
 
   @Test
+  fun inspectContextCanBeActivatedWithoutSelectionAndDoesNotSendOrConfirm() {
+    var inspections = 0
+    var sends = 0
+    var confirmations = 0
+    ComposeVisualFixture(360, 900) {
+          AssistantToolWindow(
+              AssistantToolWindowState(
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  ChatEditMode.ReplaceSymbol,
+                  "",
+                  "",
+                  false,
+                  ScopedModel(),
+                  false,
+                  FocusRequester(),
+                  FocusRequester()),
+              AssistantConversationActions(
+                  {}, {}, { confirmations++ }, { inspections++ }, { sends++ }, {}),
+              DraftEditorActions({}, {}, {}),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertFalse(fixture.isDisabled("Inspect context"))
+          fixture.clickText("Inspect context")
+          assertEquals(1, inspections)
+          assertEquals(0, sends)
+          assertEquals(0, confirmations)
+        }
+  }
+
+  @Test
   fun creationFormFocusesTheNameThenBehaviorAndDoesNotGenerateUntilRequested() {
     DeclarationCreationKind.entries.forEach { kind ->
       var name by mutableStateOf("")

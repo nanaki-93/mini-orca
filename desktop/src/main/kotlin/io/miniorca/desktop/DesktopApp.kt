@@ -438,6 +438,7 @@ internal fun MiniOrcaApp(
         presenter.dispatch(DesktopEvent.SymbolSelected(request.selectedSymbol))
     presenter.contextCreationTargetChanged("", "")
     chatMode = ChatEditMode.ReplaceSymbol
+    contextAction = "fix"
     newChatSymbol = ""
     clearComposerInput()
     focusAssistantControl(ComposerFocusTarget.Chat)
@@ -725,13 +726,17 @@ internal fun MiniOrcaApp(
                   },
                   inspectContext = {
                     presenter.inspectContext(
-                        contextAction, chatMode, newChatSymbol, creationKind.noun)
+                        if (chatMode == ChatEditMode.CreateSymbol) "create" else contextAction,
+                        chatMode,
+                        newChatSymbol,
+                        creationKind.noun)
                   },
                   send = ::sendComposerMessage,
                   cancel = presenter::cancelGeneration,
                   updateMessageValue = { chatMessage = it },
                   preparePreset = { preset ->
                     presenter.clearPreparedSuggestion()
+                    contextAction = "fix"
                     chatMessage = preparedFunctionChangeMessage(preset)
                     focusComposerControl(ComposerFocusTarget.Chat)
                   },
