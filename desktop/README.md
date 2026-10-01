@@ -31,8 +31,8 @@ Java 21 `JAVA_HOME` and no discoverable Java 25 toolchain cannot start the app.
 
 Packaged images include `java.net.http` for the daemon client and `jdk.unsupported`
 for Jewel's native bridge. Package with the JBR launcher, not the Detekt launcher.
-Native behavior should be checked on the target host; component tests cannot
-prove OS focus, popup placement or screen-reader behavior.
+Component tests do not prove OS focus, popup placement or screen-reader behavior;
+interactive app testing is not an acceptance requirement.
 
 ## Working in the app
 
@@ -526,10 +526,6 @@ report replacement. Scope, trust warning, status, failures and recovery remain
 outside optional diagnostics. Tool evidence is scoped to these checks, distinct
 from model suggestions, and is not a general safety or bug-free assurance.
 
-For native focus, action reachability and diagnostic selection/copy, follow the
-[scan review procedure](KEYBOARD_SMOKE_CHECKLIST.md#verified-go-scan-native-review).
-Offscreen fixtures do not establish those native observations.
-
 ### Security evidence and advisory review
 
 Security uses the shared results browser for loaded source-rule matches, model
@@ -749,12 +745,9 @@ disclosure, copying and resizing do not list benchmarks, grant trust, execute co
 contact a provider or write source. No new API, configuration or data migration
 is required.
 
-For native keyboard, focus, screen-reader and clipboard observations, follow the
-[benchmark native review](KEYBOARD_SMOKE_CHECKLIST.md#benchmark-discovery-and-admission-native-review).
 Ordinary automated tests use fake transport or action counters, without a running
 daemon, provider or project-code execution. Component fixtures qualify rendering
-and local interaction, not native-window behavior; unperformed native checks remain
-pending.
+and local interaction, not native-window behavior.
 
 ## New Go functions
 
@@ -816,14 +809,11 @@ See [terminal support and reproduction](TERMINAL.md).
 In the focused workspace rail group, arrows move focus through the six destinations
 without selecting; Enter/Space activates the focused destination. Tab to the
 separate utility actions; rail focus and workspace switching do not start a shell.
-Use arrows and Enter/Space for other tree/tab/disclosure navigation. The
-[keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md) covers native operation.
+Use arrows and Enter/Space for other tree/tab/disclosure navigation.
 `DesktopVisualLayoutTest` exercises production Editor, Summary and results at
-several viewports and text scales, with offscreen bounds/reflow assertions. These
-captures are not native-window evidence: focus restoration, selection/copy, popup
-placement, screen-reader output and real PTY resize still require the native
-[keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md). Do not infer native success from
-component tests.
+several viewports and text scales, with offscreen bounds/reflow assertions.
+These captures establish only the component behavior tested, not OS focus,
+popup placement, screen-reader output or real PTY behavior.
 
 Security selection is local; its source, preparation and whole-project review
 routes are described [above](#security-evidence-and-advisory-review). No

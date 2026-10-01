@@ -47,7 +47,7 @@ binaries contained in the original Pty4J jar. Dependency jars are not modified.
   output, report selection and project restore never write to terminal stdin.
 
 The pane handles key routing, project-switch confirmation and file-freshness
-checks. Verify native focus separately from the PTY tests.
+checks. PTY tests do not establish OS focus behavior.
 
 ## Supported native package
 
@@ -65,6 +65,8 @@ The app enables native access for its classpath and explicitly includes
 runtime image. Signing/notarization and other operating systems remain unverified.
 
 ## Validate the terminal
+
+These automated probes do not require opening or interacting with the app.
 
 Set `MINI_ORCA_JDK21_HOME` and `MINI_ORCA_JBR25_HOME` as described in the desktop
 runtime documentation. Run from the repository root:

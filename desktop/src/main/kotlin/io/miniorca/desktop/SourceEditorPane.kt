@@ -250,7 +250,7 @@ internal fun SourceEditorPane(
   val gutterWidth = numberWidth + (sourceEditorGutterWidth - 38.dp) * density.fontScale
   SelectionContainer(Modifier.testTag("source-viewport")) {
     Column(Modifier.fillMaxSize().padding(vertical = 8.dp)) {
-      Row(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+      Row(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("source-vertical")) {
         // Gutter labels and markers describe source; they must not enter copied source text.
         DisableSelection {
           SourceGutter(

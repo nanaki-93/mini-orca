@@ -391,6 +391,36 @@ class DesktopLayoutStateTest {
   }
 
   @Test
+  fun sourceReflowRestoresSavedPaneWidthsAfterRepeatedViewportAndTextScaleChanges() {
+    withPreferences { preferences ->
+      val store = DesktopLayoutStore(preferences)
+      val preferred =
+          DesktopLayoutState(
+              explorerWidth = 520f,
+              actionWidth = 560f,
+              activeRightToolWindow = RightToolWindow.Context,
+              editorSurface = EditorSurface.Source)
+      store.save(preferred)
+      val originalValues =
+          listOf("explorer-width", "action-width").map { preferences.get(it, null) }
+      for ((width, scale) in
+          listOf(
+              1600f to 1f, 800f to 1.5f, 1024f to 1f, 1280f to 1.5f, 800f to 1.25f, 1600f to 1f)) {
+        val resolved = resolveDesktopLayout(store.load(), width, scale)
+        assertTrue(resolved.canvasWidth > 0f)
+        assertEquals(preferred, store.load())
+        assertEquals(
+            originalValues,
+            listOf("explorer-width", "action-width").map { preferences.get(it, null) })
+      }
+      val restored = resolveDesktopLayout(store.load(), 1600f, 1f)
+      assertEquals(DesktopLayoutMode.Wide, restored.mode)
+      assertEquals(preferred.explorerWidth, restored.explorerWidth)
+      assertEquals(preferred.actionWidth, restored.actionWidth)
+    }
+  }
+
+  @Test
   fun invalidAndInsufficientWorkspaceInputsHaveFiniteNonnegativeAllocations() {
     val preferred =
         DesktopLayoutState(explorerWidth = Float.NaN, actionWidth = Float.POSITIVE_INFINITY)

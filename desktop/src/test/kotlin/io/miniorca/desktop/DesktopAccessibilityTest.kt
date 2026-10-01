@@ -13,6 +13,70 @@ import kotlin.test.assertTrue
 
 class DesktopAccessibilityTest {
   @Test
+  fun sourceRecoveryWithoutFilesAndCreationKeepNamedKeyboardActionsAcrossReflow() {
+    val evidence = sourceNavigationReviewFixture()
+    val file = requireNotNull(evidence.selected)
+    val symbol = requireNotNull(evidence.selectedSymbol)
+    val destination = "internal/" + "replacement/日本語/".repeat(8) + "user.go"
+    val read = FileReadUiState.Failed(destination, "Local read unavailable.")
+    val preferred = DesktopLayoutState(leftToolWindowVisible = false)
+    var creations = 0
+    val reopened = mutableListOf<String>()
+    var privileged = 0
+    ComposeVisualFixture(1280, 600, 1.5f) {
+          AdaptiveProductionEditorFixture(
+              preferred,
+              false,
+              evidence = evidence,
+              fileRead = read,
+              terminalCollapsed = true,
+              onCreate = { creations++ },
+              onOpenFile = { reopened += it },
+              onRequest = { privileged++ },
+              onWrite = { privileged++ },
+              onSourceLine = { privileged++ })
+        }
+        .use { fixture ->
+          fixture.render("f23-accessibility-hidden-files-before")
+          assertEquals(0, fixture.tagCount("f04-files"))
+          assertTrue(fixture.hasDescription("Project-relative path: ${file.path}"))
+          assertTrue(fixture.hasDescription("Failed destination: $destination"))
+          assertTrue(fixture.hasDescription("Selected declaration ${symbol.name} marker at line 5"))
+          assertTrue(fixture.hasText("Read-only"))
+          assertFalse(fixture.hasEditableText(withinTag = "source-viewport"))
+          assertTrue(fixture.requestDescriptionFocus("Retry opening $destination"))
+          fixture.awaitDescriptionFocus("Retry opening $destination")
+          fixture.render("f23-accessibility-hidden-files-recovery-initial")
+          for (width in listOf(800, 1280)) {
+            fixture.resize(width, 600)
+            fixture.render()
+            fixture.awaitDescriptionFocus("Retry opening $destination")
+            fixture.assertDescriptionFullyVisible("Retry opening $destination", "f04-canvas")
+            fixture.render("f23-accessibility-hidden-files-recovery-$width")
+            assertEquals(0, creations + reopened.size + privileged)
+          }
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(listOf(destination), reopened)
+          assertTrue(fixture.requestDescriptionFocus("New function in ${file.path}"))
+          fixture.render()
+          for (width in listOf(800, 1280)) {
+            fixture.resize(width, 600)
+            fixture.render()
+            fixture.awaitDescriptionFocus("New function in ${file.path}")
+            fixture.assertDescriptionFullyVisible("New function in ${file.path}", "f04-canvas")
+            fixture.render("f23-accessibility-hidden-files-creation-$width")
+            assertEquals(0, creations + privileged)
+          }
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          assertEquals(1, creations)
+          assertEquals(listOf(destination), reopened)
+          assertEquals(0, privileged)
+          assertEquals(file, evidence.selected)
+          assertEquals(symbol, evidence.selectedSymbol)
+        }
+  }
+
+  @Test
   fun scanControlsExposeNamesDisabledReasonsAndDisclosureStates() {
     val cases = verifiedScanLayoutCases().filter { it.first != "long-output" }
     for ((name, state) in cases) {

@@ -8,15 +8,18 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -260,18 +263,32 @@ internal fun EditorWorkspace(
     fileRead: FileReadUiState? = null,
     onOpenFile: ((String) -> Unit)? = null,
 ) {
-  Column(modifier.fillMaxSize().background(EditorCanvas)) {
-    ActiveFileEditorChrome(
-        chrome, onSelectSurface, onCreateDeclaration, onEditDraft.takeIf { review?.draft != null })
-    fileRead?.let {
-      FileReadFeedback(
-          it,
-          retainingFile = chrome.path != "No file selected",
-          onOpenFile = onOpenFile,
-          modifier = Modifier.fillMaxWidth().padding(8.dp))
+  BoxWithConstraints(modifier.fillMaxSize().background(EditorCanvas)) {
+    // Retained work and recovery can outgrow short windows. Scroll only the chrome rather
+    // than squeezing away the selectable source or replacing its composition on reflow.
+    val chromeHeight = (maxHeight - 120.dp * LocalDensity.current.fontScale).coerceAtLeast(0.dp)
+    Column(Modifier.fillMaxSize()) {
+      Column(
+          Modifier.fillMaxWidth()
+              .heightIn(max = chromeHeight)
+              .verticalScroll(rememberScrollState())
+              .testTag("editor-chrome-scroll")) {
+            ActiveFileEditorChrome(
+                chrome,
+                onSelectSurface,
+                onCreateDeclaration,
+                onEditDraft.takeIf { review?.draft != null })
+            fileRead?.let {
+              FileReadFeedback(
+                  it,
+                  retainingFile = chrome.path != "No file selected",
+                  onOpenFile = onOpenFile,
+                  modifier = Modifier.fillMaxWidth().padding(8.dp))
+            }
+            if (review?.draft != null) EditorReviewProgression(editorProgressionRows(review))
+          }
+      Box(Modifier.fillMaxWidth().weight(1f)) { canvas() }
     }
-    if (review?.draft != null) EditorReviewProgression(editorProgressionRows(review))
-    Box(Modifier.fillMaxWidth().weight(1f)) { canvas() }
   }
 }
 
