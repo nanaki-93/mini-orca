@@ -5066,6 +5066,111 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun explanationRejectsMissingAndIneligibleSelectionsWithoutDispatch() {
+    val requests = mutableListOf<String>()
+    val presenter = presenter { method, path, _ ->
+      requests += "$method $path"
+      error("unexpected request $method $path")
+    }
+    try {
+      loadFile(presenter)
+      assertTrue(requests.isEmpty()) // Selection is passive.
+      val run = presenter.snapshot.value.state.selectedSymbol!!
+      presenter.dispatch(DesktopEvent.FileLoaded(file(), emptyList()))
+      presenter.dispatch(DesktopEvent.SymbolSelected(run))
+      presenter.explainSelectedDeclaration()
+      assertEquals(
+          DeclarationExplanationStatus.Unavailable,
+          presenter.snapshot.value.declarationExplanation.status)
+
+      for (invalid in
+          listOf(run.copy(confidence = "approximate"), run.copy(atomicTarget = false))) {
+        presenter.dispatch(DesktopEvent.FileLoaded(file(), listOf(invalid)))
+        presenter.dispatch(DesktopEvent.SymbolSelected(invalid))
+        presenter.explainSelectedDeclaration()
+      }
+      presenter.dispatch(DesktopEvent.FileLoaded(file().copy(language = "Python"), listOf(run)))
+      presenter.dispatch(DesktopEvent.SymbolSelected(run))
+      presenter.explainSelectedDeclaration()
+      assertTrue(requests.isEmpty())
+      assertEquals(
+          DeclarationExplanationStatus.Unavailable,
+          presenter.snapshot.value.declarationExplanation.status)
+      assertNull(presenter.snapshot.value.state.review.draft)
+    } finally {
+      presenter.close()
+    }
+  }
+
+  @Test
+  fun explanationUsesAdmittedIdentityAndFunctionConfirmation() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val bodies = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, body ->
+          when (method to path) {
+            "GET" to "/status" -> response("""{"status":"ok","version":"v1"}""")
+            "GET" to "/api/models/current" -> response(functionCatalog("destination-a"))
+            "POST" to "/api/projects/current/files/explanation" -> {
+              bodies += body.orEmpty()
+              response(explanationJson("Run", "func Run()", 2, 4))
+            }
+            else -> error("unexpected request $method $path")
+          }
+        }
+    try {
+      presenter.refreshConnection()
+      dispatcher.runPending()
+      loadFile(presenter)
+      val symbol =
+          SymbolInfo(
+              "Run", "function", "func Run()", 2, 4, confidence = "exact", atomicTarget = true)
+      presenter.dispatch(DesktopEvent.FileLoaded(file(), listOf(symbol)))
+      presenter.dispatch(DesktopEvent.SymbolSelected(symbol))
+      presenter.explainSelectedDeclaration()
+      assertTrue(bodies.isEmpty())
+      assertEquals(
+          DeclarationExplanationStatus.Failed,
+          presenter.snapshot.value.declarationExplanation.status)
+
+      presenter.setProviderConfirmation(ModelScope.Function, true)
+      presenter.explainSelectedDeclaration()
+      // Revoking Function consent before transport must prevent the admitted request.
+      presenter.setProviderConfirmation(ModelScope.Function, false)
+      dispatcher.runPending()
+      assertTrue(bodies.isEmpty())
+      assertEquals(
+          DeclarationExplanationStatus.Stale,
+          presenter.snapshot.value.declarationExplanation.status)
+      presenter.setProviderConfirmation(ModelScope.Function, true)
+      presenter.explainSelectedDeclaration()
+      dispatcher.runPending()
+      assertEquals(1, bodies.size)
+      val body = bodies.single()
+      for (field in
+          listOf(
+              "\"project_id\":\"project\"",
+              "\"project_revision\":\"revision\"",
+              "\"base_file_hash\":\"base\"",
+              "\"target_path\":\"main.go\"",
+              "\"target_symbol\":\"Run\"",
+              "\"confirm_remote_provider\":true")) {
+        assertTrue(body.contains(field), "Missing $field in $body")
+      }
+      assertEquals(
+          DeclarationExplanationStatus.Current,
+          presenter.snapshot.value.declarationExplanation.status)
+      assertNull(presenter.snapshot.value.state.review.draft)
+      assertNull(presenter.snapshot.value.state.review.checks)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      dispatcher.runPending()
+    }
+  }
+
+  @Test
   fun selectionChangeCancelsAndRejectsLateDeclarationExplanation() {
     val started = CountDownLatch(1)
     val release = CountDownLatch(1)
@@ -5157,6 +5262,106 @@ class DesktopWorkflowPresenterTest {
       assertTrue(presenter.snapshot.value.declarationExplanation.message.contains("Confirm"))
     } finally {
       presenter.close()
+    }
+  }
+
+  @Test
+  fun changedFunctionDestinationCannotInheritExplanationConsent() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    var destination = "destination-a"
+    val bodies = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, body ->
+          when (method to path) {
+            "GET" to "/status" -> response("""{"status":"ok","version":"v1"}""")
+            "GET" to "/api/models/current" -> response(functionCatalog(destination))
+            "POST" to "/api/projects/current/files/explanation" -> {
+              bodies += body.orEmpty()
+              response(explanationJson("Run"))
+            }
+            else -> error("unexpected request $method $path")
+          }
+        }
+    try {
+      presenter.refreshConnection()
+      dispatcher.runPending()
+      loadFile(presenter)
+      presenter.explainSelectedDeclaration()
+      // A newly loaded catalog must cancel even a queued request to the old destination.
+      destination = "destination-b"
+      presenter.refreshConnection()
+      dispatcher.runLast() // Connection job before the queued explanation job.
+      dispatcher.runLast() // Catalog transport.
+      dispatcher.runLast() // Apply the new catalog and invalidate the pending explanation.
+      dispatcher.runPending()
+      assertTrue(bodies.isEmpty())
+      assertFalse(presenter.snapshot.value.providerConfirmed(ModelScope.Function))
+      presenter.explainSelectedDeclaration()
+      dispatcher.runPending()
+      assertTrue(bodies.isEmpty())
+      assertEquals(
+          DeclarationExplanationStatus.Failed,
+          presenter.snapshot.value.declarationExplanation.status)
+      presenter.setProviderConfirmation(ModelScope.Function, true)
+      presenter.explainSelectedDeclaration()
+      dispatcher.runPending()
+      assertEquals(1, bodies.size)
+      assertTrue(bodies.single().contains("\"confirm_remote_provider\":true"))
+    } finally {
+      presenter.close()
+      scope.cancel()
+      dispatcher.runPending()
+    }
+  }
+
+  @Test
+  fun nonFunctionCatalogChangeResetsConsentAndCancelsQueuedExplanation() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    var bugModel = "bug-a"
+    val bodies = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, body ->
+          when (method to path) {
+            "GET" to "/status" -> response("""{"status":"ok","version":"v1"}""")
+            "GET" to "/api/models/current" ->
+                response(
+                    """{"scopes":{"function":{"scope":"function","profile":"remote","model":"destination-a","remote_provider":true},"bug":{"scope":"bug","profile":"remote","model":"$bugModel","remote_provider":true}}}""")
+            "POST" to "/api/projects/current/files/explanation" -> {
+              bodies += body.orEmpty()
+              response(explanationJson("Run"))
+            }
+            else -> error("unexpected request $method $path")
+          }
+        }
+    try {
+      presenter.refreshConnection()
+      dispatcher.runPending()
+      loadFile(presenter)
+      presenter.setProviderConfirmation(ModelScope.Function, true)
+      presenter.explainSelectedDeclaration()
+      bugModel = "bug-b"
+      presenter.refreshConnection()
+      dispatcher.runLast() // Connection job before the queued explanation job.
+      dispatcher.runLast() // Catalog transport.
+      dispatcher.runLast() // Apply the catalog change before explanation transport.
+      dispatcher.runPending()
+      assertTrue(bodies.isEmpty())
+      assertFalse(presenter.snapshot.value.providerConfirmed(ModelScope.Function))
+      assertEquals(
+          DeclarationExplanationStatus.Stale,
+          presenter.snapshot.value.declarationExplanation.status)
+      presenter.explainSelectedDeclaration()
+      dispatcher.runPending()
+      assertTrue(bodies.isEmpty())
+      assertEquals(
+          DeclarationExplanationStatus.Failed,
+          presenter.snapshot.value.declarationExplanation.status)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      dispatcher.runPending()
     }
   }
 
@@ -7962,8 +8167,16 @@ class DesktopWorkflowPresenterTest {
   private fun creationProposalJson() =
       """{"session_id":"session","draft":{"id":"created","project_id":"project","project_revision":"revision","base_file_hash":"base","target_path":"main.go","mode":"create_symbol","target_symbol":"新規","declaration":"func 新規() int { return 1 }","revision":1,"hash":"draft-hash","state":"generated"},"assistant_message":{"role":"assistant","content":"Ready for review"}}"""
 
-  private fun explanationJson(symbol: String) =
-      """{"version":"v1","project_id":"project","project_revision":"revision","base_file_hash":"base","anchor":{"path":"main.go","symbol":"$symbol","signature":"","start_line":0,"end_line":0},"summary":"Explains $symbol.","behavior":[],"inputs":[],"outputs":[],"side_effects":[],"error_behavior":[],"context_manifest":{"scope":"function"}}"""
+  private fun functionCatalog(model: String) =
+      """{"scopes":{"function":{"scope":"function","profile":"remote","model":"$model","remote_provider":true}}}"""
+
+  private fun explanationJson(
+      symbol: String,
+      signature: String = "",
+      start: Int = 0,
+      end: Int = 0
+  ) =
+      """{"version":"v1","project_id":"project","project_revision":"revision","base_file_hash":"base","anchor":{"path":"main.go","symbol":"$symbol","signature":"$signature","start_line":$start,"end_line":$end},"summary":"Explains $symbol.","behavior":[],"inputs":[],"outputs":[],"side_effects":[],"error_behavior":[],"context_manifest":{"scope":"function"}}"""
 
   private fun securityReportJson(source: String) =
       """{"schema_version":"1","project_id":"project","project_revision":"revision","path":"main.go","content_hash":"base","status":"completed_empty","source":"$source","findings":[],"context_policy_version":"policy","generated_at":"2026-09-08T00:00:00Z"}"""
