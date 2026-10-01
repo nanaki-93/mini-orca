@@ -440,18 +440,11 @@ internal fun MiniOrcaApp(
     chatMode = ChatEditMode.ReplaceSymbol
     newChatSymbol = ""
     clearComposerInput()
-    focusComposerControl(ComposerFocusTarget.Chat)
+    focusAssistantControl(ComposerFocusTarget.Chat)
   }
 
   fun requestDirectEdit(symbol: SymbolInspectorSymbolState) {
-    val request =
-        directEditRequest(
-            appState.selectedFile, appState.symbols, symbol.symbol, currentEditIdentity(appState))
-            ?: return
-    val currentDraft = request.currentDraft
-    if (request.requiresDraftDiscard && currentDraft != null)
-        pendingDraftDiscard = PendingDraftDiscard.Replace(request, currentDraft)
-    else startReplaceEdit(request)
+    routeContextRefactor(presenter, symbol, ::startReplaceEdit) { pendingDraftDiscard = it }
   }
 
   fun startCreateDeclaration(kind: DeclarationCreationKind) {
@@ -1020,6 +1013,22 @@ internal fun MiniOrcaApp(
       pendingDraftDiscard = null
     }
   }
+}
+
+internal fun routeContextRefactor(
+    presenter: DesktopWorkflowPresenter,
+    symbol: SymbolInspectorSymbolState,
+    prepare: (DirectEditRequest) -> Unit,
+    confirmDiscard: (PendingDraftDiscard.Replace) -> Unit,
+) {
+  val state = presenter.snapshot.value.state
+  val request =
+      directEditRequest(
+          state.selectedFile, state.symbols, symbol.symbol, currentEditIdentity(state)) ?: return
+  val currentDraft = request.currentDraft
+  if (request.requiresDraftDiscard && currentDraft != null)
+      confirmDiscard(PendingDraftDiscard.Replace(request, currentDraft))
+  else prepare(request)
 }
 
 private fun continueAfterDraftDiscard(

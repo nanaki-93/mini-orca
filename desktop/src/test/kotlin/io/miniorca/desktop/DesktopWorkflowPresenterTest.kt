@@ -5039,6 +5039,40 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun cachedContextInspectionAndEditorNavigationDoNotDispatchOrChangeEditEvidence() {
+    val other = SymbolInfo("Other", "function", confidence = "exact", atomicTarget = true)
+    FileNavigationUiFixture("draft", extraSymbols = listOf(other)).use { navigation ->
+      val presenter = navigation.presenter
+      presenter.dispatch(
+          DesktopEvent.AnalysisLoaded(
+              FileAnalysis(
+                  "main.go", "fresh", symbolExplanations = mapOf("Run" to "Cached prose"))))
+      val before = presenter.snapshot.value.state
+      presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Editor))
+      val selected = presenter.snapshot.value.state.selectedSymbol!!
+      val inspector =
+          symbolInspectorUiState(
+              before.selectedFile,
+              before.symbols,
+              selected,
+              before.analysis,
+              false,
+              InspectorProviderState(false, false),
+              currentEditIdentity(before))!!
+      assertEquals("Cached prose", inspector.selectedSymbol?.explanation)
+      presenter.dispatch(DesktopEvent.SymbolSelected(other))
+      presenter.dispatch(DesktopEvent.SymbolSelected(selected))
+      navigation.runPending()
+      val after = presenter.snapshot.value
+      assertEquals(before.review, after.state.review)
+      assertEquals(before.chat, after.state.chat)
+      assertEquals(before.selectedFile, after.state.selectedFile)
+      assertEquals(DeclarationExplanationStatus.Unavailable, after.declarationExplanation.status)
+      assertEquals(emptyList(), navigation.calls, "Inspection must not explain, generate or write")
+    }
+  }
+
+  @Test
   fun explanationPublishesOnlyForItsExactSelectionAndDoesNotAlterDraftState() {
     val calls = AtomicInteger()
     val presenter = presenter { method, path, _ ->

@@ -183,6 +183,16 @@ class FileChatStateTest {
     assertTrue(different.requiresDraftDiscard)
     assertEquals("Discard draft for Run and edit Other?", different.discardPrompt)
     assertFalse(same.requiresDraftDiscard)
+    assertEquals(run, same.selectedSymbol)
+    assertNull(directEditRequest(file(), listOf(run), other, currentDraft))
+    assertNull(
+        directEditRequest(file().copy(language = "Python"), listOf(other), other, currentDraft))
+    assertNull(
+        directEditRequest(
+            file(),
+            listOf(other.copy(atomicTarget = false)),
+            other.copy(atomicTarget = false),
+            currentDraft))
   }
 
   @Test

@@ -6,10 +6,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.TextFieldValue
@@ -65,6 +68,213 @@ class EditorWorkspaceTest {
             assertTrue(navigation.calls.isEmpty())
           }
     }
+  }
+
+  @Test
+  fun contextSelectionTabsAndCachedInspectionArePassiveAndRefactorPreparesTheExactTarget() {
+    val other =
+        SymbolInfo(
+            "Other", "function", "func Other()", 3, 3, confidence = "exact", atomicTarget = true)
+    FileNavigationUiFixture(
+            "composer", "package main\nfunc Run() {}\nfunc Other() {}\n", listOf(other))
+        .use { navigation ->
+          val presenter = navigation.presenter
+          presenter.dispatch(
+              DesktopEvent.AnalysisLoaded(
+                  FileAnalysis(
+                      "main.go", "fresh", symbolExplanations = mapOf("Run" to "Cached prose"))))
+          var tool by mutableStateOf(RightToolWindow.Context)
+          var prepared: DirectEditRequest? = null
+          var pending: PendingDraftDiscard.Replace? = null
+          var sends = 0
+          val chatFocus = FocusRequester()
+          val initialInput = navigation.input()
+          ComposeVisualFixture(800, 650) {
+                val workflow by presenter.snapshot.collectAsState()
+                val state = workflow.state
+                Row(Modifier.fillMaxSize()) {
+                  SourceEditorPane(
+                      state.project,
+                      state.selectedFile,
+                      state.symbols,
+                      state.selectedSymbol,
+                      state.selection.focusedLine,
+                      emptyList(),
+                      sourceLineSelectionAction(presenter) {})
+                  RightToolWindowContainer(
+                      tool,
+                      { tool = it },
+                      { active, modifier ->
+                        when (active) {
+                          RightToolWindow.Context ->
+                              ContextToolWindow(
+                                  ContextToolWindowState(
+                                      symbolInspectorUiState(
+                                          state.selectedFile,
+                                          state.symbols,
+                                          state.selectedSymbol,
+                                          state.analysis,
+                                          false,
+                                          InspectorProviderState(false, false),
+                                          currentEditIdentity(state)),
+                                      ScopedModel(),
+                                      false,
+                                      state.impact,
+                                      state.gitStatus,
+                                      fileAnalysis = state.analysis,
+                                      project = state.project),
+                                  ContextToolWindowActions(
+                                      {},
+                                      {},
+                                      {},
+                                      {},
+                                      editSelected = { symbol ->
+                                        routeContextRefactor(
+                                            presenter,
+                                            symbol,
+                                            {
+                                              prepared = it
+                                              tool = RightToolWindow.Assistant
+                                            },
+                                            { pending = it })
+                                      }),
+                                  modifier)
+                          RightToolWindow.Assistant -> {
+                            val validation =
+                                validateChatTarget(
+                                    state.selectedFile,
+                                    state.symbols,
+                                    state.selectedSymbol,
+                                    ChatEditMode.ReplaceSymbol,
+                                    "")
+                            AssistantToolWindow(
+                                AssistantToolWindowState(
+                                    state.project,
+                                    state.selectedFile,
+                                    state.chat.session,
+                                    state.review.draft,
+                                    state.review.editor,
+                                    validation.target,
+                                    ChatEditMode.ReplaceSymbol,
+                                    "",
+                                    "",
+                                    false,
+                                    ScopedModel(),
+                                    false,
+                                    chatFocus,
+                                    FocusRequester(),
+                                    selectedSymbol = state.selectedSymbol,
+                                    targetValidation = validation),
+                                AssistantConversationActions({}, {}, {}, {}, { sends++ }, {}),
+                                DraftEditorActions({}, {}, {}),
+                                modifier)
+                            if (prepared != null)
+                                LaunchedEffect(prepared) { chatFocus.requestFocus() }
+                          }
+                          RightToolWindow.Review -> Text("Review")
+                        }
+                      },
+                      modifier = Modifier.weight(1f))
+                }
+              }
+              .use { fixture ->
+                fixture.render()
+                assertTrue(fixture.hasText("Cached prose"))
+                fixture.clickText("Declaration details")
+                fixture.render()
+                fixture.tapSourceText(1, 2)
+                fixture.render()
+                fixture.clickText("Details")
+                fixture.render()
+                fixture.clickText("Actions")
+                fixture.render()
+                assertEquals(initialInput, navigation.input())
+                fixture.clickText("Assistant")
+                fixture.render()
+                fixture.clickText("Context")
+                fixture.render()
+                fixture.tapSourceText(3, 6)
+                fixture.render()
+                assertEquals(other, presenter.snapshot.value.state.selectedSymbol)
+                assertNull(prepared)
+                assertNull(pending)
+                navigation.runPending()
+                assertEquals(emptyList(), navigation.calls)
+                fixture.clickText("Refactor")
+                fixture.render()
+                assertEquals("Other", prepared?.target?.symbol)
+                assertEquals(other, prepared?.selectedSymbol)
+                assertTrue(fixture.hasText("Replace selected declaration · Other"))
+                assertTrue(fixture.isDescriptionFocused("Intent"))
+                assertEquals(initialInput, navigation.input())
+                assertEquals(0, sends)
+                assertEquals(emptyList(), navigation.calls, "Refactor preparation must not Send")
+              }
+        }
+  }
+
+  @Test
+  fun decliningContextRefactorDiscardRetainsTheDraftAndItsEvidence() {
+    val other =
+        SymbolInfo(
+            "Other", "function", "func Other()", 3, 3, confidence = "exact", atomicTarget = true)
+    FileNavigationUiFixture(
+            "draft", "package main\nfunc Run() {}\nfunc Other() {}\n", listOf(other))
+        .use { navigation ->
+          val presenter = navigation.presenter
+          presenter.dispatch(DesktopEvent.SymbolSelected(other))
+          val before = presenter.snapshot.value.state
+          var pending by mutableStateOf<PendingDraftDiscard.Replace?>(null)
+          var prepared = 0
+          ComposeVisualFixture(800, 650) {
+                val state by presenter.snapshot.collectAsState()
+                ContextToolWindow(
+                    ContextToolWindowState(
+                        symbolInspectorUiState(
+                            state.state.selectedFile,
+                            state.state.symbols,
+                            state.state.selectedSymbol,
+                            state.state.analysis,
+                            false,
+                            InspectorProviderState(false, false),
+                            currentEditIdentity(state.state)),
+                        ScopedModel(),
+                        false,
+                        null,
+                        null),
+                    ContextToolWindowActions(
+                        {},
+                        {},
+                        {},
+                        {},
+                        editSelected = { symbol ->
+                          routeContextRefactor(presenter, symbol, { prepared++ }) { pending = it }
+                        }))
+                pending?.let { approval ->
+                  DraftDiscardDialog(
+                      approval.currentDraft,
+                      approval.nextLabel,
+                      onDiscard = { error("Cancel must not discard the draft") },
+                      onCancel = { pending = null })
+                }
+              }
+              .use { fixture ->
+                fixture.render()
+                fixture.clickText("Refactor")
+                fixture.render()
+                assertEquals("Other", pending?.request?.target?.symbol)
+                assertEquals(0, prepared)
+                assertEquals(before.review, presenter.snapshot.value.state.review)
+                fixture.pressKey(Key.Escape)
+                fixture.render()
+                assertNull(pending)
+                assertEquals(before.review, presenter.snapshot.value.state.review)
+                assertEquals(before.chat, presenter.snapshot.value.state.chat)
+                assertEquals(before.selection, presenter.snapshot.value.state.selection)
+                navigation.runPending()
+                assertEquals(emptyList(), navigation.calls)
+              }
+        }
   }
 
   @Test
