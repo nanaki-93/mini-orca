@@ -22,6 +22,52 @@ import kotlin.test.assertTrue
 
 class EditorWorkspaceTest {
   @Test
+  fun appSourceSelectionCallbackPreservesUnsentComposerAndDraftWhenInspectingAnotherSymbol() {
+    val source = "package main\nfunc Run() {}\nfunc Other() {}\n"
+    val other =
+        SymbolInfo(
+            "Other",
+            "function",
+            startLine = 3,
+            endLine = 3,
+            confidence = "exact",
+            atomicTarget = true)
+    FileNavigationUiFixture("draft", source, listOf(other)).use { navigation ->
+      val before = navigation.presenter.snapshot.value.state
+      navigation.message = TextFieldValue("Keep my request")
+      navigation.constraints = TextFieldValue("Keep my constraints")
+      val input = navigation.input()
+      var composerRequested = true
+      val onSourceLineSelected =
+          sourceLineSelectionAction(navigation.presenter) { composerRequested = false }
+      ComposeVisualFixture(800, 650) {
+            SourceEditorPane(
+                before.project,
+                before.selectedFile,
+                before.symbols,
+                before.selectedSymbol,
+                before.selection.focusedLine,
+                emptyList(),
+                onSourceLineSelected)
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.tapSourceText(3, 6)
+            fixture.render()
+            val after = navigation.presenter.snapshot.value.state
+            assertEquals(other, after.selectedSymbol)
+            assertEquals(3, after.selection.focusedLine)
+            assertEquals(before.review, after.review)
+            assertEquals(before.chat, after.chat)
+            assertEquals(input, navigation.input())
+            assertFalse(composerRequested)
+            navigation.runPending()
+            assertTrue(navigation.calls.isEmpty())
+          }
+    }
+  }
+
+  @Test
   fun productionSourceTapInspectsButMultilineDragCopyAndMutationAttemptsRetainWork() {
     val source =
         "package worker\n\nfunc Run() {\n    work()\n}\n\nfunc Other() {\n    more()\n}\n\n// " +
@@ -409,6 +455,87 @@ class EditorWorkspaceTest {
             assertEquals(1, creations)
             assertEquals(0, surfaceSelections)
             assertEquals("package demo\n", file.content)
+          }
+    }
+  }
+
+  @Test
+  fun newFunctionRoutesPackageOnlyPreparationButCancellationKeepsConflictingDraft() {
+    FileNavigationUiFixture("composer").use { navigation ->
+      val packageOnly =
+          requireNotNull(navigation.presenter.snapshot.value.state.selectedFile)
+              .copy(content = "package demo\n")
+      navigation.presenter.dispatch(DesktopEvent.FileLoaded(packageOnly, emptyList()))
+      var prepared: DeclarationCreationKind? = null
+      var pending: PendingDraftDiscard.Create? = null
+      val state = navigation.presenter.snapshot.value
+      assertNull(declarationCreationBlockedReason(state.state.selectedFile))
+      routeCreationRequest(
+          state, DeclarationCreationKind.Function, { prepared = it }, { pending = it })
+      assertEquals(DeclarationCreationKind.Function, prepared)
+      assertNull(pending)
+      assertEquals("package demo\n", packageOnly.content)
+      assertEquals(emptyList(), navigation.calls, "Preparation must not send or write")
+      for (blockedFile in
+          listOf(null, packageOnly.copy(language = "Markdown"), packageOnly.copy(binary = true))) {
+        prepared = null
+        routeCreationRequest(
+            state.copy(
+                state =
+                    state.state.copy(
+                        selection = state.state.selection.copy(selectedFile = blockedFile))),
+            DeclarationCreationKind.Function,
+            { prepared = it },
+            { pending = it })
+        assertNull(prepared)
+        assertNull(pending)
+      }
+      assertEquals(emptyList(), navigation.calls)
+    }
+    FileNavigationUiFixture("draft").use { navigation ->
+      var prepared = 0
+      var pending: PendingDraftDiscard.Create? by mutableStateOf(null)
+      val before = navigation.presenter.snapshot.value.state
+      ComposeVisualFixture(800, 650) {
+            EditorWorkspace(
+                editorChromeUiState(
+                    before.selectedFile,
+                    before.selectedSymbol,
+                    EditorSurface.Source,
+                    progress(EditorProgress.Inspect),
+                    before.review.draft),
+                null,
+                {},
+                {
+                  routeCreationRequest(
+                      navigation.presenter.snapshot.value,
+                      DeclarationCreationKind.Function,
+                      { prepared++ },
+                      { pending = it })
+                },
+                canvas = { Text(requireNotNull(before.selectedFile).content) })
+            pending?.let { approval ->
+              DraftDiscardDialog(
+                  approval.currentDraft,
+                  approval.nextLabel,
+                  onDiscard = { error("Cancellation must not discard") },
+                  onCancel = { pending = null })
+            }
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.clickText("New function")
+            fixture.render()
+            assertTrue(pending != null)
+            assertEquals(0, prepared)
+            assertTrue(navigation.calls.isEmpty())
+            fixture.pressKey(Key.Escape)
+            fixture.render()
+            assertNull(pending)
+            assertEquals(before.review, navigation.presenter.snapshot.value.state.review)
+            assertEquals(before.chat, navigation.presenter.snapshot.value.state.chat)
+            assertEquals(0, prepared)
+            assertEquals(emptyList(), navigation.calls)
           }
     }
   }

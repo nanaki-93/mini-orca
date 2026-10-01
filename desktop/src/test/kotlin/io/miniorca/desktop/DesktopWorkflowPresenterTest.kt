@@ -4,6 +4,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import java.net.http.HttpTimeoutException
+import java.nio.file.Files
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -999,6 +1000,78 @@ class DesktopWorkflowPresenterTest {
     } finally {
       presenter.close()
       scope.cancel()
+    }
+  }
+
+  @Test
+  fun passiveFileReadsAndInspectionDoNotSaveSelectionSendWorkOrWriteProjectSource() {
+    val directory = Files.createTempDirectory("mini-orca-passive-navigation-")
+    val source = directory.resolve("empty.go")
+    val original = "package example\n"
+    Files.writeString(source, original)
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<Pair<String, String>>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          calls += method to path
+          when {
+            path.contains("files/info?path=empty.go") ->
+                response(
+                    Json.encodeToString(
+                        file()
+                            .copy(
+                                path = "empty.go",
+                                name = "empty.go",
+                                content = Files.readString(source))))
+            path.contains("files/symbols?path=empty.go") -> response(symbolsJson("empty.go"))
+            else -> response("{}")
+          }
+        }
+    try {
+      presenter.dispatch(
+          DesktopEvent.ProjectLoaded(
+              project().copy(path = directory.toString()),
+              ProjectIndex(
+                  "project",
+                  "revision",
+                  files = listOf(IndexedFile("empty.go", "base", "Go", false)))))
+      presenter.openFileInEditor("missing.go")
+      assertTrue(calls.isEmpty())
+      presenter.openFileInEditor("empty.go")
+      repeat(6) {
+        main.runPending()
+        io.runPending()
+      }
+      val loaded = presenter.snapshot.value.state
+      assertEquals("empty.go", loaded.selectedFile?.path)
+      assertEquals(original, loaded.selectedFile?.content)
+      assertTrue(loaded.symbols.isEmpty())
+      assertEquals("package example\n", Files.readString(source))
+      assertEquals(1, calls.count { it.second.contains("files/info?path=empty.go") })
+      assertEquals(1, calls.count { it.second.contains("files/symbols?path=empty.go") })
+      val readCount = calls.size
+      presenter.dispatch(DesktopEvent.SourceLineSelected(SourceLineSelection(1, null)))
+      presenter.openFileInEditor("empty.go", EditorNavigationTarget("empty.go", line = 1))
+      main.runPending()
+      io.runPending()
+      assertEquals(readCount, calls.size)
+      assertNull(presenter.snapshot.value.state.selectedSymbol)
+      assertEquals(1, presenter.snapshot.value.state.selection.focusedLine)
+      assertTrue(calls.all { (method, _) -> method == "GET" })
+      assertTrue(
+          calls.all { (_, path) ->
+            listOf("/files/info?", "/files/symbols?", "/files/analysis?", "/impact?", "/git?")
+                .any(path::contains)
+          },
+          "Only file inspection and read-only enrichment are permitted: $calls")
+      assertEquals(original, Files.readString(source))
+    } finally {
+      presenter.close()
+      scope.cancel()
+      Files.deleteIfExists(source)
+      Files.deleteIfExists(directory)
     }
   }
 

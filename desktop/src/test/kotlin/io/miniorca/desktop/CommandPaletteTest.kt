@@ -87,6 +87,17 @@ class CommandPaletteTest {
                   assertEquals(1, navigation.clears)
                   assertEquals(TextFieldValue() to TextFieldValue(), navigation.input())
                   assertEquals(1, navigation.calls.count { it.contains("files/info?") })
+                  assertEquals(1, navigation.calls.count { it.contains("files/symbols?") })
+                  assertTrue(navigation.calls.all { it.startsWith("GET ") })
+                  assertTrue(
+                      navigation.calls.none {
+                        it.contains("/selection") ||
+                            it.contains("/chat") ||
+                            it.contains("/apply") ||
+                            it.contains("/checks") ||
+                            it.contains("/benchmark") ||
+                            it.contains("/scan")
+                      })
                 } else {
                   assertEquals(
                       previous.selection, navigation.presenter.snapshot.value.state.selection)
@@ -99,6 +110,48 @@ class CommandPaletteTest {
               }
         }
       }
+    }
+  }
+
+  @Test
+  fun symbolPaletteInspectsAnotherDeclarationWithoutClearingComposerOrRetargetingDraft() {
+    FileNavigationUiFixture("draft").use { navigation ->
+      val before = navigation.presenter.snapshot.value.state
+      navigation.message = TextFieldValue("Keep this unsent request")
+      val input = navigation.input()
+      val other =
+          SymbolInfo("Other", "function", startLine = 2, confidence = "exact", atomicTarget = true)
+      var visible by mutableStateOf(true)
+      ComposeVisualFixture(800, 650) {
+            if (visible)
+                CommandPaletteDialog(
+                    mode = PaletteMode.Symbols,
+                    query = "Other",
+                    onQuery = {},
+                    onMode = {},
+                    files = before.index!!.files,
+                    symbols = before.symbols + other,
+                    hasActiveFile = true,
+                    onSelectFile = {},
+                    onSelectSymbol = {
+                      visible = false
+                      inspectPaletteSymbol(navigation.presenter, it)
+                    },
+                    onSelectAction = {},
+                    onDismiss = { visible = false })
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
+            assertFalse(visible)
+            assertEquals(other, navigation.presenter.snapshot.value.state.selectedSymbol)
+            assertEquals(before.review, navigation.presenter.snapshot.value.state.review)
+            assertEquals(before.chat, navigation.presenter.snapshot.value.state.chat)
+            assertEquals(input, navigation.input())
+            navigation.runPending()
+            assertTrue(navigation.calls.isEmpty())
+          }
     }
   }
 
@@ -326,7 +379,11 @@ class CommandPaletteTest {
 }
 
 /** Uses the same composer-owned route and discard surface as the application callbacks. */
-internal class FileNavigationUiFixture(work: String) : AutoCloseable {
+internal class FileNavigationUiFixture(
+    work: String,
+    content: String = "package main",
+    extraSymbols: List<SymbolInfo> = emptyList(),
+) : AutoCloseable {
   private val dispatcher =
       object : CoroutineDispatcher() {
         val pending = ArrayDeque<Runnable>()
@@ -343,11 +400,11 @@ internal class FileNavigationUiFixture(work: String) : AutoCloseable {
           "base",
           "main.go",
           language = "Go",
-          sizeBytes = 12,
-          lineCount = 1,
+          sizeBytes = content.length.toLong(),
+          lineCount = content.lines().size,
           modifiedAt = "",
           binary = false,
-          content = "package main")
+          content = content)
   val presenter =
       DesktopWorkflowPresenter(
           ApiClient(
@@ -387,7 +444,7 @@ internal class FileNavigationUiFixture(work: String) : AutoCloseable {
                           IndexedFile(it, "base", "Go", false)
                         })))
     val symbol = SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)
-    presenter.dispatch(DesktopEvent.FileLoaded(file, listOf(symbol)))
+    presenter.dispatch(DesktopEvent.FileLoaded(file, listOf(symbol) + extraSymbols))
     presenter.dispatch(DesktopEvent.SymbolSelected(symbol))
     if (work != "composer")
         presenter.dispatch(
@@ -446,7 +503,17 @@ internal class FileNavigationUiFixture(work: String) : AutoCloseable {
   }
 
   override fun close() {
-    presenter.close()
-    scope.cancel()
+    try {
+      assertTrue(
+          calls.all { call ->
+            call.startsWith("GET ") &&
+                listOf("/files/info?", "/files/symbols?", "/files/analysis?", "/impact?", "/git?")
+                    .any(call::contains)
+          },
+          "File entry points must dispatch only inspection reads: $calls")
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
   }
 }
