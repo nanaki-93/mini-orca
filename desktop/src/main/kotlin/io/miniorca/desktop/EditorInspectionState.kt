@@ -90,6 +90,35 @@ enum class SymbolInspectorMode {
   SelectedSymbol
 }
 
+/** Correspondence between the loaded file response and the active project's indexed file. */
+enum class SourceIndexCorrespondence(val label: String) {
+  Matches("Matches indexed source"),
+  Changed("Loaded source differs from indexed source"),
+  Unavailable("Source/index comparison unavailable"),
+}
+
+internal fun sourceIndexCorrespondence(
+    file: ProjectFileInfo,
+    project: ProjectAnalysis?,
+    index: ProjectIndex?,
+): SourceIndexCorrespondence {
+  if (project == null ||
+      index == null ||
+      project.projectId.isBlank() ||
+      project.projectRevision.isBlank() ||
+      project.projectId != index.projectId ||
+      project.projectRevision != index.projectRevision ||
+      file.path.isBlank())
+      return SourceIndexCorrespondence.Unavailable
+  val indexed =
+      index.files.singleOrNull { it.path == file.path }
+          ?: return SourceIndexCorrespondence.Unavailable
+  if (file.contentHash.isBlank() || indexed.contentHash.isBlank())
+      return SourceIndexCorrespondence.Unavailable
+  return if (file.contentHash == indexed.contentHash) SourceIndexCorrespondence.Matches
+  else SourceIndexCorrespondence.Changed
+}
+
 /**
  * Presentation-only inspector data. It consumes existing edit identities and provider confirmation
  * state without adding another persisted target or guard.
@@ -100,6 +129,7 @@ data class SymbolInspectorUiState(
     val filePurpose: String,
     val analysisStatus: InspectorAnalysisStatus,
     val analysisAction: InspectorAnalysisAction,
+    val sourceIndexCorrespondence: SourceIndexCorrespondence,
     val remoteProviderConfirmationRequired: Boolean,
     val selectionPrompt: String,
     val selectedSymbol: SymbolInspectorSymbolState? = null,
@@ -114,6 +144,8 @@ fun symbolInspectorUiState(
     analysisInProgress: Boolean,
     provider: InspectorProviderState,
     currentEditIdentity: CurrentEditIdentity?,
+    project: ProjectAnalysis? = null,
+    index: ProjectIndex? = null,
 ): SymbolInspectorUiState? {
   val file = selectedFile ?: return null
   val analysisStatus = inspectorAnalysisStatus(analysis, analysisInProgress)
@@ -141,6 +173,7 @@ fun symbolInspectorUiState(
       filePurpose = analysis?.purpose.orEmpty(),
       analysisStatus = analysisStatus,
       analysisAction = action,
+      sourceIndexCorrespondence = sourceIndexCorrespondence(file, project, index),
       remoteProviderConfirmationRequired =
           provider.remoteProvider &&
               !provider.remoteProviderConfirmed &&
