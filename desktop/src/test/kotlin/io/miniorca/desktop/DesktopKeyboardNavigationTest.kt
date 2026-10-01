@@ -157,6 +157,58 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun contextDisclosuresKeepKeyboardFocusAndDoNotDispatch() {
+    val base = contextVisualState()
+    val state =
+        base.copy(
+            impact =
+                ImpactPreview(
+                    base.inspector!!.file.path,
+                    references =
+                        listOf(
+                            ImpactReference("internal/caller.go", "Run", "exact", "Indexed use."))))
+    var privileged = 0
+    ComposeVisualFixture(320, 400, 1.5f) {
+          ContextToolWindow(
+              state,
+              ContextToolWindowActions(
+                  { privileged++ },
+                  { privileged++ },
+                  { privileged++ },
+                  { privileged++ },
+                  { privileged++ },
+                  explainSelected = { privileged++ }),
+              androidx.compose.ui.Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          for ((title, key) in
+              listOf(
+                  "Declaration details" to Key.Enter,
+                  "References" to Key.Spacebar,
+                  "File details" to Key.Enter,
+                  "Project context" to Key.Spacebar)) {
+            fixture.revealText(title, "context-content")
+            assertTrue(fixture.requestDescriptionFocus("Expand $title"))
+            fixture.render("f24-keyboard-$title-focused")
+            assertTrue(fixture.isFocusedControl("Expand $title"))
+            fixture.assertColorVisible(FocusAccent)
+            assertTrue(fixture.pressKey(key))
+            fixture.render()
+            assertEquals("Expanded", fixture.descriptionState("Collapse $title"))
+            assertTrue(fixture.isFocusedControl("Collapse $title"))
+          }
+          fixture.revealText("internal/caller.go", "context-content")
+          assertEquals(0, privileged)
+          fixture.revealText("Refactor", "context-content")
+          assertTrue(fixture.requestFocus("Refactor"))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Refactor"))
+          assertEquals(0, privileged, "Focus alone cannot prepare an edit")
+        }
+  }
+
+  @Test
   fun scanKeyboardDisclosureAndOutputExpansionKeepVisibleFocusWithoutDispatchingWork() {
     val state = verifiedScanLayoutCases().first { it.first == "long-output" }.second
     val calls = mutableListOf<String>()

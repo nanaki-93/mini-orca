@@ -6367,6 +6367,187 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun compactExplanationLifecycleKeepsRecoveryReachableWithHelpCollapsed() {
+    val base = contextVisualState()
+    for ((width, scale) in listOf(280 to 1.5f, 480 to 1f)) {
+      var state by mutableStateOf(base)
+      var requests = 0
+      ComposeVisualFixture(width, 400, scale) {
+            ContextToolWindow(
+                state,
+                ContextToolWindowActions(
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    explainSelected = { requests++ },
+                    cancelExplanation = { requests++ }),
+                Modifier.fillMaxSize())
+          }
+          .use { fixture ->
+            for (status in DeclarationExplanationStatus.entries) {
+              state =
+                  base.copy(
+                      declarationExplanation =
+                          DeclarationExplanationState(
+                              status = status,
+                              target =
+                                  if (status == DeclarationExplanationStatus.Unavailable) null
+                                  else contextExplanationTarget(base),
+                              result =
+                                  if (status == DeclarationExplanationStatus.Current)
+                                      DeclarationExplanation(
+                                          version = "v1",
+                                          projectId = "visual-fixture",
+                                          projectRevision = "fixture-revision",
+                                          baseFileHash = "fixture-hash",
+                                          anchor =
+                                              DeclarationSourceAnchor(
+                                                  "internal/api/user.go",
+                                                  "Run",
+                                                  "func Run() error",
+                                                  5,
+                                                  12),
+                                          summary = "Validates the request.",
+                                          contextManifest = ContextManifest())
+                                  else null,
+                              message =
+                                  if (status == DeclarationExplanationStatus.Failed)
+                                      "Provider connection failed; retry after reconnecting."
+                                  else ""))
+              fixture.render("f24-lifecycle-$status-$width-$scale")
+              val badge = explanationStatusStyle(status).label
+              fixture.revealText(badge, "context-content")
+              fixture.assertTextFits(badge, maxLines = 3)
+              val action = explanationActionLabel(state.declarationExplanation)
+              fixture.revealText(action, "context-content")
+              fixture.assertTextFits(action)
+              if (status == DeclarationExplanationStatus.Failed) {
+                fixture.revealText(state.declarationExplanation.message, "context-content")
+                fixture.assertTextFits(state.declarationExplanation.message, maxLines = 4)
+              }
+              assertTrue(fixture.hasText("Refactor"))
+              assertEquals(0, requests, "Rendering $status must not retry or cancel")
+            }
+          }
+    }
+  }
+
+  @Test
+  fun contextHierarchyAndActionsRemainReachableAtCompactAndEditorSizes() {
+    val base = contextVisualState()
+    val path = "internal/" + "deep/".repeat(12) + "caller.go"
+    val reason = "Advisory indexed relationship through " + "multiple adapters ".repeat(10)
+    val signature = "func Run(" + "longArgument context.Context, ".repeat(8) + ") error"
+    val selected = requireNotNull(base.inspector).selectedSymbol!!
+    val inspector = base.inspector.copy(selectedSymbol = selected.copy(signature = signature))
+    val remote =
+        ScopedModel(
+            scope = "function",
+            profile = "editor",
+            model = "remote/" + "model/".repeat(9),
+            remoteProvider = true)
+    val state =
+        base.copy(
+            inspector = inspector,
+            functionModel = remote,
+            impact =
+                ImpactPreview(
+                    inspector.file.path,
+                    references = listOf(ImpactReference(path, "Run", "approximate", reason))),
+            declarationExplanation =
+                DeclarationExplanationState(
+                    status = DeclarationExplanationStatus.Failed,
+                    target = contextExplanationTarget(base.copy(inspector = inspector)),
+                    message = "Provider unavailable. Reconnect before retrying."))
+    // M10 hierarchy: identity, explanation/consent/actions, then optional local details.
+    // The production dock scrolls instead of copying the mock's two-column layout.
+    for ((width, scale, density) in
+        (listOf(280, 320, 480).flatMap { width ->
+          listOf(1f, 1.25f, 1.5f).map { scale -> Triple(width, scale, 1f) }
+        } + listOf(Triple(320, 1.25f, 2f), Triple(280, 1.5f, 2f)))) {
+      val height = if (width == 480) 650 else 600
+      var privileged = 0
+      ComposeVisualFixture((width * density).toInt(), (height * density).toInt(), scale, density) {
+            ContextToolWindow(
+                state,
+                ContextToolWindowActions(
+                    { privileged++ },
+                    { privileged++ },
+                    { privileged++ },
+                    { privileged++ },
+                    { privileged++ },
+                    confirmFunctionRemoteProvider = { privileged++ },
+                    explainSelected = { privileged++ },
+                    cancelExplanation = { privileged++ }),
+                Modifier.fillMaxSize())
+          }
+          .use { fixture ->
+            fixture.render("f24-context-$width-$height-$scale-${density}x")
+            fixture.assertEveryTextLineReachable(inspector.file.path, "context-content")
+            fixture.revealText("Declaration details", "context-content")
+            fixture.clickText("Declaration details")
+            fixture.render()
+            fixture.assertEveryTextLineReachable(signature, "context-content")
+            val destination = modelDestinationLabel(ModelScope.Function, remote)
+            fixture.assertEveryTextLineReachable(destination, "context-content")
+            assertTrue(fixture.hasText("Explanation failed"))
+            assertTrue(fixture.hasText(state.declarationExplanation.message))
+            assertTrue(fixture.isDisabled("Explain declaration"))
+            fixture.revealText("Refactor", "context-content")
+            fixture.assertTextFits("Refactor")
+            fixture.revealText("References", "context-content")
+            fixture.clickText("References")
+            fixture.render("f24-context-expanded-$width-$scale-${density}x")
+            for (text in listOf(path, reason)) {
+              fixture.assertEveryTextLineReachable(text, "context-content")
+            }
+            fixture.revealText("File details", "context-content")
+            fixture.clickText("File details")
+            fixture.revealText("Project context", "context-content")
+            fixture.clickText("Project context")
+            fixture.render("f24-context-local-details-$width-$scale-${density}x")
+            fixture.revealText("Routes incoming requests.", "context-content")
+            assertEquals(0, privileged, "Disclosure and scrolling are passive")
+          }
+    }
+    for ((width, height) in
+        listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        val density = if (width == 800 && scale == 1.5f) 2f else 1f
+        var privileged = 0
+        ComposeVisualFixture(
+                (width * density).toInt(), (height * density).toInt(), scale, density) {
+                  AdaptiveProductionEditorFixture(
+                      DesktopLayoutState(),
+                      false,
+                      terminalCollapsed = true,
+                      onRequest = { privileged++ },
+                      onWrite = { privileged++ },
+                      onSourceLine = { privileged++ })
+                }
+            .use { fixture ->
+              fixture.render("f24-editor-context-$width-$height-$scale-${density}x")
+              assertTrue(fixture.hasText("Context"))
+              assertTrue(fixture.hasText("No explanation yet"))
+              assertTrue(fixture.hasText("Declaration details"))
+              assertTrue(
+                  fixture.hasText("Refactor"),
+                  "Refactor present at $width x $height / $scale / ${density}x")
+              if (fixture.taggedBounds("context-content").height == 0f) {
+                fixture.scrollBy(100_000f, "f04-arrangement")
+                fixture.render()
+              }
+              fixture.revealText("Refactor", "context-content")
+              fixture.assertTextFits("Refactor")
+              assertEquals(0, privileged, "Composition and layout cannot start workflow work")
+            }
+      }
+    }
+  }
+
+  @Test
   fun filledWorkspacePanesKeepFlatCornersGuttersAndFullWidthTerminal() {
     listOf(1600 to 1000, 1440 to 900, 1000 to 760, 999 to 760, 800 to 650, 1280 to 600).forEach {
         (width, height) ->
@@ -11403,13 +11584,15 @@ internal class ComposeVisualFixture(
   }
 
   fun assertDescriptionFullyVisible(label: String, withinTag: String) {
-    val node =
-        nodes().single { node ->
-          node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true &&
-              generateSequence(node) { it.parent }
+    fun node() =
+        nodes().single { candidate ->
+          candidate.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) ==
+              true &&
+              generateSequence(candidate) { it.parent }
                   .any { it.config.getOrNull(SemanticsProperties.TestTag) == withinTag }
         }
     fun fullyVisible(): Boolean {
+      val node = node()
       val bounds = node.boundsInRoot
       return bounds.width > 0f &&
           bounds.height > 0f &&
@@ -11421,7 +11604,8 @@ internal class ComposeVisualFixture(
       Thread.sleep(10)
       render()
     }
-    assertTrue(fullyVisible(), "$label must not be clipped: ${node.boundsInRoot} vs ${node.size}")
+    assertTrue(
+        fullyVisible(), "$label must not be clipped: ${node().boundsInRoot} vs ${node().size}")
   }
 
   fun requestDescriptionFocus(label: String, withinTag: String? = null): Boolean =
@@ -13234,7 +13418,7 @@ private fun contextExplanationTarget(state: ContextToolWindowState): Declaration
       symbol.endLine)
 }
 
-private fun contextVisualState(): ContextToolWindowState {
+internal fun contextVisualState(): ContextToolWindowState {
   val file =
       ProjectFileInfo(
           "internal/api/user.go",
