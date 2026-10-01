@@ -29,11 +29,12 @@ class DesktopWorkflowControllerTest {
     val loadedFirst = controller.currentFileRequest()!!
     val second = controller.beginFileLoad("second.go")!!
 
-    assertFalse(controller.analysisLoaded(loadedFirst, FileAnalysis("first.go", "fresh")))
+    assertTrue(controller.analysisLoaded(loadedFirst, FileAnalysis("first.go", "fresh")))
     assertFalse(controller.fileLoaded(first, file("first.go", "first-hash"), emptyList()))
     assertTrue(controller.fileLoaded(second, file("second.go", "second-hash"), emptyList()))
 
     assertEquals("second.go", controller.state.selectedFile?.path)
+    assertFalse(controller.analysisLoaded(loadedFirst, FileAnalysis("first.go", "late")))
     assertNull(controller.state.analysis)
   }
 
@@ -60,6 +61,68 @@ class DesktopWorkflowControllerTest {
     assertNull(controller.state.analysis)
     assertNull(controller.state.impact)
     assertNull(controller.state.gitStatus)
+  }
+
+  @Test
+  fun failedAndCanceledReplacementsRetainLoadedAuthorityAndWork() {
+    val controller = loadedController()
+    val initial = controller.beginFileLoad("main.go")!!
+    assertNull(controller.currentFileRequest())
+    assertNull(controller.state.selectedFile)
+    assertEquals("main.go", controller.state.selection.pendingFilePath)
+    assertTrue(controller.fileLoaded(initial, file("main.go", "main-hash"), emptyList()))
+    val loaded = controller.currentFileRequest()!!
+    val (chatRequest, chatFile) = controller.beginChatLoad()!!
+    assertTrue(
+        controller.chatLoaded(
+            chatRequest,
+            chatFile,
+            ChatSession("session", "project", "revision", "main-hash", "main.go")))
+    controller.dispatch(DesktopEvent.DraftLoaded(draft()))
+    controller.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() { changed() }"))
+    assertTrue(controller.analysisLoaded(loaded, FileAnalysis("main.go", "fresh")))
+    val previous = controller.state
+
+    val failed = controller.beginFileLoad("failed.go")!!
+    assertTrue(controller.fileFailed(failed, "Read denied"))
+    assertEquals(previous.selectedFile, controller.state.selectedFile)
+    assertEquals(previous.chat, controller.state.chat)
+    assertEquals(previous.review, controller.state.review)
+    assertEquals(previous.analysis, controller.state.analysis)
+    assertEquals(loaded, controller.currentFileRequest())
+    assertEquals("failed.go", controller.state.selection.failedFilePath)
+    assertEquals("Read denied", controller.state.selection.fileReadError)
+    assertNull(controller.state.selection.pendingFilePath)
+    assertFalse(controller.state.jobs.loading)
+    assertFalse(controller.fileFailed(failed, "late failure"))
+    assertFalse(controller.fileLoaded(failed, file("failed.go", "failed-hash"), emptyList()))
+
+    val canceled = controller.beginFileLoad("canceled.go")!!
+    assertTrue(controller.cancelFileLoad(canceled))
+    assertEquals(previous.selection, controller.state.selection)
+    assertEquals(previous.chat, controller.state.chat)
+    assertEquals(previous.review, controller.state.review)
+    assertEquals(loaded, controller.currentFileRequest())
+    assertFalse(controller.state.jobs.loading)
+    assertFalse(controller.cancelFileLoad(canceled))
+    assertFalse(controller.fileLoaded(canceled, file("canceled.go", "hash"), emptyList()))
+    assertTrue(controller.analysisLoaded(loaded, FileAnalysis("main.go", "still current")))
+  }
+
+  @Test
+  fun supersededFailureAndCancellationCannotClearTheNewPendingRead() {
+    val controller = loadedController()
+    val first = controller.beginFileLoad("first.go")!!
+    val second = controller.beginFileLoad("second.go")!!
+    assertFalse(controller.fileFailed(first, "late failure"))
+    assertFalse(controller.cancelFileLoad(first))
+    assertFalse(controller.fileLoaded(first, file("first.go", "hash"), emptyList()))
+    assertEquals("second.go", controller.state.selection.pendingFilePath)
+    assertTrue(controller.state.jobs.loading)
+    assertTrue(controller.fileFailed(second, "current failure"))
+    assertFalse(controller.cancelFileLoad(first))
+    assertEquals("second.go", controller.state.selection.failedFilePath)
+    assertEquals("current failure", controller.state.selection.fileReadError)
   }
 
   @Test

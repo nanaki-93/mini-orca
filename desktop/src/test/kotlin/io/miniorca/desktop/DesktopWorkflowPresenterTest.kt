@@ -1002,6 +1002,188 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun replacementReadsRetainSourceWorkAndEvidenceUntilSuccessfulPublication() {
+    for (outcome in listOf("failed", "canceled", "loaded")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+            when {
+              path.contains("files/info?path=other.go") -> response(fileJson("other.go", "other"))
+              path.contains("files/symbols?path=other.go") ->
+                  when (outcome) {
+                    "failed" -> TransportResponse(403, """{"message":"Replacement denied"}""")
+                    "canceled" -> throw kotlinx.coroutines.CancellationException("read canceled")
+                    else -> response(symbolsJson("other.go", "Other"))
+                  }
+              path.endsWith("/explanation") -> response(explanationJson("Run"))
+              path.contains("files/symbols?path=main.go") -> response(symbolsJson("main.go", "Run"))
+              else -> creationFileResponse(path) ?: response("{}")
+            }
+          }
+      fun drain() {
+        repeat(5) {
+          main.runPending()
+          io.runPending()
+        }
+        main.runPending()
+      }
+      try {
+        loadProject(presenter)
+        presenter.selectFile("main.go")
+        drain()
+        val run = SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)
+        presenter.dispatch(DesktopEvent.EditorContextSelected(run, 3))
+        presenter.dispatch(
+            DesktopEvent.ChatLoaded(
+                ChatSession("session", "project", "revision", "base", "main.go")))
+        presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+        presenter.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() { changed() }"))
+        presenter.dispatch(
+            DesktopEvent.ChecksLoaded(DraftCheckReport("main.go", applicable = true)))
+        presenter.explainSelectedDeclaration()
+        drain()
+        val previous = presenter.snapshot.value
+        assertEquals(DeclarationExplanationStatus.Current, previous.declarationExplanation.status)
+
+        presenter.selectFile("other.go")
+        main.runPending()
+        val pending = presenter.snapshot.value
+        assertEquals("other.go", pending.state.selection.pendingFilePath)
+        assertEquals(previous.state.selectedFile, pending.state.selectedFile)
+        assertEquals(previous.state.symbols, pending.state.symbols)
+        assertEquals(run, pending.state.selectedSymbol)
+        assertEquals(3, pending.state.selection.focusedLine)
+        assertEquals(previous.state.chat, pending.state.chat)
+        assertEquals(previous.state.review, pending.state.review)
+        assertEquals(previous.state.analysis, pending.state.analysis)
+        assertEquals(previous.declarationExplanation, pending.declarationExplanation)
+        drain()
+        val finished = presenter.snapshot.value
+        assertNull(finished.state.selection.pendingFilePath)
+        assertFalse(finished.state.jobs.loading)
+        if (outcome == "loaded") {
+          assertEquals("other.go", finished.state.selectedFile?.path)
+          assertEquals("Other", finished.state.symbols.single().name)
+          assertNull(finished.state.chat.session)
+          assertNull(finished.state.review.editor)
+          assertNull(finished.state.checks)
+          assertEquals(DeclarationExplanationStatus.Stale, finished.declarationExplanation.status)
+        } else {
+          assertEquals(previous.state.selectedFile, finished.state.selectedFile)
+          assertEquals(previous.state.symbols, finished.state.symbols)
+          assertEquals(previous.state.selectedSymbol, finished.state.selectedSymbol)
+          assertEquals(previous.state.selection.focusedLine, finished.state.selection.focusedLine)
+          assertEquals(previous.state.chat, finished.state.chat)
+          assertEquals(previous.state.review, finished.state.review)
+          assertEquals(previous.declarationExplanation, finished.declarationExplanation)
+          assertEquals(
+              if (outcome == "failed") "other.go" else null,
+              finished.state.selection.failedFilePath)
+          assertEquals(
+              if (outcome == "failed") "Replacement denied" else null,
+              finished.state.selection.fileReadError)
+        }
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun closingCancelsPendingReplacementEvenBeforeItsCoroutineStarts() {
+    for (started in listOf(false, true)) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val calls = mutableListOf<String>()
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+            calls += path
+            creationFileResponse(path) ?: error("Unexpected $path")
+          }
+      try {
+        loadProject(presenter)
+        presenter.selectFile("main.go")
+        repeat(5) {
+          main.runPending()
+          io.runPending()
+        }
+        main.runPending()
+        presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+        val previous = presenter.snapshot.value.state
+        calls.clear()
+        presenter.selectFile("other.go")
+        if (started) main.runPending()
+        assertEquals("other.go", presenter.snapshot.value.state.selection.pendingFilePath)
+        presenter.close()
+        assertNull(presenter.snapshot.value.state.selection.pendingFilePath)
+        assertEquals(previous.selectedFile, presenter.snapshot.value.state.selectedFile)
+        assertEquals(previous.review.editor, presenter.snapshot.value.state.review.editor)
+        main.runPending()
+        io.runPending()
+        main.runPending()
+        assertTrue(calls.isEmpty())
+        assertNull(presenter.snapshot.value.state.selection.pendingFilePath)
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun pendingReplacementDoesNotCancelChecksAndSuccessfulPublicationClearsRunningWork() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          when {
+            path.contains("/drafts/draft/checks") ->
+                response(
+                    """{"target_path":"main.go","applicable":true,"draft_id":"draft","draft_revision":1,"draft_hash":"draft-hash","checks":[]}""")
+            path.contains("files/info?path=other.go") -> response(fileJson("other.go", "other"))
+            path.contains("files/symbols?path=other.go") -> response(symbolsJson("other.go"))
+            else -> creationFileResponse(path) ?: response("{}")
+          }
+        }
+    try {
+      loadProject(presenter)
+      presenter.selectFile("main.go")
+      repeat(5) {
+        main.runPending()
+        io.runPending()
+      }
+      main.runPending()
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      presenter.runDraftChecks()
+      main.runPending()
+      val running = presenter.snapshot.value.state.review.checkAttempt
+      assertEquals(ValidationAttemptStatus.Running, running?.status)
+      presenter.selectFile("other.go")
+      main.runPending()
+      assertEquals(running, presenter.snapshot.value.state.review.checkAttempt)
+      io.runNext() // The old-file checks may finish while the replacement read is pending.
+      main.runPending()
+      assertTrue(presenter.snapshot.value.state.checks?.applicable == true)
+      assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
+      io.runPending()
+      main.runPending()
+      assertEquals("other.go", presenter.snapshot.value.state.selectedFile?.path)
+      assertNull(presenter.snapshot.value.state.review.checkAttempt)
+      assertNull(presenter.snapshot.value.state.checks)
+      assertFalse(presenter.snapshot.value.generating)
+      assertFalse(presenter.snapshot.value.draftValidationInProgress)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun generationFailureSurvivesOtherStatusAndClearsBeforeRetryOrFileChange() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()
@@ -6125,7 +6307,7 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun selectingAFileCancelsSecurityBeforeTheQueuedRequestCanRun() {
+  fun publishingAReplacementCancelsSecurityBeforeTheQueuedRequestCanRun() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()
     val scope = CoroutineScope(SupervisorJob() + main)
@@ -6151,6 +6333,14 @@ class DesktopWorkflowPresenterTest {
       main.runPending()
       presenter.setSecurityReviewRemoteConfirmation(true)
       presenter.selectFile("other.go")
+      main.runPending()
+      assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
+      assertTrue(presenter.snapshot.value.securityReviewRemoteConfirmed)
+      assertEquals(
+          SecuritySectionOperationStatus.Running,
+          presenter.snapshot.value.state.security.sourceOperation.status)
+      io.runLast() // Publish the replacement while the old-file security read is still queued.
+      main.runPending()
       repeat(3) {
         main.runPending()
         io.runPending()
