@@ -665,14 +665,82 @@ automatically. A comparison timeout may mean execution already started, with no
 new measurements confirmed. Local stopping/invalidation does not prove the daemon
 canceled code that already began.
 
-**Measurement details** shows evidence for the candidate and selected benchmark,
-not a measured gain for a model hypothesis. New discovery/admission progress and
-failures take precedence over retained evidence, which is labeled **Prior
-measurement details** when no longer the current outcome. Retained measurements
-cannot authorize another run; unavailable, failed, canceled, stale and inconclusive
-evidence retains its meaning. Benchmarks are not an unconditional Apply prerequisite.
-Navigation, finding selection, disclosure, copying and resizing do not list
-benchmarks, grant trust, execute code, contact a provider or write source.
+The latest comparison status and its reason remain visible beside **Explore
+benchmark evidence**, even with optional details collapsed. Daemon outcomes use
+**Comparison canceled · daemon**, **Comparison failed · daemon**, **Comparison
+unavailable · daemon** or **Comparison unsupported · daemon status**; they are
+not trust-admission failures or successful empty measurements. **Completed · no
+new measurements** means neither side returned a nonempty sample list. A completed
+response with measurements is assessed separately: completion alone is not an
+improvement. Admission failures, local stopping and transport uncertainty remain
+distinct from daemon-confirmed outcomes. Unavailability clears catalog/selection
+authority; explicitly refresh and select again before another run. No outcome
+retries execution automatically.
+
+**Measurement details** opens **Benchmark evidence** for the candidate and
+selected benchmark, not a measured gain for a model hypothesis. It shows **Metric**,
+**Baseline median**, **Candidate median** and **Change / availability** for
+**Time (ns/op)**, **Bytes (B/op)** and **Allocations (allocs/op)**. **Baseline samples**
+and **Candidate samples** count each side's actual returned samples, independently
+of per-metric valid-observation coverage. At narrower local pane widths or larger
+text, the columns become stacked metrics with the same Baseline/Candidate median
+labels; no metric is hidden.
+
+Availability distinguishes **measurement not returned**, **empty samples**,
+**unavailable**, **partial**, **invalid samples** and **complete**. Omitted/null
+bytes or allocations are unavailable, never zero; recorded zero remains zero.
+Valid observations remain readable as medians even in partial or invalid evidence;
+for an even number of valid observations, the median averages the middle pair.
+Complete comparison requires five valid samples per side for all three metrics.
+Iterations and time must be positive, time finite, and present memory values
+nonnegative. Invalid observations remain inspectable but prevent a complete claim.
+Incomplete evidence has no observed-change claim for the affected metric, and a
+lower time median alone cannot establish a win with incomplete memory evidence.
+Zero-baseline changes use text such as “from zero to …”, not infinite percentages.
+
+**Inconclusive · noisy samples** identifies relative range greater than 10% of
+the median; **Inconclusive · opposing memory signals** identifies conflicting
+bytes/allocation changes. Lower time with higher memory is an explicit trade-off,
+not an unconditional win. Limitations sit beside the observations, and essential
+inconclusive/stale reasons remain visible when measurement details are collapsed.
+**Measured · selected benchmark** is scoped to that benchmark, not project-wide
+performance or the selected recommendation.
+
+During a replacement attempt, discovery/admission/running status takes precedence
+over earlier measurements; a later daemon failure, cancellation or unavailability
+stays primary. Earlier measurements remain under **Prior measurement details** /
+**Prior benchmark evidence** when the new response supplies none. Refresh, cleared
+selection, changed argv/scope or candidate/source identity removes current claims;
+stale recorded values remain inspectable with their reason and **Historical
+change** labels. Current claims require the eligible current candidate and exact
+catalog selection, matching full draft/source identity, benchmark, scope and argv.
+Retained evidence belongs to the current review lifecycle, not persistent history
+or another review's candidate. It cannot authorize another run.
+
+Inside measurement details, **Recorded conditions & identity** exposes the
+comparison's benchmark, target path, project ID/revision, draft ID/revision/hash,
+base file hash and opaque scope guard. **Recorded -count**, **Recorded -benchtime**
+and **Recorded -benchmem** derive only from the returned command (separated or
+`-flag=value` forms). **Recorded comparison argv (read-only)** shows all indexed
+JSON-quoted arguments, not a replacement selection's command. Missing metadata
+says **not recorded**; no machine, toolchain, timestamp or workload-size facts are
+invented. **Returned sample details** exposes each side's returned sample count,
+iterations, time, bytes and allocations, preserving unavailable versus zero.
+
+Evidence text is selectable/read-only. **Copy displayed benchmark evidence**
+copies its heading, assessment, median/availability labels and displayed evidence;
+the **Recorded conditions & identity** and **Returned sample details** sections
+are included only while expanded. Expand both for a full evidence copy, then paste
+into a scratch document to inspect it. Success says **Displayed benchmark evidence
+copied.**; failure says **Could not copy benchmark evidence: …** locally, without changing
+the workflow outcome. This differs from **Copy argv**, which copies the currently
+selected catalog command, not recorded comparison evidence.
+
+Benchmarks remain optional evidence, not an unconditional Apply prerequisite, and
+do not bypass existing Review/Apply/Undo guards. Navigation, finding selection,
+disclosure, copying and resizing do not list benchmarks, grant trust, execute code,
+contact a provider or write source. No new API, configuration or data migration
+is required.
 
 For native keyboard, focus, screen-reader and clipboard observations, follow the
 [benchmark native review](KEYBOARD_SMOKE_CHECKLIST.md#benchmark-discovery-and-admission-native-review).

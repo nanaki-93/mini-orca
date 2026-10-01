@@ -121,9 +121,9 @@ with keyboard focus.
 
    Also perform the [benchmark discovery and admission native review](#benchmark-discovery-and-admission-native-review)
    below. It covers explicit read-only listing/refresh, keyboard selection,
-   command/scope inspection and copying, project/revision trust, recovery and
-   invalidation during admission. Record those native observations separately
-   from fake-transport tests and offscreen fixtures; a measured candidate must
+   command/scope inspection and copying, project/revision trust, recovery,
+   invalidation during admission, and returned measurements/identity inspection.
+   Record those native observations separately from fake-transport tests and offscreen fixtures; a measured candidate must
    not label the selected Performance hypothesis measured.
 
    In Security, use disposable saved source-rule and AI results (and, if
@@ -266,9 +266,9 @@ with keyboard focus.
 This is a procedure, not completed native evidence. Use the
 [delivered Performance behavior](README.md#performance-hypotheses-and-benchmark-evidence)
 as the expected contract. Use a disposable root Go module, isolated preferences
-and a fake provider for any import or draft generation. Add a Go declaration to
-edit and at least two `func BenchmarkName(b *testing.B)` benchmarks in a same-package
-`*_test.go` file. For a long-catalog case, add at least 25 distinct benchmarks and
+and a fake provider for any import or draft generation; no live provider is
+required. Add a Go declaration to edit and at least two
+`func BenchmarkName(b *testing.B)` benchmarks in a same-package `*_test.go` file. For a long-catalog case, add at least 25 distinct benchmarks and
 include a long benchmark name; repeat with a long Unicode package/target path.
 Use only code and tests you trust, with no effects outside disposable data:
 copied workspaces are not a security sandbox. Prepare an isolated declaration
@@ -277,10 +277,12 @@ draft in Editor and explicitly validate it; do not Apply during this procedure.
 Repeat at the sizes, text scales and densities listed above, especially 800×650
 and 1280×600 at 125%/150% text and on both sides of the result-browser reflow
 boundary. Record actual runtime, viewport, density, text scale and input method.
-Keep **Report metadata** and measurement details collapsed for required-information
-checks. For request/late-response cases, use a recording proxy or controlled test
-daemon if available, pointing the client at it with `MINI_ORCA_URL` as described
-in the [desktop guide](README.md). Record the setup and response delays used;
+Keep **Report metadata**, **Measurement details** (or **Prior measurement details**),
+**Recorded conditions & identity** and **Returned sample details** collapsed for
+required-information checks; expand them separately for inspection. For
+request/late-response cases, use a recording proxy or controlled test daemon if
+available, pointing the client at it with `MINI_ORCA_URL` as described in the
+[desktop guide](README.md). Record the setup and response delays used;
 there is no in-app delay/failure-injection control. Without controlled responses
 or request evidence, mark the corresponding observations pending rather than
 inferring safety from appearance. Ordinary automated tests remain fake-transport
@@ -370,6 +372,80 @@ or action-counter tests, without real project execution.
    not execution authority or measured confirmation of a model hypothesis.
    Inspect retained unavailable, failed, canceled, stale and inconclusive evidence
    separately when supplied; absent cases are unobserved, not native passes.
+8. Inspect returned completed measurements from the explicit disposable run.
+   With **Measurement details** collapsed, read the latest assessment and any
+   inconclusive reason; completion alone must not claim improvement. Expand using
+   Enter and Space in separate attempts. Read **Metric**, **Baseline median**,
+   **Candidate median**, **Change / availability**, **Baseline samples** and
+   **Candidate samples**. Check **Time (ns/op)**, **Bytes (B/op)** and
+   **Allocations (allocs/op)** against the recorded response, including per-side
+   valid-observation coverage. Use controlled responses for missing measurement
+   objects, empty/partial samples, omitted/null memory, explicit zero, invalid,
+   noisy and opposing-memory cases that the real daemon cannot reliably produce.
+   Valid partial medians must remain readable but incomplete evidence cannot
+   claim a win. Missing memory must say unavailable rather than zero; valid zero
+   must stay zero without infinite/NaN changes. Read limitations beside values,
+   and lower-time/higher-memory trade-offs without an unconditional-win claim.
+   Record each supplied response/evidence path and observed result; unsupplied
+   cases remain pending, not implied by a successful normal run.
+9. With controlled matching responses, inspect **Comparison canceled · daemon**,
+   **Comparison failed · daemon**, **Comparison unavailable · daemon** and
+   **Comparison unsupported · daemon status**, plus **Completed · no new
+   measurements**. Read returned reasons with optional details collapsed; keep
+   these distinct from **Benchmark admission failed** or **Benchmark admission
+   stopped**. There is no dedicated benchmark cancel control; use a controlled
+   daemon response for daemon cancellation, not local invalidation as proof.
+   Starting with completed evidence, hold a replacement attempt and check
+   admission/running remains primary. Return a measurement-free terminal outcome:
+   it must stay primary above **Prior measurement details** / **Prior benchmark
+   evidence**. Open prior details and verify the heading, assessment and changes
+   stay qualified as prior/historical, not confirmation of the new attempt.
+   Unavailability must revoke selection; recovery is explicit Refresh/reselection,
+   not an automatic run. Refresh or safely edit the draft/file, clear/change the
+   selection or change its recorded command/scope using controlled responses:
+   current claims must disappear while retained values remain inspectable with
+   stale reasons. Navigating or selecting another finding alone must not change
+   otherwise current evidence. Do not expect cross-review or restart history.
+10. Expand **Recorded conditions & identity** and **Returned sample details**
+    independently with Enter/Space. Inspect/copy the full benchmark, target path,
+    project ID/revision, draft ID/revision/hash, base file hash, opaque scope and
+    **Recorded comparison argv (read-only)** through its last indexed argument.
+    Compare with the response, not the current catalog command; repeat after
+    selecting a different benchmark to distinguish historical recorded argv from
+    selected argv. Check **Recorded -count**, **Recorded -benchtime** and
+    **Recorded -benchmem** against separated and equals-form flags supplied by
+    controlled responses. Missing metadata must say **not recorded** without
+    invented machine/toolchain/time facts. Inspect each side's sample count and
+    every returned sample's iterations, ns/op, B/op and allocs/op, including
+    unavailable versus zero. Typing must not edit evidence. Focus each disclosure
+    and **Copy displayed benchmark evidence**: verify visible focus and scrolling
+    reveal it, not just focus in an offscreen semantics tree. With a screen reader,
+    check Expand/Collapse names and Expanded/Collapsed states, reading order, and
+    each median's unit, Baseline/Candidate association and availability. Color
+    alone must not carry status or side association.
+11. At all applicable viewport/text/density combinations above, resize across
+    both sides of the measurement-column/stacked boundary and back. It depends
+    on local pane width and text scale, not a fixed window width. Check stacked
+    rows retain **Baseline median**, **Candidate median**, units and
+    **Change / availability** for every metric. Scroll the existing overview to
+    reach the last metric, complete long Unicode paths/hashes/argv/reasons, both
+    nested disclosures and copy action. Repeat collapsed/expanded, with prior
+    running/failed evidence and terminal outcomes. Native focus should remain on
+    a surviving control, revealed in the scroller; expansion, evidence currentness
+    and returned values must survive resize without new work or source writes.
+12. Activate **Copy displayed benchmark evidence** using Enter/Space and paste
+    into a separate scratch document. Compare heading, assessment, units, sample
+    counts, median/availability and historical labels with displayed evidence.
+    Repeat with both nested disclosures collapsed, each expanded separately and
+    both expanded: the **Recorded conditions & identity** and **Returned sample
+    details** sections should be copied only while expanded. Confirm **Displayed
+    benchmark evidence copied.** and keep **Copy argv** separate (it copies selected catalog argv). Safely exercise a
+    host clipboard failure if possible: expect **Could not copy benchmark
+    evidence: …** beside the action, unchanged comparison state, no workflow
+    request and an explicit local retry after clipboard access recovers. There is
+    no in-app clipboard-failure switch; if the host cannot safely induce failure,
+    mark that native observation pending and cite automated failure coverage
+    separately. Success requires an actual paste, not feedback alone.
 
 Throughout, observe request methods/routes, an execution log and disposable source
 hashes where available. Finding selection, focus movement, disclosure, copying,
