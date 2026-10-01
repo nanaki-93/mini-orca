@@ -1481,5 +1481,11 @@ class DesktopShellTest {
                 estimatedTokens = 12,
                 truncated = true,
             )))
+    assertEquals(
+        "0 included · 0 excluded · unavailable estimated tokens · truncation unavailable",
+        contextManifestSummary(ContextManifest()))
+    assertEquals(
+        "0 included · 0 excluded · 0 estimated tokens · not truncated",
+        contextManifestSummary(ContextManifest(estimatedTokens = 0, truncated = false)))
   }
 }

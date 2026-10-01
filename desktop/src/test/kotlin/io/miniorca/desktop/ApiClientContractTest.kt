@@ -699,6 +699,79 @@ class ApiClientContractTest {
   }
 
   @Test
+  fun contextPreviewKeepsReportedMetadataAndUsesOnlyTheLocalRoute() {
+    val requests = mutableListOf<String>()
+    val responses =
+        listOf(
+            """{"included":[{"path":"dir/a b.go","size_bytes":12,"hash":"sha256:a","estimated_tokens":0,"truncated":false},{"path":"dir/b.go","size_bytes":90,"hash":"sha256:b","estimated_tokens":8,"truncated":true}],"excluded":[{"path":".env","include":false,"reason":"secret"}],"estimated_tokens":0,"byte_limit":2048,"token_limit":256,"truncated":false,"scope":"function","model":"m","provider_origin":"https://example.test","remote_provider":true}""",
+            """{"included":[{"path":"dir/a b.go","size_bytes":12,"hash":"sha256:a"}],"excluded":[]}""",
+            """{"included":[],"excluded":[],"estimated_tokens":0,"byte_limit":0,"token_limit":0,"truncated":false,"remote_provider":false}""")
+    var next = 0
+    val client =
+        ApiClient(
+            transport =
+                DaemonTransport { method, path, body ->
+                  assertEquals("GET", method)
+                  assertNull(body)
+                  requests.add(path)
+                  TransportResponse(200, responses[next++])
+                })
+
+    val complete = client.context("dir/a b.go")
+    assertEquals(0, complete.estimatedTokens)
+    assertEquals(2048, complete.byteLimit)
+    assertEquals(256, complete.tokenLimit)
+    assertEquals(false, complete.truncated)
+    assertEquals(true, complete.remoteProvider)
+    assertEquals(listOf(false, true), complete.included.map { it.truncated })
+    assertEquals(listOf(0, 8), complete.included.map { it.estimatedTokens })
+    assertEquals("sha256:a", complete.included.first().hash)
+    assertEquals("secret", complete.excluded.single().reason)
+
+    val omitted = client.context("dir/a b.go", "analyze_file")
+    assertNull(omitted.estimatedTokens)
+    assertNull(omitted.byteLimit)
+    assertNull(omitted.tokenLimit)
+    assertNull(omitted.truncated)
+    assertNull(omitted.remoteProvider)
+    assertNull(omitted.included.single().estimatedTokens)
+    assertNull(omitted.included.single().truncated)
+
+    val zero = client.context("dir/a b.go")
+    assertEquals(0, zero.estimatedTokens)
+    assertEquals(0, zero.byteLimit)
+    assertEquals(0, zero.tokenLimit)
+    assertEquals(false, zero.truncated)
+    assertEquals(false, zero.remoteProvider)
+    assertEquals(
+        listOf(
+            "/api/projects/current/context?path=dir%2Fa+b.go&action=fix",
+            "/api/projects/current/context?path=dir%2Fa+b.go&action=analyze_file",
+            "/api/projects/current/context?path=dir%2Fa+b.go&action=fix"),
+        requests)
+  }
+
+  @Test
+  fun contextPreviewPreservesStructuredFailures() {
+    val client =
+        ApiClient(
+            transport =
+                DaemonTransport { method, path, body ->
+                  assertEquals("GET", method)
+                  assertEquals("/api/projects/current/context?path=main.go&action=fix", path)
+                  assertNull(body)
+                  TransportResponse(
+                      409,
+                      """{"type":"conflict","message":"stale revision","user_message":"Reload the project first."}""")
+                })
+    val failure = runCatching { client.context("main.go") }.exceptionOrNull()
+    assertTrue(failure is ApiException)
+    assertEquals(409, failure.status)
+    assertEquals("conflict", failure.error?.type)
+    assertEquals("Reload the project first.", failure.message)
+  }
+
+  @Test
   fun structuredFailuresExposeTheDaemonError() {
     val client =
         ApiClient(

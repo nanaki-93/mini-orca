@@ -138,14 +138,14 @@ data class Suggestion(
 data class ContextManifest(
     val included: List<ContextFile> = emptyList(),
     val excluded: List<ContextDecision> = emptyList(),
-    @SerialName("estimated_tokens") val estimatedTokens: Int = 0,
-    @SerialName("byte_limit") val byteLimit: Int = 0,
-    @SerialName("token_limit") val tokenLimit: Int = 0,
-    val truncated: Boolean = false,
+    @SerialName("estimated_tokens") val estimatedTokens: Int? = null,
+    @SerialName("byte_limit") val byteLimit: Int? = null,
+    @SerialName("token_limit") val tokenLimit: Int? = null,
+    val truncated: Boolean? = null,
     val scope: String = "",
     val model: String = "",
     @SerialName("provider_origin") val providerOrigin: String = "",
-    @SerialName("remote_provider") val remoteProvider: Boolean = false
+    @SerialName("remote_provider") val remoteProvider: Boolean? = null
 )
 
 @Serializable
@@ -153,7 +153,8 @@ data class ContextFile(
     val path: String,
     @SerialName("size_bytes") val sizeBytes: Long,
     val hash: String,
-    @SerialName("estimated_tokens") val estimatedTokens: Int
+    @SerialName("estimated_tokens") val estimatedTokens: Int? = null,
+    val truncated: Boolean? = null
 )
 
 @Serializable

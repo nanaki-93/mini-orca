@@ -1442,13 +1442,17 @@ class DesktopStateTest {
             DaemonTransport { _, _, _ ->
               TransportResponse(
                   200,
-                  """{"included":[{"path":"main.go","size_bytes":20,"hash":"sha256:base","estimated_tokens":5}],"excluded":[{"path":".env","include":false,"reason":"secret"}],"estimated_tokens":5,"byte_limit":1024,"token_limit":256,"scope":"function","model":"local-code","provider_origin":"http://localhost:11434","content":"private source must not reach the UI model"}""")
+                  """{"included":[{"path":"main.go","size_bytes":20,"hash":"sha256:base","estimated_tokens":5,"truncated":true}],"excluded":[{"path":".env","include":false,"reason":"secret"}],"estimated_tokens":5,"byte_limit":1024,"token_limit":256,"truncated":true,"scope":"function","model":"local-code","provider_origin":"http://localhost:11434","remote_provider":false,"content":"private source must not reach the UI model"}""")
             })
 
     val manifest = client.context("main.go")
 
     assertEquals("Remote endpoint", client.endpointLocality())
     assertEquals("main.go", manifest.included.single().path)
+    assertEquals(true, manifest.included.single().truncated)
+    assertEquals(5, manifest.included.single().estimatedTokens)
+    assertEquals(true, manifest.truncated)
+    assertEquals(false, manifest.remoteProvider)
     assertEquals("secret", manifest.excluded.single().reason)
     assertEquals("function", manifest.scope)
     assertEquals("local-code", manifest.model)
