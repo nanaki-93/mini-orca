@@ -541,6 +541,51 @@ class EditorWorkspaceTest {
   }
 
   @Test
+  fun creationDiscardApprovalCannotClearChangedComposerOrDraft() {
+    FileNavigationUiFixture("draft").use { navigation ->
+      val initial = navigation.presenter.snapshot.value
+      val message = TextFieldValue("prepare a function")
+      var prepared = 0
+      var pending: PendingDraftDiscard.Create? = null
+      routeCreationRequest(
+          initial, DeclarationCreationKind.Function, { prepared++ }, { pending = it }, message)
+      val approval = requireNotNull(pending)
+      val before = initial.state.review
+      confirmCreationDiscard(
+          approval,
+          navigation.presenter,
+          { TextFieldValue("changed") to TextFieldValue() },
+          { prepared++ })
+      assertEquals(before, navigation.presenter.snapshot.value.state.review)
+      assertEquals(0, prepared)
+
+      navigation.presenter.dispatch(
+          DesktopEvent.DraftLoaded(requireNotNull(before.draft).copy(revision = 2)))
+      val changedDraft = navigation.presenter.snapshot.value.state.review
+      confirmCreationDiscard(
+          approval, navigation.presenter, { message to TextFieldValue() }, { prepared++ })
+      assertEquals(changedDraft, navigation.presenter.snapshot.value.state.review)
+      assertEquals(0, prepared)
+      assertEquals(emptyList(), navigation.calls)
+    }
+    FileNavigationUiFixture("draft").use { navigation ->
+      val initial = navigation.presenter.snapshot.value
+      var pending: PendingDraftDiscard.Create? = null
+      var prepared = 0
+      routeCreationRequest(
+          initial, DeclarationCreationKind.Function, { prepared++ }, { pending = it })
+      confirmCreationDiscard(
+          requireNotNull(pending),
+          navigation.presenter,
+          { TextFieldValue() to TextFieldValue() },
+          { prepared++ })
+      assertEquals(1, prepared)
+      assertNull(navigation.presenter.snapshot.value.state.review.draft)
+      assertEquals(emptyList(), navigation.calls)
+    }
+  }
+
+  @Test
   fun fileCreationHasOneVisibleActionInDockedEditorAndContextAndRemainsAvailableInCompactContext() {
     val file = testFile("empty.go").copy(content = "package demo\n")
     val inspector =
