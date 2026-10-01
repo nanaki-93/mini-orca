@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -591,6 +592,114 @@ class ContextToolWindowTest {
           assertFalse(fixture.hasText(target.signature))
         }
     assertEquals(0, calls)
+  }
+
+  @Test
+  fun selectedDeclarationDisclosuresExposeLocalFileAndProjectEvidenceWithoutActions() {
+    val source = file()
+    val target = symbol()
+    val analysis =
+        FileAnalysis(
+            source.path,
+            "stale",
+            purpose = "Coordinates requests.",
+            engineeringInsight = EngineeringInsight(mechanism = "Validates inputs locally."))
+    val project =
+        ProjectAnalysis(
+            "first",
+            "revision",
+            "fixture",
+            "/tmp/fixture",
+            "go",
+            fileCount = 1,
+            sourceFileCount = 1,
+            totalLines = 18,
+            summary = "",
+            aiStatus = "missing",
+            analyzedAt = "")
+    val overview =
+        ProjectOverview(
+            projectId = "first",
+            projectRevision = "revision",
+            analysis =
+                StructuredProjectAnalysis(status = "stale", purpose = "Serve local requests."))
+    var state by
+        mutableStateOf(
+            ContextToolWindowState(
+                inspector(source, selectedSymbol = target),
+                ScopedModel(),
+                false,
+                null,
+                GitStatus(true, "main", "modified", "unstaged"),
+                fileAnalysis = analysis,
+                project = project,
+                overview = overview))
+    var privilegedActions = 0
+    val actions =
+        ContextToolWindowActions(
+            { privilegedActions++ },
+            { privilegedActions++ },
+            { privilegedActions++ },
+            { privilegedActions++ },
+            { privilegedActions++ },
+            explainSelected = { privilegedActions++ })
+    ComposeVisualFixture(320, 420, 1f) { ContextToolWindow(state, actions) }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("File details"))
+          assertTrue(fixture.hasText("Project context"))
+          assertTrue(fixture.hasText("File context"))
+          assertFalse(fixture.hasText("Coordinates requests."))
+          assertFalse(fixture.hasText("Serve local requests."))
+          assertFalse(fixture.hasText("main · modified"))
+          fixture.clickText("File details")
+          fixture.render()
+          assertTrue(fixture.hasText("Coordinates requests."))
+          assertTrue(fixture.hasText("AI interpretation · File · stale"))
+          assertTrue(fixture.hasText("Validates inputs locally."))
+          fixture.clickText("Project context")
+          fixture.render()
+          assertTrue(fixture.hasText("Serve local requests."))
+          assertTrue(fixture.hasText("Stale"))
+          fixture.clickText("File context")
+          fixture.render()
+          assertTrue(fixture.hasText("main · modified · unstaged · read-only context"))
+          fixture.render()
+          assertTrue(fixture.hasText("Validates inputs locally."))
+          assertTrue(fixture.hasText("Serve local requests."))
+          assertTrue(fixture.requestDescriptionFocus("Collapse Project context"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertFalse(fixture.hasText("Serve local requests."))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertTrue(fixture.hasText("Serve local requests."))
+          state = state.copy(project = project.copy(projectId = "second"))
+          fixture.render()
+          assertFalse(fixture.hasText("Validates inputs locally."))
+          assertFalse(fixture.hasText("Serve local requests."))
+          assertFalse(fixture.hasText("main · modified"))
+          fixture.clickText("File details")
+          fixture.render()
+          assertTrue(fixture.hasText("Coordinates requests."))
+          state =
+              state.copy(inspector = inspector(source, selectedSymbol = target.copy(name = "Stop")))
+          fixture.render()
+          assertFalse(fixture.hasText("Coordinates requests."))
+          fixture.clickText("File details")
+          fixture.render()
+          assertTrue(fixture.hasText("Coordinates requests."))
+          state =
+              state.copy(
+                  inspector =
+                      inspector(
+                          source.copy(path = "other.go"),
+                          selectedSymbol = target.copy(name = "Stop")))
+          fixture.render()
+          assertFalse(fixture.hasText("Coordinates requests."))
+          assertFalse(fixture.hasText("Validates inputs locally."))
+        }
+    assertEquals(0, privilegedActions)
   }
 
   @Test

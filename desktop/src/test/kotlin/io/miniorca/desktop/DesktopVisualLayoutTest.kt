@@ -6115,9 +6115,11 @@ class DesktopVisualLayoutTest {
             listOf("Context", "Assistant", "Review", "Explain declaration", "Refactor")
                 .forEach(fixture::assertTextFits)
             assertTrue(fixture.hasText("Cached declaration explanation"))
-            listOf("Actions", "File analysis", "Project context").forEach {
-              assertFalse(fixture.hasText(it), it)
-            }
+            listOf("Actions", "File analysis").forEach { assertFalse(fixture.hasText(it), it) }
+            assertTrue(fixture.hasText("File details"))
+            assertTrue(fixture.hasText("Project context"))
+            assertFalse(fixture.hasText("Routes incoming requests."))
+            assertFalse(fixture.hasText("Go service with a small HTTP API and a repository layer."))
             fixture.assertTextFits(initial.inspector!!.file.path)
             assertTrue(fixture.hasText("Line range unavailable · Go"))
             assertTrue(fixture.hasText("Exact atomic target · editable"))
@@ -6127,6 +6129,19 @@ class DesktopVisualLayoutTest {
             fixture.clickText("Declaration details")
             fixture.render()
             assertTrue(fixture.hasText("func Run() error"))
+            fixture.clickText("File details")
+            fixture.render("context-file-details-$width-$scale")
+            fixture.revealText("Routes incoming requests.")
+            fixture.assertTextFits("Routes incoming requests.")
+            fixture.clickText("Project context")
+            fixture.render("context-project-details-$width-$scale")
+            fixture.revealText("Go service with a small HTTP API and a repository layer.")
+            if (width < 480) {
+              fixture.assertTextWrapsWithoutClipping(
+                  "Go service with a small HTTP API and a repository layer.")
+            } else {
+              fixture.assertTextFits("Go service with a small HTTP API and a repository layer.")
+            }
             assertEquals(0, actions)
             assertEquals(0, outerSelections)
             assertTrue(fixture.requestFocus("Explain declaration"))

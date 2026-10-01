@@ -142,7 +142,7 @@ internal fun ContextToolWindow(
             })
     return
   }
-  // File details reset on navigation; selected declarations have one compact view.
+  // Local details belong to the loaded file and selected declaration.
   var activeTab by
       rememberSaveable(
           state.project?.projectId,
@@ -311,6 +311,8 @@ private fun ContextDeclaration(state: ContextToolWindowState, actions: ContextTo
         style = IdeTypography.compactBody,
         modifier = Modifier.padding(top = 8.dp))
   }
+  Spacer(Modifier.height(8.dp))
+  ContextDetails(state, declarationSelected = true)
 }
 
 @Composable
@@ -398,15 +400,43 @@ private fun ExplanationAction(
 }
 
 @Composable
-private fun ContextDetails(state: ContextToolWindowState) {
+private fun ContextDetails(state: ContextToolWindowState, declarationSelected: Boolean = false) {
   val inspector = requireNotNull(state.inspector)
-  var projectExpanded by rememberSaveable { mutableStateOf(false) }
-  var fileContextExpanded by rememberSaveable { mutableStateOf(false) }
-  ContextFileDetails(inspector)
-  EngineeringInsightPanel(
-      state.fileAnalysis?.engineeringInsight,
-      stale = state.fileAnalysis?.status.equals("stale", ignoreCase = true),
-      scopeLabel = "File")
+  var projectExpanded by remember { mutableStateOf(false) }
+  var fileContextExpanded by remember { mutableStateOf(false) }
+  if (declarationSelected) {
+    var fileDetailsExpanded by remember { mutableStateOf(false) }
+    ContextSection(
+        "File details",
+        DesktopIcon.Editor,
+        fileDetailsExpanded,
+        { fileDetailsExpanded = !fileDetailsExpanded }) {
+          ContextFileDetails(inspector)
+          state.fileAnalysis
+              ?.takeIf { it.path == inspector.file.path }
+              ?.engineeringInsight
+              ?.let { insight ->
+                val pieces = engineeringInsightPieces(insight)
+                if (pieces.isNotEmpty()) {
+                  Text(
+                      engineeringInsightStateLabel(
+                          "File", state.fileAnalysis.status.equals("stale", ignoreCase = true)),
+                      color = SecondaryText,
+                      style = IdeTypography.compactBody)
+                  pieces.forEach { piece ->
+                    Text(piece.label, color = ResultAccent, style = IdeTypography.resultLabel)
+                    ModelResultContent(piece.content)
+                  }
+                }
+              }
+        }
+  } else {
+    ContextFileDetails(inspector)
+    EngineeringInsightPanel(
+        state.fileAnalysis?.engineeringInsight,
+        stale = state.fileAnalysis?.status.equals("stale", ignoreCase = true),
+        scopeLabel = "File")
+  }
   Spacer(Modifier.height(8.dp))
   ContextSection(
       "Project context",
