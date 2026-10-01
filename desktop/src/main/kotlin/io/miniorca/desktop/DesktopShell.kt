@@ -1603,8 +1603,15 @@ internal fun modelDestinationLabel(scope: ModelScope, model: ScopedModel): Strin
   }
 }
 
+private fun truncationLabel(truncated: Boolean?): String =
+    when (truncated) {
+      true -> "truncated"
+      false -> "not truncated"
+      null -> "truncation unavailable"
+    }
+
 internal fun contextManifestSummary(manifest: ContextManifest): String =
-    "${manifest.included.size} included · ${manifest.excluded.size} excluded · ${manifest.estimatedTokens} estimated tokens${if (manifest.truncated) " · truncated" else ""}"
+    "${manifest.included.size} included · ${manifest.excluded.size} excluded · ${manifest.estimatedTokens?.toString() ?: "unavailable"} estimated tokens · ${truncationLabel(manifest.truncated)}"
 
 @Composable
 private fun ContextInspectorDialog(manifest: ContextManifest, onDismiss: () -> Unit) {
@@ -1617,14 +1624,16 @@ private fun ContextInspectorDialog(manifest: ContextManifest, onDismiss: () -> U
             IdePaneHeader("Destination")
             val scope =
                 ModelScope.entries.firstOrNull { it.wireValue == manifest.scope }?.label
-                    ?: manifest.scope.ifBlank { "Function edits" }
+                    ?: manifest.scope.ifBlank { "unavailable scope" }
             val provider =
-                if (manifest.remoteProvider)
-                    "remote provider · confirmation required before sending project context"
-                else "local provider · project context stays on this machine"
+                when (manifest.remoteProvider) {
+                  true -> "remote provider · confirmation required before sending project context"
+                  false -> "local provider · project context stays on this machine"
+                  null -> "provider classification unavailable"
+                }
             Text(
-                "$scope: ${manifest.model.ifBlank { "configured model" }} · ${manifest.providerOrigin.ifBlank { "configured destination" }} · $provider",
-                color = if (manifest.remoteProvider) Warning else SecondaryText,
+                "$scope: ${manifest.model.ifBlank { "unavailable model" }} · ${manifest.providerOrigin.ifBlank { "unavailable destination" }} · $provider",
+                color = if (manifest.remoteProvider == true) Warning else SecondaryText,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(top = 5.dp))
           }
@@ -1634,16 +1643,14 @@ private fun ContextInspectorDialog(manifest: ContextManifest, onDismiss: () -> U
               color = PrimaryText,
               fontSize = 12.sp,
               modifier = Modifier.padding(top = 10.dp))
-          if (manifest.tokenLimit > 0)
-              Text(
-                  "Token budget: ${manifest.estimatedTokens} / ${manifest.tokenLimit}",
-                  color = SecondaryText,
-                  fontSize = 11.sp)
-          if (manifest.byteLimit > 0)
-              Text(
-                  "Byte limit: ${formatBytes(manifest.byteLimit.toLong())}",
-                  color = SecondaryText,
-                  fontSize = 11.sp)
+          Text(
+              "Token limit: ${manifest.tokenLimit?.takeIf { it > 0 }?.toString() ?: "unavailable"}",
+              color = SecondaryText,
+              fontSize = 11.sp)
+          Text(
+              "Byte limit: ${manifest.byteLimit?.takeIf { it > 0 }?.let { formatBytes(it.toLong()) } ?: "unavailable"}",
+              color = SecondaryText,
+              fontSize = 11.sp)
           SelectionContainer {
             Column {
               Text(
@@ -1655,7 +1662,7 @@ private fun ContextInspectorDialog(manifest: ContextManifest, onDismiss: () -> U
                   Text("No files included.", color = SecondaryText, fontSize = 11.sp)
               manifest.included.forEach {
                 Text(
-                    "${it.path} · ${formatBytes(it.sizeBytes)} · ${it.estimatedTokens} tokens",
+                    "${it.path} · ${formatBytes(it.sizeBytes)} · ${it.estimatedTokens?.toString() ?: "unavailable"} estimated tokens · ${truncationLabel(it.truncated)}",
                     color = SecondaryText,
                     fontSize = 11.sp)
               }
