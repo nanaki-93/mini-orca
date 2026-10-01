@@ -63,6 +63,15 @@ internal sealed interface PendingDraftDiscard {
     override val nextLabel: String = "create a ${kind.noun}"
   }
 
+  data class FileNavigation(
+      val intent: DesktopWorkflowPresenter.FileNavigationIntent,
+      override val currentDraft: CurrentEditIdentity?,
+      val chatMessage: TextFieldValue,
+      val constraints: TextFieldValue,
+  ) : PendingDraftDiscard {
+    override val nextLabel: String = "open ${intent.path}"
+  }
+
   data class PerformancePreparation(
       val intent: DesktopWorkflowPresenter.PerformancePreparationIntent,
       override val currentDraft: CurrentEditIdentity?,
@@ -448,6 +457,18 @@ internal fun MiniOrcaApp(
     focusAssistantControl(ComposerFocusTarget.Name)
   }
 
+  fun requestFileNavigation(path: String) {
+    routeFileNavigationRequest(
+        presenter,
+        path,
+        chatMessage,
+        advancedConstraints,
+        { chatMessage to advancedConstraints },
+        ::clearComposerInput) {
+          pendingDraftDiscard = it
+        }
+  }
+
   fun requestCreateDeclaration(kind: DeclarationCreationKind) {
     routeCreationRequest(workflow, kind, ::startCreateDeclaration) { pendingDraftDiscard = it }
   }
@@ -569,8 +590,7 @@ internal fun MiniOrcaApp(
                   }
                 },
                 selectFile = { path ->
-                  clearComposerInput()
-                  presenter.openFileInEditor(path)
+                  requestFileNavigation(path)
                   onSelected()
                 },
                 openProject = ::importProject,
@@ -913,8 +933,7 @@ internal fun MiniOrcaApp(
               switchMode = ::switchPaletteMode,
               selectFile = {
                 showPalette = false
-                clearComposerInput()
-                presenter.openFileInEditor(it)
+                requestFileNavigation(it)
               },
               selectSymbol = {
                 showPalette = false
@@ -1010,6 +1029,8 @@ private fun continueAfterDraftDiscard(
       presenter.discardDraft()
       create(pending.kind)
     }
+    is PendingDraftDiscard.FileNavigation ->
+        confirmFileNavigationDiscard(presenter, pending, currentInput, clearComposer)
     is PendingDraftDiscard.PerformancePreparation ->
         confirmPerformancePreparationDiscard(
             presenter,
@@ -1030,6 +1051,43 @@ private fun continueAfterDraftDiscard(
     is PendingDraftDiscard.Finding ->
         confirmFindingDiscard(presenter, pending, message, constraints, clearComposer)
     null -> Unit
+  }
+}
+
+internal fun routeFileNavigationRequest(
+    presenter: DesktopWorkflowPresenter,
+    path: String,
+    message: TextFieldValue,
+    constraints: TextFieldValue,
+    currentInput: () -> Pair<TextFieldValue, TextFieldValue>,
+    clearComposer: () -> Unit,
+    pending: (PendingDraftDiscard.FileNavigation) -> Unit,
+) {
+  val intent =
+      presenter.fileNavigationIntent(
+          path,
+          composerHasWork = message.text.isNotEmpty() || constraints.text.isNotEmpty(),
+          composerCurrent = { currentInput() == (message to constraints) })
+  if (intent == null) {
+    presenter.dispatch(
+        DesktopEvent.Failed("This file no longer points to an indexed file in the active project."))
+    return
+  }
+  val navigation =
+      PendingDraftDiscard.FileNavigation(
+          intent, currentEditIdentity(presenter.snapshot.value.state), message, constraints)
+  if (intent.requiresDiscard) pending(navigation)
+  else confirmFileNavigationDiscard(presenter, navigation, currentInput, clearComposer)
+}
+
+internal fun confirmFileNavigationDiscard(
+    presenter: DesktopWorkflowPresenter,
+    pending: PendingDraftDiscard.FileNavigation,
+    currentInput: () -> Pair<TextFieldValue, TextFieldValue>,
+    clearComposer: () -> Unit,
+) {
+  presenter.confirmFileNavigationIntent(pending.intent) {
+    if (currentInput() == (pending.chatMessage to pending.constraints)) clearComposer()
   }
 }
 

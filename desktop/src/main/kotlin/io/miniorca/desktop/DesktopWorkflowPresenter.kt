@@ -613,7 +613,7 @@ class DesktopWorkflowPresenter(
               "This file no longer points to an indexed file in the active project."))
       return
     }
-    if (intent.identity.selectedFile?.path != path && intent.hasWork) {
+    if (intent.requiresDiscard) {
       dispatch(
           DesktopEvent.Failed(
               "Review and confirm discarding the current work before opening this file."))
@@ -635,6 +635,9 @@ class DesktopWorkflowPresenter(
     val hasWork: Boolean
       get() =
           identity.draft.hasWork || identity.chatRequestId != 0L || generating || composerHasWork
+
+    val requiresDiscard: Boolean
+      get() = identity.selectedFile?.path != path && hasWork
   }
 
   private var pendingFileNavigationIntent: FileNavigationIntent? = null
