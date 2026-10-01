@@ -1107,6 +1107,69 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun f23PendingHiddenFilesAndBlockedCreationRemainReachableAcrossLayoutMatrix() {
+    val evidence = sourceNavigationReviewFixture()
+    val file = requireNotNull(evidence.selected)
+    val destination = "internal/" + "replacement/日本語/".repeat(8) + "user.go"
+    val preferred = DesktopLayoutState(explorerWidth = 520f, actionWidth = 560f)
+    val inventory =
+        (1..80).map { IndexedFile("internal/records/record-$it.go", "hash-$it", "Go", false) }
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        var layout by mutableStateOf(preferred.copy(leftToolWindowVisible = false))
+        var read by mutableStateOf<FileReadUiState?>(FileReadUiState.Pending(destination))
+        var actions = 0
+        val label = "f23-states-$width-$height-$scale-${density}x"
+        ComposeVisualFixture(
+                (width * density).toInt(), (height * density).toInt(), scale, density) {
+                  AdaptiveProductionEditorFixture(
+                      layout,
+                      false,
+                      evidence = evidence,
+                      fileRead = read,
+                      creationInProgress = true,
+                      extraIndexedFiles = inventory,
+                      onLeftTool = { layout = layout.openLeft(it) },
+                      terminalCollapsed = true,
+                      onOpenFile = { actions++ },
+                      onCreate = { actions++ },
+                      onRequest = { actions++ },
+                      onSourceLine = { actions++ })
+                }
+            .use { fixture ->
+              fixture.render("$label-pending-hidden")
+              assertTrue(fixture.hasDescription("Pending destination: $destination"), label)
+              assertTrue(fixture.hasDescription("Project-relative path: ${file.path}"), label)
+              assertTrue(fixture.isDisabled("New function"), label)
+              assertTrue(fixture.hasDescription("Editor tool window, selected"), label)
+              assertEquals(0, fixture.tagCount("f04-files"))
+              fixture.clickDescription("Editor tool window, selected")
+              fixture.render("$label-pending-files")
+              assertTrue(layout.leftToolWindowVisible)
+              assertTrue(fixture.descriptionBounds("Indexed file tree").height > 0f, label)
+              if (resolveDesktopLayout(layout, width.toFloat(), scale).mode ==
+                  DesktopLayoutMode.Compact) {
+                fixture.revealTagFullyWithin("explorer-header-scroll", "f04-arrangement")
+              }
+              assertTrue(fixture.hasDescription("Pending destination: $destination"), label)
+              read = FileReadUiState.Failed(destination, "Local read unavailable.")
+              fixture.render("$label-failed-files")
+              fixture.scrollBy(100_000f, "explorer-header-scroll")
+              fixture.render()
+              assertTrue(
+                  fixture.requestDescriptionFocus("Retry opening $destination", "f04-files"), label)
+              fixture.awaitDescriptionFocus("Retry opening $destination")
+              fixture.assertDescriptionFullyVisible("Retry opening $destination", "f04-files")
+              fixture.render("$label-retry-focused")
+              assertTrue(fixture.hasText("The current file remains open."), label)
+              assertEquals(0, actions, label)
+            }
+      }
+    }
+  }
+
+  @Test
   fun f23RetainedDraftIdentityRemainsAvailableAcrossCompactReflow() {
     val evidence = sourceNavigationReviewFixture()
     val file = requireNotNull(evidence.selected)
@@ -12842,6 +12905,9 @@ internal fun AdaptiveProductionEditorFixture(
     onWrite: () -> Unit = {},
     onTerminal: () -> Unit = {},
     fileRead: FileReadUiState? = null,
+    creationInProgress: Boolean = false,
+    extraIndexedFiles: List<IndexedFile> = emptyList(),
+    onLeftTool: (LeftToolWindow) -> Unit = {},
     onOpenFile: (String) -> Unit = {},
     onCreate: () -> Unit = {},
     onSourceLine: (SourceLineSelection) -> Unit = {},
@@ -12856,7 +12922,8 @@ internal fun AdaptiveProductionEditorFixture(
           "fixture-revision",
           files =
               listOf(
-                  IndexedFile(file.path, file.contentHash, "Go", false, analysisStatus = "fresh")))
+                  IndexedFile(file.path, file.contentHash, "Go", false, analysisStatus = "fresh")) +
+                  extraIndexedFiles)
   val session = requireNotNull(evidence.session)
   Column(Modifier.fillMaxSize().background(AppBackground)) {
     MainToolbar(
@@ -12868,7 +12935,7 @@ internal fun AdaptiveProductionEditorFixture(
             null),
         ToolbarActions({}, {}, {}, {}))
     WorkspaceFrame(
-        rail = { ToolWindowBar(LeftToolWindow.Editor, {}, onOpenTerminal = onTerminal) },
+        rail = { ToolWindowBar(LeftToolWindow.Editor, onLeftTool, onOpenTerminal = onTerminal) },
         panes = {},
         editorPanes = { width, height ->
           val resolved = resolveDesktopLayout(layout, width, LocalDensity.current.fontScale)
@@ -12888,6 +12955,7 @@ internal fun AdaptiveProductionEditorFixture(
                               emptySet(),
                               false,
                               readError = (fileRead as? FileReadUiState.Failed)?.message,
+                              pendingFilePath = (fileRead as? FileReadUiState.Pending)?.path,
                               failedFilePath = (fileRead as? FileReadUiState.Failed)?.path),
                           ExplorerPaneActions({}, {}, {}, {}, onOpenFile),
                           pane)
@@ -12899,7 +12967,8 @@ internal fun AdaptiveProductionEditorFixture(
                 EditorArea(
                     {
                       EditorWorkspace(
-                          editorChromeUiState(file, symbol, selectedSurface, progress, draft),
+                          editorChromeUiState(
+                              file, symbol, selectedSurface, progress, draft, creationInProgress),
                           evidence,
                           onSurface,
                           onCreate,
