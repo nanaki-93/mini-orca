@@ -35,10 +35,10 @@ links, HTML and images inert.
 
 ## Verification
 
-Test changed flows at relevant viewport and text sizes and across relevant result
-states. Check action reachability, clipping, keyboard focus, accessible names,
-contrast and clear consent/error states. Compare rendered production components
-against the *chosen* design. Use `DesktopVisualLayoutTest` component renders
-and the [keyboard checklist](KEYBOARD_SMOKE_CHECKLIST.md) when applicable.
-Offscreen renders cannot prove native focus, popup placement or screen-reader
-behavior; report native observations separately.
+Use automated workflow and production-component tests for changed flows at
+relevant viewport and text sizes and across relevant result states. Check action
+reachability, clipping, keyboard focus, accessible names, contrast and clear
+consent/error states. Compare rendered production components
+against the *chosen* design using `DesktopVisualLayoutTest` component renders.
+Offscreen renders cannot prove OS focus, popup placement or screen-reader behavior;
+limit evidence claims to the behavior exercised by the tests.

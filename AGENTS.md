@@ -122,6 +122,9 @@ Do not infer authorization from old task queues or generated
 Use focused tests while iterating, then the relevant gates below before handoff.
 Commands run from the repository root. Toolchain setup belongs to
 [README.md](README.md#development-and-documentation); do not hardcode local paths.
+Acceptance uses automated tests, offscreen component checks and applicable build
+checks. Do not require opening the app, interactive/manual testing or user-led
+native review for task completion.
 
 | Changed area | Required checks when the environment permits |
 | --- | --- |

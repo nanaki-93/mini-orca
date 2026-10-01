@@ -62,10 +62,9 @@ For substantive visual changes, render affected production components and compar
 them to the chosen design. Follow the UI guidelines' viewport, text-scale
 and state checks, including the review with optional help collapsed. Use the
 existing `DesktopVisualLayoutTest` fixtures.
-Use [KEYBOARD_SMOKE_CHECKLIST.md](KEYBOARD_SMOKE_CHECKLIST.md) for affected native
-behavior. Report offscreen rendering and native-window evidence separately;
-component tests cannot prove OS focus, popup placement or screen-reader behavior.
+Component tests establish only their exercised behavior; do not claim OS focus,
+popup placement or screen-reader observations from offscreen renders.
 
 For terminal/runtime/packaging changes, run the relevant documented distribution
-and native smoke checks. Record unavailable platform checks accurately; do not
-claim packaging or native acceptance from unit tests alone.
+build and automated terminal probes. Record unavailable platform checks accurately;
+do not claim packaging verification from unit tests alone.

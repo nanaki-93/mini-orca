@@ -1032,6 +1032,197 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun f23SourceCompositionKeepsIdentityRecoveryAndCreationReachable() {
+    val evidence = sourceNavigationReviewFixture()
+    val path = requireNotNull(evidence.selected).path
+    val failedPath = "internal/" + "replacement/日本語/".repeat(8) + "user.go"
+    val preferred = DesktopLayoutState(explorerWidth = 520f, actionWidth = 560f)
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        for (failed in listOf(false, true)) {
+          var actions = 0
+          val read =
+              if (failed) FileReadUiState.Failed(failedPath, "Local read unavailable.") else null
+          val label =
+              "f23-source-$width-$height-$scale-${density}x-${if (failed) "failed" else "loaded"}"
+          ComposeVisualFixture(
+                  (width * density).toInt(), (height * density).toInt(), scale, density) {
+                    AdaptiveProductionEditorFixture(
+                        preferred,
+                        false,
+                        evidence = evidence,
+                        fileRead = read,
+                        terminalCollapsed = true,
+                        onOpenFile = { actions++ },
+                        onCreate = { actions++ },
+                        onRequest = { actions++ },
+                        onSourceLine = { actions++ })
+                  }
+              .use { fixture ->
+                fixture.render(label)
+                assertTrue(fixture.hasText(path), label)
+                assertTrue(fixture.hasText("Read-only"), label)
+                assertFalse(fixture.hasEditableText(withinTag = "source-viewport"))
+                if (resolveDesktopLayout(preferred, width.toFloat(), scale).mode ==
+                    DesktopLayoutMode.Compact) {
+                  fixture.revealTextFullyWithin("New function", "f04-arrangement")
+                }
+                fixture.assertTextFits("New function")
+                assertTrue(fixture.requestFocus("New function"), label)
+                fixture.awaitDescriptionFocus("New function in $path")
+                fixture.assertDescriptionFullyVisible("New function in $path", "f04-canvas")
+                fixture.render("$label-creation-focused")
+                if (failed) {
+                  assertTrue(
+                      fixture.requestDescriptionFocus("Retry opening $failedPath", "f04-canvas"),
+                      label)
+                  fixture.awaitDescriptionFocus("Retry opening $failedPath")
+                  fixture.assertDescriptionFullyVisible("Retry opening $failedPath", "f04-canvas")
+                  fixture.render("$label-recovery-focused")
+                  assertTrue(fixture.hasText("The current file remains open."), label)
+                  assertTrue(fixture.hasDescription("Failed destination: $failedPath"), label)
+                }
+                if (resolveDesktopLayout(preferred, width.toFloat(), scale).mode ==
+                    DesktopLayoutMode.Compact) {
+                  fixture.revealTagFullyWithin("source-viewport", "f04-arrangement")
+                }
+                fixture.render("$label-source-revealed")
+                val source = fixture.taggedBounds("source-viewport")
+                assertTrue(
+                    source.height >= 100f * density, "$label: usable source required, got $source")
+                if (resolveDesktopLayout(preferred, width.toFloat(), scale).mode ==
+                    DesktopLayoutMode.Compact) {
+                  fixture.scrollBy(100_000f, "f04-arrangement")
+                  fixture.render("$label-context-revealed")
+                }
+                assertTrue(fixture.hasText("Context"), label)
+                assertEquals(0, actions, label)
+                assertEquals(520f, preferred.explorerWidth)
+                assertEquals(560f, preferred.actionWidth)
+              }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun f23RetainedDraftIdentityRemainsAvailableAcrossCompactReflow() {
+    val evidence = sourceNavigationReviewFixture()
+    val file = requireNotNull(evidence.selected)
+    val symbol = requireNotNull(evidence.selectedSymbol)
+    val target = "internal/other/日本語/" + "nested/".repeat(8) + "user.go"
+    val identity = CurrentEditIdentity(ChatEditMode.ReplaceSymbol, target, "Other", true)
+    val binding = "Retained draft: $target · Other (not the inspected declaration)"
+    val preferred = DesktopLayoutState(explorerWidth = 520f, actionWidth = 560f)
+    var actions = 0
+    ComposeVisualFixture(800, 650, 1.5f) {
+          AdaptiveProductionEditorFixture(
+              preferred,
+              false,
+              evidence = evidence,
+              progress = EditorProgressUiState(EditorProgress.Inspect, "", identity),
+              terminalCollapsed = true,
+              onCreate = { actions++ },
+              onRequest = { actions++ },
+              onWrite = { actions++ },
+              onSourceLine = { actions++ })
+        }
+        .use { fixture ->
+          for ((width, height) in listOf(800 to 650, 1280 to 600, 1600 to 1000)) {
+            fixture.resize(width, height)
+            fixture.render()
+            assertTrue(fixture.hasDescription("Project-relative path: ${file.path}"))
+            assertTrue(fixture.hasText(binding))
+            assertTrue(fixture.hasText("Inspecting declaration: ${symbol.name} · Lines 5–12"))
+            assertTrue(fixture.hasText("Read-only"))
+            fixture.horizontalScrollBy("editor-path", 10000f)
+            fixture.horizontalScrollBy("editor-retained-draft", 10000f)
+            fixture.render("f23-retained-draft-$width-$height")
+            assertTrue(fixture.horizontalScrollValue("editor-path") > 0f)
+            assertTrue(fixture.horizontalScrollValue("editor-retained-draft") > 0f)
+            if (width == 800) {
+              fixture.revealTagFullyWithin("source-viewport", "f04-arrangement")
+              fixture.render("f23-retained-draft-source-$width-$height")
+            }
+            assertTrue(fixture.taggedBounds("source-viewport").height >= 100f)
+            assertEquals(0, actions)
+          }
+        }
+  }
+
+  @Test
+  fun f23UnchangedSourceRetainsMultilineCopyBothScrollAxesInspectionAndDraftFocus() {
+    val evidence = sourceNavigationReviewFixture()
+    val symbol = requireNotNull(evidence.selectedSymbol)
+    val draft = requireNotNull(evidence.draft)
+    var input by
+        mutableStateOf(TextFieldValue(draft.declaration + " // local edit", TextRange(7, 13)))
+    var scale by mutableStateOf(1f)
+    var right by mutableStateOf(RightToolWindow.Context)
+    var actions = 0
+    val preferred = DesktopLayoutState(explorerWidth = 520f, actionWidth = 560f)
+    ComposeVisualFixture(1600, 1000) {
+          CompositionLocalProvider(LocalDensity provides Density(1f, scale)) {
+            AdaptiveProductionEditorFixture(
+                preferred,
+                false,
+                evidence = evidence,
+                rightTool = right,
+                onRightTool = { right = it },
+                draftInput = input,
+                onDraftInput = { input = it },
+                terminalCollapsed = true,
+                onSourceLine = { actions++ },
+                onRequest = { actions++ },
+                onWrite = { actions++ },
+                onValidate = { actions++ },
+                onCreate = { actions++ })
+          }
+        }
+        .use { fixture ->
+          fixture.render("f23-continuity-before")
+          fixture.dragSourceText(5, 0, 7, 25)
+          fixture.pressKey(Key.Copy)
+          val copied = fixture.clipboardText()
+          assertTrue(copied.contains('\n'))
+          assertTrue(copied.startsWith("func GetUser"), copied)
+          for ((width, textScale) in listOf(800 to 1f, 1600 to 1.25f, 800 to 1.5f, 1600 to 1f)) {
+            fixture.resize(width, 1000)
+            scale = textScale
+            fixture.render("f23-continuity-selection-$width-$textScale")
+            fixture.pressKey(Key.Copy)
+            assertEquals(copied, fixture.clipboardText())
+            assertTrue(
+                fixture.hasDescription("Selected declaration ${symbol.name} marker at line 5"))
+            assertEquals(0, actions)
+          }
+          fixture.horizontalScrollWithin("source-viewport", 230f)
+          fixture.scrollTagged("source-vertical", false, 200f)
+          fixture.render()
+          val horizontal = fixture.horizontalScrollWithinValue("source-viewport")
+          val vertical = fixture.scrollPosition("source-vertical", false)
+          assertTrue(horizontal > 0f && vertical > 0f)
+          fixture.clickText("Assistant")
+          fixture.render()
+          assertTrue(fixture.requestDescriptionFocus("Declaration only"))
+          fixture.render()
+          val edited = input
+          for ((width, textScale) in listOf(800 to 1.5f, 1600 to 1.25f, 800 to 1f, 1600 to 1f)) {
+            fixture.resize(width, 1000)
+            scale = textScale
+            fixture.render("f23-continuity-draft-$width-$textScale")
+            assertEquals(edited, input)
+            assertTrue(fixture.isDescriptionFocused("Declaration only"))
+            assertEquals(horizontal, fixture.horizontalScrollWithinValue("source-viewport"), 1f)
+            assertEquals(vertical, fixture.scrollPosition("source-vertical", false), 1f)
+            assertEquals(symbol, evidence.selectedSymbol)
+            assertEquals(0, actions)
+          }
+        }
+  }
+
+  @Test
   fun adaptiveProductionEditorCapturesBothSidesOfItsMeasuredBoundary() {
     val preferred = DesktopLayoutState(bottomHeight = 140f)
     for (scale in listOf(1f, 1.25f, 1.5f)) {
@@ -10918,6 +11109,22 @@ internal class ComposeVisualFixture(
             .any { it.config.getOrNull(SemanticsProperties.Focused) == true }
       }
 
+  fun awaitDescriptionFocus(label: String) {
+    fun focused(): Boolean =
+        nodes().any { node ->
+          node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true &&
+              (sequenceOf(node) + descendants(node).asSequence()).any {
+                it.config.getOrNull(SemanticsProperties.Focused) == true
+              }
+        }
+    val deadline = System.nanoTime() + 2_000_000_000L
+    while (!focused() && System.nanoTime() < deadline) {
+      Thread.sleep(10)
+      render()
+    }
+    assertTrue(focused(), "$label must retain keyboard focus")
+  }
+
   fun isDescriptionFocused(label: String): Boolean {
     val described =
         nodes().filter {
@@ -10993,11 +11200,51 @@ internal class ComposeVisualFixture(
     assertEquals(expectedCount, commits.size, "Timed out waiting for pointer resize commit")
   }
 
-  fun requestDescriptionFocus(label: String): Boolean =
+  fun revealTagFullyWithin(tag: String, scrollTag: String) {
+    repeat(20) {
+      val viewport = taggedBounds(scrollTag)
+      val node = taggedNode(tag)
+      val top = node.positionInRoot.y
+      val bottom = top + node.size.height
+      if (top >= viewport.top && bottom <= viewport.bottom) return
+      scrollBy(
+          if (bottom > viewport.bottom) bottom - viewport.bottom else top - viewport.top, scrollTag)
+      render()
+    }
+    error("$tag must fit within $scrollTag after scrolling")
+  }
+
+  fun assertDescriptionFullyVisible(label: String, withinTag: String) {
+    val node =
+        nodes().single { node ->
+          node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true &&
+              generateSequence(node) { it.parent }
+                  .any { it.config.getOrNull(SemanticsProperties.TestTag) == withinTag }
+        }
+    fun fullyVisible(): Boolean {
+      val bounds = node.boundsInRoot
+      return bounds.width > 0f &&
+          bounds.height > 0f &&
+          bounds.width >= node.size.width - 1f &&
+          bounds.height >= node.size.height - 1f
+    }
+    val deadline = System.nanoTime() + 2_000_000_000L
+    while (!fullyVisible() && System.nanoTime() < deadline) {
+      Thread.sleep(10)
+      render()
+    }
+    assertTrue(fullyVisible(), "$label must not be clipped: ${node.boundsInRoot} vs ${node.size}")
+  }
+
+  fun requestDescriptionFocus(label: String, withinTag: String? = null): Boolean =
       nodes()
           .asSequence()
-          .filter {
-            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) == true
+          .filter { node ->
+            node.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(label) ==
+                true &&
+                (withinTag == null ||
+                    generateSequence(node) { it.parent }
+                        .any { it.config.getOrNull(SemanticsProperties.TestTag) == withinTag })
           }
           .flatMap { node -> generateSequence(node) { it.parent } }
           .mapNotNull { it.config.getOrNull(SemanticsActions.RequestFocus)?.action }
@@ -12255,6 +12502,27 @@ internal fun RoundedSummaryVisualFixture(width: Float) {
   }
 }
 
+internal fun sourceNavigationReviewFixture(): ReviewToolWindowState {
+  val original = editorComparisonReviewFixture()
+  val path = "internal/" + "deeply/nested/日本語/".repeat(6) + "user.go"
+  val file =
+      requireNotNull(original.selected)
+          .copy(
+              path = path,
+              content =
+                  requireNotNull(original.selected).content +
+                      "\n" +
+                      "// long selectable source " +
+                      "argument".repeat(100) +
+                      "\n" +
+                      (1..100).joinToString("\n") { "// retained source row $it" })
+  val draft = requireNotNull(original.draft).copy(targetPath = path)
+  return original.copy(
+      selected = file,
+      draft = draft,
+      session = requireNotNull(original.session).copy(openPath = path))
+}
+
 internal fun editorComparisonReviewFixture(): ReviewToolWindowState {
   val symbol =
       SymbolInfo(
@@ -12561,6 +12829,7 @@ internal fun AdaptiveProductionEditorFixture(
     layout: DesktopLayoutState,
     review: Boolean,
     evidence: ReviewToolWindowState = editorComparisonReviewFixture(),
+    progress: EditorProgressUiState = EditorProgressUiState(EditorProgress.Review, ""),
     terminalState: TerminalWorkspaceState = TerminalWorkspaceState(),
     rightTool: RightToolWindow = if (review) RightToolWindow.Review else RightToolWindow.Context,
     onRightTool: (RightToolWindow) -> Unit = {},
@@ -12572,6 +12841,11 @@ internal fun AdaptiveProductionEditorFixture(
     onRequest: () -> Unit = {},
     onWrite: () -> Unit = {},
     onTerminal: () -> Unit = {},
+    fileRead: FileReadUiState? = null,
+    onOpenFile: (String) -> Unit = {},
+    onCreate: () -> Unit = {},
+    onSourceLine: (SourceLineSelection) -> Unit = {},
+    terminalCollapsed: Boolean = false,
 ) {
   val file = requireNotNull(evidence.selected)
   val symbol = requireNotNull(evidence.selectedSymbol)
@@ -12607,8 +12881,15 @@ internal fun AdaptiveProductionEditorFixture(
                     "Files",
                     { pane ->
                       ExplorerPane(
-                          ExplorerPaneState(index, file.path, "", emptySet(), false),
-                          ExplorerPaneActions({}, {}, {}, {}, {}),
+                          ExplorerPaneState(
+                              index,
+                              file.path,
+                              "",
+                              emptySet(),
+                              false,
+                              readError = (fileRead as? FileReadUiState.Failed)?.message,
+                              failedFilePath = (fileRead as? FileReadUiState.Failed)?.path),
+                          ExplorerPaneActions({}, {}, {}, {}, onOpenFile),
                           pane)
                     },
                     modifier.testTag("f04-files"),
@@ -12622,11 +12903,13 @@ internal fun AdaptiveProductionEditorFixture(
                               file,
                               symbol,
                               selectedSurface,
-                              EditorProgressUiState(EditorProgress.Review, ""),
+                              progress,
                               draft),
                           evidence,
                           onSurface,
-                          {},
+                          onCreate,
+                          fileRead = fileRead,
+                          onOpenFile = onOpenFile,
                           canvas = {
                             if (selectedSurface == EditorSurface.Review) ReviewDiffCanvas(draft)
                             else
@@ -12637,7 +12920,7 @@ internal fun AdaptiveProductionEditorFixture(
                                     symbol,
                                     7,
                                     emptyList(),
-                                    {})
+                                    onSourceLine)
                           })
                     },
                     modifier.testTag("f04-canvas"))
@@ -12659,7 +12942,17 @@ internal fun AdaptiveProductionEditorFixture(
                                       contentModifier)
                               RightToolWindow.Context ->
                                   ContextToolWindow(
-                                      contextVisualState(),
+                                      contextVisualState()
+                                          .copy(
+                                              inspector =
+                                                  symbolInspectorUiState(
+                                                      file,
+                                                      listOf(symbol),
+                                                      symbol,
+                                                      null,
+                                                      false,
+                                                      InspectorProviderState(false, false),
+                                                      null)),
                                       ContextToolWindowActions({}, onRequest, onRequest, {}, {}),
                                       contentModifier)
                               RightToolWindow.Assistant ->
@@ -12701,7 +12994,7 @@ internal fun AdaptiveProductionEditorFixture(
         },
         terminal = { workspaceHeight ->
           TerminalDock(
-              layout.copy(bottomCollapsed = false),
+              layout.copy(bottomCollapsed = terminalCollapsed),
               terminalState,
               {},
               {},
@@ -12711,7 +13004,7 @@ internal fun AdaptiveProductionEditorFixture(
               { modifier -> Box(modifier.background(EditorCanvas)) },
               effectiveHeight =
                   resolveTerminalDockHeight(
-                      layout.copy(bottomCollapsed = false),
+                      layout.copy(bottomCollapsed = terminalCollapsed),
                       workspaceHeight,
                       LocalDensity.current.fontScale),
               modifier = Modifier.testTag("f04-dock"))
