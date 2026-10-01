@@ -10786,6 +10786,19 @@ internal class ComposeVisualFixture(
 
   fun clipboardText(): String = clipboard.nativeClipboard.getData(DataFlavor.stringFlavor) as String
 
+  fun setClipboardText(value: String) {
+    clipboard.nativeClipboard.setContents(java.awt.datatransfer.StringSelection(value), null)
+  }
+
+  fun hasTextMutationSemantics(withinTag: String): Boolean =
+      nodes().any { node ->
+        generateSequence(node) { it.parent }
+            .any { it.config.getOrNull(SemanticsProperties.TestTag) == withinTag } &&
+            (node.config.getOrNull(SemanticsProperties.EditableText) != null ||
+                node.config.getOrNull(SemanticsActions.SetText) != null ||
+                node.config.getOrNull(SemanticsActions.InsertTextAtCursor) != null)
+      }
+
   fun editorTextWidth(label: String): Int {
     val layouts = mutableListOf<TextLayoutResult>()
     assertTrue(
@@ -11063,6 +11076,16 @@ internal class ComposeVisualFixture(
             .invoke(pixels, 0f))
   }
 
+  fun awaitHorizontalScrollWithinValue(tag: String, expected: Float) {
+    val deadline = System.nanoTime() + 2_000_000_000L
+    while (kotlin.math.abs(horizontalScrollWithinValue(tag) - expected) > 0.5f &&
+        System.nanoTime() < deadline) {
+      Thread.sleep(10)
+      render()
+    }
+    assertEquals(expected, horizontalScrollWithinValue(tag), 0.5f)
+  }
+
   fun horizontalScrollWithinValue(tag: String): Float =
       requireNotNull(
               horizontalScrollerWithin(tag)
@@ -11084,6 +11107,86 @@ internal class ComposeVisualFixture(
   fun verticalScrollValue(tag: String): Float =
       requireNotNull(taggedNode(tag).config.getOrNull(SemanticsProperties.VerticalScrollAxisRange))
           .value()
+
+  private fun sourceTextPosition(line: Int, offset: Int): Offset {
+    val text =
+        nodes().single { node ->
+          node.config.getOrNull(SemanticsProperties.Text) != null &&
+              generateSequence(node.parent) { it.parent }
+                  .any { it.config.getOrNull(SemanticsProperties.TestTag) == "source-code-$line" }
+        }
+    val layouts = mutableListOf<TextLayoutResult>()
+    assertTrue(
+        requireNotNull(text.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action)
+            .invoke(layouts))
+    val cursor = layouts.single().getCursorRect(offset)
+    val position = text.positionInRoot + cursor.center + Offset(1f, 0f)
+    val viewport = taggedBounds("source-code-$line")
+    assertTrue(
+        viewport.contains(position), "Source position must be visible: $position in $viewport")
+    return position
+  }
+
+  fun tapSourceText(line: Int, offset: Int) = tapPosition(sourceTextPosition(line, offset))
+
+  fun tapTag(tag: String) = tapPosition(taggedBounds(tag).center)
+
+  private fun tapPosition(position: Offset) {
+    scene.sendPointerEvent(
+        PointerEventType.Press,
+        position,
+        timeMillis = frameTime / 1_000_000L,
+        button = PointerButton.Primary)
+    render()
+    scene.sendPointerEvent(
+        PointerEventType.Release,
+        position,
+        timeMillis = frameTime / 1_000_000L,
+        button = PointerButton.Primary)
+    render()
+  }
+
+  fun dragSourceText(startLine: Int, startOffset: Int, endLine: Int, endOffset: Int) {
+    val start = sourceTextPosition(startLine, startOffset)
+    val end = sourceTextPosition(endLine, endOffset)
+    // Use the render clock so fast offscreen gestures cannot become OS-timed double clicks.
+    scene.sendPointerEvent(
+        PointerEventType.Press,
+        start,
+        timeMillis = frameTime / 1_000_000L,
+        button = PointerButton.Primary)
+    render()
+    repeat(12) { step ->
+      scene.sendPointerEvent(
+          PointerEventType.Move,
+          start + (end - start) * ((step + 1) / 12f),
+          timeMillis = frameTime / 1_000_000L)
+      render()
+    }
+    scene.sendPointerEvent(
+        PointerEventType.Release,
+        end,
+        timeMillis = frameTime / 1_000_000L,
+        button = PointerButton.Primary)
+    render()
+  }
+
+  fun typeCharacter(key: Key, character: Char): Boolean {
+    val typed =
+        java.awt.event.KeyEvent(
+            java.awt.Canvas(),
+            java.awt.event.KeyEvent.KEY_TYPED,
+            0L,
+            0,
+            java.awt.event.KeyEvent.VK_UNDEFINED,
+            character)
+    val down =
+        scene.sendKeyEvent(
+            KeyEvent(key, KeyEventType.KeyDown, codePoint = character.code, nativeEvent = typed))
+    val up = scene.sendKeyEvent(KeyEvent(key, KeyEventType.KeyUp))
+    render()
+    return down || up
+  }
 
   fun copyTextByDragging(label: String, expectedText: String? = null): String {
     var copied = ""

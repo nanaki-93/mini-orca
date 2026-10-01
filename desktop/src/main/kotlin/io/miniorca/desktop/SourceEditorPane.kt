@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
@@ -250,16 +251,19 @@ internal fun SourceEditorPane(
   SelectionContainer(Modifier.testTag("source-viewport")) {
     Column(Modifier.fillMaxSize().padding(vertical = 8.dp)) {
       Row(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        SourceGutter(
-            rows = rows,
-            selectedSymbol = displaySymbol,
-            focusedLine = displayFocusedLine,
-            markersByLine = markersByLine,
-            onSourceLineSelected = onSourceLineSelected,
-            modifier = Modifier.width(gutterWidth),
-            rowHeight = rowHeight,
-            numberWidth = numberWidth,
-        )
+        // Gutter labels and markers describe source; they must not enter copied source text.
+        DisableSelection {
+          SourceGutter(
+              rows = rows,
+              selectedSymbol = displaySymbol,
+              focusedLine = displayFocusedLine,
+              markersByLine = markersByLine,
+              onSourceLineSelected = onSourceLineSelected,
+              modifier = Modifier.width(gutterWidth),
+              rowHeight = rowHeight,
+              numberWidth = numberWidth,
+          )
+        }
         Column(
             Modifier.weight(1f).horizontalScroll(rememberScrollState()).width(IntrinsicSize.Max)) {
               rows.forEach { row ->

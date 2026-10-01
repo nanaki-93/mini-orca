@@ -9,6 +9,31 @@ import kotlin.test.assertTrue
 class EditorInspectionStateTest {
 
   @Test
+  fun nonSelectableGutterStillInspectsDeclarationsAndSourceTapOutsideInspectsFile() {
+    val symbol =
+        SymbolInfo(
+            "Run",
+            "function",
+            startLine = 3,
+            endLine = 3,
+            confidence = "exact",
+            atomicTarget = true)
+    val selected = file().copy(content = "package demo\n\nfunc Run() {}\n// outside")
+    val taps = mutableListOf<SourceLineSelection>()
+    ComposeVisualFixture(800, 400) {
+          SourceEditorPane(project(), selected, listOf(symbol), symbol, 3, emptyList(), taps::add)
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.tapTag("source-gutter-3")
+          assertEquals(listOf(SourceLineSelection(3, symbol)), taps)
+          fixture.tapSourceText(4, 4)
+          assertEquals(listOf(SourceLineSelection(3, symbol), SourceLineSelection(4, null)), taps)
+          assertFalse(fixture.hasTextMutationSemantics("source-viewport"))
+        }
+  }
+
+  @Test
   fun sourceLinesKeepDirectSelectableSemanticsWithoutAnInstructionalSubtitle() {
     val symbol =
         SymbolInfo(

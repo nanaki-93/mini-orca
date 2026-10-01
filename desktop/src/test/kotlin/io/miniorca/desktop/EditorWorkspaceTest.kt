@@ -3,6 +3,7 @@ package io.miniorca.desktop
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -12,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -19,6 +21,165 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class EditorWorkspaceTest {
+  @Test
+  fun productionSourceTapInspectsButMultilineDragCopyAndMutationAttemptsRetainWork() {
+    val source =
+        "package worker\n\nfunc Run() {\n    work()\n}\n\nfunc Other() {\n    more()\n}\n\n// " +
+            "longArgument".repeat(60)
+    val file = testFile("internal/worker/main.go").copy(content = source)
+    val run =
+        SymbolInfo(
+            "Run",
+            "function",
+            startLine = 3,
+            endLine = 5,
+            confidence = "exact",
+            atomicTarget = true)
+    val other = run.copy(name = "Other", startLine = 7, endLine = 9)
+    val project = resultProjectFixture()
+    for (scale in listOf(1f, 1.5f)) {
+      val controller =
+          DesktopWorkflowController(
+              DesktopState(
+                  projectState = ProjectWorkspaceState(project = project),
+                  selection =
+                      FileSelectionState(selectedFile = file, symbols = listOf(run, other))))
+      val draft =
+          validatedDraft()
+              .copy(
+                  projectId = project.projectId,
+                  projectRevision = project.projectRevision,
+                  baseFileHash = file.contentHash,
+                  targetPath = file.path,
+                  targetSymbol = other.name,
+                  mode = ChatEditMode.ReplaceSymbol.wireValue,
+                  declaration = "func Other() { candidate() }")
+      var state by mutableStateOf(controller.dispatch(DesktopEvent.DraftLoaded(draft)))
+      var draftInput by mutableStateOf(TextFieldValue(draft.declaration))
+      val taps = mutableListOf<SourceLineSelection>()
+      ComposeVisualFixture(1000, 650, scale) {
+            Row(Modifier.fillMaxSize()) {
+              Box(Modifier.weight(1f)) {
+                EditorWorkspace(
+                    editorChromeUiState(
+                        state.selectedFile,
+                        state.selectedSymbol,
+                        EditorSurface.Source,
+                        editorProgressUiState(state),
+                        state.review.draft),
+                    null,
+                    {},
+                    {},
+                    canvas = {
+                      SourceEditorPane(
+                          project,
+                          state.selectedFile,
+                          state.symbols,
+                          state.selectedSymbol,
+                          state.selection.focusedLine,
+                          listOf(
+                              UnifiedFinding(
+                                  id = "known",
+                                  title = "Known finding",
+                                  location = FindingLocation(file.path, startLine = 4)))) {
+                              selection ->
+                            taps += selection
+                            state = controller.dispatch(DesktopEvent.SourceLineSelected(selection))
+                          }
+                    })
+              }
+              CompactMultilineField(
+                  value = draftInput,
+                  onValueChange = {
+                    draftInput = it
+                    state = controller.dispatch(DesktopEvent.DraftEdited(declaration = it.text))
+                  },
+                  label = "Declaration only",
+                  minLines = 5,
+                  modifier = Modifier.width(280.dp))
+            }
+          }
+          .use { fixture ->
+            fixture.render()
+            // Establish that the fixture sends real typing/paste to an editable control first.
+            fixture.focusDescribedEditor("Declaration only")
+            fixture.typeCharacter(Key.X, 'x')
+            assertTrue(draftInput.text != draft.declaration)
+            fixture.setClipboardText("PASTED_CANDIDATE")
+            fixture.pressKey(Key.Paste)
+            fixture.render()
+            assertTrue(draftInput.text.contains("PASTED_CANDIDATE"))
+            val retainedInput = draftInput
+            val retainedReview = state.review
+            val retainedChat = state.chat
+            fixture.tapSourceText(3, 6)
+            assertEquals(listOf(SourceLineSelection(3, run)), taps)
+            assertEquals(run, state.selectedSymbol)
+            assertEquals(3, state.selection.focusedLine)
+            assertEquals(retainedReview, state.review)
+            assertEquals(retainedChat, state.chat)
+            val inspected = state.selection
+            val displayedLines = source.lines().map(::expandedEditorIndentation)
+            fun assertMutationIsRejected() {
+              assertFalse(fixture.hasTextMutationSemantics("source-viewport"))
+              fixture.setClipboardText("MUST_NOT_REPLACE_SOURCE_OR_DRAFT")
+              val attempts =
+                  listOf<() -> Unit>(
+                      { fixture.typeCharacter(Key.X, 'x') },
+                      { fixture.pressKey(Key.Backspace) },
+                      { fixture.pressKey(Key.Delete) },
+                      { fixture.pressKey(Key.Paste) },
+                      { fixture.pressKey(Key.Cut) })
+              attempts.forEach { attempt ->
+                attempt()
+                fixture.render()
+                assertEquals(file, state.selectedFile)
+                assertEquals(inspected, state.selection)
+                assertEquals(retainedInput, draftInput)
+                assertEquals(retainedReview, state.review)
+                assertEquals(retainedChat, state.chat)
+                displayedLines.forEach { assertTrue(fixture.hasText(it)) }
+                assertEquals(listOf(SourceLineSelection(3, run)), taps)
+              }
+            }
+            assertMutationIsRejected()
+            for (scroll in listOf(0f, 40f)) {
+              if (scroll > 0f) {
+                fixture.horizontalScrollWithin("source-viewport", scroll)
+                fixture.awaitHorizontalScrollWithinValue("source-viewport", scroll)
+              }
+              val offset = if (scroll == 0f) 0 else 8
+              val expected =
+                  (if (scroll == 0f) "func Run" else "") +
+                      "() {\n         work()\n}\n\nfunc Other()"
+              for (reverse in listOf(false, true)) {
+                fixture.setClipboardText("")
+                if (reverse) fixture.dragSourceText(7, 12, 3, offset)
+                else fixture.dragSourceText(3, offset, 7, 12)
+                fixture.pressKey(Key.Copy)
+                fixture.render()
+                assertEquals(
+                    expected,
+                    fixture.clipboardText(),
+                    "scale=$scale scroll=$scroll reverse=$reverse")
+                assertEquals(listOf(SourceLineSelection(3, run)), taps, "Drag must not inspect")
+                assertEquals(inspected, state.selection)
+                assertEquals(retainedReview, state.review)
+                assertEquals(retainedChat, state.chat)
+                assertEquals(retainedInput, draftInput)
+              }
+              (1..source.lines().size).forEach { line ->
+                val gutter = fixture.taggedBounds("source-gutter-$line")
+                val code = fixture.taggedBounds("source-code-$line")
+                assertEquals(gutter.top, code.top, 1f)
+                assertEquals(gutter.height, code.height, 1f)
+              }
+            }
+            assertMutationIsRejected()
+          }
+    }
+  }
+
   @Test
   fun failedDestinationKeepsRetainedSourceIdentityAndLongPathsReachableAtLargerText() {
     val path = "internal/module-with-a-very-long-name/nested/another-module/failed_destination.go"
