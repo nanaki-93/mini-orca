@@ -30,6 +30,10 @@ fun symbolAtLine(symbols: List<SymbolInfo>, line: Int): SymbolInfo? =
 
 private fun SymbolInfo.hasValidRange(): Boolean = startLine > 0 && endLine >= startLine
 
+// Display bounds come from loaded text, never the index's possibly stale line count.
+internal fun SymbolInfo.sourceDisplayRange(lineCount: Int): IntRange? =
+    if (!hasValidRange() || startLine > lineCount) null else startLine..minOf(endLine, lineCount)
+
 private fun SymbolInfo.rangeLength(): Long = endLine.toLong() - startLine.toLong() + 1
 
 internal fun SymbolInfo.isExactAtomicTarget(): Boolean =
@@ -120,7 +124,7 @@ fun symbolInspectorUiState(
         SymbolInspectorSymbolState(
             symbol = symbol,
             signature = symbol.signature,
-            rangeLabel = symbolRangeLabel(symbol),
+            rangeLabel = symbolRangeLabel(symbol, file),
             confidenceLabel = symbolConfidenceLabel(symbol, editEligibility),
             explanation =
                 analysis?.symbolExplanations?.get(symbol.name)?.takeIf { it.isNotBlank() },
@@ -229,9 +233,11 @@ private fun InspectorAnalysisStatus.action(): InspectorAnalysisAction =
       InspectorAnalysisStatus.Fresh -> InspectorAnalysisAction.None
     }
 
-private fun symbolRangeLabel(symbol: SymbolInfo): String =
-    if (symbol.hasValidRange()) "Lines ${symbol.startLine}–${symbol.endLine}"
-    else "Line range unavailable"
+internal fun symbolRangeLabel(symbol: SymbolInfo, file: ProjectFileInfo): String {
+  val lineCount = if (file.binary || file.content.isEmpty()) 0 else file.content.lines().size
+  val range = symbol.sourceDisplayRange(lineCount) ?: return "Line range unavailable"
+  return "Lines ${range.first}–${range.last}"
+}
 
 private fun symbolConfidenceLabel(symbol: SymbolInfo, eligibility: SymbolEditEligibility): String =
     when {

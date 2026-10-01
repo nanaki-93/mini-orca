@@ -2225,6 +2225,123 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun declarationEmphasisMatchesGutterAndKeepsFocusAndTextSelectionDistinct() {
+    val file =
+        ProjectFileInfo(
+            path = "internal/worker/main.go",
+            contentHash = "range-fixture",
+            name = "main.go",
+            language = "Go",
+            sizeBytes = 100,
+            lineCount = 999,
+            modifiedAt = "",
+            binary = false,
+            content =
+                "package worker\n\nfunc Run() {\n    work()\n}\n\n// outside declaration\n// last loaded line")
+    val exact =
+        SymbolInfo(
+            "Run",
+            "function",
+            startLine = 3,
+            endLine = 5,
+            confidence = "exact",
+            atomicTarget = true)
+    for (scale in listOf(1f, 1.5f)) {
+      var symbol by mutableStateOf(exact)
+      var focusedLine by mutableStateOf(4)
+      ComposeVisualFixture(800, 650, scale) {
+            EditorWorkspace(
+                editorChromeUiState(
+                    file,
+                    symbol,
+                    EditorSurface.Source,
+                    EditorProgressUiState(EditorProgress.Inspect, ""),
+                    null),
+                null,
+                {},
+                {},
+                canvas = {
+                  SourceEditorPane(
+                      resultProjectFixture(),
+                      file,
+                      listOf(symbol),
+                      symbol,
+                      focusedLine,
+                      emptyList(),
+                      {})
+                })
+          }
+          .use { fixture ->
+            fixture.render("f23-source-range-focused-$scale")
+            (1..8).forEach { line ->
+              val gutter = fixture.taggedBounds("source-gutter-$line")
+              val code = fixture.taggedBounds("source-code-$line")
+              assertEquals(gutter.top, code.top, 1f)
+              assertEquals(gutter.height, code.height, 1f)
+              assertEquals(20f * scale, code.height, 1f)
+              assertEquals(
+                  fixture.renderedPixels("source-gutter-$line").first(),
+                  fixture.renderedPixels("source-code-$line").first(),
+                  "Line $line must share its gutter/code emphasis")
+            }
+            val ordinary = fixture.renderedPixels("source-code-3").first()
+            val focusedDeclaration = fixture.renderedPixels("source-code-4").first()
+            assertEquals(SelectionSurface.toArgb(), ordinary)
+            assertTrue(
+                ordinary != EditorCanvas.toArgb(),
+                "Ordinary declaration rows must have visible emphasis")
+            assertTrue(focusedDeclaration != ordinary)
+            assertTrue(
+                fixture.hasDescription(
+                    "Line 4, focused location in selected declaration, selectable declaration Run"))
+            val beforeSelection = fixture.renderedPixels("source-code-3")
+            assertTrue(fixture.copyTextByDragging("func Run() {").isNotEmpty())
+            fixture.render("f23-source-range-text-selection-$scale")
+            assertFalse(
+                beforeSelection.contentEquals(fixture.renderedPixels("source-code-3")),
+                "Text selection must paint separately from declaration emphasis")
+            focusedLine = 7
+            fixture.render("f23-source-range-focused-location-$scale")
+            val focusedLocation = fixture.renderedPixels("source-code-7").first()
+            assertTrue(focusedLocation != ordinary && focusedLocation != focusedDeclaration)
+            assertTrue(fixture.hasDescription("Line 7, focused location"))
+            symbol = exact.copy(confidence = "approximate", endLine = Int.MAX_VALUE)
+            fixture.render("f23-source-range-approximate-clamped-$scale")
+            assertTrue(
+                fixture.hasText(
+                    "Inspecting declaration: Run · Lines 3–8 · Approximate · read-only"))
+            assertEquals(SelectionSurface.toArgb(), fixture.renderedPixels("source-code-8").first())
+            assertEquals(
+                0,
+                fixture.tagCount("source-code-9"),
+                "Never fabricate indexed lines beyond loaded content")
+            for (invalid in
+                listOf(
+                    exact.copy(startLine = 0),
+                    exact.copy(endLine = 2),
+                    exact.copy(startLine = 9, endLine = 999))) {
+              symbol = invalid
+              focusedLine = 0
+              fixture.render("f23-source-invalid-${invalid.startLine}-${invalid.endLine}-$scale")
+              assertTrue(fixture.hasText("Inspecting declaration: Run · Line range unavailable"))
+              (1..8).forEach { line ->
+                assertEquals(
+                    EditorCanvas.toArgb(),
+                    fixture.renderedPixels("source-code-$line").last(),
+                    "Invalid ranges must not paint declaration emphasis outside text selection")
+                assertEquals(
+                    EditorCanvas.toArgb(), fixture.renderedPixels("source-gutter-$line").first())
+              }
+              assertFalse(
+                  fixture.hasDescription(
+                      "Selected declaration Run marker at line ${invalid.startLine}"))
+            }
+            assertFalse(fixture.hasEditableText(withinTag = "source-viewport"))
+          }
+    }
+  }
+
+  @Test
   fun finalLifecycleMatrixUsesProductionPanesAtLargeText() {
     acceptanceRunStates.forEach { status ->
       ComposeVisualFixture(800, 650, 1.5f) {
@@ -11626,6 +11743,23 @@ internal class ComposeVisualFixture(
         color.toArgb(),
         rendered.getRGB(bounds.center.x.toInt(), bounds.top.toInt()),
         "$tag must separate from the content above")
+  }
+
+  fun renderedPixels(tag: String): IntArray {
+    val bounds = taggedBounds(tag)
+    return surface.makeImageSnapshot().use { snapshot ->
+      requireNotNull(snapshot.encodeToData()).use { data ->
+        val rendered = javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(data.bytes))
+        rendered.getRGB(
+            bounds.left.toInt(),
+            bounds.top.toInt(),
+            bounds.width.toInt(),
+            bounds.height.toInt(),
+            null,
+            0,
+            bounds.width.toInt())
+      }
+    }
   }
 
   fun assertColorVisible(color: Color) {

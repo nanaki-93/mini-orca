@@ -43,6 +43,8 @@ internal data class EditorChromeUiState(
     val path: String,
     val breadcrumbSegments: List<EditorBreadcrumbSegment>,
     val accessibleDescription: String,
+    val inspectionLabel: String,
+    val retainedDraftLabel: String?,
     val activeSurface: EditorSurface,
     val reviewAvailable: Boolean,
     val stageLabel: String,
@@ -114,12 +116,27 @@ internal fun editorChromeUiState(
         else -> "SOURCE"
       }
   val symbol = selectedSymbol?.name?.takeIf(String::isNotBlank)
+  val inspectionLabel =
+      if (file != null && selectedSymbol != null && symbol != null) {
+        val approximate =
+            if (selectedSymbol.confidence.equals("exact", ignoreCase = true)) ""
+            else " · Approximate · read-only"
+        "Inspecting declaration: $symbol · ${symbolRangeLabel(selectedSymbol, file)}$approximate"
+      } else if (file != null) "Inspecting file" else "No file selected"
+  val retainedDraftLabel =
+      progress.currentEditIdentity
+          ?.takeIf { it.hasDraft && !it.matches(file, selectedSymbol) }
+          ?.let {
+            "Retained draft: ${it.targetPath} · ${it.targetSymbol} (not the inspected declaration)"
+          }
   return EditorChromeUiState(
       title = title,
       path = path,
       breadcrumbSegments = editorBreadcrumbSegments(path, symbol),
       accessibleDescription =
-          "$title. $path${symbol?.let { ". Selected declaration $it" }.orEmpty()}. Read-only ${activeSurface.name.lowercase()} surface. $stageLabel.",
+          "$title. $path${symbol?.let { ". Selected declaration $it" }.orEmpty()}. Read-only ${activeSurface.name.lowercase()} surface. $stageLabel. $inspectionLabel.${retainedDraftLabel?.let { " $it." }.orEmpty()}",
+      inspectionLabel = inspectionLabel,
+      retainedDraftLabel = retainedDraftLabel,
       activeSurface = activeSurface,
       reviewAvailable = reviewAvailable,
       stageLabel = stageLabel,
@@ -402,6 +419,30 @@ private fun ActiveFileEditorChrome(
       )
       Spacer(Modifier.width(8.dp))
       Text("Read-only", color = FaintText, fontSize = 11.sp, softWrap = false, maxLines = 1)
+    }
+    if (state.activeSurface == EditorSurface.Source) {
+      Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+        Text(
+            state.inspectionLabel,
+            color = SecondaryText,
+            style = IdeTypography.workspaceMetadata,
+            softWrap = false,
+            modifier =
+                Modifier.fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .testTag("editor-inspection"))
+        state.retainedDraftLabel?.let { label ->
+          Text(
+              label,
+              color = Warning,
+              style = IdeTypography.workspaceMetadata,
+              softWrap = false,
+              modifier =
+                  Modifier.fillMaxWidth()
+                      .horizontalScroll(rememberScrollState())
+                      .testTag("editor-retained-draft"))
+        }
+      }
     }
   }
 }

@@ -555,6 +555,170 @@ class EditorWorkspaceTest {
     }
   }
 
+  @Test
+  fun inspectionKeepsTheRetainedDraftExplicitWithoutRetargetingIt() {
+    val path = "internal/module-with-a-very-long-name/nested/worker/main.go"
+    val file =
+        testFile(path)
+            .copy(
+                content =
+                    "package worker\n\nfunc Run() {}\n\nfunc Other() {}\n\n// outside declarations")
+    val run =
+        SymbolInfo(
+            "Run",
+            "function",
+            startLine = 3,
+            endLine = 3,
+            confidence = "exact",
+            atomicTarget = true)
+    val other = run.copy(name = "Other", startLine = 5, endLine = 5)
+    val approximate = run.copy(name = "ApproximateRun", confidence = "approximate")
+    val project = resultProjectFixture()
+    val controller =
+        DesktopWorkflowController(
+            DesktopState(
+                projectState = ProjectWorkspaceState(project = project),
+                selection =
+                    FileSelectionState(
+                        selectedFile = file, symbols = listOf(run, other, approximate))))
+    val draft =
+        validatedDraft()
+            .copy(
+                projectId = project.projectId,
+                projectRevision = project.projectRevision,
+                baseFileHash = file.contentHash,
+                targetPath = path,
+                targetSymbol = other.name,
+                mode = ChatEditMode.ReplaceSymbol.wireValue,
+                declaration = "func Other() { work() }")
+    controller.dispatch(DesktopEvent.DraftLoaded(draft))
+    var state by mutableStateOf(controller.dispatch(DesktopEvent.SymbolSelected(run)))
+    val retainedReview = state.review
+    val retainedChat = state.chat
+    ComposeVisualFixture(360, 650, 1.5f) {
+          EditorWorkspace(
+              editorChromeUiState(
+                  state.selectedFile,
+                  state.selectedSymbol,
+                  EditorSurface.Source,
+                  editorProgressUiState(state),
+                  state.review.draft),
+              null,
+              {},
+              {},
+              canvas = {
+                EditorPane(
+                    project,
+                    file,
+                    state.symbols,
+                    state.selectedSymbol,
+                    state.selection.focusedLine,
+                    emptyList(),
+                    {})
+              })
+        }
+        .use { fixture ->
+          fixture.render("editor-inspection-retained-draft-360-1.5")
+          val binding = "Retained draft: $path · Other (not the inspected declaration)"
+          assertTrue(fixture.hasText("Inspecting declaration: Run · Lines 3–3"))
+          assertTrue(fixture.hasText(binding))
+          assertTrue(fixture.hasText("Read-only"))
+          assertTrue(fixture.hasDescription("Project-relative path: $path"))
+          fixture.horizontalScrollBy("editor-path", 10000f)
+          fixture.horizontalScrollBy("editor-retained-draft", 10000f)
+          fixture.render()
+          assertTrue(fixture.horizontalScrollValue("editor-path") > 0f)
+          assertTrue(fixture.horizontalScrollValue("editor-retained-draft") > 0f)
+          assertTrue(fixture.hasText(path))
+          state = controller.dispatch(DesktopEvent.SourceLineSelected(SourceLineSelection(7, null)))
+          fixture.render("editor-inspection-file-retained-draft-360-1.5")
+          assertTrue(fixture.hasText("Inspecting file"))
+          assertTrue(fixture.hasText(binding))
+          assertNull(state.selectedSymbol)
+          assertEquals(retainedReview, state.review)
+          assertEquals(retainedChat, state.chat)
+          state = controller.dispatch(DesktopEvent.SymbolSelected(approximate))
+          fixture.render("editor-inspection-approximate-retained-draft-360-1.5")
+          assertTrue(
+              fixture.hasText(
+                  "Inspecting declaration: ApproximateRun · Lines 3–3 · Approximate · read-only"))
+          assertFalse(symbolEditEligibility(file, state.symbols, state.selectedSymbol).eligible)
+          fixture.horizontalScrollBy("editor-inspection", 10000f)
+          fixture.render()
+          assertTrue(fixture.horizontalScrollValue("editor-inspection") > 0f)
+          assertEquals(retainedReview, state.review)
+          assertEquals(retainedChat, state.chat)
+          state = controller.dispatch(DesktopEvent.SymbolSelected(other))
+          fixture.render()
+          assertFalse(
+              fixture.hasText(binding),
+              "Matching inspection must not claim a different draft target")
+          assertEquals(retainedReview, state.review)
+        }
+  }
+
+  @Test
+  fun emptyAndBinaryPreviewsCannotHighlightOrOfferAnIndexedDeclarationOnSyntheticRows() {
+    val symbol =
+        SymbolInfo(
+            "Run",
+            "function",
+            startLine = 1,
+            endLine = 999,
+            confidence = "exact",
+            atomicTarget = true)
+    val empty = testFile("empty.go")
+    for (file in listOf(empty, empty.copy(path = "binary.go", binary = true))) {
+      ComposeVisualFixture(500, 300) {
+            EditorWorkspace(
+                editorChromeUiState(
+                    file, symbol, EditorSurface.Source, progress(EditorProgress.Inspect), null),
+                null,
+                {},
+                {},
+                canvas = {
+                  SourceEditorPane(
+                      resultProjectFixture(), file, listOf(symbol), symbol, 1, emptyList(), {})
+                })
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.hasText("Inspecting declaration: Run · Line range unavailable"))
+            assertTrue(fixture.hasDescription("Line 1"))
+            assertFalse(
+                fixture.hasDescription(
+                    "Line 1, focused location in selected declaration, selectable declaration Run"))
+            assertFalse(fixture.hasDescription("Selected declaration Run marker at line 1"))
+            assertEquals(0, fixture.tagCount("source-code-2"))
+            assertFalse(fixture.hasEditableText(withinTag = "source-viewport"))
+          }
+    }
+  }
+
+  @Test
+  fun duplicateBasenamesRenderDistinctCompletePathsWithoutHover() {
+    var file by mutableStateOf(testFile("cmd/worker/main.go"))
+    ComposeVisualFixture(480, 300) {
+          EditorWorkspace(
+              editorChromeUiState(
+                  file, null, EditorSurface.Source, progress(EditorProgress.Inspect), null),
+              null,
+              {},
+              {},
+              canvas = {})
+        }
+        .use { fixture ->
+          fixture.render()
+          listOf("cmd", "worker", "main.go", "Read-only").forEach(fixture::assertTextFits)
+          assertTrue(fixture.hasDescription("Project-relative path: cmd/worker/main.go"))
+          file = testFile("cmd/server/main.go")
+          fixture.render()
+          listOf("cmd", "server", "main.go", "Read-only").forEach(fixture::assertTextFits)
+          assertFalse(fixture.hasText("worker"))
+          assertTrue(fixture.hasDescription("Project-relative path: cmd/server/main.go"))
+        }
+  }
+
   private fun progress(value: EditorProgress) = EditorProgressUiState(value, "")
 
   private fun symbol() = SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)
