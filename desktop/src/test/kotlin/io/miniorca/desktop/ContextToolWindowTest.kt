@@ -373,6 +373,107 @@ class ContextToolWindowTest {
   }
 
   @Test
+  fun functionConsentAndExplanationActionsRemainExplicitAndRefactorIndependent() {
+    val project =
+        ProjectAnalysis(
+            "project",
+            "revision",
+            "fixture",
+            "/tmp/fixture",
+            "go",
+            fileCount = 1,
+            sourceFileCount = 1,
+            totalLines = 18,
+            summary = "",
+            aiStatus = "missing",
+            analyzedAt = "")
+    val inspector = inspector(file(), selectedSymbol = symbol())
+    val model =
+        ScopedModel(
+            scope = "function",
+            profile = "review",
+            model = "provider/long-model",
+            remoteProvider = true)
+    val target =
+        DeclarationExplanationTarget(
+            WorkflowFileIdentity(
+                WorkflowProjectIdentity("project", "revision"), file().path, file().contentHash),
+            symbol().name,
+            symbol().signature,
+            symbol().startLine,
+            symbol().endLine)
+    var state by
+        mutableStateOf(
+            ContextToolWindowState(
+                inspector,
+                ScopedModel(),
+                false,
+                null,
+                null,
+                project = project,
+                functionModel = model))
+    val confirmations = mutableListOf<Boolean>()
+    var requests = 0
+    var cancellations = 0
+    var refactors = 0
+    val actions =
+        ContextToolWindowActions(
+            {},
+            {},
+            {},
+            {},
+            { refactors++ },
+            confirmFunctionRemoteProvider = {
+              confirmations += it
+              state = state.copy(functionRemoteProviderConfirmed = it)
+            },
+            explainSelected = { requests++ },
+            cancelExplanation = { cancellations++ })
+    ComposeVisualFixture(320, 420, 1.5f) { ContextToolWindow(state, actions) }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText(modelDestinationLabel(ModelScope.Function, model)))
+          assertTrue(fixture.hasText("Confirm remote destination"))
+          assertTrue(fixture.isDisabled("Explain declaration"))
+          assertFalse(fixture.tryClick("Explain declaration"))
+          assertEquals(0, requests)
+          fixture.clickText("Refactor")
+          assertEquals(1, refactors)
+          fixture.clickDescription("Confirm remote destination")
+          fixture.render()
+          assertEquals(listOf(true), confirmations)
+          assertEquals(0, requests)
+          assertFalse(fixture.isDisabled("Explain declaration"))
+          fixture.clickText("Explain declaration")
+          assertEquals(1, requests)
+          state =
+              state.copy(
+                  functionRemoteProviderConfirmed = false,
+                  declarationExplanation =
+                      DeclarationExplanationState(DeclarationExplanationStatus.Loading, target))
+          fixture.render()
+          assertTrue(fixture.hasText(modelDestinationLabel(ModelScope.Function, model)))
+          assertTrue(fixture.isDescriptionDisabled("Confirm remote destination"))
+          assertFalse(fixture.isDisabled("Cancel explanation"))
+          fixture.clickText("Cancel explanation")
+          assertEquals(1, cancellations)
+          assertEquals(1, requests)
+          fixture.clickText("Refactor")
+          assertEquals(2, refactors)
+          state =
+              state.copy(
+                  declarationExplanation =
+                      DeclarationExplanationState(
+                          DeclarationExplanationStatus.Failed, target, message = "Provider failed"))
+          fixture.render()
+          assertTrue(fixture.isDisabled("Explain declaration"))
+          fixture.clickText("Refactor")
+          assertEquals(3, refactors)
+          assertEquals(listOf(true), confirmations)
+        }
+  }
+
+  @Test
   fun declarationIdentityIsBoundedSelectableAndBlockedTargetsRemainInspectable() {
     val longPath = "internal/" + "nested/".repeat(18) + "handler.go"
     val signature = "func Run(" + "requestID string, ".repeat(12) + ") error"

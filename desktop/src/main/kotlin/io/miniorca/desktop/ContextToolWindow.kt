@@ -236,8 +236,7 @@ private fun ContextTabs(active: ContextTab, onSelect: (ContextTab) -> Unit) {
 private fun ContextDeclaration(state: ContextToolWindowState, actions: ContextToolWindowActions) {
   val inspector = requireNotNull(state.inspector)
   val symbol = requireNotNull(inspector.selectedSymbol)
-  val explanation = explanationForSelection(state)
-  val actionPresentation = declarationActionPresentation(explanation)
+  val actionPresentation = declarationActionPresentation(explanationForSelection(state))
   var detailsExpanded by
       rememberSaveable(
           state.project?.projectId,
@@ -371,12 +370,22 @@ private fun ExplanationAction(
   }
   val explanation = explanationForSelection(state)
   val loading = explanation.status == DeclarationExplanationStatus.Loading
-  if (state.functionModel.remoteProvider && !state.functionRemoteProviderConfirmed && !loading) {
-    RemoteProviderConfirmation(
-        ModelScope.Function,
-        state.functionModel,
-        state.functionRemoteProviderConfirmed,
-        actions.confirmFunctionRemoteProvider)
+  SelectionContainer {
+    Text(
+        modelDestinationLabel(ModelScope.Function, state.functionModel),
+        color = if (state.functionModel.remoteProvider) Warning else SecondaryText,
+        fontSize = 11.sp,
+        modifier = Modifier.padding(top = MiniOrcaSpacing.standard))
+  }
+  if (state.functionModel.remoteProvider) {
+    IdeCheckbox(
+        checked = state.functionRemoteProviderConfirmed,
+        onCheckedChange = actions.confirmFunctionRemoteProvider,
+        accessibleName = "Confirm remote destination",
+        modifier = Modifier.padding(top = MiniOrcaSpacing.compact),
+        enabled = !loading,
+        stateLabel = if (state.functionRemoteProviderConfirmed) "Confirmed" else "Not confirmed",
+        label = "Confirm remote destination")
   }
   MiniOrcaButton(
       onClick = if (loading) actions.cancelExplanation else actions.explainSelected,

@@ -6163,11 +6163,16 @@ class DesktopVisualLayoutTest {
   fun declarationDescriptionPreservesConsentCancellationAndLifecycleEvidence() {
     var requests = 0
     var cancellations = 0
+    var refactors = 0
+    val longModel = "provider/" + "long-destination/".repeat(8) + "editor"
+    val remoteModel =
+        ScopedModel(
+            scope = "function", profile = "editor", model = longModel, remoteProvider = true)
     var state by
         mutableStateOf(
             contextVisualState()
                 .copy(
-                    functionModel = ScopedModel(scope = "function", remoteProvider = true),
+                    functionModel = remoteModel,
                     declarationExplanation = DeclarationExplanationState()))
     val result =
         DeclarationExplanation(
@@ -6187,7 +6192,10 @@ class DesktopVisualLayoutTest {
                   {},
                   {},
                   {},
-                  {},
+                  { refactors++ },
+                  confirmFunctionRemoteProvider = {
+                    state = state.copy(functionRemoteProviderConfirmed = it)
+                  },
                   explainSelected = { requests++ },
                   cancelExplanation = { cancellations++ }),
               Modifier.fillMaxSize())
@@ -6195,11 +6203,19 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render()
           fixture.render("context-explain-consent")
+          val destination = modelDestinationLabel(ModelScope.Function, remoteModel)
+          fixture.revealText(destination)
+          fixture.assertTextWrapsWithoutClipping(destination)
+          fixture.assertTextAboveDescription(destination, "Confirm remote destination")
           assertTrue(fixture.hasText("Confirm remote destination"))
           assertTrue(fixture.isDisabled("Explain declaration"))
           assertTrue(fixture.hasText("Cached declaration explanation"))
-          state = state.copy(functionRemoteProviderConfirmed = true)
+          fixture.clickText("Refactor")
+          assertEquals(1, refactors)
+          fixture.clickVisibleDescription("Confirm remote destination")
           fixture.render()
+          assertEquals(0, requests)
+          assertTrue(fixture.hasText(destination))
           fixture.clickText("Explain declaration")
           assertEquals(1, requests)
           state =
@@ -6210,6 +6226,9 @@ class DesktopVisualLayoutTest {
                           status = DeclarationExplanationStatus.Loading,
                           target = contextExplanationTarget(state)))
           fixture.render("context-explain-loading")
+          fixture.revealText(destination)
+          fixture.assertTextAboveDescription(destination, "Confirm remote destination")
+          assertTrue(fixture.isDescriptionDisabled("Confirm remote destination"))
           fixture.assertTextFits("Explaining…")
           assertTrue(fixture.hasText("Explanation in progress. Cancel to stop this request."))
           assertTrue(fixture.hasText("Saved file analysis · Fresh"))
@@ -6226,6 +6245,8 @@ class DesktopVisualLayoutTest {
                           target = contextExplanationTarget(state),
                           result = result))
           fixture.render("context-explain-current")
+          fixture.revealText(destination)
+          fixture.assertTextAboveDescription(destination, "Confirm remote destination")
           assertTrue(fixture.hasText(result.summary))
           fixture.assertTextFits("Refresh explanation")
           fixture.assertTextFits("Current explanation")
@@ -6262,6 +6283,17 @@ class DesktopVisualLayoutTest {
           fixture.assertTextFits("Explanation canceled")
           assertTrue(fixture.hasText("Explanation canceled."))
           assertEquals(1, requests)
+          assertEquals(1, cancellations)
+          assertEquals(1, refactors)
+          state =
+              state.copy(
+                  functionModel = remoteModel.copy(remoteProvider = false),
+                  functionRemoteProviderConfirmed = false)
+          fixture.render("context-explain-local")
+          assertTrue(
+              fixture.hasText(modelDestinationLabel(ModelScope.Function, state.functionModel)))
+          assertFalse(fixture.hasText("Confirm remote destination"))
+          assertFalse(fixture.isDisabled("Explain declaration"))
         }
   }
 
