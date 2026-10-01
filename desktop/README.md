@@ -258,11 +258,23 @@ or copying evidence does not run checks. **Edit draft** opens the existing isola
 editor. Tabs and these navigation controls never generate, validate, run checks
 or apply a change.
 
-Context shows a short description for the selected declaration, with explicit
-explanation and **Refactor** actions. Without a selected declaration, **Actions**
-and **Details** provide file actions, metadata and expandable project context.
-Labeled warning/error states use amber/red. Selecting a declaration or opening a
-tab never sends a model request.
+Context shows the selected declaration's name, project-relative path, bounded
+source range, language, confidence/eligibility and selectable signature. Source/index
+correspondence compares the loaded file with the matching indexed hash; it is
+separate from saved file-analysis freshness and does not monitor disk changes.
+On-demand explanation has distinct unavailable, loading, current, stale, canceled
+and failed states beside its content and recovery action. A matching saved
+file-analysis description is labeled separately, not treated as an on-demand
+result. **Explain**/**Refresh** shows the Function model destination and requires
+current Function-scope confirmation for a remote provider; **Cancel explanation**
+stops a running request. **Refactor** prepares the existing composer without
+sending or changing source. Declaration details, file details, project context and
+read-only references are local disclosures. References are a file-scoped advisory
+indexed preview, not a verified caller list; unavailable, mismatched and empty
+previews are distinguished. Without a selected declaration, **Actions** and
+**Details** retain file actions and context. Selecting a declaration, opening a
+tab or expanding details never requests an explanation, runs project code or
+writes source.
 
 A current draft must be discarded explicitly before changing its target. Editing
 it invalidates validation/check evidence. Review shows target identity, readiness,
