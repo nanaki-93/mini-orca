@@ -1633,10 +1633,31 @@ internal fun ContextInspectorDialog(
       content = {
         Column {
           SelectionContainer {
-            Text(contextInspectionLabel(inspection), color = PrimaryText, fontSize = 12.sp)
-            inspection.identity?.let { identity ->
+            Column {
+              Text(contextInspectionLabel(inspection), color = PrimaryText, fontSize = 12.sp)
+              inspection.identity?.let { identity ->
+                Text(
+                    "Project-relative path: ${identity.file.path}",
+                    color = PrimaryText,
+                    fontSize = 11.sp)
+                val target =
+                    if (identity.creationKind.isNotEmpty())
+                        "Create ${identity.creationKind}: ${identity.creationName.ifBlank { "unavailable name" }}"
+                    else
+                        identity.symbol?.let { "${it.kind}: ${it.name}" }
+                            ?: "No declaration selected"
+                Text("Assistant target: $target", color = SecondaryText, fontSize = 11.sp)
+                Text(
+                    "Assistant intent: ${identity.intent} · File preview action: ${identity.action}",
+                    color = SecondaryText,
+                    fontSize = 11.sp)
+              }
               Text(
-                  "Assistant intent: ${identity.intent} · File preview action: ${identity.action}",
+                  "File-scoped preview, not the exact declaration request. Declaration requests may include different context and prompt material.",
+                  color = SecondaryText,
+                  fontSize = 11.sp)
+              Text(
+                  "Local inspection only; no provider request or consent. Send and Explain require separate authorization.",
                   color = SecondaryText,
                   fontSize = 11.sp)
             }
@@ -1646,35 +1667,52 @@ internal fun ContextInspectorDialog(
           if (manifest != null) {
             Column(Modifier.fillMaxWidth()) {
               IdePaneHeader("Destination")
-              val scope =
-                  ModelScope.entries.firstOrNull { it.wireValue == manifest.scope }?.label
-                      ?: manifest.scope.ifBlank { "unavailable scope" }
-              val provider =
-                  when (manifest.remoteProvider) {
-                    true -> "remote provider · confirmation required before sending project context"
-                    false -> "local provider · project context stays on this machine"
-                    null -> "provider classification unavailable"
-                  }
-              Text(
-                  "$scope: ${manifest.model.ifBlank { "unavailable model" }} · ${manifest.providerOrigin.ifBlank { "unavailable destination" }} · $provider",
-                  color = if (manifest.remoteProvider == true) Warning else SecondaryText,
-                  fontSize = 12.sp,
-                  modifier = Modifier.padding(top = 5.dp))
+              SelectionContainer {
+                Column(Modifier.fillMaxWidth()) {
+                  val scope =
+                      ModelScope.entries.firstOrNull { it.wireValue == manifest.scope }?.label
+                          ?: manifest.scope.ifBlank { "unavailable" }
+                  val classification =
+                      when (manifest.remoteProvider) {
+                        true ->
+                            "Remote provider · confirmation required before sending project context"
+                        false -> "Local provider · project context stays on this machine"
+                        null -> "Unavailable"
+                      }
+                  Text("Scope: $scope", color = SecondaryText, fontSize = 12.sp)
+                  Text(
+                      "Model: ${manifest.model.ifBlank { "unavailable" }}",
+                      color = SecondaryText,
+                      fontSize = 12.sp)
+                  Text(
+                      "Sanitized provider origin: ${manifest.providerOrigin.ifBlank { "unavailable" }}",
+                      color = SecondaryText,
+                      fontSize = 12.sp)
+                  Text(
+                      "Provider classification: $classification",
+                      color = if (manifest.remoteProvider == true) Warning else SecondaryText,
+                      fontSize = 12.sp)
+                }
+              }
             }
             IdeHorizontalSeparator(Modifier.padding(top = 10.dp))
-            Text(
-                contextManifestSummary(manifest),
-                color = PrimaryText,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(top = 10.dp))
-            Text(
-                "Token limit: ${manifest.tokenLimit?.takeIf { it > 0 }?.toString() ?: "unavailable"}",
-                color = SecondaryText,
-                fontSize = 11.sp)
-            Text(
-                "Byte limit: ${manifest.byteLimit?.takeIf { it > 0 }?.let { formatBytes(it.toLong()) } ?: "unavailable"}",
-                color = SecondaryText,
-                fontSize = 11.sp)
+            SelectionContainer {
+              Column {
+                Text(
+                    contextManifestSummary(manifest),
+                    color = PrimaryText,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 10.dp))
+                Text(
+                    "Token limit: ${manifest.tokenLimit?.takeIf { it > 0 }?.let { "$it tokens" } ?: "unavailable"}",
+                    color = SecondaryText,
+                    fontSize = 11.sp)
+                Text(
+                    "Byte limit: ${manifest.byteLimit?.takeIf { it > 0 }?.let { "$it bytes" } ?: "unavailable"}",
+                    color = SecondaryText,
+                    fontSize = 11.sp)
+              }
+            }
             SelectionContainer {
               Column {
                 Text(

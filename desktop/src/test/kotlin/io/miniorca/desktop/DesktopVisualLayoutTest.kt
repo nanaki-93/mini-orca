@@ -75,6 +75,97 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun contextPreviewDestinationAndRequestBoundariesStayReachableInProductionDialog() {
+    val identity =
+        ContextInspectionIdentity(
+            WorkflowFileIdentity(
+                WorkflowProjectIdentity("visual-project", "revision"),
+                "src/contexts/request.go",
+                "hash"),
+            null,
+            creationName = "Build",
+            creationKind = "function",
+            action = "fix",
+            intent = "Create function",
+            model = ScopedModel(scope = "function", model = "captured"))
+    val cases =
+        listOf(
+            ContextInspectionState(status = ContextInspectionStatus.Loading, identity = identity) to
+                listOf("Loading context preview…"),
+            ContextInspectionState(
+                status = ContextInspectionStatus.Ready,
+                identity = identity,
+                manifest =
+                    ContextManifest(
+                        scope = "function",
+                        model = "response-model",
+                        providerOrigin = "https://provider.test",
+                        remoteProvider = true,
+                        estimatedTokens = 0,
+                        tokenLimit = 512,
+                        byteLimit = 2048,
+                        truncated = false)) to
+                listOf(
+                    "Scope: Function edits",
+                    "Model: response-model",
+                    "Sanitized provider origin: https://provider.test",
+                    "Provider classification: Remote provider · confirmation required before sending project context",
+                    "0 included · 0 excluded · 0 estimated tokens · not truncated",
+                    "Token limit: 512 tokens",
+                    "Byte limit: 2048 bytes"),
+            ContextInspectionState(
+                status = ContextInspectionStatus.Ready,
+                identity = identity,
+                manifest = ContextManifest(tokenLimit = -1, byteLimit = 0)) to
+                listOf(
+                    "Scope: unavailable",
+                    "Model: unavailable",
+                    "Sanitized provider origin: unavailable",
+                    "Provider classification: Unavailable",
+                    "Token limit: unavailable",
+                    "Byte limit: unavailable"),
+            ContextInspectionState(
+                status = ContextInspectionStatus.Failed,
+                identity = identity,
+                message = "Daemon unavailable") to
+                listOf("Context preview failed: Daemon unavailable"),
+            ContextInspectionState(
+                status = ContextInspectionStatus.Stale,
+                identity = identity,
+                message = "Destination changed") to
+                listOf("Context preview stale: Destination changed"))
+    for ((width, height) in listOf(800 to 650, 1280 to 600)) {
+      for (scale in listOf(1f, 1.5f)) {
+        for ((inspection, labels) in cases) {
+          val label = "context-${inspection.status}-$width-$height-$scale"
+          ComposeVisualFixture(width, height, scale) {
+                ContextInspectorDialog(inspection, {}, {}, {})
+              }
+              .use { fixture ->
+                fixture.render(label)
+                for (text in
+                    listOf(
+                        "Project-relative path: src/contexts/request.go",
+                        "Assistant target: Create function: Build",
+                        "File-scoped preview, not the exact declaration request. Declaration requests may include different context and prompt material.",
+                        "Local inspection only; no provider request or consent. Send and Explain require separate authorization.") +
+                        labels) {
+                  fixture.assertEveryTextLineReachable(text, "ide-dialog-body")
+                  fixture.assertTextFits(text, maxLines = 12)
+                }
+                fixture.assertTextFits("Close")
+                fixture.assertTextFits(
+                    if (inspection.status == ContextInspectionStatus.Loading) "Cancel" else "Retry")
+                if (inspection.status != ContextInspectionStatus.Ready)
+                    assertFalse(fixture.hasText("No files included."))
+                assertFalse(fixture.hasEditableText(withinTag = "ide-dialog-body"))
+              }
+        }
+      }
+    }
+  }
+
+  @Test
   fun f20ScanScopeWarningsRecoveryAndActionsStayReachableWithDiagnosticsCollapsed() {
     val viewports = listOf(1440 to 900, 1600 to 1000, 800 to 400, 800 to 650)
     for ((width, height) in viewports) for (scale in listOf(1f, 1.25f, 1.5f)) {

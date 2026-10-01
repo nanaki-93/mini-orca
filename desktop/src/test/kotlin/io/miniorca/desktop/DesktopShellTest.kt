@@ -64,6 +64,88 @@ class DesktopShellTest {
   }
 
   @Test
+  fun inspectorShowsCapturedTargetAndReturnedBoundariesWithoutDestinationFallbacks() {
+    val identity =
+        ContextInspectionIdentity(
+            WorkflowFileIdentity(
+                WorkflowProjectIdentity("project", "revision"), "src/handler.go", "hash"),
+            SymbolInfo("Handle", "function", confidence = "exact", atomicTarget = true),
+            action = "fix",
+            intent = "Refactor",
+            model = ScopedModel(scope = "function", model = "captured-model"))
+    var inspection by
+        mutableStateOf(
+            ContextInspectionState(
+                status = ContextInspectionStatus.Ready,
+                identity = identity,
+                manifest =
+                    ContextManifest(
+                        scope = "function",
+                        model = "returned-model",
+                        providerOrigin = "https://example.test",
+                        remoteProvider = true,
+                        estimatedTokens = 0,
+                        tokenLimit = 2048,
+                        byteLimit = 4096,
+                        truncated = false)))
+    ComposeVisualFixture(800, 650) { ContextInspectorDialog(inspection, {}, {}, {}) }
+        .use { fixture ->
+          fixture.render()
+          for (label in
+              listOf(
+                  "Project-relative path: src/handler.go",
+                  "Assistant target: function: Handle",
+                  "Assistant intent: Refactor · File preview action: fix",
+                  "Scope: Function edits",
+                  "Model: returned-model",
+                  "Sanitized provider origin: https://example.test",
+                  "Provider classification: Remote provider · confirmation required before sending project context",
+                  "0 included · 0 excluded · 0 estimated tokens · not truncated",
+                  "Token limit: 2048 tokens",
+                  "Byte limit: 4096 bytes")) assertTrue(fixture.hasText(label), label)
+          assertFalse(fixture.hasText("Model: captured-model"))
+          assertTrue(
+              fixture.hasText(
+                  "File-scoped preview, not the exact declaration request. Declaration requests may include different context and prompt material."))
+          assertTrue(
+              fixture.hasText(
+                  "Local inspection only; no provider request or consent. Send and Explain require separate authorization."))
+          inspection =
+              inspection.copy(
+                  manifest =
+                      ContextManifest(
+                          estimatedTokens = 0, tokenLimit = 0, byteLimit = -1, truncated = false))
+          fixture.render()
+          for (label in
+              listOf(
+                  "Scope: unavailable",
+                  "Model: unavailable",
+                  "Sanitized provider origin: unavailable",
+                  "Provider classification: Unavailable",
+                  "Token limit: unavailable",
+                  "Byte limit: unavailable")) assertTrue(fixture.hasText(label), label)
+          assertFalse(fixture.hasText("Provider classification: Local provider"))
+          inspection = inspection.copy(manifest = ContextManifest())
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "0 included · 0 excluded · unavailable estimated tokens · truncation unavailable"))
+          inspection =
+              ContextInspectionState(
+                  status = ContextInspectionStatus.Stale,
+                  identity = identity,
+                  message = "The preview destination differs from the captured model.")
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "Context preview stale: The preview destination differs from the captured model."))
+          assertFalse(fixture.hasText("No files included."))
+          assertTrue(fixture.hasText("Retry"))
+          assertTrue(fixture.hasText("Close"))
+        }
+  }
+
+  @Test
   fun summaryActivationRevalidatesBeforeNavigationAndLeavesOtherBrowserPreferencesAlone() {
     val page = resultPageFixture("bugs")
     val app =
