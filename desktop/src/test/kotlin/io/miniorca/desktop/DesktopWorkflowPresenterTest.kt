@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import java.net.http.HttpTimeoutException
 import java.util.Collections
@@ -1043,6 +1044,195 @@ class DesktopWorkflowPresenterTest {
                 it.contains("/impact?") ||
                 it.contains("/git?")
           })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun fileRoutingConfirmsProtectedWorkAndClearsComposerOnlyAfterReplacement() {
+    for (work in listOf("none", "session", "draft", "message", "constraints")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val calls = mutableListOf<String>()
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+            calls += path
+            when {
+              path.contains("files/info?") -> response(fileJson("other.go", "other"))
+              path.contains("files/symbols?") -> response(symbolsJson("other.go"))
+              else -> response("{}")
+            }
+          }
+      try {
+        loadFile(presenter)
+        if (work == "session")
+            presenter.dispatch(
+                DesktopEvent.ChatLoaded(
+                    ChatSession("session", "project", "revision", "base", "main.go")))
+        if (work == "draft") presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+        var message = TextFieldValue(if (work == "message") "keep message" else "")
+        var constraints = TextFieldValue(if (work == "constraints") "keep constraints" else "")
+        var pending: PendingDraftDiscard.FileNavigation? = null
+        var clears = 0
+        val input = { message to constraints }
+        val clear = {
+          clears++
+          message = TextFieldValue()
+          constraints = TextFieldValue()
+        }
+        val previous = presenter.snapshot.value.state
+        routeFileNavigationRequest(presenter, "main.go", message, constraints, input, clear) {
+          pending = it
+        }
+        assertNull(pending, work)
+        assertEquals(previous.selection, presenter.snapshot.value.state.selection, work)
+        assertEquals(0, clears, work)
+        routeFileNavigationRequest(presenter, "other.go", message, constraints, input, clear) {
+          pending = it
+        }
+        if (work != "none") {
+          main.runPending()
+          io.runPending()
+          main.runPending()
+          assertTrue(calls.isEmpty(), work)
+          assertEquals(previous.selection, presenter.snapshot.value.state.selection, work)
+          assertEquals(previous.review, presenter.snapshot.value.state.review, work)
+          assertEquals(previous.chat, presenter.snapshot.value.state.chat, work)
+          confirmFileNavigationDiscard(presenter, requireNotNull(pending), input, clear)
+          // A repeated dialog callback cannot admit a second replacement.
+          confirmFileNavigationDiscard(presenter, requireNotNull(pending), input, clear)
+        }
+        assertEquals(previous.selectedFile, presenter.snapshot.value.state.selectedFile, work)
+        assertEquals(previous.review, presenter.snapshot.value.state.review, work)
+        assertEquals(previous.chat, presenter.snapshot.value.state.chat, work)
+        assertEquals(0, clears, work)
+        repeat(5) {
+          main.runPending()
+          io.runPending()
+        }
+        main.runPending()
+        assertEquals("other.go", presenter.snapshot.value.state.selectedFile?.path, work)
+        assertNull(presenter.snapshot.value.state.review.editor, work)
+        assertNull(presenter.snapshot.value.state.chat.session, work)
+        assertEquals(TextFieldValue() to TextFieldValue(), input(), work)
+        assertEquals(1, clears, work)
+        assertEquals(1, calls.count { it.contains("files/info?") }, work)
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun fileRoutingRejectsChangedTextFieldValuesBeforeConfirmationAndPublication() {
+    for (timing in listOf("dialog", "read")) {
+      for (change in
+          listOf("message", "constraints", "message selection", "constraints composition")) {
+        val main = QueuedDispatcher()
+        val io = QueuedDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + main)
+        val calls = mutableListOf<String>()
+        val presenter =
+            presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+              calls += path
+              when {
+                path.contains("files/info?") -> response(fileJson("other.go", "other"))
+                path.contains("files/symbols?") -> response(symbolsJson("other.go"))
+                else -> response("{}")
+              }
+            }
+        try {
+          loadFile(presenter)
+          presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+          presenter.dispatch(
+              DesktopEvent.ChatLoaded(
+                  ChatSession("session", "project", "revision", "base", "main.go")))
+          val previous = presenter.snapshot.value.state
+          var message = TextFieldValue("keep message")
+          var constraints = TextFieldValue("keep constraints")
+          var pending: PendingDraftDiscard.FileNavigation? = null
+          var clears = 0
+          val input = { message to constraints }
+          routeFileNavigationRequest(
+              presenter, "other.go", message, constraints, input, { clears++ }) {
+                pending = it
+              }
+          val approval = requireNotNull(pending)
+          if (timing == "read") {
+            confirmFileNavigationDiscard(presenter, approval, input) { clears++ }
+            main.runPending()
+            io.runPending() // Hold matching publication until the input changes.
+          }
+          when (change) {
+            "message" -> message = TextFieldValue("new message")
+            "constraints" -> constraints = TextFieldValue("new constraints")
+            "message selection" -> message = message.copy(selection = TextRange(1, 3))
+            "constraints composition" ->
+                constraints = constraints.copy(composition = TextRange(1, 3))
+          }
+          val newerInput = input()
+          if (timing == "dialog")
+              confirmFileNavigationDiscard(presenter, approval, input) { clears++ }
+          repeat(5) {
+            main.runPending()
+            io.runPending()
+          }
+          main.runPending()
+          assertEquals(previous.selectedFile, presenter.snapshot.value.state.selectedFile, change)
+          assertEquals(previous.symbols, presenter.snapshot.value.state.symbols, change)
+          assertEquals(
+              previous.selection.selectedSymbol,
+              presenter.snapshot.value.state.selectedSymbol,
+              change)
+          assertEquals(previous.chat, presenter.snapshot.value.state.chat, change)
+          assertEquals(previous.review, presenter.snapshot.value.state.review, change)
+          assertEquals(newerInput, input(), change)
+          assertEquals(0, clears, change)
+          assertNull(presenter.snapshot.value.state.selection.pendingFilePath, change)
+          if (timing == "dialog") assertTrue(calls.isEmpty(), change)
+          confirmFileNavigationDiscard(presenter, approval, input) { clears++ }
+          assertEquals(0, clears, change)
+        } finally {
+          presenter.close()
+          scope.cancel()
+        }
+      }
+    }
+  }
+
+  @Test
+  fun failedFileRoutingPreservesComposerAndLoadedWork() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { _, _, _ ->
+          TransportResponse(503, "")
+        }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      val previous = presenter.snapshot.value.state
+      val message = TextFieldValue("keep message", TextRange(1, 4))
+      val constraints = TextFieldValue("keep constraints", composition = TextRange(0, 4))
+      var clears = 0
+      var pending: PendingDraftDiscard.FileNavigation? = null
+      val input = { message to constraints }
+      routeFileNavigationRequest(presenter, "other.go", message, constraints, input, { clears++ }) {
+        pending = it
+      }
+      confirmFileNavigationDiscard(presenter, requireNotNull(pending), input) { clears++ }
+      dispatcher.runPending()
+      assertEquals(previous.selectedFile, presenter.snapshot.value.state.selectedFile)
+      assertEquals(previous.review, presenter.snapshot.value.state.review)
+      assertEquals(previous.chat, presenter.snapshot.value.state.chat)
+      assertEquals(previous.selection.selectedSymbol, presenter.snapshot.value.state.selectedSymbol)
+      assertEquals("other.go", presenter.snapshot.value.state.selection.failedFilePath)
+      assertEquals(0, clears)
+      assertEquals(message to constraints, input())
     } finally {
       presenter.close()
       scope.cancel()

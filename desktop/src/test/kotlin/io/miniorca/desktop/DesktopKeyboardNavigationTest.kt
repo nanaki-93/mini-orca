@@ -1281,6 +1281,73 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun explorerFileActivationSharesConfirmationAndCancelEscapePreserveAllWork() {
+    for (work in listOf("draft", "session", "composer")) {
+      for (action in listOf("cancel", "escape", "confirm")) {
+        FileNavigationUiFixture(work).use { navigation ->
+          val previous = navigation.presenter.snapshot.value.state
+          val originalInput = navigation.input()
+          ComposeVisualFixture(800, 650) {
+                ExplorerPane(
+                    ExplorerPaneState(previous.index, "main.go", "", emptySet(), false),
+                    ExplorerPaneActions({}, {}, {}, {}, navigation::route),
+                    Modifier.fillMaxSize())
+                navigation.DiscardDialog()
+              }
+              .use { fixture ->
+                fixture.render()
+                fixture.clickText("main.go")
+                fixture.render()
+                assertNull(navigation.pending)
+                navigation.runPending()
+                assertTrue(navigation.calls.isEmpty())
+                assertEquals(originalInput, navigation.input())
+                fixture.clickText("other.go")
+                fixture.render()
+                assertTrue(navigation.pending != null)
+                assertTrue(
+                    fixture.isFocusedControl(if (work == "draft") "Keep draft" else "Keep work"))
+                navigation.runPending()
+                assertTrue(navigation.calls.isEmpty())
+                assertEquals(
+                    previous.selection, navigation.presenter.snapshot.value.state.selection)
+                assertEquals(previous.chat, navigation.presenter.snapshot.value.state.chat)
+                assertEquals(previous.review, navigation.presenter.snapshot.value.state.review)
+                assertEquals(originalInput, navigation.input())
+                when (action) {
+                  "cancel" -> fixture.clickText(if (work == "draft") "Keep draft" else "Keep work")
+                  "escape" -> assertTrue(fixture.pressKey(Key.Escape))
+                  "confirm" -> {
+                    assertTrue(
+                        fixture.requestFocus(
+                            if (work == "draft") "Discard draft" else "Discard work"))
+                    assertTrue(fixture.pressKey(Key.Enter))
+                  }
+                }
+                fixture.render()
+                navigation.runPending()
+                assertNull(navigation.pending)
+                if (action == "confirm") {
+                  assertEquals(
+                      "other.go", navigation.presenter.snapshot.value.state.selectedFile?.path)
+                  assertEquals(1, navigation.clears)
+                  assertEquals(1, navigation.calls.count { it.contains("files/info?") })
+                } else {
+                  assertEquals(
+                      previous.selection, navigation.presenter.snapshot.value.state.selection)
+                  assertEquals(previous.chat, navigation.presenter.snapshot.value.state.chat)
+                  assertEquals(previous.review, navigation.presenter.snapshot.value.state.review)
+                  assertEquals(originalInput, navigation.input())
+                  assertEquals(0, navigation.clears)
+                  assertTrue(navigation.calls.isEmpty())
+                }
+              }
+        }
+      }
+    }
+  }
+
+  @Test
   fun discardPromptFocusesKeepDraftAndEscapeCannotDiscard() {
     var visible by mutableStateOf(true)
     var cancels = 0
