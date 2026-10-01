@@ -331,6 +331,35 @@ private fun mentionedNavigationSymbol(
       .singleOrNull()
 }
 
+/** Work captured for a transactional ordinary-file replacement, not inspection or evidence. */
+internal data class FileNavigationIdentity(
+    val project: SwitchProjectIdentity,
+    val index: ProjectIndex,
+    val selectedFile: ProjectFileInfo?,
+    val draft: SwitchDraftIdentity,
+    val chatRequestId: Long,
+)
+
+internal fun DesktopState.fileNavigationIdentity(path: String): FileNavigationIdentity? {
+  val project = project ?: return null
+  val index = index ?: return null
+  if (index.projectId != project.projectId ||
+      index.projectRevision != project.projectRevision ||
+      index.files.count { it.path == path } != 1)
+      return null
+  return FileNavigationIdentity(
+      SwitchProjectIdentity(project),
+      index,
+      selectedFile,
+      SwitchDraftIdentity(chat.session, review.draft, review.editor),
+      chat.pendingRequestId)
+}
+
+internal fun DesktopState.matchesFileNavigation(
+    path: String,
+    identity: FileNavigationIdentity
+): Boolean = index === identity.index && fileNavigationIdentity(path) == identity
+
 data class ChatState(
     val session: ChatSession? = null,
     val pendingRequestId: Long = 0,
@@ -1485,6 +1514,14 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
     dispatch(DesktopEvent.FileLoaded(file, symbols))
     return true
   }
+
+  internal fun fileNavigationLoaded(
+      request: RequestIdentity,
+      file: ProjectFileInfo,
+      symbols: List<SymbolInfo>,
+      identity: FileNavigationIdentity,
+  ): Boolean =
+      state.matchesFileNavigation(request.path, identity) && fileLoaded(request, file, symbols)
 
   fun fileFailed(request: RequestIdentity, message: String): Boolean =
       if (isCurrentFileLoad(request)) {

@@ -1002,6 +1002,253 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun ordinaryFileOpeningWithoutWorkLoadsAndAllowsOnlyAnIndexedMatchingTarget() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          calls += path
+          when {
+            path.contains("files/info?") -> response(fileJson("other.go", "other"))
+            path.contains("files/symbols?") ->
+                response(symbolsJson("other.go", "Other", start = 2, end = 5))
+            else -> response("{}")
+          }
+        }
+    try {
+      loadFile(presenter)
+      presenter.openFileInEditor("missing.go")
+      presenter.openFileInEditor("other.go", EditorNavigationTarget("main.go", line = 3))
+      main.runPending()
+      io.runPending()
+      assertTrue(calls.isEmpty())
+      presenter.openFileInEditor("other.go", EditorNavigationTarget("other.go", line = 3))
+      assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
+      repeat(5) {
+        main.runPending()
+        io.runPending()
+      }
+      main.runPending()
+      assertEquals("other.go", presenter.snapshot.value.state.selectedFile?.path)
+      assertEquals("Other", presenter.snapshot.value.state.selectedSymbol?.name)
+      assertEquals(3, presenter.snapshot.value.state.selection.focusedLine)
+      assertEquals(1, calls.count { it.contains("files/info?") })
+      assertTrue(
+          calls.all {
+            it.contains("files/info?") ||
+                it.contains("files/symbols?") ||
+                it.contains("files/analysis?") ||
+                it.contains("/impact?") ||
+                it.contains("/git?")
+          })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun ordinaryFileOpeningRejectsProtectedWorkAtBothPresenterEntryPoints() {
+    for (work in listOf("session", "draft", "edited buffer")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val calls = mutableListOf<String>()
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+            calls += path
+            error("No read is admitted")
+          }
+      try {
+        loadFile(presenter)
+        if (work == "session") {
+          presenter.dispatch(
+              DesktopEvent.ChatLoaded(
+                  ChatSession("session", "project", "revision", "base", "main.go")))
+        } else {
+          presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+          if (work == "edited buffer") {
+            presenter.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() { changed() }"))
+          }
+        }
+        val previous = presenter.snapshot.value.state
+        presenter.openFileInEditor("other.go")
+        presenter.selectFile("other.go")
+        main.runPending()
+        io.runPending()
+        main.runPending()
+        assertEquals(previous.selectedFile, presenter.snapshot.value.state.selectedFile, work)
+        assertEquals(previous.chat, presenter.snapshot.value.state.chat, work)
+        assertEquals(previous.review, presenter.snapshot.value.state.review, work)
+        assertNull(presenter.snapshot.value.state.selection.pendingFilePath, work)
+        assertTrue(calls.isEmpty(), work)
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
+  fun sameFileActivationIsInspectionOnlyEvenWithStaleDraftEvidence() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          calls += path
+          error("Same-file activation must not read")
+        }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      presenter.dispatch(
+          DesktopEvent.SelectedFileRefreshed(file().copy(contentHash = "changed"), emptyList()))
+      val previous = presenter.snapshot.value
+      presenter.openFileInEditor("main.go")
+      assertEquals(previous.state.selection, presenter.snapshot.value.state.selection)
+      assertEquals(previous.state.review, presenter.snapshot.value.state.review)
+      val intent =
+          presenter.fileNavigationIntent(
+              "main.go", EditorNavigationTarget("main.go", line = 1), composerHasWork = true)!!
+      var loaded = false
+      assertTrue(presenter.confirmFileNavigationIntent(intent) { loaded = true })
+      assertFalse(presenter.confirmFileNavigationIntent(intent))
+      assertEquals(1, presenter.snapshot.value.state.selection.focusedLine)
+      assertEquals(previous.state.review, presenter.snapshot.value.state.review)
+      assertEquals(previous.state.chat, presenter.snapshot.value.state.chat)
+      assertEquals(previous.declarationExplanation, presenter.snapshot.value.declarationExplanation)
+      main.runPending()
+      io.runPending()
+      assertFalse(loaded)
+      assertTrue(calls.isEmpty())
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun fileApprovalIsSingleUseAndDoesNotDiscardUntilSuccessfulPublication() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          calls += path
+          when {
+            path.contains("files/info?") -> response(fileJson("other.go", "other"))
+            path.contains("files/symbols?") -> response(symbolsJson("other.go"))
+            else -> response("{}")
+          }
+        }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      val previous = presenter.snapshot.value.state
+      var successes = 0
+      val intent = presenter.fileNavigationIntent("other.go")!!
+      assertTrue(intent.hasWork)
+      assertTrue(presenter.confirmFileNavigationIntent(intent) { successes++ })
+      assertEquals(previous.review, presenter.snapshot.value.state.review)
+      assertEquals(previous.selectedFile, presenter.snapshot.value.state.selectedFile)
+      assertFalse(presenter.confirmFileNavigationIntent(intent) { successes++ })
+      repeat(5) {
+        main.runPending()
+        io.runPending()
+      }
+      main.runPending()
+      assertEquals("other.go", presenter.snapshot.value.state.selectedFile?.path)
+      assertNull(presenter.snapshot.value.state.review.editor)
+      assertEquals(1, successes)
+      assertFalse(presenter.confirmFileNavigationIntent(intent) { successes++ })
+      assertEquals(1, calls.count { it.contains("files/info?") })
+      assertEquals(1, successes)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun changedWorkOrDestinationRevokesFileApprovalBeforeStartAndPublication() {
+    for (timing in listOf("before start", "before transport", "during read")) {
+      for (change in
+          listOf("editor", "session", "draft", "index", "project", "selected file", "composer")) {
+        val main = QueuedDispatcher()
+        val io = QueuedDispatcher()
+        val scope = CoroutineScope(SupervisorJob() + main)
+        val calls = mutableListOf<String>()
+        val presenter =
+            presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+              calls += path
+              when {
+                path.contains("files/info?") -> response(fileJson("other.go", "other"))
+                path.contains("files/symbols?") -> response(symbolsJson("other.go"))
+                else -> response("{}")
+              }
+            }
+        try {
+          loadFile(presenter)
+          presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+          var composerCurrent = true
+          var successes = 0
+          val intent =
+              presenter.fileNavigationIntent("other.go", composerCurrent = { composerCurrent })!!
+          if (timing != "before start") {
+            assertTrue(presenter.confirmFileNavigationIntent(intent) { successes++ })
+            if (timing == "during read") {
+              main.runPending()
+              io.runPending() // Transport completed; publication is still queued.
+            }
+          }
+          when (change) {
+            "editor" ->
+                presenter.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() { newer() }"))
+            "session" ->
+                presenter.dispatch(
+                    DesktopEvent.ChatLoaded(
+                        ChatSession("new", "project", "revision", "base", "main.go")))
+            "draft" -> presenter.dispatch(DesktopEvent.DraftLoaded(draft().copy(revision = 2)))
+            "index" ->
+                presenter.dispatch(
+                    DesktopEvent.IndexRefreshed(presenter.snapshot.value.state.index!!.copy()))
+            "project" -> loadProject(presenter)
+            "selected file" ->
+                presenter.dispatch(
+                    DesktopEvent.SelectedFileRefreshed(
+                        file().copy(contentHash = "new"), emptyList()))
+            "composer" -> composerCurrent = false
+          }
+          val newer = presenter.snapshot.value.state
+          if (timing == "before start")
+              assertFalse(presenter.confirmFileNavigationIntent(intent) { successes++ })
+          repeat(5) {
+            main.runPending()
+            io.runPending()
+          }
+          main.runPending()
+          val finished = presenter.snapshot.value.state
+          assertEquals(newer.selectedFile, finished.selectedFile, "$timing/$change")
+          assertEquals(newer.chat, finished.chat, "$timing/$change")
+          assertEquals(newer.review, finished.review, "$timing/$change")
+          assertNull(finished.selection.pendingFilePath, "$timing/$change")
+          assertEquals(0, successes, "$timing/$change")
+          if (timing != "during read") assertTrue(calls.isEmpty(), change)
+          assertFalse(presenter.confirmFileNavigationIntent(intent))
+        } finally {
+          presenter.close()
+          scope.cancel()
+        }
+      }
+    }
+  }
+
+  @Test
   fun replacementReadsRetainSourceWorkAndEvidenceUntilSuccessfulPublication() {
     for (outcome in listOf("failed", "canceled", "loaded")) {
       val main = QueuedDispatcher()
@@ -1047,7 +1294,8 @@ class DesktopWorkflowPresenterTest {
         val previous = presenter.snapshot.value
         assertEquals(DeclarationExplanationStatus.Current, previous.declarationExplanation.status)
 
-        presenter.selectFile("other.go")
+        assertTrue(
+            presenter.confirmFileNavigationIntent(presenter.fileNavigationIntent("other.go")!!))
         main.runPending()
         val pending = presenter.snapshot.value
         assertEquals("other.go", pending.state.selection.pendingFilePath)
@@ -1151,7 +1399,8 @@ class DesktopWorkflowPresenterTest {
         presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
         presenter.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() { changed() }"))
         val previous = presenter.snapshot.value.state
-        presenter.openFileInEditor("other.go")
+        assertTrue(
+            presenter.confirmFileNavigationIntent(presenter.fileNavigationIntent("other.go")!!))
         drain()
         val state = presenter.snapshot.value.state
         assertNull(state.selection.pendingFilePath, outcome)
@@ -1203,7 +1452,13 @@ class DesktopWorkflowPresenterTest {
           presenter.dispatch(
               DesktopEvent.ProjectLoaded(project(), index.copy(projectId = "foreign")))
         }
-        presenter.openFileInEditor("other.go")
+        if (change == "foreign index") {
+          assertNull(presenter.fileNavigationIntent("other.go"))
+          presenter.openFileInEditor("other.go")
+        } else {
+          assertTrue(
+              presenter.confirmFileNavigationIntent(presenter.fileNavigationIntent("other.go")!!))
+        }
         main.runPending()
         io.runPending() // Read completed; its UI publication is still deferred.
         val previous = presenter.snapshot.value.state
@@ -1226,8 +1481,10 @@ class DesktopWorkflowPresenterTest {
           val state = presenter.snapshot.value.state
           assertEquals(previous.selectedFile, state.selectedFile)
           assertEquals(previous.review, state.review)
-          assertEquals("other.go", state.selection.failedFilePath)
-          assertTrue(state.selection.fileReadError?.contains("no longer indexed") == true)
+          assertNull(state.selection.failedFilePath)
+          assertNull(state.selection.fileReadError)
+          if (change == "foreign index")
+              assertTrue(state.error?.contains("no longer points") == true)
         }
         assertNull(presenter.snapshot.value.state.selection.pendingFilePath, change)
       } finally {
@@ -1264,22 +1521,31 @@ class DesktopWorkflowPresenterTest {
                   if (lateFailure) TransportResponse(403, """{"message":"Late read failure"}""")
                   else response(symbolsJson("other.go", "Late"))
                 }
-                path.contains("files/symbols?path=main.go") ->
+                path.contains("files/info?path=second.go") -> response(fileJson("second.go", "new"))
+                path.contains("files/symbols?path=second.go") ->
                     if (newFailure) TransportResponse(403, """{"message":"Current read failure"}""")
-                    else response(symbolsJson("main.go", "Current"))
+                    else response(symbolsJson("second.go", "Current"))
                 else -> creationFileResponse(path) ?: response("{}")
               }
             }
         try {
           runBlocking(main) {
             loadFile(presenter)
+            presenter.dispatch(
+                DesktopEvent.IndexRefreshed(
+                    presenter.snapshot.value.state.index!!.let {
+                      it.copy(files = it.files + IndexedFile("second.go", "new", "Go", false))
+                    }))
             presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
-            presenter.openFileInEditor("other.go")
+            assertTrue(
+                presenter.confirmFileNavigationIntent(presenter.fileNavigationIntent("other.go")!!))
           }
           assertTrue(entered.await(2, TimeUnit.SECONDS))
           val newer =
               runBlocking(main) {
-                presenter.openFileInEditor("main.go")
+                assertTrue(
+                    presenter.confirmFileNavigationIntent(
+                        presenter.fileNavigationIntent("second.go")!!))
                 withTimeout(2_000) {
                       presenter.snapshot.first {
                         it.state.selection.fileReadError == "Current read failure" ||
@@ -1337,7 +1603,8 @@ class DesktopWorkflowPresenterTest {
         presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
         val previous = presenter.snapshot.value.state
         calls.clear()
-        presenter.selectFile("other.go")
+        assertTrue(
+            presenter.confirmFileNavigationIntent(presenter.fileNavigationIntent("other.go")!!))
         if (started) main.runPending()
         assertEquals("other.go", presenter.snapshot.value.state.selection.pendingFilePath)
         presenter.close()
@@ -1385,7 +1652,8 @@ class DesktopWorkflowPresenterTest {
       main.runPending()
       val running = presenter.snapshot.value.state.review.checkAttempt
       assertEquals(ValidationAttemptStatus.Running, running?.status)
-      presenter.selectFile("other.go")
+      assertTrue(
+          presenter.confirmFileNavigationIntent(presenter.fileNavigationIntent("other.go")!!))
       main.runPending()
       assertEquals(running, presenter.snapshot.value.state.review.checkAttempt)
       io.runNext() // The old-file checks may finish while the replacement read is pending.
@@ -1448,8 +1716,9 @@ class DesktopWorkflowPresenterTest {
       presenter.sendChatMessage(
           ChatEditMode.ReplaceSymbol, "", "Try preserving the public signature again")
       assertNull(presenter.snapshot.value.state.chat.failure)
-      main.runPending()
-      presenter.selectFile("other.go")
+      drain()
+      assertTrue(
+          presenter.confirmFileNavigationIntent(presenter.fileNavigationIntent("other.go")!!))
       drain()
       assertEquals("other.go", presenter.snapshot.value.state.selectedFile?.path)
       assertNull(presenter.snapshot.value.state.chat.failure)
@@ -4182,7 +4451,7 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun benchmarkCatalogRequestIsCanceledImmediatelyWhenAFileIsSelected() {
+  fun benchmarkCatalogRequestIsCanceledWhenAnApprovedReplacementPublishes() {
     val started = CountDownLatch(1)
     val interrupted = CountDownLatch(1)
     val release = CountDownLatch(1)
@@ -4213,7 +4482,8 @@ class DesktopWorkflowPresenterTest {
       presenter.loadGoBenchmarks()
       assertTrue(started.await(1, TimeUnit.SECONDS))
 
-      presenter.selectFile("other.go")
+      assertTrue(
+          presenter.confirmFileNavigationIntent(presenter.fileNavigationIntent("other.go")!!))
 
       assertTrue(interrupted.await(1, TimeUnit.SECONDS))
       eventually { presenter.snapshot.value.state.selectedFile?.path == "other.go" }
@@ -7092,7 +7362,12 @@ class DesktopWorkflowPresenterTest {
           }
       try {
         val page = securityPageFixture()
-        val index = resultIndexFixture()
+        val index =
+            resultIndexFixture().let {
+              if (variant == "fileRequest")
+                  it.copy(files = it.files + IndexedFile("other.go", "base", "Go", false))
+              else it
+            }
         presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), index))
         presenter.dispatch(
             DesktopEvent.AnalysisRunUpdated(
@@ -7159,7 +7434,12 @@ class DesktopWorkflowPresenterTest {
                         index.copy(projectRevision = "next")))
             "draft" -> presenter.dispatch(DesktopEvent.DraftEdited("edited buffer"))
             "composer" -> message = TextFieldValue("changed input")
-            "fileRequest" -> presenter.openFileInEditor("main.go")
+            "fileRequest" -> {
+              // Reactivating retained source cancels its pending replacement without reloading.
+              assertTrue(
+                  presenter.confirmFileNavigationIntent(
+                      presenter.fileNavigationIntent("other.go")!!))
+            }
           }
           io.runPending()
           main.runPending()

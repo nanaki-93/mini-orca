@@ -110,6 +110,50 @@ class DesktopWorkflowControllerTest {
   }
 
   @Test
+  fun ordinaryReplacementPublicationRequiresUnchangedCapturedWorkAndIndex() {
+    for (change in listOf("none", "session", "editor", "index", "source")) {
+      val controller = loadedController()
+      controller.dispatch(
+          DesktopEvent.IndexRefreshed(
+              index("project", "revision")
+                  .copy(files = listOf(IndexedFile("other.go", "other", "Go", false)))))
+      val initial = controller.beginFileLoad("main.go")!!
+      assertTrue(controller.fileLoaded(initial, file("main.go", "main-hash"), emptyList()))
+      controller.dispatch(DesktopEvent.DraftLoaded(draft()))
+      val identity = controller.state.fileNavigationIdentity("other.go")!!
+      val request = controller.beginFileLoad("other.go")!!
+      when (change) {
+        "session" ->
+            controller.dispatch(
+                DesktopEvent.ChatLoaded(
+                    ChatSession("new", "project", "revision", "main-hash", "main.go")))
+        "editor" -> controller.dispatch(DesktopEvent.DraftEdited("new declaration"))
+        "index" -> controller.dispatch(DesktopEvent.IndexRefreshed(controller.state.index!!.copy()))
+        "source" ->
+            controller.dispatch(
+                DesktopEvent.SelectedFileRefreshed(file("main.go", "new-hash"), emptyList()))
+      }
+      val newer = controller.state
+      val published =
+          controller.fileNavigationLoaded(request, file("other.go", "other"), emptyList(), identity)
+      assertEquals(change == "none", published, change)
+      if (published) {
+        assertEquals("other.go", controller.state.selectedFile?.path)
+        assertNull(controller.state.review.editor)
+        assertFalse(
+            controller.fileNavigationLoaded(
+                request, file("other.go", "other"), emptyList(), identity))
+      } else {
+        assertEquals(newer, controller.state, change)
+        assertTrue(controller.cancelFileLoad(request))
+        assertEquals(newer.selectedFile, controller.state.selectedFile, change)
+        assertEquals(newer.review, controller.state.review, change)
+        assertEquals(newer.chat, controller.state.chat, change)
+      }
+    }
+  }
+
+  @Test
   fun supersededFailureAndCancellationCannotClearTheNewPendingRead() {
     val controller = loadedController()
     val first = controller.beginFileLoad("first.go")!!
