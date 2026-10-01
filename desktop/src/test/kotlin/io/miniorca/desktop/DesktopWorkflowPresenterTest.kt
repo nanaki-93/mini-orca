@@ -1240,6 +1240,94 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun failedReplacementRetryRequiresFreshAdmissionAndLeavesWorkUntilSuccess() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val calls = mutableListOf<String>()
+    var denyRead = true
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          calls += path
+          when {
+            path.contains("files/info?path=other.go") && denyRead -> TransportResponse(503, "")
+            path.contains("files/info?path=other.go") -> response(fileJson("other.go", "other"))
+            path.contains("files/symbols?path=other.go") -> response(symbolsJson("other.go"))
+            else -> response("{}")
+          }
+        }
+    fun drain() {
+      repeat(5) {
+        main.runPending()
+        io.runPending()
+      }
+      main.runPending()
+    }
+    try {
+      loadFile(presenter)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      val previous = presenter.snapshot.value.state
+      var message = TextFieldValue("keep input")
+      val input = { message to TextFieldValue() }
+      var clears = 0
+      var pending: PendingDraftDiscard.FileNavigation? = null
+      fun route() =
+          routeFileNavigationRequest(
+              presenter,
+              "other.go",
+              message,
+              TextFieldValue(),
+              input,
+              {
+                clears++
+                message = TextFieldValue()
+              }) {
+                pending = it
+              }
+      route()
+      val failedApproval = requireNotNull(pending)
+      confirmFileNavigationDiscard(presenter, failedApproval, input) { clears++ }
+      drain()
+      assertEquals("other.go", presenter.snapshot.value.state.selection.failedFilePath)
+      assertEquals(previous.selectedFile, presenter.snapshot.value.state.selectedFile)
+      assertEquals(previous.review, presenter.snapshot.value.state.review)
+      assertEquals("keep input", message.text)
+      assertEquals(0, clears)
+      assertEquals(1, calls.count { it.contains("files/info?") })
+
+      denyRead = false
+      confirmFileNavigationDiscard(presenter, failedApproval, input) { clears++ }
+      presenter.openFileInEditor("other.go") // Direct entry cannot bypass the draft guard.
+      drain()
+      assertEquals(1, calls.count { it.contains("files/info?") })
+      assertEquals(previous.review, presenter.snapshot.value.state.review)
+      assertEquals("keep input", message.text)
+
+      pending = null
+      route() // Dismissing the fresh dialog does not start a read.
+      assertTrue(pending != null)
+      drain()
+      assertEquals(1, calls.count { it.contains("files/info?") })
+      route()
+      confirmFileNavigationDiscard(presenter, requireNotNull(pending), input) {
+        clears++
+        message = TextFieldValue()
+      }
+      assertEquals(previous.review, presenter.snapshot.value.state.review)
+      drain()
+      assertEquals("other.go", presenter.snapshot.value.state.selectedFile?.path)
+      assertNull(presenter.snapshot.value.state.selection.failedFilePath)
+      assertNull(presenter.snapshot.value.state.review.editor)
+      assertEquals("", message.text)
+      assertEquals(1, clears)
+      assertEquals(2, calls.count { it.contains("files/info?") })
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun ordinaryFileOpeningRejectsProtectedWorkAtBothPresenterEntryPoints() {
     for (work in listOf("session", "draft", "edited buffer")) {
       val main = QueuedDispatcher()
