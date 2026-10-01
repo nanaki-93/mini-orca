@@ -93,6 +93,8 @@ data class FileSelectionState(
     val impact: ImpactPreview? = null,
     val gitStatus: GitStatus? = null,
     val fileReadError: String? = null,
+    val pendingFilePath: String? = null,
+    val failedFilePath: String? = null,
 )
 
 data class JobState(
@@ -585,7 +587,7 @@ sealed interface DesktopEvent {
     val message: String
   }
 
-  data class FileLoadFailed(override val message: String) : LocalReadFailure
+  data class FileLoadFailed(override val message: String, val path: String) : LocalReadFailure
 
   data class ProjectLoadFailed(val requestId: Long, val message: String) : DesktopEvent
 
@@ -1076,7 +1078,11 @@ private fun DesktopState.withLocalReadFailure(event: DesktopEvent.LocalReadFailu
     when (event) {
       is DesktopEvent.FileLoadFailed ->
           copy(
-              selection = selection.copy(fileReadError = event.message),
+              selection =
+                  selection.copy(
+                      pendingFilePath = null,
+                      failedFilePath = event.path,
+                      fileReadError = event.message),
               jobs = jobs.copy(loading = false, error = event.message))
     }
 
@@ -1349,7 +1355,9 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
     private set
 
   private var nextRequestId = 0L
+  // Loaded-file authority remains valid while a separate replacement read is pending.
   private var fileRequest: RequestIdentity? = null
+  private var pendingFileRequest: RequestIdentity? = null
   private var analysisRequest: Long = 0
   private var chatRequest: Long = 0
   private var draftRequest: Long = 0
@@ -1384,6 +1392,7 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
   ): Long =
       nextId().also { requestId ->
         fileRequest = null
+        pendingFileRequest = null
         dispatch(DesktopEvent.ProjectOpeningStarted(ProjectOpeningAttempt(requestId, path, kind)))
         dispatch(DesktopEvent.Loading)
       }
@@ -1442,15 +1451,14 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
   fun beginFileLoad(path: String): RequestIdentity? {
     val project = state.project ?: return null
     val request = RequestIdentity(nextId(), project.projectId, project.projectRevision, path)
-    fileRequest = request
+    pendingFileRequest = request
     dispatch(DesktopEvent.Loading)
     dispatch(DesktopEvent.Status("Loading $path…"))
-    // Clear session and draft immediately, even if the previous request is slow.
     state =
         state.copy(
-            selection = FileSelectionState(),
-            chat = ChatState(),
-            review = DraftReviewState(applied = state.review.applied))
+            selection =
+                state.selection.copy(
+                    pendingFilePath = path, failedFilePath = null, fileReadError = null))
     return request
   }
 
@@ -1460,23 +1468,30 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
       symbols: List<SymbolInfo>
   ): Boolean {
     val resolved = request.copy(contentHash = file.contentHash)
-    if (!matchesProject(request) || fileRequest?.id != request.id || file.path != request.path)
+    if (!matchesProject(request) || pendingFileRequest != request || file.path != request.path)
         return false
+    pendingFileRequest = null
     fileRequest = resolved
+    analysisRequest = 0
+    chatRequest = 0
     dispatch(DesktopEvent.FileLoaded(file, symbols))
     return true
   }
 
   fun fileFailed(request: RequestIdentity, message: String): Boolean =
-      if (fileRequest?.id == request.id && matchesProject(request))
-          accept(DesktopEvent.FileLoadFailed(message))
-      else false
+      if (pendingFileRequest == request && matchesProject(request)) {
+        pendingFileRequest = null
+        accept(DesktopEvent.FileLoadFailed(message, request.path))
+      } else false
 
   fun cancelFileLoad(request: RequestIdentity): Boolean =
-      if (fileRequest?.id == request.id && matchesProject(request)) {
-        fileRequest = null
+      if (pendingFileRequest == request && matchesProject(request)) {
+        pendingFileRequest = null
         dispatch(DesktopEvent.Status("File load canceled"))
-        state = state.copy(jobs = state.jobs.copy(loading = false))
+        state =
+            state.copy(
+                selection = state.selection.copy(pendingFilePath = null),
+                jobs = state.jobs.copy(loading = false))
         true
       } else false
 
@@ -1661,6 +1676,8 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
               CheckAttempt(requestId, CheckCandidate(draft), ValidationAttemptStatus.Running)
 
   fun currentFileRequest(): RequestIdentity? = fileRequest
+
+  fun currentPendingFileRequest(): RequestIdentity? = pendingFileRequest
 
   private fun matchesProject(request: RequestIdentity): Boolean =
       state.project?.let {

@@ -933,8 +933,9 @@ class DesktopStateTest {
             second, fileRequest, ValidationAttemptStatus.Failed, "late"))
     val (third, _) = controller.beginDraftValidation()!!
     val otherFile = controller.beginFileLoad("other.go")!!
-    assertFalse(controller.draftValidated(third, fileRequest, updated))
+    assertTrue(controller.draftValidated(third, fileRequest, updated))
     assertTrue(controller.fileLoaded(otherFile, file("other.go", "other"), emptyList()))
+    assertFalse(controller.draftValidated(third, fileRequest, updated))
     assertNull(controller.state.review.editor)
   }
 
@@ -1013,7 +1014,7 @@ class DesktopStateTest {
   }
 
   @Test
-  fun fileSwitchRejectsLateEnrichmentAndClearsFileBoundState() {
+  fun fileSwitchRetainsFileBoundStateUntilSuccessfulPublication() {
     val controller = DesktopWorkflowController(projectState())
     val first = controller.beginFileLoad("first.go")!!
     assertTrue(controller.fileLoaded(first, file("first.go", "first"), emptyList()))
@@ -1022,13 +1023,40 @@ class DesktopStateTest {
         controller.chatLoaded(
             controller.beginChatLoad()!!.first, loadedFirst, session("first.go", "first")))
 
+    val symbol =
+        SymbolInfo(
+            "Run",
+            "function",
+            startLine = 2,
+            endLine = 4,
+            confidence = "exact",
+            atomicTarget = true)
+    controller.dispatch(DesktopEvent.EditorContextSelected(symbol, 3))
+    controller.dispatch(
+        DesktopEvent.DraftLoaded(
+            DeclarationDraft(id = "draft", targetPath = "first.go", declaration = "func Run() {}")))
+    controller.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() { changed() }"))
+    val previous = controller.state
+
     val second = controller.beginFileLoad("second.go")!!
-    assertNull(controller.state.selectedFile)
-    assertNull(controller.state.chat.session)
-    assertNull(controller.state.review.draft)
-    assertTrue(!controller.analysisLoaded(loadedFirst, FileAnalysis("first.go", "fresh")))
+    assertEquals(previous.selectedFile, controller.state.selectedFile)
+    assertEquals(previous.selection.symbols, controller.state.symbols)
+    assertEquals(symbol, controller.state.selectedSymbol)
+    assertEquals(3, controller.state.selection.focusedLine)
+    assertEquals(previous.chat, controller.state.chat)
+    assertEquals(previous.review, controller.state.review)
+    assertEquals(loadedFirst, controller.currentFileRequest())
+    assertEquals("second.go", controller.state.selection.pendingFilePath)
+    assertTrue(controller.analysisLoaded(loadedFirst, FileAnalysis("first.go", "fresh")))
     assertTrue(controller.fileLoaded(second, file("second.go", "second"), emptyList()))
+    assertFalse(controller.fileLoaded(second, file("second.go", "second"), emptyList()))
+    assertFalse(controller.analysisLoaded(loadedFirst, FileAnalysis("first.go", "late")))
     assertEquals("second.go", controller.state.selectedFile?.path)
+    assertNull(controller.state.selection.pendingFilePath)
+    assertNull(controller.state.selectedSymbol)
+    assertNull(controller.state.chat.session)
+    assertNull(controller.state.review.editor)
+    assertNull(controller.state.analysis)
   }
 
   @Test
@@ -1069,8 +1097,13 @@ class DesktopStateTest {
     assertTrue(!controller.fileFailed(first, "Late failure"))
     assertTrue(controller.fileFailed(second, "Second file denied"))
     assertEquals("Second file denied", controller.state.selection.fileReadError)
-    assertTrue(controller.fileLoaded(second, file("second.go", "hash"), emptyList()))
+    assertEquals("second.go", controller.state.selection.failedFilePath)
+    assertNull(controller.state.selection.pendingFilePath)
+    assertFalse(controller.fileLoaded(second, file("second.go", "hash"), emptyList()))
+    val retry = controller.beginFileLoad("second.go")!!
+    assertTrue(controller.fileLoaded(retry, file("second.go", "hash"), emptyList()))
     assertNull(controller.state.selection.fileReadError)
+    assertNull(controller.state.selection.failedFilePath)
     assertEquals("second.go", controller.state.selectedFile?.path)
 
     controller.dispatch(DesktopEvent.SelectedFileUnavailable("Source changed"))

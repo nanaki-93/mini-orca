@@ -399,7 +399,6 @@ class DesktopWorkflowPresenter(
 
   private fun invalidateFileSelectionWork() {
     clearSecurityReviewRemoteConfirmation()
-    benchmarkWorkflow.invalidate()
     if (mutableSnapshot.value.declarationExplanation.status !=
         DeclarationExplanationStatus.Unavailable) {
       invalidateDeclarationExplanation(
@@ -408,11 +407,21 @@ class DesktopWorkflowPresenter(
     chatJob?.cancel()
     draftValidationJob?.cancel()
     draftChecksJob?.cancel()
-    securityWorkflow.cancel()
     activeTask = null
     activeDraft = null
+    setOperation(generating = false, validating = false)
     fileFreshnessJob?.cancel()
     enrichmentJobs.forEach(Job::cancel)
+    securityWorkflow.cancel()
+    benchmarkWorkflow.invalidate()
+  }
+
+  private fun cancelFileReadJob() {
+    // A queued coroutine may be canceled before its body (and cancellation catch) starts.
+    controller.currentPendingFileRequest()?.let { request ->
+      if (controller.cancelFileLoad(request)) publish()
+    }
+    fileJob?.cancel()
   }
 
   internal fun selectFile(
@@ -425,7 +434,7 @@ class DesktopWorkflowPresenter(
       inspectionCurrent: () -> Boolean = { true },
       onInspectionLoaded: (() -> Unit)? = null,
   ) {
-    invalidateFileSelectionWork()
+    cancelFileReadJob()
     val request = controller.beginFileLoad(path) ?: return
     val selectionGeneration = preparationSelectionGeneration
     fun obsoletePreparation(): Boolean {
@@ -442,7 +451,6 @@ class DesktopWorkflowPresenter(
           latest.task != preparedTaskSpec
     }
     publish()
-    fileJob?.cancel()
     fileJob =
         scope.launch {
           try {
@@ -476,6 +484,7 @@ class DesktopWorkflowPresenter(
                   }
                 } else null
             if (!controller.fileLoaded(request, file, symbols)) return@launch
+            invalidateFileSelectionWork()
             publish()
             if (inspectionResult != null) onInspectionLoaded?.invoke()
             if (prepared != null) {
@@ -502,8 +511,9 @@ class DesktopWorkflowPresenter(
             }
             val loaded = controller.currentFileRequest() ?: return@launch
             loadFileEnrichments(loaded)
-          } catch (_: CancellationException) {
+          } catch (canceled: CancellationException) {
             if (controller.cancelFileLoad(request)) publish()
+            throw canceled
           } catch (error: Exception) {
             if (obsoletePreparation()) {
               if (controller.cancelFileLoad(request)) publish()
@@ -882,7 +892,7 @@ class DesktopWorkflowPresenter(
     val attempt = ++performancePreparationGeneration
     val generation = preparationSelectionGeneration
     val fileRequest = controller.currentFileRequest()
-    fileJob?.cancel()
+    cancelFileReadJob()
     fileJob =
         scope.launch {
           fun current(): Boolean =
@@ -1034,7 +1044,7 @@ class DesktopWorkflowPresenter(
       }
       return
     }
-    fileJob?.cancel()
+    cancelFileReadJob()
     fileJob =
         scope.launch {
           try {
@@ -1152,7 +1162,7 @@ class DesktopWorkflowPresenter(
     val attempt = ++securityPreparationGeneration
     val generation = preparationSelectionGeneration
     val fileRequest = controller.currentFileRequest()
-    fileJob?.cancel()
+    cancelFileReadJob()
     fileJob =
         scope.launch {
           fun current(): Boolean =
@@ -1934,7 +1944,7 @@ class DesktopWorkflowPresenter(
     acceptedProjects.close()
     preferenceSaveJob.cancel()
     fileFreshnessJob?.cancel()
-    fileJob?.cancel()
+    cancelFileReadJob()
     enrichmentJobs.forEach(Job::cancel)
     securityWorkflow.cancel()
     jobCoordinator.close()
@@ -2180,7 +2190,7 @@ class DesktopWorkflowPresenter(
   private fun cancelProjectScopedWork() {
     jobCoordinator.projectClosed()
     fileFreshnessJob?.cancel()
-    fileJob?.cancel()
+    cancelFileReadJob()
     enrichmentJobs.forEach(Job::cancel)
     securityWorkflow.cancel()
     cancelAll()
