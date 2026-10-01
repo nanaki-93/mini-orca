@@ -39,6 +39,124 @@ import kotlinx.coroutines.CompletableDeferred
 
 class DesktopKeyboardNavigationTest {
   @Test
+  fun explorerFilterOwnsSpacesArrowsAndEditingWithoutActivatingTheTree() {
+    val files = listOf(IndexedFile("src/a b.go", "hash", "Go", false))
+    var state by
+        mutableStateOf(
+            ExplorerPaneState(
+                ProjectIndex("project", "revision", files = files),
+                "src/a b.go",
+                "",
+                emptySet(),
+                false))
+    val calls = mutableListOf<String>()
+    ComposeVisualFixture(360, 400) {
+          ExplorerPane(
+              state,
+              ExplorerPaneActions(
+                  { state = state.copy(filter = it) },
+                  { calls += "toggle:$it" },
+                  { calls += "collapse" },
+                  { calls += "reveal" },
+                  { calls += "open:$it" }),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.focusDescribedEditor("Filter indexed files")
+          assertTrue(fixture.typeCharacter(Key.A, 'a'))
+          assertTrue(fixture.typeCharacter(Key.Spacebar, ' '))
+          assertTrue(fixture.typeCharacter(Key.B, 'b'))
+          assertEquals("a b", state.filter)
+          for (key in listOf(Key.DirectionUp, Key.DirectionDown, Key.Enter)) {
+            fixture.pressKey(key)
+            fixture.render()
+            assertEquals("a b", state.filter)
+          }
+          fixture.pressKey(Key.DirectionLeft)
+          fixture.render()
+          fixture.pressKey(Key.Backspace)
+          fixture.render()
+          assertEquals("ab", state.filter, "Left/Backspace must edit the filter, not the tree")
+          fixture.pressKey(Key.DirectionRight)
+          fixture.render()
+          fixture.pressKey(Key.Backspace)
+          fixture.render()
+          assertEquals("a", state.filter)
+          fixture.pressKey(Key.MoveHome)
+          fixture.render()
+          fixture.pressKey(Key.Delete)
+          fixture.render()
+          assertEquals("", state.filter)
+          assertTrue(fixture.typeCharacter(Key.Spacebar, ' '))
+          assertEquals(" ", state.filter)
+          assertTrue(fixture.isFocusedControl("Filter indexed relative file paths"))
+          assertEquals(emptyList(), calls, "Filter keys must never emit tree actions")
+        }
+  }
+
+  @Test
+  fun explorerTreeArrowsRevealOffscreenFocusAndOnlyExplicitActivationOpensFiles() {
+    val files =
+        (1..60).map {
+          IndexedFile("file-${it.toString().padStart(2, '0')}.go", "hash", "Go", false)
+        }
+    val calls = mutableListOf<String>()
+    ComposeVisualFixture(360, 260, 1.5f) {
+          ExplorerPane(
+              ExplorerPaneState(
+                  ProjectIndex("project", "revision", files = files),
+                  files.first().path,
+                  "",
+                  emptySet(),
+                  false),
+              ExplorerPaneActions({}, { calls += "toggle:$it" }, {}, {}, { calls += "open:$it" }),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertFalse(fixture.hasText(files.last().path))
+          assertTrue(fixture.requestDescriptionFocus("Indexed file tree"))
+          fixture.render()
+          fun assertFocused(index: Int) {
+            val description = explorerRowDescription(explorerRows(files)[index], index == 0, true)
+            fixture.awaitVisibleDescription(description)
+            assertTrue(fixture.descriptionState(description)!!.contains("Keyboard focused"))
+            val bounds = fixture.descriptionBounds(description)
+            val viewport = fixture.descriptionBounds("Indexed file tree")
+            assertTrue(bounds.top >= viewport.top && bounds.bottom <= viewport.bottom)
+            fixture.assertTextFits(files[index].path)
+          }
+          assertFocused(0)
+          assertTrue(fixture.pressKey(Key.DirectionUp))
+          fixture.render()
+          assertFocused(0)
+          for (index in 1..files.lastIndex) {
+            assertTrue(fixture.pressKey(Key.DirectionDown))
+            fixture.render()
+            assertFocused(index)
+          }
+          assertTrue(fixture.pressKey(Key.DirectionDown))
+          fixture.render("f23-explorer-last-row-keyboard-focus")
+          assertFocused(files.lastIndex)
+          fixture.assertColorVisible(FocusAccent)
+          assertEquals(emptyList(), calls, "Focus movement must not read or open files")
+          for (key in listOf(Key.Enter, Key.Spacebar)) {
+            assertTrue(fixture.pressKey(key))
+            fixture.render()
+          }
+          assertEquals(List(2) { "open:${files.last().path}" }, calls)
+          repeat(files.lastIndex) {
+            assertTrue(fixture.pressKey(Key.DirectionUp))
+            fixture.render()
+          }
+          assertFocused(0)
+          fixture.render("f23-explorer-first-row-keyboard-focus")
+          assertEquals(List(2) { "open:${files.last().path}" }, calls)
+        }
+  }
+
+  @Test
   fun scanKeyboardDisclosureAndOutputExpansionKeepVisibleFocusWithoutDispatchingWork() {
     val state = verifiedScanLayoutCases().first { it.first == "long-output" }.second
     val calls = mutableListOf<String>()

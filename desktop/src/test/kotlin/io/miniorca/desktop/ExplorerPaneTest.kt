@@ -14,6 +14,166 @@ import kotlin.test.assertTrue
 
 class ExplorerPaneTest {
   @Test
+  fun treeFocusSurvivesExpansionAndReconcilesCollapsedFilteredAndRemovedPaths() {
+    val files =
+        listOf("src/a.go", "src/nested/b.go", "z.go").map { IndexedFile(it, "hash", "Go", false) }
+    var state by
+        mutableStateOf(
+            ExplorerPaneState(
+                ProjectIndex("project", "revision", files = files), "z.go", "", emptySet(), false))
+    val opened = mutableListOf<String>()
+    val toggled = mutableListOf<String>()
+    val actions =
+        ExplorerPaneActions(
+            { state = state.copy(filter = it) },
+            { path ->
+              toggled += path
+              state =
+                  state.copy(
+                      collapsedDirectories =
+                          if (path in state.collapsedDirectories) state.collapsedDirectories - path
+                          else state.collapsedDirectories + path)
+            },
+            { state = state.copy(collapsedDirectories = explorerDirectories(state.index!!.files)) },
+            {
+              state =
+                  state.copy(
+                      filter = "",
+                      collapsedDirectories =
+                          revealExplorerPath(
+                              state.index!!.files, state.collapsedDirectories, state.selectedPath))
+            },
+            opened::add)
+    ComposeVisualFixture(360, 400) { ExplorerPane(state, actions, Modifier.fillMaxSize()) }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestDescriptionFocus("Indexed file tree"))
+          fixture.render()
+          fun assertFocused(path: String, expanded: Boolean = true) {
+            val row = explorerRows(state.index!!.files).single { it.path == path }
+            val description = explorerRowDescription(row, path == state.selectedPath, expanded)
+            fixture.awaitVisibleDescription(description)
+            assertTrue(fixture.descriptionState(description)!!.contains("Keyboard focused"))
+          }
+          assertFocused("z.go")
+          repeat(4) {
+            assertTrue(fixture.pressKey(Key.DirectionUp))
+            fixture.render()
+          }
+          assertFocused("src")
+          assertTrue(fixture.pressKey(Key.DirectionLeft))
+          fixture.render()
+          assertFocused("src", expanded = false)
+          assertEquals(setOf("src"), state.collapsedDirectories)
+          assertTrue(fixture.pressKey(Key.DirectionRight))
+          fixture.render()
+          assertFocused("src")
+          assertTrue(fixture.pressKey(Key.DirectionRight))
+          fixture.render()
+          assertFocused("src/nested")
+          for (key in listOf(Key.Spacebar, Key.Enter)) {
+            assertTrue(fixture.pressKey(key))
+            fixture.render()
+            assertFocused("src/nested", expanded = key == Key.Enter)
+          }
+          assertEquals(listOf("src", "src", "src/nested", "src/nested"), toggled)
+          assertTrue(fixture.pressKey(Key.DirectionRight))
+          fixture.render()
+          assertFocused("src/nested/b.go")
+          state = state.copy(collapsedDirectories = setOf("src/nested"))
+          fixture.render()
+          assertFocused("src/nested", expanded = false)
+          // Filtering reveals required ancestors even when they were locally collapsed.
+          state = state.copy(filter = "b.go")
+          fixture.render()
+          assertFocused("src/nested")
+          fixture.pressKey(Key.DirectionDown)
+          fixture.render()
+          assertFocused("src/nested/b.go")
+          state = state.copy(filter = "a.go")
+          fixture.render()
+          assertFocused("src")
+          state = state.copy(filter = "", collapsedDirectories = emptySet())
+          fixture.render()
+          assertFocused("src")
+          fixture.pressKey(Key.DirectionDown)
+          fixture.render()
+          assertFocused("src/nested")
+          state = state.copy(index = state.index!!.copy(projectRevision = "new-revision"))
+          fixture.render()
+          assertFocused("src/nested", expanded = true)
+          state = state.copy(index = state.index!!.copy(files = files.filter { it.path == "z.go" }))
+          fixture.render()
+          assertFocused("z.go")
+          assertTrue(opened.isEmpty(), "Reconciliation never activates the newly focused row")
+        }
+  }
+
+  @Test
+  fun pointerActivationCollapseAllAndRevealKeepOneKeyboardTreeStop() {
+    val files = listOf(IndexedFile("src/nested/active.go", "hash", "Go", false))
+    var state by
+        mutableStateOf(
+            ExplorerPaneState(
+                ProjectIndex("project", "revision", files = files),
+                files.single().path,
+                "",
+                emptySet(),
+                false))
+    val opened = mutableListOf<String>()
+    ComposeVisualFixture(360, 400) {
+          ExplorerPane(
+              state,
+              ExplorerPaneActions(
+                  {},
+                  { path -> state = state.copy(collapsedDirectories = setOf(path)) },
+                  { state = state.copy(collapsedDirectories = explorerDirectories(files)) },
+                  {
+                    state =
+                        state.copy(
+                            collapsedDirectories =
+                                revealExplorerPath(
+                                    files, state.collapsedDirectories, state.selectedPath))
+                  },
+                  opened::add),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("nested")
+          fixture.render()
+          assertEquals(setOf("src/nested"), state.collapsedDirectories)
+          assertEquals(
+              "Collapsed, Keyboard focused",
+              fixture.descriptionState("Folder src/nested, collapsed"))
+          fixture.pressKey(Key.DirectionLeft)
+          fixture.render()
+          assertEquals(
+              "Expanded, Keyboard focused", fixture.descriptionState("Folder src, expanded"))
+          fixture.pressKey(Key.Tab, shift = true)
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Filter indexed relative file paths"))
+          fixture.clickDescription("Collapse all folders")
+          fixture.render()
+          assertEquals(setOf("src", "src/nested"), state.collapsedDirectories)
+          assertFalse(fixture.hasText("active.go"))
+          fixture.clickDescription("Reveal active file")
+          fixture.render()
+          assertEquals(emptySet(), state.collapsedDirectories)
+          assertTrue(fixture.hasText("active.go"))
+          assertTrue(opened.isEmpty())
+          fixture.clickText("active.go")
+          fixture.render()
+          assertEquals(listOf("src/nested/active.go"), opened)
+          assertTrue(fixture.requestDescriptionFocus("Indexed file tree"))
+          fixture.render()
+          fixture.pressKey(Key.Spacebar)
+          fixture.render()
+          assertEquals(List(2) { "src/nested/active.go" }, opened)
+        }
+  }
+
+  @Test
   fun replacementFeedbackKeepsTheOldRowSelectedAndRetryEmitsOnlyTheFailedDestination() {
     val destination = "internal/module-with-a-very-long-name/nested/package/failed_destination.go"
     val files = listOf("main.go", destination).map { IndexedFile(it, "hash", "Go", false) }
