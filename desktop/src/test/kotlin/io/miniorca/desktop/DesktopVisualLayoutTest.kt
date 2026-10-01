@@ -6142,6 +6142,11 @@ class DesktopVisualLayoutTest {
                                       symbol = it.symbol.copy(name = "Stop"),
                                       explanation = "Stops the worker.")
                                 }))
+            state =
+                state.copy(
+                    fileAnalysis =
+                        state.fileAnalysis!!.copy(
+                            symbolExplanations = mapOf("Stop" to "Stops the worker.")))
             fixture.render("context-new-selection-$width-$scale")
             assertTrue(fixture.hasText("Stop"))
             assertTrue(fixture.hasText("Stops the worker."))
@@ -6201,8 +6206,13 @@ class DesktopVisualLayoutTest {
               state.copy(
                   functionRemoteProviderConfirmed = false,
                   declarationExplanation =
-                      DeclarationExplanationState(status = DeclarationExplanationStatus.Loading))
+                      DeclarationExplanationState(
+                          status = DeclarationExplanationStatus.Loading,
+                          target = contextExplanationTarget(state)))
           fixture.render("context-explain-loading")
+          fixture.assertTextFits("Explaining…")
+          assertTrue(fixture.hasText("Explanation in progress. Cancel to stop this request."))
+          assertTrue(fixture.hasText("Saved file analysis · Fresh"))
           fixture.assertTextFits("Cancel explanation")
           assertFalse(fixture.isDisabled("Cancel explanation"))
           fixture.clickText("Cancel explanation")
@@ -6212,10 +6222,16 @@ class DesktopVisualLayoutTest {
                   functionRemoteProviderConfirmed = true,
                   declarationExplanation =
                       DeclarationExplanationState(
-                          status = DeclarationExplanationStatus.Current, result = result))
+                          status = DeclarationExplanationStatus.Current,
+                          target = contextExplanationTarget(state),
+                          result = result))
           fixture.render("context-explain-current")
           assertTrue(fixture.hasText(result.summary))
-          assertFalse(fixture.hasText("Current explanation"))
+          fixture.assertTextFits("Refresh explanation")
+          fixture.assertTextFits("Current explanation")
+          assertTrue(
+              fixture.hasText(
+                  "On-demand · matches the selected loaded source and declaration; not a disk check."))
           state =
               state.copy(
                   declarationExplanation =
@@ -6223,6 +6239,7 @@ class DesktopVisualLayoutTest {
                           status = DeclarationExplanationStatus.Stale))
           fixture.render("context-explain-stale")
           assertFalse(fixture.hasText(result.summary))
+          assertTrue(fixture.hasText("Source or selection changed. Request a new explanation."))
           fixture.assertTextFits("Explanation needs refresh")
           state =
               state.copy(
@@ -6233,14 +6250,17 @@ class DesktopVisualLayoutTest {
                               "The provider could not complete the explanation. Retry after reconnecting to the local service."))
           fixture.render("context-explain-failed")
           fixture.assertTextWrapsWithoutClipping(state.declarationExplanation.message)
+          assertTrue(fixture.hasText("Saved file analysis · Fresh"))
           assertFalse(fixture.hasText(result.summary))
           state =
               state.copy(
                   declarationExplanation =
                       state.declarationExplanation.copy(
-                          status = DeclarationExplanationStatus.Canceled))
+                          status = DeclarationExplanationStatus.Canceled,
+                          message = "Explanation canceled."))
           fixture.render("context-explain-canceled")
           fixture.assertTextFits("Explanation canceled")
+          assertTrue(fixture.hasText("Explanation canceled."))
           assertEquals(1, requests)
         }
   }
@@ -12828,6 +12848,17 @@ internal fun EditorVisualFixture(
                                   declarationExplanation =
                                       DeclarationExplanationState(
                                           status = DeclarationExplanationStatus.Current,
+                                          target =
+                                              DeclarationExplanationTarget(
+                                                  WorkflowFileIdentity(
+                                                      WorkflowProjectIdentity(
+                                                          "visual-fixture", "fixture-revision"),
+                                                      file.path,
+                                                      file.contentHash),
+                                                  symbol.name,
+                                                  symbol.signature,
+                                                  symbol.startLine,
+                                                  symbol.endLine),
                                           result =
                                               DeclarationExplanation(
                                                   version = "v1",
@@ -13085,6 +13116,21 @@ internal fun AdaptiveProductionEditorFixture(
             "Visual fixture · no backend"),
         {})
   }
+}
+
+private fun contextExplanationTarget(state: ContextToolWindowState): DeclarationExplanationTarget {
+  val project = requireNotNull(state.project)
+  val file = requireNotNull(state.inspector).file
+  val symbol = requireNotNull(state.inspector.selectedSymbol).symbol
+  return DeclarationExplanationTarget(
+      WorkflowFileIdentity(
+          WorkflowProjectIdentity(project.projectId, project.projectRevision),
+          file.path,
+          file.contentHash),
+      symbol.name,
+      symbol.signature,
+      symbol.startLine,
+      symbol.endLine)
 }
 
 private fun contextVisualState(): ContextToolWindowState {
