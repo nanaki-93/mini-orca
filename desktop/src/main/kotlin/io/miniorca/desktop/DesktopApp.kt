@@ -629,6 +629,8 @@ internal fun MiniOrcaApp(
                                 bugModel.remoteProvider,
                                 workflow.providerConfirmed(ModelScope.Bug)),
                         currentEditIdentity = currentEditIdentity(appState),
+                        project = appState.project,
+                        index = appState.index,
                     ),
                 bugModel = bugModel,
                 remoteProviderConfirmed = workflow.providerConfirmed(ModelScope.Bug),

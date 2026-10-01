@@ -231,6 +231,68 @@ class EditorInspectionStateTest {
   }
 
   @Test
+  fun sourceIndexCorrespondenceRequiresMatchingIdentityPathAndNonblankHashes() {
+    val loaded = file()
+    val active = project()
+    val indexed = IndexedFile(loaded.path, loaded.contentHash, "Go", false)
+    val baseIndex = ProjectIndex(active.projectId, active.projectRevision, files = listOf(indexed))
+    fun correspondence(
+        file: ProjectFileInfo = loaded,
+        project: ProjectAnalysis? = active,
+        index: ProjectIndex? = baseIndex,
+        analysis: FileAnalysis? = null,
+    ): SourceIndexCorrespondence =
+        requireNotNull(
+                symbolInspectorUiState(
+                    file,
+                    emptyList(),
+                    null,
+                    analysis,
+                    false,
+                    InspectorProviderState(false, false),
+                    null,
+                    project,
+                    index))
+            .sourceIndexCorrespondence
+
+    assertEquals(SourceIndexCorrespondence.Matches, correspondence())
+    assertEquals(SourceIndexCorrespondence.Unavailable, correspondence(index = null))
+    assertEquals(
+        SourceIndexCorrespondence.Unavailable,
+        correspondence(index = baseIndex.copy(files = emptyList())))
+    assertEquals(
+        SourceIndexCorrespondence.Unavailable,
+        correspondence(index = baseIndex.copy(files = listOf(indexed, indexed))))
+    assertEquals(SourceIndexCorrespondence.Unavailable, correspondence(project = null))
+    assertEquals(
+        SourceIndexCorrespondence.Unavailable,
+        correspondence(project = active.copy(projectId = "other")))
+    assertEquals(
+        SourceIndexCorrespondence.Unavailable,
+        correspondence(index = baseIndex.copy(projectId = "other")))
+    assertEquals(
+        SourceIndexCorrespondence.Unavailable,
+        correspondence(index = baseIndex.copy(projectRevision = "other")))
+    assertEquals(
+        SourceIndexCorrespondence.Unavailable,
+        correspondence(file = loaded.copy(path = "other.go")))
+    assertEquals(
+        SourceIndexCorrespondence.Unavailable,
+        correspondence(file = loaded.copy(contentHash = "  ")))
+    assertEquals(
+        SourceIndexCorrespondence.Unavailable,
+        correspondence(index = baseIndex.copy(files = listOf(indexed.copy(contentHash = "")))))
+    assertEquals(
+        SourceIndexCorrespondence.Changed,
+        correspondence(
+            file = loaded.copy(contentHash = "sha256:changed"),
+            analysis = FileAnalysis(loaded.path, "fresh")))
+    assertEquals(
+        SourceIndexCorrespondence.Matches,
+        correspondence(analysis = FileAnalysis(loaded.path, "stale")))
+  }
+
+  @Test
   fun inspectorEditEligibilityAndCurrentDraftIdentityStaySeparate() {
     val selected = SymbolInfo("Run", "function", "func Run()", 5, 12, "exact", true)
     val draft =
