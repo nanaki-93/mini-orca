@@ -1,5 +1,6 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -73,6 +74,73 @@ class DesktopAccessibilityTest {
           assertEquals(0, privileged)
           assertEquals(file, evidence.selected)
           assertEquals(symbol, evidence.selectedSymbol)
+        }
+  }
+
+  @Test
+  fun compactContextExposesConsentBlockAndSelectableDetailsWithoutPassiveRequests() {
+    val base = contextVisualState()
+    val inspector = requireNotNull(base.inspector)
+    val signature = "func Run(" + "context.Context, veryLongArgument string, ".repeat(7) + ") error"
+    val longPath = "internal/" + "nested/".repeat(12) + "handler.go"
+    val blocked =
+        inspector.selectedSymbol!!.copy(
+            signature = signature,
+            editEligibility =
+                SymbolEditEligibility(false, "Approximate grouped declaration cannot be edited."))
+    var state by
+        mutableStateOf(
+            base.copy(
+                inspector =
+                    inspector.copy(
+                        file = inspector.file.copy(path = longPath), selectedSymbol = blocked),
+                functionModel =
+                    ScopedModel(
+                        scope = "function", model = "remote/editor", remoteProvider = true)))
+    var privileged = 0
+    ComposeVisualFixture(280, 400, 1.5f) {
+          ContextToolWindow(
+              state,
+              ContextToolWindowActions(
+                  { privileged++ },
+                  { privileged++ },
+                  { privileged++ },
+                  { privileged++ },
+                  { privileged++ },
+                  confirmFunctionRemoteProvider = {
+                    state = state.copy(functionRemoteProviderConfirmed = it)
+                  },
+                  explainSelected = { privileged++ }),
+              androidx.compose.ui.Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render("f24-accessibility-blocked")
+          assertTrue(fixture.hasText(blocked.editEligibility.blockedReason))
+          fixture.assertEveryTextLineReachable(longPath, "context-content")
+          fixture.revealText(longPath, "context-content")
+          assertTrue(fixture.copyTextByDragging(longPath).isNotEmpty())
+          fixture.revealText(blocked.editEligibility.blockedReason, "context-content")
+          assertFalse(fixture.hasText("Explain declaration"))
+          fixture.revealText("Declaration details", "context-content")
+          assertTrue(fixture.requestDescriptionFocus("Expand Declaration details"))
+          assertEquals("Collapsed", fixture.descriptionState("Expand Declaration details"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals("Expanded", fixture.descriptionState("Collapse Declaration details"))
+          fixture.assertEveryTextLineReachable(signature, "context-content")
+          assertEquals(0, privileged)
+          state = state.copy(inspector = inspector)
+          fixture.render("f24-accessibility-remote")
+          fixture.revealText("Confirm remote destination", "context-content")
+          assertFalse(fixture.isDescriptionDisabled("Confirm remote destination"))
+          assertTrue(fixture.isDisabled("Explain declaration"))
+          assertTrue(fixture.requestDescriptionFocus("Confirm remote destination"))
+          fixture.render("f24-accessibility-consent-focus")
+          fixture.assertColorVisible(FocusAccent)
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals(0, privileged, "Confirmation is not dispatch")
+          assertFalse(fixture.isDisabled("Explain declaration"))
         }
   }
 
