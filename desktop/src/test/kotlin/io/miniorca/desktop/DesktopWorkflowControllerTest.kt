@@ -126,6 +126,59 @@ class DesktopWorkflowControllerTest {
   }
 
   @Test
+  fun wrongPathCannotPublishAndLateResultsCannotClearANewerError() {
+    val controller = loadedController()
+    val initial = controller.beginFileLoad("main.go")!!
+    assertTrue(controller.fileLoaded(initial, file("main.go", "base"), emptyList()))
+    val wrong = controller.beginFileLoad("other.go")!!
+    assertFalse(controller.fileLoaded(wrong, file("foreign.go", "foreign"), emptyList()))
+    assertEquals("main.go", controller.state.selectedFile?.path)
+    assertEquals(wrong, controller.currentPendingFileRequest())
+
+    val newer = controller.beginFileLoad("second.go")!!
+    assertTrue(controller.fileFailed(newer, "Current read denied"))
+    val failed = controller.state
+    assertFalse(controller.fileLoaded(wrong, file("other.go", "late"), emptyList()))
+    assertFalse(controller.fileFailed(wrong, "Old read denied"))
+    assertFalse(controller.cancelFileLoad(wrong))
+    assertEquals(failed, controller.state)
+  }
+
+  @Test
+  fun fileRequestsCannotReviveAfterProjectOrRevisionRoundTrips() {
+    for (change in listOf("project", "revision", "reload")) {
+      val controller = loadedController()
+      val old = controller.beginFileLoad("main.go")!!
+      when (change) {
+        "project" -> {
+          controller.dispatch(
+              DesktopEvent.ProjectLoaded(project("other", "revision"), index("other", "revision")))
+          controller.dispatch(
+              DesktopEvent.ProjectLoaded(
+                  project("project", "revision"), index("project", "revision")))
+        }
+        "revision" -> {
+          controller.dispatch(DesktopEvent.IndexRefreshed(index("project", "next")))
+          controller.dispatch(DesktopEvent.IndexRefreshed(index("project", "revision")))
+        }
+        else ->
+            controller.dispatch(
+                DesktopEvent.ProjectLoaded(
+                    project("project", "revision"), index("project", "revision")))
+      }
+      assertNull(controller.currentPendingFileRequest(), change)
+      assertNull(controller.state.selection.pendingFilePath, change)
+      val current = controller.beginFileLoad("other.go")!!
+      assertFalse(controller.fileLoaded(old, file("main.go", "late"), emptyList()), change)
+      assertFalse(controller.fileFailed(old, "Late failure"), change)
+      assertFalse(controller.cancelFileLoad(old), change)
+      assertEquals(current, controller.currentPendingFileRequest(), change)
+      assertEquals("other.go", controller.state.selection.pendingFilePath, change)
+      assertTrue(controller.fileLoaded(current, file("other.go", "current"), emptyList()), change)
+    }
+  }
+
+  @Test
   fun projectSwitchClearsFileBoundChatAndDraft() {
     val controller = loadedController()
     val initialRequest = controller.beginFileLoad("main.go")!!
