@@ -278,8 +278,8 @@ Repeat at the sizes, text scales and densities listed above, especially 800×650
 and 1280×600 at 125%/150% text and on both sides of the result-browser reflow
 boundary. Record actual runtime, viewport, density, text scale and input method.
 Keep **Report metadata**, **Measurement details** (or **Prior measurement details**),
-**Recorded conditions & identity** and **Returned sample details** collapsed for
-required-information checks; expand them separately for inspection. For
+**Latest response details**, **Recorded conditions & identity** and **Returned
+sample details** collapsed for required-information checks; expand them separately for inspection. For
 request/late-response cases, use a recording proxy or controlled test daemon if
 available, pointing the client at it with `MINI_ORCA_URL` as described in the
 [desktop guide](README.md). Record the setup and response delays used;
@@ -400,6 +400,10 @@ or action-counter tests, without real project execution.
    it must stay primary above **Prior measurement details** / **Prior benchmark
    evidence**. Open prior details and verify the heading, assessment and changes
    stay qualified as prior/historical, not confirmation of the new attempt.
+   Also open **Latest response details**, including on a first attempt without
+   prior evidence: inspect its own **Daemon status**, **Daemon reason**, recorded
+   identity/argv and missing-versus-empty sample counts. **Copy displayed response
+   details** must copy only the displayed latest response, not prior measurements.
    Unavailability must revoke selection; recovery is explicit Refresh/reselection,
    not an automatic run. Refresh or safely edit the draft/file, clear/change the
    selection or change its recorded command/scope using controlled responses:

@@ -717,8 +717,15 @@ catalog selection, matching full draft/source identity, benchmark, scope and arg
 Retained evidence belongs to the current review lifecycle, not persistent history
 or another review's candidate. It cannot authorize another run.
 
-Inside measurement details, **Recorded conditions & identity** exposes the
-comparison's benchmark, target path, project ID/revision, draft ID/revision/hash,
+When the latest response contains no measurements, **Latest response details**
+opens **Latest comparison response** separately from any prior measurements.
+It retains the **Daemon status** and **Daemon reason**, with its own recorded
+identity/argv and sample details; a missing measurement is not an empty sample
+list. **Copy displayed response details** copies only that response's displayed
+fields, including optional sections while expanded, never prior measurements.
+
+Inside measurement or latest-response details, **Recorded conditions & identity**
+exposes the comparison's benchmark, target path, project ID/revision, draft ID/revision/hash,
 base file hash and opaque scope guard. **Recorded -count**, **Recorded -benchtime**
 and **Recorded -benchmem** derive only from the returned command (separated or
 `-flag=value` forms). **Recorded comparison argv (read-only)** shows all indexed

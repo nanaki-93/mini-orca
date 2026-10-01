@@ -5126,6 +5126,127 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun measurementFreeTerminalResponsesExposeTheirOwnDetailsAlongsidePriorEvidence() {
+    val prior =
+        GoBenchmarkComparison(
+            benchmark = "BenchmarkPrior",
+            status = "completed",
+            command = listOf("go", "test", "prior", "-count=5"),
+            base = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1000, 100.0, 10, 1) }),
+            candidate = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1000, 80.0, 0, 0) }))
+    val responses =
+        listOf("completed", "canceled", "failed", "unavailable", "future-status").map { status ->
+          GoBenchmarkComparison(
+              draftId = "response-draft",
+              draftRevision = 3,
+              draftHash = "response-hash",
+              projectId = "response-project",
+              projectRevision = "response-revision",
+              targetPath = "internal/日本語/response.go",
+              baseFileHash = "response-base",
+              benchmark = "BenchmarkResponse",
+              scope = "response-scope",
+              status = status,
+              reason = "Recorded $status reason",
+              command = listOf("go", "test", "response", "-count", "5", "-benchmem"),
+              base = GoBenchmarkMeasurement(),
+              candidate = null)
+        } + GoBenchmarkComparison(status = "unavailable", reason = "Sparse response reason")
+    for ((index, response) in responses.withIndex()) {
+      for (retainPrior in listOf(false, true)) {
+        for ((width, height, scale) in listOf(Triple(1440, 900, 1f), Triple(800, 650, 1.5f))) {
+          val initial =
+              if (retainPrior)
+                  DesktopState().reduce(DesktopEvent.GoBenchmarkComparisonLoaded(prior))
+              else DesktopState()
+          val evidence =
+              initial
+                  .reduce(DesktopEvent.GoBenchmarkComparisonStarted)
+                  .reduce(DesktopEvent.GoBenchmarkComparisonLoaded(response))
+                  .review
+                  .benchmark
+          assertEquals(if (retainPrior) prior else null, evidence.comparison)
+          assertEquals(response, evidence.latestOutcome!!.response)
+          var requests = 0
+          ComposeVisualFixture(width, height, scale) {
+                PerformanceWorkspacePane(
+                    PerformanceWorkspacePaneState(
+                        performancePageFixture(),
+                        null,
+                        benchmarkComparison = evidence.comparison,
+                        benchmarkLatestOutcome = evidence.latestOutcome),
+                    PerformanceWorkspaceActions(
+                        { requests++ },
+                        { requests++ },
+                        FindingActions({ requests++ }, { _, _ -> requests++ }, { requests++ }),
+                        openSource = { requests++ },
+                        loadBenchmarks = { requests++ },
+                        selectBenchmark = { requests++ },
+                        runBenchmark = { requests++ }))
+              }
+              .use { fixture ->
+                fixture.render()
+                assertTrue(fixture.hasText(response.reason))
+                fixture.clickDescription("Expand Explore benchmark evidence")
+                fixture.render()
+                assertTrue(
+                    fixture.hasText("Latest response details"),
+                    "Every terminal response is inspectable")
+                fixture.revealTextFullyWithin("Latest response details", "result-overview")
+                fixture.clickText("Latest response details")
+                fixture.render()
+                assertTrue(fixture.hasText("Latest comparison response"))
+                assertFalse(fixture.hasText("Baseline median"), "No measurements are invented")
+                for (label in listOf("Recorded conditions & identity", "Returned sample details")) {
+                  fixture.revealTextFullyWithin(label, "result-overview")
+                  fixture.clickText(label)
+                  fixture.render()
+                }
+                for ((label, value) in
+                    performanceBenchmarkRecordedRows(response) +
+                        performanceBenchmarkSampleRows(response)) {
+                  val text = "$label: $value"
+                  fixture.revealTextFullyWithin(text, "result-overview")
+                  fixture.assertTextFits(text, maxLines = 20)
+                }
+                fixture.revealTextFullyWithin("Copy displayed response details", "result-overview")
+                fixture.clickText("Copy displayed response details")
+                fixture.render("f22-latest-response-$index-$retainPrior-$width-$height-$scale")
+                val copied = fixture.clipboardText()
+                assertEquals(performanceBenchmarkResponseCopyText(response, true, true), copied)
+                assertTrue(copied.startsWith("Latest comparison response"))
+                assertTrue(copied.contains("Daemon status: ${response.status}"))
+                assertTrue(copied.contains("Daemon reason: ${response.reason}"))
+                for ((label, value) in
+                    performanceBenchmarkRecordedRows(response) +
+                        performanceBenchmarkSampleRows(response)) {
+                  assertTrue(copied.contains("$label: $value"))
+                }
+                assertFalse(
+                    copied.contains("BenchmarkPrior"), "Do not substitute prior identity or argv")
+                assertFalse(copied.contains("Baseline median"))
+                fixture.revealTextFullyWithin("Latest response details", "result-overview")
+                fixture.clickText("Latest response details")
+                fixture.render()
+                if (retainPrior) {
+                  fixture.revealTextFullyWithin("Prior measurement details", "result-overview")
+                  fixture.clickText("Prior measurement details")
+                  fixture.render()
+                  assertTrue(fixture.hasText("Prior benchmark evidence"))
+                  fixture.revealTextFullyWithin("100 ns/op", "result-overview")
+                  fixture.assertTextFits("100 ns/op")
+                  assertFalse(fixture.hasText("Measured · selected benchmark"))
+                } else {
+                  assertFalse(fixture.hasText("Prior measurement details"))
+                }
+                assertEquals(0, requests, "Response and prior evidence inspection remain passive")
+              }
+        }
+      }
+    }
+  }
+
+  @Test
   fun longBenchmarkCatalogAdmissionAndDiagnosticsUseOneReachableOverview() {
     val path = "internal/" + "日本語-équipe-δοκιμή/".repeat(10) + "work.go"
     val draft =

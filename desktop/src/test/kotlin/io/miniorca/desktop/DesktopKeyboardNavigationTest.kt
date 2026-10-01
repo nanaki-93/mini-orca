@@ -598,6 +598,93 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun latestResponseKeyboardInspectionAndCopyStaySeparateFromPriorMeasurements() {
+    val response =
+        GoBenchmarkComparison(
+            status = "failed",
+            reason = "Execution failed before measurements",
+            benchmark = "BenchmarkResponse",
+            command = listOf("go", "test", "response"),
+            base = GoBenchmarkMeasurement(),
+            candidate = null)
+    val prior =
+        GoBenchmarkComparison(
+            status = "completed",
+            benchmark = "BenchmarkPrior",
+            base = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1, 100.0, 0, 0) }),
+            candidate = GoBenchmarkMeasurement(List(5) { GoBenchmarkSample(1, 80.0, 0, 0) }))
+    for (activation in listOf(Key.Enter, Key.Spacebar)) {
+      for (retainPrior in listOf(false, true)) {
+        var requests = 0
+        ComposeVisualFixture(800, 650, 1.5f, frameDurationNanos = 16_000_000) {
+              PerformanceWorkspacePane(
+                  PerformanceWorkspacePaneState(
+                      performancePageFixture(),
+                      null,
+                      benchmarkComparison = prior.takeIf { retainPrior },
+                      benchmarkLatestOutcome = BenchmarkComparisonOutcome(response)),
+                  PerformanceWorkspaceActions(
+                      { requests++ },
+                      { requests++ },
+                      FindingActions({ requests++ }, { _, _ -> requests++ }, { requests++ }),
+                      { requests++ },
+                      loadBenchmarks = { requests++ },
+                      selectBenchmark = { requests++ },
+                      runBenchmark = { requests++ }))
+            }
+            .use { fixture ->
+              fixture.render()
+              for (label in
+                  listOf(
+                      "Explore benchmark evidence",
+                      "Latest response details",
+                      "Recorded conditions & identity",
+                      "Returned sample details")) {
+                fixture.revealTextFullyWithin(label, "result-overview")
+                assertTrue(fixture.requestDescriptionFocus("Expand $label"))
+                fixture.render()
+                assertTrue(fixture.isFocusedControl("Expand $label"))
+                fixture.assertColorVisible(FocusAccent)
+                assertEquals("Collapsed", fixture.descriptionState("Expand $label"))
+                assertEquals(0, requests, "Focus alone is passive")
+                assertTrue(fixture.pressKey(activation))
+                fixture.render()
+                assertEquals("Expanded", fixture.descriptionState("Collapse $label"))
+              }
+              assertTrue(fixture.hasText("Baseline returned samples: 0"))
+              assertTrue(
+                  fixture.hasText(
+                      "Candidate returned samples: unavailable · measurement not returned"))
+              assertFalse(fixture.hasText("Baseline median"))
+              assertFalse(fixture.hasEditableText(withinTag = "benchmark-latest-response"))
+              tabToBenchmarkControl(fixture, "benchmark-copy-response")
+              awaitBenchmarkReveal(fixture, "benchmark-copy-response", 32f)
+              fixture.assertColorVisible(FocusAccent)
+              assertTrue(fixture.isFocusedControl("Copy displayed response details"))
+              fixture.failClipboardWrites = true
+              assertTrue(fixture.pressKey(activation))
+              fixture.render()
+              assertTrue(
+                  fixture.hasText("Could not copy benchmark evidence: Clipboard unavailable"))
+              fixture.failClipboardWrites = false
+              assertTrue(fixture.pressKey(activation))
+              fixture.render()
+              assertEquals(
+                  performanceBenchmarkResponseCopyText(response, true, true),
+                  fixture.clipboardText())
+              assertFalse(fixture.clipboardText().contains("BenchmarkPrior"))
+              fixture.resize(1280, 600)
+              fixture.render()
+              assertTrue(fixture.isFocusedControl("Copy displayed response details"))
+              fixture.render("f22-keyboard-latest-response-$activation-$retainPrior")
+              assertEquals(
+                  0, requests, "Disclosure, copy failure/success and resizing remain local")
+            }
+      }
+    }
+  }
+
+  @Test
   fun benchmarkKeyboardBlockedReasonsRemainAccessibleWithoutActivatingDisabledRecovery() {
     for (discovery in
         listOf(

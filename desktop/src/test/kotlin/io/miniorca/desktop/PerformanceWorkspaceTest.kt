@@ -177,6 +177,43 @@ class PerformanceWorkspaceTest {
   }
 
   @Test
+  fun responseCopyPreservesTerminalMetadataWithoutMeasurementsOrInventedIdentity() {
+    for (status in listOf("completed", "canceled", "failed", "unavailable", "future-status")) {
+      val response =
+          GoBenchmarkComparison(
+              status = status,
+              reason = "Recorded $status reason",
+              benchmark = "BenchmarkResponse",
+              command = listOf("go", "test", "response", "-count=5"),
+              base = GoBenchmarkMeasurement(),
+              candidate = null)
+      val collapsed = performanceBenchmarkResponseCopyText(response, false, false)
+      assertEquals(
+          "Latest comparison response\nDaemon status: $status\nDaemon reason: ${response.reason}",
+          collapsed)
+      assertFalse(collapsed.contains("Recorded comparison argv"))
+      assertFalse(collapsed.contains("returned samples"))
+      val expanded = performanceBenchmarkResponseCopyText(response, true, true)
+      (performanceBenchmarkRecordedRows(response) + performanceBenchmarkSampleRows(response))
+          .forEach { (label, value) -> assertTrue(expanded.contains("$label: $value")) }
+      assertTrue(expanded.contains("Baseline returned samples: 0"))
+      assertTrue(
+          expanded.contains("Candidate returned samples: unavailable · measurement not returned"))
+      assertTrue(expanded.contains("Project ID: not recorded"))
+      assertFalse(expanded.contains("median"))
+      assertFalse(expanded.contains("Measured"))
+      assertFalse(expanded.contains("Prior"))
+    }
+    val sparse = performanceBenchmarkResponseCopyText(GoBenchmarkComparison(), true, true)
+    assertTrue(sparse.contains("Daemon status: not recorded"))
+    assertTrue(sparse.contains("Daemon reason: not recorded"))
+    assertTrue(sparse.contains("Recorded comparison argv (read-only): not recorded"))
+    assertTrue(sparse.contains("Baseline returned samples: unavailable · measurement not returned"))
+    assertTrue(
+        sparse.contains("Candidate returned samples: unavailable · measurement not returned"))
+  }
+
+  @Test
   fun priorMeasurementDetailsQualifyTheirAssessmentAndKeepRecordedValues() {
     val comparison = comparison()
     val choice = GoBenchmarkChoice(comparison.benchmark, comparison.command, comparison.scope)
