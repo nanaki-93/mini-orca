@@ -65,7 +65,7 @@ class DesktopShellTest {
   }
 
   @Test
-  fun assembledEditorReflowKeepsSelectedFileAndTabWithoutInvokingOperations() {
+  fun assembledEditorReflowRetainsSelectionAndExposesReadRecoveryWhenFilesAreHidden() {
     val selected = analysisFileFixture("another.go").copy(content = "package selectedfile")
     val index =
         resultIndexFixture()
@@ -130,7 +130,8 @@ class DesktopShellTest {
                       generate = { operations += "provider" },
                       cancelGeneration = { operations += "cancel generation" },
                       dismissContext = { operations += "dismiss context" },
-                      createDeclaration = { operations += "create" }),
+                      createDeclaration = { operations += "create" },
+                      openFile = { operations += "open file $it" }),
               analysisActions =
                   DesktopShellAnalysisActions(
                       refreshStatus = { operations += "status read" },
@@ -329,6 +330,43 @@ class DesktopShellTest {
           fixture.revealText("Refresh status", "analysis-page")
           fixture.clickDescription("Refresh analysis run status")
           assertEquals(listOf("status read"), operations.drop(3))
+          shell.value =
+              shell.value.copy(
+                  app =
+                      shell.value.app.copy(
+                          workspace = Workspace.Editor,
+                          selection =
+                              shell.value.app.selection.copy(
+                                  pendingFilePath = "missing/destination.go")),
+                  layout =
+                      shell.value.layout.copy(
+                          leftToolWindowVisible = false, rightToolWindowVisible = false))
+          fixture.resize(800, 650)
+          fixture.render("shell-pending-file-hidden-files-800")
+          assertTrue(fixture.hasDescription("Pending destination: missing/destination.go"))
+          assertTrue(fixture.hasDescription("Project-relative path: another.go"))
+          assertTrue(fixture.hasText("package selectedfile"))
+          assertFalse(fixture.hasText("Retry opening file"))
+          assertEquals(4, operations.size)
+          shell.value =
+              shell.value.copy(
+                  app =
+                      shell.value.app.copy(
+                          selection =
+                              shell.value.app.selection.copy(
+                                  pendingFilePath = null,
+                                  failedFilePath = "missing/destination.go",
+                                  fileReadError = "File no longer exists")))
+          fixture.render("shell-failed-file-hidden-files-800")
+          assertTrue(fixture.hasDescription("Failed destination: missing/destination.go"))
+          assertTrue(fixture.hasDescription("Source file · another.go"))
+          assertTrue(fixture.hasText("package selectedfile"))
+          fixture.assertTextFits("Retry opening file")
+          assertEquals(4, operations.size, "Hidden Files must not trigger retry")
+          fixture.clickText("Retry opening file")
+          assertEquals(listOf("open file missing/destination.go"), operations.drop(4))
+          assertEquals(selected, shell.value.app.selectedFile)
+          assertFalse(shell.value.layout.leftToolWindowVisible)
         }
   }
 

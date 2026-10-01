@@ -1,13 +1,90 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ExplorerPaneTest {
+  @Test
+  fun replacementFeedbackKeepsTheOldRowSelectedAndRetryEmitsOnlyTheFailedDestination() {
+    val destination = "internal/module-with-a-very-long-name/nested/package/failed_destination.go"
+    val files = listOf("main.go", destination).map { IndexedFile(it, "hash", "Go", false) }
+    val selected = mutableListOf<String>()
+    var state by
+        mutableStateOf(
+            ExplorerPaneState(
+                ProjectIndex("project", "revision", files = files),
+                "main.go",
+                "",
+                emptySet(),
+                false,
+                readError = "Permission denied",
+                failedFilePath = destination))
+    ComposeVisualFixture(360, 650, 1.5f) {
+          ExplorerPane(
+              state, ExplorerPaneActions({}, {}, {}, {}, selected::add), Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render("explorer-failed-destination-360-1.5")
+          fixture.assertTextFits("Retry opening file")
+          assertTrue(fixture.hasDescription("Go file main.go at main.go, Not analyzed, selected"))
+          assertTrue(fixture.hasDescription("Failed destination: $destination"))
+          assertTrue(fixture.hasDescription("Retry opening $destination"))
+          assertEquals(emptyList(), selected)
+          fixture.horizontalScrollBy("file-read-path", 10000f)
+          fixture.render()
+          assertTrue(fixture.horizontalScrollValue("file-read-path") > 0f)
+          assertTrue(fixture.requestFocus("Retry opening file"))
+          fixture.render()
+          fixture.pressKey(Key.Enter)
+          fixture.render()
+          assertEquals(
+              listOf(destination), selected, "Keyboard retry must not activate the retained row")
+          state = state.copy(pendingFilePath = destination, failedFilePath = null, readError = null)
+          fixture.render("explorer-pending-destination-360-1.5")
+          assertTrue(fixture.hasDescription("Pending destination: $destination"))
+          assertTrue(fixture.hasDescription("Go file main.go at main.go, Not analyzed, selected"))
+          assertFalse(fixture.hasText("Retry opening file"))
+          assertEquals(listOf(destination), selected)
+        }
+  }
+
+  @Test
+  fun initialFileReadFailureCanRetryEvenWithoutAnIndexAndDoesNotPretendAFileIsLoaded() {
+    val selected = mutableListOf<String>()
+    ComposeVisualFixture(360, 650, 1.5f) {
+          ExplorerPane(
+              ExplorerPaneState(
+                  null,
+                  null,
+                  "",
+                  emptySet(),
+                  false,
+                  projectAvailable = true,
+                  readError = "Symbols unavailable",
+                  failedFilePath = "main.go"),
+              ExplorerPaneActions({}, {}, {}, {}, selected::add),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render("explorer-initial-read-failure-360-1.5")
+          fixture.assertTextFits("Retry opening file")
+          assertTrue(fixture.hasDescription("Failed destination: main.go"))
+          assertFalse(fixture.hasText("The current file remains open."))
+          assertEquals(emptyList(), selected)
+          fixture.clickText("Retry opening file")
+          assertEquals(listOf("main.go"), selected)
+        }
+  }
+
   @Test
   fun localReadFailureStaysAboveIndexedRowsAndEmptyGuidanceDoesNotReplaceIt() {
     val files = listOf(IndexedFile("main.go", "hash", "Go", false))
