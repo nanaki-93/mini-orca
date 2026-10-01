@@ -60,6 +60,7 @@ internal fun ExplorerPane(
       visibleExplorerRows(state.index?.files.orEmpty(), state.filter, state.collapsedDirectories)
   var focusedPath by remember(state.index?.projectRevision) { mutableStateOf(state.selectedPath) }
   var treeHasFocus by remember { mutableStateOf(false) }
+  var recoveryHasFocus by remember { mutableStateOf(false) }
   LaunchedEffect(state.selectedPath, rows) {
     if (state.selectedPath in rows.map(ExplorerRow::path)) focusedPath = state.selectedPath
     else if (focusedPath !in rows.map(ExplorerRow::path)) focusedPath = rows.firstOrNull()?.path
@@ -72,7 +73,9 @@ internal fun ExplorerPane(
               .onFocusChanged { treeHasFocus = it.hasFocus }
               .focusable()
               .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                // Recovery activation must reach its button, not activate the focused tree row.
+                if (event.type != KeyEventType.KeyDown || recoveryHasFocus)
+                    return@onPreviewKeyEvent false
                 val interaction =
                     explorerTreeInteraction(
                         rows,
@@ -118,12 +121,13 @@ internal fun ExplorerPane(
                 },
         )
         Spacer(Modifier.height(6.dp))
-        state.readError?.let { error ->
-          SystemStateMessage(
-              "Could not open file",
-              "Reading local file data failed. ${error.ifBlank { "No details available." }}",
-              accent = Error,
-              action =
+        fileReadUiState(state.pendingFilePath, state.failedFilePath, state.readError)?.let { read ->
+          FileReadFeedback(
+              read,
+              retainingFile = state.selectedPath != null,
+              onOpenFile = actions.selectFile,
+              modifier = Modifier.onFocusChanged { recoveryHasFocus = it.hasFocus },
+              fallbackAction =
                   if (state.index == null && !state.projectAvailable)
                       actions.openProject?.let { open ->
                         { MiniOrcaButton(onClick = open) { Text("Open project") } }
@@ -175,6 +179,8 @@ internal data class ExplorerPaneState(
     val loading: Boolean,
     val projectAvailable: Boolean = index != null,
     val readError: String? = null,
+    val pendingFilePath: String? = null,
+    val failedFilePath: String? = null,
 )
 
 /** Explorer-only intents, kept separate from project and editor workflow actions. */

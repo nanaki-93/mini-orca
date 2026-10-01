@@ -569,6 +569,8 @@ internal fun MiniOrcaApp(
                 loading = appState.loading,
                 projectAvailable = appState.project != null,
                 readError = appState.selection.fileReadError,
+                pendingFilePath = appState.selection.pendingFilePath,
+                failedFilePath = appState.selection.failedFilePath,
             ),
         actions =
             ExplorerPaneActions(
@@ -851,6 +853,7 @@ internal fun MiniOrcaApp(
               runDraftChecks = presenter::runDraftChecks,
               generate = ::sendComposerMessage,
               createDeclaration = { requestCreateDeclaration(DeclarationCreationKind.Function) },
+              openFile = ::requestFileNavigation,
               cancelGeneration = presenter::cancelGeneration,
               dismissContext = {
                 showContext = false

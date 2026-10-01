@@ -158,6 +158,79 @@ internal fun editorBreadcrumbSegments(
   }
 }
 
+internal sealed interface FileReadUiState {
+  data class Pending(val path: String) : FileReadUiState
+
+  // Pathless failures cover local reads before a destination could be established.
+  data class Failed(val path: String?, val message: String) : FileReadUiState
+}
+
+internal fun fileReadUiState(
+    pendingPath: String?,
+    failedPath: String?,
+    error: String?,
+): FileReadUiState? =
+    when {
+      pendingPath != null -> FileReadUiState.Pending(pendingPath)
+      error != null -> FileReadUiState.Failed(failedPath, error)
+      else -> null
+    }
+
+@Composable
+internal fun FileReadFeedback(
+    state: FileReadUiState,
+    retainingFile: Boolean,
+    onOpenFile: ((String) -> Unit)?,
+    modifier: Modifier = Modifier,
+    fallbackAction: (@Composable () -> Unit)? = null,
+) {
+  val failed = state as? FileReadUiState.Failed
+  val path =
+      when (state) {
+        is FileReadUiState.Pending -> state.path
+        is FileReadUiState.Failed -> state.path
+      }
+  SystemStateMessage(
+      title = if (failed != null) "Could not open file" else "Opening file",
+      message =
+          if (failed != null)
+              "Reading local file data failed. ${failed.message.ifBlank { "No details available." }}"
+          else "Reading local file data.",
+      accent = if (failed != null) Error else Information,
+      modifier = modifier,
+      action = {
+        Column {
+          if (path != null) {
+            val label = if (failed != null) "Failed destination" else "Pending destination"
+            Text(label, color = SecondaryText, style = IdeTypography.workspaceMetadata)
+            Text(
+                path,
+                color = PrimaryText,
+                style = IdeTypography.compactBody,
+                softWrap = false,
+                modifier =
+                    Modifier.fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .testTag("file-read-path")
+                        .semantics { contentDescription = "$label: $path" })
+          }
+          if (retainingFile)
+              Text(
+                  "The current file remains open.",
+                  color = SecondaryText,
+                  style = IdeTypography.compactBody)
+          if (failed != null && path != null && onOpenFile != null) {
+            MiniOrcaButton(
+                onClick = { onOpenFile(path) },
+                density = ButtonDensity.Toolbar,
+                modifier = Modifier.semantics { contentDescription = "Retry opening $path" }) {
+                  Text("Retry opening file", style = IdeTypography.action)
+                }
+          } else if (failed != null) fallbackAction?.invoke()
+        }
+      })
+}
+
 @Composable
 internal fun EditorWorkspace(
     chrome: EditorChromeUiState,
@@ -167,10 +240,19 @@ internal fun EditorWorkspace(
     canvas: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     onEditDraft: (() -> Unit)? = null,
+    fileRead: FileReadUiState? = null,
+    onOpenFile: ((String) -> Unit)? = null,
 ) {
   Column(modifier.fillMaxSize().background(EditorCanvas)) {
     ActiveFileEditorChrome(
         chrome, onSelectSurface, onCreateDeclaration, onEditDraft.takeIf { review?.draft != null })
+    fileRead?.let {
+      FileReadFeedback(
+          it,
+          retainingFile = chrome.path != "No file selected",
+          onOpenFile = onOpenFile,
+          modifier = Modifier.fillMaxWidth().padding(8.dp))
+    }
     if (review?.draft != null) EditorReviewProgression(editorProgressionRows(review))
     Box(Modifier.fillMaxWidth().weight(1f)) { canvas() }
   }

@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.TextFieldValue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -18,6 +19,184 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class EditorWorkspaceTest {
+  @Test
+  fun failedDestinationKeepsRetainedSourceIdentityAndLongPathsReachableAtLargerText() {
+    val path = "internal/module-with-a-very-long-name/nested/another-module/failed_destination.go"
+    val retained = testFile("cmd/worker/main.go").copy(content = "package retained")
+    listOf(360 to 1.5f, 800 to 1f).forEach { (width, scale) ->
+      val retries = mutableListOf<String>()
+      var read by mutableStateOf<FileReadUiState>(FileReadUiState.Failed(path, "Permission denied"))
+      ComposeVisualFixture(width, 650, scale) {
+            EditorWorkspace(
+                editorChromeUiState(
+                    retained, null, EditorSurface.Source, progress(EditorProgress.Inspect), null),
+                null,
+                {},
+                {},
+                canvas = {
+                  EditorPane(
+                      resultProjectFixture(), retained, emptyList(), null, 0, emptyList(), {})
+                },
+                fileRead = read,
+                onOpenFile = retries::add)
+          }
+          .use { fixture ->
+            fixture.render("editor-read-failure-$width-$scale")
+            fixture.assertTextFits("Retry opening file")
+            assertTrue(fixture.hasDescription("Project-relative path: cmd/worker/main.go"))
+            assertTrue(fixture.hasDescription("Failed destination: $path"))
+            assertFalse(fixture.hasDescription("Project-relative path: $path"))
+            assertTrue(fixture.hasText("package retained"))
+            assertTrue(fixture.hasText("The current file remains open."))
+            assertEquals(emptyList(), retries, "Rendering must not retry")
+            if (width == 360) {
+              fixture.horizontalScrollBy("file-read-path", 10000f)
+              fixture.render()
+              assertTrue(fixture.horizontalScrollValue("file-read-path") > 0f)
+            }
+            assertTrue(fixture.requestFocus("Retry opening file"))
+            fixture.render()
+            fixture.pressKey(Key.Enter)
+            fixture.render()
+            assertEquals(listOf(path), retries)
+            read = FileReadUiState.Pending(path)
+            fixture.render("editor-read-pending-$width-$scale")
+            assertTrue(fixture.hasText("Opening file"))
+            assertTrue(fixture.hasDescription("Pending destination: $path"))
+            assertFalse(fixture.hasText("Retry opening file"))
+            assertTrue(fixture.hasText("package retained"))
+            assertEquals(listOf(path), retries)
+          }
+    }
+  }
+
+  @Test
+  fun initialFailureBinaryPreviewAndValidEmptySourceRemainDistinct() {
+    var file by mutableStateOf<ProjectFileInfo?>(null)
+    var read by
+        mutableStateOf<FileReadUiState?>(FileReadUiState.Failed("empty.go", "Read unavailable"))
+    val retries = mutableListOf<String>()
+    ComposeVisualFixture(360, 650, 1.5f) {
+          EditorWorkspace(
+              editorChromeUiState(
+                  file, null, EditorSurface.Source, progress(EditorProgress.Inspect), null),
+              null,
+              {},
+              {},
+              canvas = {
+                EditorPane(resultProjectFixture(), file, emptyList(), null, 0, emptyList(), {})
+              },
+              fileRead = read,
+              onOpenFile = retries::add)
+        }
+        .use { fixture ->
+          fixture.render("editor-initial-read-failure-360-1.5")
+          assertTrue(fixture.hasText("Could not open file"))
+          assertTrue(fixture.hasDescription("Project-relative path: No file selected"))
+          assertFalse(fixture.hasText("The current file remains open."))
+          assertEquals(emptyList(), retries)
+          fixture.clickText("Retry opening file")
+          assertEquals(listOf("empty.go"), retries)
+          file = testFile("binary.go").copy(binary = true)
+          read = null
+          fixture.render("editor-binary-preview-360-1.5")
+          assertTrue(fixture.hasText("Binary file: source preview is unavailable."))
+          assertFalse(fixture.hasText("Could not open file"))
+          assertFalse(fixture.hasText("Retry opening file"))
+          file = testFile("empty.go").copy(content = "")
+          fixture.render("editor-valid-empty-source-360-1.5")
+          assertTrue(fixture.hasDescription("Project-relative path: empty.go"))
+          assertTrue(fixture.hasText("Read-only"))
+          assertFalse(fixture.hasText("Binary file: source preview is unavailable."))
+          assertFalse(fixture.hasText("Could not open file"))
+          assertFalse(fixture.hasText("Retry opening file"))
+          assertEquals(listOf("empty.go"), retries)
+        }
+  }
+
+  @Test
+  fun retryUsesFreshComposerAndPresenterAdmissionRatherThanReusingFailedReadApproval() {
+    for (work in listOf("composer", "session", "draft")) {
+      FileNavigationUiFixture(work).use { navigation ->
+        navigation.presenter.dispatch(DesktopEvent.FileLoadFailed("Permission denied", "other.go"))
+        when (work) {
+          "composer" -> navigation.message = TextFieldValue("New input after failure")
+          "session" ->
+              navigation.presenter.dispatch(
+                  DesktopEvent.ChatLoaded(
+                      requireNotNull(navigation.presenter.snapshot.value.state.chat.session)
+                          .copy(id = "new-session-after-failure")))
+          "draft" ->
+              navigation.presenter.dispatch(
+                  DesktopEvent.DraftEdited(
+                      declaration = "func Run() { println(\"changed after failure\") }"))
+        }
+        val retained = navigation.presenter.snapshot.value.state
+        val inputAtRetry = navigation.input()
+        ComposeVisualFixture(800, 650) {
+              EditorWorkspace(
+                  editorChromeUiState(
+                      retained.selectedFile,
+                      retained.selectedSymbol,
+                      EditorSurface.Source,
+                      progress(EditorProgress.Inspect),
+                      retained.review.draft),
+                  null,
+                  {},
+                  {},
+                  canvas = { Text(requireNotNull(retained.selectedFile).content) },
+                  fileRead =
+                      fileReadUiState(
+                          retained.selection.pendingFilePath,
+                          retained.selection.failedFilePath,
+                          retained.selection.fileReadError),
+                  onOpenFile = navigation::route)
+              navigation.DiscardDialog()
+            }
+            .use { fixture ->
+              fixture.render()
+              navigation.runPending()
+              assertEquals(emptyList(), navigation.calls)
+              fixture.clickText("Retry opening file")
+              fixture.render()
+              assertTrue(navigation.pending != null)
+              navigation.runPending()
+              assertEquals(
+                  emptyList(), navigation.calls, "Retry must wait for current discard admission")
+              fixture.pressKey(Key.Escape)
+              fixture.render()
+              assertNull(navigation.pending)
+              assertEquals(retained.selection, navigation.presenter.snapshot.value.state.selection)
+              assertEquals(retained.chat, navigation.presenter.snapshot.value.state.chat)
+              assertEquals(retained.review, navigation.presenter.snapshot.value.state.review)
+              assertEquals(inputAtRetry, navigation.input())
+              fixture.clickText("Retry opening file")
+              fixture.render()
+              val approval = requireNotNull(navigation.pending)
+              navigation.message = TextFieldValue("Changed while retry confirmation was open")
+              confirmFileNavigationDiscard(navigation.presenter, approval, navigation::input) {
+                error("Stale retry must not clear input")
+              }
+              navigation.runPending()
+              assertEquals(emptyList(), navigation.calls)
+              assertEquals(retained.selection, navigation.presenter.snapshot.value.state.selection)
+              navigation.pending = null
+              fixture.render()
+              fixture.clickText("Retry opening file")
+              fixture.render()
+              confirmFileNavigationDiscard(
+                  navigation.presenter, requireNotNull(navigation.pending), navigation::input) {
+                    navigation.clears++
+                  }
+              navigation.runPending()
+              assertTrue(navigation.calls.any { it.contains("files/info?path=other.go") })
+              assertEquals("other.go", navigation.presenter.snapshot.value.state.selectedFile?.path)
+              assertEquals(1, navigation.clears)
+            }
+      }
+    }
+  }
+
   @Test
   fun creationAcceptsAGoFileWithoutDeclarationsAndExplainsUnsupportedOrBusyStates() {
     val file = testFile("empty.go").copy(content = "package demo\n")

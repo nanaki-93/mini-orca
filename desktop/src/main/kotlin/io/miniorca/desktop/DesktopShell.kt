@@ -248,6 +248,7 @@ internal data class DesktopShellEditorActions(
     val cancelGeneration: () -> Unit,
     val dismissContext: () -> Unit,
     val createDeclaration: () -> Unit,
+    val openFile: ((String) -> Unit)? = null,
 )
 
 internal data class DesktopShellAnalysisActions(
@@ -1400,6 +1401,11 @@ private fun DesktopCanvas(
                     draft = appState.review.draft,
                     review = reviewToolWindowState(appState),
                     focusedLine = appState.selection.focusedLine,
+                    fileRead =
+                        fileReadUiState(
+                            appState.selection.pendingFilePath,
+                            appState.selection.failedFilePath,
+                            appState.selection.fileReadError),
                     findings = appState.findings.findings,
                     analysis = AnalysisWorkspacePaneState(appState.project, appState.analysisRun),
                     bugs =
@@ -1441,6 +1447,7 @@ private fun DesktopCanvas(
                     selectEditorSurface = editorActions.selectEditorSurface,
                     createDeclaration = editorActions.createDeclaration,
                     editDraft = editorActions.focusDraft,
+                    openFile = editorActions.openFile,
                     sourceLineSelected = { selection ->
                       editorActions.sourceLineSelected(selection)
                     },
@@ -1521,6 +1528,8 @@ private fun ContentPane(
               onEditDraft = navigation.editDraft,
               onSelectSurface = navigation.selectEditorSurface,
               onCreateDeclaration = navigation.createDeclaration,
+              fileRead = state.fileRead,
+              onOpenFile = navigation.openFile,
               canvas = {
                 if (state.editorChrome.activeSurface == EditorSurface.Review) {
                   ReviewDiffCanvas(state.draft)
@@ -1554,6 +1563,7 @@ private data class ContentPaneState(
     val review: ReviewToolWindowState,
     val draft: DeclarationDraft?,
     val focusedLine: Int,
+    val fileRead: FileReadUiState?,
     val findings: List<UnifiedFinding>,
     val analysis: AnalysisWorkspacePaneState,
     val bugs: BugsWorkspacePaneState,
@@ -1569,6 +1579,7 @@ private data class ContentPaneNavigationActions(
     val selectEditorSurface: (EditorSurface) -> Unit,
     val sourceLineSelected: (SourceLineSelection) -> Unit,
     val createDeclaration: () -> Unit,
+    val openFile: ((String) -> Unit)?,
 )
 
 private fun DesktopShellAnalysisActions.toWorkspaceActions(openResults: (Workspace) -> Unit) =
