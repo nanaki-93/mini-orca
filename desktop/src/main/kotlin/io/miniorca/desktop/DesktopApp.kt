@@ -844,11 +844,8 @@ internal fun MiniOrcaApp(
               focusChat = { focusAssistantControl(ComposerFocusTarget.Chat) },
               focusDraft = { focusAssistantControl(ComposerFocusTarget.Draft) },
               cancelAnalysis = presenter::cancelAnalysis,
-              sourceLineSelected = { selection ->
-                presenter.dispatch(DesktopEvent.SourceLineSelected(selection))
-                if (selection.symbol != appState.selectedSymbol) clearComposerInput()
-                composerRequested = false
-              },
+              sourceLineSelected =
+                  sourceLineSelectionAction(presenter) { composerRequested = false },
               validateDraft = presenter::validateEditableDraft,
               runDraftChecks = presenter::runDraftChecks,
               generate = ::sendComposerMessage,
@@ -940,9 +937,7 @@ internal fun MiniOrcaApp(
               },
               selectSymbol = {
                 showPalette = false
-                presenter.dispatch(DesktopEvent.SymbolSelected(it))
-                presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Editor))
-                if (it != appState.selectedSymbol) clearComposerInput()
+                inspectPaletteSymbol(presenter, it)
                 composerRequested = false
               },
               selectAction = { action ->
@@ -1055,6 +1050,19 @@ private fun continueAfterDraftDiscard(
         confirmFindingDiscard(presenter, pending, message, constraints, clearComposer)
     null -> Unit
   }
+}
+
+internal fun sourceLineSelectionAction(
+    presenter: DesktopWorkflowPresenter,
+    onInspected: () -> Unit,
+): (SourceLineSelection) -> Unit = { selection ->
+  presenter.dispatch(DesktopEvent.SourceLineSelected(selection))
+  onInspected()
+}
+
+internal fun inspectPaletteSymbol(presenter: DesktopWorkflowPresenter, symbol: SymbolInfo) {
+  presenter.dispatch(DesktopEvent.SymbolSelected(symbol))
+  presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Editor))
 }
 
 internal fun routeFileNavigationRequest(
@@ -1441,7 +1449,7 @@ internal fun commitProjectSwitch(
 private val DesktopWorkflowSnapshot.creationInProgress: Boolean
   get() = generating || draftValidationInProgress
 
-private fun routeCreationRequest(
+internal fun routeCreationRequest(
     workflow: DesktopWorkflowSnapshot,
     kind: DeclarationCreationKind,
     start: (DeclarationCreationKind) -> Unit,
