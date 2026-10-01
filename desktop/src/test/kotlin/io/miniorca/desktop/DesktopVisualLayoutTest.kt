@@ -6086,7 +6086,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun selectedDeclarationShowsDescriptionAndExplicitActionsWithoutDetailTabs() {
+  fun selectedDeclarationShowsIdentityAndExplicitActionsWithoutFileTabs() {
     listOf(Triple(280, 600, 1f), Triple(320, 600, 1.5f), Triple(480, 650, 1.25f)).forEach {
         (width, height, scale) ->
       var actions = 0
@@ -6115,14 +6115,18 @@ class DesktopVisualLayoutTest {
             listOf("Context", "Assistant", "Review", "Explain declaration", "Refactor")
                 .forEach(fixture::assertTextFits)
             assertTrue(fixture.hasText("Cached declaration explanation"))
-            listOf(
-                    "Actions",
-                    "Explain",
-                    "Details",
-                    "File analysis",
-                    "Project context",
-                    "func Run() error")
-                .forEach { assertFalse(fixture.hasText(it), it) }
+            listOf("Actions", "File analysis", "Project context").forEach {
+              assertFalse(fixture.hasText(it), it)
+            }
+            fixture.assertTextFits(initial.inspector!!.file.path)
+            assertTrue(fixture.hasText("Line range unavailable · Go"))
+            assertTrue(fixture.hasText("Exact atomic target · editable"))
+            assertTrue(fixture.hasText("Source/index comparison unavailable"))
+            assertTrue(fixture.hasText("Line range unavailable"))
+            assertFalse(fixture.hasText("func Run() error"))
+            fixture.clickText("Declaration details")
+            fixture.render()
+            assertTrue(fixture.hasText("func Run() error"))
             assertEquals(0, actions)
             assertEquals(0, outerSelections)
             assertTrue(fixture.requestFocus("Explain declaration"))

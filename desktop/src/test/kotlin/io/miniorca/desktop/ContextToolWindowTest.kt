@@ -145,6 +145,158 @@ class ContextToolWindowTest {
   }
 
   @Test
+  fun declarationIdentityIsBoundedSelectableAndBlockedTargetsRemainInspectable() {
+    val longPath = "internal/" + "nested/".repeat(18) + "handler.go"
+    val signature = "func Run(" + "requestID string, ".repeat(12) + ") error"
+    val loaded = file().copy(path = longPath, content = (1..6).joinToString("\n") { "line $it" })
+    val exact = symbol().copy(signature = signature, startLine = 4, endLine = 900)
+    val approximate = exact.copy(confidence = "approximate", atomicTarget = false)
+    val grouped = exact.copy(atomicTarget = false)
+    val cases =
+        listOf(
+            Triple(loaded, exact, "Exact atomic target · editable"),
+            Triple(loaded, approximate, "Approximate indexed declaration · read-only"),
+            Triple(loaded, grouped, "Exact indexed declaration · read-only"),
+            Triple(
+                loaded.copy(language = "Python"), exact, "Exact indexed declaration · read-only"))
+    var calls = 0
+    val actions =
+        ContextToolWindowActions(
+            {}, { calls++ }, {}, {}, { calls++ }, explainSelected = { calls++ })
+    cases.forEach { (source, target, confidence) ->
+      val inspector =
+          symbolInspectorUiState(
+              source,
+              listOf(target),
+              target,
+              null,
+              false,
+              InspectorProviderState(false, false),
+              null)!!
+      ComposeVisualFixture(280, 400, 1.5f) {
+            ContextToolWindow(
+                ContextToolWindowState(inspector, ScopedModel(), false, null, null), actions)
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.assertTextWrapsWithoutClipping(longPath)
+            fixture.assertTextFits("Lines 4–6 · ${source.language}")
+            assertTrue(fixture.hasText(confidence))
+            assertTrue(fixture.hasText("Source/index comparison unavailable"))
+            if (!inspector.selectedSymbol!!.editEligibility.eligible) {
+              assertTrue(fixture.hasText(inspector.selectedSymbol.editEligibility.blockedReason))
+              assertFalse(fixture.hasText("Refactor"))
+            }
+            fixture.clickText("Declaration details")
+            fixture.render()
+            assertTrue(fixture.hasText(signature))
+          }
+    }
+    val missing =
+        symbolInspectorUiState(
+            loaded, emptyList(), exact, null, false, InspectorProviderState(false, false), null)!!
+    ComposeVisualFixture(320, 400, 1f) {
+          ContextToolWindow(
+              ContextToolWindowState(missing, ScopedModel(), false, null, null), actions)
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText(exact.name))
+          assertTrue(fixture.hasText(missing.selectedSymbol!!.editEligibility.blockedReason))
+          assertFalse(fixture.hasText("Refactor"))
+          fixture.clickText("Declaration details")
+          fixture.render()
+          assertTrue(fixture.hasText(signature))
+        }
+    assertEquals(0, calls)
+  }
+
+  @Test
+  fun declarationDetailsResetOnProjectChangeEvenWithTheSameFileAndSymbol() {
+    val source = file()
+    val target = symbol()
+    val inspector = inspector(source, selectedSymbol = target)
+    val project =
+        ProjectAnalysis(
+            "first",
+            "revision",
+            "fixture",
+            "/tmp/fixture",
+            "go",
+            fileCount = 1,
+            sourceFileCount = 1,
+            totalLines = 18,
+            summary = "",
+            aiStatus = "missing",
+            analyzedAt = "")
+    var state by
+        mutableStateOf(
+            ContextToolWindowState(inspector, ScopedModel(), false, null, null, project = project))
+    var calls = 0
+    val actions =
+        ContextToolWindowActions(
+            {}, { calls++ }, {}, {}, { calls++ }, explainSelected = { calls++ })
+    ComposeVisualFixture(320, 400, 1f) { ContextToolWindow(state, actions) }
+        .use { fixture ->
+          fixture.render()
+          assertFalse(fixture.hasText(target.signature))
+          fixture.clickText("Declaration details")
+          fixture.render()
+          assertTrue(fixture.hasText(target.signature))
+          fixture.render() // Recomposition with the same identity keeps the disclosure open.
+          assertTrue(fixture.hasText(target.signature))
+          state = state.copy(project = project.copy(projectId = "second"))
+          fixture.render()
+          assertFalse(fixture.hasText(target.signature))
+          fixture.clickText("Declaration details")
+          fixture.render()
+          assertTrue(fixture.hasText(target.signature))
+          state = state.copy(project = project.copy(projectRevision = "new-revision"))
+          fixture.render()
+          assertFalse(fixture.hasText(target.signature))
+          fixture.clickText("Declaration details")
+          fixture.render()
+          state =
+              state.copy(inspector = inspector.copy(file = source.copy(contentHash = "changed")))
+          fixture.render()
+          assertFalse(fixture.hasText(target.signature))
+        }
+    assertEquals(0, calls)
+  }
+
+  @Test
+  fun fileFallbackKeepsActionsAndDetailsWithoutMisreportingUnselectedSymbols() {
+    var calls = 0
+    val actions =
+        ContextToolWindowActions(
+            {}, { calls++ }, {}, {}, { calls++ }, explainSelected = { calls++ })
+    val noSymbols = "No indexed declarations in this file. File details remain available."
+    val unselected = "Select a declaration in the editor to inspect it."
+    listOf(emptyList(), listOf(symbol())).forEach { symbols ->
+      val inspector =
+          symbolInspectorUiState(
+              file(), symbols, null, null, false, InspectorProviderState(false, false), null)!!
+      ComposeVisualFixture(320, 400, 1f) {
+            ContextToolWindow(
+                ContextToolWindowState(inspector, ScopedModel(), false, null, null), actions)
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.hasText("Actions"))
+            assertTrue(fixture.hasText("Analyze project"))
+            assertTrue(fixture.hasText(if (symbols.isEmpty()) noSymbols else unselected))
+            assertFalse(fixture.hasText(if (symbols.isEmpty()) unselected else noSymbols))
+            fixture.clickText("Details")
+            fixture.render()
+            assertTrue(fixture.hasText(file().path))
+            assertTrue(fixture.hasText("Source/index comparison unavailable"))
+            assertFalse(fixture.hasText("Explain declaration"))
+          }
+    }
+    assertEquals(0, calls)
+  }
+
+  @Test
   fun contextSynchronizesBetweenFileAndExactDeclarationWithoutChangingSelectionState() {
     val file = file()
     val symbol = symbol()

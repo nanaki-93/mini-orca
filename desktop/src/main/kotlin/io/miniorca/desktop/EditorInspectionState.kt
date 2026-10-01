@@ -178,7 +178,10 @@ fun symbolInspectorUiState(
           provider.remoteProvider &&
               !provider.remoteProviderConfirmed &&
               action != InspectorAnalysisAction.CancelAnalysis,
-      selectionPrompt = "Select a declaration in the editor to inspect it.",
+      selectionPrompt =
+          if (symbols.isEmpty())
+              "No indexed declarations in this file. File details remain available."
+          else "Select a declaration in the editor to inspect it.",
       selectedSymbol = symbolState,
       currentEditIdentity = currentEditIdentity,
   )

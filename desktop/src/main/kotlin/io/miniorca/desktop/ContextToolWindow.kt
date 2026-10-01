@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -143,9 +144,14 @@ internal fun ContextToolWindow(
   }
   // File details reset on navigation; selected declarations have one compact view.
   var activeTab by
-      rememberSaveable(inspector.file.path, inspector.selectedSymbol?.symbol) {
-        mutableStateOf(ContextTab.Actions)
-      }
+      rememberSaveable(
+          state.project?.projectId,
+          state.project?.projectRevision,
+          inspector.file.path,
+          inspector.file.contentHash,
+          inspector.selectedSymbol?.symbol) {
+            mutableStateOf(ContextTab.Actions)
+          }
   Column(
       modifier.background(Panel).semantics {
         contentDescription = contextToolWindowDescription(inspector)
@@ -165,7 +171,12 @@ internal fun ContextToolWindow(
         if (inspector.selectedSymbol == null) ContextTabs(activeTab, { activeTab = it })
         IdeHorizontalSeparator()
         androidx.compose.runtime.key(
-            activeTab, inspector.file.path, inspector.selectedSymbol?.symbol) {
+            state.project?.projectId,
+            state.project?.projectRevision,
+            activeTab,
+            inspector.file.path,
+            inspector.file.contentHash,
+            inspector.selectedSymbol?.symbol) {
               Column(
                   Modifier.fillMaxWidth()
                       .weight(1f)
@@ -227,6 +238,43 @@ private fun ContextDeclaration(state: ContextToolWindowState, actions: ContextTo
   val symbol = requireNotNull(inspector.selectedSymbol)
   val explanation = state.declarationExplanation
   val actionPresentation = declarationActionPresentation(explanation)
+  var detailsExpanded by
+      rememberSaveable(
+          state.project?.projectId,
+          state.project?.projectRevision,
+          inspector.file.path,
+          inspector.file.contentHash,
+          symbol.symbol) {
+            mutableStateOf(false)
+          }
+  SelectionContainer {
+    Column(Modifier.fillMaxWidth()) {
+      Text(inspector.file.path, color = PrimaryText, style = IdeTypography.compactBody)
+      Text(
+          "${symbol.rangeLabel} · ${inspector.file.language}",
+          color = SecondaryText,
+          style = IdeTypography.compactBody)
+      Text(symbol.confidenceLabel, color = SecondaryText, style = IdeTypography.compactBody)
+      Text(
+          inspector.sourceIndexCorrespondence.label,
+          color = SecondaryText,
+          style = IdeTypography.compactBody)
+    }
+  }
+  ContextSection(
+      "Declaration details",
+      DesktopIcon.Editor,
+      detailsExpanded,
+      { detailsExpanded = !detailsExpanded }) {
+        SelectionContainer {
+          Text(
+              symbol.signature.ifBlank { "Signature unavailable" },
+              color = PrimaryText,
+              fontFamily = FontFamily.Monospace,
+              style = IdeTypography.compactBody)
+        }
+      }
+  Spacer(Modifier.height(8.dp))
   if (explanation.status == DeclarationExplanationStatus.Unavailable &&
       symbol.explanation != null) {
     ModelResultContent(symbol.explanation)
@@ -280,6 +328,11 @@ private fun ContextActions(state: ContextToolWindowState, actions: ContextToolWi
             InspectorAnalysisStatus.Missing -> SecondaryText
           })
   ContextProjectAnalysisActions(state, actions)
+  Text(
+      inspector.selectionPrompt,
+      color = SecondaryText,
+      style = IdeTypography.compactBody,
+      modifier = Modifier.padding(top = 8.dp))
 }
 
 @Composable
@@ -471,17 +524,23 @@ internal fun contextStateBadge(inspector: SymbolInspectorUiState): String? =
 @Composable
 private fun ContextFileDetails(inspector: SymbolInspectorUiState) {
   Column(Modifier.fillMaxWidth()) {
-    Text(
-        inspector.file.path,
-        color = PrimaryText,
-        fontFamily = FontFamily.Monospace,
-        fontSize = 12.sp,
-        modifier = Modifier.padding(top = 6.dp))
+    SelectionContainer {
+      Text(
+          inspector.file.path,
+          color = PrimaryText,
+          fontFamily = FontFamily.Monospace,
+          fontSize = 12.sp,
+          modifier = Modifier.padding(top = 6.dp))
+    }
     Text(
         "${inspector.file.language} · ${formatBytes(inspector.file.sizeBytes)} · ${inspector.file.lineCount} lines · ${inspector.analysisStatus.label}",
         color = SecondaryText,
         fontSize = 11.sp,
     )
+    Text(
+        inspector.sourceIndexCorrespondence.label,
+        color = SecondaryText,
+        style = IdeTypography.compactBody)
     if (inspector.filePurpose.isNotBlank()) {
       Text(
           inspector.filePurpose,
