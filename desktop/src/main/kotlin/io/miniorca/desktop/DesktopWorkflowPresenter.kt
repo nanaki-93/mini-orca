@@ -1652,12 +1652,21 @@ class DesktopWorkflowPresenter(
         scope.launch {
           try {
             val manifest = io { api.context(identity.file.path, identity.action) }
-            if (canPublishContextInspection(generation, identity))
-                mutableSnapshot.value =
-                    mutableSnapshot.value.copy(
-                        contextInspection =
-                            ContextInspectionState(
-                                ContextInspectionStatus.Ready, identity, generation, manifest))
+            if (canPublishContextInspection(generation, identity)) {
+              val destinationChanged = contextDestinationMismatch(identity, manifest)
+              mutableSnapshot.value =
+                  mutableSnapshot.value.copy(
+                      contextInspection =
+                          ContextInspectionState(
+                              if (destinationChanged) ContextInspectionStatus.Stale
+                              else ContextInspectionStatus.Ready,
+                              identity,
+                              generation,
+                              manifest.takeUnless { destinationChanged },
+                              if (destinationChanged)
+                                  "The preview destination differs from the captured model. Inspect the current target again."
+                              else ""))
+            }
           } catch (canceled: CancellationException) {
             throw canceled
           } catch (error: Exception) {
@@ -1674,6 +1683,24 @@ class DesktopWorkflowPresenter(
                                         ?: "Context preview failed"))
           }
         }
+  }
+
+  private fun contextDestinationMismatch(
+      identity: ContextInspectionIdentity,
+      manifest: ContextManifest,
+  ): Boolean {
+    val expectedScope = if (identity.action == "analyze_file") "bug" else "function"
+    val captured = identity.model
+    return (manifest.scope.isNotBlank() && manifest.scope != expectedScope) ||
+        (captured.model.isNotBlank() &&
+            manifest.model.isNotBlank() &&
+            manifest.model != captured.model) ||
+        (captured.providerOrigin.isNotBlank() &&
+            manifest.providerOrigin.isNotBlank() &&
+            manifest.providerOrigin != captured.providerOrigin) ||
+        (captured.model.isNotBlank() &&
+            manifest.remoteProvider != null &&
+            manifest.remoteProvider != captured.remoteProvider)
   }
 
   private fun isCurrentContextInspection(identity: ContextInspectionIdentity): Boolean =

@@ -86,6 +86,38 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun returnedKnownDestinationMismatchIsStaleNotCurrent() {
+    val main = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var responseScope = "bug"
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = main) { method, path, _ ->
+          require(method == "GET" && path.startsWith("/api/projects/current/context?"))
+          response("""{"scope":"$responseScope","model":"returned-model","remote_provider":true}""")
+        }
+    try {
+      loadFile(presenter)
+      presenter.inspectContext("fix")
+      main.runPending()
+      val stale = presenter.snapshot.value.contextInspection
+      assertEquals(ContextInspectionStatus.Stale, stale.status)
+      assertNull(stale.manifest)
+      assertTrue(stale.message.contains("destination"))
+      assertEquals("main.go", stale.identity?.file?.path)
+      presenter.retryContextInspection()
+      main.runPending()
+      assertEquals(ContextInspectionStatus.Stale, presenter.snapshot.value.contextInspection.status)
+      responseScope = ""
+      presenter.inspectContext("fix")
+      main.runPending()
+      assertEquals(ContextInspectionStatus.Ready, presenter.snapshot.value.contextInspection.status)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun contextInspectionCapturesCreationTargetAndUsesCanonicalPreviewAction() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()
