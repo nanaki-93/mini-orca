@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.jediterm.terminal.model.StyleState
@@ -158,12 +159,22 @@ internal fun TerminalSourceRefreshEffect(
     terminal: DesktopTerminalWorkspace,
     presenter: DesktopWorkflowPresenter,
 ) {
-  LaunchedEffect(state.workspace, layout.activeRightToolWindow, layout.editorSurface) {
-    if (state.workspace == Workspace.Editor &&
-        terminal.state.value.projectPath == state.project?.path) {
-      presenter.refreshSelectedFile()
-    }
-  }
+  val windowFocused = LocalWindowInfo.current.isWindowFocused
+  val terminalState by terminal.state.collectAsState()
+  LaunchedEffect(
+      windowFocused,
+      state.workspace,
+      state.project?.projectId,
+      terminalState.projectPath,
+      layout.activeRightToolWindow,
+      layout.editorSurface) {
+        if (windowFocused &&
+            state.workspace == Workspace.Editor &&
+            state.project != null &&
+            terminalState.projectPath == state.project?.path) {
+          presenter.refreshSelectedFile()
+        }
+      }
 }
 
 /** A library terminal with the same source palette, text scale and flat scrollbar as the IDE. */

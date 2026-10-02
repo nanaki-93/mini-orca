@@ -11,6 +11,31 @@ import kotlin.test.assertTrue
 
 class ReviewToolWindowTest {
   @Test
+  fun shortComparisonOffersFullScopeWithoutTakingSpaceFromTheCode() {
+    val draft = editorComparisonReviewFixture().draft!!.copy(imports = listOf("fmt", "strings"))
+    for (height in listOf(300, 379, 380)) {
+      ComposeVisualFixture(700, height, 1.5f) { ReviewDiffCanvas(draft) }
+          .use { fixture ->
+            fixture.render("f38-scope-breakpoint-$height")
+            if (height < 380) {
+              assertTrue(fixture.taggedBounds("diff-Current-column").height > 200)
+              fixture.requestDescriptionFocus("Candidate scope")
+              fixture.pressKey(Key.Enter)
+              fixture.render("f38-scope-details-$height")
+              assertTrue(fixture.hasText(reviewComparisonScope(draft)))
+              assertTrue(fixture.hasText(draft.targetPath))
+              fixture.pressKey(Key.Escape)
+              fixture.render()
+              assertTrue(fixture.isFocusedControl("Candidate scope"))
+            } else {
+              assertTrue(fixture.hasText(reviewComparisonScope(draft)))
+            }
+            assertFalse(fixture.hasEditableText("Read-only composed diff"))
+          }
+    }
+  }
+
+  @Test
   fun applyAttemptStaysLocalAndCannotAdvertiseReadinessWhileRunning() {
     val base = editorComparisonReviewFixture()
     for (status in DraftMutationStatus.entries) {

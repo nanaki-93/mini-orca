@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -87,7 +88,11 @@ fun sideBySideDiffRows(diff: UnifiedDiff): List<DiffRow> {
 }
 
 @Composable
-internal fun DiffViewer(diff: UnifiedDiff?, modifier: Modifier = Modifier) {
+internal fun DiffViewer(
+    diff: UnifiedDiff?,
+    modifier: Modifier = Modifier,
+    leadingControl: (@Composable () -> Unit)? = null
+) {
   if (diff == null) {
     SystemStateMessage(
         "Composed diff unavailable",
@@ -103,6 +108,10 @@ internal fun DiffViewer(diff: UnifiedDiff?, modifier: Modifier = Modifier) {
       Row(
           Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
           horizontalArrangement = Arrangement.End) {
+            if (leadingControl != null) {
+              leadingControl()
+              Spacer(Modifier.weight(1f))
+            }
             ChromeTab(
                 selected = sideBySide,
                 onClick = { sideBySide = true },
