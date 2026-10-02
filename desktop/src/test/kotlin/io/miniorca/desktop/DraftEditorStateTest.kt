@@ -1,5 +1,7 @@
 package io.miniorca.desktop
 
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -27,6 +29,10 @@ class DraftEditorStateTest {
                                 draftId = original.id,
                                 draftRevision = original.revision,
                                 draftHash = original.hash),
+                        benchmark =
+                            BenchmarkEvidenceState(
+                                catalog = GoBenchmarkCatalog(available = true),
+                                discovery = BenchmarkDiscoveryOutcome.Loaded),
                     ),
             )
             .reduce(
@@ -38,7 +44,73 @@ class DraftEditorStateTest {
     assertEquals(listOf("fmt"), state.review.editor?.imports)
     assertNull(state.review.draft?.validation)
     assertNull(state.review.checks)
+    assertNull(state.review.benchmark.catalog)
+    assertEquals(BenchmarkDiscoveryOutcome.Invalidated, state.review.benchmark.discovery)
     assertFalse(draftApplyEligibility(state.review.draft, state.review.checks, file()).eligible)
+  }
+
+  @Test
+  fun selectionAndRepeatedCallbacksDoNotEmitEdits() {
+    val input = TextFieldValue("func Run() {}")
+    assertNull(declarationTextEdit(input, input))
+    assertNull(declarationTextEdit(input, input.copy(selection = TextRange(5))))
+    val edited = TextFieldValue("func Run() { changed() }")
+    assertEquals(edited.text, declarationTextEdit(input, edited)?.declaration)
+    assertNull(declarationTextEdit(edited, edited))
+    assertNull(importTextEdit("fmt, io", "fmt, io"))
+  }
+
+  @Test
+  fun rawImportEditsAndRestoredTextRemainDirtyEvenWhenImportsNormalizeIdentically() {
+    val original = draft(imports = listOf("fmt"))
+    val initial =
+        DesktopState(
+            review =
+                DraftReviewState(
+                    draft = original,
+                    editor = editableDraft(original),
+                    checks = DraftCheckReport("main.go", true)))
+    val changed = importTextEdit("fmt", " fmt, ")!!
+    assertEquals(listOf("fmt"), changed.imports)
+    val edited = initial.reduce(changed)
+    assertEquals(DraftEditorStatus.Dirty, edited.review.editor?.status)
+    assertNull(edited.review.checks)
+    assertNull(edited.review.draft?.validation)
+
+    val restored = edited.reduce(importTextEdit(" fmt, ", "fmt")!!)
+    assertEquals(original.declaration, restored.review.editor?.declaration)
+    assertEquals(original.imports, restored.review.editor?.imports)
+    assertEquals(DraftEditorStatus.Dirty, restored.review.editor?.status)
+    assertNull(restored.review.draft?.validation)
+    assertNull(restored.review.checks)
+  }
+
+  @Test
+  fun selectionDoesNotInvalidatePendingValidationButATextEditDoes() {
+    val controller = DesktopWorkflowController()
+    val projectRequest = controller.beginProjectLoad()
+    assertTrue(
+        controller.projectLoaded(projectRequest, project(), ProjectIndex("project", "revision")))
+    val fileRequest = controller.beginFileLoad("main.go")!!
+    assertTrue(controller.fileLoaded(fileRequest, file(), emptyList()))
+    val original = draft()
+    controller.dispatch(DesktopEvent.DraftLoaded(original))
+
+    val (request, fileIdentity) = controller.beginDraftValidation()!!
+    val before = controller.state
+    val input = TextFieldValue(original.declaration)
+    declarationTextEdit(input, input.copy(selection = TextRange(2)))?.let(controller::dispatch)
+    assertEquals(before, controller.state)
+    assertTrue(controller.draftValidated(request, fileIdentity, original))
+
+    val (lateRequest, lateFile) = controller.beginDraftValidation()!!
+    controller.dispatch(declarationTextEdit(input, TextFieldValue("func Run() { changed() }"))!!)
+    assertFalse(controller.draftValidated(lateRequest, lateFile, original))
+    assertEquals(DraftEditorStatus.Dirty, controller.state.review.editor?.status)
+    controller.dispatch(declarationTextEdit(TextFieldValue("func Run() { changed() }"), input)!!)
+    assertEquals(original.declaration, controller.state.review.editor?.declaration)
+    assertEquals(DraftEditorStatus.Dirty, controller.state.review.editor?.status)
+    assertNull(controller.state.review.draft?.validation)
   }
 
   @Test

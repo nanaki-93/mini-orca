@@ -45,6 +45,15 @@ private data class DraftFieldIdentity(
 private fun draftFieldIdentity(editor: EditableDraftState?): DraftFieldIdentity? =
     editor?.serverDraft?.let { DraftFieldIdentity(it.id, it.revision, it.hash) }
 
+internal fun declarationTextEdit(
+    previous: TextFieldValue,
+    next: TextFieldValue
+): DesktopEvent.DraftEdited? =
+    if (previous.text != next.text) DesktopEvent.DraftEdited(declaration = next.text) else null
+
+internal fun importTextEdit(previous: String, next: String): DesktopEvent.DraftEdited? =
+    if (previous != next) DesktopEvent.DraftEdited(imports = parseRequiredImports(next)) else null
+
 internal sealed interface PendingDraftDiscard {
   val currentDraft: CurrentEditIdentity?
   val nextLabel: String
@@ -333,6 +342,7 @@ internal fun MiniOrcaApp(
   var consumedPreparedRequestGeneration by remember { mutableStateOf(0L) }
   var draftFieldKey by remember { mutableStateOf<DraftFieldIdentity?>(null) }
   var draftFieldValue by remember { mutableStateOf(TextFieldValue()) }
+  var draftImportText by remember { mutableStateOf("") }
   val switchAdmission = remember { ProjectSwitchAdmission() }
   var pendingSwitch by remember { mutableStateOf<PendingProjectSwitch?>(null) }
   var chooserOpen by remember { mutableStateOf(false) }
@@ -415,10 +425,14 @@ internal fun MiniOrcaApp(
   LaunchedEffect(activeDraftFieldIdentity) {
     draftFieldKey = activeDraftFieldIdentity
     draftFieldValue = TextFieldValue(appState.review.editor?.declaration.orEmpty())
+    draftImportText = appState.review.editor?.imports?.joinToString(", ").orEmpty()
   }
   val activeDraftFieldValue =
       if (draftFieldKey == activeDraftFieldIdentity) draftFieldValue
       else TextFieldValue(appState.review.editor?.declaration.orEmpty())
+  val activeDraftImportText =
+      if (draftFieldKey == activeDraftFieldIdentity) draftImportText
+      else appState.review.editor?.imports?.joinToString(", ").orEmpty()
   LaunchedEffect(presenter) { presenter.start() }
   DisposableEffect(presenter, terminal) {
     terminal.onFocusLeft = { presenter.refreshSelectedFile() }
@@ -732,6 +746,7 @@ internal fun MiniOrcaApp(
                   draftFocus = draftFocusRequester,
                   messageInput = chatMessage,
                   draftInput = activeDraftFieldValue,
+                  importInput = activeDraftImportText,
                   selectedSymbol = appState.selectedSymbol,
                   targetValidation = targetValidation,
                   advancedConstraintsInput = advancedConstraints,
@@ -784,13 +799,29 @@ internal fun MiniOrcaApp(
           editorActions =
               DraftEditorActions(
                   updateDeclaration = {
-                    presenter.dispatch(DesktopEvent.DraftEdited(declaration = it))
+                    if (it != appState.review.editor?.declaration)
+                        presenter.dispatch(DesktopEvent.DraftEdited(declaration = it))
                   },
-                  updateImports = { presenter.dispatch(DesktopEvent.DraftEdited(imports = it)) },
+                  updateImports = {
+                    if (it != appState.review.editor?.imports)
+                        presenter.dispatch(DesktopEvent.DraftEdited(imports = it))
+                  },
                   validate = presenter::validateEditableDraft,
-                  updateDeclarationValue = {
-                    draftFieldValue = it
-                    presenter.dispatch(DesktopEvent.DraftEdited(declaration = it.text))
+                  updateDeclarationValue = { value ->
+                    val previous =
+                        if (draftFieldKey == activeDraftFieldIdentity) draftFieldValue
+                        else activeDraftFieldValue
+                    val event = declarationTextEdit(previous, value)
+                    draftFieldValue = value
+                    if (event != null) presenter.dispatch(event)
+                  },
+                  updateImportText = { value ->
+                    val previous =
+                        if (draftFieldKey == activeDraftFieldIdentity) draftImportText
+                        else activeDraftImportText
+                    val event = importTextEdit(previous, value)
+                    draftImportText = value
+                    if (event != null) presenter.dispatch(event)
                   },
               ),
           modifier = modifier,
