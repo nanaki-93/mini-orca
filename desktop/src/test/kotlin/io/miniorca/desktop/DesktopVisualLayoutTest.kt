@@ -133,33 +133,70 @@ class DesktopVisualLayoutTest {
                 status = ContextInspectionStatus.Stale,
                 identity = identity,
                 message = "Destination changed") to
-                listOf("Context preview stale: Destination changed"))
-    for ((width, height) in listOf(800 to 650, 1280 to 600)) {
-      for (scale in listOf(1f, 1.5f)) {
-        for ((inspection, labels) in cases) {
-          val label = "context-${inspection.status}-$width-$height-$scale"
-          ComposeVisualFixture(width, height, scale) {
-                ContextInspectorDialog(inspection, {}, {}, {})
-              }
-              .use { fixture ->
-                fixture.render(label)
-                for (text in
-                    listOf(
-                        "Project-relative path: src/contexts/request.go",
-                        "Assistant target: Create function: Build",
-                        "File-scoped preview, not the exact declaration request. Declaration requests may include different context and prompt material.",
-                        "Local inspection only; no provider request or consent. Send and Explain require separate authorization.") +
-                        labels) {
-                  fixture.assertEveryTextLineReachable(text, "ide-dialog-body")
-                  fixture.assertTextFits(text, maxLines = 12)
-                }
-                fixture.assertTextFits("Close")
-                fixture.assertTextFits(
-                    if (inspection.status == ContextInspectionStatus.Loading) "Cancel" else "Retry")
-                if (inspection.status != ContextInspectionStatus.Ready)
+                listOf("Context preview stale: Destination changed"),
+            ContextInspectionState(
+                status = ContextInspectionStatus.Canceled,
+                identity = identity,
+                message = "Request canceled") to
+                listOf("Context preview canceled: Request canceled"),
+            ContextInspectionState(
+                status = ContextInspectionStatus.Ready,
+                identity = identity,
+                manifest =
+                    ContextManifest(
+                        estimatedTokens = null,
+                        truncated = true,
+                        included =
+                            listOf(
+                                ContextFile("src/long-request.go", 87, "sha-example", null, true)),
+                        excluded =
+                            listOf(
+                                ContextDecision("generated/cache.go", false, "Generated file")))) to
+                listOf(
+                    "Context preview ready",
+                    "Provider classification: Unavailable",
+                    "1 included · 1 excluded · unavailable estimated tokens · truncated",
+                    "File truncation: truncated",
+                    "Estimated tokens: unavailable",
+                    "Reason: Generated file"))
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+          for ((inspection, labels) in cases) {
+            val label =
+                "context-${inspection.status}-$width-$height-$scale-${density}x-${cases.indexOf(inspection to labels)}"
+            ComposeVisualFixture(
+                    (width * density).toInt(), (height * density).toInt(), scale, density) {
+                      ContextInspectorDialog(inspection, {}, {}, {})
+                    }
+                .use { fixture ->
+                  fixture.render(label)
+                  for (text in
+                      listOf(
+                          "Project-relative path: src/contexts/request.go",
+                          "Assistant target: Create function: Build",
+                          "File-scoped preview, not the exact declaration request. Declaration requests may include different context and prompt material.",
+                          "Local inspection only; no provider request or consent. Send and Explain require separate authorization.") +
+                          labels) {
+                    fixture.assertEveryTextLineReachable(text, "ide-dialog-body")
+                    fixture.assertTextFits(text, maxLines = 12)
+                  }
+                  val body = fixture.taggedBounds("ide-dialog-body")
+                  val close = fixture.firstVisibleTextBounds("Close")
+                  assertTrue(body.height > 0 && body.bottom <= close.top, label)
+                  assertTrue(close.bottom <= height * density, label)
+                  fixture.assertTextFits("Close")
+                  fixture.assertTextFits(
+                      if (inspection.status == ContextInspectionStatus.Loading) "Cancel"
+                      else "Retry")
+                  if (inspection.status != ContextInspectionStatus.Ready) {
                     assertFalse(fixture.hasText("No files included."))
-                assertFalse(fixture.hasEditableText(withinTag = "ide-dialog-body"))
-              }
+                    assertFalse(fixture.hasText("No files excluded."))
+                  }
+                  assertFalse(fixture.hasEditableText(withinTag = "ide-dialog-body"))
+                }
+          }
         }
       }
     }
@@ -188,63 +225,68 @@ class DesktopVisualLayoutTest {
                       false,
                       if (index == 16) longReason.removePrefix("Reason: ") else "Reason $index")
                 })
-    for ((width, height) in listOf(800 to 650, 1280 to 600)) {
-      val inspection =
-          ContextInspectionState(status = ContextInspectionStatus.Ready, manifest = manifest)
-      ComposeVisualFixture(width, height, 1.5f) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-              IdeDialogSurface(
-                  maxHeight = (height - 64).coerceAtMost(520).dp,
-                  title = { Text("Context inspector · read-only") },
-                  content = { ContextInspectorContent(inspection) },
-                  actions = { ContextInspectorActions(inspection, {}, {}, {}) })
+    for ((width, height) in
+        listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)) {
+      for ((scale, density) in listOf(1f to 1f, 1.25f to 1f, 1.5f to 1f, 1.5f to 2f)) {
+        val inspection =
+            ContextInspectionState(status = ContextInspectionStatus.Ready, manifest = manifest)
+        ComposeVisualFixture(
+                (width * density).toInt(), (height * density).toInt(), scale, density) {
+                  Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    IdeDialogSurface(
+                        maxHeight = (height - 64).coerceAtMost(520).dp,
+                        title = { Text("Context inspector · read-only") },
+                        content = { ContextInspectorContent(inspection) },
+                        actions = { ContextInspectorActions(inspection, {}, {}, {}) })
+                  }
+                }
+            .use { fixture ->
+              fixture.render("context-file-decisions-$width-$height-$scale-${density}x")
+              val body = fixture.taggedBounds("ide-dialog-body")
+              val close = fixture.firstVisibleTextBounds("Close")
+              assertTrue(body.height > 0 && body.bottom <= close.top)
+              assertTrue(close.bottom <= height * density)
+              assertTrue(fixture.hasText("Inclusion reasons: not supplied."))
+              for (index in 1..16) {
+                assertEquals(1, fixture.textCount("Included file $index"))
+                assertEquals(1, fixture.textCount("Excluded file $index"))
+                assertEquals(
+                    1, fixture.textCount(if (index == 16) longPath else "Path: src/file-$index.go"))
+                assertEquals(
+                    1, fixture.textCount(if (index == 16) longHash else "Hash: hash-$index"))
+                assertEquals(1, fixture.textCount("Path: excluded/file-$index.go"))
+                assertEquals(
+                    1, fixture.textCount(if (index == 16) longReason else "Reason: Reason $index"))
+              }
+              fixture.assertTextOrder(
+                  listOf(
+                      "Included file 1", "Included file 16", "Excluded file 1", "Excluded file 16"))
+              for (text in
+                  listOf(
+                      longPath,
+                      "Reported file size: 1040 bytes",
+                      "Estimated tokens: 0",
+                      longHash,
+                      "File truncation: truncated",
+                      "Excluded file 16",
+                      "Path: excluded/file-16.go",
+                      longReason)) {
+                fixture.assertEveryTextLineReachable(text, "ide-dialog-body")
+              }
+              for (text in listOf(longPath, longHash, longReason, "Path: excluded/file-16.go")) {
+                fixture.revealText(text, "ide-dialog-body")
+                val viewport = fixture.taggedBounds("ide-dialog-body")
+                fixture.scrollBy(
+                    fixture.firstVisibleTextBounds(text).top - viewport.top - 8f, "ide-dialog-body")
+                fixture.render()
+                val firstLine = fixture.firstVisibleTextBounds(text).top
+                assertTrue(firstLine >= viewport.top && firstLine < viewport.bottom, text)
+                assertTrue(fixture.copyTextByDragging(text, text).isNotBlank())
+              }
+              fixture.assertTextFits("Close")
+              fixture.assertTextFits("Retry")
             }
-          }
-          .use { fixture ->
-            fixture.render("context-file-decisions-$width-$height")
-            val body = fixture.taggedBounds("ide-dialog-body")
-            val close = fixture.firstVisibleTextBounds("Close")
-            assertTrue(body.height > 0 && body.bottom <= close.top)
-            assertTrue(close.bottom <= height)
-            assertTrue(fixture.hasText("Inclusion reasons: not supplied."))
-            for (index in 1..16) {
-              assertEquals(1, fixture.textCount("Included file $index"))
-              assertEquals(1, fixture.textCount("Excluded file $index"))
-              assertEquals(
-                  1, fixture.textCount(if (index == 16) longPath else "Path: src/file-$index.go"))
-              assertEquals(1, fixture.textCount(if (index == 16) longHash else "Hash: hash-$index"))
-              assertEquals(1, fixture.textCount("Path: excluded/file-$index.go"))
-              assertEquals(
-                  1, fixture.textCount(if (index == 16) longReason else "Reason: Reason $index"))
-            }
-            fixture.assertTextOrder(
-                listOf(
-                    "Included file 1", "Included file 16", "Excluded file 1", "Excluded file 16"))
-            for (text in
-                listOf(
-                    longPath,
-                    "Reported file size: 1040 bytes",
-                    "Estimated tokens: 0",
-                    longHash,
-                    "File truncation: truncated",
-                    "Excluded file 16",
-                    "Path: excluded/file-16.go",
-                    longReason)) {
-              fixture.assertEveryTextLineReachable(text, "ide-dialog-body")
-            }
-            for (text in listOf(longPath, longHash, longReason, "Path: excluded/file-16.go")) {
-              fixture.revealText(text, "ide-dialog-body")
-              val viewport = fixture.taggedBounds("ide-dialog-body")
-              fixture.scrollBy(
-                  fixture.firstVisibleTextBounds(text).top - viewport.top - 8f, "ide-dialog-body")
-              fixture.render()
-              val firstLine = fixture.firstVisibleTextBounds(text).top
-              assertTrue(firstLine >= viewport.top && firstLine < viewport.bottom, text)
-              assertTrue(fixture.copyTextByDragging(text, text).isNotBlank())
-            }
-            fixture.assertTextFits("Close")
-            fixture.assertTextFits("Retry")
-          }
+      }
     }
   }
 

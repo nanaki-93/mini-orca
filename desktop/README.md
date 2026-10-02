@@ -276,6 +276,32 @@ previews are distinguished. Without a selected declaration, **Actions** and
 tab or expanding details never requests an explanation, runs project code or
 writes source.
 
+### Inspect Assistant context
+
+In Assistant, **Inspect context** opens a read-only dialog immediately for the
+selected project-relative file and Assistant intent. It makes one local daemon
+file-context preview request; Fix, Refactor, Document and creation intents use the
+supported `fix` preview action. Without a project or selected file, the dialog
+explains why inspection is unavailable instead of requesting a preview. Loading,
+failed, stale and canceled inspections are labeled separately from a successful
+empty manifest. **Retry** replaces the displayed result only if its captured
+target still applies; **Cancel** stops a loading inspection and keeps the dialog
+open with a canceled state and **Retry**. **Close** and Escape dismiss without
+sending. A changed target or model destination cannot silently attach an old
+response to the new selection. Dismissal returns keyboard focus to the
+initiating control when it survives, otherwise to a safe workspace control.
+
+A ready preview shows the returned destination, estimated tokens, supplied
+positive limits, truncation, and every included file's reported size, estimate,
+hash and truncation alongside every excluded path and supplied reason. Missing
+metadata is labeled unavailable; inclusion reasons are not supplied. Values and
+diagnostics are selectable in the scrolling dialog. This is a **file-scoped
+preview**, not the exact declaration prompt: a later declaration request may
+compose different context and additional prompt material. Inspecting is local;
+it does not contact a model provider, grant Function consent, run code or write
+source. **Send** and **Explain** still require their own authorization, including
+remote-provider confirmation when applicable.
+
 A current draft must be discarded explicitly before changing its target. Editing
 it invalidates validation/check evidence. Review shows target identity, readiness,
 three compact Validation / Focused checks / Source unchanged rows, and a summary
