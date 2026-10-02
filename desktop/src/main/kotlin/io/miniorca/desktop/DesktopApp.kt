@@ -713,7 +713,13 @@ internal fun MiniOrcaApp(
                   advancedConstraintsInput = advancedConstraints,
                   creationKind = creationKind,
                   creationNameFocus = creationNameFocusRequester,
-                  requestFailure = appState.chat.failure,
+                  attempts = appState.chat.attempts,
+                  taskSpec =
+                      appState.preparedTaskSpec?.takeIf {
+                        it.targetPath == appState.selectedFile?.path &&
+                            it.targetSymbol == target?.symbol &&
+                            chatMode == ChatEditMode.ReplaceSymbol
+                      },
                   inspectContextFocus = inspectContextFocusRequester,
               ),
           conversationActions =
