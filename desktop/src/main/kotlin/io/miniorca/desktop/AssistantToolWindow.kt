@@ -415,15 +415,12 @@ private fun AssistantDraftEditorSection(
           minLines = 5,
           textStyle = IdeTypography.resultCode,
           modifier = Modifier.fillMaxWidth().padding(top = 7.dp).focusRequester(draftFocus))
-      if (requiredImportsVisible(editor)) {
-        CompactSingleLineField(
-            importText,
-            actions.updateImportValue,
-            enabled =
-                editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale),
-            label = "Required imports",
-            modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
-      }
+      CompactSingleLineField(
+          importText,
+          actions.updateImportValue,
+          enabled = editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale),
+          label = "Required imports",
+          modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
       DraftValidationDiagnostics(editor.diagnostics, retained = editor.diagnosticsAreRetained)
       Text(
           draftEditorStatusMessage(editor.status),
@@ -636,19 +633,12 @@ internal fun preparedFunctionChangeMessage(preset: FunctionChangePreset): TextFi
 /** Editable declaration intents, separate from the chat conversation. */
 internal data class DraftEditorActions(
     val updateDeclaration: (String) -> Unit,
-    val updateImports: (List<String>) -> Unit,
+    val updateImportValue: (TextFieldValue) -> Unit,
     val validate: () -> Unit,
     val updateDeclarationValue: (TextFieldValue) -> Unit = { value ->
       updateDeclaration(value.text)
     },
-    val updateImportText: (String) -> Unit = { value ->
-      updateImports(parseRequiredImports(value))
-    },
-    val updateImportValue: (TextFieldValue) -> Unit = { value -> updateImportText(value.text) },
 )
-
-internal fun requiredImportsVisible(editor: EditableDraftState): Boolean =
-    editor.imports.isNotEmpty()
 
 internal fun parseRequiredImports(value: String): List<String> =
     value.split(',').map { it.trim() }.filter { it.isNotBlank() }
