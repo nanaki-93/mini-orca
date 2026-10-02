@@ -143,6 +143,7 @@ class DesktopWorkflowPresenter(
       DesktopAnalysisWorkflow(
           api, scope, ioDispatcher, jobCoordinator, { controller.state }, ::dispatch)
 
+  private var mutationJob: Job? = null
   private var connectionJob: Job? = null
   private var startupJob: Job? = null
   private var started = false
@@ -2171,6 +2172,7 @@ class DesktopWorkflowPresenter(
 
   fun applyEditableDraft() {
     val state = snapshot.value.state
+    if (closed || mutationJob?.isActive == true || state.review.applied != null) return
     val draft = state.review.draft ?: return
     val project = state.project ?: return
     val file = state.selectedFile ?: return
@@ -2182,23 +2184,71 @@ class DesktopWorkflowPresenter(
       dispatch(DesktopEvent.Failed(eligibility.reason))
       return
     }
+    fun currentCandidate(): Boolean {
+      val current = snapshot.value.state
+      return !closed &&
+          currentDraftIdentity() == identity &&
+          current.review.editor?.status == DraftEditorStatus.Valid &&
+          current.review.editor.declaration == draft.declaration &&
+          current.review.editor.imports == draft.imports &&
+          draftReviewEligibility(
+                  current.review.editor,
+                  current.review.draft,
+                  current.checks,
+                  current.selectedFile,
+                  current.project,
+                  current.review.checkAttempt)
+              .eligible
+    }
+    fun failed(message: String, conflict: Boolean = false) {
+      if (!isCurrentFile(identity.file)) return
+      if (conflict) dispatch(DesktopEvent.DraftMarkedStale)
+      dispatch(
+          DesktopEvent.DraftMutationUpdated(
+              DraftMutationAttempt(
+                  DraftMutationOperation.Apply,
+                  if (conflict) DraftMutationStatus.Conflict else DraftMutationStatus.Failed,
+                  message)))
+      dispatch(DesktopEvent.Failed(message))
+    }
     benchmarkWorkflow.invalidate()
+    dispatch(
+        DesktopEvent.DraftMutationUpdated(
+            DraftMutationAttempt(
+                DraftMutationOperation.Apply,
+                DraftMutationStatus.Running,
+                "Waiting for the guarded Apply receipt.")))
     dispatch(DesktopEvent.Loading)
     dispatch(DesktopEvent.Status("Applying reviewed declaration draft…"))
-    scope.launch {
-      try {
-        val result = io { api.applyDraft(draft) }
-        if (activeDraft != null && activeDraft != identity) return@launch
-        dispatch(DesktopEvent.Applied(result))
-        dispatch(DesktopEvent.Status("Applied ${draft.targetPath}; Undo is available."))
-        reloadAfterMutation(identity.file, result.projectRevision)
-      } catch (_: CancellationException) {
-        throw CancellationException()
-      } catch (error: Exception) {
-        if (currentDraftIdentity() == identity)
-            dispatch(DesktopEvent.Failed(error.message ?: "Apply failed"))
-      }
-    }
+    mutationJob =
+        scope.launch {
+          try {
+            val result = io {
+              if (!currentCandidate())
+                  throw CancellationException("Apply candidate changed before dispatch.")
+              api.applyDraft(draft)
+            }
+            if (!currentCandidate()) {
+              failed("Apply returned for an earlier candidate. Refresh source before continuing.")
+              if (isCurrentFile(identity.file)) refreshSelectedFile()
+              return@launch
+            }
+            dispatch(DesktopEvent.Applied(result))
+            dispatch(
+                DesktopEvent.Status(
+                    "Applied ${draft.targetPath}." +
+                        if (result.undoAvailable) " Undo is available while source is unchanged."
+                        else " Undo is unavailable."))
+            reloadAfterMutation(identity.file, result.projectRevision)
+          } catch (canceled: CancellationException) {
+            failed(canceled.message ?: "Apply canceled; refresh source before retrying.")
+            throw canceled
+          } catch (error: ApiException) {
+            failed(error.message ?: "Apply failed", error.status == 409)
+          } catch (error: Exception) {
+            failed(error.message ?: "Apply failed")
+          }
+        }
   }
 
   fun undoAppliedDraft() {

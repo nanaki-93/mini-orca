@@ -1013,3 +1013,9 @@ file and requested imports above Current/Candidate. Its scope area scrolls separ
 when paths or imports are long, leaving both code panes available. Review breadcrumbs
 follow the retained candidate, while Source keeps the inspected declaration. Switching
 Side-by-side/Unified is local; only the isolated draft in Assistant is editable.
+
+Apply keeps the exact candidate scope and revision in the decision region, including
+when validation, checks or source identity block it. An explicit Apply starts one
+guarded request; a second activation while it is pending sends nothing. The running
+state waits for a daemon receipt. Failure and conflict diagnostics stay beside the
+action; a conflict marks the draft stale and preserves it for recovery.

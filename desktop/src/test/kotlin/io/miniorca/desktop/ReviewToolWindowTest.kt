@@ -11,6 +11,34 @@ import kotlin.test.assertTrue
 
 class ReviewToolWindowTest {
   @Test
+  fun applyAttemptStaysLocalAndCannotAdvertiseReadinessWhileRunning() {
+    val base = editorComparisonReviewFixture()
+    for (status in DraftMutationStatus.entries) {
+      var applies = 0
+      val attempt =
+          DraftMutationAttempt(DraftMutationOperation.Apply, status, "Guarded operation diagnostic")
+      val state = base.copy(mutation = attempt)
+      ComposeVisualFixture(360, 400, 1.5f) {
+            ReviewToolWindow(
+                state,
+                ReviewToolWindowActions({}, {}, {}),
+                DraftApplicationActions({ applies++ }, {}))
+          }
+          .use { fixture ->
+            fixture.render("f33-apply-${status.name}-360-400-150")
+            assertTrue(fixture.hasText("Apply this change"))
+            assertTrue(fixture.hasText("Candidate: GetUser in internal/api/user.go · revision 1"))
+            assertTrue(fixture.hasText("Apply ${status.name.lowercase()}"))
+            if (status == DraftMutationStatus.Running) {
+              assertFalse(fixture.hasText("Ready to apply"))
+              assertFalse(fixture.hasText("Apply change"))
+            }
+            assertEquals(0, applies)
+          }
+    }
+  }
+
+  @Test
   fun comparisonKeepsCandidateIdentityImportsAndBothReadOnlySidesAtEverySize() {
     val draft = editorComparisonReviewFixture().draft!!.copy(imports = listOf("fmt", "strings"))
     for ((width, height) in

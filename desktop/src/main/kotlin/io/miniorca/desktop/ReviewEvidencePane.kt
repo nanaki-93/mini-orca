@@ -109,6 +109,14 @@ internal fun reviewNextActionUiState(
     checksRunning: Boolean,
 ): ReviewNextActionUiState {
   val scope = draft?.let { "${it.targetSymbol} in ${it.targetPath}" } ?: "the selected declaration"
+  decision.pendingOperation?.let { operation ->
+    return ReviewNextActionUiState(
+        ReviewNextActionKind.Waiting,
+        "${operation.name} in progress",
+        scope,
+        decision.reason,
+        false)
+  }
   if (decision.receiptTitle != null) {
     val undoAvailable = decision.undoLabel == "Undo this change"
     return ReviewNextActionUiState(
@@ -258,7 +266,8 @@ internal fun editorProgressionRows(state: ReviewToolWindowState): List<ReviewEvi
             state.draft,
             state.checks,
             state.applied,
-            state.checkAttempt),
+            state.checkAttempt,
+            state.mutation),
     )
 
 /** Presentation-only review evidence; daemon-owned draft and check guards remain authoritative. */
@@ -492,6 +501,7 @@ internal data class ApplyDecisionUiState(
     val receiptTitle: String? = null,
     val receiptDetail: String = "",
     val undoLabel: String = "Undo",
+    val pendingOperation: DraftMutationOperation? = null,
 )
 
 internal fun applyActionLabel(draft: DeclarationDraft?): String =
@@ -511,7 +521,11 @@ internal fun applyDecisionUiState(
     checks: DraftCheckReport?,
     applied: ApplyResult?,
     checkAttempt: CheckAttempt? = null,
+    mutation: DraftMutationAttempt? = null,
 ): ApplyDecisionUiState {
+  if (mutation?.status == DraftMutationStatus.Running)
+      return ApplyDecisionUiState(
+          false, applyActionLabel(draft), mutation.message, pendingOperation = mutation.operation)
   if (applied != null) {
     val action = applyReceiptTitle(applied)
     return ApplyDecisionUiState(
@@ -601,7 +615,8 @@ internal fun ReviewToolWindow(
           state.draft,
           state.checks,
           state.applied,
-          state.checkAttempt)
+          state.checkAttempt,
+          state.mutation)
   val nextAction =
       reviewNextActionUiState(
           evidence, decision, state.draft, state.checks, state.session, state.checksRunning)
@@ -635,6 +650,7 @@ internal fun ReviewToolWindow(
                     if (state.draft == null) "No candidate"
                     else reviewReadinessTitle(evidence, decision),
                     when {
+                      decision.pendingOperation != null -> decision.reason
                       evidence.validation.status != ReviewEvidenceStatus.Passed ->
                           evidence.validation.detail
                       evidence.checks.status != ReviewEvidenceStatus.Passed ->
@@ -643,7 +659,9 @@ internal fun ReviewToolWindow(
                           "Validation and check evidence match this candidate."
                       else -> decision.reason
                     },
-                    if (nextAction.kind == ReviewNextActionKind.Apply) ReviewEvidenceStatus.Passed
+                    if (decision.pendingOperation != null) ReviewEvidenceStatus.Running
+                    else if (nextAction.kind == ReviewNextActionKind.Apply)
+                        ReviewEvidenceStatus.Passed
                     else reviewReadinessStatus(evidence))
                 Column {
                   listOf(
@@ -710,6 +728,7 @@ internal fun reviewReadinessTitle(
     decision: ApplyDecisionUiState
 ): String =
     when {
+      decision.pendingOperation != null -> "${decision.pendingOperation.name} in progress"
       evidence.validation.status == ReviewEvidenceStatus.Running -> "Validating draft"
       evidence.checks.status == ReviewEvidenceStatus.Running -> "Checks running"
       evidence.validation.status == ReviewEvidenceStatus.Failed -> "Validation failed"
@@ -845,12 +864,29 @@ private fun ReviewActionRegion(
           .testTag("review-action-region"),
       verticalArrangement = Arrangement.spacedBy(8.dp)) {
         IdeHorizontalSeparator(Modifier.padding(bottom = 8.dp))
-        if (action.kind == ReviewNextActionKind.Apply) {
+        if (state.draft != null && state.applied == null) {
           Text("Apply this change", color = PrimaryText, style = IdeTypography.workspaceHeading)
           Text(
               "1 declaration · 1 file",
               color = SecondaryText,
               style = IdeTypography.workspaceMetadata)
+        }
+        state.draft
+            ?.takeIf { state.applied == null }
+            ?.let { draft ->
+              SelectionContainer {
+                Text(
+                    "Candidate: ${draft.targetSymbol} in ${draft.targetPath} · revision ${draft.revision}",
+                    color = SecondaryText,
+                    style = IdeTypography.workspaceMetadata)
+              }
+            }
+        state.mutation?.let { attempt ->
+          Text(
+              "${attempt.operation.name} ${attempt.status.name.lowercase()}",
+              color = if (attempt.status == DraftMutationStatus.Running) Information else Error,
+              style = IdeTypography.workspaceHeading)
+          if (attempt.status != DraftMutationStatus.Running) DiagnosticText(attempt.message)
         }
         if (action.kind == ReviewNextActionKind.RunChecks &&
             state.draft?.taskSpec?.goTestCandidate != null)
@@ -909,6 +945,7 @@ internal data class ReviewToolWindowState(
     val applied: ApplyResult?,
     val checksRunning: Boolean,
     val checkAttempt: CheckAttempt? = null,
+    val mutation: DraftMutationAttempt? = null,
 )
 
 /** Review and repair intents that leave guarded Apply and Undo separate. */
