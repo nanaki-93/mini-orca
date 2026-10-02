@@ -999,3 +999,11 @@ scope before **Trust local execution & run checks**. Trust must still match the
 project revision and candidate when execution starts. Missing or skipped check rows
 are labeled without claiming readiness; failed attempts retain prior output without
 reusing it as current approval.
+
+After a failed focused check, **Revise with check output** explicitly sends a bounded
+repair request for the same candidate and pinned task. Review shows the next attempt
+out of three; current Function edits destination consent is still required. **Edit
+draft manually** remains available. A stale or edited candidate, canceled checks,
+a different conversation or an exhausted limit blocks repair. A failed or canceled
+request keeps the draft and useful diagnostics; a returned revision needs new
+validation and checks.

@@ -219,3 +219,32 @@ internal fun sessionTaskSpecAfterProposal(
 ): BugTaskSpec? =
     if (current != null && proposed != null && repairTaskSpecMatches(current, proposed)) proposed
     else current
+
+internal const val MAX_DRAFT_REPAIRS = 3
+
+internal fun repairUnavailableReason(
+    session: ChatSession?,
+    draft: DeclarationDraft?,
+    checks: DraftCheckReport?
+): String? =
+    when {
+      session == null ||
+          draft == null ||
+          !session.state.equals("active", ignoreCase = true) ||
+          !chatDraftMatchesSession(draft, session.copy(taskSpec = draft.taskSpec)) ||
+          session.latestDraftId != draft.id ->
+          "Repair needs the conversation bound to this candidate."
+      session.taskSpec == null ||
+          draft.taskSpec == null ||
+          !repairTaskSpecMatches(session.taskSpec, draft.taskSpec) ->
+          "This candidate has no pinned repair task. Edit the draft manually."
+      session.repairCount >= MAX_DRAFT_REPAIRS ->
+          "The repair limit is reached ($MAX_DRAFT_REPAIRS of $MAX_DRAFT_REPAIRS). Edit the draft manually."
+      !checksMatchDraft(checks, draft) ->
+          "Run focused checks for this candidate before requesting repair."
+      checks!!.checks.any { it.state.lowercase() in setOf("canceled", "cancelled") } ->
+          "Checks were canceled. Run them again before requesting repair."
+      checks.checks.none { it.state.lowercase() in setOf("failed", "error") } ->
+          "No failed check output is available for repair. Edit the draft or rerun checks."
+      else -> null
+    }

@@ -37,6 +37,74 @@ import kotlinx.serialization.json.jsonPrimitive
 class DesktopWorkflowPresenterTest {
 
   @Test
+  fun repairHandoffCannotUseDirtyStaleForeignOrExhaustedEvidence() {
+    for (condition in listOf("dirty", "stale", "target", "limit", "checking")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val calls = mutableListOf<String>()
+      val owner =
+          presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+            calls += "$method $path"
+            creationFileResponse(path) ?: error("Repair must not send: $path")
+          }
+      try {
+        loadQueuedChatFile(owner, main, io)
+        val symbol = SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)
+        owner.dispatch(DesktopEvent.FileLoaded(file(), listOf(symbol)))
+        owner.dispatch(DesktopEvent.SymbolSelected(symbol))
+        val task = BugTaskSpec(targetPath = "main.go", targetSymbol = "Run")
+        val current = draft().copy(taskSpec = task)
+        owner.dispatch(DesktopEvent.DraftLoaded(current))
+        owner.dispatch(
+            DesktopEvent.ChatLoaded(
+                ChatSession(
+                    id = "session",
+                    projectId = current.projectId,
+                    projectRevision = current.projectRevision,
+                    baseFileHash = current.baseFileHash,
+                    openPath = current.targetPath,
+                    mode = current.mode,
+                    targetSymbol = current.targetSymbol,
+                    latestDraftId = current.id,
+                    state = "active",
+                    taskSpec = task,
+                    repairCount = if (condition == "limit") 3 else 0)))
+        owner.dispatch(
+            DesktopEvent.ChecksLoaded(
+                DraftCheckReport(
+                    "main.go",
+                    false,
+                    listOf(DraftCheck("test", true, "failed", output = "failure")),
+                    current.id,
+                    current.revision,
+                    current.hash)))
+        when (condition) {
+          "dirty" ->
+              owner.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() int { return 1 }"))
+          "stale" -> owner.dispatch(DesktopEvent.DraftMarkedStale)
+          "target" ->
+              owner.dispatch(
+                  DesktopEvent.SymbolSelected(
+                      SymbolInfo("Other", "function", confidence = "exact", atomicTarget = true)))
+          "checking" -> owner.runDraftChecks()
+        }
+        calls.clear()
+        owner.reviseWithCheckOutput(ChatEditMode.ReplaceSymbol, "")
+        assertTrue(
+            owner.snapshot.value.state.error?.contains(
+                if (condition == "limit") "limit" else "blocked") == true,
+            "$condition: ${owner.snapshot.value.state.error}")
+        assertTrue(calls.isEmpty())
+        assertEquals(current.declaration, owner.snapshot.value.state.review.draft?.declaration)
+      } finally {
+        owner.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
   fun focusedChecksRecheckCandidateAndTrustIdentityBeforeEveryPrivilegedRequest() {
     for (scenario in
         listOf("valid", "foreign-preview", "foreign-ack", "denied", "edit-preview", "edit-ack")) {

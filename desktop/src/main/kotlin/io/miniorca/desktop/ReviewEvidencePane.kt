@@ -172,8 +172,11 @@ internal fun reviewNextActionUiState(
         else ReviewNextActionKind.EditDraft,
         if (repair != null) "Revise with check output" else "Edit draft",
         scope,
-        if (repair != null) "Use the failed focused check evidence to revise this declaration."
-        else "Edit this declaration before validating and checking it again.",
+        if (repair != null)
+            "Repair attempt ${(session?.repairCount ?: 0) + 1} of $MAX_DRAFT_REPAIRS. Send the failed check output to the Function edits destination. Fresh validation and checks are required afterward."
+        else
+            repairUnavailableReason(session, draft, checks)
+                ?: "Edit this declaration before validating and checking it again.",
         true,
     )
   }
@@ -381,18 +384,10 @@ internal fun repairMessageForChecks(
     draft: DeclarationDraft?,
     checks: DraftCheckReport?
 ): String? {
-  if (session?.taskSpec == null ||
-      draft?.taskSpec == null ||
-      !repairTaskSpecMatches(session.taskSpec, draft.taskSpec) ||
-      session.repairCount >= 3 ||
-      !checksMatchDraft(checks, draft))
-      return null
+  if (repairUnavailableReason(session, draft, checks) != null) return null
   val failures = checks!!.checks.filter { it.state.lowercase() in setOf("failed", "error") }
-  if (checks.checks.any { it.state.lowercase() in setOf("canceled", "cancelled") }) return null
-  if (failures.isEmpty() && checks.applicable) return null
   val evidence =
       failures
-          .ifEmpty { checks.checks.filter { it.output.isNotBlank() } }
           .joinToString("\n\n") { check ->
             "${check.name} (${check.state}):\n${check.output.take(2048)}"
           }
@@ -400,19 +395,6 @@ internal fun repairMessageForChecks(
   return "Revise the current declaration to address this sanitized focused check evidence. Keep the pinned task scope and do not change unrelated code.\n\n$evidence"
       .trim()
 }
-
-private fun repairLimitReached(
-    session: ChatSession?,
-    draft: DeclarationDraft?,
-    checks: DraftCheckReport?
-): Boolean =
-    session?.taskSpec != null &&
-        draft?.taskSpec != null &&
-        repairTaskSpecMatches(session.taskSpec, draft.taskSpec) &&
-        session.repairCount >= 3 &&
-        checksMatchDraft(checks, draft) &&
-        !checks!!.applicable &&
-        checks.checks.none { it.state.lowercase() in setOf("canceled", "cancelled") }
 
 private fun focusedChecksEvidence(
     checks: DraftCheckReport?,
@@ -835,13 +817,6 @@ private fun ReviewActionRegion(
         if (action.kind == ReviewNextActionKind.RunChecks &&
             state.draft?.taskSpec?.goTestCandidate != null)
             ReviewExecutionScope(state.draft)
-        if (action.kind == ReviewNextActionKind.EditDraft &&
-            repairLimitReached(state.session, state.draft, state.checks)) {
-          Text(
-              "The repair limit is reached. Edit the draft manually.",
-              color = Warning,
-              style = IdeTypography.workspaceMetadata)
-        }
         if (action.kind == ReviewNextActionKind.Undo)
             Text(action.detail, color = PrimaryText, style = IdeTypography.workspaceMetadata)
         if (action.kind == ReviewNextActionKind.EditDraft ||
@@ -864,6 +839,11 @@ private fun ReviewActionRegion(
           }
         }
         ReviewNextAction(action, state.draft, evidenceActions, applicationActions)
+        if (action.kind == ReviewNextActionKind.ReviseWithCheckOutput) {
+          MiniOrcaButton(onClick = evidenceActions.editDraft, modifier = Modifier.fillMaxWidth()) {
+            Text("Edit draft manually")
+          }
+        }
         if (action.kind == ReviewNextActionKind.Apply)
             Text(
                 "Updates ${action.scope}.",

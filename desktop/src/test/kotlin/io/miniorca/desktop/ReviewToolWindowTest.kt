@@ -11,6 +11,44 @@ import kotlin.test.assertTrue
 
 class ReviewToolWindowTest {
   @Test
+  fun repairAndManualRecoveryRemainExplicitWithDetailsCollapsed() {
+    val base = editorComparisonReviewFixture()
+    val task =
+        BugTaskSpec(targetPath = base.draft!!.targetPath, targetSymbol = base.draft.targetSymbol)
+    val current = base.draft.copy(taskSpec = task)
+    var repairs = 0
+    var edits = 0
+    val state =
+        base.copy(
+            draft = current,
+            editor = editableDraft(current),
+            session = base.session!!.copy(taskSpec = task, repairCount = 2, state = "active"),
+            checks =
+                base.checks!!.copy(
+                    applicable = false,
+                    checks =
+                        listOf(DraftCheck("test", true, "failed", output = "assertion failed"))))
+    ComposeVisualFixture(360, 600, 1.5f) {
+          ReviewToolWindow(
+              state,
+              ReviewToolWindowActions({}, { repairs++ }, { edits++ }),
+              DraftApplicationActions({}, {}))
+        }
+        .use { fixture ->
+          fixture.render("f31-repair-360-600-150")
+          assertTrue(fixture.hasText("Revise with check output"))
+          assertFalse(fixture.hasText("Apply change"))
+          assertEquals(0, repairs + edits)
+          fixture.revealText("Edit draft manually", "review-action-scroll")
+          fixture.clickText("Edit draft manually")
+          assertEquals(1, edits)
+          fixture.revealText("Revise with check output", "review-action-scroll")
+          fixture.clickText("Revise with check output")
+          assertEquals(1, repairs)
+        }
+  }
+
+  @Test
   fun taskTestTrustScopeShowsTheExactGeneratedTestCommand() {
     val current =
         draft().copy(taskSpec = BugTaskSpec(goTestCandidate = GoTestCandidateSpec("TestRun")))
@@ -26,7 +64,17 @@ class ReviewToolWindowTest {
     val proof = GoTestCandidateSpec("TestRun", "package main\nfunc TestRun() {}")
     val parentTask = sessionTask.copy(goTestCandidate = proof)
     val current = draft().copy(taskSpec = parentTask)
-    val session = ChatSession(taskSpec = sessionTask)
+    val session =
+        ChatSession(
+            projectId = current.projectId,
+            projectRevision = current.projectRevision,
+            baseFileHash = current.baseFileHash,
+            openPath = current.targetPath,
+            mode = current.mode,
+            targetSymbol = current.targetSymbol,
+            latestDraftId = current.id,
+            state = "active",
+            taskSpec = sessionTask)
     val checks =
         DraftCheckReport(
             "main.go",
