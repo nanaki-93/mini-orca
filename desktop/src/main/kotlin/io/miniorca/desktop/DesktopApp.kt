@@ -541,8 +541,7 @@ internal fun MiniOrcaApp(
         ::applyCreationKind,
         { Triple(chatMode, creationKind, newChatSymbol) })
     if (pending is PendingDraftDiscard.Create) {
-      if (chatMode == ChatEditMode.CreateSymbol) focusAssistantControl(ComposerFocusTarget.Name)
-      else focusAssistantControl(ComposerFocusTarget.Chat)
+      focusAssistantControl(composerFocusAfterDiscard(chatMode))
     }
   }
 
@@ -796,20 +795,15 @@ internal fun MiniOrcaApp(
               ),
           modifier = modifier,
       )
-      val focusTarget = pendingComposerFocus
-      LaunchedEffect(focusTarget, draftEditorVisible, showPalette, pendingDraftDiscard) {
-        if (showPalette || pendingDraftDiscard != null) return@LaunchedEffect
-        when (focusTarget) {
-          ComposerFocusTarget.Name -> creationNameFocusRequester.requestFocus()
-          ComposerFocusTarget.Chat -> chatFocusRequester.requestFocus()
-          ComposerFocusTarget.Draft -> {
-            if (!draftEditorVisible) return@LaunchedEffect
-            draftFocusRequester.requestFocus()
+      ComposerFocusEffect(
+          pendingComposerFocus,
+          draftEditorVisible,
+          showPalette || pendingDraftDiscard != null,
+          creationNameFocusRequester,
+          chatFocusRequester,
+          draftFocusRequester) { focused ->
+            if (pendingComposerFocus == focused) pendingComposerFocus = null
           }
-          null -> return@LaunchedEffect
-        }
-        if (pendingComposerFocus == focusTarget) pendingComposerFocus = null
-      }
     } else {
       SystemStateMessage(
           "Assistant",
@@ -856,6 +850,23 @@ internal fun MiniOrcaApp(
     if (appState.project != null) TerminalToolWindow(terminal, modifier)
   }
   val terminalState by terminal.state.collectAsState()
+  fun selectPaletteAction(action: String): Boolean {
+    val kind = creationKindForCommand(action)
+    if (kind != null) {
+      paletteBlockedReason = requestCreateDeclaration(kind)
+      if (paletteBlockedReason == null) showPalette = false
+    } else {
+      showPalette = false
+      commandActionWorkspace(action)?.let { presenter.dispatch(DesktopEvent.WorkspaceSelected(it)) }
+      when (action) {
+        "start_analysis" -> presenter.previewAnalysis()
+        "fix",
+        "refactor",
+        "document" -> contextAction = action
+      }
+    }
+    return kind != null && paletteBlockedReason == null
+  }
   val contextualActions =
       editorContextualActions(
           appState,
@@ -1026,30 +1037,7 @@ internal fun MiniOrcaApp(
                 inspectPaletteSymbol(presenter, it)
                 composerRequested = false
               },
-              selectAction = { action ->
-                val creationKind =
-                    when (action) {
-                      "create_function" -> DeclarationCreationKind.Function
-                      "create_type" -> DeclarationCreationKind.Type
-                      else -> null
-                    }
-                if (creationKind != null) {
-                  paletteBlockedReason = requestCreateDeclaration(creationKind)
-                  if (paletteBlockedReason == null) showPalette = false
-                } else {
-                  showPalette = false
-                  commandActionWorkspace(action)?.let {
-                    presenter.dispatch(DesktopEvent.WorkspaceSelected(it))
-                  }
-                  when (action) {
-                    "start_analysis" -> presenter.previewAnalysis()
-                    "fix",
-                    "refactor",
-                    "document" -> contextAction = action
-                  }
-                }
-                creationKind != null && paletteBlockedReason == null
-              },
+              selectAction = ::selectPaletteAction,
           ),
       panes =
           DesktopShellPanes(
@@ -1100,12 +1088,46 @@ internal fun MiniOrcaApp(
     DraftDiscardDialog(pending.currentDraft, pending.nextLabel, ::discardDraftAndContinue) {
       pendingDraftDiscard = null
       if (pending is PendingDraftDiscard.Create) {
-        if (chatMode == ChatEditMode.CreateSymbol) focusAssistantControl(ComposerFocusTarget.Name)
-        else focusAssistantControl(ComposerFocusTarget.Chat)
+        focusAssistantControl(composerFocusAfterDiscard(chatMode))
       }
     }
   }
 }
+
+@Composable
+private fun ComposerFocusEffect(
+    target: ComposerFocusTarget?,
+    draftVisible: Boolean,
+    dialogOpen: Boolean,
+    name: FocusRequester,
+    chat: FocusRequester,
+    draft: FocusRequester,
+    onFocused: (ComposerFocusTarget) -> Unit,
+) {
+  LaunchedEffect(target, draftVisible, dialogOpen) {
+    if (dialogOpen) return@LaunchedEffect
+    when (target) {
+      ComposerFocusTarget.Name -> name.requestFocus()
+      ComposerFocusTarget.Chat -> chat.requestFocus()
+      ComposerFocusTarget.Draft -> {
+        if (!draftVisible) return@LaunchedEffect
+        draft.requestFocus()
+      }
+      null -> return@LaunchedEffect
+    }
+    onFocused(target)
+  }
+}
+
+private fun composerFocusAfterDiscard(mode: ChatEditMode): ComposerFocusTarget =
+    if (mode == ChatEditMode.CreateSymbol) ComposerFocusTarget.Name else ComposerFocusTarget.Chat
+
+private fun creationKindForCommand(action: String): DeclarationCreationKind? =
+    when (action) {
+      "create_function" -> DeclarationCreationKind.Function
+      "create_type" -> DeclarationCreationKind.Type
+      else -> null
+    }
 
 internal fun routeContextRefactor(
     presenter: DesktopWorkflowPresenter,

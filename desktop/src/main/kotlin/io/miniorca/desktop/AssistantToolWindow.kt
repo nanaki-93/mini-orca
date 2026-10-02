@@ -28,6 +28,62 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 
 @Composable
+private fun CreationNameControls(
+    state: AssistantToolWindowState,
+    actions: AssistantConversationActions,
+    blocked: String?,
+) {
+  Text(
+      "Declaration kind",
+      color = SecondaryText,
+      style = IdeTypography.resultLabel,
+      modifier = Modifier.padding(top = 9.dp, bottom = 5.dp))
+  Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    DeclarationCreationKind.entries.forEach { kind ->
+      val active = state.creationKind == kind
+      ChromeButton(
+          onClick = { actions.changeCreationKind(kind) },
+          enabled = blocked == null,
+          selected = active,
+          role = Role.RadioButton,
+          accessibleName = "New Go ${kind.noun}",
+          tooltip = null,
+          modifier =
+              Modifier.weight(1f).semantics {
+                selected = active
+                stateDescription = if (active) "Selected" else "Not selected"
+              }) {
+            Text(
+                "${if (active) "Selected" else "Select"} · ${kind.noun.replaceFirstChar { it.uppercase() }}")
+          }
+    }
+  }
+  if (blocked != null) {
+    Text(
+        blocked,
+        color = Warning,
+        style = IdeTypography.compactBody,
+        modifier = Modifier.padding(top = 5.dp))
+  }
+  CompactSingleLineField(
+      state.newSymbol,
+      actions.updateNewSymbol,
+      label = "New ${state.creationKind.noun} name",
+      enabled = blocked == null,
+      modifier =
+          Modifier.fillMaxWidth()
+              .padding(top = 9.dp)
+              .then(state.creationNameFocus?.let { Modifier.focusRequester(it) } ?: Modifier))
+  if (state.targetValidation.message.isNotBlank()) {
+    Text(
+        state.targetValidation.message,
+        color = if (state.targetValidation.valid) SecondaryText else Warning,
+        style = IdeTypography.compactBody,
+        modifier = Modifier.padding(top = 5.dp).testTag("assistant-name-feedback"))
+  }
+}
+
+@Composable
 internal fun AssistantToolWindow(
     state: AssistantToolWindowState,
     conversationActions: AssistantConversationActions,
@@ -95,58 +151,7 @@ internal fun AssistantToolWindow(
                   style = IdeTypography.compactBody,
                   modifier = Modifier.padding(top = 5.dp))
             }
-            if (creating) {
-              Text(
-                  "Declaration kind",
-                  color = SecondaryText,
-                  style = IdeTypography.resultLabel,
-                  modifier = Modifier.padding(top = 9.dp, bottom = 5.dp))
-              Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                DeclarationCreationKind.entries.forEach { kind ->
-                  val active = state.creationKind == kind
-                  ChromeButton(
-                      onClick = { conversationActions.changeCreationKind(kind) },
-                      enabled = creationBlocked == null,
-                      selected = active,
-                      role = Role.RadioButton,
-                      accessibleName = "New Go ${kind.noun}",
-                      tooltip = null,
-                      modifier =
-                          Modifier.weight(1f).semantics {
-                            selected = active
-                            stateDescription = if (active) "Selected" else "Not selected"
-                          }) {
-                        Text(
-                            "${if (active) "Selected" else "Select"} · ${kind.noun.replaceFirstChar { it.uppercase() }}")
-                      }
-                }
-              }
-              if (creationBlocked != null) {
-                Text(
-                    creationBlocked,
-                    color = Warning,
-                    style = IdeTypography.compactBody,
-                    modifier = Modifier.padding(top = 5.dp))
-              }
-              CompactSingleLineField(
-                  state.newSymbol,
-                  conversationActions.updateNewSymbol,
-                  label = "New ${state.creationKind.noun} name",
-                  enabled = creationBlocked == null,
-                  modifier =
-                      Modifier.fillMaxWidth()
-                          .padding(top = 9.dp)
-                          .then(
-                              state.creationNameFocus?.let { Modifier.focusRequester(it) }
-                                  ?: Modifier))
-              if (state.targetValidation.message.isNotBlank()) {
-                Text(
-                    state.targetValidation.message,
-                    color = if (state.targetValidation.valid) SecondaryText else Warning,
-                    style = IdeTypography.compactBody,
-                    modifier = Modifier.padding(top = 5.dp))
-              }
-            }
+            if (creating) CreationNameControls(state, conversationActions, creationBlocked)
             if (presetsAvailable) {
               Text(
                   "Quick change",
