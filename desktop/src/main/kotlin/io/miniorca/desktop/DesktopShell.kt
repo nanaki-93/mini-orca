@@ -285,7 +285,8 @@ internal data class DesktopShellPaletteActions(
     val switchMode: (PaletteMode) -> Unit,
     val selectFile: (String) -> Unit,
     val selectSymbol: (SymbolInfo) -> Unit,
-    val selectAction: (String) -> Unit,
+    // True when the action moves focus to its own destination after closing the palette.
+    val selectAction: (String) -> Boolean,
 )
 
 internal data class DesktopShellPanes(
@@ -919,8 +920,8 @@ internal fun DesktopShell(
                 paletteOrigin = null
               },
               { action ->
-                paletteActions.selectAction(action)
-                pendingFocus = paletteOrigin
+                val focusTransferred = paletteActions.selectAction(action)
+                pendingFocus = if (focusTransferred) null else paletteOrigin
                 paletteOrigin = null
               },
               ::dismissPaletteAndRestoreFocus,

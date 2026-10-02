@@ -540,9 +540,10 @@ internal fun MiniOrcaApp(
         ::startCreateDeclaration,
         ::applyCreationKind,
         { Triple(chatMode, creationKind, newChatSymbol) })
-    if (pending is PendingDraftDiscard.Create &&
-        pending.intent == PendingDraftDiscard.CreationIntent.ChangeKind)
-        focusComposerControl(ComposerFocusTarget.Name)
+    if (pending is PendingDraftDiscard.Create) {
+      if (chatMode == ChatEditMode.CreateSymbol) focusAssistantControl(ComposerFocusTarget.Name)
+      else focusAssistantControl(ComposerFocusTarget.Chat)
+    }
   }
 
   fun updatePendingSwitch() {
@@ -712,16 +713,6 @@ internal fun MiniOrcaApp(
           draft != null &&
               appState.review.editor != null &&
               chatDraftMatchesSession(draft, appState.chat.session)
-      val focusTarget = pendingComposerFocus
-      LaunchedEffect(focusTarget, draftEditorVisible) {
-        when (focusTarget) {
-          ComposerFocusTarget.Name -> creationNameFocusRequester.requestFocus()
-          ComposerFocusTarget.Chat -> chatFocusRequester.requestFocus()
-          ComposerFocusTarget.Draft -> if (draftEditorVisible) draftFocusRequester.requestFocus()
-          null -> Unit
-        }
-        if (pendingComposerFocus == focusTarget) pendingComposerFocus = null
-      }
       AssistantToolWindow(
           state =
               AssistantToolWindowState(
@@ -805,6 +796,20 @@ internal fun MiniOrcaApp(
               ),
           modifier = modifier,
       )
+      val focusTarget = pendingComposerFocus
+      LaunchedEffect(focusTarget, draftEditorVisible, showPalette, pendingDraftDiscard) {
+        if (showPalette || pendingDraftDiscard != null) return@LaunchedEffect
+        when (focusTarget) {
+          ComposerFocusTarget.Name -> creationNameFocusRequester.requestFocus()
+          ComposerFocusTarget.Chat -> chatFocusRequester.requestFocus()
+          ComposerFocusTarget.Draft -> {
+            if (!draftEditorVisible) return@LaunchedEffect
+            draftFocusRequester.requestFocus()
+          }
+          null -> return@LaunchedEffect
+        }
+        if (pendingComposerFocus == focusTarget) pendingComposerFocus = null
+      }
     } else {
       SystemStateMessage(
           "Assistant",
@@ -1043,6 +1048,7 @@ internal fun MiniOrcaApp(
                     "document" -> contextAction = action
                   }
                 }
+                creationKind != null && paletteBlockedReason == null
               },
           ),
       panes =
@@ -1093,9 +1099,10 @@ internal fun MiniOrcaApp(
   pendingDraftDiscard?.let { pending ->
     DraftDiscardDialog(pending.currentDraft, pending.nextLabel, ::discardDraftAndContinue) {
       pendingDraftDiscard = null
-      if (pending is PendingDraftDiscard.Create &&
-          pending.intent == PendingDraftDiscard.CreationIntent.ChangeKind)
-          focusComposerControl(ComposerFocusTarget.Name)
+      if (pending is PendingDraftDiscard.Create) {
+        if (chatMode == ChatEditMode.CreateSymbol) focusAssistantControl(ComposerFocusTarget.Name)
+        else focusAssistantControl(ComposerFocusTarget.Chat)
+      }
     }
   }
 }
