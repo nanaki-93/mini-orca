@@ -27,6 +27,27 @@ import kotlin.test.assertTrue
 
 class TerminalToolWindowTest {
   @Test
+  fun nativeWidgetTextScalingKeepsItsReaderAndHistory() =
+      withWorkspace { workspace, process, starts, path ->
+        edt { workspace.activate(path) }
+        eventually { workspace.state.value.widget != null }
+        val widget = workspace.state.value.widget!!
+        process.emit("retained across text scale\r\n")
+        eventually {
+          widget.terminalTextBuffer.getScreenLines().contains("retained across text scale")
+        }
+        val connector = widget.ttyConnector
+        for (scale in listOf(1f, 1.25f, 1.5f, 1f)) {
+          edt { widget.updateFontScale(scale) }
+          assertSame(connector, widget.ttyConnector)
+          assertTrue(
+              widget.terminalTextBuffer.getScreenLines().contains("retained across text scale"))
+          assertTrue(process.alive)
+        }
+        assertEquals(1, starts.get())
+      }
+
+  @Test
   fun liveTerminalOwnerSurvivesProductionEditorReflow() =
       withWorkspace { workspace, process, starts, path ->
         edt { workspace.activate(path) }

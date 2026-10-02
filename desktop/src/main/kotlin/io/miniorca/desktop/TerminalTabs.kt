@@ -3,7 +3,9 @@ package io.miniorca.desktop
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
@@ -52,6 +54,8 @@ internal fun TerminalTabs(
         modifier = Modifier.padding(start = 4.dp),
     ) {
       DesktopLineIcon(DesktopIcon.Add, "New shell", iconSize = 16.dp)
+      Spacer(Modifier.width(4.dp))
+      Text("New shell", style = IdeTypography.action)
     }
   }
 }
