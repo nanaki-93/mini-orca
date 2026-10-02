@@ -333,6 +333,8 @@ internal fun MiniOrcaApp(
   val chatFocusRequester = remember { FocusRequester() }
   val creationNameFocusRequester = remember { FocusRequester() }
   val draftFocusRequester = remember { FocusRequester() }
+  val inspectContextFocusRequester = remember { FocusRequester() }
+  var contextInspectOpener by remember { mutableStateOf<ContextInspectFocusOrigin?>(null) }
   TerminalSourceRefreshEffect(appState, layout, terminal, presenter)
   val analyzeModel = workflow.model(ModelScope.Analyze)
   val bugModel = workflow.model(ModelScope.Bug)
@@ -712,6 +714,7 @@ internal fun MiniOrcaApp(
                   creationKind = creationKind,
                   creationNameFocus = creationNameFocusRequester,
                   requestFailure = appState.chat.failure,
+                  inspectContextFocus = inspectContextFocusRequester,
               ),
           conversationActions =
               AssistantConversationActions(
@@ -725,6 +728,11 @@ internal fun MiniOrcaApp(
                     presenter.setProviderConfirmation(ModelScope.Function, it)
                   },
                   inspectContext = {
+                    contextInspectOpener =
+                        ContextInspectFocusOrigin(
+                            appState.project?.projectId,
+                            appState.workspace,
+                            inspectContextFocusRequester)
                     presenter.inspectContext(
                         if (chatMode == ChatEditMode.CreateSymbol) "create" else contextAction,
                         chatMode,
@@ -814,6 +822,10 @@ internal fun MiniOrcaApp(
       )
   DesktopShell(
       terminal = terminal,
+      contextInspectOpener = contextInspectOpener,
+      contextInspectControlPresent =
+          (composerRequested || editorProgress.progress == EditorProgress.Edit) &&
+              !workflow.generating,
       state =
           DesktopShellState(
               app = appState,

@@ -1,11 +1,13 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -13,6 +15,39 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class DesktopAccessibilityTest {
+  @Test
+  fun contextInspectorKeepsActionFocusAndKeyboardTraversalInsideItsSurface() {
+    var dismissals = 0
+    var retries = 0
+    var cancels = 0
+    val inspection = ContextInspectionState(status = ContextInspectionStatus.Loading)
+    ComposeVisualFixture(800, 650, 1.5f) {
+          IdeDialogSurface(
+              maxHeight = 520.dp,
+              title = { Text("Context inspector · read-only") },
+              content = { ContextInspectorContent(inspection) },
+              actions = {
+                ContextInspectorActions(inspection, { dismissals++ }, { retries++ }, { cancels++ })
+              },
+              focusSafeActionOnOpen = true,
+              onDismissRequest = { dismissals++ })
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Cancel"))
+          assertTrue(fixture.pressKey(Key.Tab))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Close"))
+          assertTrue(fixture.pressKey(Key.Tab, shift = true))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Cancel"))
+          assertEquals(0, dismissals + retries + cancels)
+          assertTrue(fixture.pressKey(Key.Escape))
+          assertEquals(1, dismissals)
+          assertEquals(0, retries + cancels)
+        }
+  }
+
   @Test
   fun sourceRecoveryWithoutFilesAndCreationKeepNamedKeyboardActionsAcrossReflow() {
     val evidence = sourceNavigationReviewFixture()

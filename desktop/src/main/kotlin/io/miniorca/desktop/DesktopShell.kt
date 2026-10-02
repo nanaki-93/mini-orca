@@ -332,11 +332,61 @@ internal enum class TransientOpener {
   FooterModels,
 }
 
+internal data class ContextInspectFocusOrigin(
+    val projectId: String?,
+    val workspace: Workspace,
+    val requester: FocusRequester,
+)
+
 private data class TransientFocusOrigin(
     val region: DesktopFocusRegion,
     val projectId: String?,
     val opener: TransientOpener = TransientOpener.Region,
+    val inspect: ContextInspectFocusOrigin? = null,
 )
+
+private fun contextInspectOpenerSurvives(
+    origin: ContextInspectFocusOrigin?,
+    projectId: String?,
+    workspace: Workspace,
+    assistantVisible: Boolean,
+): Boolean =
+    origin != null &&
+        origin.projectId == projectId &&
+        origin.workspace == workspace &&
+        workspace == Workspace.Editor &&
+        assistantVisible
+
+private fun contextInspectionFocusOrigin(
+    region: DesktopFocusRegion,
+    projectId: String?,
+    inspect: ContextInspectFocusOrigin?,
+): TransientFocusOrigin =
+    TransientFocusOrigin(
+        if (inspect != null) DesktopFocusRegion.RightToolWindow else region,
+        inspect?.projectId ?: projectId,
+        inspect = inspect)
+
+private fun contextInspectRestoreRequester(
+    origin: ContextInspectFocusOrigin?,
+    projectId: String?,
+    workspace: Workspace,
+    showsEditorChrome: Boolean,
+    layout: DesktopLayoutState,
+    controlPresent: Boolean,
+): FocusRequester? =
+    origin
+        ?.takeIf {
+          contextInspectOpenerSurvives(
+              it,
+              projectId,
+              workspace,
+              showsEditorChrome &&
+                  layout.rightToolWindowVisible &&
+                  layout.activeRightToolWindow == RightToolWindow.Assistant &&
+                  controlPresent)
+        }
+        ?.requester
 
 internal fun transientFocusOpener(
     opener: TransientOpener,
@@ -393,6 +443,8 @@ internal fun DesktopShell(
     paletteActions: DesktopShellPaletteActions,
     panes: DesktopShellPanes,
     terminal: DesktopTerminalWorkspace? = null,
+    contextInspectOpener: ContextInspectFocusOrigin? = null,
+    contextInspectControlPresent: Boolean = false,
 ) {
   val appState = state.app
   val layout = state.layout
@@ -505,7 +557,9 @@ internal fun DesktopShell(
     if (context.visible &&
         shellMode == DesktopShellMode.ProjectWorkspace &&
         contextOrigin == null) {
-      contextOrigin = TransientFocusOrigin(layout.lastFocusedRegion, appState.project?.projectId)
+      contextOrigin =
+          contextInspectionFocusOrigin(
+              layout.lastFocusedRegion, appState.project?.projectId, contextInspectOpener)
     } else if (contextOrigin != null) {
       pendingFocus = contextOrigin
       contextOrigin = null
@@ -591,8 +645,17 @@ internal fun DesktopShell(
                   workspace,
                   showsEditorChrome && layout.rightToolWindowVisible,
                   desktopStatusBarVisible(appState.project))
+          val inspectRequester =
+              contextInspectRestoreRequester(
+                  origin.inspect,
+                  appState.project?.projectId,
+                  workspace,
+                  showsEditorChrome,
+                  layout,
+                  contextInspectControlPresent)
           val requester =
               when {
+                inspectRequester != null -> inspectRequester
                 region == null ->
                     if (projectOpenAvailable(appState.projectState.openingAttempt))
                         focusRequesters.landing
