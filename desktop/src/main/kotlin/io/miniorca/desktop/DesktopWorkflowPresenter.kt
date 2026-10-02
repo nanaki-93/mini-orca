@@ -1809,33 +1809,33 @@ class DesktopWorkflowPresenter(
     val state = snapshot.value.state
     if (state.chat.pendingRequestId != 0L) return
     val project = state.project ?: return
-    val file = state.selectedFile ?: return
+    val file = state.selectedFile
     val target =
         validateChatTarget(file, state.symbols, state.selectedSymbol, mode, requestedSymbol)
-    if (!target.valid) {
-      dispatch(DesktopEvent.Failed(target.message))
+    val workflow = snapshot.value
+    val destination = workflow.model(ModelScope.Function)
+    val remoteConfirmed = workflow.providerConfirmed(ModelScope.Function)
+    val blockedReason =
+        assistantComposerBlockedReason(
+            mode,
+            file,
+            target,
+            rawIntent,
+            workflow.generating,
+            workflow.draftValidationInProgress ||
+                state.review.editor?.status == DraftEditorStatus.Validating,
+            destination,
+            remoteConfirmed)
+    if (blockedReason != null) {
+      dispatch(DesktopEvent.Failed(blockedReason))
       return
     }
-    if (!hasFunctionChangeIntent(rawIntent)) {
-      val guidance =
-          if (rawIntent.isBlank()) "Write a concise intent before sending."
-          else "Add a concise intent after the selected preset before sending."
-      dispatch(DesktopEvent.Failed(guidance))
-      return
-    }
+    if (file == null) return
     val request = functionChangeRequest(rawIntent, constraints)
     val content =
         if (mode == ChatEditMode.CreateSymbol && creationKind != null)
             creationMessage(creationKind, requestedSymbol, request)
         else request
-    val destination = snapshot.value.model(ModelScope.Function)
-    val remoteConfirmed = snapshot.value.providerConfirmed(ModelScope.Function)
-    if (destination.remoteProvider && !remoteConfirmed) {
-      dispatch(
-          DesktopEvent.Failed(
-              "Confirm the Function edits model destination before sending context."))
-      return
-    }
     val chatTarget = target.target ?: return
     val taskSpec =
         state.preparedTaskSpec?.takeIf {

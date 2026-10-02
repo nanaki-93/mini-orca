@@ -17,6 +17,7 @@ internal fun editorContextualActions(
     sending: Boolean,
     functionModel: ScopedModel,
     remoteProviderConfirmed: Boolean,
+    validating: Boolean = false,
 ): EditorContextualActions {
   if (state.workspace != Workspace.Editor) {
     return EditorContextualActions(
@@ -56,10 +57,15 @@ internal fun editorContextualActions(
       canFocusChat = target.valid,
       canFocusDraft = draftCurrent,
       canGenerate =
-          target.valid &&
-              hasFunctionChangeIntent(rawIntent) &&
-              !sending &&
-              (!functionModel.remoteProvider || remoteProviderConfirmed),
+          assistantComposerBlockedReason(
+              mode,
+              state.selectedFile,
+              target,
+              rawIntent,
+              sending,
+              validating || editor?.status == DraftEditorStatus.Validating,
+              functionModel,
+              remoteProviderConfirmed) == null,
       canValidateDraft = canValidate,
       canRunFocusedChecks = canChecks,
   )

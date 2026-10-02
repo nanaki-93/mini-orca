@@ -285,6 +285,9 @@ class AssistantToolWindowTest {
         "Confirm the Function remote destination before sending.",
         assistantComposerBlockedReason(base))
     assertEquals(null, assistantComposerBlockedReason(base.copy(remoteConfirmed = true)))
+    assertEquals(
+        "Wait for the current draft validation to finish.",
+        assistantComposerBlockedReason(base.copy(remoteConfirmed = true, validating = true)))
     val invalid =
         base.copy(
             target = null,

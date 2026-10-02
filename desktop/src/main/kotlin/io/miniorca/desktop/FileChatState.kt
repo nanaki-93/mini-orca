@@ -98,6 +98,37 @@ fun validateChatTarget(
   }
 }
 
+internal fun assistantComposerBlockedReason(
+    mode: ChatEditMode,
+    selected: ProjectFileInfo?,
+    validation: ChatTargetValidation,
+    rawIntent: String,
+    sending: Boolean,
+    validating: Boolean,
+    functionModel: ScopedModel,
+    remoteConfirmed: Boolean,
+): String? =
+    when {
+      sending -> "Request running. Cancel before sending another request."
+      mode == ChatEditMode.CreateSymbol ->
+          declarationCreationBlockedReason(selected, validating)
+              ?: validation.message
+                  .ifBlank { "Select a declaration or enter a new name." }
+                  .takeIf { !validation.valid }
+              ?: if (!hasFunctionChangeIntent(rawIntent))
+                  "Enter a specific behavior before sending."
+              else if (functionModel.remoteProvider && !remoteConfirmed)
+                  "Confirm the Function remote destination before sending."
+              else null
+      !validation.valid ->
+          validation.message.ifBlank { "Select one Go declaration before sending." }
+      validating -> "Wait for the current draft validation to finish."
+      !hasFunctionChangeIntent(rawIntent) -> "Enter a specific intent before sending."
+      functionModel.remoteProvider && !remoteConfirmed ->
+          "Confirm the Function remote destination before sending."
+      else -> null
+    }
+
 fun functionChangePresetBoundary(
     mode: ChatEditMode,
     selectedSymbol: SymbolInfo?,

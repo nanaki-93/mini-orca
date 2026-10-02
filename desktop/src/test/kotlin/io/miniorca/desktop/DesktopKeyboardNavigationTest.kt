@@ -1215,6 +1215,182 @@ class DesktopKeyboardNavigationTest {
     assertEquals(1, selections)
   }
 
+  @Test
+  fun plainEnterInAssistantIntentRemainsMultilineAndNeverSends() {
+    val file =
+        ProjectFileInfo(
+            "main.go",
+            "base",
+            "main.go",
+            language = "Go",
+            sizeBytes = 10,
+            lineCount = 3,
+            modifiedAt = "",
+            binary = false)
+    val symbol = SymbolInfo("Run", "function", "func Run()", 1, 3, "exact", true)
+    val target = ChatTarget(ChatEditMode.ReplaceSymbol, "Run")
+    var input by mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("Fix this"))
+    var sends = 0
+    ComposeVisualFixture(480, 650) {
+          AssistantToolWindow(
+              AssistantToolWindowState(
+                  resultProjectFixture(),
+                  file,
+                  null,
+                  null,
+                  null,
+                  target,
+                  ChatEditMode.ReplaceSymbol,
+                  "",
+                  input.text,
+                  false,
+                  ScopedModel(),
+                  false,
+                  FocusRequester(),
+                  FocusRequester(),
+                  messageInput = input,
+                  selectedSymbol = symbol,
+                  targetValidation = ChatTargetValidation(target)),
+              AssistantConversationActions(
+                  {}, {}, {}, {}, { sends++ }, {}, updateMessageValue = { input = it }),
+              DraftEditorActions({}, {}, {}),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.requestDescriptionFocus("Intent"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertTrue(input.text.contains('\n'))
+          assertTrue(fixture.isDescriptionFocused("Intent"))
+          assertEquals(0, sends)
+        }
+  }
+
+  @OptIn(InternalComposeUiApi::class)
+  @Test
+  fun assistantShortcutSharesSendAdmissionAndOnlyCancelsTheRunningRequest() {
+    val project = resultProjectFixture()
+    val file =
+        ProjectFileInfo(
+            "main.go",
+            "base",
+            "main.go",
+            language = "Go",
+            sizeBytes = 10,
+            lineCount = 3,
+            modifiedAt = "",
+            binary = false)
+    val symbol = SymbolInfo("Run", "function", "func Run()", 1, 3, "exact", true)
+    val state =
+        DesktopState(
+            workspace = Workspace.Editor,
+            projectState = ProjectWorkspaceState(project),
+            selection =
+                FileSelectionState(
+                    selectedFile = file, symbols = listOf(symbol), selectedSymbol = symbol))
+    val function = ScopedModel(scope = "function", remoteProvider = true)
+    val calls = mutableListOf<String>()
+    val actions =
+        DesktopShellEditorActions(
+            selectWorkspace = {},
+            selectEditorSurface = {},
+            focusChat = {},
+            focusDraft = {},
+            cancelAnalysis = {},
+            sourceLineSelected = {},
+            validateDraft = {},
+            runDraftChecks = {},
+            generate = { calls += "send" },
+            cancelGeneration = { calls += "cancel" },
+            dismissContext = {},
+            createDeclaration = {},
+            retryContext = {},
+            cancelContext = {})
+    fun activate(
+        current: DesktopState,
+        intent: String,
+        sending: Boolean = false,
+        confirmed: Boolean = false,
+        key: Key = Key.Enter,
+        dismissTransient: Boolean = false,
+        validating: Boolean = false,
+    ): Boolean =
+        handleDesktopShortcut(
+            KeyEvent(key, KeyEventType.KeyDown, isCtrlPressed = key == Key.Enter),
+            DesktopShellMode.ProjectWorkspace,
+            current,
+            DesktopShellEditorState(
+                EditorProgressUiState(EditorProgress.Edit, ""),
+                editorContextualActions(
+                    current,
+                    ChatEditMode.ReplaceSymbol,
+                    "",
+                    intent,
+                    sending,
+                    function,
+                    confirmed,
+                    validating),
+                false,
+                sending),
+            DesktopShellProjectActions({}, {}, {}),
+            false,
+            actions,
+            DesktopShellPaletteActions({}, {}, {}, {}, {}, {}, {}),
+            onDismissTransient = { dismissTransient },
+            onWorkspaceSelected = {},
+            terminal = null,
+            onTerminalSelected = {})
+    assertFalse(activate(state, ""))
+    assertFalse(activate(state, "Constraints: keep ABI"))
+    assertFalse(
+        activate(
+            state.copy(selection = state.selection.copy(selectedSymbol = null)),
+            "Fix the bug",
+            confirmed = true))
+    assertFalse(activate(state, "Fix the bug"))
+    assertFalse(activate(state, "Fix the bug", confirmed = true, validating = true))
+    assertFalse(
+        activate(state.copy(workspace = Workspace.Summary), "Fix the bug", confirmed = true))
+    assertTrue(activate(state, "Fix the bug", confirmed = true))
+    assertEquals(listOf("send"), calls)
+    assertFalse(activate(state, "Fix the bug", sending = true, confirmed = true))
+    val target = ChatTarget(ChatEditMode.ReplaceSymbol, "Run")
+    val running =
+        state.copy(
+            chat =
+                ChatState(
+                    attempts =
+                        listOf(
+                            ChatRequestAttempt(
+                                1,
+                                ChatRequestScope(
+                                    project.projectId,
+                                    project.projectRevision,
+                                    file.path,
+                                    file.contentHash,
+                                    target,
+                                    declaration = symbol),
+                                function,
+                                true,
+                                "Fix the bug",
+                                0))))
+    assertTrue(activate(running, "Fix the bug", sending = true, confirmed = true))
+    assertEquals(listOf("send", "cancel"), calls)
+    assertTrue(
+        activate(running, "Fix the bug", sending = true, key = Key.Escape, dismissTransient = true))
+    assertEquals(listOf("send", "cancel"), calls, "Escape must dismiss the inspector first")
+    assertTrue(activate(running, "Fix the bug", sending = true, key = Key.Escape))
+    assertEquals(listOf("send", "cancel", "cancel"), calls)
+    assertFalse(
+        activate(
+            running.copy(workspace = Workspace.Summary),
+            "Fix the bug",
+            sending = true,
+            confirmed = true))
+    assertEquals(listOf("send", "cancel", "cancel"), calls)
+  }
+
   @OptIn(InternalComposeUiApi::class)
   @Test
   fun openShortcutUsesTheSameAttemptAvailabilityAsThePointer() {
@@ -1943,7 +2119,7 @@ class DesktopKeyboardNavigationTest {
           fixture.render()
           repeat(2) { escape ->
             assertTrue(fixture.requestFocus("Inspect context"))
-            fixture.clickText("Inspect context")
+            assertTrue(fixture.pressKey(Key.Enter))
             fixture.render()
             assertTrue(fixture.hasText("Context inspector · read-only"))
             // Offscreen popup windows do not steal host focus; move it to a surviving
