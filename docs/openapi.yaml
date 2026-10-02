@@ -1361,7 +1361,7 @@ components:
         base_file_hash: {type: string}
         open_path: {type: string, description: Project-relative open Go source file.}
         mode: {type: string, enum: [replace_symbol, create_symbol]}
-        target_symbol: {type: string, description: Exact existing symbol for replacement or absent top-level identifier for creation.}
+        target_symbol: {type: string, description: Exact existing symbol for replacement or valid Go identifier absent from all indexed symbols in the open file for creation. Creation rejects Go keywords and workflow-reserved names (_, init, main); it does not guarantee package-wide uniqueness. Function versus Type is conveyed in the message, not a separate session field.}
         task_spec: {$ref: '#/components/schemas/BugTaskSpec'}
         engineering_insight: {$ref: '#/components/schemas/EngineeringInsight'}
     ChatMessageRequest:

@@ -75,6 +75,362 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun f27CreationComposerProductionMatrix() {
+    val evidence = editorComparisonReviewFixture()
+    val file = requireNotNull(evidence.selected)
+    val oldDraft = requireNotNull(evidence.draft)
+    val longPath = "internal/" + "deeply/nested/日本語/".repeat(9) + "creation.go"
+    val remote =
+        ScopedModel(
+            scope = "function",
+            profile = "remote-edit",
+            model = "example-model",
+            providerOrigin = "https://provider.example.invalid",
+            remoteProvider = true)
+    val local =
+        ScopedModel(
+            scope = "function",
+            profile = "local-edit",
+            model = "example-model",
+            providerOrigin = "http://localhost:11434")
+    val prior =
+        oldDraft.copy(
+            mode = "create_symbol", targetSymbol = "Build", declaration = "func Build() {}")
+    val priorSession =
+        requireNotNull(evidence.session)
+            .copy(mode = "create_symbol", targetSymbol = "Build", latestDraftId = prior.id)
+    val scope =
+        ChatRequestScope(
+            visualFixtureProject.projectId,
+            visualFixtureProject.projectRevision,
+            file.path,
+            file.contentHash,
+            ChatTarget(ChatEditMode.CreateSymbol, "Build"))
+    val base =
+        AssistantToolWindowState(
+            visualFixtureProject,
+            file,
+            null,
+            null,
+            null,
+            null,
+            ChatEditMode.CreateSymbol,
+            "",
+            "Describe the intended behavior.",
+            false,
+            local,
+            false,
+            FocusRequester(),
+            FocusRequester(),
+            creationNameFocus = FocusRequester())
+    fun prepared(
+        name: String,
+        kind: DeclarationCreationKind = DeclarationCreationKind.Function,
+        selected: ProjectFileInfo = file,
+        symbols: List<SymbolInfo> = listOf(requireNotNull(evidence.selectedSymbol)),
+    ): AssistantToolWindowState {
+      val validation = validateChatTarget(selected, symbols, null, ChatEditMode.CreateSymbol, name)
+      return base.copy(
+          selected = selected,
+          creationKind = kind,
+          newSymbol = name,
+          target = validation.target,
+          targetValidation = validation)
+    }
+    val diagnostic = "Provider timeout: " + "connection detail ".repeat(32)
+    val failed =
+        ChatRequestAttempt(
+            1,
+            scope,
+            local,
+            false,
+            "Create a Go function named Build.",
+            0,
+            ChatRequestOutcome.Failed(diagnostic))
+    val canceled =
+        ChatRequestAttempt(
+            2,
+            scope,
+            local,
+            false,
+            "Create a Go function named Build.",
+            0,
+            ChatRequestOutcome.Canceled,
+            "Canceled locally")
+    val scenarios =
+        listOf(
+            "function-empty" to prepared(""),
+            "type-empty" to prepared("", DeclarationCreationKind.Type),
+            "function-valid" to prepared("Build"),
+            "type-valid" to prepared("Build", DeclarationCreationKind.Type),
+            "package-only-function" to
+                prepared(
+                    "Build",
+                    selected = file.copy(content = "package api\n"),
+                    symbols = emptyList()),
+            "package-only-type" to
+                prepared(
+                    "Build",
+                    DeclarationCreationKind.Type,
+                    file.copy(content = "package api\n"),
+                    emptyList()),
+            "keyword" to prepared("func"),
+            "reserved" to prepared("init"),
+            "existing" to prepared("GetUser"),
+            "long-name" to prepared("Build" + "日本語".repeat(24)),
+            "long-path" to prepared("Build", selected = file.copy(path = longPath)),
+            "unsupported" to prepared("Build", selected = file.copy(language = "Java")),
+            "remote" to prepared("Build").copy(functionModel = remote),
+            "running" to
+                prepared("Build")
+                    .copy(
+                        sending = true,
+                        attempts =
+                            listOf(
+                                ChatRequestAttempt(3, scope, local, false, "Pending request", 0))),
+            "failed" to prepared("Build").copy(attempts = listOf(failed)),
+            "canceled" to prepared("Build").copy(attempts = listOf(canceled)),
+            "draft-conflict" to
+                prepared("Build", DeclarationCreationKind.Type)
+                    .copy(session = priorSession, draft = prior, editor = editableDraft(prior)))
+    for ((width, height) in listOf(1600 to 1000, 1024 to 768, 800 to 650, 1280 to 600)) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+          for ((name, state) in scenarios) {
+            var calls = 0
+            val label = "f27-creation-$name-$width-$height-$scale-${density}x"
+            ComposeVisualFixture(
+                    (width * density).toInt(), (height * density).toInt(), scale, density) {
+                      AssistantToolWindow(
+                          state,
+                          AssistantConversationActions(
+                              { calls++ },
+                              { calls++ },
+                              { calls++ },
+                              { calls++ },
+                              { calls++ },
+                              { calls++ },
+                              changeCreationKind = { calls++ }),
+                          DraftEditorActions({ calls++ }, { calls++ }, { calls++ }),
+                          Modifier.fillMaxSize())
+                    }
+                .use { fixture ->
+                  fixture.render("$label-collapsed")
+                  assertEquals("Collapsed", fixture.stateDescription("Advanced constraints"), label)
+                  assertFalse(fixture.hasText("Constraints"), label)
+                  assertTrue(fixture.hasDescription("New Go function"), label)
+                  assertTrue(fixture.hasDescription("New Go type"), label)
+                  for (kind in DeclarationCreationKind.entries) {
+                    fixture.assertTextFits(
+                        "${if (kind == state.creationKind) "Selected" else "Select"} · ${kind.noun.replaceFirstChar { it.uppercase() }}",
+                        maxLines = 2)
+                  }
+                  assertEquals(
+                      if (state.creationKind == DeclarationCreationKind.Function) "Selected"
+                      else "Not selected",
+                      fixture.descriptionStateDescription("New Go function"),
+                      label)
+                  assertEquals(
+                      if (state.creationKind == DeclarationCreationKind.Type) "Selected"
+                      else "Not selected",
+                      fixture.descriptionStateDescription("New Go type"),
+                      label)
+                  assertEquals(
+                      state.creationKind == DeclarationCreationKind.Function,
+                      fixture.isDescriptionSelected("New Go function"),
+                      label)
+                  assertEquals(
+                      state.creationKind == DeclarationCreationKind.Type,
+                      fixture.isDescriptionSelected("New Go type"),
+                      label)
+                  assertTrue(fixture.hasText("Conversation"), label)
+                  assertTrue(fixture.hasText("Inspect context"), label)
+                  assertTrue(fixture.hasText("Behavior"), label)
+                  val nameLabel = "New ${state.creationKind.noun} name"
+                  assertTrue(fixture.hasText(nameLabel), label)
+                  fixture.assertTextFits(nameLabel)
+                  fixture.scrollBy(100_000f, "assistant-composer-scroll")
+                  fixture.render()
+                  val actionText =
+                      if (state.sending) "Cancel request" else "Generate ${state.creationKind.noun}"
+                  val action = fixture.taggedBounds("assistant-request-action")
+                  val composer = fixture.taggedBounds("assistant-composer-scroll")
+                  assertTrue(action.top >= composer.top && action.bottom <= composer.bottom, label)
+                  assertTrue(action.right <= width * density, label)
+                  fixture.assertTextFits(actionText)
+                  if (!state.sending) {
+                    assertEquals(
+                        assistantComposerBlockedReason(state) != null,
+                        fixture.isDisabled(actionText),
+                        label)
+                  }
+                  val feedback = state.targetValidation.message
+                  if (feedback.isNotBlank()) {
+                    fixture.assertEveryTextLineReachable(feedback, "assistant-composer-scroll")
+                    fixture.assertTextContrast(feedback, AppBackground)
+                  }
+                  if (name == "long-name") {
+                    assertTrue(fixture.hasText(state.newSymbol), label)
+                    assertTrue(state.targetValidation.valid, label)
+                  }
+                  if (name == "long-path") {
+                    fixture.assertEveryTextLineReachable(longPath, "assistant-composer-scroll")
+                    fixture.revealTextFullyWithin(longPath, "assistant-composer-scroll")
+                    assertTrue(fixture.copyTextByDragging(longPath).isNotBlank(), label)
+                  }
+                  if (name == "remote") {
+                    assertTrue(
+                        fixture.hasText("Confirm the Function remote destination before sending."),
+                        label)
+                    assertEquals(
+                        ToggleableState.Off,
+                        fixture.descriptionToggleableState("Confirm remote destination"),
+                        label)
+                    assertTrue(fixture.isDisabled(actionText), label)
+                  }
+                  if (name == "running") {
+                    assertTrue(
+                        fixture.hasText(
+                            "Request running · Cancel keeps the existing draft and conversation."),
+                        label)
+                    assertTrue(fixture.isDescriptionDisabled("New Go type"), label)
+                  }
+                  if (name == "unsupported")
+                      assertTrue(
+                          fixture.hasText("Function and type creation requires a Go source file."),
+                          label)
+                  if (name.startsWith("package-only")) {
+                    assertTrue(state.targetValidation.valid, label)
+                    assertTrue(
+                        fixture.hasText(
+                            "Name absent in the current file snapshot; the daemon rechecks before generation."),
+                        label)
+                  }
+                  if (name == "failed" || name == "canceled") {
+                    assertTrue(
+                        fixture.hasText(
+                            if (name == "failed") "Request failed" else "Request canceled"),
+                        label)
+                    if (name == "failed") {
+                      fixture.assertEveryTextLineReachable(diagnostic, "assistant-history-scroll")
+                      fixture.revealTextFullyWithin("Request failed", "assistant-history-scroll")
+                      fixture.assertTextContrast("Request failed", AppBackground)
+                    } else assertTrue(fixture.hasText("Canceled locally"), label)
+                  }
+                  if (name == "draft-conflict") assertTrue(fixture.hasText("Editable draft"), label)
+                  if (name == "function-valid" && width == 1024 && scale == 1f) {
+                    fixture.revealTextFullyWithin(nameLabel, "assistant-composer-scroll")
+                    assertTrue(fixture.requestDescriptionFocus(nameLabel), label)
+                    fixture.render("$label-name-focused")
+                    assertTrue(fixture.isDescriptionFocused(nameLabel), label)
+                  }
+                  assertEquals(0, calls, "Passive capture dispatched work: $label")
+                }
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun f27CreationKindConflictShowsExplicitDiscardInProductionDialog() {
+    val draft = requireNotNull(editorComparisonReviewFixture().draft)
+    val current =
+        CurrentEditIdentity(ChatEditMode.CreateSymbol, draft.targetPath, draft.targetSymbol, true)
+    for ((width, height) in listOf(1024 to 768, 800 to 650, 1280 to 600)) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        var decisions = 0
+        val label = "f27-creation-kind-discard-$width-$height-$scale"
+        ComposeVisualFixture(width, height, scale) {
+              DraftDiscardDialog(
+                  current, "change the creation kind", { decisions++ }, { decisions++ })
+            }
+            .use { fixture ->
+              fixture.render(label)
+              assertTrue(fixture.hasText("Discard current draft?"), label)
+              assertTrue(fixture.hasText("Keep draft"), label)
+              assertTrue(fixture.hasText("Discard draft"), label)
+              fixture.assertTextFits("Keep draft")
+              fixture.assertTextFits("Discard draft")
+              assertTrue(fixture.firstVisibleTextBounds("Discard draft").bottom <= height, label)
+              assertEquals(0, decisions, label)
+            }
+      }
+    }
+  }
+
+  @Test
+  fun f27CreationRemainsReachableBesideReadOnlySourceInNarrowAssistantPane() {
+    val evidence = editorComparisonReviewFixture()
+    val file = requireNotNull(evidence.selected)
+    val layout =
+        DesktopLayoutState(explorerWidth = 520f, actionWidth = 360f, bottomCollapsed = true)
+    for ((width, height) in listOf(1600 to 1000, 1024 to 768, 800 to 650, 1280 to 600)) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+          for (kind in DeclarationCreationKind.entries) {
+            var calls = 0
+            val validation =
+                validateChatTarget(file, emptyList(), null, ChatEditMode.CreateSymbol, "Build")
+            val state =
+                AssistantToolWindowState(
+                    visualFixtureProject,
+                    file,
+                    null,
+                    null,
+                    null,
+                    validation.target,
+                    ChatEditMode.CreateSymbol,
+                    "Build",
+                    "Describe the intended behavior.",
+                    false,
+                    ScopedModel(
+                        profile = "local",
+                        model = "editor",
+                        providerOrigin = "http://localhost:11434"),
+                    false,
+                    FocusRequester(),
+                    FocusRequester(),
+                    targetValidation = validation,
+                    creationKind = kind,
+                    creationNameFocus = FocusRequester())
+            val label = "f27-editor-creation-${kind.noun}-$width-$height-$scale-${density}x"
+            ComposeVisualFixture(
+                    (width * density).toInt(), (height * density).toInt(), scale, density) {
+                      AdaptiveProductionEditorFixture(
+                          layout,
+                          review = false,
+                          evidence = evidence,
+                          rightTool = RightToolWindow.Assistant,
+                          assistantState = state,
+                          terminalCollapsed = true,
+                          onRequest = { calls++ },
+                          onWrite = { calls++ })
+                    }
+                .use { fixture ->
+                  fixture.render(label)
+                  assertFalse(fixture.hasEditableText(withinTag = "source-viewport"), label)
+                  if (resolveDesktopLayout(layout, width.toFloat(), scale).mode ==
+                      DesktopLayoutMode.Compact) {
+                    fixture.scrollBy(100_000f, "f04-arrangement")
+                    fixture.render()
+                  }
+                  assertTrue(fixture.taggedBounds("f04-tool").width > 0, label)
+                  assertTrue(fixture.hasText("New ${kind.noun} name"), label)
+                  fixture.scrollBy(100_000f, "assistant-composer-scroll")
+                  fixture.render("$label-action")
+                  val action = fixture.taggedBounds("assistant-request-action")
+                  val composer = fixture.taggedBounds("assistant-composer-scroll")
+                  assertTrue(action.top >= composer.top && action.bottom <= composer.bottom, label)
+                  assertEquals(0, calls, label)
+                }
+          }
+        }
+      }
+    }
+  }
+
+  @Test
   fun f26AssistantComposerAndConversationProductionMatrix() {
     val evidence = editorComparisonReviewFixture()
     val file = requireNotNull(evidence.selected)

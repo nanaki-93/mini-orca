@@ -820,17 +820,30 @@ Ordinary automated tests use fake transport or action counters, without a runnin
 daemon, provider or project-code execution. Component fixtures qualify rendering
 and local interaction, not native-window behavior.
 
-## New Go functions
+## New Go functions and types
 
-Open a Go file, including one containing only a package declaration, and select
-**New function** in its header or Context. Assistant focuses the new-name field.
-**New Go function** and **New Go type** also remain in Commands. An invalid,
-reserved or existing name is rejected before a provider request. Preparing the
-composer does not generate or write code. A different active draft requires an
-explicit discard choice; canceling keeps that draft intact.
+Open a Go source file, including a package-only file, and choose **New function**
+in its header or Context, or **New Go function** / **New Go type** in Commands.
+Assistant opens with the new-name field focused. Use **Declaration kind** to
+switch between Function and Type without losing the name, Behavior or optional
+constraints. A conflicting draft requires explicit discard confirmation; keeping
+it preserves the draft and input. Preparation, switching kind and inspecting
+context do not generate a candidate or change source.
 
-After generation, edit the candidate, validate it, run trusted focused checks and
-review the read-only diff. Apply and Undo retain the existing file/hash guards.
+Enter a new name and meaningful **Behavior**, then explicitly **Generate function**
+or **Generate type**. Names are trimmed; Go identifiers including Unicode letters,
+`_helper` and `any` are allowed. Empty, malformed, keyword, workflow-reserved
+(`_`, `init`, `main`) and already reported names in the current file are rejected.
+Valid-name feedback refers only to the loaded *current file snapshot*; the daemon
+rechecks the name and file identity before generation. It does not promise
+package-wide uniqueness or a current-disk check. Unsupported files and busy
+requests show why creation is unavailable. A remote Function destination requires
+its own confirmation before sending; constraints alone do not replace Behavior.
+Cancel retains existing drafts and request history. A successful response creates
+an isolated editable declaration/import draft, not a validated or applied edit.
+
+Edit the candidate, validate it, run trusted focused checks and review the read-only
+diff. Apply and Undo retain the existing file/hash guards.
 Review keeps check diagnostics; Assistant retains failures and cancellations beside
 their originating requests within the current file conversation; Analysis and Bugs
 retain their own operational evidence. The bottom bar shows only
