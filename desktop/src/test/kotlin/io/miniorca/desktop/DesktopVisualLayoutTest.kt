@@ -112,6 +112,71 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun f28NarrowAssistantKeepsBothInputsAndActionsReachableAtHighDensity() {
+    val path = "internal/" + "deeply/nested/".repeat(5) + "run.go"
+    val draft =
+        DeclarationDraft(
+            "draft",
+            "project",
+            "revision",
+            "base",
+            path,
+            "replace_symbol",
+            "Run",
+            "func Run() {\n" + "  println(\"long declaration\")\n".repeat(12) + "}",
+            revision = 4,
+            hash = "hash")
+    val session =
+        ChatSession(
+            projectId = draft.projectId,
+            projectRevision = draft.projectRevision,
+            baseFileHash = draft.baseFileHash,
+            openPath = path,
+            mode = draft.mode,
+            targetSymbol = draft.targetSymbol,
+            state = "active",
+            latestDraftId = draft.id)
+    for ((width, height, density) in listOf(Triple(360, 650, 1f), Triple(640, 1200, 2f))) {
+      var dispatches = 0
+      ComposeVisualFixture(width, height, 1.5f, density) {
+            AssistantToolWindow(
+                AssistantToolWindowState(
+                    visualFixtureProject,
+                    null,
+                    session,
+                    draft,
+                    editableDraft(draft),
+                    ChatTarget(ChatEditMode.ReplaceSymbol, "Run"),
+                    ChatEditMode.ReplaceSymbol,
+                    "",
+                    "",
+                    false,
+                    ScopedModel(),
+                    false,
+                    FocusRequester(),
+                    FocusRequester(),
+                    draftInput = TextFieldValue(draft.declaration),
+                    importInput = TextFieldValue("fmt, ")),
+                AssistantConversationActions(
+                    {}, {}, {}, {}, { dispatches++ }, { dispatches++ }, changeCreationKind = {}),
+                DraftEditorActions({}, {}, { dispatches++ }, { dispatches++ }),
+                Modifier.fillMaxSize())
+          }
+          .use { fixture ->
+            fixture.render("f28-narrow-$width-$height-150-${density}x")
+            assertTrue(fixture.hasDescription("Declaration only"))
+            assertTrue(fixture.hasDescription("Required imports"))
+            fixture.revealText("Required imports", "assistant-history-scroll")
+            fixture.render("f28-narrow-imports-$width-$height-150-${density}x")
+            fixture.revealText("Discard draft…", "assistant-history-scroll")
+            fixture.render("f28-narrow-actions-$width-$height-150-${density}x")
+            assertTrue(fixture.hasText("Validate draft for Run"))
+            assertEquals(0, dispatches)
+          }
+    }
+  }
+
+  @Test
   fun f28DraftEditorStatesAndDiscardProductionCaptures() {
     val path = "internal/" + "deeply/nested/日本語/".repeat(6) + "run.go"
     val declaration =
