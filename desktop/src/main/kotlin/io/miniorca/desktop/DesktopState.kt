@@ -413,6 +413,7 @@ data class ChatRequestAttempt(
     val admittedDraftRevision: Long,
     val outcome: ChatRequestOutcome = ChatRequestOutcome.Running,
     val invalidationReason: String? = null,
+    val creationKind: String? = null,
 )
 
 data class ChatState(
@@ -1248,7 +1249,9 @@ private fun DesktopState.withValidationStopped(
                   review.copy(
                       editor =
                           editor.copy(
-                              status = DraftEditorStatus.Generated,
+                              status =
+                                  if (editor.unvalidatedLocalEdits) DraftEditorStatus.Dirty
+                                  else DraftEditorStatus.Generated,
                               validationAttempt =
                                   ValidationAttempt(event.requestId, event.status, event.message))))
         } ?: this
@@ -1685,6 +1688,7 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
       destination: ScopedModel,
       requestText: String,
       remoteConfirmed: Boolean = false,
+      creationKind: String? = null,
   ): Pair<Long, RequestIdentity>? {
     val file = fileRequest ?: return null
     if (!matchesFile(file) ||
@@ -1706,7 +1710,8 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
                                 destination,
                                 remoteConfirmed,
                                 requestText,
-                                draftRevision)))
+                                draftRevision,
+                                creationKind = creationKind)))
     return generation to file
   }
 

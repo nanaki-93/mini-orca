@@ -876,6 +876,39 @@ class DesktopStateTest {
   }
 
   @Test
+  fun editedDraftRemainsLocallyEditedAfterFailedOrCanceledValidation() {
+    val original = DeclarationDraft(id = "draft", declaration = "func Run() {}")
+    val initial =
+        DesktopState(review = DraftReviewState(draft = original, editor = editableDraft(original)))
+    for (outcome in listOf(ValidationAttemptStatus.Failed, ValidationAttemptStatus.Canceled)) {
+      // Restoring the original text does not restore validation authority.
+      val edited =
+          initial
+              .reduce(DesktopEvent.DraftEdited(declaration = "func Run() int { return 1 }"))
+              .reduce(DesktopEvent.DraftEdited(declaration = original.declaration))
+      val running = edited.reduce(DesktopEvent.DraftValidationStarted(7))
+      val patched =
+          running.reduce(
+              DesktopEvent.DraftValidationUpdated(
+                  7, original.copy(revision = 2, validation = null)))
+      val stopped =
+          patched.reduce(DesktopEvent.DraftValidationStopped(7, outcome, "Connection lost"))
+      assertEquals(original.declaration, stopped.review.editor?.declaration)
+      assertEquals(2, stopped.review.editor?.serverDraft?.revision)
+      assertEquals(DraftEditorStatus.Dirty, stopped.review.editor?.status)
+      assertEquals(
+          "Locally edited · needs validation",
+          draftEditorStatusLabel(stopped.review.editor!!.status))
+      assertEquals(outcome, stopped.review.editor.validationAttempt?.status)
+      assertEquals("Connection lost", stopped.review.editor.validationAttempt?.message)
+      assertNull(stopped.review.draft?.validation)
+      assertEquals(
+          DraftEditorStatus.Validating,
+          stopped.reduce(DesktopEvent.DraftValidationStarted(8)).review.editor?.status)
+    }
+  }
+
+  @Test
   fun predecessorCannotStopAReplacementOrAnEditedDraft() {
     val draft = DeclarationDraft(id = "draft", declaration = "func Run() {}")
     val initial =

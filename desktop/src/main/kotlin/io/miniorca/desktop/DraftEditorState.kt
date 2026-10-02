@@ -28,6 +28,7 @@ data class EditableDraftState(
     val status: DraftEditorStatus = draftEditorStatus(serverDraft),
     val validationAttempt: ValidationAttempt? = null,
     val retainedValidation: DeclarationValidation? = null,
+    val unvalidatedLocalEdits: Boolean = false,
     // Advances only when a complete authoritative draft is accepted, not on a PATCH response.
     val acceptanceGeneration: Long = 0,
 ) {
@@ -56,6 +57,7 @@ fun editDraft(
         declaration = declaration,
         imports = imports,
         status = DraftEditorStatus.Dirty,
+        unvalidatedLocalEdits = true,
         validationAttempt = null)
 
 fun draftEditorMatchesOpenFile(

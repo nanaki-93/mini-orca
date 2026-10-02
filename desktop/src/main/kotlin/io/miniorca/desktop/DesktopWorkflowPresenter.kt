@@ -1856,7 +1856,8 @@ class DesktopWorkflowPresenter(
                 if (mode == ChatEditMode.ReplaceSymbol) state.selectedSymbol else null),
             destination,
             content,
-            remoteConfirmed) ?: return
+            remoteConfirmed,
+            creationKind.takeIf { mode == ChatEditMode.CreateSymbol }?.noun) ?: return
     activeTask = identity
     val matchingSession =
         state.chat.session?.takeIf { chatSessionMatches(it, file, project, chatTarget, taskSpec) }
