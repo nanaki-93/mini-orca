@@ -1844,7 +1844,13 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
   fun draftValidated(requestId: Long, file: RequestIdentity, draft: DeclarationDraft): Boolean =
       if (currentValidation(requestId, file) &&
           state.review.editor?.serverDraft?.let {
-            it.id == draft.id && draft.revision == it.revision
+            it.id == draft.id &&
+                draft.revision == it.revision &&
+                it.hash == draft.hash &&
+                it.declaration == draft.declaration &&
+                it.imports == draft.imports &&
+                it.mode == draft.mode &&
+                it.targetSymbol == draft.targetSymbol
           } == true)
           draftLoaded(requestId, file, draft)
       else false

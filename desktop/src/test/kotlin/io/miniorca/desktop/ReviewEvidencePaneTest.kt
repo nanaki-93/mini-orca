@@ -9,6 +9,47 @@ import kotlin.test.assertTrue
 class ReviewEvidencePaneTest {
 
   @Test
+  fun validationCannotPassForAChangedSourceOrDifferentCandidate() {
+    val base = editorComparisonReviewFixture()
+    for ((file, draft) in
+        listOf(
+            base.selected!!.copy(contentHash = "external") to base.draft,
+            base.selected to base.draft!!.copy(hash = "foreign"))) {
+      val evidence = reviewEvidenceUiState(base.project, file, base.editor, draft, base.checks)
+      assertFalse(evidence.validation.status == ReviewEvidenceStatus.Passed)
+      assertFalse(evidence.canRunChecks)
+    }
+  }
+
+  @Test
+  fun validationStageHasExplicitActionsAndReadableFailureWithoutAutomaticWork() {
+    val base = editorComparisonReviewFixture().editor!!
+    for (status in DraftEditorStatus.entries) {
+      var calls = 0
+      val editor =
+          base.copy(status = status, unvalidatedLocalEdits = status == DraftEditorStatus.Dirty)
+      ComposeVisualFixture(360, 640, 1.5f) {
+            DraftValidationStage(
+                editor,
+                DraftEditorActions(
+                    {}, {}, { calls++ }, {}, cancelValidation = { calls++ }, review = { calls++ }))
+          }
+          .use { fixture ->
+            fixture.render("f29-validation-${status.name}")
+            assertTrue(fixture.hasText("Validation"))
+            assertEquals(0, calls)
+            when (status) {
+              DraftEditorStatus.Valid -> fixture.clickText("Review focused checks")
+              DraftEditorStatus.Validating -> fixture.clickText("Cancel validation")
+              DraftEditorStatus.Stale -> return@use
+              else -> fixture.clickText("Validate draft for GetUser")
+            }
+            assertEquals(1, calls)
+          }
+    }
+  }
+
+  @Test
   fun retainedValidationDiagnosticsAreNotPresentedAsCurrentApproval() {
     ComposeVisualFixture(420, 280) {
           DraftValidationDiagnostics(

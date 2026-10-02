@@ -984,3 +984,10 @@ Changing the selection does not rewrite a previous run.
 Summary's overall status and coverage follow the current selected files, including
 selection changes. The saved project description keeps its own freshness in the
 status details; an older description does not mark current file analysis outdated.
+
+Validation is an explicit stage in the isolated draft. It shows the server revision
+(and any local edits), current or retained diagnostics, and **Cancel validation**
+while a request is pending. After validation, **Review focused checks** opens Review
+without executing checks. Validation composes a candidate in memory; it does not
+run tests or write source. A response for different candidate content cannot approve
+the draft, and a changed source identity blocks current validation evidence.

@@ -959,6 +959,15 @@ class DesktopStateTest {
     assertTrue(controller.draftValidationUpdated(second, fileRequest, updated))
     assertEquals(2, controller.state.review.editor?.serverDraft?.revision)
     assertEquals("func Run() {}", controller.state.review.editor?.declaration)
+    for (foreign in
+        listOf(
+            updated.copy(hash = "other"),
+            updated.copy(declaration = "func Other() {}"),
+            updated.copy(imports = listOf("fmt")),
+            updated.copy(targetSymbol = "Other"),
+            updated.copy(mode = "create_symbol"))) {
+      assertFalse(controller.draftValidated(second, fileRequest, foreign))
+    }
     controller.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() int { return 1 }"))
     assertFalse(controller.draftValidated(second, fileRequest, updated))
     assertFalse(

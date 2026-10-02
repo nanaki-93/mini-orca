@@ -2012,7 +2012,11 @@ class DesktopWorkflowPresenter(
                   editor.declaration,
                   editor.imports)
             }
-            if (!controller.draftValidationUpdated(request, fileRequest, updated)) return@launch
+            if (!controller.draftValidationUpdated(request, fileRequest, updated)) {
+              reportFailure(
+                  IllegalStateException("Draft update returned a different candidate."), false)
+              return@launch
+            }
             publish()
             val validated = io {
               api.validateDraft(updated.id, project.projectRevision, updated.revision)
@@ -2025,6 +2029,9 @@ class DesktopWorkflowPresenter(
                   DesktopEvent.Status(
                       if (validated.validation?.applicable == true) "Draft validation passed."
                       else "Draft validation needs attention."))
+            } else {
+              reportFailure(
+                  IllegalStateException("Validation returned a different candidate."), false)
             }
           } catch (canceled: CancellationException) {
             if (controller.draftValidationStopped(
