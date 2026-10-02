@@ -21,6 +21,111 @@ import kotlinx.serialization.json.Json
 
 class CommandPaletteTest {
   @Test
+  fun allLoadedFilesAndSymbolsRemainLocallySearchable() {
+    val files =
+        (1..250).map {
+          IndexedFile("internal/${it.toString().padStart(3, '0')}/same.go", "hash", "Go", false)
+        }
+    val symbols =
+        (1..250).map {
+          SymbolInfo(
+              "Run$it", "function", startLine = it, confidence = "exact", atomicTarget = true)
+        }
+    assertEquals(250, commandSearchResults(PaletteMode.Files, "", files, symbols, true).size)
+    assertEquals(250, commandSearchResults(PaletteMode.Symbols, "", files, symbols, true).size)
+    assertEquals(
+        files.last().path,
+        commandSearchResults(PaletteMode.Files, "250", files, symbols, true).single().path)
+    val selected = mutableListOf<String>()
+    ComposeVisualFixture(800, 650, 1.5f) {
+          CommandPaletteDialog(
+              PaletteMode.Files, "", {}, {}, files, symbols, true, { selected += it }, {}, {}, {})
+        }
+        .use { fixture ->
+          fixture.render("f35-many-files-150")
+          assertTrue(fixture.hasText("250 results"))
+          fixture.pressKey(Key.DirectionUp)
+          fixture.render()
+          fixture.assertTextFits(files.last().path)
+          fixture.pressKey(Key.Enter)
+          assertEquals(listOf(files.last().path), selected)
+        }
+  }
+
+  @Test
+  fun focusedRowsUseArrowsEnterAndSpaceWithoutConsumingSpacesInTheFilter() {
+    val files =
+        listOf("a b/main.go", "a b/other.go", "z/last.go").map {
+          IndexedFile(it, "hash", "Go", false)
+        }
+    var query by mutableStateOf("")
+    val selected = mutableListOf<String>()
+    ComposeVisualFixture(800, 650) {
+          CommandPaletteDialog(
+              PaletteMode.Files,
+              query,
+              { query = it },
+              {},
+              files,
+              emptyList(),
+              false,
+              { selected += it },
+              {},
+              {},
+              {})
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.setFocusedText("a")
+          fixture.typeCharacter(Key.Spacebar, ' ')
+          fixture.typeCharacter(Key.B, 'b')
+          fixture.render("f35-filter-spaces")
+          assertEquals("a b", query)
+          assertTrue(selected.isEmpty())
+          assertTrue(fixture.requestDescriptionFocus("File a b/main.go, selected"))
+          fixture.render()
+          fixture.pressKey(Key.DirectionDown)
+          fixture.render()
+          fixture.pressKey(Key.Spacebar)
+          fixture.render()
+          assertEquals(listOf("a b/other.go"), selected)
+          fixture.pressKey(Key.DirectionUp)
+          fixture.render()
+          fixture.pressKey(Key.Enter)
+          assertEquals(listOf("a b/other.go", "a b/main.go"), selected)
+        }
+  }
+
+  @Test
+  fun fullPathsDisambiguateSameNamesAtCompactAndShortHeights() {
+    val paths =
+        listOf(
+            "internal/long-feature-module/first-services/handlers/main.go",
+            "internal/long-feature-module/second-services/handlers/main.go")
+    for ((width, height) in listOf(800 to 650, 1280 to 600)) {
+      ComposeVisualFixture(width, height, 1.5f) {
+            CommandPaletteDialog(
+                PaletteMode.Files,
+                "",
+                {},
+                {},
+                paths.map { IndexedFile(it, "hash", "Go", false) },
+                emptyList(),
+                false,
+                {},
+                {},
+                {},
+                {})
+          }
+          .use { fixture ->
+            fixture.render("f35-long-paths-$width-$height")
+            paths.forEach { fixture.assertTextWrapsWithoutClipping(it) }
+            fixture.assertTextFits("Close")
+          }
+    }
+  }
+
+  @Test
   fun creationCommandsRetainPaletteAndShowSharedBlockedReason() {
     FileNavigationUiFixture("composer").use { navigation ->
       var blocked by mutableStateOf<String?>(null)
@@ -301,7 +406,7 @@ class CommandPaletteTest {
             fixture.render("palette-analysis-$width-1.5")
             fixture.assertTextFits("Start analysis")
             fixture.assertTextFits("View analysis progress")
-            assertTrue(fixture.hasText(commandActionDetail("start_analysis")))
+            assertTrue(fixture.hasText("Action · ${commandActionDetail("start_analysis")}"))
             assertTrue(selected.isEmpty())
             assertTrue(fixture.pressKey(Key.DirectionDown))
             fixture.render()
@@ -396,7 +501,9 @@ class CommandPaletteTest {
     assertEquals(2, nextCommandSearchSelection(0, 3, -1))
     assertEquals(0, nextCommandSearchSelection(2, 3, 1))
     assertEquals(-1, nextCommandSearchSelection(0, 0, 1))
-    assertEquals("↑↓ select · Enter activate · Esc close", commandSearchHint(PaletteMode.Files))
+    assertEquals(
+        "↑↓ select · Enter activate · Space on result · Esc close",
+        commandSearchHint(PaletteMode.Files))
     assertEquals("No focused action is available", commandSearchEmptyTitle(PaletteMode.Actions))
   }
 

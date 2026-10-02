@@ -18,18 +18,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -79,7 +81,8 @@ internal fun commandSearchModeLabel(mode: PaletteMode): String =
       PaletteMode.Actions -> "Commands"
     }
 
-internal fun commandSearchHint(mode: PaletteMode): String = "↑↓ select · Enter activate · Esc close"
+internal fun commandSearchHint(mode: PaletteMode): String =
+    "↑↓ select · Enter activate · Space on result · Esc close"
 
 internal fun commandSearchResults(
     mode: PaletteMode,
@@ -95,7 +98,6 @@ internal fun commandSearchResults(
             .asSequence()
             .filter { it.path.contains(normalizedQuery, ignoreCase = true) }
             .sortedBy { it.path.lowercase() }
-            .take(MAX_COMMAND_RESULTS)
             .map { file ->
               CommandSearchResult(
                   type = CommandSearchResultType.File,
@@ -111,7 +113,6 @@ internal fun commandSearchResults(
             .asSequence()
             .filter { it.name.contains(normalizedQuery, ignoreCase = true) }
             .sortedWith(compareBy<SymbolInfo> { it.name.lowercase() }.thenBy { it.startLine })
-            .take(MAX_COMMAND_RESULTS)
             .map { symbol ->
               CommandSearchResult(
                   type = CommandSearchResultType.Symbol,
@@ -174,7 +175,12 @@ internal fun CommandPaletteDialog(
     onDismiss: () -> Unit,
     blockedReason: String? = null,
 ) {
-  val results = commandSearchResults(mode, query, files, symbols, hasActiveFile)
+  val results =
+      remember(mode, query, files, symbols, hasActiveFile) {
+        commandSearchResults(mode, query, files, symbols, hasActiveFile)
+      }
+  val resultFocus = remember(results) { results.map { FocusRequester() } }
+  var pendingResultFocus by remember(results) { mutableStateOf<Int?>(null) }
   val filterFocusRequester = remember { FocusRequester() }
   val resultListState = rememberLazyListState()
   var selectedIndex by
@@ -189,18 +195,21 @@ internal fun CommandPaletteDialog(
       null -> Unit
     }
   }
-  fun handleKey(event: KeyEvent): Boolean {
+  fun handleKey(event: KeyEvent, fromResult: Boolean = false): Boolean {
     if (event.type != KeyEventType.KeyDown) return false
     return when (event.key) {
       Key.DirectionDown -> {
         selectedIndex = nextCommandSearchSelection(selectedIndex, results.size, 1)
+        if (fromResult) pendingResultFocus = selectedIndex
         true
       }
       Key.DirectionUp -> {
         selectedIndex = nextCommandSearchSelection(selectedIndex, results.size, -1)
+        if (fromResult) pendingResultFocus = selectedIndex
         true
       }
       Key.Enter -> {
+        if (fromResult) return false
         results.getOrNull(selectedIndex)?.let(::activate)
         true
       }
@@ -239,9 +248,9 @@ internal fun CommandPaletteDialog(
               label = commandSearchFieldLabel(mode),
               showLabel = false,
               modifier =
-                  Modifier.fillMaxWidth()
-                      .focusRequester(filterFocusRequester)
-                      .onPreviewKeyEvent(::handleKey))
+                  Modifier.fillMaxWidth().focusRequester(filterFocusRequester).onPreviewKeyEvent {
+                    handleKey(it)
+                  })
           Text(
               commandSearchHint(mode),
               color = SecondaryText,
@@ -255,19 +264,28 @@ internal fun CommandPaletteDialog(
           if (results.isEmpty()) {
             SystemStateMessage(commandSearchEmptyTitle(mode), commandSearchEmptyDetail(mode))
           } else {
+            Text(
+                "${results.size} results",
+                color = SecondaryText,
+                style = IdeTypography.workspaceMetadata)
             Box(Modifier.fillMaxWidth().heightIn(max = COMMAND_RESULT_HEIGHT)) {
-              LazyColumn(Modifier.fillMaxWidth(), state = resultListState) {
-                itemsIndexed(results) { index, result ->
-                  CommandSearchEntry(
-                      result = result,
-                      selected = index == selectedIndex,
-                      onClick = {
-                        selectedIndex = index
-                        activate(result)
-                      },
-                  )
-                }
-              }
+              LazyColumn(
+                  Modifier.fillMaxWidth().testTag("palette-results"), state = resultListState) {
+                    itemsIndexed(results) { index, result ->
+                      CommandSearchEntry(
+                          result = result,
+                          selected = index == selectedIndex,
+                          modifier =
+                              Modifier.focusRequester(resultFocus[index])
+                                  .onFocusChanged { if (it.isFocused) selectedIndex = index }
+                                  .onPreviewKeyEvent { handleKey(it, fromResult = true) },
+                          onClick = {
+                            selectedIndex = index
+                            activate(result)
+                          },
+                      )
+                    }
+                  }
             }
           }
         }
@@ -277,8 +295,21 @@ internal fun CommandPaletteDialog(
       },
   )
   LaunchedEffect(mode) { filterFocusRequester.requestFocus() }
-  LaunchedEffect(selectedIndex, results) {
-    if (selectedIndex in results.indices) resultListState.scrollToItem(selectedIndex)
+  LaunchedEffect(selectedIndex, results, pendingResultFocus) {
+    if (selectedIndex in results.indices) {
+      val visible =
+          resultListState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == selectedIndex }
+      if (visible == null ||
+          visible.offset < resultListState.layoutInfo.viewportStartOffset ||
+          visible.offset + visible.size > resultListState.layoutInfo.viewportEndOffset) {
+        resultListState.scrollToItem(selectedIndex)
+      }
+      if (pendingResultFocus == selectedIndex) {
+        withFrameNanos {}
+        resultFocus[selectedIndex].requestFocus()
+        pendingResultFocus = null
+      }
+    }
   }
 }
 
@@ -356,21 +387,19 @@ private fun CommandSearchEntry(
       tone = ActionTone.Navigation,
       selected = selected,
   ) {
-    if (result.type == CommandSearchResultType.Action) {
-      Column(Modifier.fillMaxWidth()) {
-        Text(result.label, color = PrimaryText, style = IdeTypography.resultHeading)
-        Text(result.detail, color = SecondaryText, fontSize = 11.sp, lineHeight = 16.sp)
-      }
-    } else {
+    Column(Modifier.fillMaxWidth()) {
       Text(
-          "${result.type.label} · ${result.label} · ${result.detail}",
-          fontFamily = FontFamily.Monospace,
-          fontSize = 11.sp,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis)
+          result.label,
+          color = PrimaryText,
+          style =
+              if (result.type == CommandSearchResultType.File) IdeTypography.resultCode
+              else IdeTypography.resultHeading)
+      Text(
+          "${result.type.label} · ${result.detail}",
+          color = SecondaryText,
+          style = IdeTypography.workspaceMetadata)
     }
   }
 }
 
-private const val MAX_COMMAND_RESULTS = 12
 private val COMMAND_RESULT_HEIGHT = 288.dp
