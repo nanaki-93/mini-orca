@@ -335,8 +335,28 @@ it does not contact a model provider, grant Function consent, run code or write
 source. **Send** and **Explain** still require their own authorization, including
 remote-provider confirmation when applicable.
 
-A current draft must be discarded explicitly before changing its target. Editing
-it invalidates validation/check evidence. Review shows target identity, readiness,
+A current draft must be discarded explicitly before changing its target. In
+Assistant, **Editable draft** shows the project-relative target path, declaration
+name and replacement/new-declaration scope (Function or Type when known), the
+server draft revision, and a separate generated, locally edited, validating,
+validated, invalid or stale status. Only the isolated declaration and **Required
+imports** fields are editable; source and composed diffs remain selectable and
+read-only. The import field stays available when empty. Enter comma-separated
+import paths; spaces, trailing commas and partial entries remain in the field
+while editing, with nonblank entries trimmed for explicit validation. An empty
+list adds no required imports; it does not remove imports from the source file.
+Plain Enter in the declaration inserts a line, not a validation request.
+
+Editing either field invalidates validation/check readiness, even if the import
+list normalizes to the same entries or the original text is restored. Moving the
+caret or changing selection does not invalidate evidence. **Validate draft**
+explicitly sends the candidate for validation; validation alone neither runs
+checks nor writes source. Retained diagnostics are labeled as earlier evidence,
+not approval of the current candidate. **Discard draft…** opens a confirmation;
+**Keep draft**, Escape or dismissal preserves both inputs and evidence. Confirmed
+discard clears the current in-memory draft/conversation and focused checks without
+writing source; a confirmation for an older revision or edited buffer cannot
+silently discard newer work. Review shows target identity, readiness,
 three compact Validation / Focused checks / Source unchanged rows, and a summary
 of reported required checks. Check details and read-only project context start
 collapsed; failed output and validation diagnostics remain visible without hovering.

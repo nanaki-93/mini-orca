@@ -16,6 +16,91 @@ import kotlin.test.assertTrue
 
 class DesktopAccessibilityTest {
   @Test
+  fun draftInputsAndActionsExposeNamesStatusAndEarlierDiagnostics() {
+    val draft =
+        DeclarationDraft(
+            "draft",
+            "project",
+            "revision",
+            "base",
+            "internal/a/very/long/path/run.go",
+            "replace_symbol",
+            "Run",
+            "func Run() {}",
+            revision = 3,
+            hash = "hash",
+            validation =
+                DeclarationValidation(
+                    applicable = false,
+                    scopeMode = "symbol_plus_imports",
+                    diagnostics = listOf(DeclarationFinding("syntax", "missing closing brace")),
+                    diff =
+                        UnifiedDiff(
+                            "internal/a/very/long/path/run.go",
+                            "internal/a/very/long/path/run.go")))
+    val session =
+        ChatSession(
+            projectId = draft.projectId,
+            projectRevision = draft.projectRevision,
+            baseFileHash = draft.baseFileHash,
+            openPath = draft.targetPath,
+            mode = draft.mode,
+            targetSymbol = draft.targetSymbol,
+            state = "active",
+            latestDraftId = draft.id)
+    var editor by mutableStateOf(editableDraft(draft))
+    var actions = 0
+    ComposeVisualFixture(420, 760, 1.25f) {
+          AssistantToolWindow(
+              AssistantToolWindowState(
+                  resultProjectFixture(),
+                  null,
+                  session,
+                  draft,
+                  editor,
+                  ChatTarget(ChatEditMode.ReplaceSymbol, "Run"),
+                  ChatEditMode.ReplaceSymbol,
+                  "",
+                  "",
+                  false,
+                  ScopedModel(),
+                  false,
+                  androidx.compose.ui.focus.FocusRequester(),
+                  androidx.compose.ui.focus.FocusRequester()),
+              AssistantConversationActions(
+                  {}, {}, {}, {}, { actions++ }, { actions++ }, changeCreationKind = {}),
+              DraftEditorActions({}, {}, { actions++ }, { actions++ }),
+              androidx.compose.ui.Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasDescription("Declaration only"))
+          assertTrue(fixture.hasDescription("Required imports"))
+          assertTrue(fixture.hasText("Invalid"))
+          assertTrue(fixture.hasText(draftIdentityLabel(draft, null)))
+          assertTrue(fixture.hasText("missing closing brace"))
+          assertTrue(fixture.requestDescriptionFocus("Required imports"))
+          fixture.render()
+          fixture.assertColorVisible(FocusAccent)
+          assertTrue(fixture.requestFocus("Validate draft for Run"))
+          fixture.render()
+          fixture.assertColorVisible(FocusAccent)
+          assertTrue(fixture.requestFocus("Discard draft…"))
+          fixture.render()
+          fixture.assertColorVisible(FocusAccent)
+          editor =
+              editor.copy(
+                  status = DraftEditorStatus.Dirty,
+                  retainedValidation = draft.validation,
+                  serverDraft = draft.copy(validation = null))
+          fixture.render()
+          assertTrue(fixture.hasText("Locally edited · needs validation"))
+          assertTrue(fixture.hasText("Previous validation diagnostics"))
+          assertEquals(0, actions)
+        }
+  }
+
+  @Test
   fun creationFieldsKindsAndBlockedRequestsHaveTextualAccessibleStates() {
     val file =
         ProjectFileInfo(
