@@ -157,6 +157,49 @@ func TestChatSessionRejectsInvalidTargetsAndStaleState(t *testing.T) {
 	}
 }
 
+func TestCreateChatTargetValidation(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		target  string
+		symbols []project.SymbolInfo
+		valid   bool
+	}{
+		{name: "unicode", target: "Δοκιμή٢", valid: true},
+		{name: "leading underscore", target: "_helper", valid: true},
+		{name: "predeclared name", target: "any", valid: true},
+		{name: "empty", target: ""},
+		{name: "whitespace", target: " "},
+		{name: "blank identifier", target: "_"},
+		{name: "init", target: "init"},
+		{name: "main", target: "main"},
+		{name: "keyword", target: "func"},
+		{name: "qualified", target: "pkg.Build"},
+		{name: "invalid punctuation", target: "not-valid"},
+		{name: "unicode mark", target: "e\u0301"},
+		{name: "existing atomic", target: "Run", symbols: []project.SymbolInfo{{Name: "Run", AtomicTarget: true, Confidence: "exact"}}},
+		{name: "existing non-atomic", target: "Build", symbols: []project.SymbolInfo{{Name: "Build", AtomicTarget: false, Confidence: "exact"}}},
+		{name: "existing inexact", target: "Build", symbols: []project.SymbolInfo{{Name: "Build", AtomicTarget: true, Confidence: "partial"}}},
+		{name: "existing inexact non-atomic", target: "Build", symbols: []project.SymbolInfo{{Name: "Build", AtomicTarget: false, Confidence: "partial"}}},
+		{name: "different symbol", target: "Build", symbols: []project.SymbolInfo{{Name: "Run", AtomicTarget: true, Confidence: "exact"}}, valid: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			file := project.IndexFile{Symbols: test.symbols}
+			if err := validateChatTarget(file, project.DeclarationEditCreateSymbol, test.target); (err == nil) != test.valid {
+				t.Fatalf("creation target %q: error = %v, want valid = %t", test.target, err, test.valid)
+			}
+		})
+	}
+	// Replacement still requires exactly one exact atomic symbol.
+	file := project.IndexFile{Symbols: []project.SymbolInfo{{Name: "Run", Confidence: "partial", AtomicTarget: true}}}
+	if err := validateChatTarget(file, project.DeclarationEditReplaceSymbol, "Run"); err == nil {
+		t.Fatal("replacement accepted an inexact symbol")
+	}
+	file.Symbols[0].Confidence = "exact"
+	if err := validateChatTarget(file, project.DeclarationEditReplaceSymbol, "Run"); err != nil {
+		t.Fatalf("replacement rejected an exact atomic symbol: %v", err)
+	}
+}
+
 func TestChatSessionCreateNameAndFileBoundaries(t *testing.T) {
 	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
 	for _, name := range []string{"", " ", "func", "type", "var", "package", "range", "fallthrough", "interface", "2Build", "٢Build", "Worker.Build", "$Build", "e\u0301", "Build😀", "name\u200C", "Run"} {

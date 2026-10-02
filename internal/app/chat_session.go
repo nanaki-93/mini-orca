@@ -126,20 +126,25 @@ func validateChatTarget(file project.IndexFile, mode project.DeclarationEditMode
 	if target == "" {
 		return fmt.Errorf("target symbol is required")
 	}
-	count := 0
-	for _, symbol := range file.Symbols {
-		if symbol.Name == target && symbol.AtomicTarget && symbol.Confidence == "exact" {
-			count++
-		}
-	}
 	switch mode {
 	case project.DeclarationEditReplaceSymbol:
+		count := 0
+		for _, symbol := range file.Symbols {
+			if symbol.Name == target && symbol.AtomicTarget && symbol.Confidence == "exact" {
+				count++
+			}
+		}
 		if count != 1 {
 			return fmt.Errorf("replace mode requires one exact selected symbol")
 		}
 	case project.DeclarationEditCreateSymbol:
-		if strings.Contains(target, ".") || !token.IsIdentifier(target) || token.Lookup(target).IsKeyword() || count != 0 {
+		if !token.IsIdentifier(target) || target == "_" || target == "init" || target == "main" {
 			return fmt.Errorf("create mode requires one valid absent top-level symbol name")
+		}
+		for _, symbol := range file.Symbols {
+			if symbol.Name == target {
+				return fmt.Errorf("create mode requires one valid absent top-level symbol name")
+			}
 		}
 	default:
 		return fmt.Errorf("unsupported declaration edit mode")
