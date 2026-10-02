@@ -123,6 +123,7 @@ class AssistantToolWindowTest {
                   { inspections++ },
                   { sends++ },
                   {},
+                  changeCreationKind = {},
                   preparePreset = { prepared = it }),
               DraftEditorActions({}, {}, {}),
               Modifier.fillMaxSize())
@@ -195,7 +196,8 @@ class AssistantToolWindowTest {
       ComposeVisualFixture(360, 360, 1.5f) {
             AssistantToolWindow(
                 base.copy(sending = running, remoteConfirmed = true),
-                AssistantConversationActions({}, {}, {}, {}, { activated++ }, { activated++ }),
+                AssistantConversationActions(
+                    {}, {}, {}, {}, { activated++ }, { activated++ }, changeCreationKind = {}),
                 DraftEditorActions({}, {}, {}),
                 Modifier.fillMaxSize())
           }
@@ -238,7 +240,7 @@ class AssistantToolWindowTest {
     ComposeVisualFixture(420, 650) {
           AssistantToolWindow(
               historyState(target, null, emptyList()).copy(functionModel = model),
-              AssistantConversationActions({}, {}, {}, {}, {}, {}),
+              AssistantConversationActions({}, {}, {}, {}, {}, {}, changeCreationKind = {}),
               DraftEditorActions({}, {}, {}),
               Modifier.fillMaxSize())
         }
@@ -253,7 +255,8 @@ class AssistantToolWindowTest {
     ComposeVisualFixture(420, 650) {
           AssistantToolWindow(
               historyState(target, null, emptyList()).copy(functionModel = remote),
-              AssistantConversationActions({}, {}, { confirmations++ }, {}, {}, {}),
+              AssistantConversationActions(
+                  {}, {}, { confirmations++ }, {}, {}, {}, changeCreationKind = {}),
               DraftEditorActions({}, {}, {}),
               Modifier.fillMaxSize())
         }
@@ -303,7 +306,8 @@ class AssistantToolWindowTest {
     ComposeVisualFixture(420, 650) {
           AssistantToolWindow(
               base,
-              AssistantConversationActions({}, {}, { confirmations++ }, {}, { sends++ }, {}),
+              AssistantConversationActions(
+                  {}, {}, { confirmations++ }, {}, { sends++ }, {}, changeCreationKind = {}),
               DraftEditorActions({}, {}, {}),
               Modifier.fillMaxSize())
         }
@@ -318,7 +322,7 @@ class AssistantToolWindowTest {
     ComposeVisualFixture(420, 650) {
           AssistantToolWindow(
               invalid,
-              AssistantConversationActions({}, {}, {}, {}, {}, {}),
+              AssistantConversationActions({}, {}, {}, {}, {}, {}, changeCreationKind = {}),
               DraftEditorActions({}, {}, {}),
               Modifier.fillMaxSize())
         }
@@ -330,7 +334,7 @@ class AssistantToolWindowTest {
     ComposeVisualFixture(420, 650) {
           AssistantToolWindow(
               base.copy(remoteConfirmed = true),
-              AssistantConversationActions({}, {}, {}, {}, {}, {}),
+              AssistantConversationActions({}, {}, {}, {}, {}, {}, changeCreationKind = {}),
               DraftEditorActions({}, {}, {}),
               Modifier.fillMaxSize())
         }
@@ -364,7 +368,8 @@ class AssistantToolWindowTest {
     ComposeVisualFixture(420, 650) {
           AssistantToolWindow(
               state,
-              AssistantConversationActions({}, {}, {}, {}, { sent++ }, { canceled++ }),
+              AssistantConversationActions(
+                  {}, {}, {}, {}, { sent++ }, { canceled++ }, changeCreationKind = {}),
               DraftEditorActions({}, {}, {}),
               Modifier.fillMaxSize())
         }
@@ -399,7 +404,8 @@ class AssistantToolWindowTest {
                           "<b>literal request</b>",
                           0,
                           ChatRequestOutcome.Failed("provider\u0000 unavailable")))),
-              AssistantConversationActions({}, {}, {}, {}, { sends++ }, {}),
+              AssistantConversationActions(
+                  {}, {}, {}, {}, { sends++ }, {}, changeCreationKind = {}),
               DraftEditorActions({}, {}, {}),
               Modifier.fillMaxSize())
         }
@@ -483,7 +489,7 @@ class AssistantToolWindowTest {
     ComposeVisualFixture(480, 1000) {
           AssistantToolWindow(
               state,
-              AssistantConversationActions({}, {}, {}, {}, {}, {}),
+              AssistantConversationActions({}, {}, {}, {}, {}, {}, changeCreationKind = {}),
               DraftEditorActions({}, {}, {}),
               Modifier.fillMaxSize())
         }
@@ -506,7 +512,7 @@ class AssistantToolWindowTest {
     ComposeVisualFixture(480, 900) {
           AssistantToolWindow(
               historyState(target, null, listOf(attempt)).copy(sending = true),
-              AssistantConversationActions({}, {}, {}, {}, {}, {}),
+              AssistantConversationActions({}, {}, {}, {}, {}, {}, changeCreationKind = {}),
               DraftEditorActions({}, {}, {}),
               Modifier.fillMaxSize())
         }
@@ -670,7 +676,13 @@ class AssistantToolWindowTest {
                   FocusRequester(),
                   FocusRequester()),
               AssistantConversationActions(
-                  {}, {}, { confirmations++ }, { inspections++ }, { sends++ }, {}),
+                  {},
+                  {},
+                  { confirmations++ },
+                  { inspections++ },
+                  { sends++ },
+                  {},
+                  changeCreationKind = {}),
               DraftEditorActions({}, {}, {}),
               Modifier.fillMaxSize())
         }
@@ -694,7 +706,7 @@ class AssistantToolWindowTest {
       val nameFocus = FocusRequester()
       val chatFocus = FocusRequester()
       val file = creationFile()
-      val nameLabel = "${kind.noun.replaceFirstChar { it.uppercase() }} name"
+      val nameLabel = "New ${kind.noun} name"
       ComposeVisualFixture(360, 900, 1.5f) {
             val validation =
                 validateChatTarget(file, emptyList(), null, ChatEditMode.CreateSymbol, name)
@@ -722,7 +734,13 @@ class AssistantToolWindowTest {
                           creationKind = kind,
                           creationNameFocus = nameFocus),
                       AssistantConversationActions(
-                          { behavior = it }, { name = it }, {}, {}, { requests++ }, {}),
+                          { behavior = it },
+                          { name = it },
+                          {},
+                          {},
+                          { requests++ },
+                          {},
+                          changeCreationKind = {}),
                       DraftEditorActions({}, {}, {}),
                       contentModifier)
                 },
@@ -754,6 +772,142 @@ class AssistantToolWindowTest {
             assertEquals("package demo\n", file.content)
           }
     }
+  }
+
+  @Test
+  fun creationSelectorEmitsKindChangesAndShowsScopedNameFeedbackBesideBehavior() {
+    val file = creationFile().copy(path = "internal/project/empty.go")
+    var kind by mutableStateOf(DeclarationCreationKind.Function)
+    var name by mutableStateOf("Build")
+    var changes = 0
+    var sends = 0
+    var confirmed by mutableStateOf(false)
+    ComposeVisualFixture(420, 780) {
+          val validation =
+              validateChatTarget(file, emptyList(), null, ChatEditMode.CreateSymbol, name)
+          AssistantToolWindow(
+              historyState(ChatTarget(ChatEditMode.CreateSymbol, "Build"), null, emptyList())
+                  .copy(
+                      selected = file,
+                      creationKind = kind,
+                      newSymbol = name,
+                      target = validation.target,
+                      targetValidation = validation,
+                      message = "Return a result.",
+                      functionModel =
+                          ScopedModel(
+                              profile = "edit-profile",
+                              model = "edit-model",
+                              providerOrigin = "https://provider.example.invalid",
+                              remoteProvider = true),
+                      remoteConfirmed = confirmed),
+              AssistantConversationActions(
+                  {},
+                  { name = it },
+                  { confirmed = it },
+                  {},
+                  { sends++ },
+                  {},
+                  changeCreationKind = { selected ->
+                    changes++
+                    kind = selected
+                  }),
+              DraftEditorActions({}, {}, {}),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText(file.path))
+          assertTrue(fixture.hasText("Declaration kind"))
+          assertTrue(fixture.isDescriptionSelected("New Go function"))
+          assertFalse(fixture.isDescriptionSelected("New Go type"))
+          assertEquals("Selected", fixture.descriptionStateDescription("New Go function"))
+          assertTrue(
+              fixture.hasText(
+                  "Name absent in the current file snapshot; the daemon rechecks before generation."))
+          assertTrue(fixture.hasText("Behavior"))
+          assertTrue(
+              fixture.hasText("Generate a candidate; source changes only after Review and Apply"))
+          assertEquals("Collapsed", fixture.stateDescription("Advanced constraints"))
+          assertTrue(fixture.hasText("Confirm the Function remote destination before sending."))
+          assertTrue(fixture.isDisabled("Generate function"))
+          fixture.clickDescription("New Go type")
+          fixture.render()
+          assertEquals(DeclarationCreationKind.Type, kind)
+          assertEquals(1, changes)
+          assertTrue(fixture.isDescriptionSelected("New Go type"))
+          assertTrue(fixture.hasText("New type name"))
+          assertTrue(fixture.hasText("Generate type"))
+          fixture.clickDescription("New Go type")
+          assertEquals(0, sends)
+          assertEquals(2, changes)
+          fixture.clickText("Confirm remote destination")
+          fixture.render()
+          assertTrue(confirmed)
+          assertFalse(fixture.isDisabled("Generate type"))
+          fixture.clickText("Generate type")
+          assertEquals(1, sends)
+        }
+  }
+
+  @Test
+  fun creationSelectorShowsDistinctNameErrorsAndDisablesBusyOrUnsupportedChanges() {
+    val file = creationFile()
+    val collision = SymbolInfo("Build", "type", "type Build struct{}", 1, 1, "inexact", false)
+    val cases =
+        listOf(
+            "" to "Enter a name for the new Go function or type.",
+            "bad.name" to "Enter a valid new Go function or type name.",
+            "func" to "func is a Go keyword. Choose a different name.",
+            "main" to "main is reserved for this creation workflow. Choose another name.",
+            "Build" to "Build already exists in this file; select it to replace instead.")
+    cases.forEach { (name, expected) ->
+      val validation =
+          validateChatTarget(file, listOf(collision), null, ChatEditMode.CreateSymbol, name)
+      ComposeVisualFixture(420, 720) {
+            AssistantToolWindow(
+                historyState(ChatTarget(ChatEditMode.CreateSymbol, "Build"), null, emptyList())
+                    .copy(
+                        newSymbol = name,
+                        target = validation.target,
+                        targetValidation = validation),
+                AssistantConversationActions({}, {}, {}, {}, {}, {}, changeCreationKind = {}),
+                DraftEditorActions({}, {}, {}),
+                Modifier.fillMaxSize())
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.hasText(expected), name)
+            assertTrue(fixture.isDisabled("Generate function"))
+          }
+    }
+    listOf(
+            historyState(ChatTarget(ChatEditMode.CreateSymbol, "Build"), null, emptyList())
+                .copy(sending = true) to "Wait for the current generation or validation to finish.",
+            historyState(ChatTarget(ChatEditMode.CreateSymbol, "Build"), null, emptyList())
+                .copy(validating = true) to
+                "Wait for the current generation or validation to finish.",
+            historyState(ChatTarget(ChatEditMode.CreateSymbol, "Build"), null, emptyList())
+                .copy(selected = file.copy(binary = true)) to
+                "Function and type creation requires a Go source file.")
+        .forEach { (state, reason) ->
+          var changes = 0
+          ComposeVisualFixture(420, 720) {
+                AssistantToolWindow(
+                    state,
+                    AssistantConversationActions(
+                        {}, {}, {}, {}, {}, {}, changeCreationKind = { changes++ }),
+                    DraftEditorActions({}, {}, {}),
+                    Modifier.fillMaxSize())
+              }
+              .use { fixture ->
+                fixture.render()
+                assertTrue(fixture.hasText(reason))
+                assertTrue(fixture.isDisabled("Select · Type"))
+                assertFalse(fixture.tryClick("New Go type"))
+                assertEquals(0, changes)
+              }
+        }
   }
 
   @Test
@@ -867,7 +1021,7 @@ class AssistantToolWindowTest {
                   FocusRequester(),
                   FocusRequester(),
                   targetValidation = validation),
-              AssistantConversationActions({}, {}, {}, {}, {}, {}),
+              AssistantConversationActions({}, {}, {}, {}, {}, {}, changeCreationKind = {}),
               DraftEditorActions({}, {}, {}),
               Modifier.fillMaxSize())
         }

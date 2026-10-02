@@ -1252,7 +1252,14 @@ class DesktopKeyboardNavigationTest {
                   selectedSymbol = symbol,
                   targetValidation = ChatTargetValidation(target)),
               AssistantConversationActions(
-                  {}, {}, {}, {}, { sends++ }, {}, updateMessageValue = { input = it }),
+                  {},
+                  {},
+                  {},
+                  {},
+                  { sends++ },
+                  {},
+                  changeCreationKind = {},
+                  updateMessageValue = { input = it }),
               DraftEditorActions({}, {}, {}),
               Modifier.fillMaxSize())
         }
@@ -2881,7 +2888,13 @@ class DesktopKeyboardNavigationTest {
                             androidx.compose.ui.focus.FocusRequester(),
                             inspectContextFocus = inspectFocus),
                         AssistantConversationActions(
-                            {}, {}, {}, onInspect, onOperation, onOperation),
+                            {},
+                            {},
+                            {},
+                            onInspect,
+                            onOperation,
+                            onOperation,
+                            changeCreationKind = {}),
                         DraftEditorActions({}, {}, {}),
                         modifier)
                   }

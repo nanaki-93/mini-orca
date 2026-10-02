@@ -778,6 +778,7 @@ internal fun MiniOrcaApp(
                   },
                   send = ::sendComposerMessage,
                   cancel = presenter::cancelGeneration,
+                  changeCreationKind = ::changeCreationKind,
                   updateMessageValue = { chatMessage = it },
                   preparePreset = { preset ->
                     presenter.clearPreparedSuggestion()

@@ -18,6 +18,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
@@ -34,7 +38,10 @@ internal fun AssistantToolWindow(
   val creationBlocked =
       if (creating)
           declarationCreationBlockedReason(
-              state.selected, state.sending || state.editor?.status == DraftEditorStatus.Validating)
+              state.selected,
+              state.sending ||
+                  state.validating ||
+                  state.editor?.status == DraftEditorStatus.Validating)
       else null
   val history = assistantHistoryEntries(state)
   val blockedReason = assistantComposerBlockedReason(state)
@@ -89,10 +96,42 @@ internal fun AssistantToolWindow(
                   modifier = Modifier.padding(top = 5.dp))
             }
             if (creating) {
+              Text(
+                  "Declaration kind",
+                  color = SecondaryText,
+                  style = IdeTypography.resultLabel,
+                  modifier = Modifier.padding(top = 9.dp, bottom = 5.dp))
+              Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                DeclarationCreationKind.entries.forEach { kind ->
+                  val active = state.creationKind == kind
+                  ChromeButton(
+                      onClick = { conversationActions.changeCreationKind(kind) },
+                      enabled = creationBlocked == null,
+                      selected = active,
+                      role = Role.RadioButton,
+                      accessibleName = "New Go ${kind.noun}",
+                      tooltip = null,
+                      modifier =
+                          Modifier.weight(1f).semantics {
+                            selected = active
+                            stateDescription = if (active) "Selected" else "Not selected"
+                          }) {
+                        Text(
+                            "${if (active) "Selected" else "Select"} · ${kind.noun.replaceFirstChar { it.uppercase() }}")
+                      }
+                }
+              }
+              if (creationBlocked != null) {
+                Text(
+                    creationBlocked,
+                    color = Warning,
+                    style = IdeTypography.compactBody,
+                    modifier = Modifier.padding(top = 5.dp))
+              }
               CompactSingleLineField(
                   state.newSymbol,
                   conversationActions.updateNewSymbol,
-                  label = "${state.creationKind.noun.replaceFirstChar { it.uppercase() }} name",
+                  label = "New ${state.creationKind.noun} name",
                   enabled = creationBlocked == null,
                   modifier =
                       Modifier.fillMaxWidth()
@@ -158,7 +197,9 @@ internal fun AssistantToolWindow(
                   value = state.advancedConstraintsInput,
                   onValueChange = conversationActions.updateAdvancedConstraintsValue,
                   label = "Constraints",
-                  enabled = !state.sending && state.target != null,
+                  enabled =
+                      if (creating) creationBlocked == null
+                      else !state.sending && state.target != null,
                   placeholder = "Optional compatibility, allocation, or error-handling limits",
                   minLines = 2,
                   modifier = Modifier.fillMaxWidth().padding(top = 5.dp))
@@ -574,6 +615,7 @@ internal data class AssistantConversationActions(
     val send: () -> Unit,
     val cancel: () -> Unit,
     val updateMessageValue: (TextFieldValue) -> Unit = { value -> updateMessage(value.text) },
+    val changeCreationKind: (DeclarationCreationKind) -> Unit,
     val preparePreset: (FunctionChangePreset) -> Unit = {},
     val updateAdvancedConstraintsValue: (TextFieldValue) -> Unit = {},
 )

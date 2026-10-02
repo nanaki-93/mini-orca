@@ -79,6 +79,7 @@ class DesktopAccessibilityTest {
                   { calls += "inspect" },
                   { calls += "send" },
                   { calls += "cancel" },
+                  changeCreationKind = { calls += "kind" },
                   preparePreset = { calls += "preset" }),
               DraftEditorActions({}, {}, {}),
               androidx.compose.ui.Modifier.fillMaxSize())
