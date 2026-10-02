@@ -38,7 +38,9 @@ internal fun AssistantToolWindow(
       else null
   val bound =
       state.target != null &&
-          chatSessionMatches(state.session, state.selected, state.project, state.target)
+          chatSessionMatches(
+              state.session, state.selected, state.project, state.target, state.taskSpec)
+  val history = assistantHistoryEntries(state)
   val draftVisible =
       state.draft != null &&
           state.editor != null &&
@@ -99,20 +101,55 @@ internal fun AssistantToolWindow(
                       },
                   color = if (state.target == null) Warning else SecondaryText,
                   fontSize = 11.sp)
-              if (bound && state.session != null) {
-                state.session.messages.forEach { turn ->
-                  Text(
-                      assistantMessageLabel(turn.role),
-                      color =
-                          if (turn.role.equals("assistant", ignoreCase = true)) ResultAccent
-                          else SelectionText,
-                      style = IdeTypography.resultHeading,
-                      modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
-                  if (turn.role.equals("assistant", ignoreCase = true)) {
-                    ModelResultContent(turn.content)
-                  } else {
+              history.forEach { entry ->
+                when (entry) {
+                  is AssistantHistoryEntry.Turn -> {
+                    Text(
+                        assistantMessageLabel(entry.message.role),
+                        color =
+                            if (entry.message.role.equals("assistant", ignoreCase = true))
+                                ResultAccent
+                            else SelectionText,
+                        style = IdeTypography.resultHeading,
+                        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+                    entry.scopeLabel?.let { label ->
+                      Text(label, color = Warning, style = IdeTypography.compactBody)
+                    }
+                    if (entry.message.role.equals("assistant", ignoreCase = true)) {
+                      ModelResultContent(entry.message.content)
+                    } else {
+                      SelectionContainer {
+                        Text(entry.message.content, color = PrimaryText, style = IdeTypography.body)
+                      }
+                    }
+                  }
+                  is AssistantHistoryEntry.Attempt -> {
+                    Text(
+                        when (entry.attempt.outcome) {
+                          ChatRequestOutcome.Running -> "Request running"
+                          is ChatRequestOutcome.Failed -> "Request failed"
+                          ChatRequestOutcome.Canceled -> "Request canceled"
+                          is ChatRequestOutcome.Succeeded -> "Request completed"
+                        },
+                        color =
+                            if (entry.attempt.outcome is ChatRequestOutcome.Failed) Error
+                            else SecondaryText,
+                        style = IdeTypography.resultHeading,
+                        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+                    entry.scopeLabel?.let { label ->
+                      Text(label, color = Warning, style = IdeTypography.compactBody)
+                    }
                     SelectionContainer {
-                      Text(turn.content, color = PrimaryText, style = IdeTypography.body)
+                      Text(
+                          entry.attempt.requestText,
+                          color = PrimaryText,
+                          style = IdeTypography.body)
+                    }
+                    when (val outcome = entry.attempt.outcome) {
+                      is ChatRequestOutcome.Failed -> DiagnosticText(outcome.message, color = Error)
+                      ChatRequestOutcome.Canceled ->
+                          entry.attempt.invalidationReason?.let { DiagnosticText(it) }
+                      else -> Unit
                     }
                   }
                 }
@@ -169,12 +206,6 @@ internal fun AssistantToolWindow(
                   minLines = 3,
                   modifier =
                       Modifier.fillMaxWidth().padding(top = 9.dp).focusRequester(state.chatFocus))
-              state.requestFailure
-                  ?.takeIf { it.target == state.target }
-                  ?.let { failure ->
-                    Text("Request failed", color = Error, style = IdeTypography.resultHeading)
-                    DiagnosticText(failure.message, color = Error)
-                  }
               IdeDisclosureHeader(
                   title = "Advanced constraints",
                   expanded = constraintsExpanded,
@@ -332,6 +363,108 @@ internal fun DraftValidationDiagnostics(
   }
 }
 
+internal sealed interface AssistantHistoryEntry {
+  data class Turn(val message: ChatSessionMessage, val scopeLabel: String? = null) :
+      AssistantHistoryEntry
+
+  data class Attempt(val attempt: ChatRequestAttempt, val scopeLabel: String? = null) :
+      AssistantHistoryEntry
+}
+
+/** The daemon owns successful turns; attempts only supply positions and local outcomes. */
+internal fun assistantHistoryEntries(state: AssistantToolWindowState): List<AssistantHistoryEntry> {
+  val project = state.project ?: return emptyList()
+  val file = state.selected ?: return emptyList()
+  val session =
+      state.session?.takeIf { it.projectId == project.projectId && it.openPath == file.path }
+  val turns = session?.messages.orEmpty()
+  val entries = mutableListOf<AssistantHistoryEntry>()
+  var cursor = 0
+  val attempts =
+      state.attempts.filter {
+        it.scope.projectId == project.projectId && it.scope.path == file.path
+      }
+  for ((position, attempt) in attempts.withIndex()) {
+    val scopeLabel =
+        if (attempt.scope.projectRevision == project.projectRevision &&
+            attempt.scope.baseFileHash == file.contentHash &&
+            attempt.scope.target == state.target &&
+            (attempt.scope.target.mode != ChatEditMode.ReplaceSymbol ||
+                attempt.scope.declaration == state.selectedSymbol) &&
+            sameTaskSpec(attempt.scope.taskSpec, state.taskSpec))
+            null
+        else
+            "Earlier scope: ${attempt.scope.path} · ${attempt.scope.target.symbol} " +
+                "(${attempt.scope.target.mode.label}; project ${attempt.scope.projectId}, " +
+                "revision ${attempt.scope.projectRevision}, file hash ${attempt.scope.baseFileHash})"
+    val outcome = attempt.outcome
+    if (outcome is ChatRequestOutcome.Succeeded &&
+        session != null &&
+        outcome.sessionId == session.id &&
+        attempt.scope.matches(session)) {
+      val match = matchingSuccessfulTurn(turns, cursor, attempt)
+      if (match != null) {
+        val responseIndex = match.second
+        for (index in cursor..responseIndex) {
+          entries +=
+              AssistantHistoryEntry.Turn(turns[index], scopeLabel ?: sessionScopeLabel(state))
+        }
+        cursor = responseIndex + 1
+        continue
+      }
+    }
+    if (outcome !is ChatRequestOutcome.Succeeded) {
+      // Turns predating an unrecorded session load belong before this submitted request.
+      val nextTurn =
+          attempts.drop(position + 1).firstNotNullOfOrNull { later ->
+            if (later.outcome is ChatRequestOutcome.Succeeded &&
+                session != null &&
+                later.outcome.sessionId == session.id &&
+                later.scope.matches(session))
+                matchingSuccessfulTurn(turns, cursor, later)?.first
+            else null
+          } ?: turns.size
+      for (index in cursor until nextTurn) {
+        entries += AssistantHistoryEntry.Turn(turns[index], sessionScopeLabel(state))
+      }
+      cursor = nextTurn
+      entries += AssistantHistoryEntry.Attempt(attempt, scopeLabel)
+    }
+  }
+  for (index in cursor until turns.size) {
+    entries += AssistantHistoryEntry.Turn(turns[index], sessionScopeLabel(state))
+  }
+  return entries
+}
+
+private fun matchingSuccessfulTurn(
+    turns: List<ChatSessionMessage>,
+    cursor: Int,
+    attempt: ChatRequestAttempt,
+): Pair<Int, Int>? {
+  val outcome = attempt.outcome as? ChatRequestOutcome.Succeeded ?: return null
+  val responseIndex =
+      (cursor until turns.size).firstOrNull {
+        turns[it].role.equals("assistant", ignoreCase = true) &&
+            turns[it].draftId == outcome.draftId
+      } ?: return null
+  val requestIndex =
+      (cursor until responseIndex).lastOrNull {
+        turns[it].role.equals("user", ignoreCase = true) && turns[it].content == attempt.requestText
+      } ?: return null
+  return requestIndex to responseIndex
+}
+
+private fun sessionScopeLabel(state: AssistantToolWindowState): String? {
+  val session = state.session ?: return null
+  if (state.target != null &&
+      chatSessionMatches(session, state.selected, state.project, state.target, state.taskSpec))
+      return null
+  return "Earlier scope: ${session.openPath} · ${session.targetSymbol} " +
+      "(${session.mode}; project ${session.projectId}, revision ${session.projectRevision}, " +
+      "file hash ${session.baseFileHash})"
+}
+
 internal fun assistantMessageLabel(role: String): String =
     when (role.lowercase()) {
       "user" -> "Your request"
@@ -369,7 +502,8 @@ internal data class AssistantToolWindowState(
     val advancedConstraintsInput: TextFieldValue = TextFieldValue(),
     val creationKind: DeclarationCreationKind = DeclarationCreationKind.Function,
     val creationNameFocus: FocusRequester? = null,
-    val requestFailure: ChatRequestFailure? = null,
+    val attempts: List<ChatRequestAttempt> = emptyList(),
+    val taskSpec: BugTaskSpec? = null,
     val inspectContextFocus: FocusRequester? = null,
 )
 

@@ -11,6 +11,7 @@ import androidx.compose.ui.input.key.Key
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class AssistantToolWindowTest {
@@ -73,40 +74,271 @@ class AssistantToolWindowTest {
               hash = "draft-hash"))
 
   @Test
-  fun requestFailureAppearsBesideItsTargetWithoutExecutingAnotherRequest() {
+  fun firstSessionFailureRendersSubmittedTextAndLiteralDiagnosticWithoutDispatch() {
     val target = ChatTarget(ChatEditMode.CreateSymbol, "Build")
-    listOf(target, target.copy(symbol = "Other")).forEach { selected ->
-      var calls = 0
-      ComposeVisualFixture(360, 900, 1.5f) {
-            AssistantToolWindow(
-                AssistantToolWindowState(
-                    null,
-                    creationFile(),
-                    null,
-                    null,
-                    null,
-                    selected,
-                    ChatEditMode.CreateSymbol,
-                    selected.symbol,
-                    "Return a reusable result",
-                    false,
-                    ScopedModel(),
-                    false,
-                    FocusRequester(),
-                    FocusRequester(),
-                    requestFailure = ChatRequestFailure(target, "provider\u0000 unavailable")),
-                AssistantConversationActions({}, {}, {}, {}, { calls++ }, {}),
-                DraftEditorActions({}, {}, {}),
-                Modifier.fillMaxSize())
-          }
-          .use { fixture ->
-            fixture.render("bottom-request-failure-${selected.symbol}-360-1.5")
-            assertEquals(selected == target, fixture.hasText("Request failed"))
-            assertEquals(selected == target, fixture.hasText("provider  unavailable"))
-            assertEquals(0, calls)
-          }
-    }
+    val scope = ChatRequestScope("project", "revision", "empty.go", "hash", target)
+    var sends = 0
+    ComposeVisualFixture(480, 900) {
+          AssistantToolWindow(
+              historyState(
+                  target,
+                  null,
+                  listOf(
+                      ChatRequestAttempt(
+                          1,
+                          scope,
+                          ScopedModel(),
+                          false,
+                          "<b>literal request</b>",
+                          0,
+                          ChatRequestOutcome.Failed("provider\u0000 unavailable")))),
+              AssistantConversationActions({}, {}, {}, {}, { sends++ }, {}),
+              DraftEditorActions({}, {}, {}),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Request failed"))
+          assertTrue(fixture.hasText("<b>literal request</b>"))
+          assertTrue(fixture.hasText("provider  unavailable"))
+          assertEquals(0, sends)
+        }
   }
+
+  @Test
+  fun successfulTurnsAndFailedRetryAreInterleavedWithoutDuplicatingDaemonRequests() {
+    val target = ChatTarget(ChatEditMode.CreateSymbol, "Build")
+    val scope = ChatRequestScope("project", "revision", "empty.go", "hash", target)
+    val attempts =
+        listOf(
+            ChatRequestAttempt(
+                1,
+                scope,
+                ScopedModel(),
+                false,
+                "same request",
+                0,
+                ChatRequestOutcome.Succeeded("session", "draft-1")),
+            ChatRequestAttempt(
+                2,
+                scope,
+                ScopedModel(),
+                false,
+                "failed request",
+                0,
+                ChatRequestOutcome.Failed("timeout; send again")),
+            ChatRequestAttempt(
+                3, scope, ScopedModel(), false, "same request", 0, ChatRequestOutcome.Canceled),
+            ChatRequestAttempt(
+                4,
+                scope,
+                ScopedModel(),
+                false,
+                "same request",
+                0,
+                ChatRequestOutcome.Succeeded("session", "draft-2")))
+    val session =
+        ChatSession(
+            "session",
+            "project",
+            "revision",
+            "hash",
+            "empty.go",
+            "create_symbol",
+            "Build",
+            "active",
+            messages =
+                listOf(
+                    ChatSessionMessage("user", "same request"),
+                    ChatSessionMessage(
+                        "assistant", "<img src='https://example.invalid/a'>", "draft-1"),
+                    ChatSessionMessage("user", "same request"),
+                    ChatSessionMessage("assistant", "", "draft-2")))
+    val state = historyState(target, session, attempts)
+    val entries = assistantHistoryEntries(state)
+    assertEquals(6, entries.size)
+    assertEquals(
+        listOf(
+            "same request",
+            "<img src='https://example.invalid/a'>",
+            "failed request",
+            "same request",
+            "same request",
+            ""),
+        entries.map {
+          when (it) {
+            is AssistantHistoryEntry.Turn -> it.message.content
+            is AssistantHistoryEntry.Attempt -> it.attempt.requestText
+          }
+        })
+    assertIs<AssistantHistoryEntry.Attempt>(entries[2])
+    assertIs<AssistantHistoryEntry.Attempt>(entries[3])
+    ComposeVisualFixture(480, 1000) {
+          AssistantToolWindow(
+              state,
+              AssistantConversationActions({}, {}, {}, {}, {}, {}),
+              DraftEditorActions({}, {}, {}),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertEquals(3, fixture.textCount("same request"))
+          assertTrue(fixture.hasText("Request failed"))
+          assertTrue(fixture.hasText("Request canceled"))
+          assertTrue(fixture.hasText("timeout; send again"))
+          assertTrue(fixture.hasText("<img src='https://example.invalid/a'>"))
+          assertEquals(2, fixture.textCount("Model response"))
+        }
+  }
+
+  @Test
+  fun runningRequestRendersSubmittedTextBeforeAnySessionExists() {
+    val target = ChatTarget(ChatEditMode.CreateSymbol, "Build")
+    val scope = ChatRequestScope("project", "revision", "empty.go", "hash", target)
+    val attempt = ChatRequestAttempt(1, scope, ScopedModel(), false, "pending request", 0)
+    ComposeVisualFixture(480, 900) {
+          AssistantToolWindow(
+              historyState(target, null, listOf(attempt)).copy(sending = true),
+              AssistantConversationActions({}, {}, {}, {}, {}, {}),
+              DraftEditorActions({}, {}, {}),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Request running"))
+          assertTrue(fixture.hasText("pending request"))
+          assertTrue(fixture.hasText("Cancel request"))
+          assertFalse(fixture.hasText("Request failed"))
+        }
+  }
+
+  @Test
+  fun failureAfterLoadedDaemonTurnsKeepsThoseTurnsAheadOfTheFailure() {
+    val target = ChatTarget(ChatEditMode.CreateSymbol, "Build")
+    val scope = ChatRequestScope("project", "revision", "empty.go", "hash", target)
+    val session =
+        ChatSession(
+            "session",
+            "project",
+            "revision",
+            "hash",
+            "empty.go",
+            "create_symbol",
+            "Build",
+            "active",
+            messages =
+                listOf(
+                    ChatSessionMessage("user", "earlier request"),
+                    ChatSessionMessage("assistant", "", "earlier-draft")))
+    val attempt =
+        ChatRequestAttempt(
+            1,
+            scope,
+            ScopedModel(),
+            false,
+            "later failed request",
+            0,
+            ChatRequestOutcome.Failed("timeout"))
+    val entries = assistantHistoryEntries(historyState(target, session, listOf(attempt)))
+    assertEquals(3, entries.size)
+    assertEquals(
+        "earlier request", assertIs<AssistantHistoryEntry.Turn>(entries[0]).message.content)
+    assertEquals("", assertIs<AssistantHistoryEntry.Turn>(entries[1]).message.content)
+    assertEquals(
+        "later failed request",
+        assertIs<AssistantHistoryEntry.Attempt>(entries[2]).attempt.requestText)
+  }
+
+  @Test
+  fun retainedSameFileHistoryLabelsOriginalScopeAndNeverLeaksAcrossFilesOrProjects() {
+    val target = ChatTarget(ChatEditMode.CreateSymbol, "Build")
+    val oldScope = ChatRequestScope("project", "revision", "empty.go", "hash", target)
+    val attempt =
+        ChatRequestAttempt(
+            1,
+            oldScope,
+            ScopedModel(),
+            false,
+            "old request",
+            0,
+            ChatRequestOutcome.Failed("old failure"))
+    val session =
+        ChatSession(
+            "session",
+            "project",
+            "revision",
+            "hash",
+            "empty.go",
+            "create_symbol",
+            "Build",
+            "active",
+            messages = listOf(ChatSessionMessage("assistant", "old prose")))
+    val state = historyState(target.copy(symbol = "Other"), session, listOf(attempt))
+    val entries = assistantHistoryEntries(state)
+    assertEquals(2, entries.size)
+    assertTrue(
+        entries.all { entry ->
+          when (entry) {
+            is AssistantHistoryEntry.Turn -> entry.scopeLabel
+            is AssistantHistoryEntry.Attempt -> entry.scopeLabel
+          }?.contains("empty.go · Build") == true
+        })
+    assertTrue(
+        assistantHistoryEntries(state.copy(selected = creationFile().copy(path = "other.go")))
+            .isEmpty())
+    assertTrue(
+        assistantHistoryEntries(
+                state.copy(project = testHistoryProject().copy(projectId = "other")))
+            .isEmpty())
+    val changedRevision =
+        assistantHistoryEntries(
+            historyState(target, session, listOf(attempt))
+                .copy(
+                    project = testHistoryProject().copy(projectRevision = "new-revision"),
+                    selected = creationFile().copy(contentHash = "new-hash")))
+    assertTrue(
+        changedRevision
+            .filterIsInstance<AssistantHistoryEntry.Attempt>()
+            .single()
+            .scopeLabel
+            ?.contains("revision revision, file hash hash") == true)
+  }
+
+  private fun testHistoryProject() =
+      ProjectAnalysis(
+          "project",
+          "revision",
+          "project",
+          "/tmp/project",
+          "go",
+          fileCount = 1,
+          sourceFileCount = 1,
+          totalLines = 1,
+          summary = "",
+          aiStatus = "fresh",
+          analyzedAt = "")
+
+  private fun historyState(
+      target: ChatTarget,
+      session: ChatSession?,
+      attempts: List<ChatRequestAttempt>
+  ) =
+      AssistantToolWindowState(
+          testHistoryProject(),
+          creationFile(),
+          session,
+          null,
+          null,
+          target,
+          ChatEditMode.CreateSymbol,
+          target.symbol,
+          "unsent intent",
+          false,
+          ScopedModel(),
+          false,
+          FocusRequester(),
+          FocusRequester(),
+          attempts = attempts)
 
   @Test
   fun inspectContextCanBeActivatedWithoutSelectionAndDoesNotSendOrConfirm() {
