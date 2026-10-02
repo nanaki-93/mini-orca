@@ -666,13 +666,7 @@ internal fun MiniOrcaApp(
   }
   val assistantPane: @Composable (Modifier) -> Unit = { modifier ->
     if (composerRequested || editorProgress.progress == EditorProgress.Edit) {
-      val targetValidation =
-          validateChatTarget(
-              appState.selectedFile,
-              appState.symbols,
-              appState.selectedSymbol,
-              chatMode,
-              newChatSymbol)
+      val targetValidation = validateChatTarget(appState.selection, chatMode, newChatSymbol)
       val target = targetValidation.target
       val draft = appState.review.draft
       val draftEditorVisible =
@@ -1563,7 +1557,7 @@ private fun submitComposerMessage(
   if (assistantComposerBlockedReason(
       mode,
       state.selectedFile,
-      validateChatTarget(state.selectedFile, state.symbols, state.selectedSymbol, mode, name),
+      validateChatTarget(state.selection, mode, name),
       behavior,
       workflow.generating,
       workflow.draftValidationInProgress ||

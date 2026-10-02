@@ -78,14 +78,16 @@ internal fun AssistantToolWindow(
                   if (creating) "Generate a candidate; source changes only after Review and Apply"
                   else "Replace one declaration; source changes only after Review and Apply")
           Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-            Text(
-                state.target?.let { "${it.mode.label} · ${it.symbol}" }
-                    ?: state.targetValidation.message.ifBlank {
-                      "Select a declaration or enter a new name."
-                    },
-                color = if (state.target == null) Warning else SecondaryText,
-                style = IdeTypography.compactBody,
-                modifier = Modifier.padding(top = 5.dp))
+            if (!creating) {
+              Text(
+                  state.target?.let { "${it.mode.label} · ${it.symbol}" }
+                      ?: state.targetValidation.message.ifBlank {
+                        "Select a declaration or enter a new name."
+                      },
+                  color = if (state.target == null) Warning else SecondaryText,
+                  style = IdeTypography.compactBody,
+                  modifier = Modifier.padding(top = 5.dp))
+            }
             if (creating) {
               CompactSingleLineField(
                   state.newSymbol,
@@ -98,6 +100,13 @@ internal fun AssistantToolWindow(
                           .then(
                               state.creationNameFocus?.let { Modifier.focusRequester(it) }
                                   ?: Modifier))
+              if (state.targetValidation.message.isNotBlank()) {
+                Text(
+                    state.targetValidation.message,
+                    color = if (state.targetValidation.valid) SecondaryText else Warning,
+                    style = IdeTypography.compactBody,
+                    modifier = Modifier.padding(top = 5.dp))
+              }
             }
             if (presetsAvailable) {
               Text(
