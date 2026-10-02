@@ -172,6 +172,7 @@ internal fun CommandPaletteDialog(
     onSelectSymbol: (SymbolInfo) -> Unit,
     onSelectAction: (String) -> Unit,
     onDismiss: () -> Unit,
+    blockedReason: String? = null,
 ) {
   val results = commandSearchResults(mode, query, files, symbols, hasActiveFile)
   val filterFocusRequester = remember { FocusRequester() }
@@ -247,6 +248,10 @@ internal fun CommandPaletteDialog(
               fontSize = 10.sp,
               modifier = Modifier.padding(top = 5.dp))
           Spacer(Modifier.height(6.dp))
+          blockedReason?.let {
+            SystemStateMessage("Cannot prepare creation", it)
+            Spacer(Modifier.height(6.dp))
+          }
           if (results.isEmpty()) {
             SystemStateMessage(commandSearchEmptyTitle(mode), commandSearchEmptyDetail(mode))
           } else {

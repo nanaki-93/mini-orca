@@ -17,6 +17,49 @@ import kotlin.test.assertTrue
 
 class ContextToolWindowTest {
   @Test
+  fun contextCreationUsesPackageOnlyFileAndExplainsBusyOrUnsupportedFiles() {
+    val file = file().copy(path = "internal/empty.go", name = "empty.go", lineCount = 1)
+    var creations = 0
+    val actions = ContextToolWindowActions({}, {}, {}, {}, {}, createDeclaration = { creations++ })
+    for ((source, busy) in
+        listOf(
+            file to false,
+            file to true,
+            file.copy(binary = true) to false,
+            file.copy(language = "Markdown") to false)) {
+      val inspector =
+          requireNotNull(
+              symbolInspectorUiState(
+                  source,
+                  emptyList(),
+                  null,
+                  null,
+                  false,
+                  InspectorProviderState(false, false),
+                  null))
+      ComposeVisualFixture(320, 400) {
+            ContextCreationAction(
+                ContextToolWindowState(
+                    inspector, ScopedModel(), false, null, null, creationInProgress = busy),
+                actions)
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.hasText("New function"))
+            if (source == file && !busy) {
+              assertFalse(fixture.isDisabled("New function"))
+              fixture.clickText("New function")
+            } else {
+              assertTrue(fixture.isDisabled("New function"))
+              assertTrue(
+                  fixture.hasText(requireNotNull(declarationCreationBlockedReason(source, busy))))
+            }
+          }
+    }
+    assertEquals(1, creations)
+  }
+
+  @Test
   fun noSelectionAndFailedLocalFileReadKeepFileNavigationAdjacent() {
     var selections = 0
     var analyses = 0

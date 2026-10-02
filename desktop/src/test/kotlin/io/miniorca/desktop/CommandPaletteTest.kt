@@ -21,6 +21,60 @@ import kotlinx.serialization.json.Json
 
 class CommandPaletteTest {
   @Test
+  fun creationCommandsRetainPaletteAndShowSharedBlockedReason() {
+    FileNavigationUiFixture("composer").use { navigation ->
+      var blocked by mutableStateOf<String?>(null)
+      var visible by mutableStateOf(true)
+      var prepared: DeclarationCreationKind? = null
+      val state = navigation.presenter.snapshot.value
+      val unavailable =
+          state.copy(
+              state =
+                  state.state.copy(
+                      selection =
+                          state.state.selection.copy(
+                              selectedFile =
+                                  requireNotNull(state.state.selectedFile).copy(binary = true))))
+      ComposeVisualFixture(800, 650) {
+            if (visible)
+                CommandPaletteDialog(
+                    mode = PaletteMode.Actions,
+                    query = "New Go type",
+                    onQuery = {},
+                    onMode = {},
+                    files = emptyList(),
+                    symbols = emptyList(),
+                    hasActiveFile = true,
+                    onSelectFile = {},
+                    onSelectSymbol = {},
+                    onSelectAction = { action ->
+                      blocked =
+                          routeCreationRequest(
+                              unavailable,
+                              if (action == "create_type") DeclarationCreationKind.Type
+                              else DeclarationCreationKind.Function,
+                              { prepared = it },
+                              { error("No draft") })
+                      if (blocked == null) visible = false
+                    },
+                    onDismiss = { visible = false },
+                    blockedReason = blocked)
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.clickText("New Go type")
+            fixture.render()
+            assertTrue(visible)
+            assertEquals("Function and type creation requires a Go source file.", blocked)
+            assertTrue(fixture.hasText("Cannot prepare creation"))
+            assertTrue(fixture.hasText(requireNotNull(blocked)))
+            assertEquals(null, prepared)
+            assertEquals(emptyList(), navigation.calls)
+          }
+    }
+  }
+
+  @Test
   fun filePaletteRoutesProtectedWorkThroughConfirmationAndKeepsItOnCancelOrEscape() {
     for (work in listOf("draft", "session", "composer")) {
       for (action in listOf("cancel", "escape", "confirm")) {

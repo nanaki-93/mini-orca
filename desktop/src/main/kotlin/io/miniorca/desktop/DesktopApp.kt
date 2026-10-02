@@ -324,6 +324,7 @@ internal fun MiniOrcaApp(
   var paletteMode by remember { mutableStateOf(PaletteMode.Files) }
   var paletteQuery by remember { mutableStateOf("") }
   var showPalette by remember { mutableStateOf(false) }
+  var paletteBlockedReason by remember { mutableStateOf<String?>(null) }
   var chatMode by remember { mutableStateOf(ChatEditMode.ReplaceSymbol) }
   var creationKind by remember { mutableStateOf(DeclarationCreationKind.Function) }
   var newChatSymbol by remember { mutableStateOf("") }
@@ -501,8 +502,8 @@ internal fun MiniOrcaApp(
         }
   }
 
-  fun requestCreateDeclaration(kind: DeclarationCreationKind) {
-    routeCreationRequest(
+  fun requestCreateDeclaration(kind: DeclarationCreationKind): String? {
+    return routeCreationRequest(
         workflow,
         kind,
         ::startCreateDeclaration,
@@ -597,11 +598,13 @@ internal fun MiniOrcaApp(
   fun openPalette(mode: PaletteMode) {
     paletteMode = mode
     paletteQuery = ""
+    paletteBlockedReason = null
     showPalette = true
   }
 
   fun switchPaletteMode(mode: PaletteMode) {
     paletteMode = mode
+    paletteBlockedReason = null
   }
 
   val explorer: @Composable (Modifier, () -> Unit) -> Unit = { modifier, onSelected ->
@@ -885,7 +888,9 @@ internal fun MiniOrcaApp(
                       analyzeProviderConfirmed = workflow.providerConfirmed(ModelScope.Analyze),
                       securityReviewRemoteConfirmed = workflow.securityReviewRemoteConfirmed,
                   ),
-              palette = DesktopShellPaletteState(paletteMode, paletteQuery, showPalette),
+              palette =
+                  DesktopShellPaletteState(
+                      paletteMode, paletteQuery, showPalette, paletteBlockedReason),
               statusProviders =
                   DesktopShellStatusProviders(
                       analyze = analyzeModel,
@@ -997,8 +1002,14 @@ internal fun MiniOrcaApp(
       findingActions = findingActions,
       paletteActions =
           DesktopShellPaletteActions(
-              updateQuery = { paletteQuery = it },
-              dismiss = { showPalette = false },
+              updateQuery = {
+                paletteQuery = it
+                paletteBlockedReason = null
+              },
+              dismiss = {
+                showPalette = false
+                paletteBlockedReason = null
+              },
               open = ::openPalette,
               switchMode = ::switchPaletteMode,
               selectFile = {
@@ -1011,17 +1022,26 @@ internal fun MiniOrcaApp(
                 composerRequested = false
               },
               selectAction = { action ->
-                showPalette = false
-                commandActionWorkspace(action)?.let {
-                  presenter.dispatch(DesktopEvent.WorkspaceSelected(it))
-                }
-                when (action) {
-                  "start_analysis" -> presenter.previewAnalysis()
-                  "create_function" -> requestCreateDeclaration(DeclarationCreationKind.Function)
-                  "create_type" -> requestCreateDeclaration(DeclarationCreationKind.Type)
-                  "fix",
-                  "refactor",
-                  "document" -> contextAction = action
+                val creationKind =
+                    when (action) {
+                      "create_function" -> DeclarationCreationKind.Function
+                      "create_type" -> DeclarationCreationKind.Type
+                      else -> null
+                    }
+                if (creationKind != null) {
+                  paletteBlockedReason = requestCreateDeclaration(creationKind)
+                  if (paletteBlockedReason == null) showPalette = false
+                } else {
+                  showPalette = false
+                  commandActionWorkspace(action)?.let {
+                    presenter.dispatch(DesktopEvent.WorkspaceSelected(it))
+                  }
+                  when (action) {
+                    "start_analysis" -> presenter.previewAnalysis()
+                    "fix",
+                    "refactor",
+                    "document" -> contextAction = action
+                  }
                 }
               },
           ),
@@ -1614,10 +1634,14 @@ internal fun routeCreationRequest(
     currentKind: DeclarationCreationKind = DeclarationCreationKind.Function,
     name: String = "",
     mode: ChatEditMode = ChatEditMode.CreateSymbol,
-) {
+): String? {
   val state = workflow.state
-  if (declarationCreationBlockedReason(state.selectedFile, workflow.creationInProgress) != null)
-      return
+  val blockedReason =
+      declarationCreationBlockedReason(
+          state.selectedFile,
+          workflow.creationInProgress ||
+              state.review.editor?.status == DraftEditorStatus.Validating)
+  if (blockedReason != null) return blockedReason
   val currentDraft = currentEditIdentity(state)?.takeIf { it.hasDraft }
   if (currentDraft == null) start(kind)
   else
@@ -1632,6 +1656,7 @@ internal fun routeCreationRequest(
               name,
               message,
               constraints))
+  return null
 }
 
 private fun creationDiscard(

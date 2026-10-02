@@ -224,6 +224,7 @@ internal data class DesktopShellPaletteState(
     val mode: PaletteMode,
     val query: String,
     val visible: Boolean,
+    val blockedReason: String? = null,
 )
 
 internal data class DesktopShellLayoutActions(
@@ -923,6 +924,7 @@ internal fun DesktopShell(
                 paletteOrigin = null
               },
               ::dismissPaletteAndRestoreFocus,
+              blockedReason = palette.blockedReason,
           )
         }
         if (statusDetailsVisible) {
