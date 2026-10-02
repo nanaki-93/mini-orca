@@ -410,6 +410,7 @@ data class ChatRequestAttempt(
     val destination: ScopedModel,
     val remoteConfirmed: Boolean,
     val requestText: String,
+    val admittedDraftRevision: Long,
     val outcome: ChatRequestOutcome = ChatRequestOutcome.Running,
     val invalidationReason: String? = null,
 )
@@ -433,7 +434,7 @@ data class ChatRequestFailure(val target: ChatTarget, val message: String)
 
 private fun ChatState.finishAttempt(generation: Long, outcome: ChatRequestOutcome): ChatState =
     copy(
-        pendingRequestId = 0,
+        pendingRequestId = if (pendingRequestId == generation) 0 else pendingRequestId,
         attempts =
             attempts.map { attempt ->
               if (attempt.generation == generation && attempt.outcome == ChatRequestOutcome.Running)
@@ -1469,6 +1470,7 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
   private var pendingFileRequest: RequestIdentity? = null
   private var analysisRequest: Long = 0
   private var chatRequest: Long = 0
+  private var draftRevision: Long = 0
   private var draftRequest: Long = 0
 
   fun dispatch(event: DesktopEvent): DesktopState {
@@ -1493,13 +1495,20 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
       draftRequest = 0
     }
     val previousProject = state.project
-    val previousScope =
-        state.chat.attempts.lastOrNull { it.outcome == ChatRequestOutcome.Running }?.scope
+    val previousAttempt =
+        state.chat.attempts.lastOrNull { it.outcome == ChatRequestOutcome.Running }
+    if (event is DesktopEvent.DraftEdited ||
+        event is DesktopEvent.DraftLoaded ||
+        event is DesktopEvent.DraftValidationUpdated ||
+        event == DesktopEvent.DraftMarkedStale ||
+        event == DesktopEvent.DraftDiscarded)
+        draftRevision++
     state = state.reduce(event)
-    if (previousScope != null &&
+    if (previousAttempt != null &&
         event !is DesktopEvent.ChatProposalLoaded &&
         event !is DesktopEvent.ChatLoaded &&
-        !state.matchesChatScope(previousScope)) {
+        (!state.matchesChatScope(previousAttempt.scope) ||
+            previousAttempt.admittedDraftRevision != draftRevision)) {
       chatRequest = 0
       state =
           state.copy(
@@ -1511,7 +1520,10 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
                                 attempt.outcome == ChatRequestOutcome.Running)
                                 attempt.copy(
                                     outcome = ChatRequestOutcome.Canceled,
-                                    invalidationReason = "The request target changed.")
+                                    invalidationReason =
+                                        if (previousAttempt.admittedDraftRevision != draftRevision)
+                                            "The draft changed during the request."
+                                        else "The request target changed.")
                             else attempt
                           },
                       pendingRequestId = 0))
@@ -1696,7 +1708,12 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
                     attempts =
                         state.chat.attempts +
                             ChatRequestAttempt(
-                                generation, scope, destination, remoteConfirmed, requestText)))
+                                generation,
+                                scope,
+                                destination,
+                                remoteConfirmed,
+                                requestText,
+                                draftRevision)))
     return generation to file
   }
 
@@ -1727,7 +1744,8 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
             it.generation == requestId &&
             it.outcome == ChatRequestOutcome.Running &&
             matchesFile(file) &&
-            state.matchesChatScope(it.scope)
+            state.matchesChatScope(it.scope) &&
+            it.admittedDraftRevision == draftRevision
       }
 
   fun chatLoaded(requestId: Long, file: RequestIdentity, session: ChatSession): Boolean =
