@@ -137,7 +137,7 @@ class DesktopVisualLayoutTest {
           target = validation.target,
           targetValidation = validation)
     }
-    val diagnostic = "Provider timeout: " + "connection detail ".repeat(32)
+    val diagnostic = ("Provider timeout: " + "connection detail ".repeat(32)).trim()
     val failed =
         ChatRequestAttempt(
             1,
@@ -266,7 +266,10 @@ class DesktopVisualLayoutTest {
                   }
                   val feedback = state.targetValidation.message
                   if (feedback.isNotBlank()) {
-                    fixture.assertEveryTextLineReachable(feedback, "assistant-composer-scroll")
+                    fixture.assertEveryTextLineReachable(
+                        feedback,
+                        "assistant-composer-scroll",
+                        withinTag = "assistant-name-feedback")
                     fixture.assertTextContrast(feedback, AppBackground)
                   }
                   if (name == "long-name") {
@@ -12867,10 +12870,12 @@ internal class ComposeVisualFixture(
         label.length,
         layout.getLineEnd(layout.lineCount - 1),
         "The complete value must be laid out")
-    assertFalse(layout.didOverflowWidth, "$label must wrap within the available width")
     for (line in 0 until layout.lineCount) {
       assertFalse(layout.isLineEllipsized(line), "$label line $line must not be truncated")
       val viewport = taggedBounds(scrollTag)
+      assertTrue(
+          node().positionInRoot.x + layout.getLineRight(line) <= viewport.right + 1f,
+          "$label line $line must fit inside $scrollTag")
       repeat(10) {
         val top = node().positionInRoot.y + layout.getLineTop(line)
         val bottom = node().positionInRoot.y + layout.getLineBottom(line)
