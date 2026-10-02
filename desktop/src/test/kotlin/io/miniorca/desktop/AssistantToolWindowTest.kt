@@ -8,6 +8,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -752,6 +754,69 @@ class AssistantToolWindowTest {
             assertEquals("package demo\n", file.content)
           }
     }
+  }
+
+  @Test
+  fun creationKindChangePreservesUnsentInputsAndChangesRequestWording() {
+    val file = creationFile()
+    val workflow =
+        DesktopWorkflowSnapshot(
+            state = DesktopState(selection = FileSelectionState(selectedFile = file)))
+    var kind = DeclarationCreationKind.Function
+    val name = "Build"
+    val behavior = TextFieldValue("Return a result.", TextRange(7, 9))
+    val constraints = TextFieldValue("Keep it stable.", TextRange(5))
+    var invalidations = 0
+    fun select(requested: DeclarationCreationKind) {
+      routeCreationKindChange(workflow, ChatEditMode.CreateSymbol, kind, requested) {
+        invalidations++
+        kind = requested
+      }
+    }
+
+    select(DeclarationCreationKind.Function)
+    assertEquals(0, invalidations)
+    select(DeclarationCreationKind.Type)
+    assertEquals(DeclarationCreationKind.Type, kind)
+    assertEquals(1, invalidations)
+    assertEquals("Build", name)
+    assertEquals(TextFieldValue("Return a result.", TextRange(7, 9)), behavior)
+    assertEquals(TextFieldValue("Keep it stable.", TextRange(5)), constraints)
+    assertEquals(
+        "Create a Go type named Build.\n\nReturn a result.",
+        creationMessage(kind, name, behavior.text))
+  }
+
+  @Test
+  fun creationKindCallbackRechecksEligibilityBusyStateAndMode() {
+    val file = creationFile()
+    val workflow =
+        DesktopWorkflowSnapshot(
+            state = DesktopState(selection = FileSelectionState(selectedFile = file)))
+    var changes = 0
+    fun attempt(snapshot: DesktopWorkflowSnapshot, mode: ChatEditMode = ChatEditMode.CreateSymbol) {
+      routeCreationKindChange(
+          snapshot, mode, DeclarationCreationKind.Function, DeclarationCreationKind.Type) {
+            changes++
+          }
+    }
+    attempt(workflow.copy(state = workflow.state.copy(selection = FileSelectionState())))
+    attempt(
+        workflow.copy(
+            state =
+                workflow.state.copy(
+                    selection = FileSelectionState(selectedFile = file.copy(language = "Text")))))
+    attempt(
+        workflow.copy(
+            state =
+                workflow.state.copy(
+                    selection = FileSelectionState(selectedFile = file.copy(binary = true)))))
+    attempt(workflow.copy(generating = true))
+    attempt(workflow.copy(draftValidationInProgress = true))
+    attempt(workflow, ChatEditMode.ReplaceSymbol)
+    assertEquals(0, changes)
+    attempt(workflow)
+    assertEquals(1, changes)
   }
 
   @Test

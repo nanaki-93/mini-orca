@@ -473,6 +473,13 @@ internal fun MiniOrcaApp(
         }
   }
 
+  fun changeCreationKind(kind: DeclarationCreationKind) {
+    routeCreationKindChange(workflow, chatMode, creationKind, kind) {
+      presenter.contextCreationTargetChanged(newChatSymbol, kind.noun)
+      creationKind = kind
+    }
+  }
+
   fun requestCreateDeclaration(kind: DeclarationCreationKind) {
     routeCreationRequest(
         workflow,
@@ -1516,6 +1523,23 @@ internal fun commitProjectSwitch(
 
 private val DesktopWorkflowSnapshot.creationInProgress: Boolean
   get() = generating || draftValidationInProgress
+
+internal fun routeCreationKindChange(
+    workflow: DesktopWorkflowSnapshot,
+    mode: ChatEditMode,
+    currentKind: DeclarationCreationKind,
+    requestedKind: DeclarationCreationKind,
+    change: () -> Unit,
+) {
+  if (mode != ChatEditMode.CreateSymbol || currentKind == requestedKind) return
+  val state = workflow.state
+  if (declarationCreationBlockedReason(
+      state.selectedFile,
+      workflow.creationInProgress || state.review.editor?.status == DraftEditorStatus.Validating) !=
+      null || currentEditIdentity(state)?.hasDraft == true)
+      return
+  change()
+}
 
 internal fun routeCreationRequest(
     workflow: DesktopWorkflowSnapshot,
