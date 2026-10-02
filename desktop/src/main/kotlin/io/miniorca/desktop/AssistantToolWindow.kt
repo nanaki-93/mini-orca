@@ -289,6 +289,7 @@ internal fun AssistantToolWindow(
             AssistantDraftEditorSection(
                 state.editor,
                 state.draftInput ?: TextFieldValue(state.editor.declaration),
+                state.importInput ?: state.editor.imports.joinToString(", "),
                 state.draftFocus,
                 state.draft.engineeringInsight,
                 state.draft.state.equals("stale", ignoreCase = true),
@@ -382,6 +383,7 @@ internal fun assistantComposerBlockedReason(state: AssistantToolWindowState): St
 private fun AssistantDraftEditorSection(
     editor: EditableDraftState,
     declaration: TextFieldValue,
+    importText: String,
     draftFocus: FocusRequester,
     insight: EngineeringInsight?,
     stale: Boolean,
@@ -415,8 +417,8 @@ private fun AssistantDraftEditorSection(
           modifier = Modifier.fillMaxWidth().padding(top = 7.dp).focusRequester(draftFocus))
       if (requiredImportsVisible(editor)) {
         CompactSingleLineField(
-            editor.imports.joinToString(", "),
-            { value -> actions.updateImports(parseRequiredImports(value)) },
+            importText,
+            actions.updateImportText,
             enabled =
                 editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale),
             label = "Required imports",
@@ -600,6 +602,7 @@ internal data class AssistantToolWindowState(
     val draftFocus: FocusRequester,
     val messageInput: TextFieldValue = TextFieldValue(message),
     val draftInput: TextFieldValue? = null,
+    val importInput: String? = null,
     val selectedSymbol: SymbolInfo? = null,
     val targetValidation: ChatTargetValidation = ChatTargetValidation(target),
     val advancedConstraintsInput: TextFieldValue = TextFieldValue(),
@@ -637,6 +640,9 @@ internal data class DraftEditorActions(
     val validate: () -> Unit,
     val updateDeclarationValue: (TextFieldValue) -> Unit = { value ->
       updateDeclaration(value.text)
+    },
+    val updateImportText: (String) -> Unit = { value ->
+      updateImports(parseRequiredImports(value))
     },
 )
 
