@@ -31,6 +31,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 class DesktopWorkflowPresenterTest {
 
@@ -7738,6 +7740,132 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun presenterRejectsRawIntentBeforeConstraintsOrCreationWording() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val calls = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, _ ->
+          if (method == "POST") calls += "$method $path"
+          chatFileResponse(path) ?: error("Unexpected request $method $path")
+        }
+    try {
+      loadProject(presenter)
+      presenter.selectFile("main.go")
+      dispatcher.runPending()
+      presenter.dispatch(
+          DesktopEvent.SymbolSelected(
+              SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)))
+      listOf("", "  \n", FunctionChangePreset.Fix.preparedMessage()).forEach { raw ->
+        presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", raw, "Keep the public signature.")
+        dispatcher.runPending()
+        assertTrue(calls.isEmpty())
+        assertFalse(presenter.snapshot.value.generating)
+      }
+      presenter.sendChatMessage(
+          ChatEditMode.CreateSymbol,
+          "NewName",
+          FunctionChangePreset.Document.preparedMessage(),
+          "Keep the public signature.",
+          creationKind = DeclarationCreationKind.Function)
+      dispatcher.runPending()
+      assertTrue(calls.isEmpty())
+      assertNull(presenter.snapshot.value.state.chat.session)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      dispatcher.runPending()
+    }
+  }
+
+  @Test
+  fun presenterComposesConstraintsOnlyAfterAdmittingIntent() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val calls = mutableListOf<Pair<String, String>>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, body ->
+          if (method == "POST") calls += path to body.orEmpty()
+          chatFileResponse(path)
+              ?: when (path) {
+                "/api/projects/current/chat/sessions" ->
+                    response(
+                        """{"id":"session","project_id":"project","project_revision":"revision","base_file_hash":"base","open_path":"main.go","mode":"replace_symbol","target_symbol":"Run","state":"active","messages":[]}""")
+                "/api/projects/current/chat/sessions/session/messages" ->
+                    response(
+                        """{"session_id":"session","draft":{"id":"draft","project_id":"project","project_revision":"revision","base_file_hash":"base","target_path":"main.go","mode":"replace_symbol","target_symbol":"Run","declaration":"func Run() {}","revision":1,"hash":"draft-hash","state":"generated"},"assistant_message":{"role":"assistant","content":"Ready"}}""")
+                else -> error("Unexpected request $method $path")
+              }
+        }
+    try {
+      loadProject(presenter)
+      presenter.selectFile("main.go")
+      dispatcher.runPending()
+      presenter.dispatch(
+          DesktopEvent.SymbolSelected(
+              SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)))
+      presenter.sendChatMessage(
+          ChatEditMode.ReplaceSymbol, "", "  Preserve order.  ", "  Keep the public signature.  ")
+      dispatcher.runPending()
+      assertEquals(2, calls.size, presenter.snapshot.value.state.error.orEmpty())
+      assertEquals(
+          "Preserve order.\n\nConstraints:\nKeep the public signature.",
+          Json.parseToJsonElement(calls[1].second).jsonObject["message"]?.jsonPrimitive?.content)
+      assertEquals("draft", presenter.snapshot.value.state.review.draft?.id)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      dispatcher.runPending()
+    }
+  }
+
+  @Test
+  fun presenterKeepsCreationWordingAndRepairFlagAfterRawIntentAdmission() {
+    listOf(false, true).forEach { repair ->
+      val dispatcher = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + dispatcher)
+      val requests = mutableListOf<Pair<String, String>>()
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, body ->
+            if (method == "POST") requests += path to body.orEmpty()
+            chatFileResponse(path)
+                ?: when (path) {
+                  "/api/projects/current/chat/sessions" -> response(creationSessionJson())
+                  "/api/projects/current/chat/sessions/session/messages" ->
+                      response(creationProposalJson())
+                  else -> error("Unexpected request $method $path")
+                }
+          }
+      try {
+        loadProject(presenter)
+        presenter.selectFile("main.go")
+        dispatcher.runPending()
+        presenter.sendChatMessage(
+            ChatEditMode.CreateSymbol,
+            "新規",
+            "  Return one.  ",
+            "  Keep exported names. ",
+            repair = repair,
+            creationKind = DeclarationCreationKind.Function)
+        dispatcher.runPending()
+        assertEquals(2, requests.size, presenter.snapshot.value.state.error.orEmpty())
+        assertTrue(requests[0].second.contains("\"mode\":\"create_symbol\""))
+        assertTrue(requests[0].second.contains("\"target_symbol\":\"新規\""))
+        val body = Json.parseToJsonElement(requests[1].second).jsonObject
+        assertEquals(
+            "Create a Go function named 新規.\n\nReturn one.\n\nConstraints:\nKeep exported names.",
+            body["message"]?.jsonPrimitive?.content)
+        assertEquals(repair.toString(), body["repair"]?.jsonPrimitive?.content)
+        assertEquals("created", presenter.snapshot.value.state.review.draft?.id)
+      } finally {
+        presenter.close()
+        scope.cancel()
+        dispatcher.runPending()
+      }
+    }
+  }
+
+  @Test
   fun explicitSendMakesOneChatRequestAndPreservesFunctionRemoteConsent() {
     val dispatcher = QueuedDispatcher()
     val scope = CoroutineScope(SupervisorJob() + dispatcher)
@@ -9219,6 +9347,16 @@ class DesktopWorkflowPresenterTest {
         "GET" to "/api/projects/current/scan?project_revision=revision" ->
             TransportResponse(204, "")
         else -> error("Unexpected request $method $path")
+      }
+
+  private fun chatFileResponse(path: String): TransportResponse? =
+      when {
+        path.contains("files/info?path=main.go") -> response(fileJson("main.go", "base"))
+        path.contains("files/symbols?path=main.go") -> response(symbolsJson("main.go", "Run"))
+        path.contains("files/analysis") -> response("""{"path":"main.go","status":"missing"}""")
+        path.contains("/impact") -> response("""{"target_path":"main.go"}""")
+        path.contains("/git") -> response("""{"available":false}""")
+        else -> null
       }
 
   private fun creationFileResponse(path: String): TransportResponse? =
