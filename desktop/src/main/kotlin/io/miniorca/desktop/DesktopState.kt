@@ -1001,7 +1001,11 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
               review =
                   review.copy(
                       draft = event.draft,
-                      editor = editableDraft(event.draft),
+                      editor =
+                          editableDraft(event.draft)
+                              .copy(
+                                  acceptanceGeneration =
+                                      (review.editor?.acceptanceGeneration ?: 0) + 1),
                       checks = null,
                       checkAttempt = null,
                       benchmark =
