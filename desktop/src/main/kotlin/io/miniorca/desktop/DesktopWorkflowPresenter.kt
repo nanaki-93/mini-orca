@@ -260,6 +260,9 @@ class DesktopWorkflowPresenter(
             providerConfirmations =
                 previous.providerConfirmations.withConfirmation(scope, confirmed),
         )
+    if (scope == ModelScope.Function && previous.providerConfirmed(scope) && !confirmed) {
+      invalidateChatAuthorization()
+    }
     if (scope == ModelScope.Function &&
         !confirmed &&
         previous.providerConfirmed(scope) &&
@@ -296,6 +299,7 @@ class DesktopWorkflowPresenter(
                           previous.modelCatalog.identity() == catalog.identity()
                         } ?: false)
             if (previous.modelCatalog.identity() != catalog.identity()) {
+              invalidateChatAuthorization()
               invalidateContextInspectionIfTargetChanged()
               analysisWorkflow.providerChanged()
               if (previous.declarationExplanation.status == DeclarationExplanationStatus.Loading)
@@ -1787,6 +1791,7 @@ class DesktopWorkflowPresenter(
       creationKind: DeclarationCreationKind? = null,
   ) {
     val state = snapshot.value.state
+    if (state.chat.pendingRequestId != 0L) return
     val project = state.project ?: return
     val file = state.selectedFile ?: return
     val target =
@@ -1807,8 +1812,9 @@ class DesktopWorkflowPresenter(
         if (mode == ChatEditMode.CreateSymbol && creationKind != null)
             creationMessage(creationKind, requestedSymbol, request)
         else request
-    if (snapshot.value.model(ModelScope.Function).remoteProvider &&
-        !snapshot.value.providerConfirmed(ModelScope.Function)) {
+    val destination = snapshot.value.model(ModelScope.Function)
+    val remoteConfirmed = snapshot.value.providerConfirmed(ModelScope.Function)
+    if (destination.remoteProvider && !remoteConfirmed) {
       dispatch(
           DesktopEvent.Failed(
               "Confirm the Function edits model destination before sending context."))
@@ -1833,12 +1839,12 @@ class DesktopWorkflowPresenter(
                 chatTarget,
                 taskSpec,
                 if (mode == ChatEditMode.ReplaceSymbol) state.selectedSymbol else null),
-            snapshot.value.model(ModelScope.Function),
-            content) ?: return
+            destination,
+            content,
+            remoteConfirmed) ?: return
     activeTask = identity
     val matchingSession =
         state.chat.session?.takeIf { chatSessionMatches(it, file, project, chatTarget, taskSpec) }
-    chatJob?.cancel()
     dispatch(DesktopEvent.Loading)
     dispatch(DesktopEvent.Status("Sending a request for ${chatTarget.symbol} in ${file.path}…"))
     setOperation(generating = true)
@@ -1857,43 +1863,84 @@ class DesktopWorkflowPresenter(
                           chatTarget.symbol,
                           taskSpec)
                     }
-            val proposal = io {
-              api.sendChatMessage(
-                  session.id,
-                  content,
-                  session.latestDraftId,
-                  snapshot.value.providerConfirmed(ModelScope.Function),
-                  repair)
+            if (!chatSessionMatches(session, file, project, chatTarget, taskSpec))
+                throw IllegalStateException(
+                    "The opened chat session does not match the request target.")
+            if (!canDispatchChatRequest(
+                requestId, fileRequest, identity, destination, remoteConfirmed)) {
+              if (controller.cancelChatLoad(requestId, fileRequest)) publish()
+              return@launch
             }
-            if (activeTask == identity &&
-                controller.chatProposalLoaded(
-                    requestId,
-                    fileRequest,
-                    session.copy(
-                        repairCount = session.repairCount + if (repair) 1 else 0,
-                        taskSpec =
-                            sessionTaskSpecAfterProposal(
-                                session.taskSpec, proposal.draft.taskSpec)),
-                    content,
-                    proposal)) {
+            val proposal =
+                io {
+                  api.sendChatMessage(
+                      session.id, content, session.latestDraftId, remoteConfirmed, repair)
+                }
+            if (!canDispatchChatRequest(
+                requestId, fileRequest, identity, destination, remoteConfirmed)) {
+              if (controller.cancelChatLoad(requestId, fileRequest)) publish()
+              return@launch
+            }
+            if (controller.chatProposalLoaded(
+                requestId,
+                fileRequest,
+                session.copy(
+                    repairCount = session.repairCount + if (repair) 1 else 0,
+                    taskSpec =
+                        sessionTaskSpecAfterProposal(session.taskSpec, proposal.draft.taskSpec)),
+                content,
+                proposal)) {
               activeDraft = proposal.draft.identity(identity.file)
               publish()
               dispatch(DesktopEvent.Status("Draft is ready for review."))
+            } else if (controller.chatAttemptFailed(
+                requestId,
+                fileRequest,
+                "The chat response does not match the request target. Send again to retry.")) {
+              publish()
             }
           } catch (_: CancellationException) {
             if (controller.cancelChatLoad(requestId, fileRequest)) publish()
             throw CancellationException()
           } catch (error: Exception) {
-            if (activeTask == identity &&
-                controller.chatAttemptFailed(
-                    requestId,
-                    fileRequest,
-                    modelRequestFailureMessage(error, ModelScope.Function, "Chat request failed")))
-                publish()
+            if (canDispatchChatRequest(
+                requestId, fileRequest, identity, destination, remoteConfirmed)) {
+              val staleConsent = staleRemoteConfirmationMessage(error, ModelScope.Function)
+              val message =
+                  staleConsent
+                      ?: (error as? ApiException)?.error?.userMessage?.takeIf(String::isNotBlank)
+                      ?: "Chat request failed. Send again to retry."
+              if (controller.chatAttemptFailed(requestId, fileRequest, message)) publish()
+              if (staleConsent != null) setProviderConfirmation(ModelScope.Function, false)
+            } else if (controller.cancelChatLoad(requestId, fileRequest)) publish()
           } finally {
             if (chatJob === coroutineContext[Job]) setOperation(generating = false)
           }
         }
+  }
+
+  private fun canDispatchChatRequest(
+      requestId: Long,
+      file: RequestIdentity,
+      identity: WorkflowTaskIdentity,
+      destination: ScopedModel,
+      remoteConfirmed: Boolean,
+  ): Boolean =
+      activeTask == identity &&
+          controller.isCurrentChatAttempt(requestId, file) &&
+          snapshot.value.model(ModelScope.Function) == destination &&
+          snapshot.value.providerConfirmed(ModelScope.Function) == remoteConfirmed &&
+          (!destination.remoteProvider || remoteConfirmed)
+
+  private fun invalidateChatAuthorization() {
+    val requestId = controller.state.chat.pendingRequestId
+    if (requestId == 0L) return
+    controller.currentFileRequest()?.let { file ->
+      if (controller.cancelChatLoad(requestId, file)) publish()
+    }
+    activeTask = null
+    chatJob?.cancel()
+    setOperation(generating = false)
   }
 
   fun reviseWithCheckOutput(mode: ChatEditMode, requestedSymbol: String) {

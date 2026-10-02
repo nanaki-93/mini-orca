@@ -7957,6 +7957,337 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun duplicateSendWhileAttemptRunsOpensOnlyOneSession() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var opens = 0
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          chatFileResponse(path)
+              ?: when (path) {
+                "/api/projects/current/chat/sessions" -> {
+                  opens++
+                  response(
+                      """{"id":"session","project_id":"project","project_revision":"revision","base_file_hash":"base","open_path":"main.go","mode":"replace_symbol","target_symbol":"Run","state":"active","messages":[]}""")
+                }
+                "/api/projects/current/chat/sessions/session/messages" ->
+                    TransportResponse(503, """{"user_message":"Provider unavailable"}""")
+                else -> error("Unexpected request $path")
+              }
+        }
+    try {
+      loadQueuedChatFile(presenter, main, io)
+      presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Improve Run")
+      val admitted = presenter.snapshot.value.state.chat.attempts.single()
+      presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Improve Run again")
+      assertEquals(listOf(admitted), presenter.snapshot.value.state.chat.attempts)
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(1, opens)
+      val attempts = presenter.snapshot.value.state.chat.attempts
+      assertEquals(1, attempts.size)
+      assertEquals(
+          ChatRequestOutcome.Failed("Provider unavailable"), attempts.single().outcome)
+      assertEquals("Improve Run", attempts.single().requestText)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      main.runPending()
+      io.runPending()
+    }
+  }
+
+  @Test
+  fun sessionOpenFailureBelongsToAdmittedAttemptAndPreservesPriorEvidence() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var opens = 0
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          chatFileResponse(path)
+              ?: if (path == "/api/projects/current/chat/sessions") {
+                opens++
+                TransportResponse(
+                    409, """{"type":"conflict","user_message":"Reopen the changed file."}""")
+              } else error("Unexpected request $path")
+        }
+    try {
+      loadQueuedChatFile(presenter, main, io)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Preserve the signature")
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      val state = presenter.snapshot.value.state
+      assertEquals(1, opens)
+      assertEquals("Preserve the signature", state.chat.attempts.single().requestText)
+      assertTrue(
+          (state.chat.attempts.single().outcome as ChatRequestOutcome.Failed)
+              .message
+              .contains("Reopen the changed file."))
+      assertEquals("draft", state.review.draft?.id)
+      assertEquals("Run", state.selectedSymbol?.name)
+      assertFalse(presenter.snapshot.value.generating)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      main.runPending()
+      io.runPending()
+    }
+  }
+
+  @Test
+  fun messageTransportFailureRetainsDraftAndDoesNotExposeTransportDetails() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var messages = 0
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          chatFileResponse(path)
+              ?: when (path) {
+                "/api/projects/current/chat/sessions" ->
+                    response(
+                        """{"id":"session","project_id":"project","project_revision":"revision","base_file_hash":"base","open_path":"main.go","mode":"replace_symbol","target_symbol":"Run","state":"active","messages":[]}""")
+                "/api/projects/current/chat/sessions/session/messages" -> {
+                  messages++
+                  error("private transport details: token=secret")
+                }
+                else -> error("Unexpected request $path")
+              }
+        }
+    try {
+      loadQueuedChatFile(presenter, main, io)
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Improve Run")
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      val state = presenter.snapshot.value.state
+      assertEquals(1, messages)
+      assertEquals("Improve Run", state.chat.attempts.single().requestText)
+      assertEquals(
+          ChatRequestOutcome.Failed("Chat request failed. Send again to retry."),
+          state.chat.attempts.single().outcome)
+      assertEquals("draft", state.review.draft?.id)
+      assertFalse(presenter.snapshot.value.generating)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      main.runPending()
+      io.runPending()
+    }
+  }
+
+  @Test
+  fun openedSessionForAnotherTargetDoesNotReceiveTheAdmittedMessage() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var messages = 0
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          chatFileResponse(path)
+              ?: when (path) {
+                "/api/projects/current/chat/sessions" ->
+                    response(
+                        """{"id":"wrong","project_id":"project","project_revision":"revision","base_file_hash":"base","open_path":"other.go","mode":"replace_symbol","target_symbol":"Run","state":"active","messages":[]}""")
+                "/api/projects/current/chat/sessions/wrong/messages" -> {
+                  messages++
+                  error("Must not send to a mismatched session")
+                }
+                else -> error("Unexpected request $path")
+              }
+        }
+    try {
+      loadQueuedChatFile(presenter, main, io)
+      presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Improve Run")
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(0, messages)
+      assertTrue(
+          presenter.snapshot.value.state.chat.attempts.single().outcome
+              is ChatRequestOutcome.Failed)
+      assertEquals("Improve Run", presenter.snapshot.value.state.chat.attempts.single().requestText)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      main.runPending()
+      io.runPending()
+    }
+  }
+
+  @Test
+  fun revokedFunctionConsentDuringSessionOpenCannotDispatchWithOldConfirmation() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var messages = 0
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          chatFileResponse(path)
+              ?: when (path) {
+                "/status" -> response("""{"status":"ok","version":"v1"}""")
+                "/api/models/current" -> response(functionCatalog("provider/editor"))
+                "/api/projects/current/chat/sessions" ->
+                    response(
+                        """{"id":"session","project_id":"project","project_revision":"revision","base_file_hash":"base","open_path":"main.go","mode":"replace_symbol","target_symbol":"Run","state":"active","messages":[]}""")
+                "/api/projects/current/chat/sessions/session/messages" -> {
+                  messages++
+                  error("Must not dispatch without Function authorization")
+                }
+                else -> error("Unexpected request $path")
+              }
+        }
+    try {
+      loadQueuedChatFile(presenter, main, io)
+      presenter.refreshConnection()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertTrue(presenter.snapshot.value.model(ModelScope.Function).remoteProvider)
+      presenter.setProviderConfirmation(ModelScope.Analyze, true)
+      presenter.setProviderConfirmation(ModelScope.Bug, true)
+      presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Improve Run")
+      assertTrue(presenter.snapshot.value.state.chat.attempts.isEmpty())
+      presenter.setProviderConfirmation(ModelScope.Function, true)
+      presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Improve Run")
+      assertTrue(presenter.snapshot.value.state.chat.attempts.single().remoteConfirmed)
+      assertEquals(
+          "provider/editor",
+          presenter.snapshot.value.state.chat.attempts.single().destination.model)
+      main.runPending()
+      io.runPending() // Session creation finishes; the message has not started.
+      presenter.setProviderConfirmation(ModelScope.Function, false)
+      main.runPending()
+      io.runPending()
+      assertEquals(0, messages)
+      assertEquals(
+          ChatRequestOutcome.Canceled,
+          presenter.snapshot.value.state.chat.attempts.single().outcome)
+      assertFalse(presenter.snapshot.value.generating)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      main.runPending()
+      io.runPending()
+    }
+  }
+
+  @Test
+  fun revokedFunctionConsentBeforeQueuedMessageTransportDoesNotDispatch() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var messages = 0
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          chatFileResponse(path)
+              ?: when (path) {
+                "/status" -> response("""{"status":"ok","version":"v1"}""")
+                "/api/models/current" -> response(functionCatalog("provider/editor"))
+                "/api/projects/current/chat/sessions" ->
+                    response(
+                        """{"id":"session","project_id":"project","project_revision":"revision","base_file_hash":"base","open_path":"main.go","mode":"replace_symbol","target_symbol":"Run","state":"active","messages":[]}""")
+                "/api/projects/current/chat/sessions/session/messages" -> {
+                  messages++
+                  error("Revoked consent must not reach message transport")
+                }
+                else -> error("Unexpected request $path")
+              }
+        }
+    try {
+      loadQueuedChatFile(presenter, main, io)
+      presenter.refreshConnection()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      presenter.setProviderConfirmation(ModelScope.Function, true)
+      presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Improve Run")
+      main.runPending()
+      io.runPending() // Session open completes; the continuation is on main.
+      main.runPending() // Authorization is checked on main; transport is queued on I/O.
+      presenter.setProviderConfirmation(ModelScope.Function, false)
+      io.runPending()
+      main.runPending()
+      assertEquals(0, messages)
+      assertEquals(
+          ChatRequestOutcome.Canceled,
+          presenter.snapshot.value.state.chat.attempts.single().outcome)
+      assertEquals(0L, presenter.snapshot.value.state.chat.pendingRequestId)
+      assertFalse(presenter.snapshot.value.generating)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      main.runPending()
+      io.runPending()
+    }
+  }
+
+  @Test
+  fun changedFunctionDestinationDuringSessionOpenCannotDispatch() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var model = "provider/first"
+    var messages = 0
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          chatFileResponse(path)
+              ?: when (path) {
+                "/status" -> response("""{"status":"ok","version":"v1"}""")
+                "/api/models/current" -> response(functionCatalog(model))
+                "/api/projects/current/chat/sessions" ->
+                    response(
+                        """{"id":"session","project_id":"project","project_revision":"revision","base_file_hash":"base","open_path":"main.go","mode":"replace_symbol","target_symbol":"Run","state":"active","messages":[]}""")
+                "/api/projects/current/chat/sessions/session/messages" -> {
+                  messages++
+                  error("Message must not reach a changed destination")
+                }
+                else -> error("Unexpected request $path")
+              }
+        }
+    try {
+      loadQueuedChatFile(presenter, main, io)
+      presenter.refreshConnection()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      presenter.setProviderConfirmation(ModelScope.Function, true)
+      presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Improve Run")
+      main.runPending()
+      io.runPending() // Open completed, but Send is still suspended.
+      model = "provider/second"
+      presenter.refreshConnection()
+      main.runLast() // Start catalog refresh before resuming Send.
+      io.runPending()
+      main.runLast() // Publish the new catalog and invalidate consent.
+      main.runPending()
+      io.runPending()
+      assertEquals(0, messages)
+      assertEquals(
+          "provider/first", presenter.snapshot.value.state.chat.attempts.single().destination.model)
+      assertEquals(
+          ChatRequestOutcome.Canceled,
+          presenter.snapshot.value.state.chat.attempts.single().outcome)
+      assertFalse(presenter.snapshot.value.providerConfirmed(ModelScope.Function))
+    } finally {
+      presenter.close()
+      scope.cancel()
+      main.runPending()
+      io.runPending()
+    }
+  }
+
+  @Test
   fun newLocalChangeDoesNotAttachAnOldPreparedBugTask() {
     val sessionBodies = Collections.synchronizedList(mutableListOf<String>())
     val messageRequests = AtomicInteger()
@@ -9272,6 +9603,23 @@ class DesktopWorkflowPresenterTest {
                 "revision",
                 files =
                     listOf("main.go", "other.go").map { IndexedFile(it, "base", "Go", false) })))
+  }
+
+  private fun loadQueuedChatFile(
+      presenter: DesktopWorkflowPresenter,
+      main: QueuedDispatcher,
+      io: QueuedDispatcher,
+  ) {
+    loadProject(presenter)
+    presenter.selectFile("main.go")
+    repeat(4) {
+      main.runPending()
+      io.runPending()
+    }
+    presenter.dispatch(
+        DesktopEvent.SymbolSelected(
+            SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)))
+    assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
   }
 
   private fun loadFile(presenter: DesktopWorkflowPresenter) {

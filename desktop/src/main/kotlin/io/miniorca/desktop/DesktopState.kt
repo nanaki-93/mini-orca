@@ -408,6 +408,7 @@ data class ChatRequestAttempt(
     val generation: Long,
     val scope: ChatRequestScope,
     val destination: ScopedModel,
+    val remoteConfirmed: Boolean,
     val requestText: String,
     val outcome: ChatRequestOutcome = ChatRequestOutcome.Running,
     val invalidationReason: String? = null,
@@ -1678,6 +1679,7 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
       scope: ChatRequestScope,
       destination: ScopedModel,
       requestText: String,
+      remoteConfirmed: Boolean = false,
   ): Pair<Long, RequestIdentity>? {
     val file = fileRequest ?: return null
     if (!matchesFile(file) ||
@@ -1693,9 +1695,13 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
                     pendingRequestId = generation,
                     attempts =
                         state.chat.attempts +
-                            ChatRequestAttempt(generation, scope, destination, requestText)))
+                            ChatRequestAttempt(
+                                generation, scope, destination, remoteConfirmed, requestText)))
     return generation to file
   }
+
+  fun isCurrentChatAttempt(requestId: Long, file: RequestIdentity): Boolean =
+      currentChatAttempt(requestId, file) != null
 
   fun chatAttemptFailed(requestId: Long, file: RequestIdentity, message: String): Boolean {
     val attempt = currentChatAttempt(requestId, file) ?: return false
