@@ -681,6 +681,10 @@ internal fun DesktopShell(
               .focusRequester(focusRequesters.fallback)
               .focusable()
               .onPreviewKeyEvent { event ->
+                if (event.key == Key.Enter &&
+                    (event.isMetaPressed || event.isCtrlPressed) &&
+                    (context.visible || palette.visible || statusDetailsVisible))
+                    return@onPreviewKeyEvent false
                 handleDesktopShortcut(
                     event = event,
                     terminal = terminal,
@@ -1202,11 +1206,13 @@ internal fun handleDesktopShortcut(
     }
     DesktopShortcut.Generate ->
         when {
-          editor.generating -> {
+          appState.chat.attempts.lastOrNull()?.outcome == ChatRequestOutcome.Running &&
+              editor.generating &&
+              appState.workspace == Workspace.Editor -> {
             editorActions.cancelGeneration()
             true
           }
-          editor.contextualActions.canGenerate -> {
+          !editor.generating && editor.contextualActions.canGenerate -> {
             editorActions.generate()
             true
           }
@@ -1215,7 +1221,8 @@ internal fun handleDesktopShortcut(
     DesktopShortcut.Cancel ->
         when {
           onDismissTransient() -> true
-          editor.generating -> {
+          editor.generating &&
+              appState.chat.attempts.lastOrNull()?.outcome == ChatRequestOutcome.Running -> {
             editorActions.cancelGeneration()
             true
           }

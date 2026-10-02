@@ -304,26 +304,15 @@ internal fun functionDestinationLabel(model: ScopedModel): String =
             "${model.model.ifBlank { "model unavailable" }} · provider locality unavailable"
 
 internal fun assistantComposerBlockedReason(state: AssistantToolWindowState): String? =
-    when {
-      state.sending -> "Request running. Cancel before sending another request."
-      state.mode == ChatEditMode.CreateSymbol ->
-          declarationCreationBlockedReason(
-              state.selected, state.editor?.status == DraftEditorStatus.Validating)
-              ?: state.targetValidation.message
-                  .ifBlank { "Select a declaration or enter a new name." }
-                  .takeIf { !state.targetValidation.valid }
-              ?: if (!hasFunctionChangeIntent(state.message))
-                  "Enter a specific behavior before sending."
-              else if (state.functionModel.remoteProvider && !state.remoteConfirmed)
-                  "Confirm the Function remote destination before sending."
-              else null
-      !state.targetValidation.valid ->
-          state.targetValidation.message.ifBlank { "Select one Go declaration before sending." }
-      !hasFunctionChangeIntent(state.message) -> "Enter a specific intent before sending."
-      state.functionModel.remoteProvider && !state.remoteConfirmed ->
-          "Confirm the Function remote destination before sending."
-      else -> null
-    }
+    assistantComposerBlockedReason(
+        state.mode,
+        state.selected,
+        state.targetValidation,
+        state.message,
+        state.sending,
+        state.validating || state.editor?.status == DraftEditorStatus.Validating,
+        state.functionModel,
+        state.remoteConfirmed)
 
 @Composable
 private fun AssistantDraftEditorSection(
@@ -555,6 +544,7 @@ internal data class AssistantToolWindowState(
     val attempts: List<ChatRequestAttempt> = emptyList(),
     val taskSpec: BugTaskSpec? = null,
     val inspectContextFocus: FocusRequester? = null,
+    val validating: Boolean = false,
 )
 
 /** Conversation intents that do not mutate the editable declaration. */

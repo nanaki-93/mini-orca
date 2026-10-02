@@ -16,6 +16,125 @@ import kotlin.test.assertTrue
 
 class DesktopAccessibilityTest {
   @Test
+  fun assistantControlsExposeBlockedRunningAndRecoveryStatesWithoutPassiveDispatch() {
+    val file =
+        ProjectFileInfo(
+            "internal/run.go",
+            "base",
+            "run.go",
+            language = "Go",
+            sizeBytes = 10,
+            lineCount = 3,
+            modifiedAt = "",
+            binary = false)
+    val symbol = SymbolInfo("Run", "function", "func Run()", 1, 3, "exact", true)
+    val target = ChatTarget(ChatEditMode.ReplaceSymbol, "Run")
+    val scope =
+        ChatRequestScope(
+            "project", "revision", file.path, file.contentHash, target, declaration = symbol)
+    val model =
+        ScopedModel(
+            scope = "function",
+            profile = "remote",
+            model = "edit",
+            providerOrigin = "https://example.invalid",
+            remoteProvider = true)
+    var state by
+        mutableStateOf(
+            AssistantToolWindowState(
+                resultProjectFixture(),
+                file,
+                null,
+                null,
+                null,
+                target,
+                ChatEditMode.ReplaceSymbol,
+                "",
+                "",
+                false,
+                model,
+                false,
+                androidx.compose.ui.focus.FocusRequester(),
+                androidx.compose.ui.focus.FocusRequester(),
+                selectedSymbol = symbol,
+                targetValidation = ChatTargetValidation(target),
+                attempts =
+                    listOf(
+                        ChatRequestAttempt(
+                            1,
+                            scope,
+                            model,
+                            false,
+                            "prior intent",
+                            0,
+                            ChatRequestOutcome.Failed("provider unavailable")))))
+    val calls = mutableListOf<String>()
+    ComposeVisualFixture(420, 650, 1.25f) {
+          AssistantToolWindow(
+              state,
+              AssistantConversationActions(
+                  {},
+                  {},
+                  { state = state.copy(remoteConfirmed = it) },
+                  { calls += "inspect" },
+                  { calls += "send" },
+                  { calls += "cancel" },
+                  preparePreset = { calls += "preset" }),
+              DraftEditorActions({}, {}, {}),
+              androidx.compose.ui.Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Request failed"))
+          assertTrue(fixture.hasText("provider unavailable"))
+          assertTrue(fixture.hasText("Enter a specific intent before sending."))
+          assertTrue(fixture.isDisabled("Send message"))
+          assertFalse(fixture.requestFocus("Send message"))
+          assertTrue(fixture.requestFocus("Fix"))
+          fixture.render()
+          fixture.assertColorVisible(FocusAccent)
+          assertEquals(emptyList(), calls)
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          assertEquals(listOf("preset"), calls)
+          assertTrue(fixture.requestDescriptionFocus("Expand Advanced constraints"))
+          assertEquals("Collapsed", fixture.descriptionState("Expand Advanced constraints"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals("Expanded", fixture.descriptionState("Collapse Advanced constraints"))
+          assertTrue(fixture.isFocusedControl("Collapse Advanced constraints"))
+          assertEquals(listOf("preset"), calls)
+          state = state.copy(message = "Fix the behavior.")
+          fixture.render()
+          assertTrue(fixture.hasText("Confirm the Function remote destination before sending."))
+          assertTrue(fixture.isDisabled("Send message"))
+          assertEquals("Not confirmed", fixture.descriptionState("Confirm remote destination"))
+          assertTrue(fixture.requestDescriptionFocus("Confirm remote destination"))
+          fixture.render()
+          fixture.assertColorVisible(FocusAccent)
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals("Confirmed", fixture.descriptionState("Confirm remote destination"))
+          assertFalse(fixture.isDisabled("Send message"))
+          assertEquals(listOf("preset"), calls)
+          state = state.copy(sending = true)
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "Request running · Cancel keeps the existing draft and conversation."))
+          assertFalse(fixture.hasText("Send message"))
+          assertTrue(fixture.requestFocus("Cancel request"))
+          fixture.render()
+          fixture.assertColorVisible(FocusAccent)
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(listOf("preset", "cancel"), calls)
+          assertTrue(fixture.hasText("Request failed"))
+          assertTrue(fixture.hasText("prior intent"))
+          fixture.revealText("provider unavailable")
+          assertTrue(fixture.copyTextByDragging("provider unavailable").isNotEmpty())
+        }
+  }
+
+  @Test
   fun contextInspectorKeepsActionFocusAndKeyboardTraversalInsideItsSurface() {
     var dismissals = 0
     var retries = 0

@@ -7784,6 +7784,49 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun directSendCannotBypassDraftValidationAdmission() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val calls = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, _ ->
+          if (method == "POST") calls += path
+          chatFileResponse(path) ?: error("Unexpected request $method $path")
+        }
+    try {
+      loadProject(presenter)
+      presenter.selectFile("main.go")
+      dispatcher.runPending()
+      presenter.dispatch(
+          DesktopEvent.SymbolSelected(
+              SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)))
+      presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+      presenter.validateEditableDraft()
+      assertEquals(
+          DraftEditorStatus.Validating, presenter.snapshot.value.state.review.editor?.status)
+      assertTrue(presenter.snapshot.value.draftValidationInProgress)
+
+      presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Preserve the signature")
+      presenter.sendChatMessage(
+          ChatEditMode.CreateSymbol,
+          "NewName",
+          "Return one.",
+          creationKind = DeclarationCreationKind.Function)
+      assertTrue(calls.isEmpty())
+      assertEquals(0L, presenter.snapshot.value.state.chat.pendingRequestId)
+      assertTrue(presenter.snapshot.value.state.chat.attempts.isEmpty())
+      assertFalse(presenter.snapshot.value.generating)
+      assertEquals(
+          DraftEditorStatus.Validating, presenter.snapshot.value.state.review.editor?.status)
+      assertEquals("draft", presenter.snapshot.value.state.review.draft?.id)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      dispatcher.runPending()
+    }
+  }
+
+  @Test
   fun presenterComposesConstraintsOnlyAfterAdmittingIntent() {
     val dispatcher = QueuedDispatcher()
     val scope = CoroutineScope(SupervisorJob() + dispatcher)

@@ -702,6 +702,7 @@ internal fun MiniOrcaApp(
                   newSymbol = newChatSymbol,
                   message = chatMessage.text,
                   sending = workflow.generating,
+                  validating = workflow.draftValidationInProgress,
                   functionModel = functionModel,
                   remoteConfirmed = workflow.providerConfirmed(ModelScope.Function),
                   chatFocus = chatFocusRequester,
@@ -823,6 +824,7 @@ internal fun MiniOrcaApp(
           newChatSymbol,
           chatMessage.text,
           sending = workflow.generating,
+          validating = workflow.draftValidationInProgress,
           functionModel = functionModel,
           remoteProviderConfirmed = workflow.providerConfirmed(ModelScope.Function),
       )
@@ -1557,9 +1559,17 @@ private fun submitComposerMessage(
     constraints: String,
 ) {
   val workflow = presenter.snapshot.value
-  if (mode == ChatEditMode.CreateSymbol &&
-      (declarationCreationBlockedReason(workflow.state.selectedFile, workflow.creationInProgress) !=
-          null || !hasFunctionChangeIntent(behavior)))
+  val state = workflow.state
+  if (assistantComposerBlockedReason(
+      mode,
+      state.selectedFile,
+      validateChatTarget(state.selectedFile, state.symbols, state.selectedSymbol, mode, name),
+      behavior,
+      workflow.generating,
+      workflow.draftValidationInProgress ||
+          state.review.editor?.status == DraftEditorStatus.Validating,
+      workflow.model(ModelScope.Function),
+      workflow.providerConfirmed(ModelScope.Function)) != null)
       return
   presenter.sendChatMessage(
       mode,
