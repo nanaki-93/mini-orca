@@ -588,6 +588,7 @@ internal fun MiniOrcaApp(
                   checks = appState.review.checks,
                   applied = appState.review.applied,
                   checkAttempt = appState.review.checkAttempt,
+                  mutation = appState.review.mutation,
               ),
       )
   LaunchedEffect(editorProgress.progress) {
@@ -1993,6 +1994,7 @@ internal fun reviewToolWindowState(state: DesktopState) =
         applied = state.review.applied,
         checksRunning = state.review.checkAttempt?.status == ValidationAttemptStatus.Running,
         checkAttempt = state.review.checkAttempt,
+        mutation = state.review.mutation,
     )
 
 private fun reviewToolWindowActions(

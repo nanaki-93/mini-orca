@@ -478,6 +478,23 @@ data class CheckAttempt(
     val message: String = "",
 )
 
+enum class DraftMutationOperation {
+  Apply,
+  Undo
+}
+
+enum class DraftMutationStatus {
+  Running,
+  Failed,
+  Conflict
+}
+
+data class DraftMutationAttempt(
+    val operation: DraftMutationOperation,
+    val status: DraftMutationStatus,
+    val message: String,
+)
+
 data class DraftReviewState(
     val checks: DraftCheckReport? = null,
     val draft: DeclarationDraft? = null,
@@ -485,6 +502,7 @@ data class DraftReviewState(
     val applied: ApplyResult? = null,
     val benchmark: BenchmarkEvidenceState = BenchmarkEvidenceState(),
     val checkAttempt: CheckAttempt? = null,
+    val mutation: DraftMutationAttempt? = null,
 )
 
 sealed interface BenchmarkDiscoveryOutcome {
@@ -790,6 +808,8 @@ sealed interface DesktopEvent {
 
   data class Applied(val result: ApplyResult?) : DesktopEvent
 
+  data class DraftMutationUpdated(val attempt: DraftMutationAttempt) : DesktopEvent
+
   data class Failed(val message: String) : DesktopEvent
 
   data class Status(val message: String) : DesktopEvent
@@ -1018,11 +1038,14 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
               chat = ChatState(),
               review = DraftReviewState(applied = review.applied),
               jobs = jobs.copy(loading = false, error = null))
+      is DesktopEvent.DraftMutationUpdated -> copy(review = review.copy(mutation = event.attempt))
       is DesktopEvent.Applied ->
           copy(
               review =
                   review.copy(
-                      applied = event.result, benchmark = review.benchmark.withoutCatalog()),
+                      applied = event.result,
+                      mutation = null,
+                      benchmark = review.benchmark.withoutCatalog()),
               jobs = jobs.copy(loading = false))
       is DesktopEvent.Failed -> copy(jobs = jobs.copy(loading = false, error = event.message))
       is DesktopEvent.Status -> copy(jobs = jobs.copy(status = event.message))

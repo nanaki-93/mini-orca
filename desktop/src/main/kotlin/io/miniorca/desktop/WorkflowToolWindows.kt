@@ -41,6 +41,8 @@ private fun reviewToolWindowBadge(
     decision: ApplyDecisionUiState,
 ): RightToolWindowBadge? =
     when {
+      decision.pendingOperation != null ->
+          RightToolWindowBadge("${decision.pendingOperation.name} running")
       decision.receiptTitle != null -> RightToolWindowBadge("Applied")
       evidence.validation.status == ReviewEvidenceStatus.Running ->
           RightToolWindowBadge("Validating")

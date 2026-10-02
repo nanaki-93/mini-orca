@@ -37,6 +37,56 @@ import kotlinx.serialization.json.jsonPrimitive
 class DesktopWorkflowPresenterTest {
 
   @Test
+  fun guardedApplyDeduplicatesActivationAndRejectsEditedCandidatesBeforeDispatch() {
+    for (editBeforeDispatch in listOf(false, true)) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      var applies = 0
+      val owner =
+          presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+            check(path.endsWith("/apply"))
+            applies++
+            TransportResponse(409, """{"message":"Source changed on disk"}""")
+          }
+      try {
+        loadFile(owner)
+        val current = draft()
+        owner.dispatch(DesktopEvent.DraftLoaded(current))
+        owner.dispatch(
+            DesktopEvent.ChecksLoaded(
+                DraftCheckReport(
+                    "main.go",
+                    true,
+                    listOf(DraftCheck("gofmt", true, "passed")),
+                    current.id,
+                    current.revision,
+                    current.hash)))
+        owner.applyEditableDraft()
+        owner.applyEditableDraft()
+        assertEquals(
+            DraftMutationStatus.Running, owner.snapshot.value.state.review.mutation?.status)
+        assertNull(owner.snapshot.value.state.review.applied)
+        if (editBeforeDispatch) owner.dispatch(DesktopEvent.DraftEdited(imports = listOf("fmt")))
+        repeat(3) {
+          main.runPending()
+          io.runPending()
+        }
+        assertEquals(if (editBeforeDispatch) 0 else 1, applies)
+        assertNull(owner.snapshot.value.state.review.applied)
+        assertEquals(
+            if (editBeforeDispatch) DraftMutationStatus.Failed else DraftMutationStatus.Conflict,
+            owner.snapshot.value.state.review.mutation?.status)
+        if (!editBeforeDispatch)
+            assertEquals(DraftEditorStatus.Stale, owner.snapshot.value.state.review.editor?.status)
+      } finally {
+        owner.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
   fun repairHandoffCannotUseDirtyStaleForeignOrExhaustedEvidence() {
     for (condition in listOf("dirty", "stale", "target", "limit", "checking")) {
       val main = QueuedDispatcher()
