@@ -1,17 +1,17 @@
 package io.miniorca.desktop
 
 enum class FunctionChangePreset(val label: String, private val requestLead: String) {
-  BugFix("Fix bug", "Fix a bug"),
-  Performance("Performance", "Improve performance"),
-  Behavior("Behavior", "Change behavior");
+  Fix("Fix", "Fix a bug"),
+  Refactor("Refactor", "Refactor without changing behavior"),
+  Document("Document", "Document without changing behavior");
 
   fun preparedMessage(): String = "$requestLead: "
 }
 
-fun hasFunctionChangeIntent(message: String): Boolean {
-  val content = message.trim()
-  return content.isNotEmpty() &&
-      FunctionChangePreset.entries.none { content == it.preparedMessage().trim() }
+fun hasFunctionChangeIntent(rawIntent: String): Boolean {
+  val intent = rawIntent.trim()
+  return intent.isNotEmpty() &&
+      FunctionChangePreset.entries.none { intent == it.preparedMessage().trim() }
 }
 
 fun functionChangeRequest(message: String, advancedConstraints: String): String {

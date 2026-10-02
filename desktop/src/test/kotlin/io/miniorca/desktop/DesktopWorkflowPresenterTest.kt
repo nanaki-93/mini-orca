@@ -7790,7 +7790,7 @@ class DesktopWorkflowPresenterTest {
               SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)))
 
       presenter.sendChatMessage(
-          ChatEditMode.ReplaceSymbol, "", FunctionChangePreset.BugFix.preparedMessage())
+          ChatEditMode.ReplaceSymbol, "", FunctionChangePreset.Fix.preparedMessage())
       dispatcher.runPending()
       assertEquals(0, sessionRequests.get())
       assertEquals(0, messageRequests.get())

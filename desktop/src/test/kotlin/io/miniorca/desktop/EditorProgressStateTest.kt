@@ -111,6 +111,35 @@ class EditorProgressStateTest {
   }
 
   @Test
+  fun contextualGenerationRejectsPresetLeadsAndBlankRawIntent() {
+    val state = stateWithDraft()
+    val function = ScopedModel(scope = "function", profile = "function", model = "local")
+    (listOf("", "  \n") + FunctionChangePreset.entries.map { it.preparedMessage() }).forEach {
+        intent ->
+      assertFalse(
+          editorContextualActions(
+                  state,
+                  ChatEditMode.ReplaceSymbol,
+                  "",
+                  intent,
+                  sending = false,
+                  functionModel = function,
+                  remoteProviderConfirmed = false)
+              .canGenerate)
+    }
+    assertTrue(
+        editorContextualActions(
+                state,
+                ChatEditMode.ReplaceSymbol,
+                "",
+                FunctionChangePreset.Document.preparedMessage() + "Explain the exported API.",
+                sending = false,
+                functionModel = function,
+                remoteProviderConfirmed = false)
+            .canGenerate)
+  }
+
+  @Test
   fun createComposerCannotSendUntilTheNewNameIsValid() {
     val state = stateWithDraft().copy(chat = ChatState(), review = DraftReviewState())
     val localFunction = ScopedModel(scope = "function", profile = "function", model = "local")

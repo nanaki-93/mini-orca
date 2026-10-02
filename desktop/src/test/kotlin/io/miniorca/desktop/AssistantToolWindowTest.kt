@@ -303,9 +303,9 @@ class AssistantToolWindowTest {
 
   @Test
   fun preparedPresetTextPlacesTheCaretAfterTheRequestLead() {
-    val prepared = preparedFunctionChangeMessage(FunctionChangePreset.Behavior)
+    val prepared = preparedFunctionChangeMessage(FunctionChangePreset.Refactor)
 
-    assertEquals("Change behavior: ", prepared.text)
+    assertEquals("Refactor without changing behavior: ", prepared.text)
     assertEquals(prepared.text.length, prepared.selection.start)
     assertEquals(prepared.text.length, prepared.selection.end)
   }
