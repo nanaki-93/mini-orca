@@ -1,8 +1,16 @@
 package io.miniorca.desktop
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -16,8 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.jediterm.terminal.model.StyleState
 import com.jediterm.terminal.model.TerminalTextBuffer
 import com.jediterm.terminal.ui.JediTermWidget
@@ -53,24 +61,7 @@ internal fun TerminalToolWindow(
 ) {
   val state by terminal.state.collectAsState()
   val fontScale = LocalDensity.current.fontScale
-  Column(modifier) {
-    state.session.error?.let {
-      Text(it, color = Error, fontSize = 12.sp, modifier = Modifier.padding(8.dp))
-    }
-    if (state.activeTab != null && state.session.phase != TerminalSessionPhase.Running) {
-      Text(
-          terminalSummary(state.session),
-          color = SecondaryText,
-          fontSize = 12.sp,
-          modifier = Modifier.padding(8.dp))
-    }
-    if (state.tabs.isEmpty()) {
-      Text(
-          "Use + to open a shell.",
-          color = SecondaryText,
-          fontSize = 12.sp,
-          modifier = Modifier.padding(8.dp))
-    }
+  TerminalSessionContent(state, modifier) { canvasModifier ->
     val widget = state.widget
     if (widget != null) {
       // Detaching a Swing host must never stop its reader or create a second emulator.
@@ -79,7 +70,7 @@ internal fun TerminalToolWindow(
         DisposableEffect(host) { onDispose { host.remove(widget) } }
         SwingPanel(
             background = EditorCanvas,
-            modifier = Modifier.fillMaxSize(),
+            modifier = canvasModifier,
             factory = {
               host.apply {
                 add(widget, BorderLayout.CENTER)
@@ -95,6 +86,57 @@ internal fun TerminalToolWindow(
               }
             },
         )
+      }
+    }
+  }
+}
+
+@Composable
+internal fun TerminalSessionContent(
+    state: TerminalWorkspaceState,
+    modifier: Modifier = Modifier,
+    canvas: @Composable (Modifier) -> Unit,
+) {
+  BoxWithConstraints(modifier.background(EditorCanvas)) {
+    val feedbackHeight = maxHeight * 0.35f
+    Column(Modifier.fillMaxSize()) {
+      Column(
+          Modifier.fillMaxWidth()
+              .heightIn(max = feedbackHeight)
+              .verticalScroll(rememberScrollState())
+              .testTag("terminal-feedback")
+              .padding(8.dp)) {
+            SelectionContainer {
+              Column {
+                if (state.tabs.isEmpty()) {
+                  Text(
+                      "New shell opens a local shell in the current project.",
+                      color = SecondaryText,
+                      style = IdeTypography.workspaceMetadata)
+                } else {
+                  state.projectPath?.let {
+                    Text("Opened in: $it", color = SecondaryText, style = IdeTypography.resultCode)
+                  }
+                  Text(
+                      "Ctrl+Shift+F12 returns to Editor",
+                      color = SecondaryText,
+                      style = IdeTypography.workspaceMetadata)
+                  if (state.session.phase != TerminalSessionPhase.Running ||
+                      state.session.cleanupPending) {
+                    Text(
+                        terminalSummary(state.session),
+                        color = Warning,
+                        style = IdeTypography.workspaceMetadata)
+                  }
+                  state.session.error?.let {
+                    Text(it, color = Error, style = IdeTypography.workspaceMetadata)
+                  }
+                }
+              }
+            }
+          }
+      Box(Modifier.weight(1f).fillMaxWidth().testTag("terminal-canvas")) {
+        canvas(Modifier.fillMaxSize())
       }
     }
   }

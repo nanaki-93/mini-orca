@@ -1,6 +1,7 @@
 package io.miniorca.desktop
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.Text
@@ -12,6 +13,42 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class TerminalTabsTest {
+  @Test
+  fun longSessionFailuresKeepTheCanvasBoundedAndTheLastDiagnosticReachable() {
+    val error = "Failed to stop shell children.\n".repeat(50) + "Final cleanup diagnostic"
+    val state =
+        TerminalWorkspaceState(
+            projectPath = "/projects/" + "long-path/".repeat(15),
+            tabs =
+                listOf(
+                    TerminalTabState(
+                        1,
+                        "Shell 1",
+                        TerminalSessionState(
+                            TerminalSessionPhase.Closed, error = error, cleanupPending = true))),
+            activeTabId = 1)
+    for (density in listOf(1f, 2f)) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        ComposeVisualFixture((800 * density).toInt(), (220 * density).toInt(), scale, density) {
+              TerminalSessionContent(state, Modifier.fillMaxSize()) {
+                Box(it.background(EditorCanvas))
+              }
+            }
+            .use { fixture ->
+              fixture.render("f37-feedback-$density-$scale")
+              val canvas = fixture.taggedBounds("terminal-canvas")
+              val feedback = fixture.taggedBounds("terminal-feedback")
+              assertTrue(canvas.height >= 220 * density * 0.64f)
+              assertTrue(canvas.top >= feedback.bottom)
+              assertTrue(canvas.bottom <= 220 * density)
+              assertTrue(fixture.hasText("Stopping shell…"))
+              fixture.assertEveryTextLineReachable(error, "terminal-feedback")
+              fixture.render("f37-final-diagnostic-$density-$scale")
+            }
+      }
+    }
+  }
+
   @Test
   fun shellTabsShareOneBarAndHaveIndependentKeyboardAccessibleActions() {
     var selected: Long? = null
@@ -105,6 +142,7 @@ class TerminalTabsTest {
               repeat(3) { fixture.render() }
               fixture.render("terminal-tabs-$width-$height-$scale")
               fixture.assertTextFits("Shell 8")
+              fixture.assertTextFits("New shell")
               assertTrue(fixture.hasDescription("New shell"))
               assertTrue(fixture.hasDescription("Close Shell 8"))
               fixture.clickDescription("New shell")
