@@ -20,17 +20,42 @@ class DesktopAccessibilityTest {
     var dismissals = 0
     var retries = 0
     var cancels = 0
-    val inspection = ContextInspectionState(status = ContextInspectionStatus.Loading)
+    var inspection by
+        mutableStateOf(ContextInspectionState(status = ContextInspectionStatus.Loading))
     ComposeVisualFixture(800, 650, 1.5f) {
-          IdeDialogSurface(
-              maxHeight = 520.dp,
-              title = { Text("Context inspector · read-only") },
-              content = { ContextInspectorContent(inspection) },
-              actions = {
-                ContextInspectorActions(inspection, { dismissals++ }, { retries++ }, { cancels++ })
-              },
-              focusSafeActionOnOpen = true,
-              onDismissRequest = { dismissals++ })
+          inspection
+              .takeIf { it.status != ContextInspectionStatus.Closed }
+              ?.let { current ->
+                IdeDialogSurface(
+                    maxHeight = 520.dp,
+                    title = { Text("Context inspector · read-only") },
+                    content = { ContextInspectorContent(current) },
+                    actions = {
+                      ContextInspectorActions(
+                          current,
+                          {
+                            dismissals++
+                            inspection = ContextInspectionState()
+                          },
+                          {
+                            retries++
+                            inspection =
+                                ContextInspectionState(status = ContextInspectionStatus.Loading)
+                          },
+                          {
+                            cancels++
+                            inspection =
+                                ContextInspectionState(
+                                    status = ContextInspectionStatus.Canceled,
+                                    message = "Context inspection canceled.")
+                          })
+                    },
+                    focusSafeActionOnOpen = true,
+                    onDismissRequest = {
+                      dismissals++
+                      inspection = ContextInspectionState()
+                    })
+              }
         }
         .use { fixture ->
           fixture.render()
@@ -42,10 +67,94 @@ class DesktopAccessibilityTest {
           fixture.render()
           assertTrue(fixture.isFocusedControl("Cancel"))
           assertEquals(0, dismissals + retries + cancels)
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals(1, cancels)
+          assertEquals(ContextInspectionStatus.Canceled, inspection.status)
+          assertTrue(fixture.hasText("Context preview canceled: Context inspection canceled."))
+          assertTrue(fixture.hasText("Retry"))
+          assertEquals(0, dismissals + retries)
+          assertTrue(fixture.requestFocus("Retry"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertEquals(1, retries)
+          assertEquals(ContextInspectionStatus.Loading, inspection.status)
+          assertTrue(fixture.requestFocus("Cancel"))
           assertTrue(fixture.pressKey(Key.Escape))
+          fixture.render()
           assertEquals(1, dismissals)
-          assertEquals(0, retries + cancels)
+          assertEquals(ContextInspectionStatus.Closed, inspection.status)
         }
+  }
+
+  @Test
+  fun contextInspectorRecoveryStatesKeepSafeFocusAndSelectableDiagnostics() {
+    val diagnostic = "Preview unavailable for src/" + "nested/".repeat(18) + "request.go"
+    for (status in
+        listOf(
+            ContextInspectionStatus.Failed,
+            ContextInspectionStatus.Stale,
+            ContextInspectionStatus.Canceled)) {
+      var inspection by
+          mutableStateOf(ContextInspectionState(status = status, message = diagnostic))
+      var retries = 0
+      var closes = 0
+      ComposeVisualFixture(800, 650, 1.5f) {
+            inspection
+                .takeIf { it.status != ContextInspectionStatus.Closed }
+                ?.let { current ->
+                  IdeDialogSurface(
+                      maxHeight = 520.dp,
+                      title = { Text("Context inspector · read-only") },
+                      content = { ContextInspectorContent(current) },
+                      actions = {
+                        ContextInspectorActions(
+                            current,
+                            {
+                              closes++
+                              inspection = ContextInspectionState()
+                            },
+                            {
+                              retries++
+                              inspection =
+                                  ContextInspectionState(status = ContextInspectionStatus.Loading)
+                            },
+                            {})
+                      },
+                      focusSafeActionOnOpen = true,
+                      onDismissRequest = {
+                        closes++
+                        inspection = ContextInspectionState()
+                      })
+                }
+          }
+          .use { fixture ->
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Retry"), status.name)
+            val message = contextInspectionLabel(inspection)
+            fixture.assertEveryTextLineReachable(message, "ide-dialog-body")
+            assertTrue(fixture.pressKey(Key.Tab))
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Close"))
+            assertTrue(fixture.pressKey(Key.Tab, shift = true))
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Retry"))
+            fixture.revealText(message, "ide-dialog-body")
+            assertTrue(fixture.copyTextByDragging(message, message).isNotBlank())
+            assertEquals(0, retries + closes)
+            assertTrue(fixture.requestFocus("Retry"))
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
+            assertEquals(1, retries)
+            assertTrue(fixture.hasText("Loading context preview…"))
+            assertFalse(fixture.hasText(message))
+            assertTrue(fixture.requestFocus("Cancel"))
+            assertTrue(fixture.pressKey(Key.Escape))
+            fixture.render()
+            assertEquals(1, closes)
+            assertEquals(ContextInspectionStatus.Closed, inspection.status)
+          }
+    }
   }
 
   @Test
