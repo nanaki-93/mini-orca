@@ -17,11 +17,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 @Composable
 internal fun AssistantToolWindow(
@@ -36,11 +36,8 @@ internal fun AssistantToolWindow(
           declarationCreationBlockedReason(
               state.selected, state.sending || state.editor?.status == DraftEditorStatus.Validating)
       else null
-  val bound =
-      state.target != null &&
-          chatSessionMatches(
-              state.session, state.selected, state.project, state.target, state.taskSpec)
   val history = assistantHistoryEntries(state)
+  val blockedReason = assistantComposerBlockedReason(state)
   val draftVisible =
       state.draft != null &&
           state.editor != null &&
@@ -58,222 +55,275 @@ internal fun AssistantToolWindow(
         mutableStateOf(false)
       }
   Column(modifier) {
-    ToolWindowScopeHeader(
-        "ASSISTANT",
-        assistantToolWindowScope(
-            state.selected,
-            state.target,
-            state.draft,
-            state.newSymbol,
-            state.mode,
-            state.creationKind),
-        Modifier)
     Column(
-        Modifier.weight(1f)
+        Modifier.weight(1.3f)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 8.dp)
-            .padding(bottom = 8.dp)) {
-          Column(Modifier.fillMaxWidth()) {
-            IdePaneHeader(
-                title = if (creating) "New ${state.creationKind.noun}" else "Conversation",
-                icon = DesktopIcon.Editor,
-                stateLabel =
-                    when {
-                      creating -> "Generate a candidate, then review before applying"
-                      bound -> "Bound to the focused declaration"
-                      state.target != null -> "Ready for the selected declaration"
-                      else -> "Select a declaration"
-                    })
-            Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-              Text(
-                  state.selected?.path ?: "Open a file to draft.",
-                  color = PrimaryText,
-                  fontFamily = FontFamily.Monospace,
-                  fontSize = 12.sp)
-              Text(
-                  creationBlocked
-                      ?: state.target?.let {
-                        if (creating) "New ${state.creationKind.noun} · ${it.symbol}"
-                        else "${it.mode.label} · ${it.symbol}"
-                      }
-                      ?: state.targetValidation.message.ifBlank {
-                        "Select a declaration or enter a new name."
-                      },
-                  color = if (state.target == null) Warning else SecondaryText,
-                  fontSize = 11.sp)
-              history.forEach { entry ->
-                when (entry) {
-                  is AssistantHistoryEntry.Turn -> {
-                    Text(
-                        assistantMessageLabel(entry.message.role),
-                        color =
-                            if (entry.message.role.equals("assistant", ignoreCase = true))
-                                ResultAccent
-                            else SelectionText,
-                        style = IdeTypography.resultHeading,
-                        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
-                    entry.scopeLabel?.let { label ->
-                      Text(label, color = Warning, style = IdeTypography.compactBody)
-                    }
-                    if (entry.message.role.equals("assistant", ignoreCase = true)) {
-                      ModelResultContent(entry.message.content)
-                    } else {
-                      SelectionContainer {
-                        Text(entry.message.content, color = PrimaryText, style = IdeTypography.body)
-                      }
-                    }
-                  }
-                  is AssistantHistoryEntry.Attempt -> {
-                    Text(
-                        when (entry.attempt.outcome) {
-                          ChatRequestOutcome.Running -> "Request running"
-                          is ChatRequestOutcome.Failed -> "Request failed"
-                          ChatRequestOutcome.Canceled -> "Request canceled"
-                          is ChatRequestOutcome.Succeeded -> "Request completed"
-                        },
-                        color =
-                            if (entry.attempt.outcome is ChatRequestOutcome.Failed) Error
-                            else SecondaryText,
-                        style = IdeTypography.resultHeading,
-                        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
-                    entry.scopeLabel?.let { label ->
-                      Text(label, color = Warning, style = IdeTypography.compactBody)
-                    }
-                    SelectionContainer {
-                      Text(
-                          entry.attempt.requestText,
-                          color = PrimaryText,
-                          style = IdeTypography.body)
-                    }
-                    when (val outcome = entry.attempt.outcome) {
-                      is ChatRequestOutcome.Failed -> DiagnosticText(outcome.message, color = Error)
-                      ChatRequestOutcome.Canceled ->
-                          entry.attempt.invalidationReason?.let { DiagnosticText(it) }
-                      else -> Unit
-                    }
-                  }
-                }
-              }
-              if (creating) {
-                CompactSingleLineField(
-                    state.newSymbol,
-                    conversationActions.updateNewSymbol,
-                    label = "${state.creationKind.noun.replaceFirstChar { it.uppercase() }} name",
-                    enabled = creationBlocked == null,
-                    modifier =
-                        Modifier.fillMaxWidth()
-                            .padding(top = 9.dp)
-                            .then(
-                                state.creationNameFocus?.let { Modifier.focusRequester(it) }
-                                    ?: Modifier))
-              }
-              if (presetsAvailable) {
-                Text(
-                    "Quick change",
-                    color = SecondaryText,
-                    style = IdeTypography.resultLabel,
-                    modifier = Modifier.padding(top = 9.dp, bottom = 5.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                  FunctionChangePreset.entries.forEach { preset ->
-                    MiniOrcaButton(
-                        onClick = { conversationActions.preparePreset(preset) },
-                        enabled = !state.sending,
-                        density = ButtonDensity.Toolbar,
-                        modifier = Modifier.weight(1f)) {
-                          Text(preset.label)
-                        }
-                  }
-                }
-              } else if (presetBoundary != null && state.targetValidation.valid) {
-                Text(
-                    presetBoundary,
-                    color = Warning,
-                    style = IdeTypography.compactBody,
-                    modifier = Modifier.padding(top = 9.dp))
-              }
-              CompactMultilineField(
-                  value = state.messageInput,
-                  onValueChange = conversationActions.updateMessageValue,
-                  label = if (creating) "Behavior" else "Intent",
-                  enabled =
-                      if (creating) creationBlocked == null
-                      else !state.sending && state.target != null,
-                  placeholder =
-                      if (!creating) "For example: preserve order while deduplicating"
-                      else if (state.creationKind == DeclarationCreationKind.Type)
-                          "Describe the type's fields and purpose"
-                      else "Describe inputs, return values and expected behavior",
-                  minLines = 3,
-                  modifier =
-                      Modifier.fillMaxWidth().padding(top = 9.dp).focusRequester(state.chatFocus))
-              IdeDisclosureHeader(
-                  title = "Advanced constraints",
-                  expanded = constraintsExpanded,
-                  onToggle = { constraintsExpanded = !constraintsExpanded },
-                  stateLabel = if (constraintsExpanded) "Expanded" else "Collapsed",
-                  modifier = Modifier.padding(top = 5.dp))
-              if (constraintsExpanded) {
-                CompactMultilineField(
-                    value = state.advancedConstraintsInput,
-                    onValueChange = conversationActions.updateAdvancedConstraintsValue,
-                    label = "Constraints",
-                    enabled = !state.sending && state.target != null,
-                    placeholder = "Optional compatibility, allocation, or error-handling limits",
-                    minLines = 2,
-                    modifier = Modifier.fillMaxWidth().padding(top = 5.dp))
-              }
-              RemoteProviderConfirmation(
-                  ModelScope.Function,
-                  state.functionModel,
-                  state.remoteConfirmed,
-                  conversationActions.confirmRemoteProvider)
-              MiniOrcaButton(
-                  onClick = conversationActions.inspectContext,
-                  enabled = !state.sending,
-                  tone = ActionTone.Neutral,
+            .testTag("assistant-composer-scroll")) {
+          ToolWindowScopeHeader(
+              "ASSISTANT",
+              assistantToolWindowScope(
+                  state.selected,
+                  state.target,
+                  null,
+                  state.newSymbol,
+                  state.mode,
+                  state.creationKind),
+              Modifier)
+          IdePaneHeader(
+              title =
+                  if (creating) "New ${state.creationKind.noun}"
+                  else "Request an isolated candidate",
+              icon = DesktopIcon.Editor,
+              stateLabel =
+                  if (creating) "Generate a candidate; source changes only after Review and Apply"
+                  else "Replace one declaration; source changes only after Review and Apply")
+          Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+            Text(
+                state.target?.let { "${it.mode.label} · ${it.symbol}" }
+                    ?: state.targetValidation.message.ifBlank {
+                      "Select a declaration or enter a new name."
+                    },
+                color = if (state.target == null) Warning else SecondaryText,
+                style = IdeTypography.compactBody,
+                modifier = Modifier.padding(top = 5.dp))
+            if (creating) {
+              CompactSingleLineField(
+                  state.newSymbol,
+                  conversationActions.updateNewSymbol,
+                  label = "${state.creationKind.noun.replaceFirstChar { it.uppercase() }} name",
+                  enabled = creationBlocked == null,
                   modifier =
                       Modifier.fillMaxWidth()
-                          .padding(top = 8.dp)
+                          .padding(top = 9.dp)
                           .then(
-                              state.inspectContextFocus?.let { Modifier.focusRequester(it) }
-                                  ?: Modifier)) {
-                    Text("Inspect context")
-                  }
-              if (state.sending)
-                  MiniOrcaButton(
-                      onClick = conversationActions.cancel,
-                      tone = ActionTone.Destructive,
-                      modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) {
-                        Text("Cancel request")
-                      }
-              else
-                  MiniOrcaButton(
-                      onClick = conversationActions.send,
-                      enabled =
-                          state.target != null &&
-                              (!creating || creationBlocked == null) &&
-                              hasFunctionChangeIntent(state.message) &&
-                              (!state.functionModel.remoteProvider || state.remoteConfirmed),
-                      tone = if (draftVisible) ActionTone.Neutral else ActionTone.Primary,
-                      modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) {
-                        Text(
-                            if (creating) "Generate ${state.creationKind.noun}" else "Send message")
-                      }
+                              state.creationNameFocus?.let { Modifier.focusRequester(it) }
+                                  ?: Modifier))
             }
-            IdeHorizontalSeparator()
+            if (presetsAvailable) {
+              Text(
+                  "Quick change",
+                  color = SecondaryText,
+                  style = IdeTypography.resultLabel,
+                  modifier = Modifier.padding(top = 9.dp, bottom = 5.dp))
+              Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                FunctionChangePreset.entries.forEach { preset ->
+                  MiniOrcaButton(
+                      onClick = { conversationActions.preparePreset(preset) },
+                      enabled = !state.sending,
+                      density = ButtonDensity.Toolbar,
+                      modifier = Modifier.weight(1f)) {
+                        Text(preset.label)
+                      }
+                }
+              }
+            } else if (presetBoundary != null && state.targetValidation.valid) {
+              Text(
+                  presetBoundary,
+                  color = Warning,
+                  style = IdeTypography.compactBody,
+                  modifier = Modifier.padding(top = 9.dp))
+            }
+            CompactMultilineField(
+                value = state.messageInput,
+                onValueChange = conversationActions.updateMessageValue,
+                label = if (creating) "Behavior" else "Intent",
+                enabled =
+                    if (creating) creationBlocked == null
+                    else !state.sending && state.target != null,
+                placeholder =
+                    if (!creating) "For example: preserve order while deduplicating"
+                    else if (state.creationKind == DeclarationCreationKind.Type)
+                        "Describe the type's fields and purpose"
+                    else "Describe inputs, return values and expected behavior",
+                minLines = 3,
+                modifier =
+                    Modifier.fillMaxWidth().padding(top = 9.dp).focusRequester(state.chatFocus))
+            IdeDisclosureHeader(
+                title = "Advanced constraints",
+                expanded = constraintsExpanded,
+                onToggle = { constraintsExpanded = !constraintsExpanded },
+                stateLabel = if (constraintsExpanded) "Expanded" else "Collapsed",
+                modifier = Modifier.padding(top = 5.dp))
+            if (constraintsExpanded) {
+              CompactMultilineField(
+                  value = state.advancedConstraintsInput,
+                  onValueChange = conversationActions.updateAdvancedConstraintsValue,
+                  label = "Constraints",
+                  enabled = !state.sending && state.target != null,
+                  placeholder = "Optional compatibility, allocation, or error-handling limits",
+                  minLines = 2,
+                  modifier = Modifier.fillMaxWidth().padding(top = 5.dp))
+            }
           }
-          if (draftVisible) {
-            AssistantDraftEditorSection(
-                state.editor,
-                state.draftInput ?: TextFieldValue(state.editor.declaration),
-                state.draftFocus,
-                state.draft.engineeringInsight,
-                state.draft.state.equals("stale", ignoreCase = true),
-                editorActions)
+          IdeHorizontalSeparator()
+          Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
+            MiniOrcaButton(
+                onClick = conversationActions.inspectContext,
+                enabled = !state.sending,
+                tone = ActionTone.Neutral,
+                modifier =
+                    Modifier.fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .then(
+                            state.inspectContextFocus?.let { Modifier.focusRequester(it) }
+                                ?: Modifier)) {
+                  Text("Inspect context")
+                }
+            Text(
+                "File-scoped preview only · no Function request or confirmation.",
+                color = SecondaryText,
+                style = IdeTypography.compactBody)
+            val model = state.functionModel
+            if (model.remoteProvider || functionDestinationMetadataComplete(model)) {
+              RemoteProviderConfirmation(
+                  ModelScope.Function,
+                  model.copy(
+                      profile = model.profile.ifBlank { "profile unavailable" },
+                      model = model.model.ifBlank { "model unavailable" }),
+                  state.remoteConfirmed,
+                  conversationActions.confirmRemoteProvider)
+            } else {
+              Text(
+                  functionDestinationLabel(model),
+                  color = SecondaryText,
+                  style = IdeTypography.compactBody)
+            }
+            Text(
+                "Function provider origin: ${model.providerOrigin.takeIf { it.isNotBlank() }?.let { sanitizedOutputText(it, 256) } ?: "unavailable"}",
+                color = SecondaryText,
+                style = IdeTypography.compactBody)
+            Text(
+                if (state.sending)
+                    "Request running · Cancel keeps the existing draft and conversation."
+                else
+                    blockedReason
+                        ?: "Ready to send · Generates one isolated candidate, not a source edit.",
+                color = if (blockedReason != null && !state.sending) Warning else SecondaryText,
+                style = IdeTypography.compactBody,
+                modifier = Modifier.padding(top = 6.dp))
+            if (state.sending)
+                MiniOrcaButton(
+                    onClick = conversationActions.cancel,
+                    tone = ActionTone.Destructive,
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .padding(top = 7.dp)
+                            .testTag("assistant-request-action")) {
+                      Text("Cancel request")
+                    }
+            else
+                MiniOrcaButton(
+                    onClick = conversationActions.send,
+                    enabled = blockedReason == null,
+                    tone = if (draftVisible) ActionTone.Neutral else ActionTone.Primary,
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .padding(top = 7.dp)
+                            .testTag("assistant-request-action")) {
+                      Text(if (creating) "Generate ${state.creationKind.noun}" else "Send message")
+                    }
           }
         }
+    IdeHorizontalSeparator()
+    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 8.dp)) {
+      if (draftVisible) {
+        AssistantDraftEditorSection(
+            state.editor,
+            state.draftInput ?: TextFieldValue(state.editor.declaration),
+            state.draftFocus,
+            state.draft.engineeringInsight,
+            state.draft.state.equals("stale", ignoreCase = true),
+            editorActions)
+      }
+      IdePaneHeader(
+          title = "Conversation",
+          stateLabel = if (history.isEmpty()) "No requests yet" else "Requests and responses")
+      Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+        history.forEach { entry ->
+          when (entry) {
+            is AssistantHistoryEntry.Turn -> {
+              Text(
+                  assistantMessageLabel(entry.message.role),
+                  color =
+                      if (entry.message.role.equals("assistant", ignoreCase = true)) ResultAccent
+                      else SelectionText,
+                  style = IdeTypography.resultHeading,
+                  modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+              entry.scopeLabel?.let { Text(it, color = Warning, style = IdeTypography.compactBody) }
+              if (entry.message.role.equals("assistant", ignoreCase = true)) {
+                ModelResultContent(entry.message.content)
+              } else {
+                SelectionContainer {
+                  Text(entry.message.content, color = PrimaryText, style = IdeTypography.body)
+                }
+              }
+            }
+            is AssistantHistoryEntry.Attempt -> {
+              Text(
+                  when (entry.attempt.outcome) {
+                    ChatRequestOutcome.Running -> "Request running"
+                    is ChatRequestOutcome.Failed -> "Request failed"
+                    ChatRequestOutcome.Canceled -> "Request canceled"
+                    is ChatRequestOutcome.Succeeded -> "Request completed"
+                  },
+                  color =
+                      if (entry.attempt.outcome is ChatRequestOutcome.Failed) Error
+                      else SecondaryText,
+                  style = IdeTypography.resultHeading,
+                  modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+              entry.scopeLabel?.let { Text(it, color = Warning, style = IdeTypography.compactBody) }
+              SelectionContainer {
+                Text(entry.attempt.requestText, color = PrimaryText, style = IdeTypography.body)
+              }
+              when (val outcome = entry.attempt.outcome) {
+                is ChatRequestOutcome.Failed -> DiagnosticText(outcome.message, color = Error)
+                ChatRequestOutcome.Canceled ->
+                    entry.attempt.invalidationReason?.let { DiagnosticText(it) }
+                else -> Unit
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
+
+private fun functionDestinationMetadataComplete(model: ScopedModel): Boolean =
+    model.profile.isNotBlank() && model.model.isNotBlank() && model.providerOrigin.isNotBlank()
+
+internal fun functionDestinationLabel(model: ScopedModel): String =
+    if (functionDestinationMetadataComplete(model) || model.remoteProvider)
+        modelDestinationLabel(
+            ModelScope.Function,
+            model.copy(
+                profile = model.profile.ifBlank { "profile unavailable" },
+                model = model.model.ifBlank { "model unavailable" }))
+    else
+        "${ModelScope.Function.label}: ${model.profile.ifBlank { "profile unavailable" }} · " +
+            "${model.model.ifBlank { "model unavailable" }} · provider locality unavailable"
+
+internal fun assistantComposerBlockedReason(state: AssistantToolWindowState): String? =
+    when {
+      state.sending -> "Request running. Cancel before sending another request."
+      state.mode == ChatEditMode.CreateSymbol ->
+          declarationCreationBlockedReason(
+              state.selected, state.editor?.status == DraftEditorStatus.Validating)
+              ?: state.targetValidation.message
+                  .ifBlank { "Select a declaration or enter a new name." }
+                  .takeIf { !state.targetValidation.valid }
+              ?: if (!hasFunctionChangeIntent(state.message))
+                  "Enter a specific behavior before sending."
+              else if (state.functionModel.remoteProvider && !state.remoteConfirmed)
+                  "Confirm the Function remote destination before sending."
+              else null
+      !state.targetValidation.valid ->
+          state.targetValidation.message.ifBlank { "Select one Go declaration before sending." }
+      !hasFunctionChangeIntent(state.message) -> "Enter a specific intent before sending."
+      state.functionModel.remoteProvider && !state.remoteConfirmed ->
+          "Confirm the Function remote destination before sending."
+      else -> null
+    }
 
 @Composable
 private fun AssistantDraftEditorSection(
