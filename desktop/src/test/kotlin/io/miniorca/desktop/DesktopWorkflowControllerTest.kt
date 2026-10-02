@@ -384,6 +384,160 @@ class DesktopWorkflowControllerTest {
         draftApplyEligibility(draft, matchingChecks, file("other.go", "main-hash")).eligible)
   }
 
+  @Test
+  fun chatAttemptsRetainFailureAndCancellationInAdmissionOrderWithoutInventingTurns() {
+    val controller = loadedController()
+    val symbol = SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)
+    val load = controller.beginFileLoad("main.go")!!
+    assertTrue(controller.fileLoaded(load, file("main.go", "main-hash"), listOf(symbol)))
+    controller.dispatch(DesktopEvent.SymbolSelected(symbol))
+    val scope = chatScope(symbol)
+    val destination = ScopedModel(scope = "function", model = "model-a")
+    assertTrue(controller.state.chat.attempts.isEmpty())
+
+    val (first, firstFile) = controller.beginChatAttempt(scope, destination, "First")!!
+    assertEquals("First", controller.state.chat.attempts.single().requestText)
+    assertNull(controller.beginChatAttempt(scope, destination, "Duplicate"))
+    assertTrue(controller.chatAttemptFailed(first, firstFile, "provider unavailable"))
+    assertNull(controller.state.chat.session)
+    val (second, secondFile) = controller.beginChatAttempt(scope, destination, "Second")!!
+    assertTrue(controller.cancelChatLoad(second, secondFile))
+    assertFalse(controller.chatAttemptFailed(second, secondFile, "late failure"))
+    assertEquals(
+        listOf(ChatRequestOutcome.Failed("provider unavailable"), ChatRequestOutcome.Canceled),
+        controller.state.chat.attempts.map { it.outcome })
+    assertNull(controller.state.chat.session)
+
+    val (third, thirdFile) = controller.beginChatAttempt(scope, destination, "Third")!!
+    val session =
+        ChatSession(
+            "session",
+            "project",
+            "revision",
+            "main-hash",
+            "main.go",
+            "replace_symbol",
+            "Run",
+            "active",
+            messages = listOf(ChatSessionMessage("user", "Earlier")))
+    val proposal =
+        ChatDraftProposal(
+            "session",
+            draft().copy(mode = "replace_symbol", targetSymbol = "Run"),
+            ChatSessionMessage("assistant", "Result", "draft"))
+    assertTrue(controller.chatProposalLoaded(third, thirdFile, session, "Third", proposal))
+    assertEquals(
+        ChatRequestOutcome.Succeeded("session", "draft"),
+        controller.state.chat.attempts.last().outcome)
+    assertEquals(
+        listOf("Earlier", "Third", "Result"),
+        controller.state.chat.session?.messages?.map { it.content })
+    assertEquals(
+        ChatRequestOutcome.Failed("provider unavailable"),
+        controller.state.chat.attempts.first().outcome)
+    assertFalse(controller.chatProposalLoaded(third, thirdFile, session, "Third", proposal))
+  }
+
+  @Test
+  fun chatAttemptsRejectOtherScopesAndInvalidateOnTargetChangeOrDiscard() {
+    val controller = loadedController()
+    val run = SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)
+    val other = run.copy(name = "Other")
+    val load = controller.beginFileLoad("main.go")!!
+    assertTrue(controller.fileLoaded(load, file("main.go", "main-hash"), listOf(run, other)))
+    controller.dispatch(DesktopEvent.SymbolSelected(run))
+    val scope = chatScope(run)
+    val destination = ScopedModel(scope = "function", model = "model-a")
+    for (wrong in
+        listOf(
+            scope.copy(projectId = "another"),
+            scope.copy(projectRevision = "next"),
+            scope.copy(path = "other.go"),
+            scope.copy(baseFileHash = "other-hash"),
+            scope.copy(target = ChatTarget(ChatEditMode.ReplaceSymbol, "Other")),
+            scope.copy(declaration = other))) {
+      assertNull(controller.beginChatAttempt(wrong, destination, "wrong"), wrong.toString())
+    }
+    val (request, fileRequest) = controller.beginChatAttempt(scope, destination, "First")!!
+    controller.dispatch(DesktopEvent.SymbolSelected(other))
+    assertEquals(ChatRequestOutcome.Canceled, controller.state.chat.attempts.single().outcome)
+    assertEquals(
+        "The request target changed.", controller.state.chat.attempts.single().invalidationReason)
+    assertFalse(controller.chatAttemptFailed(request, fileRequest, "late"))
+    controller.dispatch(DesktopEvent.SymbolSelected(run))
+    val (next, nextFile) = controller.beginChatAttempt(scope, destination, "Second")!!
+    controller.dispatch(DesktopEvent.DraftDiscarded)
+    assertTrue(controller.state.chat.attempts.isEmpty())
+    assertFalse(controller.chatAttemptFailed(next, nextFile, "late"))
+    assertNull(controller.state.chat.failure)
+  }
+
+  @Test
+  fun changedTaskSpecInvalidatesTheRunningAttemptWithoutLosingItsText() {
+    val controller = loadedController()
+    val run = SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)
+    val load = controller.beginFileLoad("main.go")!!
+    assertTrue(controller.fileLoaded(load, file("main.go", "main-hash"), listOf(run)))
+    controller.dispatch(DesktopEvent.SymbolSelected(run))
+    val task = BugTaskSpec("1", "main.go", "Run", "func Run()", listOf("Preserve the API."))
+    controller.dispatch(DesktopEvent.SuggestionPrepared("fix", "First", run, task))
+    val scope = chatScope(run).copy(taskSpec = task)
+    val (request, fileRequest) =
+        controller.beginChatAttempt(scope, ScopedModel(scope = "function"), "First")!!
+    controller.dispatch(
+        DesktopEvent.SuggestionPrepared(
+            "fix", "Second", run, task.copy(acceptanceCriteria = listOf("Change the API."))))
+    assertEquals("First", controller.state.chat.attempts.single().requestText)
+    assertEquals(ChatRequestOutcome.Canceled, controller.state.chat.attempts.single().outcome)
+    assertFalse(controller.chatAttemptFailed(request, fileRequest, "late failure"))
+  }
+
+  @Test
+  fun identicallyNamedDeclarationsDoNotInheritDiagnosticsAcrossFilesOrProjects() {
+    val controller = loadedController()
+    val run = SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)
+    val destination = ScopedModel(scope = "function", model = "model-a")
+    val first = controller.beginFileLoad("main.go")!!
+    assertTrue(controller.fileLoaded(first, file("main.go", "main-hash"), listOf(run)))
+    controller.dispatch(DesktopEvent.SymbolSelected(run))
+    val scope = chatScope(run)
+    val (request, fileRequest) = controller.beginChatAttempt(scope, destination, "Improve Run")!!
+    assertTrue(controller.chatAttemptFailed(request, fileRequest, "main.go failure"))
+
+    val second = controller.beginFileLoad("other.go")!!
+    assertTrue(controller.fileLoaded(second, file("other.go", "main-hash"), listOf(run)))
+    controller.dispatch(DesktopEvent.SymbolSelected(run))
+    assertTrue(controller.state.chat.attempts.isEmpty())
+    assertNull(controller.state.chat.failure)
+    assertNull(controller.beginChatAttempt(scope, destination, "stale file"))
+    val otherScope = scope.copy(path = "other.go")
+    assertTrue(controller.beginChatAttempt(otherScope, destination, "Other file") != null)
+    controller.dispatch(DesktopEvent.DraftDiscarded)
+
+    val opened = controller.beginProjectLoad()
+    assertTrue(
+        controller.projectLoaded(
+            opened, project("another", "revision"), index("another", "revision")))
+    val third = controller.beginFileLoad("main.go")!!
+    assertTrue(controller.fileLoaded(third, file("main.go", "main-hash"), listOf(run)))
+    controller.dispatch(DesktopEvent.SymbolSelected(run))
+    assertTrue(controller.state.chat.attempts.isEmpty())
+    assertNull(controller.beginChatAttempt(scope, destination, "stale project"))
+    assertTrue(
+        controller.beginChatAttempt(scope.copy(projectId = "another"), destination, "Fresh") !=
+            null)
+    assertNull(controller.state.chat.failure)
+  }
+
+  private fun chatScope(symbol: SymbolInfo) =
+      ChatRequestScope(
+          "project",
+          "revision",
+          "main.go",
+          "main-hash",
+          ChatTarget(ChatEditMode.ReplaceSymbol, symbol.name),
+          declaration = symbol)
+
   private fun loadedController(): DesktopWorkflowController =
       DesktopWorkflowController().also { controller ->
         val request = controller.beginProjectLoad()

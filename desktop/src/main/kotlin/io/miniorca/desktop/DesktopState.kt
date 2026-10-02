@@ -360,13 +360,103 @@ internal fun DesktopState.matchesFileNavigation(
     identity: FileNavigationIdentity
 ): Boolean = index === identity.index && fileNavigationIdentity(path) == identity
 
+data class ChatRequestScope(
+    val projectId: String,
+    val projectRevision: String,
+    val path: String,
+    val baseFileHash: String,
+    val target: ChatTarget,
+    val taskSpec: BugTaskSpec? = null,
+    val declaration: SymbolInfo? = null,
+) {
+  fun matchesDraft(draft: DeclarationDraft): Boolean =
+      projectId == draft.projectId &&
+          projectRevision == draft.projectRevision &&
+          path == draft.targetPath &&
+          baseFileHash == draft.baseFileHash &&
+          target.mode.wireValue == draft.mode &&
+          target.symbol == draft.targetSymbol &&
+          (sameTaskSpec(taskSpec, draft.taskSpec) ||
+              taskSpec != null &&
+                  draft.taskSpec != null &&
+                  repairTaskSpecMatches(taskSpec, draft.taskSpec))
+
+  fun matches(session: ChatSession): Boolean =
+      projectId == session.projectId &&
+          projectRevision == session.projectRevision &&
+          path == session.openPath &&
+          baseFileHash == session.baseFileHash &&
+          target.mode.wireValue == session.mode &&
+          target.symbol == session.targetSymbol &&
+          (sameTaskSpec(taskSpec, session.taskSpec) ||
+              taskSpec != null &&
+                  session.taskSpec != null &&
+                  repairTaskSpecMatches(taskSpec, session.taskSpec))
+}
+
+sealed interface ChatRequestOutcome {
+  data object Running : ChatRequestOutcome
+
+  data class Succeeded(val sessionId: String, val draftId: String) : ChatRequestOutcome
+
+  data class Failed(val message: String) : ChatRequestOutcome
+
+  data object Canceled : ChatRequestOutcome
+}
+
+data class ChatRequestAttempt(
+    val generation: Long,
+    val scope: ChatRequestScope,
+    val destination: ScopedModel,
+    val requestText: String,
+    val outcome: ChatRequestOutcome = ChatRequestOutcome.Running,
+    val invalidationReason: String? = null,
+)
+
 data class ChatState(
     val session: ChatSession? = null,
     val pendingRequestId: Long = 0,
-    val failure: ChatRequestFailure? = null,
-)
+    val attempts: List<ChatRequestAttempt> = emptyList(),
+) {
+  // Temporary read bridge for the existing Assistant; the history UI will consume attempts.
+  val failure: ChatRequestFailure?
+    get() =
+        attempts.lastOrNull()?.let { attempt ->
+          (attempt.outcome as? ChatRequestOutcome.Failed)?.let {
+            ChatRequestFailure(attempt.scope.target, it.message)
+          }
+        }
+}
 
 data class ChatRequestFailure(val target: ChatTarget, val message: String)
+
+private fun ChatState.finishAttempt(generation: Long, outcome: ChatRequestOutcome): ChatState =
+    copy(
+        pendingRequestId = 0,
+        attempts =
+            attempts.map { attempt ->
+              if (attempt.generation == generation && attempt.outcome == ChatRequestOutcome.Running)
+                  attempt.copy(outcome = outcome)
+              else attempt
+            })
+
+private fun DesktopState.matchesChatScope(scope: ChatRequestScope): Boolean {
+  val relevantTask =
+      preparedTaskSpec?.takeIf {
+        scope.target.mode == ChatEditMode.ReplaceSymbol &&
+            it.targetPath == scope.path &&
+            it.targetSymbol == scope.target.symbol
+      }
+  return project?.let {
+    it.projectId == scope.projectId && it.projectRevision == scope.projectRevision
+  } == true &&
+      selectedFile?.let { it.path == scope.path && it.contentHash == scope.baseFileHash } == true &&
+      (scope.target.mode != ChatEditMode.ReplaceSymbol ||
+          selectedSymbol == scope.declaration &&
+              selectedSymbol?.name == scope.target.symbol &&
+              selectedSymbol in symbols) &&
+      sameTaskSpec(relevantTask, scope.taskSpec)
+}
 
 data class CheckCandidate(
     val projectId: String,
@@ -710,8 +800,6 @@ sealed interface DesktopEvent {
 
   data class Failed(val message: String) : DesktopEvent
 
-  data class ChatRequestFailed(val failure: ChatRequestFailure) : DesktopEvent
-
   data class Status(val message: String) : DesktopEvent
 }
 
@@ -874,15 +962,7 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       is DesktopEvent.GoBenchmarkComparisonFailed,
       is DesktopEvent.GoBenchmarkComparisonLoaded,
       DesktopEvent.GoBenchmarkComparisonStopped -> withBenchmarkEvent(event)
-      is DesktopEvent.ChatRequestFailed ->
-          copy(
-              chat = chat.copy(failure = event.failure),
-              jobs =
-                  jobs.copy(
-                      loading = false,
-                      error = event.failure.message,
-                      status = "Request failed for ${event.failure.target.symbol}."))
-      is DesktopEvent.ChatLoaded -> copy(chat = chat.copy(session = event.session, failure = null))
+      is DesktopEvent.ChatLoaded -> copy(chat = chat.copy(session = event.session))
       is DesktopEvent.ChatProposalLoaded -> {
         val messages =
             event.session.messages +
@@ -891,7 +971,6 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
         copy(
             chat =
                 chat.copy(
-                    failure = null,
                     session =
                         event.session.copy(
                             latestDraftId = event.proposal.draft.id, messages = messages)),
@@ -1413,7 +1492,29 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
       draftRequest = 0
     }
     val previousProject = state.project
+    val previousScope =
+        state.chat.attempts.lastOrNull { it.outcome == ChatRequestOutcome.Running }?.scope
     state = state.reduce(event)
+    if (previousScope != null &&
+        event !is DesktopEvent.ChatProposalLoaded &&
+        event !is DesktopEvent.ChatLoaded &&
+        !state.matchesChatScope(previousScope)) {
+      chatRequest = 0
+      state =
+          state.copy(
+              chat =
+                  state.chat.copy(
+                      attempts =
+                          state.chat.attempts.map { attempt ->
+                            if (attempt.generation == state.chat.pendingRequestId &&
+                                attempt.outcome == ChatRequestOutcome.Running)
+                                attempt.copy(
+                                    outcome = ChatRequestOutcome.Canceled,
+                                    invalidationReason = "The request target changed.")
+                            else attempt
+                          },
+                      pendingRequestId = 0))
+    }
     if (event is DesktopEvent.ProjectLoaded ||
         previousProject?.projectId != state.project?.projectId ||
         previousProject?.projectRevision != state.project?.projectRevision) {
@@ -1565,10 +1666,62 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
   fun analysisCompleted(requestId: Long, file: RequestIdentity, analysis: FileAnalysis): Boolean =
       if (requestId == analysisRequest) analysisLoaded(file, analysis) else false
 
+  // Existing session reads do not create submitted request turns.
   fun beginChatLoad(): Pair<Long, RequestIdentity>? =
-      fileRequest?.let { file ->
-        state = state.copy(chat = state.chat.copy(failure = null))
-        nextId().also { chatRequest = it } to file
+      fileRequest
+          ?.takeUnless {
+            state.chat.attempts.any { attempt -> attempt.outcome == ChatRequestOutcome.Running }
+          }
+          ?.let { file -> nextId().also { chatRequest = it } to file }
+
+  fun beginChatAttempt(
+      scope: ChatRequestScope,
+      destination: ScopedModel,
+      requestText: String,
+  ): Pair<Long, RequestIdentity>? {
+    val file = fileRequest ?: return null
+    if (!matchesFile(file) ||
+        !state.matchesChatScope(scope) ||
+        state.chat.attempts.any { it.outcome == ChatRequestOutcome.Running })
+        return null
+    val generation = nextId()
+    chatRequest = generation
+    state =
+        state.copy(
+            chat =
+                state.chat.copy(
+                    pendingRequestId = generation,
+                    attempts =
+                        state.chat.attempts +
+                            ChatRequestAttempt(generation, scope, destination, requestText)))
+    return generation to file
+  }
+
+  fun chatAttemptFailed(requestId: Long, file: RequestIdentity, message: String): Boolean {
+    val attempt = currentChatAttempt(requestId, file) ?: return false
+    chatRequest = 0
+    state =
+        state.copy(
+            chat = state.chat.finishAttempt(requestId, ChatRequestOutcome.Failed(message)),
+            jobs =
+                state.jobs.copy(
+                    loading = false,
+                    error = message,
+                    status = "Request failed for ${attempt.scope.target.symbol}."))
+    return true
+  }
+
+  private fun currentChatAttempt(
+      requestId: Long,
+      file: RequestIdentity,
+  ): ChatRequestAttempt? =
+      state.chat.attempts.lastOrNull()?.takeIf {
+        requestId == chatRequest &&
+            requestId == state.chat.pendingRequestId &&
+            it.generation == requestId &&
+            it.outcome == ChatRequestOutcome.Running &&
+            matchesFile(file) &&
+            state.matchesChatScope(it.scope)
       }
 
   fun chatLoaded(requestId: Long, file: RequestIdentity, session: ChatSession): Boolean =
@@ -1590,7 +1743,13 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
       userMessage: String,
       proposal: ChatDraftProposal
   ): Boolean =
-      if (requestId == chatRequest &&
+      if ((state.chat.pendingRequestId == 0L ||
+          currentChatAttempt(requestId, file)?.let {
+            it.requestText == userMessage &&
+                it.scope.matches(session) &&
+                it.scope.matchesDraft(proposal.draft)
+          } == true) &&
+          requestId == chatRequest &&
           matchesFile(file) &&
           sessionMatches(
               file,
@@ -1604,13 +1763,22 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
               proposal.draft.projectId,
               proposal.draft.projectRevision,
               proposal.draft.targetPath,
-              proposal.draft.baseFileHash))
-          accept(DesktopEvent.ChatProposalLoaded(session, userMessage, proposal))
-      else false
+              proposal.draft.baseFileHash)) {
+        val published = accept(DesktopEvent.ChatProposalLoaded(session, userMessage, proposal))
+        if (published && state.chat.pendingRequestId == requestId)
+            state =
+                state.copy(
+                    chat =
+                        state.chat.finishAttempt(
+                            requestId, ChatRequestOutcome.Succeeded(session.id, proposal.draft.id)))
+        chatRequest = 0
+        published
+      } else false
 
   fun cancelChatLoad(requestId: Long, file: RequestIdentity): Boolean =
       if (requestId == chatRequest && matchesFile(file)) {
         chatRequest = 0
+        state = state.copy(chat = state.chat.finishAttempt(requestId, ChatRequestOutcome.Canceled))
         accept(DesktopEvent.Status("Chat request canceled"))
       } else false
 
