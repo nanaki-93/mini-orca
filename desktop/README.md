@@ -276,6 +276,39 @@ previews are distinguished. Without a selected declaration, **Actions** and
 tab or expanding details never requests an explanation, runs project code or
 writes source.
 
+### Assistant requests and conversation
+
+Assistant names the current project-relative file, declaration and operation before a
+request. For an exact Go function or method, **Fix**, **Refactor** and **Document**
+prepare short, unsent intents; other eligible declarations can use freeform intent.
+Complete the labeled **Intent** (or creation **Behavior**) field with a specific
+request. A preset lead alone, blank intent or constraints alone cannot Send.
+**Advanced constraints** is optional and starts collapsed; it is appended to a
+valid request when supplied. Preparing a preset, opening constraints or navigating
+does not contact a provider or replace a draft. Press Enter to add a line; use
+**Send message** (or **Generate function/type** for creation) or Cmd/Ctrl+Enter
+to request one isolated candidate. **Cancel request** stops the current local
+request without clearing an existing draft. A timed-out request needs another
+explicit Send; local cancellation cannot guarantee cancellation at the provider.
+
+Review the Function scope, model and provider origin before Send. A remote Function
+destination needs its own confirmation: Analyze/Security confirmation and project-code
+execution trust do not authorize it. Inspect context is a local, file-scoped
+preview, not confirmation or the exact declaration payload. Sending generates a
+candidate in the editable declaration/import draft; it never writes source. Use
+validation, focused checks, Review and an explicit **Apply change** to edit the
+source under the existing guards.
+
+The separate **Conversation** keeps daemon-backed requests and model responses in
+order, along with submitted requests that are still running, failed or canceled.
+Failure details stay beside the originating request when you retry; they do not
+replace previous successful turns or erase the draft. Model prose is selectable
+and can be expanded to its full available text; model-supplied links, images and
+HTML are inert. Retained history from an earlier declaration/revision is labeled
+with its original scope and does not authorize work on the new target. History
+belongs to the current project/file session, not a persistent global archive.
+Changing a target with a draft still requires explicit discard approval.
+
 ### Inspect Assistant context
 
 In Assistant, **Inspect context** opens a read-only dialog immediately for the
@@ -798,8 +831,9 @@ explicit discard choice; canceling keeps that draft intact.
 
 After generation, edit the candidate, validate it, run trusted focused checks and
 review the read-only diff. Apply and Undo retain the existing file/hash guards.
-Review keeps check diagnostics; Assistant keeps its current request failure;
-Analysis and Bugs retain their own operational evidence. The bottom bar shows only
+Review keeps check diagnostics; Assistant retains failures and cancellations beside
+their originating requests within the current file conversation; Analysis and Bugs
+retain their own operational evidence. The bottom bar shows only
 counts of distinct configured local and cloud models, aligned to the right;
 select the counts to view model and destination details. Incomplete configuration
 is labeled unavailable, not zero. The counts have no hover tooltips.

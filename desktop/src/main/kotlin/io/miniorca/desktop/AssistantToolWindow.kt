@@ -225,67 +225,76 @@ internal fun AssistantToolWindow(
           }
         }
     IdeHorizontalSeparator()
-    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 8.dp)) {
-      if (draftVisible) {
-        AssistantDraftEditorSection(
-            state.editor,
-            state.draftInput ?: TextFieldValue(state.editor.declaration),
-            state.draftFocus,
-            state.draft.engineeringInsight,
-            state.draft.state.equals("stale", ignoreCase = true),
-            editorActions)
-      }
-      IdePaneHeader(
-          title = "Conversation",
-          stateLabel = if (history.isEmpty()) "No requests yet" else "Requests and responses")
-      Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-        history.forEach { entry ->
-          when (entry) {
-            is AssistantHistoryEntry.Turn -> {
-              Text(
-                  assistantMessageLabel(entry.message.role),
-                  color =
-                      if (entry.message.role.equals("assistant", ignoreCase = true)) ResultAccent
-                      else SelectionText,
-                  style = IdeTypography.resultHeading,
-                  modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
-              entry.scopeLabel?.let { Text(it, color = Warning, style = IdeTypography.compactBody) }
-              if (entry.message.role.equals("assistant", ignoreCase = true)) {
-                ModelResultContent(entry.message.content)
-              } else {
-                SelectionContainer {
-                  Text(entry.message.content, color = PrimaryText, style = IdeTypography.body)
+    Column(
+        Modifier.weight(1f)
+            .verticalScroll(rememberScrollState())
+            .testTag("assistant-history-scroll")
+            .padding(bottom = 8.dp)) {
+          if (draftVisible) {
+            AssistantDraftEditorSection(
+                state.editor,
+                state.draftInput ?: TextFieldValue(state.editor.declaration),
+                state.draftFocus,
+                state.draft.engineeringInsight,
+                state.draft.state.equals("stale", ignoreCase = true),
+                editorActions)
+          }
+          IdePaneHeader(
+              title = "Conversation",
+              stateLabel = if (history.isEmpty()) "No requests yet" else "Requests and responses")
+          Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+            history.forEach { entry ->
+              when (entry) {
+                is AssistantHistoryEntry.Turn -> {
+                  Text(
+                      assistantMessageLabel(entry.message.role),
+                      color =
+                          if (entry.message.role.equals("assistant", ignoreCase = true))
+                              ResultAccent
+                          else SelectionText,
+                      style = IdeTypography.resultHeading,
+                      modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+                  entry.scopeLabel?.let {
+                    Text(it, color = Warning, style = IdeTypography.compactBody)
+                  }
+                  if (entry.message.role.equals("assistant", ignoreCase = true)) {
+                    ModelResultContent(entry.message.content)
+                  } else {
+                    SelectionContainer {
+                      Text(entry.message.content, color = PrimaryText, style = IdeTypography.body)
+                    }
+                  }
                 }
-              }
-            }
-            is AssistantHistoryEntry.Attempt -> {
-              Text(
-                  when (entry.attempt.outcome) {
-                    ChatRequestOutcome.Running -> "Request running"
-                    is ChatRequestOutcome.Failed -> "Request failed"
-                    ChatRequestOutcome.Canceled -> "Request canceled"
-                    is ChatRequestOutcome.Succeeded -> "Request completed"
-                  },
-                  color =
-                      if (entry.attempt.outcome is ChatRequestOutcome.Failed) Error
-                      else SecondaryText,
-                  style = IdeTypography.resultHeading,
-                  modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
-              entry.scopeLabel?.let { Text(it, color = Warning, style = IdeTypography.compactBody) }
-              SelectionContainer {
-                Text(entry.attempt.requestText, color = PrimaryText, style = IdeTypography.body)
-              }
-              when (val outcome = entry.attempt.outcome) {
-                is ChatRequestOutcome.Failed -> DiagnosticText(outcome.message, color = Error)
-                ChatRequestOutcome.Canceled ->
-                    entry.attempt.invalidationReason?.let { DiagnosticText(it) }
-                else -> Unit
+                is AssistantHistoryEntry.Attempt -> {
+                  Text(
+                      when (entry.attempt.outcome) {
+                        ChatRequestOutcome.Running -> "Request running"
+                        is ChatRequestOutcome.Failed -> "Request failed"
+                        ChatRequestOutcome.Canceled -> "Request canceled"
+                        is ChatRequestOutcome.Succeeded -> "Request completed"
+                      },
+                      color =
+                          if (entry.attempt.outcome is ChatRequestOutcome.Failed) Error
+                          else SecondaryText,
+                      style = IdeTypography.resultHeading,
+                      modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+                  entry.scopeLabel?.let {
+                    Text(it, color = Warning, style = IdeTypography.compactBody)
+                  }
+                  SelectionContainer {
+                    Text(entry.attempt.requestText, color = PrimaryText, style = IdeTypography.body)
+                  }
+                  when (val outcome = entry.attempt.outcome) {
+                    is ChatRequestOutcome.Failed -> DiagnosticText(outcome.message, color = Error)
+                    ChatRequestOutcome.Canceled ->
+                        entry.attempt.invalidationReason?.let { DiagnosticText(it) }
+                    else -> Unit
+                  }
+                }
               }
             }
           }
         }
-      }
-    }
   }
 }
 
