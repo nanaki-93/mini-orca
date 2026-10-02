@@ -1032,6 +1032,54 @@ class AssistantToolWindowTest {
         }
   }
 
+  @Test
+  fun requiredImportControlRemainsEditableWhenEmptyAndAfterClearing() {
+    val draft = editableDraftForFindingTest().serverDraft
+    val session =
+        ChatSession(
+            "session", "project", "revision", "hash", "main.go", "replace_symbol", "Run", "active")
+    var imports by mutableStateOf(TextFieldValue())
+    var normalized = emptyList<String>()
+    var updates = 0
+    val state =
+        historyState(ChatTarget(ChatEditMode.ReplaceSymbol, "Run"), session, emptyList())
+            .copy(draft = draft, editor = editableDraft(draft), importInput = imports)
+    ComposeVisualFixture(480, 900) {
+          AssistantToolWindow(
+              state.copy(importInput = imports),
+              AssistantConversationActions({}, {}, {}, {}, {}, {}, changeCreationKind = {}),
+              DraftEditorActions(
+                  {},
+                  updateImportValue = { value ->
+                    imports = value
+                    normalized = parseRequiredImports(value.text)
+                    updates++
+                  },
+                  validate = {}),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Required imports"))
+          fixture.setTextForDescription("Required imports", " fmt, example.com/partial/, ")
+          fixture.render()
+          assertEquals(" fmt, example.com/partial/, ", imports.text)
+          assertEquals(listOf("fmt", "example.com/partial/"), normalized)
+          fixture.selectEditorText("Required imports", 2, 5)
+          fixture.render()
+          assertEquals(TextRange(2, 5), imports.selection)
+          fixture.setTextForDescription("Required imports", "")
+          fixture.render()
+          assertEquals("", imports.text)
+          assertTrue(fixture.hasText("Required imports"))
+          fixture.setTextForDescription("Required imports", "bad path, ")
+          fixture.render()
+          assertEquals("bad path, ", imports.text)
+          assertEquals(listOf("bad path"), normalized)
+          assertEquals(4, updates)
+        }
+  }
+
   private fun creationFile() =
       ProjectFileInfo(
           "empty.go",

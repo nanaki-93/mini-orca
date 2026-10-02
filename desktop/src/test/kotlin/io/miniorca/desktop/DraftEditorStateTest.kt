@@ -114,14 +114,12 @@ class DraftEditorStateTest {
   }
 
   @Test
-  fun requiredImportsAreVisibleOnlyWhenTheDraftAlreadyHasImports() {
-    val emptyImports = editableDraft(draft())
-    val populatedImports = editableDraft(draft(imports = listOf("fmt", "io")))
-
-    assertFalse(requiredImportsVisible(emptyImports))
-    assertTrue(requiredImportsVisible(populatedImports))
-    assertEquals(listOf("fmt", "io"), populatedImports.imports)
+  fun requiredImportsParseForRequestsWithoutDroppingNonblankPartialPaths() {
+    assertEquals(emptyList(), parseRequiredImports(" ,  , "))
     assertEquals(listOf("fmt", "io"), parseRequiredImports(" fmt, io, "))
+    assertEquals(
+        listOf("example.com/partial/", "bad path"),
+        parseRequiredImports("example.com/partial/, bad path, "))
   }
 
   @Test

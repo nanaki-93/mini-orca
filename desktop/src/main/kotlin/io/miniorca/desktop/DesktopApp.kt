@@ -837,10 +837,6 @@ internal fun MiniOrcaApp(
                     if (it != appState.review.editor?.declaration)
                         presenter.dispatch(DesktopEvent.DraftEdited(declaration = it))
                   },
-                  updateImports = {
-                    if (it != appState.review.editor?.imports)
-                        presenter.dispatch(DesktopEvent.DraftEdited(imports = it))
-                  },
                   validate = presenter::validateEditableDraft,
                   updateDeclarationValue = { value ->
                     val current = reconcileDraftFields(draftFields, appState.review.editor)
