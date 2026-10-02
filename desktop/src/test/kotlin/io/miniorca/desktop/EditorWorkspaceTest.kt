@@ -753,6 +753,58 @@ class EditorWorkspaceTest {
   }
 
   @Test
+  fun creationEntryPointsShareAdmissionForBothKindsAndNeverPrepareBlockedFiles() {
+    FileNavigationUiFixture("composer").use { navigation ->
+      val workflow = navigation.presenter.snapshot.value
+      val file = requireNotNull(workflow.state.selectedFile).copy(content = "package demo\n")
+      val loaded =
+          workflow.copy(
+              state =
+                  workflow.state.copy(
+                      selection = workflow.state.selection.copy(selectedFile = file)))
+      for (kind in DeclarationCreationKind.entries) {
+        var prepared: DeclarationCreationKind? = null
+        var pending: PendingDraftDiscard.Create? = null
+        assertNull(routeCreationRequest(loaded, kind, { prepared = it }, { pending = it }))
+        assertEquals(kind, prepared)
+        assertNull(pending)
+      }
+      for ((blockedFile, reason) in
+          listOf(
+              null to "Open a Go file to create a function or type.",
+              file.copy(language = "Markdown") to
+                  "Function and type creation requires a Go source file.",
+              file.copy(binary = true) to
+                  "Function and type creation requires a Go source file.")) {
+        for (kind in DeclarationCreationKind.entries) {
+          var prepared = false
+          val blocked =
+              loaded.copy(
+                  state =
+                      loaded.state.copy(
+                          selection = loaded.state.selection.copy(selectedFile = blockedFile)))
+          assertEquals(
+              reason,
+              routeCreationRequest(
+                  blocked, kind, { prepared = true }, { error("No draft to discard") }))
+          assertFalse(prepared)
+        }
+      }
+      for (busy in
+          listOf(loaded.copy(generating = true), loaded.copy(draftValidationInProgress = true))) {
+        var prepared = false
+        assertEquals(
+            "Wait for the current generation or validation to finish.",
+            routeCreationRequest(
+                busy, DeclarationCreationKind.Function, { prepared = true }, { error("Busy") }))
+        assertFalse(prepared)
+      }
+      assertEquals(emptyList(), navigation.calls)
+      assertEquals("package demo\n", file.content)
+    }
+  }
+
+  @Test
   fun creationDiscardApprovalCannotClearChangedComposerOrDraft() {
     FileNavigationUiFixture("draft").use { navigation ->
       val initial = navigation.presenter.snapshot.value
