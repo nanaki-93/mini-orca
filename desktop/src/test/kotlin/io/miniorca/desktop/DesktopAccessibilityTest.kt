@@ -16,6 +16,97 @@ import kotlin.test.assertTrue
 
 class DesktopAccessibilityTest {
   @Test
+  fun creationFieldsKindsAndBlockedRequestsHaveTextualAccessibleStates() {
+    val file =
+        ProjectFileInfo(
+            "empty.go",
+            "base",
+            "empty.go",
+            language = "Go",
+            sizeBytes = 13,
+            lineCount = 1,
+            modifiedAt = "",
+            binary = false,
+            content = "package main\n")
+    var name by mutableStateOf("main")
+    var kind by mutableStateOf(DeclarationCreationKind.Function)
+    var confirmed by mutableStateOf(false)
+    var sending by mutableStateOf(false)
+    var sends = 0
+    val model = ScopedModel(scope = "function", remoteProvider = true)
+    ComposeVisualFixture(420, 760) {
+          val validation =
+              validateChatTarget(file, emptyList(), null, ChatEditMode.CreateSymbol, name)
+          AssistantToolWindow(
+              AssistantToolWindowState(
+                  null,
+                  file,
+                  null,
+                  null,
+                  null,
+                  validation.target,
+                  ChatEditMode.CreateSymbol,
+                  name,
+                  "Return a result.",
+                  sending,
+                  model,
+                  confirmed,
+                  androidx.compose.ui.focus.FocusRequester(),
+                  androidx.compose.ui.focus.FocusRequester(),
+                  targetValidation = validation,
+                  creationKind = kind),
+              AssistantConversationActions(
+                  {},
+                  { name = it },
+                  { confirmed = it },
+                  {},
+                  { sends++ },
+                  {},
+                  changeCreationKind = { kind = it }),
+              DraftEditorActions({}, {}, {}),
+              androidx.compose.ui.Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasDescription("New Go function"))
+          assertEquals("Selected", fixture.descriptionStateDescription("New Go function"))
+          assertEquals("Not selected", fixture.descriptionStateDescription("New Go type"))
+          assertTrue(fixture.hasDescription("New function name"))
+          assertTrue(fixture.hasDescription("Behavior"))
+          assertTrue(
+              fixture.hasText("main is reserved for this creation workflow. Choose another name."))
+          assertTrue(fixture.isDisabled("Generate function"))
+          assertFalse(fixture.requestFocus("Generate function"))
+          assertEquals(0, sends)
+          name = "Build"
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "Name absent in the current file snapshot; the daemon rechecks before generation."))
+          assertTrue(fixture.hasText("Confirm the Function remote destination before sending."))
+          assertTrue(fixture.isDisabled("Generate function"))
+          fixture.clickDescription("New Go type")
+          fixture.render()
+          assertTrue(fixture.isDescriptionSelected("New Go type"))
+          assertTrue(fixture.hasDescription("New type name"))
+          fixture.clickText("Confirm remote destination")
+          fixture.render()
+          assertEquals("Confirmed", fixture.descriptionState("Confirm remote destination"))
+          assertFalse(fixture.isDisabled("Generate type"))
+          sending = true
+          fixture.render()
+          assertTrue(fixture.isDescriptionDisabled("New Go function"))
+          assertTrue(fixture.hasText("Wait for the current generation or validation to finish."))
+          assertTrue(
+              fixture.hasText(
+                  "Request running · Cancel keeps the existing draft and conversation."))
+          assertFalse(fixture.hasText("Generate type"))
+          assertTrue(fixture.hasText("Cancel request"))
+          assertEquals(0, sends)
+        }
+  }
+
+  @Test
   fun assistantControlsExposeBlockedRunningAndRecoveryStatesWithoutPassiveDispatch() {
     val file =
         ProjectFileInfo(

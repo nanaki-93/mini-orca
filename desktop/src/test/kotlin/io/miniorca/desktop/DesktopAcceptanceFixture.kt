@@ -286,6 +286,7 @@ private fun NativeRoundedWorkspace(terminal: DesktopTerminalWorkspace, directory
                 selectAction = {
                   record(it)
                   palette = palette.copy(visible = false)
+                  false
                 }),
         panes =
             DesktopShellPanes(

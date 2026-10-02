@@ -358,7 +358,10 @@ class DesktopShellTest {
                       switchMode = { operations += "switch palette" },
                       selectFile = { operations += "palette file" },
                       selectSymbol = { operations += "palette symbol" },
-                      selectAction = { operations += "palette action" }),
+                      selectAction = {
+                        operations += "palette action"
+                        false
+                      }),
               panes =
                   DesktopShellPanes(
                       explorer = { modifier, _ ->

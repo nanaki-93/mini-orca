@@ -28,9 +28,7 @@ internal fun editorContextualActions(
         canRunFocusedChecks = false,
     )
   }
-  val target =
-      validateChatTarget(
-          state.selectedFile, state.symbols, state.selectedSymbol, mode, requestedSymbol)
+  val target = validateChatTarget(state.selection, mode, requestedSymbol)
   val editor = state.review.editor
   val draft = state.review.draft
   val draftCurrent = draftEditorMatchesOpenFile(editor, state.selectedFile, state.project)

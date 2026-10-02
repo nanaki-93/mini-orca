@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +26,8 @@ import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.asAwtTransferable
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import java.nio.file.Files
 import java.util.concurrent.TimeUnit
@@ -38,6 +41,181 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
 
 class DesktopKeyboardNavigationTest {
+  @Test
+  fun creationKeyboardTraversalRetainsBehaviorSelectionAndOnlyExplicitGenerateDispatches() {
+    val file =
+        ProjectFileInfo(
+            "empty.go",
+            "base",
+            "empty.go",
+            language = "Go",
+            sizeBytes = 13,
+            lineCount = 1,
+            modifiedAt = "",
+            binary = false,
+            content = "package main\n")
+    val nameFocus = FocusRequester()
+    var kind by mutableStateOf(DeclarationCreationKind.Function)
+    var name by mutableStateOf("Build")
+    var behavior by mutableStateOf(TextFieldValue("Return a result.", TextRange(3, 8)))
+    var requests = 0
+    ComposeVisualFixture(420, 780) {
+          val validation =
+              validateChatTarget(file, emptyList(), null, ChatEditMode.CreateSymbol, name)
+          AssistantToolWindow(
+              AssistantToolWindowState(
+                  null,
+                  file,
+                  null,
+                  null,
+                  null,
+                  validation.target,
+                  ChatEditMode.CreateSymbol,
+                  name,
+                  behavior.text,
+                  false,
+                  ScopedModel(),
+                  false,
+                  FocusRequester(),
+                  FocusRequester(),
+                  messageInput = behavior,
+                  targetValidation = validation,
+                  creationKind = kind,
+                  creationNameFocus = nameFocus),
+              AssistantConversationActions(
+                  {},
+                  { name = it },
+                  {},
+                  {},
+                  { requests++ },
+                  {},
+                  changeCreationKind = { kind = it },
+                  updateMessageValue = { behavior = it }),
+              DraftEditorActions({}, {}, {}),
+              Modifier.fillMaxSize())
+          LaunchedEffect(Unit) { nameFocus.requestFocus() }
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.isDescriptionFocused("New function name"))
+          assertTrue(fixture.pressKey(Key.Tab, shift = true))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("New Go type"))
+          assertTrue(fixture.pressKey(Key.Spacebar))
+          fixture.render()
+          assertEquals(DeclarationCreationKind.Type, kind)
+          assertEquals(TextRange(3, 8), behavior.selection)
+          assertTrue(fixture.pressKey(Key.Tab))
+          fixture.render()
+          assertTrue(fixture.isDescriptionFocused("New type name"))
+          assertTrue(fixture.pressKey(Key.Tab))
+          fixture.render()
+          assertTrue(fixture.isDescriptionFocused("Behavior"))
+          fixture.resize(360, 650)
+          fixture.render()
+          assertTrue(fixture.isDescriptionFocused("Behavior"))
+          assertEquals(TextRange(3, 8), behavior.selection)
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertTrue(behavior.text.contains('\n'))
+          assertEquals(0, requests)
+          fixture.revealText("Generate type", "assistant-composer-scroll")
+          assertTrue(fixture.requestFocus("Generate type"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          assertEquals(1, requests)
+          assertEquals("package main\n", file.content)
+        }
+  }
+
+  @OptIn(InternalComposeUiApi::class)
+  @Test
+  fun creationShortcutSharesPointerAdmissionIncludingLoadedSnapshotAndConsent() {
+    val file =
+        ProjectFileInfo(
+            "empty.go",
+            "base",
+            "empty.go",
+            language = "Go",
+            sizeBytes = 13,
+            lineCount = 1,
+            modifiedAt = "",
+            binary = false,
+            content = "package main\n")
+    val project = resultProjectFixture()
+    val base =
+        DesktopState(
+            workspace = Workspace.Editor,
+            projectState = ProjectWorkspaceState(project),
+            selection = FileSelectionState(selectedFile = file))
+    val model = ScopedModel(scope = "function", remoteProvider = true)
+    var sends = 0
+    val actions =
+        DesktopShellEditorActions(
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            { sends++ },
+            {},
+            {},
+            {},
+            retryContext = {},
+            cancelContext = {})
+    fun activate(
+        state: DesktopState,
+        name: String,
+        behavior: String,
+        confirmed: Boolean,
+        validating: Boolean = false,
+        meta: Boolean = false
+    ): Boolean {
+      val admission =
+          editorContextualActions(
+              state, ChatEditMode.CreateSymbol, name, behavior, false, model, confirmed, validating)
+      assertEquals(
+          assistantComposerBlockedReason(
+              ChatEditMode.CreateSymbol,
+              state.selectedFile,
+              validateChatTarget(state.selection, ChatEditMode.CreateSymbol, name),
+              behavior,
+              false,
+              validating,
+              model,
+              confirmed) == null,
+          admission.canGenerate)
+      return handleDesktopShortcut(
+          KeyEvent(Key.Enter, KeyEventType.KeyDown, isCtrlPressed = !meta, isMetaPressed = meta),
+          DesktopShellMode.ProjectWorkspace,
+          state,
+          DesktopShellEditorState(
+              EditorProgressUiState(EditorProgress.Edit, ""), admission, false, false),
+          DesktopShellProjectActions({}, {}, {}),
+          false,
+          actions,
+          DesktopShellPaletteActions({}, {}, {}, {}, {}, {}, { false }),
+          onDismissTransient = { false },
+          onWorkspaceSelected = {},
+          terminal = null,
+          onTerminalSelected = {})
+    }
+    val pending = base.copy(selection = base.selection.copy(pendingFilePath = file.path))
+    for (state in listOf(pending, base)) {
+      assertFalse(activate(state, "main", "Return a result.", true))
+      assertFalse(activate(state, "Build", "  ", true))
+    }
+    assertFalse(activate(pending, "Build", "Return a result.", true))
+    assertFalse(activate(base, "Build", "Return a result.", false))
+    assertFalse(activate(base, "Build", "Return a result.", true, validating = true))
+    assertEquals(0, sends)
+    assertTrue(activate(base, "Build", "Return a result.", true))
+    assertTrue(activate(base, "Build", "Return a result.", true, meta = true))
+    assertEquals(2, sends)
+  }
+
   @Test
   fun explorerFilterOwnsSpacesArrowsAndEditingWithoutActivatingTheTree() {
     val files = listOf(IndexedFile("src/a b.go", "hash", "Go", false))
@@ -1343,7 +1521,7 @@ class DesktopKeyboardNavigationTest {
             DesktopShellProjectActions({}, {}, {}),
             false,
             actions,
-            DesktopShellPaletteActions({}, {}, {}, {}, {}, {}, {}),
+            DesktopShellPaletteActions({}, {}, {}, {}, {}, {}, { false }),
             onDismissTransient = { dismissTransient },
             onWorkspaceSelected = {},
             terminal = null,
@@ -1432,7 +1610,7 @@ class DesktopKeyboardNavigationTest {
                 {},
                 retryContext = {},
                 cancelContext = {}),
-            DesktopShellPaletteActions({}, {}, {}, {}, {}, {}, {}),
+            DesktopShellPaletteActions({}, {}, {}, {}, {}, {}, { false }),
             onDismissTransient = { false },
             onWorkspaceSelected = {},
             terminal = null,
@@ -2351,6 +2529,63 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
+  fun commandsCreationTransfersFocusToAttachedNameAfterPaletteDismissal() {
+    val project = resultProjectFixture()
+    val file =
+        ProjectFileInfo(
+            "empty.go",
+            "base",
+            "empty.go",
+            language = "Go",
+            sizeBytes = 13,
+            lineCount = 1,
+            modifiedAt = "",
+            binary = false,
+            content = "package main\n")
+    var state by
+        mutableStateOf(
+            shellFocusState(project).let {
+              it.copy(app = it.app.copy(selection = FileSelectionState(selectedFile = file)))
+            })
+    val nameFocus = FocusRequester()
+    var work = 0
+    ComposeVisualFixture(1_280, 800) {
+          FocusTestShell(
+              state,
+              onState = { state = it },
+              onOperation = { work++ },
+              creationNameFocus = nameFocus,
+              onPaletteAction = { action ->
+                if (action != "create_type") false
+                else {
+                  state =
+                      state.copy(
+                          app = state.app.copy(workspace = Workspace.Editor),
+                          layout = state.layout.openRight(RightToolWindow.Assistant),
+                          palette = state.palette.copy(visible = false))
+                  true
+                }
+              })
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickDescription("Commands · Open actions")
+          fixture.render()
+          fixture.focusDescribedEditor("Filter commands")
+          fixture.setFocusedText("New Go type")
+          fixture.render()
+          fixture.clickText("New Go type")
+          fixture.render()
+          assertFalse(fixture.hasText("Filter commands"))
+          assertEquals(Workspace.Editor, state.app.workspace)
+          assertTrue(fixture.isDescriptionFocused("New type name"))
+          assertFalse(fixture.isFocusedControl("Commands · Open actions"))
+          assertEquals(0, work)
+          assertEquals("package main\n", file.content)
+        }
+  }
+
+  @Test
   fun commandsRailOpensActionsAndRestoresItsOwnFocusOnCloseAndEscape() {
     var operations = 0
     var opens = 0
@@ -2805,6 +3040,8 @@ class DesktopKeyboardNavigationTest {
       inspectOrigin: ContextInspectFocusOrigin? = null,
       onInspect: () -> Unit = {},
       onCancelContext: () -> Unit = onOperation,
+      onPaletteAction: (String) -> Boolean = { false },
+      creationNameFocus: FocusRequester? = null,
   ) {
     DesktopShell(
         contextInspectOpener = inspectOrigin,
@@ -2864,12 +3101,48 @@ class DesktopKeyboardNavigationTest {
                 switchMode = { onState(state.copy(palette = state.palette.copy(mode = it))) },
                 selectFile = {},
                 selectSymbol = {},
-                selectAction = {}),
+                selectAction = onPaletteAction),
         panes =
             DesktopShellPanes(
                 explorer = { _, _ -> },
                 rightToolWindows = { selected, modifier ->
-                  if (selected == RightToolWindow.Assistant && inspectFocus != null) {
+                  if (selected == RightToolWindow.Assistant && creationNameFocus != null) {
+                    val file = state.app.selectedFile
+                    val validation =
+                        validateChatTarget(state.app.selection, ChatEditMode.CreateSymbol, "")
+                    AssistantToolWindow(
+                        AssistantToolWindowState(
+                            state.app.project,
+                            file,
+                            null,
+                            null,
+                            null,
+                            validation.target,
+                            ChatEditMode.CreateSymbol,
+                            "",
+                            "",
+                            false,
+                            ScopedModel(),
+                            false,
+                            FocusRequester(),
+                            FocusRequester(),
+                            targetValidation = validation,
+                            creationKind = DeclarationCreationKind.Type,
+                            creationNameFocus = creationNameFocus),
+                        AssistantConversationActions(
+                            {},
+                            {},
+                            {},
+                            {},
+                            onOperation,
+                            onOperation,
+                            changeCreationKind = { onOperation() }),
+                        DraftEditorActions({}, {}, {}),
+                        modifier)
+                    if (!state.palette.visible) {
+                      LaunchedEffect(state.palette.visible) { creationNameFocus.requestFocus() }
+                    }
+                  } else if (selected == RightToolWindow.Assistant && inspectFocus != null) {
                     AssistantToolWindow(
                         AssistantToolWindowState(
                             state.app.project,
