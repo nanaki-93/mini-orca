@@ -1007,3 +1007,9 @@ draft manually** remains available. A stale or edited candidate, canceled checks
 a different conversation or an exhausted limit blocks repair. A failed or canceled
 request keeps the draft and useful diagnostics; a returned revision needs new
 validation and checks.
+
+The read-only Review comparison identifies the candidate declaration, server revision,
+file and requested imports above Current/Candidate. Its scope area scrolls separately
+when paths or imports are long, leaving both code panes available. Review breadcrumbs
+follow the retained candidate, while Source keeps the inspected declaration. Switching
+Side-by-side/Unified is local; only the isolated draft in Assistant is editable.

@@ -26,6 +26,29 @@ import kotlin.test.assertTrue
 
 class EditorWorkspaceTest {
   @Test
+  fun reviewBreadcrumbsUseTheRetainedCandidateInsteadOfTheInspectedSymbol() {
+    val base = editorComparisonReviewFixture()
+    val state =
+        DesktopState(
+            projectState = ProjectWorkspaceState(base.project),
+            selection =
+                FileSelectionState(
+                    selectedFile = base.selected, selectedSymbol = base.selectedSymbol),
+            review =
+                DraftReviewState(draft = base.draft, editor = base.editor, checks = base.checks))
+    val chrome =
+        editorChromeUiState(
+            base.selected,
+            base.selectedSymbol!!.copy(name = "Other"),
+            EditorSurface.Review,
+            editorProgressUiState(state),
+            base.draft)
+    assertEquals(EditorSurface.Review, chrome.activeSurface)
+    assertEquals("GetUser", chrome.breadcrumbSegments.last().label)
+    assertTrue(chrome.inspectionLabel.contains("GetUser"))
+  }
+
+  @Test
   fun appSourceSelectionCallbackPreservesUnsentComposerAndDraftWhenInspectingAnotherSymbol() {
     val source = "package main\nfunc Run() {}\nfunc Other() {}\n"
     val other =

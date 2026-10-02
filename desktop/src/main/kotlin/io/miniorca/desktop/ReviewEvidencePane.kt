@@ -534,9 +534,47 @@ internal fun applyDecisionUiState(
   )
 }
 
+internal fun reviewComparisonScope(draft: DeclarationDraft): String {
+  val operation =
+      when (draft.mode) {
+        "replace_symbol" -> "Replace one declaration"
+        "create_symbol" -> "Create one declaration"
+        else -> "Declaration scope unavailable"
+      }
+  val imports =
+      if (draft.imports.isEmpty()) "No additional imports requested"
+      else "Required imports: ${draft.imports.joinToString(", ")}"
+  return "$operation · $imports · Read-only comparison"
+}
+
 @Composable
 internal fun ReviewDiffCanvas(draft: DeclarationDraft?, modifier: Modifier = Modifier) {
-  DiffViewer(draft?.validation?.diff, modifier.fillMaxSize().padding(8.dp))
+  BoxWithConstraints(modifier.fillMaxSize()) {
+    val maximumScopeHeight = maxHeight * 0.25f
+    Column(Modifier.fillMaxSize()) {
+      if (draft != null) {
+        SelectionContainer {
+          Column(
+              Modifier.fillMaxWidth()
+                  .heightIn(max = maximumScopeHeight)
+                  .verticalScroll(rememberScrollState())
+                  .padding(12.dp)
+                  .testTag("comparison-scope")) {
+                Text(
+                    "${draft.targetSymbol} · Candidate revision ${draft.revision}",
+                    color = PrimaryText,
+                    style = IdeTypography.workspaceMetadata)
+                Text(draft.targetPath, color = SecondaryText, style = IdeTypography.resultCode)
+                Text(
+                    reviewComparisonScope(draft),
+                    color = SecondaryText,
+                    style = IdeTypography.compactBody)
+              }
+        }
+      }
+      DiffViewer(draft?.validation?.diff, Modifier.weight(1f).fillMaxWidth().padding(8.dp))
+    }
+  }
 }
 
 @Composable
