@@ -12,6 +12,79 @@ import kotlin.test.assertTrue
 
 class DesktopStatusBarTest {
   @Test
+  fun missingDestinationCannotCountAsAKnownLocalModel() {
+    val complete = providers()
+    val presentation =
+        desktopStatusBarPresentation(
+            DesktopState(workspace = Workspace.Editor),
+            complete.copy(functionEdits = complete.functionEdits.copy(providerOrigin = "")))
+    assertEquals("Models: unavailable", presentation.modelsLabel)
+    assertTrue(presentation.provider!!.detail.contains("Configuration unavailable"))
+    assertFalse(presentation.provider.detail.contains("local provider"))
+    ComposeVisualFixture(800, 650, 1.5f) { DesktopStatusDetailsDialog(presentation) {} }
+        .use { fixture ->
+          fixture.render("f36-incomplete-destination")
+          assertTrue(fixture.hasText("Destination: Unavailable"))
+          assertTrue(fixture.hasText("Configuration unavailable"))
+          assertFalse(fixture.hasText("Models: 0 local · 0 cloud"))
+        }
+  }
+
+  @Test
+  fun currentScopeCardsAndCapturedRunRemainDistinctAtAllAcceptanceSizes() {
+    val destination = "https://provider.example/" + "long-destination-segment/".repeat(7)
+    val configured =
+        providers(true).let {
+          it.copy(functionEdits = it.functionEdits.copy(providerOrigin = destination))
+        }
+    val state =
+        DesktopState(
+            workspace = Workspace.Analysis,
+            projectState = ProjectWorkspaceState(resultProjectFixture()),
+            analysisRun = ProjectAnalysisRunState(run = analysisRunFixture()))
+    val presentation = desktopStatusBarPresentation(state, configured)
+    assertTrue(presentation.provider!!.capturedRun)
+    for ((width, height) in
+        listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        ComposeVisualFixture(width, height, scale) { DesktopStatusDetailsDialog(presentation) {} }
+            .use { fixture ->
+              fixture.render("f36-scopes-$width-$height-$scale")
+              assertTrue(fixture.hasText("Current configured scopes"))
+              for (scope in ModelScope.entries) assertTrue(fixture.hasText(scope.label))
+              assertTrue(fixture.hasText("Destination: $destination"))
+              assertTrue(fixture.hasText("Displayed run configuration"))
+              assertTrue(fixture.hasText(presentation.provider.detail))
+              fixture.assertTextFits("Close")
+              if (width == 800 && scale == 1.5f) {
+                val label = "Destination: $destination"
+                fixture.revealTextFullyWithin(label, "ide-dialog-body")
+                fixture.assertTextWrapsWithoutClipping(label)
+                fixture.render("f36-long-destination")
+              }
+            }
+      }
+    }
+  }
+
+  @Test
+  fun configuredScopeRowSupportsCopyingItsLongDestination() {
+    val model =
+        providers(true)
+            .functionEdits
+            .copy(providerOrigin = "https://provider.example/" + "long-destination/".repeat(8))
+    ComposeVisualFixture(800, 600, 1.5f) {
+          ConfiguredProviderRow(DesktopStatusProvider(ModelScope.Function, model))
+        }
+        .use { fixture ->
+          fixture.render("f36-selectable-destination")
+          val label = "Destination: ${model.providerOrigin}"
+          assertTrue(label.contains(fixture.copyTextByDragging(label, label)))
+          fixture.render("f36-selected-destination")
+        }
+  }
+
+  @Test
   fun bottomBarShowsOnlyModelCountsAcrossWidthsAndTextScales() {
     val state =
         DesktopState(
@@ -181,9 +254,9 @@ class DesktopStatusBarTest {
     val mixed = DesktopShellStatusProviders(local, cloud, local.copy(scope = "function"))
     val presentation = desktopStatusBarPresentation(state, mixed)
     assertEquals("Models: 1 local · 1 cloud", presentation.modelsLabel)
-    assertTrue(presentation.modelsDetail.contains("Analyze:"))
-    assertTrue(presentation.modelsDetail.contains("Bugs:"))
-    assertTrue(presentation.modelsDetail.contains("Function edits:"))
+    assertEquals(
+        listOf(ModelScope.Analyze, ModelScope.Bug, ModelScope.Function),
+        presentation.configuredScopes.map { it.scope })
     assertEquals(
         "Models: 2 local · 1 cloud",
         desktopStatusBarPresentation(
@@ -211,7 +284,12 @@ class DesktopStatusBarTest {
   }
 
   private fun providers(remote: Boolean = false): DesktopShellStatusProviders {
-    val model = ScopedModel(profile = "test", model = "test-model", remoteProvider = remote)
+    val model =
+        ScopedModel(
+            profile = "test",
+            model = "test-model",
+            providerOrigin = if (remote) "https://provider.example" else "http://localhost:11434",
+            remoteProvider = remote)
     return DesktopShellStatusProviders(
         model.copy(scope = "analyze"), model.copy(scope = "bug"), model.copy(scope = "function"))
   }

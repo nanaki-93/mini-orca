@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,12 +30,14 @@ internal data class DesktopStatusProvider(
 internal data class DesktopStatusProviderPresentation(
     val detail: String,
     val remoteProvider: Boolean,
+    val capturedRun: Boolean = false,
 )
 
 internal data class DesktopStatusBarPresentation(
     val provider: DesktopStatusProviderPresentation?,
     val modelsLabel: String,
     val modelsDetail: String,
+    val configuredScopes: List<DesktopStatusProvider> = emptyList(),
 )
 
 internal fun desktopStatusBarVisible(project: ProjectAnalysis?): Boolean = project != null
@@ -53,7 +56,7 @@ internal fun desktopStatusBarPresentation(
           DesktopStatusProvider(ModelScope.Analyze, providers.analyze),
           DesktopStatusProvider(ModelScope.Bug, providers.bugs),
           DesktopStatusProvider(ModelScope.Function, providers.functionEdits))
-  val complete = configured.all { it.model.model.isNotBlank() }
+  val complete = configured.all { modelConfigurationAvailable(it.model) }
   val models =
       configured
           .map { it.model }
@@ -63,10 +66,9 @@ internal fun desktopStatusBarPresentation(
       provider,
       if (complete) "Models: ${models.size - cloud} local · $cloud cloud"
       else "Models: unavailable",
-      if (complete)
-          "Distinct configured models by destination; shared models are counted once.\n" +
-              configured.joinToString("\n") { modelDestinationLabel(it.scope, it.model) }
+      if (complete) "Distinct configured models by destination; shared models are counted once."
       else "Model counts are unavailable until all configured model scopes have been loaded.",
+      configuredScopes = configured,
   )
 }
 
@@ -119,16 +121,30 @@ internal fun DesktopStatusDetailsDialog(
       onDismissRequest = onDismiss,
       title = { Text("Provider details") },
       content = {
-        Column {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+          Text(
+              "Current configured scopes",
+              color = PrimaryText,
+              style = IdeTypography.workspaceHeading)
+          Text(presentation.modelsLabel)
+          DiagnosticText(presentation.modelsDetail, color = SecondaryText)
+          presentation.configuredScopes.forEach { provider -> ConfiguredProviderRow(provider) }
           presentation.provider?.let { provider ->
+            IdeHorizontalSeparator()
+            Text(
+                if (provider.capturedRun) "Displayed run configuration"
+                else "Current workspace configuration",
+                color = PrimaryText,
+                style = IdeTypography.workspaceHeading)
             DiagnosticText(
                 provider.detail,
                 color = if (provider.remoteProvider) Warning else SecondaryText,
                 modifier = Modifier.padding(bottom = 6.dp),
             )
           }
-          Text(presentation.modelsLabel, modifier = Modifier.padding(bottom = 6.dp))
-          DiagnosticText(presentation.modelsDetail, color = SecondaryText)
+          DiagnosticText(
+              "Daemon connectivity is separate from provider configuration. These details do not check provider health or send project context.",
+              color = SecondaryText)
         }
       },
       actions = {
@@ -153,6 +169,7 @@ private fun capturedRunProviderPresentation(
   return DesktopStatusProviderPresentation(
       "Captured providers for the displayed run: $detail. This describes the run configuration, not a live connection.",
       remoteProvider = remote > 0,
+      capturedRun = true,
   )
 }
 
@@ -163,7 +180,47 @@ private fun providerPresentation(
   if (model.model.isBlank() && model.profile.isBlank() && model.providerOrigin.isBlank())
       return null
   return DesktopStatusProviderPresentation(
-      modelDestinationLabel(provider.scope, model),
+      if (modelConfigurationAvailable(model)) modelDestinationLabel(provider.scope, model)
+      else
+          "${provider.scope.label}: Configuration unavailable; model or destination metadata is missing.",
       remoteProvider = model.remoteProvider,
   )
+}
+
+private fun modelConfigurationAvailable(model: ScopedModel): Boolean =
+    model.model.isNotBlank() && model.providerOrigin.isNotBlank()
+
+@Composable
+internal fun ConfiguredProviderRow(provider: DesktopStatusProvider) {
+  val model = provider.model
+  SelectionContainer {
+    Column(
+        Modifier.fillMaxWidth().background(EditorCanvas).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          Text(provider.scope.label, color = PrimaryText, style = IdeTypography.workspaceHeading)
+          Text(
+              if (!modelConfigurationAvailable(model)) "Configuration unavailable"
+              else if (model.remoteProvider) "Cloud · configured" else "Local · configured",
+              color = if (model.remoteProvider) Warning else SecondaryText,
+              style = IdeTypography.workspaceMetadata)
+          Text(
+              "Model: ${model.model.ifBlank { "Unavailable" }}",
+              color = PrimaryText,
+              style = IdeTypography.resultCode)
+          Text(
+              "Destination: ${model.providerOrigin.ifBlank { "Unavailable" }}",
+              color = SecondaryText,
+              style = IdeTypography.resultCode)
+          if (model.profile.isNotBlank())
+              Text(
+                  "Profile: ${model.profile}",
+                  color = SecondaryText,
+                  style = IdeTypography.workspaceMetadata)
+          if (model.reasoningEffort.isNotBlank())
+              Text(
+                  "Reasoning: ${model.reasoningEffort}",
+                  color = SecondaryText,
+                  style = IdeTypography.workspaceMetadata)
+        }
+  }
 }
