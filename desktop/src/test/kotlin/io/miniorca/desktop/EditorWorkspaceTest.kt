@@ -166,7 +166,8 @@ class EditorWorkspaceTest {
                                     FocusRequester(),
                                     selectedSymbol = state.selectedSymbol,
                                     targetValidation = validation),
-                                AssistantConversationActions({}, {}, {}, {}, { sends++ }, {}),
+                                AssistantConversationActions(
+                                    {}, {}, {}, {}, { sends++ }, {}, changeCreationKind = {}),
                                 DraftEditorActions({}, {}, {}),
                                 modifier)
                             if (prepared != null)

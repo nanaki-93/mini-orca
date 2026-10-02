@@ -224,6 +224,7 @@ class DesktopVisualLayoutTest {
                             { actions++ },
                             { actions++ },
                             { actions++ },
+                            changeCreationKind = { actions++ },
                             preparePreset = { actions++ }),
                         DraftEditorActions({ actions++ }, { actions++ }, { actions++ }),
                         Modifier.fillMaxSize())
@@ -7723,7 +7724,8 @@ class DesktopVisualLayoutTest {
                   { assistantActions++ },
                   { assistantActions++ },
                   { assistantActions++ },
-                  { assistantActions++ }),
+                  { assistantActions++ },
+                  changeCreationKind = { assistantActions++ }),
               DraftEditorActions(
                   { assistantActions++ }, { assistantActions++ }, { assistantActions++ }),
               Modifier.fillMaxSize())
@@ -7963,6 +7965,7 @@ class DesktopVisualLayoutTest {
                       send = { sendCalls++ },
                       cancel = { otherCalls++ },
                       updateMessageValue = { message = it },
+                      changeCreationKind = { otherCalls++ },
                       preparePreset = { preset ->
                         presetCalls++
                         message = preparedFunctionChangeMessage(preset)
@@ -13916,7 +13919,13 @@ internal fun AdaptiveProductionEditorFixture(
                                               FocusRequester(),
                                               draftInput = draftInput),
                                       AssistantConversationActions(
-                                          {}, {}, {}, {}, onRequest, onRequest),
+                                          {},
+                                          {},
+                                          {},
+                                          {},
+                                          onRequest,
+                                          onRequest,
+                                          changeCreationKind = {}),
                                       DraftEditorActions(
                                           {},
                                           {},
