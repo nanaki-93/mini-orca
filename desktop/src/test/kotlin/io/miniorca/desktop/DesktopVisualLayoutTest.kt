@@ -75,6 +75,188 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun f28SourceAndComposedDiffStayReadOnlyBesideDraft() {
+    val evidence = sourceNavigationReviewFixture()
+    var surface by mutableStateOf(EditorSurface.Source)
+    var requests = 0
+    for ((width, height, scale) in
+        listOf(
+            Triple(1600, 1000, 1f),
+            Triple(1024, 768, 1.25f),
+            Triple(800, 650, 1.5f),
+            Triple(1280, 600, 1f))) {
+      ComposeVisualFixture(width, height, scale) {
+            AdaptiveProductionEditorFixture(
+                DesktopLayoutState(),
+                false,
+                evidence = evidence,
+                selectedSurface = surface,
+                onSurface = { surface = it },
+                rightTool = RightToolWindow.Assistant,
+                onRequest = { requests++ },
+                onValidate = { requests++ },
+                onWrite = { requests++ })
+          }
+          .use { fixture ->
+            fixture.render("f28-source-$width-$height-$scale")
+            assertTrue(fixture.hasText("Read-only"))
+            assertFalse(fixture.hasEditableText(withinTag = "source-viewport"))
+            surface = EditorSurface.Review
+            fixture.render("f28-diff-$width-$height-$scale")
+            assertTrue(fixture.hasDescription("Read-only composed diff"))
+            assertFalse(fixture.hasEditableText("Read-only composed diff"))
+            assertEquals(0, requests)
+          }
+      surface = EditorSurface.Source
+    }
+  }
+
+  @Test
+  fun f28DraftEditorStatesAndDiscardProductionCaptures() {
+    val path = "internal/" + "deeply/nested/日本語/".repeat(6) + "run.go"
+    val declaration =
+        "func Run() {\n" + "  // keep the long declaration inspectable\n".repeat(15) + "}"
+    val base =
+        DeclarationDraft(
+            "draft",
+            "project",
+            "revision",
+            "base",
+            path,
+            "replace_symbol",
+            "Run",
+            declaration,
+            revision = 4,
+            hash = "hash")
+    val diagnostic = DeclarationFinding("syntax", "missing closing brace")
+    val invalid =
+        base.copy(
+            validation =
+                DeclarationValidation(
+                    false, "symbol_plus_imports", listOf(diagnostic), UnifiedDiff(path, path)))
+    val valid =
+        base.copy(
+            validation =
+                DeclarationValidation(true, "symbol_plus_imports", diff = UnifiedDiff(path, path)))
+    val cases =
+        listOf(
+            "generated-empty" to editableDraft(base),
+            "dirty-imports" to
+                editDraft(
+                    editableDraft(base.copy(imports = listOf("fmt"))), imports = listOf("fmt")),
+            "validated" to editableDraft(valid),
+            "invalid" to editableDraft(invalid),
+            "stale-retained" to
+                editableDraft(invalid)
+                    .copy(
+                        serverDraft = invalid.copy(validation = null),
+                        retainedValidation = invalid.validation,
+                        status = DraftEditorStatus.Stale))
+    for ((name, editor) in cases) {
+      for ((scope, kind) in
+          listOf(
+              "replace" to null,
+              "function" to DeclarationCreationKind.Function,
+              "type" to DeclarationCreationKind.Type)) {
+        val draft =
+            editor.serverDraft.copy(mode = if (kind == null) "replace_symbol" else "create_symbol")
+        val session =
+            ChatSession(
+                projectId = draft.projectId,
+                projectRevision = draft.projectRevision,
+                baseFileHash = draft.baseFileHash,
+                openPath = draft.targetPath,
+                mode = draft.mode,
+                targetSymbol = draft.targetSymbol,
+                state = "active",
+                latestDraftId = draft.id)
+        val attempts =
+            if (kind == null) emptyList()
+            else
+                listOf(
+                    ChatRequestAttempt(
+                        1,
+                        ChatRequestScope(
+                            draft.projectId,
+                            draft.projectRevision,
+                            draft.targetPath,
+                            draft.baseFileHash,
+                            ChatTarget(ChatEditMode.CreateSymbol, draft.targetSymbol)),
+                        ScopedModel(),
+                        false,
+                        "Create",
+                        0,
+                        ChatRequestOutcome.Succeeded("session", draft.id),
+                        creationKind = kind.noun))
+        var dialog by mutableStateOf(false)
+        var dispatches = 0
+        ComposeVisualFixture(800, 650, 1.5f) {
+              AssistantToolWindow(
+                  AssistantToolWindowState(
+                      visualFixtureProject,
+                      null,
+                      session,
+                      draft,
+                      editor.copy(serverDraft = draft),
+                      ChatTarget(
+                          if (kind == null) ChatEditMode.ReplaceSymbol
+                          else ChatEditMode.CreateSymbol,
+                          draft.targetSymbol),
+                      if (kind == null) ChatEditMode.ReplaceSymbol else ChatEditMode.CreateSymbol,
+                      "",
+                      "",
+                      false,
+                      ScopedModel(),
+                      false,
+                      FocusRequester(),
+                      FocusRequester(),
+                      draftInput = TextFieldValue(declaration),
+                      importInput =
+                          TextFieldValue(
+                              if (name == "dirty-imports") "fmt, "
+                              else editor.imports.joinToString(", ")),
+                      attempts = attempts),
+                  AssistantConversationActions(
+                      {}, {}, {}, {}, { dispatches++ }, { dispatches++ }, changeCreationKind = {}),
+                  DraftEditorActions({}, {}, { dispatches++ }, { dialog = true }),
+                  Modifier.fillMaxSize())
+              if (dialog) {
+                DraftDiscardDialog(
+                    CurrentEditIdentity(
+                        if (kind == null) ChatEditMode.ReplaceSymbol else ChatEditMode.CreateSymbol,
+                        path,
+                        "Run",
+                        true),
+                    "discard this draft",
+                    { dispatches++ },
+                    { dialog = false })
+              }
+            }
+            .use { fixture ->
+              fixture.render("f28-$name-$scope-800-650-150")
+              assertTrue(fixture.hasDescription("Declaration only"))
+              assertTrue(fixture.hasDescription("Required imports"))
+              assertTrue(fixture.hasText(draftIdentityLabel(draft, kind)))
+              assertTrue(fixture.hasText(draftEditorStatusLabel(editor.status)))
+              if (name == "stale-retained") {
+                assertTrue(fixture.hasText("Previous validation diagnostics"))
+              }
+              if (name == "generated-empty" && scope == "replace") {
+                fixture.revealText("Discard draft…", "assistant-history-scroll")
+                fixture.clickText("Discard draft…")
+                fixture.render("f28-discard-confirmation-800-650-150")
+                assertTrue(fixture.hasText("Keep draft"))
+                fixture.clickText("Keep draft")
+                fixture.render("f28-discard-canceled-800-650-150")
+                assertFalse(dialog)
+              }
+              assertEquals(0, dispatches)
+            }
+      }
+    }
+  }
+
+  @Test
   fun f27CreationComposerProductionMatrix() {
     val evidence = editorComparisonReviewFixture()
     val file = requireNotNull(evidence.selected)

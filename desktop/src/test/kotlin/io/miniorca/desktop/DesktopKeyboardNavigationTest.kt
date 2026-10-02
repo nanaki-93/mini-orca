@@ -42,6 +42,103 @@ import kotlinx.coroutines.CompletableDeferred
 
 class DesktopKeyboardNavigationTest {
   @Test
+  fun isolatedDraftEnterEditsTextAndDiscardCancelKeepsBothBuffers() {
+    val draft =
+        DeclarationDraft(
+            "draft",
+            "project",
+            "revision",
+            "base",
+            "internal/run.go",
+            "replace_symbol",
+            "Run",
+            "func Run() {}",
+            revision = 2,
+            hash = "hash")
+    val session =
+        ChatSession(
+            projectId = draft.projectId,
+            projectRevision = draft.projectRevision,
+            baseFileHash = draft.baseFileHash,
+            openPath = draft.targetPath,
+            mode = draft.mode,
+            targetSymbol = draft.targetSymbol,
+            state = "active",
+            latestDraftId = draft.id)
+    var declaration by mutableStateOf(TextFieldValue(draft.declaration, TextRange(5, 8)))
+    var imports by mutableStateOf(TextFieldValue("fmt, ", TextRange(5)))
+    var confirm by mutableStateOf(false)
+    var validations = 0
+    var discards = 0
+    var requests = 0
+    ComposeVisualFixture(420, 760) {
+          AssistantToolWindow(
+              AssistantToolWindowState(
+                  resultProjectFixture(),
+                  null,
+                  session,
+                  draft,
+                  editableDraft(draft),
+                  ChatTarget(ChatEditMode.ReplaceSymbol, "Run"),
+                  ChatEditMode.ReplaceSymbol,
+                  "",
+                  "",
+                  false,
+                  ScopedModel(),
+                  false,
+                  FocusRequester(),
+                  FocusRequester(),
+                  draftInput = declaration,
+                  importInput = imports),
+              AssistantConversationActions(
+                  {}, {}, {}, {}, { requests++ }, { requests++ }, changeCreationKind = {}),
+              DraftEditorActions(
+                  {},
+                  { imports = it },
+                  { validations++ },
+                  { confirm = true },
+                  updateDeclarationValue = { declaration = it }),
+              Modifier.fillMaxSize())
+          if (confirm) {
+            DraftDiscardDialog(
+                CurrentEditIdentity(ChatEditMode.ReplaceSymbol, draft.targetPath, "Run", true),
+                "discard this draft",
+                { discards++ },
+                { confirm = false })
+          }
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.revealText("Declaration only", "assistant-history-scroll")
+          assertTrue(fixture.requestDescriptionFocus("Declaration only"))
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertTrue(declaration.text.contains('\n'))
+          assertEquals(0, validations)
+          assertEquals(0, requests)
+          assertTrue(fixture.requestDescriptionFocus("Required imports"))
+          fixture.render()
+          assertEquals("fmt, ", imports.text)
+          assertEquals(TextRange(5), imports.selection)
+          fixture.revealText("Discard draft…", "assistant-history-scroll")
+          assertTrue(fixture.requestFocus("Discard draft…"))
+          fixture.render()
+          fixture.assertColorVisible(FocusAccent)
+          assertTrue(fixture.pressKey(Key.Enter))
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Keep draft"))
+          assertTrue(fixture.pressKey(Key.Escape))
+          fixture.render()
+          assertFalse(confirm)
+          assertEquals(0, discards)
+          assertEquals(0, validations)
+          assertEquals(0, requests)
+          assertTrue(declaration.text.contains('\n'))
+          assertEquals("fmt, ", imports.text)
+        }
+  }
+
+  @Test
   fun creationKeyboardTraversalRetainsBehaviorSelectionAndOnlyExplicitGenerateDispatches() {
     val file =
         ProjectFileInfo(

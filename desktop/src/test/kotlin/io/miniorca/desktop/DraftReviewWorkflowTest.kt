@@ -9,6 +9,49 @@ import kotlin.test.assertTrue
 
 class DraftReviewWorkflowTest {
   @Test
+  fun editedCandidateRejectsLateCheckCompletionAndOldApplyEvidence() {
+    val validated =
+        draft(
+            2,
+            "validated",
+            DeclarationValidation(
+                true, "symbol_plus_imports", diff = UnifiedDiff("main.go", "main.go")),
+            "replace_symbol")
+    val checks =
+        DraftCheckReport(
+            "main.go",
+            true,
+            draftId = validated.id,
+            draftRevision = validated.revision,
+            draftHash = validated.hash)
+    val ready =
+        DesktopState(
+            projectState = ProjectWorkspaceState(project()),
+            selection = FileSelectionState(selectedFile = file()),
+            review =
+                DraftReviewState(
+                    draft = validated, editor = editableDraft(validated), checks = checks))
+    assertTrue(
+        draftReviewEligibility(
+                ready.review.editor, ready.review.draft, ready.review.checks, file(), project())
+            .eligible)
+    val pending = ready.reduce(DesktopEvent.ChecksStarted(7, CheckCandidate(validated)))
+    val edited = pending.reduce(DesktopEvent.DraftEdited(imports = listOf("fmt")))
+    val late = edited.reduce(DesktopEvent.ChecksCompleted(7, checks))
+    assertEquals("fmt", late.review.editor?.imports?.single())
+    assertEquals(DraftEditorStatus.Dirty, late.review.editor?.status)
+    assertNull(late.review.checks)
+    assertNull(late.review.checkAttempt)
+    assertFalse(
+        draftReviewEligibility(late.review.editor, late.review.draft, checks, file(), project())
+            .eligible)
+    assertFalse(draftApplyEligibility(late.review.draft, checks, file()).eligible)
+    val discarded = late.reduce(DesktopEvent.DraftDiscarded)
+    assertNull(discarded.review.draft)
+    assertNull(discarded.reduce(DesktopEvent.ChecksCompleted(7, checks)).review.checks)
+  }
+
+  @Test
   fun editedDraftRequiresFreshValidationAndChecksBeforeTheFakeTransportCanApplyAndUndo() {
     listOf("replace_symbol", "create_symbol").forEach { mode ->
       val requests = mutableListOf<String>()
