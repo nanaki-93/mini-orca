@@ -1027,3 +1027,9 @@ project match that receipt; an external edit, expired backup or conflict blocks 
 A pending or failed Undo keeps the Apply receipt and its local diagnostic. A
 successful Undo refreshes source and cannot expose an older Undo chain, even if a
 server response advertises one. Accepting a new candidate replaces the prior receipt.
+
+Files, Symbols and Commands use a local palette with all loaded results available
+in a scrolling list. File paths wrap for disambiguation. Arrow keys select from the
+filter or move focus between result controls; Enter activates the current result,
+and Space activates a focused result while remaining ordinary text in the filter.
+Preparation commands keep their existing target checks and discard confirmation.
