@@ -1778,11 +1778,13 @@ class DesktopWorkflowPresenter(
             contextInspection = ContextInspectionState(generation = contextInspectionGeneration))
   }
 
-  fun sendChatMessage(
+  internal fun sendChatMessage(
       mode: ChatEditMode,
       requestedSymbol: String,
-      message: String,
-      repair: Boolean = false
+      rawIntent: String,
+      constraints: String = "",
+      repair: Boolean = false,
+      creationKind: DeclarationCreationKind? = null,
   ) {
     val state = snapshot.value.state
     val project = state.project ?: return
@@ -1793,14 +1795,18 @@ class DesktopWorkflowPresenter(
       dispatch(DesktopEvent.Failed(target.message))
       return
     }
-    val content = message.trim()
-    if (!hasFunctionChangeIntent(content)) {
+    if (!hasFunctionChangeIntent(rawIntent)) {
       val guidance =
-          if (content.isBlank()) "Write a concise intent before sending."
+          if (rawIntent.isBlank()) "Write a concise intent before sending."
           else "Add a concise intent after the selected preset before sending."
       dispatch(DesktopEvent.Failed(guidance))
       return
     }
+    val request = functionChangeRequest(rawIntent, constraints)
+    val content =
+        if (mode == ChatEditMode.CreateSymbol && creationKind != null)
+            creationMessage(creationKind, requestedSymbol, request)
+        else request
     if (snapshot.value.model(ModelScope.Function).remoteProvider &&
         !snapshot.value.providerConfirmed(ModelScope.Function)) {
       dispatch(
@@ -1808,7 +1814,7 @@ class DesktopWorkflowPresenter(
               "Confirm the Function edits model destination before sending context."))
       return
     }
-    val (request, fileRequest) = controller.beginChatLoad() ?: return
+    val (requestId, fileRequest) = controller.beginChatLoad() ?: return
     val chatTarget = target.target ?: return
     val taskSpec =
         state.preparedTaskSpec?.takeIf {
@@ -1850,7 +1856,7 @@ class DesktopWorkflowPresenter(
             }
             if (activeTask == identity &&
                 controller.chatProposalLoaded(
-                    request,
+                    requestId,
                     fileRequest,
                     session.copy(
                         repairCount = session.repairCount + if (repair) 1 else 0,
@@ -1864,10 +1870,10 @@ class DesktopWorkflowPresenter(
               dispatch(DesktopEvent.Status("Draft is ready for review."))
             }
           } catch (_: CancellationException) {
-            if (controller.cancelChatLoad(request, fileRequest)) publish()
+            if (controller.cancelChatLoad(requestId, fileRequest)) publish()
             throw CancellationException()
           } catch (error: Exception) {
-            if (activeTask == identity && controller.cancelChatLoad(request, fileRequest)) {
+            if (activeTask == identity && controller.cancelChatLoad(requestId, fileRequest)) {
               val message =
                   modelRequestFailureMessage(error, ModelScope.Function, "Chat request failed")
               dispatch(DesktopEvent.ChatRequestFailed(ChatRequestFailure(chatTarget, message)))

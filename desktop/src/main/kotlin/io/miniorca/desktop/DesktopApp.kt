@@ -1555,11 +1555,12 @@ private fun submitComposerMessage(
       (declarationCreationBlockedReason(workflow.state.selectedFile, workflow.creationInProgress) !=
           null || !hasFunctionChangeIntent(behavior)))
       return
-  val request = functionChangeRequest(behavior, constraints)
   presenter.sendChatMessage(
       mode,
       name,
-      if (mode == ChatEditMode.CreateSymbol) creationMessage(kind, name, request) else request)
+      behavior,
+      constraints,
+      creationKind = kind.takeIf { mode == ChatEditMode.CreateSymbol })
 }
 
 internal fun reviewToolWindowState(state: DesktopState) =
