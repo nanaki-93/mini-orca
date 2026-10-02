@@ -273,8 +273,10 @@ internal fun reviewEvidenceUiState(
   val identityCurrent = draftEditorMatchesOpenFile(editor, selected, project)
   val validationAttempt = editor?.validationAttempt?.takeIf { identityCurrent }
   val validationCurrent =
-      editor?.status == DraftEditorStatus.Valid &&
-          draft?.validation?.applicable == true &&
+      identityCurrent &&
+          editor?.status == DraftEditorStatus.Valid &&
+          editor.serverDraft == draft &&
+          draft.validation?.applicable == true &&
           validationAttempt == null
   val currentAttempt =
       checkAttempt?.takeIf { draft != null && it.candidate == CheckCandidate(draft) }
@@ -288,6 +290,8 @@ internal fun reviewEvidenceUiState(
                   when {
                     validationAttempt != null -> validationAttemptDetail(validationAttempt)
                     validationCurrent -> "Validation is current."
+                    editor != null && !identityCurrent ->
+                        "The draft no longer matches the open file. Reopen the source and prepare a new draft."
                     editor == null -> "No editable draft is loaded."
                     else -> reviewValidationSummary(editor, validationCurrent)
                   },
@@ -298,6 +302,7 @@ internal fun reviewEvidenceUiState(
                     ValidationAttemptStatus.Canceled -> ReviewEvidenceStatus.Canceled
                     null ->
                         if (validationCurrent) ReviewEvidenceStatus.Passed
+                        else if (editor != null && !identityCurrent) ReviewEvidenceStatus.Stale
                         else validationStatus(editor)
                   },
           ),
@@ -657,7 +662,7 @@ internal fun ReviewToolWindow(
                     }
                 DraftValidationDiagnostics(
                     state.editor?.diagnostics.orEmpty(),
-                    retained = state.editor?.diagnosticsAreRetained == true)
+                    retained = state.editor?.let(::draftDiagnosticsAreEarlierEvidence) == true)
                 ReviewDetails(state, evidence, nextAction, evidenceActions)
                 ReadOnlyImpactPane(state.impact, state.gitStatus)
                 state.draft?.engineeringInsight?.let { insight ->

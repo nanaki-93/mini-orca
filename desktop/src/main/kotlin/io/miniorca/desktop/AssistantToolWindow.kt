@@ -395,9 +395,6 @@ private fun AssistantDraftEditorSection(
 ) {
   Column(Modifier.fillMaxWidth()) {
     val draft = editor.serverDraft
-    val canValidate =
-        editor.status in
-            setOf(DraftEditorStatus.Generated, DraftEditorStatus.Dirty, DraftEditorStatus.Invalid)
     IdePaneHeader(
         title = "Editable draft",
         icon = DesktopIcon.Document,
@@ -430,31 +427,7 @@ private fun AssistantDraftEditorSection(
           enabled = editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale),
           label = "Required imports",
           modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
-      DraftValidationDiagnostics(
-          editor.diagnostics, retained = draftDiagnosticsAreEarlierEvidence(editor))
-      Text(
-          draftEditorStatusMessage(editor.status),
-          color = draftEditorStatusColor(editor.status),
-          style = IdeTypography.body,
-          modifier = Modifier.padding(top = 5.dp))
-      editor.validationAttempt
-          ?.takeIf { it.status != ValidationAttemptStatus.Running }
-          ?.let {
-            Text(
-                "Validation ${it.status.name.lowercase()}: ${it.message}",
-                color = Warning,
-                style = IdeTypography.body,
-                modifier = Modifier.padding(top = 5.dp))
-          }
-      MiniOrcaButton(
-          onClick = actions.validate,
-          enabled = canValidate,
-          tone = ActionTone.Primary,
-          modifier = Modifier.fillMaxWidth().padding(top = 7.dp)) {
-            Text(
-                if (editor.status == DraftEditorStatus.Validating) "Validating declaration…"
-                else "Validate draft for ${draft.targetSymbol}")
-          }
+      DraftValidationStage(editor, actions)
       MiniOrcaButton(
           onClick = actions.discard,
           tone = ActionTone.Destructive,
@@ -665,6 +638,8 @@ internal data class DraftEditorActions(
     val updateImportValue: (TextFieldValue) -> Unit,
     val validate: () -> Unit,
     val discard: () -> Unit,
+    val cancelValidation: (() -> Unit)? = null,
+    val review: (() -> Unit)? = null,
     val updateDeclarationValue: (TextFieldValue) -> Unit = { value ->
       updateDeclaration(value.text)
     },

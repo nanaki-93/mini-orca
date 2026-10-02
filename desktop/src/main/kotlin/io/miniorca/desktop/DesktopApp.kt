@@ -477,6 +477,7 @@ private fun draftEditorActions(
     fields: () -> DraftFieldBuffers?,
     setFields: (DraftFieldBuffers) -> Unit,
     requestDiscard: (PendingDraftDiscard.Direct) -> Unit,
+    review: () -> Unit,
 ): DraftEditorActions =
     DraftEditorActions(
         updateDeclaration = { text ->
@@ -496,6 +497,8 @@ private fun draftEditorActions(
           }
         },
         validate = presenter::validateEditableDraft,
+        cancelValidation = presenter::cancelDraftValidation,
+        review = review,
         discard = {
           val state = presenter.snapshot.value.state
           directDiscardRequest(state, reconcileDraftFields(fields(), state.review.editor))
@@ -1003,7 +1006,17 @@ internal fun MiniOrcaApp(
               ),
           editorActions =
               draftEditorActions(
-                  presenter, { draftFields }, { draftFields = it }, { pendingDraftDiscard = it }),
+                  presenter,
+                  { draftFields },
+                  { draftFields = it },
+                  { pendingDraftDiscard = it },
+                  review = {
+                    layout =
+                        layout
+                            .withEditorSurface(EditorSurface.Review)
+                            .openRight(RightToolWindow.Review)
+                            .withFocus(DesktopFocusRegion.Editor)
+                  }),
           modifier = modifier,
       )
       ComposerFocusEffect(
