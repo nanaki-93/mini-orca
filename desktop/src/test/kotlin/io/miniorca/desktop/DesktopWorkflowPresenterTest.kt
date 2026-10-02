@@ -5402,7 +5402,11 @@ class DesktopWorkflowPresenterTest {
                       draftRevision = 1,
                       draftHash = "draft-hash")))
           if (action == "undo")
-              presenter.dispatch(DesktopEvent.Applied(ApplyResult("next", "after", true)))
+              presenter.dispatch(
+                  DesktopEvent.Applied(
+                      ApplyResult("revision", "base", true),
+                      AppliedDeclarationScope(
+                          "project", "main.go", "Run", DraftMutationOperation.Apply)))
           val catalog = Json.decodeFromString<GoBenchmarkCatalog>(benchmarkCatalogJson())
           val prior = Json.decodeFromString<GoBenchmarkComparison>(benchmarkComparisonJson())
           presenter.dispatch(DesktopEvent.GoBenchmarkCatalogLoaded(catalog))
@@ -5499,7 +5503,11 @@ class DesktopWorkflowPresenterTest {
                             draftRevision = 1,
                             draftHash = "draft-hash")))
                 if (action == "undo")
-                    presenter.dispatch(DesktopEvent.Applied(ApplyResult("next", "after", true)))
+                    presenter.dispatch(
+                        DesktopEvent.Applied(
+                            ApplyResult("revision", "base", true),
+                            AppliedDeclarationScope(
+                                "project", "main.go", "Run", DraftMutationOperation.Apply)))
                 val catalog =
                     Json.decodeFromString<GoBenchmarkCatalog>(benchmarkCatalogJson(trusted = true))
                 presenter.dispatch(DesktopEvent.GoBenchmarkCatalogLoaded(catalog))
@@ -8947,15 +8955,38 @@ class DesktopWorkflowPresenterTest {
 
   @Test
   fun applyAndUndoReloadOnlyTheBoundDraftFile() {
-    val presenter = presenter { method, path, _ ->
-      when (method to path) {
-        "POST" to "/api/projects/current/apply" ->
-            response(
-                "{\"project_revision\":\"next\",\"post_apply_hash\":\"after\",\"undo_available\":true}")
-        "POST" to "/api/projects/current/undo" ->
-            response(
-                "{\"project_revision\":\"restored\",\"post_apply_hash\":\"before\",\"undo_available\":true}")
-        else -> response("{}")
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var revision = "revision"
+    var hash = "base"
+    val calls = mutableListOf<Pair<String, String>>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+          calls += method to path
+          when {
+            method == "POST" && path.endsWith("/apply") -> {
+              revision = "next"
+              hash = "after"
+              response(
+                  """{"project_revision":"$revision","post_apply_hash":"$hash","undo_available":true}""")
+            }
+            method == "POST" && path.endsWith("/undo") -> {
+              revision = "restored"
+              hash = "before"
+              response(
+                  """{"project_revision":"$revision","post_apply_hash":"$hash","undo_available":true}""")
+            }
+            path.endsWith("/index") ->
+                response("""{"project_id":"project","project_revision":"$revision"}""")
+            path.contains("/files/info") -> response(fileJson("main.go", hash))
+            else -> creationFileResponse(path) ?: response("{}")
+          }
+        }
+    fun drain() {
+      repeat(12) {
+        main.runPending()
+        io.runPending()
       }
     }
     try {
@@ -8971,13 +9002,76 @@ class DesktopWorkflowPresenterTest {
                   draftRevision = draft.revision,
                   draftHash = draft.hash)))
       presenter.applyEditableDraft()
-      eventually { presenter.snapshot.value.state.review.applied?.postApplyHash == "after" }
+      drain()
+      assertEquals("after", presenter.snapshot.value.state.selectedFile?.contentHash)
+      assertEquals("next", presenter.snapshot.value.state.project?.projectRevision)
       presenter.undoAppliedDraft()
-      eventually { presenter.snapshot.value.state.review.applied?.postApplyHash == "before" }
-
+      presenter.undoAppliedDraft()
+      drain()
       assertEquals("before", presenter.snapshot.value.state.review.applied?.postApplyHash)
+      assertEquals("before", presenter.snapshot.value.state.selectedFile?.contentHash)
+      assertEquals(
+          DraftMutationOperation.Undo,
+          presenter.snapshot.value.state.review.receiptScope?.operation)
+      presenter.undoAppliedDraft()
+      drain()
+      assertEquals(1, calls.count { it == "POST" to "/api/projects/current/apply" })
+      assertEquals(1, calls.count { it == "POST" to "/api/projects/current/undo" })
     } finally {
       presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun undoConflictKeepsApplyReceiptAndRefreshFailureNeverRestoresSource() {
+    for (status in listOf(409, 503)) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val calls = mutableListOf<String>()
+      val presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { method, path, _ ->
+            calls += "$method $path"
+            TransportResponse(status, """{"message":"Source cannot be restored"}""")
+          }
+      try {
+        loadFile(presenter)
+        val receipt = ApplyResult("revision", "base", true)
+        presenter.dispatch(
+            DesktopEvent.Applied(
+                receipt,
+                AppliedDeclarationScope("project", "main.go", "Run", DraftMutationOperation.Apply)))
+        presenter.undoAppliedDraft()
+        presenter.undoAppliedDraft()
+        repeat(4) {
+          main.runPending()
+          io.runPending()
+        }
+        assertEquals(receipt, presenter.snapshot.value.state.review.applied)
+        assertEquals("base", presenter.snapshot.value.state.selectedFile?.contentHash)
+        assertEquals(
+            if (status == 409) DraftMutationStatus.Conflict else DraftMutationStatus.Failed,
+            presenter.snapshot.value.state.review.mutation?.status)
+        presenter.refreshReceiptSource()
+        repeat(4) {
+          main.runPending()
+          io.runPending()
+        }
+        assertEquals(receipt, presenter.snapshot.value.state.review.applied)
+        assertTrue(
+            presenter.snapshot.value.state.review.receiptRefreshError!!.contains(
+                "Source cannot be restored"))
+        presenter.undoAppliedDraft()
+        repeat(4) {
+          main.runPending()
+          io.runPending()
+        }
+        assertEquals(1, calls.count { it == "POST /api/projects/current/undo" })
+      } finally {
+        presenter.close()
+        scope.cancel()
+      }
     }
   }
 

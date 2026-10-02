@@ -123,7 +123,7 @@ internal fun reviewNextActionUiState(
         ReviewNextActionKind.Undo,
         decision.undoLabel,
         scope,
-        decision.receiptDetail,
+        decision.undoReason,
         undoAvailable,
     )
   }
@@ -267,7 +267,9 @@ internal fun editorProgressionRows(state: ReviewToolWindowState): List<ReviewEvi
             state.checks,
             state.applied,
             state.checkAttempt,
-            state.mutation),
+            state.mutation,
+            state.receiptScope,
+            state.receiptRefreshError),
     )
 
 /** Presentation-only review evidence; daemon-owned draft and check guards remain authoritative. */
@@ -502,13 +504,17 @@ internal data class ApplyDecisionUiState(
     val receiptDetail: String = "",
     val undoLabel: String = "Undo",
     val pendingOperation: DraftMutationOperation? = null,
+    val undoReason: String = "",
 )
 
 internal fun applyActionLabel(draft: DeclarationDraft?): String =
     draft?.let { "Apply ${it.targetSymbol} to ${it.targetPath}" } ?: "Apply draft"
 
-internal fun applyReceiptTitle(result: ApplyResult): String =
-    when (result.audit?.action?.lowercase()) {
+internal fun applyReceiptTitle(
+    result: ApplyResult,
+    operation: DraftMutationOperation? = null
+): String =
+    when (operation?.name?.lowercase() ?: result.audit?.action?.lowercase()) {
       "undo" -> "Change undone"
       else -> "Change applied"
     }
@@ -522,22 +528,28 @@ internal fun applyDecisionUiState(
     applied: ApplyResult?,
     checkAttempt: CheckAttempt? = null,
     mutation: DraftMutationAttempt? = null,
+    receiptScope: AppliedDeclarationScope? = null,
+    receiptRefreshError: String? = null,
 ): ApplyDecisionUiState {
-  if (mutation?.status == DraftMutationStatus.Running)
+  if (applied == null && mutation?.status == DraftMutationStatus.Running)
       return ApplyDecisionUiState(
           false, applyActionLabel(draft), mutation.message, pendingOperation = mutation.operation)
   if (applied != null) {
-    val action = applyReceiptTitle(applied)
+    val action = applyReceiptTitle(applied, receiptScope?.operation)
+    val undo =
+        undoEligibility(project, selected, applied, receiptScope, mutation, receiptRefreshError)
     return ApplyDecisionUiState(
         eligible = false,
         actionLabel = "Apply unavailable after receipt",
         reason =
-            "The previous guarded operation must be reviewed before another draft can be applied.",
+            mutation?.takeIf { it.status == DraftMutationStatus.Running }?.message
+                ?: "The previous guarded operation must be reviewed before another draft can be applied.",
         receiptTitle = action,
         receiptDetail =
-            "${applied.audit?.targetPath?.takeIf { it.isNotBlank() } ?: "Selected file"} ${if (action == "Change undone") "was restored" else "was updated"}.",
-        undoLabel =
-            if (applied.undoAvailable) "Undo this change" else "Undo is no longer available",
+            "${applied.audit?.targetPath?.takeIf { it.isNotBlank() } ?: receiptScope?.path ?: "Selected file"} ${if (action == "Change undone") "was restored" else "was updated"}.",
+        undoLabel = if (undo.eligible) "Undo this change" else "Undo is no longer available",
+        undoReason = undo.reason,
+        pendingOperation = mutation?.takeIf { it.status == DraftMutationStatus.Running }?.operation,
     )
   }
   val eligibility = draftReviewEligibility(editor, draft, checks, selected, project, checkAttempt)
@@ -616,7 +628,9 @@ internal fun ReviewToolWindow(
           state.checks,
           state.applied,
           state.checkAttempt,
-          state.mutation)
+          state.mutation,
+          state.receiptScope,
+          state.receiptRefreshError)
   val nextAction =
       reviewNextActionUiState(
           evidence, decision, state.draft, state.checks, state.session, state.checksRunning)
@@ -641,10 +655,17 @@ internal fun ReviewToolWindow(
                 ReviewReadiness(
                     decision.receiptTitle, decision.receiptDetail, ReviewEvidenceStatus.Passed)
                 Text(
-                    if (state.applied?.undoAvailable == true) "Undo available"
+                    if (decision.undoLabel == "Undo this change") "Undo available"
                     else "Undo unavailable",
-                    color = if (state.applied?.undoAvailable == true) Success else Warning,
+                    color = if (decision.undoLabel == "Undo this change") Success else Warning,
                     style = IdeTypography.workspaceMetadata)
+                state.applied?.let { ApplyReceiptDetails(it, state.receiptScope) }
+                state.receiptRefreshError?.let { DiagnosticText("Source refresh failed: $it") }
+                evidenceActions.refreshSource?.let { refresh ->
+                  MiniOrcaButton(onClick = refresh, modifier = Modifier.fillMaxWidth()) {
+                    Text("Refresh source")
+                  }
+                }
               } else {
                 ReviewReadiness(
                     if (state.draft == null) "No candidate"
@@ -946,6 +967,8 @@ internal data class ReviewToolWindowState(
     val checksRunning: Boolean,
     val checkAttempt: CheckAttempt? = null,
     val mutation: DraftMutationAttempt? = null,
+    val receiptScope: AppliedDeclarationScope? = null,
+    val receiptRefreshError: String? = null,
 )
 
 /** Review and repair intents that leave guarded Apply and Undo separate. */
@@ -953,6 +976,7 @@ internal data class ReviewToolWindowActions(
     val runChecks: () -> Unit,
     val reviseWithCheckOutput: () -> Unit,
     val editDraft: () -> Unit,
+    val refreshSource: (() -> Unit)? = null,
 )
 
 /** The only source-mutating intents exposed by the review pane. */

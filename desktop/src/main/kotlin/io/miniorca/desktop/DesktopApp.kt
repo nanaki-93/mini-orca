@@ -589,6 +589,8 @@ internal fun MiniOrcaApp(
                   applied = appState.review.applied,
                   checkAttempt = appState.review.checkAttempt,
                   mutation = appState.review.mutation,
+                  receiptScope = appState.review.receiptScope,
+                  receiptRefreshError = appState.review.receiptRefreshError,
               ),
       )
   LaunchedEffect(editorProgress.progress) {
@@ -1995,6 +1997,8 @@ internal fun reviewToolWindowState(state: DesktopState) =
         checksRunning = state.review.checkAttempt?.status == ValidationAttemptStatus.Running,
         checkAttempt = state.review.checkAttempt,
         mutation = state.review.mutation,
+        receiptScope = state.review.receiptScope,
+        receiptRefreshError = state.review.receiptRefreshError,
     )
 
 private fun reviewToolWindowActions(
@@ -2007,6 +2011,7 @@ private fun reviewToolWindowActions(
         runChecks = presenter::runDraftChecks,
         reviseWithCheckOutput = { presenter.reviseWithCheckOutput(chatMode, newChatSymbol) },
         editDraft = editDraft,
+        refreshSource = presenter::refreshReceiptSource,
     )
 
 private fun draftApplicationActions(presenter: DesktopWorkflowPresenter) =

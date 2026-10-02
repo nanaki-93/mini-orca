@@ -503,6 +503,8 @@ data class DraftReviewState(
     val benchmark: BenchmarkEvidenceState = BenchmarkEvidenceState(),
     val checkAttempt: CheckAttempt? = null,
     val mutation: DraftMutationAttempt? = null,
+    val receiptScope: AppliedDeclarationScope? = null,
+    val receiptRefreshError: String? = null,
 )
 
 sealed interface BenchmarkDiscoveryOutcome {
@@ -806,7 +808,10 @@ sealed interface DesktopEvent {
 
   data object DraftDiscarded : DesktopEvent
 
-  data class Applied(val result: ApplyResult?) : DesktopEvent
+  data class Applied(val result: ApplyResult?, val scope: AppliedDeclarationScope? = null) :
+      DesktopEvent
+
+  data class ReceiptRefreshFailed(val message: String) : DesktopEvent
 
   data class DraftMutationUpdated(val attempt: DraftMutationAttempt) : DesktopEvent
 
@@ -923,7 +928,11 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
           copy(
               selection = FileSelectionState(selectedFile = event.file, symbols = event.symbols),
               chat = ChatState(),
-              review = DraftReviewState(applied = review.applied),
+              review =
+                  DraftReviewState(
+                      applied = review.applied,
+                      receiptScope = review.receiptScope,
+                      mutation = review.mutation),
               jobs = jobs.copy(loading = false, status = event.file.path, error = null),
           )
       is DesktopEvent.SelectedFileRefreshed -> withRefreshedFile(event)
@@ -989,6 +998,10 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
             review =
                 review.copy(
                     draft = event.proposal.draft,
+                    applied = null,
+                    receiptScope = null,
+                    receiptRefreshError = null,
+                    mutation = null,
                     editor = editableDraft(event.proposal.draft),
                     checks = null,
                     checkAttempt = null,
@@ -1022,6 +1035,10 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
               review =
                   review.copy(
                       draft = event.draft,
+                      applied = null,
+                      receiptScope = null,
+                      receiptRefreshError = null,
+                      mutation = null,
                       editor =
                           editableDraft(event.draft)
                               .copy(
@@ -1036,14 +1053,22 @@ fun DesktopState.reduce(event: DesktopEvent): DesktopState =
       DesktopEvent.DraftDiscarded ->
           copy(
               chat = ChatState(),
-              review = DraftReviewState(applied = review.applied),
+              review =
+                  DraftReviewState(
+                      applied = review.applied,
+                      receiptScope = review.receiptScope,
+                      mutation = review.mutation),
               jobs = jobs.copy(loading = false, error = null))
+      is DesktopEvent.ReceiptRefreshFailed ->
+          copy(review = review.copy(receiptRefreshError = event.message))
       is DesktopEvent.DraftMutationUpdated -> copy(review = review.copy(mutation = event.attempt))
       is DesktopEvent.Applied ->
           copy(
               review =
                   review.copy(
                       applied = event.result,
+                      receiptScope = event.scope,
+                      receiptRefreshError = null,
                       mutation = null,
                       benchmark = review.benchmark.withoutCatalog()),
               jobs = jobs.copy(loading = false))
