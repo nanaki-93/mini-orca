@@ -469,7 +469,6 @@ class DesktopWorkflowControllerTest {
     controller.dispatch(DesktopEvent.DraftDiscarded)
     assertTrue(controller.state.chat.attempts.isEmpty())
     assertFalse(controller.chatAttemptFailed(next, nextFile, "late"))
-    assertNull(controller.state.chat.failure)
   }
 
   @Test
@@ -508,7 +507,6 @@ class DesktopWorkflowControllerTest {
     assertTrue(controller.fileLoaded(second, file("other.go", "main-hash"), listOf(run)))
     controller.dispatch(DesktopEvent.SymbolSelected(run))
     assertTrue(controller.state.chat.attempts.isEmpty())
-    assertNull(controller.state.chat.failure)
     assertNull(controller.beginChatAttempt(scope, destination, "stale file"))
     val otherScope = scope.copy(path = "other.go")
     assertTrue(controller.beginChatAttempt(otherScope, destination, "Other file") != null)
@@ -526,7 +524,7 @@ class DesktopWorkflowControllerTest {
     assertTrue(
         controller.beginChatAttempt(scope.copy(projectId = "another"), destination, "Fresh") !=
             null)
-    assertNull(controller.state.chat.failure)
+    assertEquals("Fresh", controller.state.chat.attempts.single().requestText)
   }
 
   private fun chatScope(symbol: SymbolInfo) =

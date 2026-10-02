@@ -585,12 +585,7 @@ internal fun DesktopShell(
   }
   fun showStatusDetails(opener: TransientOpener) {
     if (statusDetailsVisible) return
-    val region =
-        when (opener) {
-          TransientOpener.RailModels -> DesktopFocusRegion.LeftToolWindow
-          TransientOpener.FooterModels -> DesktopFocusRegion.StatusBar
-          else -> return
-        }
+    val region = statusDetailsRegion(opener) ?: return
     statusOrigin = TransientFocusOrigin(region, appState.project?.projectId, opener)
     layoutActions.updateLayout(layout.withFocus(region))
     statusDetailsVisible = true
@@ -681,9 +676,8 @@ internal fun DesktopShell(
               .focusRequester(focusRequesters.fallback)
               .focusable()
               .onPreviewKeyEvent { event ->
-                if (event.key == Key.Enter &&
-                    (event.isMetaPressed || event.isCtrlPressed) &&
-                    (context.visible || palette.visible || statusDetailsVisible))
+                if (transientBlocksGenerateShortcut(
+                    event, context.visible, palette.visible, statusDetailsVisible))
                     return@onPreviewKeyEvent false
                 handleDesktopShortcut(
                     event = event,
@@ -1115,6 +1109,23 @@ private suspend fun restoreTerminalEditorFocus(
   focusManager.clearFocus(force = true)
   editor.requestFocus()
 }
+
+private fun statusDetailsRegion(opener: TransientOpener): DesktopFocusRegion? =
+    when (opener) {
+      TransientOpener.RailModels -> DesktopFocusRegion.LeftToolWindow
+      TransientOpener.FooterModels -> DesktopFocusRegion.StatusBar
+      else -> null
+    }
+
+private fun transientBlocksGenerateShortcut(
+    event: KeyEvent,
+    contextVisible: Boolean,
+    paletteVisible: Boolean,
+    statusDetailsVisible: Boolean,
+): Boolean =
+    event.key == Key.Enter &&
+        (event.isMetaPressed || event.isCtrlPressed) &&
+        (contextVisible || paletteVisible || statusDetailsVisible)
 
 internal fun handleDesktopShortcut(
     event: KeyEvent,

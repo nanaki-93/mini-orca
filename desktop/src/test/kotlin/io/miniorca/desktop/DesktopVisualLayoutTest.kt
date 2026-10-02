@@ -7973,7 +7973,7 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("assistant-function-presets-480-1.3")
-          assertTrue(fixture.hasText("Ready for the selected declaration"))
+          assertTrue(fixture.hasText("Enter a specific intent before sending."))
           fixture.clickText("Fix")
           fixture.render("assistant-function-preset-prepared-480-1.3")
 

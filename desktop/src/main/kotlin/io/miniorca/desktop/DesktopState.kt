@@ -419,18 +419,7 @@ data class ChatState(
     val session: ChatSession? = null,
     val pendingRequestId: Long = 0,
     val attempts: List<ChatRequestAttempt> = emptyList(),
-) {
-  // Temporary read bridge for the existing Assistant; the history UI will consume attempts.
-  val failure: ChatRequestFailure?
-    get() =
-        attempts.lastOrNull()?.let { attempt ->
-          (attempt.outcome as? ChatRequestOutcome.Failed)?.let {
-            ChatRequestFailure(attempt.scope.target, it.message)
-          }
-        }
-}
-
-data class ChatRequestFailure(val target: ChatTarget, val message: String)
+)
 
 private fun ChatState.finishAttempt(generation: Long, outcome: ChatRequestOutcome): ChatState =
     copy(

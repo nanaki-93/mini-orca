@@ -108,6 +108,8 @@ class DesktopAccessibilityTest {
           assertTrue(fixture.hasText("Confirm the Function remote destination before sending."))
           assertTrue(fixture.isDisabled("Send message"))
           assertEquals("Not confirmed", fixture.descriptionState("Confirm remote destination"))
+          fixture.scrollBy(100_000f, "assistant-composer-scroll")
+          fixture.render()
           assertTrue(fixture.requestDescriptionFocus("Confirm remote destination"))
           fixture.render()
           fixture.assertColorVisible(FocusAccent)
