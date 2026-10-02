@@ -1033,3 +1033,10 @@ in a scrolling list. File paths wrap for disambiguation. Arrow keys select from 
 filter or move focus between result controls; Enter activates the current result,
 and Space activates a focused result while remaining ordinary text in the filter.
 Preparation commands keep their existing target checks and discard confirmation.
+
+The footer and Models rail entry open the same read-only provider details. Separate
+Analyze, Bugs and Function edits rows show configured models and selectable
+destinations. Shared model/destination pairs count once; incomplete model or
+destination metadata leaves totals unavailable. A displayed run's captured providers
+stay labeled separately from current configuration and daemon connectivity. Opening
+this dialog neither tests provider health nor grants consent to send project context.

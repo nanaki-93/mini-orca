@@ -2237,10 +2237,7 @@ class DesktopKeyboardNavigationTest {
             assertTrue(fixture.hasText("Models: 1 local · 1 cloud"))
             assertTrue(
                 fixture.hasText(
-                    "Distinct configured models by destination; shared models are counted once." +
-                        "\nAnalyze: local · shared · local provider · project context stays on this machine" +
-                        "\nBugs: cloud · cloud-model · remote provider · confirmation required before sending project context" +
-                        "\nFunction edits: local · shared · local provider · project context stays on this machine"))
+                    "Distinct configured models by destination; shared models are counted once."))
             assertEquals(Workspace.Summary, state.app.workspace)
             fixture.clickDescription(opener)
             fixture.render()
