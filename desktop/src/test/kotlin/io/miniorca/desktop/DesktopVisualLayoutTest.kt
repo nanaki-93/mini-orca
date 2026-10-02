@@ -211,7 +211,8 @@ class DesktopVisualLayoutTest {
                               { calls++ },
                               { calls++ },
                               changeCreationKind = { calls++ }),
-                          DraftEditorActions({ calls++ }, { calls++ }, { calls++ }),
+                          DraftEditorActions(
+                              { calls++ }, { calls++ }, { calls++ }, discard = { calls++ }),
                           Modifier.fillMaxSize())
                     }
                 .use { fixture ->
@@ -585,7 +586,8 @@ class DesktopVisualLayoutTest {
                             { actions++ },
                             changeCreationKind = { actions++ },
                             preparePreset = { actions++ }),
-                        DraftEditorActions({ actions++ }, { actions++ }, { actions++ }),
+                        DraftEditorActions(
+                            { actions++ }, { actions++ }, { actions++ }, discard = { actions++ }),
                         Modifier.fillMaxSize())
                   }
               .use { fixture ->
@@ -8086,7 +8088,10 @@ class DesktopVisualLayoutTest {
                   { assistantActions++ },
                   changeCreationKind = { assistantActions++ }),
               DraftEditorActions(
-                  { assistantActions++ }, { assistantActions++ }, { assistantActions++ }),
+                  { assistantActions++ },
+                  { assistantActions++ },
+                  { assistantActions++ },
+                  discard = { assistantActions++ }),
               Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -8330,7 +8335,7 @@ class DesktopVisualLayoutTest {
                         message = preparedFunctionChangeMessage(preset)
                         focusRequester.requestFocus()
                       }),
-              editorActions = DraftEditorActions({}, {}, {}),
+              editorActions = DraftEditorActions({}, {}, {}, discard = {}),
               modifier = Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -14291,6 +14296,7 @@ internal fun AdaptiveProductionEditorFixture(
                                           {},
                                           {},
                                           onValidate,
+                                          discard = {},
                                           updateDeclarationValue = onDraftInput),
                                       contentModifier)
                             }

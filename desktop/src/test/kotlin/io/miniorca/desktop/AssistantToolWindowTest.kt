@@ -14,6 +14,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class AssistantToolWindowTest {
@@ -59,6 +60,200 @@ class AssistantToolWindowTest {
           assertEquals(2, dismissed)
           assertEquals(0, confirmed)
         }
+  }
+
+  @Test
+  fun discardDraftControlInvokesTheSuppliedIntent() {
+    val draft = editableDraftForFindingTest().serverDraft
+    val session =
+        ChatSession(
+            "session", "project", "revision", "hash", "main.go", "replace_symbol", "Run", "active")
+    val state =
+        historyState(ChatTarget(ChatEditMode.ReplaceSymbol, "Run"), session, emptyList())
+            .copy(draft = draft, editor = editableDraft(draft))
+    var discards = 0
+    ComposeVisualFixture(480, 900) {
+          AssistantToolWindow(
+              state,
+              AssistantConversationActions({}, {}, {}, {}, {}, {}, changeCreationKind = {}),
+              DraftEditorActions({}, {}, {}, discard = { discards++ }),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("Discard draft…")
+          assertEquals(1, discards)
+        }
+  }
+
+  @Test
+  fun directDiscardApprovalIsSingleUseAndBoundToProjectFileRevisionAndRawEdits() {
+    val draft = editableDraftForFindingTest().serverDraft
+    val file = creationFile().copy(path = draft.targetPath, contentHash = draft.baseFileHash)
+    val project = testHistoryProject()
+    val initial =
+        DesktopState(
+            projectState = ProjectWorkspaceState(project = project),
+            selection = FileSelectionState(selectedFile = file),
+            review = DraftReviewState(draft = draft, editor = editableDraft(draft)))
+    val fields = reconcileDraftFields(null, initial.review.editor)!!
+    val identity = directDraftIdentity(initial, fields)!!
+    val target = CurrentEditIdentity(ChatEditMode.ReplaceSymbol, "main.go", "Run", true)
+    var discards = 0
+    fun approve(state: DesktopState, buffer: DraftFieldBuffers = fields): Boolean =
+        PendingDraftDiscard.Direct(target, identity).let { pending ->
+          confirmDirectDraftDiscard(pending, pending, state, buffer) { discards++ }
+        }
+
+    assertFalse(approve(initial, fields.copy(imports = TextFieldValue(" fmt, "))))
+    val restoredAfterEdit =
+        fields.copy(localEditGeneration = 2, declaration = TextFieldValue(draft.declaration))
+    assertFalse(approve(initial, restoredAfterEdit))
+    assertFalse(
+        approve(
+            initial.copy(
+                projectState = ProjectWorkspaceState(project = project.copy(projectId = "other")))))
+    assertFalse(
+        approve(
+            initial.copy(
+                selection = FileSelectionState(selectedFile = file.copy(path = "other.go")))))
+    assertFalse(
+        approve(
+            initial.copy(
+                selection = FileSelectionState(selectedFile = file.copy(contentHash = "new")))))
+    assertFalse(approve(initial.copy(review = initial.review.copy(draft = draft.copy(id = "new")))))
+    assertFalse(
+        approve(
+            initial.copy(
+                review =
+                    initial.review.copy(
+                        draft = draft.copy(targetSymbol = "Other"),
+                        editor = editableDraft(draft.copy(targetSymbol = "Other"))))))
+    assertFalse(
+        approve(
+            initial.copy(
+                review =
+                    initial.review.copy(
+                        draft = draft.copy(revision = 2, hash = "new"),
+                        editor = editableDraft(draft.copy(revision = 2, hash = "new"))))))
+    assertEquals(0, discards)
+    val pending = PendingDraftDiscard.Direct(target, identity)
+    assertTrue(confirmDirectDraftDiscard(pending, pending, initial, fields) { discards++ })
+    assertFalse(confirmDirectDraftDiscard(pending, pending, initial, fields) { discards++ })
+    assertEquals(1, discards)
+  }
+
+  @Test
+  fun editedValidatedDraftCanOpenAndConfirmDirectDiscardWithoutApprovingLaterEdits() {
+    for (applicable in listOf(true, false)) {
+      val draft =
+          editableDraftForFindingTest()
+              .serverDraft
+              .copy(
+                  validation =
+                      DeclarationValidation(
+                          applicable = applicable,
+                          scopeMode = "strict_symbol",
+                          diff = UnifiedDiff("main.go", "main.go")))
+      val initial =
+          DesktopState(
+              projectState = ProjectWorkspaceState(project = testHistoryProject()),
+              selection =
+                  FileSelectionState(
+                      selectedFile =
+                          creationFile()
+                              .copy(path = draft.targetPath, contentHash = draft.baseFileHash)),
+              review = DraftReviewState(draft = draft, editor = editableDraft(draft)))
+      val declaration = "func Run() { changed() }"
+      val edited = initial.reduce(DesktopEvent.DraftEdited(declaration = declaration))
+      val fields =
+          reconcileDraftFields(null, initial.review.editor)!!.copy(
+              declaration = TextFieldValue(declaration), localEditGeneration = 1)
+      val identity = directDraftIdentity(edited, fields)
+      assertNotNull(identity)
+      var discards = 0
+      val pending =
+          PendingDraftDiscard.Direct(
+              CurrentEditIdentity(ChatEditMode.ReplaceSymbol, draft.targetPath, "Run", true),
+              identity)
+      val laterEdit = edited.reduce(DesktopEvent.DraftEdited(declaration = "func Run() {}"))
+      assertFalse(
+          confirmDirectDraftDiscard(
+              pending,
+              pending,
+              laterEdit,
+              fields.copy(declaration = TextFieldValue("func Run() {}"), localEditGeneration = 2)) {
+                discards++
+              })
+      assertTrue(confirmDirectDraftDiscard(pending, pending, edited, fields) { discards++ })
+      assertEquals(1, discards)
+    }
+  }
+
+  @Test
+  fun replacedDiscardDialogCallbacksCannotApproveOrDismissNewerConfirmation() {
+    val draft = editableDraftForFindingTest().serverDraft
+    val state =
+        DesktopState(
+            projectState = ProjectWorkspaceState(project = testHistoryProject()),
+            selection =
+                FileSelectionState(selectedFile = creationFile().copy(path = draft.targetPath)),
+            review = DraftReviewState(draft = draft, editor = editableDraft(draft)))
+    val fields = reconcileDraftFields(null, state.review.editor)!!
+    val target = CurrentEditIdentity(ChatEditMode.ReplaceSymbol, "main.go", "Run", true)
+    val identity = directDraftIdentity(state, fields)!!
+    val old = PendingDraftDiscard.Direct(target, identity)
+    val newer = PendingDraftDiscard.Direct(target, identity)
+    var current: PendingDraftDiscard? = old
+    var discards = 0
+    val oldConfirm = {
+      if (pendingDiscardIsCurrent(old, current)) {
+        confirmDirectDraftDiscard(old, current, state, fields) { discards++ }
+        current = null
+      }
+    }
+    val oldDismiss = { if (pendingDiscardIsCurrent(old, current)) current = null }
+    current = newer
+    oldConfirm()
+    oldDismiss()
+    assertEquals(0, discards)
+    assertTrue(current === newer)
+    assertFalse(confirmDirectDraftDiscard(old, current, state, fields) { discards++ })
+    assertTrue(confirmDirectDraftDiscard(newer, current, state, fields) { discards++ })
+    assertEquals(1, discards)
+  }
+
+  @Test
+  fun directDiscardApprovalDoesNotTreatSelectionAsAnEdit() {
+    val draft = editableDraftForFindingTest().serverDraft
+    val initial =
+        DesktopState(
+            projectState = ProjectWorkspaceState(project = testHistoryProject()),
+            selection =
+                FileSelectionState(selectedFile = creationFile().copy(path = draft.targetPath)),
+            review = DraftReviewState(draft = draft, editor = editableDraft(draft)))
+    val fields = reconcileDraftFields(null, initial.review.editor)!!
+    val pending =
+        PendingDraftDiscard.Direct(
+            CurrentEditIdentity(ChatEditMode.ReplaceSymbol, "main.go", "Run", true),
+            directDraftIdentity(initial, fields)!!)
+    var discards = 0
+    assertTrue(
+        confirmDirectDraftDiscard(
+            pending,
+            pending,
+            initial,
+            fields.copy(declaration = fields.declaration.copy(selection = TextRange(4)))) {
+              discards++
+            })
+    assertEquals(1, discards)
+    val stale =
+        initial.copy(
+            selection =
+                FileSelectionState(
+                    selectedFile = initial.selectedFile!!.copy(contentHash = "changed")))
+    assertTrue(
+        directDraftIdentity(stale, reconcileDraftFields(fields, stale.review.editor)) != null)
   }
 
   private fun editableDraftForFindingTest(): EditableDraftState =
@@ -125,7 +320,7 @@ class AssistantToolWindowTest {
                   {},
                   changeCreationKind = {},
                   preparePreset = { prepared = it }),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -198,7 +393,7 @@ class AssistantToolWindowTest {
                 base.copy(sending = running, remoteConfirmed = true),
                 AssistantConversationActions(
                     {}, {}, {}, {}, { activated++ }, { activated++ }, changeCreationKind = {}),
-                DraftEditorActions({}, {}, {}),
+                DraftEditorActions({}, {}, {}, discard = {}),
                 Modifier.fillMaxSize())
           }
           .use { fixture ->
@@ -241,7 +436,7 @@ class AssistantToolWindowTest {
           AssistantToolWindow(
               historyState(target, null, emptyList()).copy(functionModel = model),
               AssistantConversationActions({}, {}, {}, {}, {}, {}, changeCreationKind = {}),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -257,7 +452,7 @@ class AssistantToolWindowTest {
               historyState(target, null, emptyList()).copy(functionModel = remote),
               AssistantConversationActions(
                   {}, {}, { confirmations++ }, {}, {}, {}, changeCreationKind = {}),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -308,7 +503,7 @@ class AssistantToolWindowTest {
               base,
               AssistantConversationActions(
                   {}, {}, { confirmations++ }, {}, { sends++ }, {}, changeCreationKind = {}),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -323,7 +518,7 @@ class AssistantToolWindowTest {
           AssistantToolWindow(
               invalid,
               AssistantConversationActions({}, {}, {}, {}, {}, {}, changeCreationKind = {}),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -335,7 +530,7 @@ class AssistantToolWindowTest {
           AssistantToolWindow(
               base.copy(remoteConfirmed = true),
               AssistantConversationActions({}, {}, {}, {}, {}, {}, changeCreationKind = {}),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -370,7 +565,7 @@ class AssistantToolWindowTest {
               state,
               AssistantConversationActions(
                   {}, {}, {}, {}, { sent++ }, { canceled++ }, changeCreationKind = {}),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -406,7 +601,7 @@ class AssistantToolWindowTest {
                           ChatRequestOutcome.Failed("provider\u0000 unavailable")))),
               AssistantConversationActions(
                   {}, {}, {}, {}, { sends++ }, {}, changeCreationKind = {}),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -490,7 +685,7 @@ class AssistantToolWindowTest {
           AssistantToolWindow(
               state,
               AssistantConversationActions({}, {}, {}, {}, {}, {}, changeCreationKind = {}),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -513,7 +708,7 @@ class AssistantToolWindowTest {
           AssistantToolWindow(
               historyState(target, null, listOf(attempt)).copy(sending = true),
               AssistantConversationActions({}, {}, {}, {}, {}, {}, changeCreationKind = {}),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -683,7 +878,7 @@ class AssistantToolWindowTest {
                   { sends++ },
                   {},
                   changeCreationKind = {}),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -741,7 +936,7 @@ class AssistantToolWindowTest {
                           { requests++ },
                           {},
                           changeCreationKind = {}),
-                      DraftEditorActions({}, {}, {}),
+                      DraftEditorActions({}, {}, {}, discard = {}),
                       contentModifier)
                 },
                 modifier = Modifier.fillMaxSize())
@@ -812,7 +1007,7 @@ class AssistantToolWindowTest {
                     changes++
                     kind = selected
                   }),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -872,7 +1067,7 @@ class AssistantToolWindowTest {
                         target = validation.target,
                         targetValidation = validation),
                 AssistantConversationActions({}, {}, {}, {}, {}, {}, changeCreationKind = {}),
-                DraftEditorActions({}, {}, {}),
+                DraftEditorActions({}, {}, {}, discard = {}),
                 Modifier.fillMaxSize())
           }
           .use { fixture ->
@@ -897,7 +1092,7 @@ class AssistantToolWindowTest {
                     state,
                     AssistantConversationActions(
                         {}, {}, {}, {}, {}, {}, changeCreationKind = { changes++ }),
-                    DraftEditorActions({}, {}, {}),
+                    DraftEditorActions({}, {}, {}, discard = {}),
                     Modifier.fillMaxSize())
               }
               .use { fixture ->
@@ -1022,7 +1217,7 @@ class AssistantToolWindowTest {
                   FocusRequester(),
                   targetValidation = validation),
               AssistantConversationActions({}, {}, {}, {}, {}, {}, changeCreationKind = {}),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -1055,7 +1250,8 @@ class AssistantToolWindowTest {
                     normalized = parseRequiredImports(value.text)
                     updates++
                   },
-                  validate = {}),
+                  validate = {},
+                  discard = {}),
               Modifier.fillMaxSize())
         }
         .use { fixture ->
