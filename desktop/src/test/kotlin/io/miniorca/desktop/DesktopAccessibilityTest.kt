@@ -63,7 +63,7 @@ class DesktopAccessibilityTest {
                   { sends++ },
                   {},
                   changeCreationKind = { kind = it }),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               androidx.compose.ui.Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -172,7 +172,7 @@ class DesktopAccessibilityTest {
                   { calls += "cancel" },
                   changeCreationKind = { calls += "kind" },
                   preparePreset = { calls += "preset" }),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               androidx.compose.ui.Modifier.fillMaxSize())
         }
         .use { fixture ->

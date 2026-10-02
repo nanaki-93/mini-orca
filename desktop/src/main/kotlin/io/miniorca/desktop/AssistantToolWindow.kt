@@ -291,6 +291,7 @@ internal fun AssistantToolWindow(
                 state.draftInput ?: TextFieldValue(state.editor.declaration),
                 state.importInput ?: TextFieldValue(state.editor.imports.joinToString(", ")),
                 state.draftFocus,
+                state.discardFocus,
                 state.draft.engineeringInsight,
                 state.draft.state.equals("stale", ignoreCase = true),
                 draftCreationKind(state.draft, state.attempts),
@@ -386,6 +387,7 @@ private fun AssistantDraftEditorSection(
     declaration: TextFieldValue,
     importText: TextFieldValue,
     draftFocus: FocusRequester,
+    discardFocus: FocusRequester?,
     insight: EngineeringInsight?,
     stale: Boolean,
     creationKind: DeclarationCreationKind?,
@@ -452,6 +454,15 @@ private fun AssistantDraftEditorSection(
             Text(
                 if (editor.status == DraftEditorStatus.Validating) "Validating declaration…"
                 else "Validate draft for ${draft.targetSymbol}")
+          }
+      MiniOrcaButton(
+          onClick = actions.discard,
+          tone = ActionTone.Destructive,
+          modifier =
+              Modifier.fillMaxWidth()
+                  .padding(top = 5.dp)
+                  .then(discardFocus?.let { Modifier.focusRequester(it) } ?: Modifier)) {
+            Text("Discard draft…")
           }
       EngineeringInsightPanel(insight, stale = stale, scopeLabel = "Current proposal")
     }
@@ -614,6 +625,7 @@ internal data class AssistantToolWindowState(
     val remoteConfirmed: Boolean,
     val chatFocus: FocusRequester,
     val draftFocus: FocusRequester,
+    val discardFocus: FocusRequester? = null,
     val messageInput: TextFieldValue = TextFieldValue(message),
     val draftInput: TextFieldValue? = null,
     val importInput: TextFieldValue? = null,
@@ -652,6 +664,7 @@ internal data class DraftEditorActions(
     val updateDeclaration: (String) -> Unit,
     val updateImportValue: (TextFieldValue) -> Unit,
     val validate: () -> Unit,
+    val discard: () -> Unit,
     val updateDeclarationValue: (TextFieldValue) -> Unit = { value ->
       updateDeclaration(value.text)
     },

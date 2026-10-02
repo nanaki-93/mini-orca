@@ -168,7 +168,7 @@ class EditorWorkspaceTest {
                                     targetValidation = validation),
                                 AssistantConversationActions(
                                     {}, {}, {}, {}, { sends++ }, {}, changeCreationKind = {}),
-                                DraftEditorActions({}, {}, {}),
+                                DraftEditorActions({}, {}, {}, discard = {}),
                                 modifier)
                             if (prepared != null)
                                 LaunchedEffect(prepared) { chatFocus.requestFocus() }

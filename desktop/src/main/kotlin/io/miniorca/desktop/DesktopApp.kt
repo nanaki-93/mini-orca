@@ -32,7 +32,8 @@ internal enum class PaletteMode {
 private enum class ComposerFocusTarget {
   Name,
   Chat,
-  Draft
+  Draft,
+  Discard
 }
 
 internal fun layoutForPreparedRequest(layout: DesktopLayoutState): DesktopLayoutState =
@@ -51,6 +52,7 @@ internal data class DraftFieldBuffers(
     val acceptanceGeneration: Long,
     val declaration: TextFieldValue,
     val imports: TextFieldValue,
+    val localEditGeneration: Long = 0,
 )
 
 private fun draftFieldIdentity(editor: EditableDraftState): DraftFieldIdentity =
@@ -101,9 +103,96 @@ internal fun declarationTextEdit(
 internal fun importTextEdit(previous: String, next: String): DesktopEvent.DraftEdited? =
     if (previous != next) DesktopEvent.DraftEdited(imports = parseRequiredImports(next)) else null
 
+internal data class DirectDraftIdentity(
+    val projectId: String,
+    val projectRevision: String,
+    val path: String,
+    val fileHash: String,
+    val draftId: String,
+    val draftRevision: Long,
+    val draftHash: String,
+    val draftProjectRevision: String,
+    val draftFileHash: String,
+    val mode: String,
+    val targetSymbol: String,
+    val acceptanceGeneration: Long,
+    val declaration: String,
+    val imports: List<String>,
+    val rawDeclaration: String,
+    val rawImports: String,
+    val localEditGeneration: Long,
+)
+
+internal fun directDraftIdentity(
+    state: DesktopState,
+    fields: DraftFieldBuffers?
+): DirectDraftIdentity? {
+  val project = state.project ?: return null
+  val file = state.selectedFile ?: return null
+  val draft = state.review.draft ?: return null
+  val editor = state.review.editor ?: return null
+  if (editor.serverDraft.copy(validation = null) != draft.copy(validation = null) ||
+      draftFieldIdentity(editor) != fields?.identity ||
+      draft.projectId != project.projectId ||
+      draft.targetPath != file.path)
+      return null
+  return DirectDraftIdentity(
+      project.projectId,
+      project.projectRevision,
+      file.path,
+      file.contentHash,
+      draft.id,
+      draft.revision,
+      draft.hash,
+      draft.projectRevision,
+      draft.baseFileHash,
+      draft.mode,
+      draft.targetSymbol,
+      editor.acceptanceGeneration,
+      editor.declaration,
+      editor.imports,
+      fields.declaration.text,
+      fields.imports.text,
+      fields.localEditGeneration)
+}
+
+internal fun pendingDiscardIsCurrent(
+    pending: PendingDraftDiscard,
+    current: PendingDraftDiscard?
+): Boolean = pending === current
+
+internal fun confirmDirectDraftDiscard(
+    pending: PendingDraftDiscard.Direct,
+    current: PendingDraftDiscard?,
+    state: DesktopState,
+    fields: DraftFieldBuffers?,
+    discard: () -> Unit,
+): Boolean {
+  if (!pendingDiscardIsCurrent(pending, current) ||
+      directDraftIdentity(state, fields) != pending.identity ||
+      !pending.consume())
+      return false
+  discard()
+  return true
+}
+
 internal sealed interface PendingDraftDiscard {
   val currentDraft: CurrentEditIdentity?
   val nextLabel: String
+
+  class Direct(
+      override val currentDraft: CurrentEditIdentity,
+      val identity: DirectDraftIdentity,
+  ) : PendingDraftDiscard {
+    override val nextLabel: String = "continue"
+    private var consumed = false
+
+    fun consume(): Boolean {
+      if (consumed) return false
+      consumed = true
+      return true
+    }
+  }
 
   data class Replace(
       val request: DirectEditRequest,
@@ -398,6 +487,7 @@ internal fun MiniOrcaApp(
   val chatFocusRequester = remember { FocusRequester() }
   val creationNameFocusRequester = remember { FocusRequester() }
   val draftFocusRequester = remember { FocusRequester() }
+  val discardFocusRequester = remember { FocusRequester() }
   val inspectContextFocusRequester = remember { FocusRequester() }
   var contextInspectOpener by remember { mutableStateOf<ContextInspectFocusOrigin?>(null) }
   TerminalSourceRefreshEffect(appState, layout, terminal, presenter)
@@ -574,8 +664,22 @@ internal fun MiniOrcaApp(
         advancedConstraints.text)
   }
 
-  fun discardDraftAndContinue() {
-    val pending = pendingDraftDiscard
+  fun discardDraftAndContinue(pending: PendingDraftDiscard) {
+    if (!pendingDiscardIsCurrent(pending, pendingDraftDiscard)) return
+    if (pending is PendingDraftDiscard.Direct) {
+      val state = presenter.snapshot.value.state
+      val discarded =
+          confirmDirectDraftDiscard(
+              pending,
+              pendingDraftDiscard,
+              state,
+              reconcileDraftFields(draftFields, state.review.editor),
+              presenter::discardDraft)
+      pendingDraftDiscard = null
+      focusAssistantControl(
+          if (discarded) composerFocusAfterDiscard(chatMode) else ComposerFocusTarget.Discard)
+      return
+    }
     pendingDraftDiscard = null
     continueAfterDraftDiscard(
         pending,
@@ -779,6 +883,7 @@ internal fun MiniOrcaApp(
                   remoteConfirmed = workflow.providerConfirmed(ModelScope.Function),
                   chatFocus = chatFocusRequester,
                   draftFocus = draftFocusRequester,
+                  discardFocus = discardFocusRequester,
                   messageInput = chatMessage,
                   draftInput = activeDraftFields?.declaration,
                   importInput = activeDraftFields?.imports,
@@ -838,11 +943,28 @@ internal fun MiniOrcaApp(
                         presenter.dispatch(DesktopEvent.DraftEdited(declaration = it))
                   },
                   validate = presenter::validateEditableDraft,
+                  discard = {
+                    val state = presenter.snapshot.value.state
+                    val fields = reconcileDraftFields(draftFields, state.review.editor)
+                    val identity = directDraftIdentity(state, fields)
+                    val draft = state.review.draft
+                    val mode = ChatEditMode.entries.find { it.wireValue == draft?.mode }
+                    if (identity != null && draft != null && mode != null)
+                        pendingDraftDiscard =
+                            PendingDraftDiscard.Direct(
+                                CurrentEditIdentity(
+                                    mode, draft.targetPath, draft.targetSymbol, true),
+                                identity)
+                  },
                   updateDeclarationValue = { value ->
                     val current = reconcileDraftFields(draftFields, appState.review.editor)
                     if (current != null) {
                       val event = declarationTextEdit(current.declaration, value)
-                      draftFields = current.copy(declaration = value)
+                      draftFields =
+                          current.copy(
+                              declaration = value,
+                              localEditGeneration =
+                                  current.localEditGeneration + if (event != null) 1 else 0)
                       if (event != null) presenter.dispatch(event)
                     }
                   },
@@ -850,7 +972,11 @@ internal fun MiniOrcaApp(
                     val current = reconcileDraftFields(draftFields, appState.review.editor)
                     if (current != null) {
                       val event = importTextEdit(current.imports.text, value.text)
-                      draftFields = current.copy(imports = value)
+                      draftFields =
+                          current.copy(
+                              imports = value,
+                              localEditGeneration =
+                                  current.localEditGeneration + if (event != null) 1 else 0)
                       if (event != null) presenter.dispatch(event)
                     }
                   },
@@ -863,7 +989,8 @@ internal fun MiniOrcaApp(
           showPalette || pendingDraftDiscard != null,
           creationNameFocusRequester,
           chatFocusRequester,
-          draftFocusRequester) { focused ->
+          draftFocusRequester,
+          discardFocusRequester) { focused ->
             if (pendingComposerFocus == focused) pendingComposerFocus = null
           }
     } else {
@@ -1147,12 +1274,20 @@ internal fun MiniOrcaApp(
   }
   DesktopAnalysisAdmissionOverlay(appState.analysisRun, presenter)
   pendingDraftDiscard?.let { pending ->
-    DraftDiscardDialog(pending.currentDraft, pending.nextLabel, ::discardDraftAndContinue) {
-      pendingDraftDiscard = null
-      if (pending is PendingDraftDiscard.Create) {
-        focusAssistantControl(composerFocusAfterDiscard(chatMode))
-      }
-    }
+    DraftDiscardDialog(
+        pending.currentDraft,
+        pending.nextLabel,
+        onDiscard = { discardDraftAndContinue(pending) },
+        onCancel = {
+          if (pendingDiscardIsCurrent(pending, pendingDraftDiscard)) {
+            pendingDraftDiscard = null
+            if (pending is PendingDraftDiscard.Direct) {
+              focusAssistantControl(ComposerFocusTarget.Discard)
+            } else if (pending is PendingDraftDiscard.Create) {
+              focusAssistantControl(composerFocusAfterDiscard(chatMode))
+            }
+          }
+        })
   }
 }
 
@@ -1164,6 +1299,7 @@ private fun ComposerFocusEffect(
     name: FocusRequester,
     chat: FocusRequester,
     draft: FocusRequester,
+    discard: FocusRequester,
     onFocused: (ComposerFocusTarget) -> Unit,
 ) {
   LaunchedEffect(target, draftVisible, dialogOpen) {
@@ -1174,6 +1310,9 @@ private fun ComposerFocusEffect(
       ComposerFocusTarget.Draft -> {
         if (!draftVisible) return@LaunchedEffect
         draft.requestFocus()
+      }
+      ComposerFocusTarget.Discard -> {
+        if (draftVisible) discard.requestFocus() else chat.requestFocus()
       }
       null -> return@LaunchedEffect
     }
@@ -1221,6 +1360,7 @@ private fun continueAfterDraftDiscard(
     currentCreation: () -> Triple<ChatEditMode, DeclarationCreationKind, String>,
 ) {
   when (pending) {
+    is PendingDraftDiscard.Direct -> Unit
     is PendingDraftDiscard.Replace -> {
       presenter.discardDraft()
       replace(pending.request)

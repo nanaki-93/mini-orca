@@ -91,7 +91,7 @@ class DesktopKeyboardNavigationTest {
                   {},
                   changeCreationKind = { kind = it },
                   updateMessageValue = { behavior = it }),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               Modifier.fillMaxSize())
           LaunchedEffect(Unit) { nameFocus.requestFocus() }
         }
@@ -1438,7 +1438,7 @@ class DesktopKeyboardNavigationTest {
                   {},
                   changeCreationKind = {},
                   updateMessageValue = { input = it }),
-              DraftEditorActions({}, {}, {}),
+              DraftEditorActions({}, {}, {}, discard = {}),
               Modifier.fillMaxSize())
         }
         .use { fixture ->
@@ -3137,7 +3137,7 @@ class DesktopKeyboardNavigationTest {
                             onOperation,
                             onOperation,
                             changeCreationKind = { onOperation() }),
-                        DraftEditorActions({}, {}, {}),
+                        DraftEditorActions({}, {}, {}, discard = {}),
                         modifier)
                     if (!state.palette.visible) {
                       LaunchedEffect(state.palette.visible) { creationNameFocus.requestFocus() }
@@ -3168,7 +3168,7 @@ class DesktopKeyboardNavigationTest {
                             onOperation,
                             onOperation,
                             changeCreationKind = {}),
-                        DraftEditorActions({}, {}, {}),
+                        DraftEditorActions({}, {}, {}, discard = {}),
                         modifier)
                   }
                 },
