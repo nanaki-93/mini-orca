@@ -74,6 +74,308 @@ class AssistantToolWindowTest {
               hash = "draft-hash"))
 
   @Test
+  fun composerShowsExactScopeAndKeepsActionsOutsideLongHistoryAndConstraints() {
+    val symbol = SymbolInfo("Run", "function", "func Run()", 1, 3, "exact", true)
+    val target = ChatTarget(ChatEditMode.ReplaceSymbol, "Run")
+    val path = "internal/project/nested/run.go"
+    val file = creationFile().copy(path = path)
+    val scope = ChatRequestScope("project", "revision", path, "hash", target, declaration = symbol)
+    var sends = 0
+    var inspections = 0
+    var prepared: FunctionChangePreset? = null
+    var confirmations = 0
+    val state =
+        historyState(
+                target,
+                null,
+                (1..30).map { index ->
+                  ChatRequestAttempt(
+                      index.toLong(),
+                      scope,
+                      ScopedModel(),
+                      false,
+                      "previous $index",
+                      0,
+                      ChatRequestOutcome.Failed("retry $index"))
+                })
+            .copy(
+                selected = file,
+                mode = ChatEditMode.ReplaceSymbol,
+                selectedSymbol = symbol,
+                targetValidation = ChatTargetValidation(target),
+                message = "Preserve the public behavior.",
+                messageInput =
+                    androidx.compose.ui.text.input.TextFieldValue("Preserve the public behavior."),
+                functionModel =
+                    ScopedModel(
+                        profile = "function-profile",
+                        model = "edit-model",
+                        providerOrigin = "http://localhost:11434"))
+    ComposeVisualFixture(420, 650) {
+          AssistantToolWindow(
+              state,
+              AssistantConversationActions(
+                  {},
+                  {},
+                  { confirmations++ },
+                  { inspections++ },
+                  { sends++ },
+                  {},
+                  preparePreset = { prepared = it }),
+              DraftEditorActions({}, {}, {}),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText(path))
+          assertTrue(fixture.hasText("Replace selected declaration · Run"))
+          assertTrue(
+              fixture.hasText(
+                  "Replace one declaration; source changes only after Review and Apply"))
+          assertTrue(fixture.hasText("Intent"))
+          assertTrue(
+              fixture.hasText(
+                  "Function edits: function-profile · edit-model · local provider · project context stays on this machine"))
+          assertTrue(fixture.hasText("Function provider origin: http://localhost:11434"))
+          assertTrue(
+              fixture.hasText("File-scoped preview only · no Function request or confirmation."))
+          assertEquals(30, assistantHistoryEntries(state).size)
+          assertTrue(fixture.hasText("previous 1"))
+          fixture.clickText("Advanced constraints")
+          fixture.render()
+          assertTrue(fixture.hasText("Constraints"))
+          fixture.clickText("Refactor")
+          fixture.clickText("Inspect context")
+          assertEquals(FunctionChangePreset.Refactor, prepared)
+          assertEquals(1, inspections)
+          assertEquals(0, confirmations)
+          assertEquals(0, sends)
+          assertFalse(fixture.isDisabled("Send message"))
+          fixture.clickText("Send message")
+          assertEquals(1, sends)
+        }
+  }
+
+  @Test
+  fun shortComposerScrollReachesConsentStatusAndSendOrCancelIndependentlyOfHistory() {
+    val target = ChatTarget(ChatEditMode.ReplaceSymbol, "Run")
+    val symbol = SymbolInfo("Run", "function", "func Run()", 1, 3, "exact", true)
+    val file = creationFile().copy(path = "internal/" + "nested/".repeat(12) + "run.go")
+    val scope =
+        ChatRequestScope("project", "revision", file.path, "hash", target, declaration = symbol)
+    val attempts =
+        (1..30).map { index ->
+          ChatRequestAttempt(
+              index.toLong(),
+              scope,
+              ScopedModel(),
+              false,
+              "previous $index",
+              0,
+              ChatRequestOutcome.Failed("retry $index"))
+        }
+    val base =
+        historyState(target, null, attempts)
+            .copy(
+                selected = file,
+                mode = ChatEditMode.ReplaceSymbol,
+                selectedSymbol = symbol,
+                targetValidation = ChatTargetValidation(target),
+                message = "Preserve the behavior.",
+                functionModel =
+                    ScopedModel(
+                        profile = "remote-profile",
+                        model = "edit-model",
+                        providerOrigin = "https://provider.example.invalid/" + "long/".repeat(50),
+                        remoteProvider = true))
+    listOf(false, true).forEach { running ->
+      var activated = 0
+      ComposeVisualFixture(360, 360, 1.5f) {
+            AssistantToolWindow(
+                base.copy(sending = running, remoteConfirmed = true),
+                AssistantConversationActions({}, {}, {}, {}, { activated++ }, { activated++ }),
+                DraftEditorActions({}, {}, {}),
+                Modifier.fillMaxSize())
+          }
+          .use { fixture ->
+            fixture.render()
+            fixture.clickText("Advanced constraints")
+            fixture.render()
+            assertTrue(fixture.hasText("Constraints"))
+            assertTrue(fixture.scrollMaximum("assistant-composer-scroll", false) > 0f)
+            fixture.scrollBy(100_000f, "assistant-composer-scroll")
+            fixture.render()
+            val action = fixture.taggedBounds("assistant-request-action")
+            val composer = fixture.taggedBounds("assistant-composer-scroll")
+            assertTrue(
+                action.top >= composer.top && action.bottom <= composer.bottom,
+                "$action outside $composer")
+            assertTrue(
+                fixture.hasText(
+                    "Function provider origin: ${sanitizedOutputText(base.functionModel.providerOrigin, 256)}"))
+            assertTrue(
+                fixture
+                    .hasText("Request running · Cancel keeps the existing draft and conversation.")
+                    .equals(running))
+            fixture.clickText(if (running) "Cancel request" else "Send message")
+            assertEquals(1, activated)
+          }
+    }
+  }
+
+  @Test
+  fun incompleteFunctionMetadataDoesNotAssertLocalityOrInventProfileAndModel() {
+    val model =
+        ScopedModel(profile = "known-profile", providerOrigin = "https://provider.example.invalid")
+    assertEquals(
+        "Function edits: known-profile · model unavailable · provider locality unavailable",
+        functionDestinationLabel(model))
+    assertFalse(functionDestinationLabel(model).contains("local provider"))
+    assertTrue(functionDestinationLabel(ScopedModel()).contains("profile unavailable"))
+    val target = ChatTarget(ChatEditMode.ReplaceSymbol, "Run")
+    ComposeVisualFixture(420, 650) {
+          AssistantToolWindow(
+              historyState(target, null, emptyList()).copy(functionModel = model),
+              AssistantConversationActions({}, {}, {}, {}, {}, {}),
+              DraftEditorActions({}, {}, {}),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText(functionDestinationLabel(model)))
+          assertFalse(fixture.hasText("local provider"))
+          assertTrue(fixture.hasText("Function provider origin: https://provider.example.invalid"))
+        }
+    val remote = model.copy(remoteProvider = true)
+    var confirmations = 0
+    ComposeVisualFixture(420, 650) {
+          AssistantToolWindow(
+              historyState(target, null, emptyList()).copy(functionModel = remote),
+              AssistantConversationActions({}, {}, { confirmations++ }, {}, {}, {}),
+              DraftEditorActions({}, {}, {}),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Confirm remote destination"))
+          assertTrue(fixture.hasText("Confirm the Function remote destination before sending."))
+          fixture.clickText("Confirm remote destination")
+          assertEquals(1, confirmations)
+        }
+  }
+
+  @Test
+  fun composerExplainsInvalidAndNonPresetTargetsAndRemoteConsent() {
+    val symbol = SymbolInfo("Config", "type", "type Config struct{}", 1, 1, "exact", true)
+    val target = ChatTarget(ChatEditMode.ReplaceSymbol, "Config")
+    val base =
+        historyState(target, null, emptyList())
+            .copy(
+                mode = ChatEditMode.ReplaceSymbol,
+                selectedSymbol = symbol,
+                targetValidation = ChatTargetValidation(target),
+                message = "Improve documentation.",
+                functionModel =
+                    ScopedModel(
+                        profile = "remote-profile",
+                        model = "edit-model",
+                        providerOrigin = "https://provider.example.invalid",
+                        remoteProvider = true))
+    assertEquals(
+        "Confirm the Function remote destination before sending.",
+        assistantComposerBlockedReason(base))
+    assertEquals(null, assistantComposerBlockedReason(base.copy(remoteConfirmed = true)))
+    val invalid =
+        base.copy(
+            target = null,
+            targetValidation =
+                ChatTargetValidation(
+                    message =
+                        "Select one declaration. Multi-function or grouped declaration changes are not supported."))
+    assertEquals(invalid.targetValidation.message, assistantComposerBlockedReason(invalid))
+    var confirmations = 0
+    var sends = 0
+    ComposeVisualFixture(420, 650) {
+          AssistantToolWindow(
+              base,
+              AssistantConversationActions({}, {}, { confirmations++ }, {}, { sends++ }, {}),
+              DraftEditorActions({}, {}, {}),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText("Confirm the Function remote destination before sending."))
+          assertTrue(fixture.isDisabled("Send message"))
+          fixture.clickText("Confirm remote destination")
+          assertEquals(1, confirmations)
+          assertEquals(0, sends)
+        }
+    ComposeVisualFixture(420, 650) {
+          AssistantToolWindow(
+              invalid,
+              AssistantConversationActions({}, {}, {}, {}, {}, {}),
+              DraftEditorActions({}, {}, {}),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(fixture.hasText(invalid.targetValidation.message))
+          assertTrue(fixture.isDisabled("Send message"))
+        }
+    ComposeVisualFixture(420, 650) {
+          AssistantToolWindow(
+              base.copy(remoteConfirmed = true),
+              AssistantConversationActions({}, {}, {}, {}, {}, {}),
+              DraftEditorActions({}, {}, {}),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "Quick changes require one Go function or method. Select one to use a preset."))
+          assertTrue(fixture.hasText("Function provider origin: https://provider.example.invalid"))
+          assertFalse(fixture.hasText("Refactor"))
+          assertFalse(fixture.isDisabled("Send message"))
+        }
+  }
+
+  @Test
+  fun composerKeepsCancelReachableWhileRunningAndExplainsBlockedIntent() {
+    val target = ChatTarget(ChatEditMode.ReplaceSymbol, "Run")
+    val symbol = SymbolInfo("Run", "function", "func Run()", 1, 3, "exact", true)
+    val base =
+        historyState(target, null, emptyList())
+            .copy(
+                mode = ChatEditMode.ReplaceSymbol,
+                selectedSymbol = symbol,
+                targetValidation = ChatTargetValidation(target),
+                message = "   ",
+                messageInput = androidx.compose.ui.text.input.TextFieldValue("   "))
+    assertEquals("Enter a specific intent before sending.", assistantComposerBlockedReason(base))
+    val state = base.copy(sending = true)
+    var canceled = 0
+    var sent = 0
+    ComposeVisualFixture(420, 650) {
+          AssistantToolWindow(
+              state,
+              AssistantConversationActions({}, {}, {}, {}, { sent++ }, { canceled++ }),
+              DraftEditorActions({}, {}, {}),
+              Modifier.fillMaxSize())
+        }
+        .use { fixture ->
+          fixture.render()
+          assertTrue(
+              fixture.hasText(
+                  "Request running · Cancel keeps the existing draft and conversation."))
+          assertFalse(fixture.hasText("Send message"))
+          fixture.clickText("Cancel request")
+          assertEquals(1, canceled)
+          assertEquals(0, sent)
+        }
+  }
+
+  @Test
   fun firstSessionFailureRendersSubmittedTextAndLiteralDiagnosticWithoutDispatch() {
     val target = ChatTarget(ChatEditMode.CreateSymbol, "Build")
     val scope = ChatRequestScope("project", "revision", "empty.go", "hash", target)
