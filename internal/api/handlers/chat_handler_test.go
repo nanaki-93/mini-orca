@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -60,6 +61,71 @@ func TestChatSessionEndpointsKeepMessagesBoundToOneFile(t *testing.T) {
 	}
 	assertStructuredError(t, retargetResponse)
 
+}
+
+func TestChatSessionCreationAdmissionRejectsNamesBeforeGeneration(t *testing.T) {
+	var providerCalls atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		providerCalls.Add(1)
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"version":"v1","declaration":"func Fresh() {}","explanation":"Created Fresh."}`}}}})
+	}))
+	defer server.Close()
+	const source = "package sample\n\nfunc Run() {}\nvar Build, other = 1, 2\n"
+	handler, identity := newChatSessionTestHandlerWithSource(t, server.URL, 0, source)
+	for _, name := range []string{"_", "init", "main", "func", "not-valid", "Run", "Build"} {
+		t.Run(name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			handler.OpenSession(response, httptest.NewRequest(http.MethodPost, "/api/projects/current/chat/sessions", bytes.NewReader(marshalChatBody(t, ChatSessionRequest{
+				ProjectID: identity.projectID, ProjectRevision: identity.revision, BaseFileHash: identity.hash,
+				OpenPath: "sample.go", Mode: project.DeclarationEditCreateSymbol, TargetSymbol: name,
+			}))))
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("rejected creation status = %d: %s", response.Code, response.Body.String())
+			}
+			assertStructuredError(t, response)
+			if providerCalls.Load() != 0 {
+				t.Fatalf("provider called for rejected target %q", name)
+			}
+		})
+	}
+	content, err := os.ReadFile(filepath.Join(identity.root, "sample.go"))
+	if err != nil || string(content) != source {
+		t.Fatalf("rejected creation changed source = %q, err = %v", content, err)
+	}
+	// A successful request retains the existing wire identity and has no draft until a message is sent.
+	opened := httptest.NewRecorder()
+	handler.OpenSession(opened, httptest.NewRequest(http.MethodPost, "/api/projects/current/chat/sessions", bytes.NewReader(marshalChatBody(t, ChatSessionRequest{
+		ProjectID: identity.projectID, ProjectRevision: identity.revision, BaseFileHash: identity.hash,
+		OpenPath: "sample.go", Mode: project.DeclarationEditCreateSymbol, TargetSymbol: "Fresh",
+	}))))
+	if opened.Code != http.StatusCreated {
+		t.Fatalf("valid creation status = %d: %s", opened.Code, opened.Body.String())
+	}
+	var session app.ChatSession
+	if err := json.NewDecoder(opened.Body).Decode(&session); err != nil {
+		t.Fatal(err)
+	}
+	if session.ID == "" || session.ProjectID != identity.projectID || session.ProjectRevision != identity.revision || session.BaseFileHash != identity.hash || session.OpenPath != "sample.go" || session.Mode != project.DeclarationEditCreateSymbol || session.TargetSymbol != "Fresh" || session.State != "active" || session.LatestDraftID != "" || len(session.Messages) != 0 || providerCalls.Load() != 0 {
+		t.Fatalf("creation session identity = %+v, provider calls = %d", session, providerCalls.Load())
+	}
+	message := httptest.NewRequest(http.MethodPost, "/api/projects/current/chat/sessions/"+session.ID+"/messages", bytes.NewBufferString(`{"message":"Create Fresh."}`))
+	message.SetPathValue("sessionID", session.ID)
+	generated := httptest.NewRecorder()
+	handler.SendSessionMessage(generated, message)
+	if generated.Code != http.StatusOK {
+		t.Fatalf("creation message status = %d: %s", generated.Code, generated.Body.String())
+	}
+	var proposal app.ChatDraftProposal
+	if err := json.NewDecoder(generated.Body).Decode(&proposal); err != nil {
+		t.Fatal(err)
+	}
+	if providerCalls.Load() != 1 || proposal.SessionID != session.ID || proposal.Draft.TargetSymbol != "Fresh" || proposal.Draft.Mode != project.DeclarationEditCreateSymbol || proposal.Draft.State != app.DraftGenerated {
+		t.Fatalf("creation proposal = %+v, provider calls = %d", proposal, providerCalls.Load())
+	}
+	content, err = os.ReadFile(filepath.Join(identity.root, "sample.go"))
+	if err != nil || string(content) != source {
+		t.Fatalf("creation changed source = %q, err = %v", content, err)
+	}
 }
 
 func TestChatSessionEndpointReportsCancellationAndStaleSession(t *testing.T) {
@@ -133,6 +199,7 @@ func TestChatSessionEndpointRejectsInvalidEditMode(t *testing.T) {
 }
 
 type chatSessionIdentity struct {
+	root      string
 	projectID string
 	revision  string
 	hash      string
@@ -140,8 +207,13 @@ type chatSessionIdentity struct {
 
 func newChatSessionTestHandler(t *testing.T, baseURL string, generationSeconds int) (*ChatHandler, chatSessionIdentity) {
 	t.Helper()
+	return newChatSessionTestHandlerWithSource(t, baseURL, generationSeconds, "package sample\n\nfunc Run() {}\n")
+}
+
+func newChatSessionTestHandlerWithSource(t *testing.T, baseURL string, generationSeconds int, source string) (*ChatHandler, chatSessionIdentity) {
+	t.Helper()
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "sample.go"), []byte("package sample\n\nfunc Run() {}\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "sample.go"), []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	manager, err := project.NewManager(root)
@@ -166,7 +238,7 @@ func newChatSessionTestHandler(t *testing.T, baseURL string, generationSeconds i
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewChatHandler(service), chatSessionIdentity{projectID: analysis.ProjectID, revision: analysis.ProjectRevision, hash: file.ContentHash}
+	return NewChatHandler(service), chatSessionIdentity{root: root, projectID: analysis.ProjectID, revision: analysis.ProjectRevision, hash: file.ContentHash}
 }
 
 func openChatSessionThroughHandler(t *testing.T, handler *ChatHandler, identity chatSessionIdentity) app.ChatSession {
