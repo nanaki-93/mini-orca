@@ -7957,6 +7957,216 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun cancelBeforeLaunchIsSynchronousAndOldJobCannotClearNewRunningRequest() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    var opens = 0
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          chatFileResponse(path)
+              ?: when (path) {
+                "/api/projects/current/chat/sessions" -> {
+                  opens++
+                  response(
+                      """{"id":"session","project_id":"project","project_revision":"revision","base_file_hash":"base","open_path":"main.go","mode":"replace_symbol","target_symbol":"Run","state":"active","messages":[]}""")
+                }
+                else -> error("Unexpected request $path")
+              }
+        }
+    try {
+      loadQueuedChatFile(presenter, main, io)
+      presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "First request")
+      val first = presenter.snapshot.value.state.chat.pendingRequestId
+      presenter.cancelGeneration()
+      assertEquals(
+          ChatRequestOutcome.Canceled,
+          presenter.snapshot.value.state.chat.attempts.single().outcome)
+      assertEquals(0L, presenter.snapshot.value.state.chat.pendingRequestId)
+      presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Second request")
+      val second = presenter.snapshot.value.state.chat.pendingRequestId
+      assertTrue(second != first)
+      main.runPending()
+      assertEquals(second, presenter.snapshot.value.state.chat.pendingRequestId)
+      assertTrue(presenter.snapshot.value.generating)
+      assertEquals(0, opens)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      main.runPending()
+      io.runPending()
+    }
+  }
+
+  @Test
+  fun lateTransportSuccessAndFailureCannotReplaceChangedTargetDraftOrClosedPresenter() {
+    for (failure in listOf(false, true)) for (change in
+        listOf("target", "draft", "replacement", "discard", "close", "cancel")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      lateinit var presenter: DesktopWorkflowPresenter
+      var messages = 0
+      presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+            chatFileResponse(path)
+                ?: when (path) {
+                  "/api/projects/current/chat/sessions" ->
+                      response(
+                          """{"id":"session","project_id":"project","project_revision":"revision","base_file_hash":"base","open_path":"main.go","mode":"replace_symbol","target_symbol":"Run","state":"active","messages":[]}""")
+                  "/api/projects/current/chat/sessions/session/messages" -> {
+                    messages++
+                    when (change) {
+                      "target" ->
+                          presenter.dispatch(
+                              DesktopEvent.SymbolSelected(
+                                  SymbolInfo(
+                                      "Other",
+                                      "function",
+                                      confidence = "exact",
+                                      atomicTarget = true)))
+                      "draft" ->
+                          presenter.dispatch(
+                              DesktopEvent.DraftEdited(declaration = "func Run() { println(1) }"))
+                      "replacement" ->
+                          presenter.dispatch(
+                              DesktopEvent.DraftLoaded(draft().copy(id = "newer", revision = 2)))
+                      "discard" -> presenter.discardDraft()
+                      "close" -> presenter.close()
+                      "cancel" -> presenter.cancelGeneration()
+                    }
+                    if (failure)
+                        TransportResponse(503, """{"user_message":"Late provider error"}""")
+                    else
+                        response(
+                            """{"session_id":"session","draft":{"id":"new-draft","project_id":"project","project_revision":"revision","base_file_hash":"base","target_path":"main.go","mode":"replace_symbol","target_symbol":"Run","declaration":"func Run() {}","revision":1,"hash":"new-hash","state":"generated"},"assistant_message":{"role":"assistant","content":"Late"}}""")
+                  }
+                  else -> error("Unexpected request $path")
+                }
+          }
+      try {
+        loadQueuedChatFile(presenter, main, io)
+        presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+        presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Improve Run")
+        main.runPending()
+        io.runPending()
+        main.runPending()
+        io.runPending()
+        main.runPending()
+        assertEquals(1, messages, "$failure/$change")
+        val state = presenter.snapshot.value.state
+        assertEquals(0L, state.chat.pendingRequestId, "$failure/$change")
+        assertNull(state.chat.session, "$failure/$change")
+        assertTrue(
+            state.chat.attempts.none {
+              it.outcome is ChatRequestOutcome.Failed || it.outcome is ChatRequestOutcome.Succeeded
+            },
+            "$failure/$change")
+        assertTrue(state.review.draft?.id != "new-draft", "$failure/$change")
+        if (change == "replacement") assertEquals("newer", state.review.draft?.id)
+        assertFalse(presenter.snapshot.value.generating, "$failure/$change")
+      } finally {
+        presenter.close()
+        scope.cancel()
+        main.runPending()
+        io.runPending()
+      }
+    }
+  }
+
+  @Test
+  fun lateTransportResultAfterFunctionConsentRevocationCannotPublish() {
+    for (failure in listOf(false, true)) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      lateinit var presenter: DesktopWorkflowPresenter
+      presenter =
+          presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+            chatFileResponse(path)
+                ?: when (path) {
+                  "/status" -> response("""{"status":"ok","version":"v1"}""")
+                  "/api/models/current" -> response(functionCatalog("provider/editor"))
+                  "/api/projects/current/chat/sessions" ->
+                      response(
+                          """{"id":"session","project_id":"project","project_revision":"revision","base_file_hash":"base","open_path":"main.go","mode":"replace_symbol","target_symbol":"Run","state":"active","messages":[]}""")
+                  "/api/projects/current/chat/sessions/session/messages" -> {
+                    presenter.setProviderConfirmation(ModelScope.Function, false)
+                    if (failure) TransportResponse(503, """{"user_message":"Late failure"}""")
+                    else
+                        response(
+                            """{"session_id":"session","draft":{"id":"new-draft","project_id":"project","project_revision":"revision","base_file_hash":"base","target_path":"main.go","mode":"replace_symbol","target_symbol":"Run","declaration":"func Run() {}","revision":1,"hash":"new-hash","state":"generated"},"assistant_message":{"role":"assistant","content":"Late"}}""")
+                  }
+                  else -> error("Unexpected request $path")
+                }
+          }
+      try {
+        loadQueuedChatFile(presenter, main, io)
+        presenter.refreshConnection()
+        main.runPending()
+        io.runPending()
+        main.runPending()
+        presenter.setProviderConfirmation(ModelScope.Function, true)
+        presenter.dispatch(DesktopEvent.DraftLoaded(draft()))
+        presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Improve Run")
+        main.runPending()
+        io.runPending()
+        main.runPending()
+        io.runPending()
+        main.runPending()
+        val state = presenter.snapshot.value.state
+        assertEquals(ChatRequestOutcome.Canceled, state.chat.attempts.last().outcome)
+        assertNull(state.chat.session)
+        assertEquals("draft", state.review.draft?.id)
+        assertFalse(presenter.snapshot.value.generating)
+      } finally {
+        presenter.close()
+        scope.cancel()
+        main.runPending()
+        io.runPending()
+      }
+    }
+  }
+
+  @Test
+  fun transportTimeoutIsFailureNotConfirmedCancellation() {
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          chatFileResponse(path)
+              ?: when (path) {
+                "/api/projects/current/chat/sessions" ->
+                    response(
+                        """{"id":"session","project_id":"project","project_revision":"revision","base_file_hash":"base","open_path":"main.go","mode":"replace_symbol","target_symbol":"Run","state":"active","messages":[]}""")
+                "/api/projects/current/chat/sessions/session/messages" ->
+                    throw HttpTimeoutException("timed out")
+                else -> error("Unexpected request $path")
+              }
+        }
+    try {
+      loadQueuedChatFile(presenter, main, io)
+      presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Improve Run")
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertTrue(
+          presenter.snapshot.value.state.chat.attempts.single().outcome
+              is ChatRequestOutcome.Failed)
+      assertEquals(0L, presenter.snapshot.value.state.chat.pendingRequestId)
+      assertFalse(presenter.snapshot.value.generating)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      main.runPending()
+      io.runPending()
+    }
+  }
+
+  @Test
   fun duplicateSendWhileAttemptRunsOpensOnlyOneSession() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()
@@ -7990,8 +8200,7 @@ class DesktopWorkflowPresenterTest {
       assertEquals(1, opens)
       val attempts = presenter.snapshot.value.state.chat.attempts
       assertEquals(1, attempts.size)
-      assertEquals(
-          ChatRequestOutcome.Failed("Provider unavailable"), attempts.single().outcome)
+      assertEquals(ChatRequestOutcome.Failed("Provider unavailable"), attempts.single().outcome)
       assertEquals("Improve Run", attempts.single().requestText)
     } finally {
       presenter.close()

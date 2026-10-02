@@ -308,6 +308,72 @@ class FileChatStateTest {
   }
 
   @Test
+  fun canceledAttemptCannotPublishLateSuccessOrFailureOrClearANewerAttempt() {
+    val controller = loadedController()
+    val load = controller.beginFileLoad("main.go")!!
+    assertTrue(controller.fileLoaded(load, file(), listOf(symbol("Run"))))
+    controller.dispatch(DesktopEvent.SymbolSelected(symbol("Run")))
+    val scope =
+        ChatRequestScope(
+            "project",
+            "revision",
+            "main.go",
+            "base",
+            ChatTarget(ChatEditMode.ReplaceSymbol, "Run"),
+            declaration = symbol("Run"))
+    val destination = ScopedModel(scope = "function")
+    val (old, file) = controller.beginChatAttempt(scope, destination, "First")!!
+    assertTrue(controller.cancelChatLoad(old, file))
+    val (new, newFile) = controller.beginChatAttempt(scope, destination, "Second")!!
+    assertFalse(controller.chatAttemptFailed(old, file, "Late error"))
+    assertFalse(
+        controller.chatProposalLoaded(
+            old,
+            file,
+            session(),
+            "First",
+            ChatDraftProposal("session", draft(), ChatSessionMessage("assistant", "Late"))))
+    assertEquals(new, controller.state.chat.pendingRequestId)
+    assertFalse(controller.chatAttemptFailed(old, file, "Late error again"))
+    assertEquals(ChatRequestOutcome.Running, controller.state.chat.attempts.last().outcome)
+    assertTrue(controller.chatAttemptFailed(new, newFile, "Current error"))
+    assertEquals(ChatRequestOutcome.Canceled, controller.state.chat.attempts.first().outcome)
+  }
+
+  @Test
+  fun draftEditAndSameFileTargetChangeInvalidateAdmittedAttempt() {
+    val controller = loadedController()
+    val load = controller.beginFileLoad("main.go")!!
+    assertTrue(controller.fileLoaded(load, file(), listOf(symbol("Run"), symbol("Other"))))
+    controller.dispatch(DesktopEvent.SymbolSelected(symbol("Run")))
+    controller.dispatch(DesktopEvent.DraftLoaded(draft()))
+    val scope =
+        ChatRequestScope(
+            "project",
+            "revision",
+            "main.go",
+            "base",
+            ChatTarget(ChatEditMode.ReplaceSymbol, "Run"),
+            declaration = symbol("Run"))
+    val destination = ScopedModel(scope = "function")
+    val (first, file) = controller.beginChatAttempt(scope, destination, "First")!!
+    controller.dispatch(DesktopEvent.DraftEdited(declaration = "func Run() { println(1) }"))
+    assertEquals(ChatRequestOutcome.Canceled, controller.state.chat.attempts.last().outcome)
+    assertFalse(controller.chatAttemptFailed(first, file, "Late error"))
+    assertFalse(
+        controller.chatProposalLoaded(
+            first,
+            file,
+            session(),
+            "First",
+            ChatDraftProposal("session", draft(), ChatSessionMessage("assistant", "Late"))))
+    val (second, sameFile) = controller.beginChatAttempt(scope, destination, "Second")!!
+    controller.dispatch(DesktopEvent.SymbolSelected(symbol("Other")))
+    assertEquals(ChatRequestOutcome.Canceled, controller.state.chat.attempts.last().outcome)
+    assertFalse(controller.chatAttemptFailed(second, sameFile, "Late error"))
+  }
+
+  @Test
   fun cancellationAndRevisionChangeRejectLateChatResultsAndClearDrafts() {
     val controller = loadedController()
     val fileLoad = controller.beginFileLoad("main.go")!!

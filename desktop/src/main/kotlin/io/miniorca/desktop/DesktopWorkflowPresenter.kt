@@ -179,6 +179,7 @@ class DesktopWorkflowPresenter(
   private var contextInspectionJob: Job? = null
   private var contextInspectionGeneration = 0L
   private var chatJob: Job? = null
+  private var closed = false
   private var draftValidationJob: Job? = null
   private var draftChecksJob: Job? = null
   private var declarationExplanationGeneration = 0L
@@ -229,7 +230,14 @@ class DesktopWorkflowPresenter(
       invalidateJobActions()
       jobCoordinator.projectOpened(event.project.identity())
     }
+    val pendingChat = controller.state.chat.pendingRequestId
     controller.dispatch(event)
+    if (pendingChat != 0L && controller.state.chat.pendingRequestId != pendingChat) {
+      activeTask = null
+      chatJob?.cancel()
+      chatJob = null
+      setOperation(generating = false)
+    }
     if (event is DesktopEvent.DraftEdited) {
       draftValidationJob?.cancel()
       setOperation(validating = false)
@@ -1535,8 +1543,15 @@ class DesktopWorkflowPresenter(
   }
 
   fun cancelGeneration() {
+    val requestId = controller.state.chat.pendingRequestId
+    if (requestId != 0L) {
+      controller.currentFileRequest()?.let { file ->
+        if (controller.cancelChatLoad(requestId, file)) publish()
+      }
+    }
     activeTask = null
     chatJob?.cancel()
+    chatJob = null
     setOperation(generating = false)
   }
 
@@ -1790,6 +1805,7 @@ class DesktopWorkflowPresenter(
       repair: Boolean = false,
       creationKind: DeclarationCreationKind? = null,
   ) {
+    if (closed) return
     val state = snapshot.value.state
     if (state.chat.pendingRequestId != 0L) return
     val project = state.project ?: return
@@ -1851,6 +1867,9 @@ class DesktopWorkflowPresenter(
     chatJob =
         scope.launch {
           try {
+            if (!canDispatchChatRequest(
+                requestId, fileRequest, identity, destination, remoteConfirmed))
+                return@launch
             val session =
                 matchingSession
                     ?: io {
@@ -1871,11 +1890,10 @@ class DesktopWorkflowPresenter(
               if (controller.cancelChatLoad(requestId, fileRequest)) publish()
               return@launch
             }
-            val proposal =
-                io {
-                  api.sendChatMessage(
-                      session.id, content, session.latestDraftId, remoteConfirmed, repair)
-                }
+            val proposal = io {
+              api.sendChatMessage(
+                  session.id, content, session.latestDraftId, remoteConfirmed, repair)
+            }
             if (!canDispatchChatRequest(
                 requestId, fileRequest, identity, destination, remoteConfirmed)) {
               if (controller.cancelChatLoad(requestId, fileRequest)) publish()
@@ -1899,9 +1917,9 @@ class DesktopWorkflowPresenter(
                 "The chat response does not match the request target. Send again to retry.")) {
               publish()
             }
-          } catch (_: CancellationException) {
+          } catch (canceled: CancellationException) {
             if (controller.cancelChatLoad(requestId, fileRequest)) publish()
-            throw CancellationException()
+            throw canceled
           } catch (error: Exception) {
             if (canDispatchChatRequest(
                 requestId, fileRequest, identity, destination, remoteConfirmed)) {
@@ -1914,7 +1932,10 @@ class DesktopWorkflowPresenter(
               if (staleConsent != null) setProviderConfirmation(ModelScope.Function, false)
             } else if (controller.cancelChatLoad(requestId, fileRequest)) publish()
           } finally {
-            if (chatJob === coroutineContext[Job]) setOperation(generating = false)
+            if (chatJob === coroutineContext[Job] && controller.state.chat.pendingRequestId == 0L) {
+              chatJob = null
+              setOperation(generating = false)
+            }
           }
         }
   }
@@ -1926,7 +1947,8 @@ class DesktopWorkflowPresenter(
       destination: ScopedModel,
       remoteConfirmed: Boolean,
   ): Boolean =
-      activeTask == identity &&
+      !closed &&
+          activeTask == identity &&
           controller.isCurrentChatAttempt(requestId, file) &&
           snapshot.value.model(ModelScope.Function) == destination &&
           snapshot.value.providerConfirmed(ModelScope.Function) == remoteConfirmed &&
@@ -1940,6 +1962,7 @@ class DesktopWorkflowPresenter(
     }
     activeTask = null
     chatJob?.cancel()
+    chatJob = null
     setOperation(generating = false)
   }
 
@@ -2327,7 +2350,7 @@ class DesktopWorkflowPresenter(
   }
 
   fun discardDraft() {
-    chatJob?.cancel()
+    cancelGeneration()
     draftValidationJob?.cancel()
     draftChecksJob?.cancel()
     activeTask = null
@@ -2353,6 +2376,7 @@ class DesktopWorkflowPresenter(
   }
 
   override fun close() {
+    closed = true
     cancelAll()
     connectionJob?.cancel()
     startupJob?.cancel()
