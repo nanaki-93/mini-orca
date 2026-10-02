@@ -1837,7 +1837,7 @@ class DesktopWorkflowPresenter(
             creationMessage(creationKind, chatTarget.symbol, request)
         else request
     val taskSpec =
-        state.preparedTaskSpec?.takeIf {
+        (if (repair) state.chat.session?.taskSpec else state.preparedTaskSpec)?.takeIf {
           it.targetPath == file.path &&
               it.targetSymbol == chatTarget.symbol &&
               chatTarget.mode == ChatEditMode.ReplaceSymbol
@@ -1968,8 +1968,25 @@ class DesktopWorkflowPresenter(
 
   fun reviseWithCheckOutput(mode: ChatEditMode, requestedSymbol: String) {
     val state = snapshot.value.state
-    val message =
-        repairMessageForChecks(state.chat.session, state.review.draft, state.checks) ?: return
+    val draft = state.review.draft ?: return
+    val target = validateChatTarget(state.selection, mode, requestedSymbol).target
+    if (state.review.editor?.status != DraftEditorStatus.Valid ||
+        !draftEditorMatchesOpenFile(state.review.editor, state.selectedFile, state.project) ||
+        state.review.editor.serverDraft != draft ||
+        state.review.checkAttempt != null ||
+        target?.symbol != draft.targetSymbol ||
+        target.mode.wireValue != draft.mode) {
+      dispatch(
+          DesktopEvent.Failed(
+              "Repair is blocked by changed source, candidate, target or check evidence. Edit the draft or run fresh checks."))
+      return
+    }
+    val blocked = repairUnavailableReason(state.chat.session, draft, state.checks)
+    if (blocked != null) {
+      dispatch(DesktopEvent.Failed(blocked))
+      return
+    }
+    val message = repairMessageForChecks(state.chat.session, draft, state.checks) ?: return
     sendChatMessage(mode, requestedSymbol, message, repair = true)
   }
 

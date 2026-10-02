@@ -600,7 +600,19 @@ class ReviewEvidencePaneTest {
   fun taskBoundFailureCreatesABoundedExplicitRepairMessageUntilTheLimit() {
     val task = BugTaskSpec("1", "main.go", "Run", "func Run()", listOf("Return an error."))
     val current = draft().copy(taskSpec = task)
-    val session = ChatSession(id = "session", taskSpec = task, repairCount = 2)
+    val session =
+        ChatSession(
+            id = "session",
+            projectId = current.projectId,
+            projectRevision = current.projectRevision,
+            baseFileHash = current.baseFileHash,
+            openPath = current.targetPath,
+            mode = current.mode,
+            targetSymbol = current.targetSymbol,
+            latestDraftId = current.id,
+            state = "active",
+            taskSpec = task,
+            repairCount = 2)
     val checks =
         DraftCheckReport(
             "main.go",

@@ -8,6 +8,41 @@ import kotlin.test.assertTrue
 
 class FileChatStateTest {
   @Test
+  fun repairRequiresBoundFailureAndKeepsTheLastAttemptExplicit() {
+    val base = editorComparisonReviewFixture()
+    val task =
+        BugTaskSpec(targetPath = base.draft!!.targetPath, targetSymbol = base.draft.targetSymbol)
+    val draft = base.draft.copy(taskSpec = task)
+    val session = base.session!!.copy(taskSpec = task, repairCount = 2, state = "active")
+    val report =
+        base.checks!!.copy(
+            applicable = false,
+            checks = listOf(DraftCheck("test", true, "failed", output = "expected failure")))
+    assertNull(repairUnavailableReason(session, draft, report))
+    assertTrue(
+        repairUnavailableReason(session.copy(repairCount = 3), draft, report)!!.contains("limit"))
+    assertTrue(
+        repairUnavailableReason(session.copy(latestDraftId = "older"), draft, report)!!.contains(
+            "bound"))
+    assertTrue(
+        repairUnavailableReason(session.copy(openPath = "other.go"), draft, report)!!.contains(
+            "bound"))
+    assertTrue(
+        repairUnavailableReason(session, draft, report.copy(draftHash = "older"))!!.contains(
+            "candidate"))
+    assertTrue(
+        repairUnavailableReason(session, draft, report.copy(checks = emptyList()))!!.contains(
+            "No failed"))
+    val evidence =
+        reviewEvidenceUiState(base.project, base.selected, editableDraft(draft), draft, report)
+    val decision =
+        applyDecisionUiState(base.project, base.selected, editableDraft(draft), draft, report, null)
+    val action = reviewNextActionUiState(evidence, decision, draft, report, session, false)
+    assertEquals(ReviewNextActionKind.ReviseWithCheckOutput, action.kind)
+    assertTrue(action.detail.contains("3 of 3"))
+  }
+
+  @Test
   fun replaceRequiresAnExactSelectedDeclaration() {
     val exact = symbol("Run")
     val approximate = exact.copy(confidence = "approximate")
