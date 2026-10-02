@@ -2811,7 +2811,9 @@ class DesktopWorkflowPresenterTest {
                 response(
                     symbolsJson(if (path.contains("other.go")) "other.go" else "main.go", "Run"))
             method == "POST" && path.endsWith("chat/sessions") ->
-                TransportResponse(503, """{"message":"provider request failed"}""")
+                TransportResponse(
+                    503,
+                    """{"type":"provider_unavailable","message":"provider request failed","user_message":"provider request failed"}""")
             else -> response("{}")
           }
         }
@@ -2831,26 +2833,25 @@ class DesktopWorkflowPresenterTest {
               SymbolInfo("Run", "function", confidence = "exact", atomicTarget = true)))
       presenter.sendChatMessage(ChatEditMode.ReplaceSymbol, "", "Preserve the public signature")
       drain()
-      val failure = presenter.snapshot.value.state.chat.failure
+      val failure = presenter.snapshot.value.state.chat.attempts.single()
       assertEquals("Request failed for Run.", presenter.snapshot.value.state.status)
-      assertEquals(ChatTarget(ChatEditMode.ReplaceSymbol, "Run"), failure?.target)
-      assertTrue(failure?.message.orEmpty().contains("provider request failed"))
+      assertEquals(ChatTarget(ChatEditMode.ReplaceSymbol, "Run"), failure.scope.target)
+      assertTrue(
+          (failure.outcome as ChatRequestOutcome.Failed)
+              .message
+              .contains("provider request failed"))
       presenter.dispatch(DesktopEvent.Status("Another operation finished"))
-      assertEquals(failure, presenter.snapshot.value.state.chat.failure)
+      assertEquals(failure, presenter.snapshot.value.state.chat.attempts.single())
       presenter.sendChatMessage(
           ChatEditMode.ReplaceSymbol, "", "Try preserving the public signature again")
-      assertEquals(
-          failure,
-          presenter.snapshot.value.state.chat.attempts.first().let {
-            ChatRequestFailure(it.scope.target, (it.outcome as ChatRequestOutcome.Failed).message)
-          })
+      assertEquals(failure, presenter.snapshot.value.state.chat.attempts.first())
       drain()
       assertEquals(2, presenter.snapshot.value.state.chat.attempts.size)
       assertTrue(
           presenter.confirmFileNavigationIntent(presenter.fileNavigationIntent("other.go")!!))
       drain()
       assertEquals("other.go", presenter.snapshot.value.state.selectedFile?.path)
-      assertNull(presenter.snapshot.value.state.chat.failure)
+      assertTrue(presenter.snapshot.value.state.chat.attempts.isEmpty())
     } finally {
       presenter.close()
       scope.cancel()
@@ -7970,9 +7971,7 @@ class DesktopWorkflowPresenterTest {
       dispatcher.runPending()
       assertEquals(0, sessionRequests.get())
       assertEquals(0, messageRequests.get())
-      assertEquals(
-          "Add a concise intent after the selected preset before sending.",
-          presenter.snapshot.value.state.error)
+      assertEquals("Enter a specific intent before sending.", presenter.snapshot.value.state.error)
 
       presenter.sendChatMessage(
           ChatEditMode.ReplaceSymbol, "", "Fix a bug: return a typed error for a missing user")
@@ -7980,7 +7979,7 @@ class DesktopWorkflowPresenterTest {
       assertEquals(0, sessionRequests.get())
       assertEquals(0, messageRequests.get())
       assertEquals(
-          "Confirm the Function edits model destination before sending context.",
+          "Confirm the Function remote destination before sending.",
           presenter.snapshot.value.state.error)
 
       presenter.setProviderConfirmation(ModelScope.Function, true)
@@ -8556,8 +8555,12 @@ class DesktopWorkflowPresenterTest {
         "GET" to "/api/projects/current/git?path=main.go" -> response("{\"available\":false}")
         "POST" to "/api/projects/current/chat/sessions" -> {
           sessionBodies += body.orEmpty()
+          val task =
+              if (body.orEmpty().contains("\"task_spec\""))
+                  ",\"task_spec\":{\"schema_version\":\"1\",\"target_path\":\"main.go\",\"target_symbol\":\"Run\",\"target_signature\":\"func Run()\",\"acceptance_criteria\":[\"Return an error for empty input.\"]}"
+              else ""
           response(
-              "{\"id\":\"session\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"base_file_hash\":\"base\",\"open_path\":\"main.go\",\"mode\":\"replace_symbol\",\"target_symbol\":\"Run\",\"state\":\"active\",\"messages\":[]}")
+              "{\"id\":\"session\",\"project_id\":\"project\",\"project_revision\":\"revision\",\"base_file_hash\":\"base\",\"open_path\":\"main.go\",\"mode\":\"replace_symbol\",\"target_symbol\":\"Run\",\"state\":\"active\",\"messages\":[]$task}")
         }
         "POST" to "/api/projects/current/chat/sessions/session/messages" -> {
           messageRequests.incrementAndGet()
