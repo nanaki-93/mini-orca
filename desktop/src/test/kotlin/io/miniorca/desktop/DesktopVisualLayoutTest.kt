@@ -75,6 +75,345 @@ import org.jetbrains.skia.Surface
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
+  fun f26AssistantComposerAndConversationProductionMatrix() {
+    val evidence = editorComparisonReviewFixture()
+    val file = requireNotNull(evidence.selected)
+    val symbol = requireNotNull(evidence.selectedSymbol)
+    val draft = requireNotNull(evidence.draft)
+    val target = ChatTarget(ChatEditMode.ReplaceSymbol, symbol.name)
+    val scope =
+        ChatRequestScope(
+            visualFixtureProject.projectId,
+            visualFixtureProject.projectRevision,
+            file.path,
+            file.contentHash,
+            target,
+            declaration = symbol)
+    val longPath = "internal/" + "deeply/nested/日本語/".repeat(9) + "user.go"
+    val longDiagnostic = ("Provider timeout at " + "long diagnostic segment ".repeat(30)).trim()
+    val remote =
+        ScopedModel(
+            scope = "function",
+            profile = "remote-edit",
+            model = "example-model",
+            providerOrigin = "https://provider.example.invalid",
+            remoteProvider = true)
+    val local =
+        ScopedModel(
+            scope = "function",
+            profile = "local-edit",
+            model = "example-model",
+            providerOrigin = "http://localhost:11434")
+    val response =
+        "**Suggested change:** keep the signature. <img src='https://example.invalid/a'>\n" +
+            (1..12).joinToString("\n") { "- Preserve existing behavior $it." }
+    val session =
+        requireNotNull(evidence.session)
+            .copy(
+                messages =
+                    listOf(
+                        ChatSessionMessage("user", "First request"),
+                        ChatSessionMessage("assistant", response, "fixture-draft"),
+                        ChatSessionMessage("user", "Retry request"),
+                        ChatSessionMessage("assistant", "Second response", "next-draft")))
+    val attempts =
+        listOf(
+            ChatRequestAttempt(
+                1,
+                scope,
+                local,
+                false,
+                "First request",
+                0,
+                ChatRequestOutcome.Succeeded(session.id, "fixture-draft")),
+            ChatRequestAttempt(
+                2,
+                scope,
+                local,
+                false,
+                "Failed request",
+                1,
+                ChatRequestOutcome.Failed(longDiagnostic)),
+            ChatRequestAttempt(
+                3,
+                scope,
+                local,
+                false,
+                "Canceled request",
+                1,
+                ChatRequestOutcome.Canceled,
+                "Canceled locally"),
+            ChatRequestAttempt(
+                4,
+                scope,
+                local,
+                false,
+                "Retry request",
+                1,
+                ChatRequestOutcome.Succeeded(session.id, "next-draft")))
+    val base =
+        AssistantToolWindowState(
+            visualFixtureProject,
+            file,
+            null,
+            null,
+            null,
+            target,
+            ChatEditMode.ReplaceSymbol,
+            "",
+            "Keep the signature.",
+            false,
+            local,
+            false,
+            FocusRequester(),
+            FocusRequester(),
+            selectedSymbol = symbol,
+            targetValidation = ChatTargetValidation(target),
+            advancedConstraintsInput = TextFieldValue("Preserve existing callers."))
+    val scenarios =
+        listOf(
+            "empty" to
+                base.copy(
+                    project = null,
+                    selected = null,
+                    target = null,
+                    targetValidation = ChatTargetValidation(message = "Open a Go file first.")),
+            "ineligible" to
+                base.copy(
+                    target = null,
+                    targetValidation =
+                        ChatTargetValidation(message = "Select one exact declaration.")),
+            "local" to base,
+            "remote-unconfirmed" to base.copy(functionModel = remote),
+            "remote-confirmed" to base.copy(functionModel = remote, remoteConfirmed = true),
+            "running" to
+                base.copy(
+                    functionModel = remote,
+                    remoteConfirmed = true,
+                    sending = true,
+                    attempts =
+                        listOf(ChatRequestAttempt(5, scope, remote, true, "Pending request", 1))),
+            "failed" to base.copy(attempts = listOf(attempts[1])),
+            "canceled" to base.copy(attempts = listOf(attempts[2])),
+            "history-draft" to
+                base.copy(
+                    session = session,
+                    attempts = attempts,
+                    draft = draft,
+                    editor = editableDraft(draft)),
+            "long-path" to
+                base.copy(
+                    selected = file.copy(path = longPath),
+                    target = null,
+                    targetValidation =
+                        ChatTargetValidation(message = "Select an exact declaration.")))
+    val sizes = listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)
+    for ((width, height) in sizes) for (scale in listOf(1f, 1.25f, 1.5f)) {
+      for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+        for ((name, state) in scenarios) {
+          var actions = 0
+          val label = "f26-assistant-$name-$width-$height-$scale-${density}x"
+          ComposeVisualFixture(
+                  (width * density).toInt(), (height * density).toInt(), scale, density) {
+                    AssistantToolWindow(
+                        state,
+                        AssistantConversationActions(
+                            { actions++ },
+                            { actions++ },
+                            { actions++ },
+                            { actions++ },
+                            { actions++ },
+                            { actions++ },
+                            preparePreset = { actions++ }),
+                        DraftEditorActions({ actions++ }, { actions++ }, { actions++ }),
+                        Modifier.fillMaxSize())
+                  }
+              .use { fixture ->
+                fixture.render("$label-collapsed")
+                assertEquals("Collapsed", fixture.stateDescription("Advanced constraints"), label)
+                assertFalse(fixture.hasText("Constraints"), label)
+                assertTrue(fixture.hasText("Inspect context"), label)
+                assertTrue(fixture.hasText("Conversation"), label)
+                assertTrue(
+                    fixture.hasText(
+                        "File-scoped preview only · no Function request or confirmation."),
+                    label)
+                assertTrue(fixture.hasDescription("Intent"), label)
+                val actionText = if (state.sending) "Cancel request" else "Send message"
+                fixture.scrollBy(100_000f, "assistant-composer-scroll")
+                fixture.render()
+                val action = fixture.taggedBounds("assistant-request-action")
+                val composer = fixture.taggedBounds("assistant-composer-scroll")
+                assertTrue(action.top >= composer.top && action.bottom <= composer.bottom, label)
+                assertTrue(action.right <= width * density, label)
+                fixture.assertTextFits(actionText)
+                assertEquals(
+                    !state.sending && assistantComposerBlockedReason(state) != null,
+                    fixture.isDisabled(actionText),
+                    label)
+                if (name == "remote-unconfirmed" ||
+                    name == "remote-confirmed" ||
+                    name == "running") {
+                  assertEquals(
+                      if (state.remoteConfirmed) ToggleableState.On else ToggleableState.Off,
+                      fixture.descriptionToggleableState("Confirm remote destination"),
+                      label)
+                  assertTrue(
+                      fixture.hasText("Function provider origin: https://provider.example.invalid"),
+                      label)
+                  fixture.assertTextContrast(
+                      "Function provider origin: https://provider.example.invalid", AppBackground)
+                }
+                if (name == "local") {
+                  assertTrue(fixture.hasText(functionDestinationLabel(local)), label)
+                  assertFalse(fixture.hasText("Confirm remote destination"), label)
+                }
+                if (name == "running") {
+                  assertTrue(
+                      fixture.hasText(
+                          "Request running · Cancel keeps the existing draft and conversation."),
+                      label)
+                  assertTrue(fixture.hasText("Pending request"), label)
+                }
+                if (name == "ineligible")
+                    assertTrue(fixture.hasText("Select one exact declaration."), label)
+                if (name == "long-path") {
+                  fixture.assertEveryTextLineReachable(longPath, "assistant-composer-scroll")
+                }
+                if (name == "failed" || name == "history-draft") {
+                  assertTrue(fixture.hasText("Request failed"), label)
+                  fixture.assertEveryTextLineReachable(longDiagnostic, "assistant-history-scroll")
+                  fixture.revealTextFullyWithin("Failed request", "assistant-history-scroll")
+                  assertTrue(fixture.copyTextByDragging("Failed request").isNotBlank(), label)
+                }
+                if (name == "canceled" || name == "history-draft") {
+                  assertTrue(fixture.hasText("Request canceled"), label)
+                  assertTrue(fixture.hasText("Canceled locally"), label)
+                }
+                if (name == "history-draft") {
+                  assertEquals(1, fixture.textCount("First request"), label)
+                  assertEquals(1, fixture.textCount("Retry request"), label)
+                  assertTrue(fixture.hasText(formatModelResult(response).text), label)
+                  assertTrue(fixture.hasText("Editable draft"), label)
+                  if (width == 800 && scale == 1.5f) {
+                    fixture.revealTextFullyWithin("Show full response", "assistant-history-scroll")
+                    fixture.clickText("Show full response")
+                    fixture.render("$label-full-response")
+                    fixture.assertEveryTextLineReachable(
+                        formatModelResult(response).text, "assistant-history-scroll")
+                  }
+                  fixture.revealText("Validate draft for GetUser", "assistant-history-scroll")
+                  fixture.revealTextFullyWithin("Second response", "assistant-history-scroll")
+                  assertTrue(fixture.copyTextByDragging("Second response").isNotBlank(), label)
+                  assertTrue(
+                      fixture.hasEditableText(withinTag = "assistant-composer-scroll"), label)
+                }
+                if (name == "local" || name == "remote-unconfirmed") {
+                  fixture.revealTextFullyWithin("Advanced constraints", "assistant-composer-scroll")
+                  fixture.clickText("Advanced constraints")
+                  fixture.render("$label-expanded")
+                  assertEquals("Expanded", fixture.stateDescription("Advanced constraints"), label)
+                  assertTrue(fixture.hasText("Constraints"), label)
+                  fixture.scrollBy(100_000f, "assistant-composer-scroll")
+                  fixture.render()
+                  val expandedAction = fixture.taggedBounds("assistant-request-action")
+                  val expandedComposer = fixture.taggedBounds("assistant-composer-scroll")
+                  assertTrue(
+                      expandedAction.top >= expandedComposer.top &&
+                          expandedAction.bottom <= expandedComposer.bottom,
+                      label)
+                  if (name == "remote-unconfirmed") {
+                    assertTrue(
+                        fixture.hasText("Confirm the Function remote destination before sending."),
+                        label)
+                    assertTrue(fixture.isDisabled("Send message"), label)
+                  } else if (width == 1440 && scale == 1f) {
+                    assertTrue(fixture.requestFocus("Send message"), label)
+                    fixture.render("$label-focused")
+                    assertTrue(fixture.isFocusedControl("Send message"), label)
+                    fixture.assertColorVisible(FocusAccent)
+                  }
+                }
+                assertEquals(0, actions, "Passive render dispatched work: $label")
+              }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun f26AssistantRemainsReachableBesideTheReadOnlyEditorAtResponsiveSizes() {
+    val evidence = editorComparisonReviewFixture()
+    val file = requireNotNull(evidence.selected)
+    val symbol = requireNotNull(evidence.selectedSymbol)
+    val draft = requireNotNull(evidence.draft)
+    val target = ChatTarget(ChatEditMode.ReplaceSymbol, symbol.name)
+    val state =
+        AssistantToolWindowState(
+            visualFixtureProject,
+            file,
+            evidence.session,
+            draft,
+            editableDraft(draft),
+            target,
+            ChatEditMode.ReplaceSymbol,
+            "",
+            "Preserve public behavior.",
+            false,
+            ScopedModel(
+                profile = "local", model = "editor", providerOrigin = "http://localhost:11434"),
+            false,
+            FocusRequester(),
+            FocusRequester(),
+            selectedSymbol = symbol,
+            targetValidation = ChatTargetValidation(target))
+    val layout =
+        DesktopLayoutState(explorerWidth = 520f, actionWidth = 560f, bottomCollapsed = true)
+    for ((width, height) in
+        listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        for (density in if (width == 800 && scale == 1.5f) listOf(1f, 2f) else listOf(1f)) {
+          var actions = 0
+          val label = "f26-editor-assistant-$width-$height-$scale-${density}x"
+          ComposeVisualFixture(
+                  (width * density).toInt(), (height * density).toInt(), scale, density) {
+                    AdaptiveProductionEditorFixture(
+                        layout,
+                        review = false,
+                        evidence = evidence,
+                        rightTool = RightToolWindow.Assistant,
+                        assistantState = state,
+                        terminalCollapsed = true,
+                        onRequest = { actions++ },
+                        onWrite = { actions++ })
+                  }
+              .use { fixture ->
+                fixture.render(label)
+                assertFalse(fixture.hasEditableText(withinTag = "source-viewport"), label)
+                if (resolveDesktopLayout(layout, width.toFloat(), scale).mode ==
+                    DesktopLayoutMode.Compact) {
+                  fixture.scrollBy(100_000f, "f04-arrangement")
+                  fixture.render()
+                }
+                val tool = fixture.taggedBounds("f04-tool")
+                val dock = fixture.taggedBounds("f04-dock")
+                assertTrue(tool.width > 0 && tool.top < dock.top, label)
+                assertTrue(fixture.hasText("Conversation"), label)
+                fixture.scrollBy(100_000f, "assistant-composer-scroll")
+                fixture.render("$label-action")
+                val action = fixture.taggedBounds("assistant-request-action")
+                val composer = fixture.taggedBounds("assistant-composer-scroll")
+                assertTrue(action.top >= composer.top && action.bottom <= composer.bottom, label)
+                assertTrue(fixture.hasText("Editable draft"), label)
+                assertTrue(fixture.hasText("Inspect context"), label)
+                assertEquals(0, actions, label)
+              }
+        }
+      }
+    }
+  }
+
+  @Test
   fun contextPreviewDestinationAndRequestBoundariesStayReachableInProductionDialog() {
     val identity =
         ContextInspectionIdentity(
@@ -7399,8 +7738,9 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.hasText(formatModelResult(response).text))
           assertTrue(fixture.hasText("Candidate for review"))
           assertTrue(fixture.hasText("missing closing brace"))
-          assertEquals(1, fixture.scrollableContentCount())
-          fixture.scrollBy(2000f)
+          assertTrue(fixture.taggedBounds("assistant-composer-scroll").height > 0f)
+          assertTrue(fixture.taggedBounds("assistant-history-scroll").height > 0f)
+          fixture.scrollBy(2000f, "assistant-history-scroll")
           fixture.render()
           fixture.assertTextAboveDescription("Candidate for review", "Invalid")
           fixture.clickText("Show full response")
@@ -7634,7 +7974,7 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render("assistant-function-presets-480-1.3")
           assertTrue(fixture.hasText("Ready for the selected declaration"))
-          fixture.clickText("Fix bug")
+          fixture.clickText("Fix")
           fixture.render("assistant-function-preset-prepared-480-1.3")
 
           assertEquals(1, presetCalls)
@@ -13439,6 +13779,7 @@ internal fun AdaptiveProductionEditorFixture(
     onValidate: () -> Unit = {},
     onRequest: () -> Unit = {},
     onWrite: () -> Unit = {},
+    assistantState: AssistantToolWindowState? = null,
     onTerminal: () -> Unit = {},
     fileRead: FileReadUiState? = null,
     creationInProgress: Boolean = false,
@@ -13557,22 +13898,23 @@ internal fun AdaptiveProductionEditorFixture(
                                       contentModifier)
                               RightToolWindow.Assistant ->
                                   AssistantToolWindow(
-                                      AssistantToolWindowState(
-                                          visualFixtureProject,
-                                          file,
-                                          session,
-                                          draft,
-                                          editableDraft(draft),
-                                          ChatTarget(ChatEditMode.ReplaceSymbol, symbol.name),
-                                          ChatEditMode.ReplaceSymbol,
-                                          "",
-                                          "Change the declaration",
-                                          false,
-                                          ScopedModel(),
-                                          false,
-                                          FocusRequester(),
-                                          FocusRequester(),
-                                          draftInput = draftInput),
+                                      assistantState
+                                          ?: AssistantToolWindowState(
+                                              visualFixtureProject,
+                                              file,
+                                              session,
+                                              draft,
+                                              editableDraft(draft),
+                                              ChatTarget(ChatEditMode.ReplaceSymbol, symbol.name),
+                                              ChatEditMode.ReplaceSymbol,
+                                              "",
+                                              "Change the declaration",
+                                              false,
+                                              ScopedModel(),
+                                              false,
+                                              FocusRequester(),
+                                              FocusRequester(),
+                                              draftInput = draftInput),
                                       AssistantConversationActions(
                                           {}, {}, {}, {}, onRequest, onRequest),
                                       DraftEditorActions(
