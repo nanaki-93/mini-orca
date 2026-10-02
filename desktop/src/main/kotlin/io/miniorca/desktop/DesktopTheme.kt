@@ -318,6 +318,51 @@ internal fun CompactSingleLineField(
   }
 }
 
+@Composable
+internal fun CompactSingleLineField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+  val interactions = remember { MutableInteractionSource() }
+  val focused by interactions.collectIsFocusedAsState()
+  Column(modifier) {
+    Text(
+        label,
+        color = SecondaryText,
+        style = IdeTypography.section,
+        modifier = Modifier.padding(bottom = 5.dp))
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        enabled = enabled,
+        singleLine = true,
+        interactionSource = interactions,
+        textStyle = IdeTypography.compactBody.copy(color = if (enabled) PrimaryText else FaintText),
+        cursorBrush = SolidColor(FocusAccent),
+        modifier =
+            Modifier.fillMaxWidth()
+                .heightIn(min = 34.dp)
+                .clip(MiniOrcaShapes.control)
+                .background(EditorCanvas)
+                .border(
+                    BorderStroke(
+                        if (focused) 2.dp else 1.dp, if (focused) FocusAccent else ControlBorder),
+                    MiniOrcaShapes.control)
+                .semantics { contentDescription = label },
+        decorationBox = { input ->
+          Box(
+              Modifier.padding(horizontal = 10.dp, vertical = MiniOrcaSpacing.standard),
+              contentAlignment = Alignment.CenterStart) {
+                input()
+              }
+        },
+    )
+  }
+}
+
 /** A contained, selectable multiline input that shares the compact dark field treatment. */
 @Composable
 internal fun CompactMultilineField(

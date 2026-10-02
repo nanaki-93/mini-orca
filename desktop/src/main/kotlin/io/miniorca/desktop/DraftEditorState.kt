@@ -28,6 +28,8 @@ data class EditableDraftState(
     val status: DraftEditorStatus = draftEditorStatus(serverDraft),
     val validationAttempt: ValidationAttempt? = null,
     val retainedValidation: DeclarationValidation? = null,
+    // Advances only when a complete authoritative draft is accepted, not on a PATCH response.
+    val acceptanceGeneration: Long = 0,
 ) {
   val diagnostics: List<DeclarationFinding>
     get() = serverDraft.validation?.diagnostics ?: retainedValidation?.diagnostics.orEmpty()

@@ -289,7 +289,7 @@ internal fun AssistantToolWindow(
             AssistantDraftEditorSection(
                 state.editor,
                 state.draftInput ?: TextFieldValue(state.editor.declaration),
-                state.importInput ?: state.editor.imports.joinToString(", "),
+                state.importInput ?: TextFieldValue(state.editor.imports.joinToString(", ")),
                 state.draftFocus,
                 state.draft.engineeringInsight,
                 state.draft.state.equals("stale", ignoreCase = true),
@@ -383,7 +383,7 @@ internal fun assistantComposerBlockedReason(state: AssistantToolWindowState): St
 private fun AssistantDraftEditorSection(
     editor: EditableDraftState,
     declaration: TextFieldValue,
-    importText: String,
+    importText: TextFieldValue,
     draftFocus: FocusRequester,
     insight: EngineeringInsight?,
     stale: Boolean,
@@ -418,7 +418,7 @@ private fun AssistantDraftEditorSection(
       if (requiredImportsVisible(editor)) {
         CompactSingleLineField(
             importText,
-            actions.updateImportText,
+            actions.updateImportValue,
             enabled =
                 editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale),
             label = "Required imports",
@@ -602,7 +602,7 @@ internal data class AssistantToolWindowState(
     val draftFocus: FocusRequester,
     val messageInput: TextFieldValue = TextFieldValue(message),
     val draftInput: TextFieldValue? = null,
-    val importInput: String? = null,
+    val importInput: TextFieldValue? = null,
     val selectedSymbol: SymbolInfo? = null,
     val targetValidation: ChatTargetValidation = ChatTargetValidation(target),
     val advancedConstraintsInput: TextFieldValue = TextFieldValue(),
@@ -644,6 +644,7 @@ internal data class DraftEditorActions(
     val updateImportText: (String) -> Unit = { value ->
       updateImports(parseRequiredImports(value))
     },
+    val updateImportValue: (TextFieldValue) -> Unit = { value -> updateImportText(value.text) },
 )
 
 internal fun requiredImportsVisible(editor: EditableDraftState): Boolean =

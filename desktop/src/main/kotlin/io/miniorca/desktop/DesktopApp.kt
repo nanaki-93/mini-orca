@@ -6,6 +6,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -14,6 +15,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import java.io.File
 import java.util.concurrent.CompletableFuture
@@ -36,14 +38,59 @@ private enum class ComposerFocusTarget {
 internal fun layoutForPreparedRequest(layout: DesktopLayoutState): DesktopLayoutState =
     layout.openRight(RightToolWindow.Assistant).withFocus(DesktopFocusRegion.RightToolWindow)
 
-private data class DraftFieldIdentity(
+internal data class DraftFieldIdentity(
+    val projectId: String,
+    val projectRevision: String,
+    val path: String,
+    val baseFileHash: String,
     val id: String,
-    val revision: Long,
-    val hash: String,
 )
 
-private fun draftFieldIdentity(editor: EditableDraftState?): DraftFieldIdentity? =
-    editor?.serverDraft?.let { DraftFieldIdentity(it.id, it.revision, it.hash) }
+internal data class DraftFieldBuffers(
+    val identity: DraftFieldIdentity,
+    val acceptanceGeneration: Long,
+    val declaration: TextFieldValue,
+    val imports: TextFieldValue,
+)
+
+private fun draftFieldIdentity(editor: EditableDraftState): DraftFieldIdentity =
+    editor.serverDraft.let {
+      DraftFieldIdentity(it.projectId, it.projectRevision, it.targetPath, it.baseFileHash, it.id)
+    }
+
+private fun reconciledField(value: TextFieldValue, text: String): TextFieldValue {
+  if (value.text == text) return value
+  return value.copy(
+      text = text,
+      selection =
+          TextRange(
+              value.selection.start.coerceIn(0, text.length),
+              value.selection.end.coerceIn(0, text.length)),
+      composition =
+          value.composition?.let {
+            TextRange(it.start.coerceIn(0, text.length), it.end.coerceIn(0, text.length))
+          })
+}
+
+internal fun reconcileDraftFields(
+    previous: DraftFieldBuffers?,
+    editor: EditableDraftState?,
+): DraftFieldBuffers? {
+  if (editor == null) return null
+  val identity = draftFieldIdentity(editor)
+  val imports = editor.imports.joinToString(", ")
+  if (previous == null || previous.identity != identity)
+      return DraftFieldBuffers(
+          identity,
+          editor.acceptanceGeneration,
+          TextFieldValue(editor.declaration),
+          TextFieldValue(imports))
+  if (previous.acceptanceGeneration >= editor.acceptanceGeneration) return previous
+  return previous.copy(
+      acceptanceGeneration = editor.acceptanceGeneration,
+      declaration = reconciledField(previous.declaration, editor.declaration),
+      imports = reconciledField(previous.imports, imports))
+}
 
 internal fun declarationTextEdit(
     previous: TextFieldValue,
@@ -340,9 +387,7 @@ internal fun MiniOrcaApp(
   var chatMessage by remember { mutableStateOf(TextFieldValue()) }
   var advancedConstraints by remember { mutableStateOf(TextFieldValue()) }
   var consumedPreparedRequestGeneration by remember { mutableStateOf(0L) }
-  var draftFieldKey by remember { mutableStateOf<DraftFieldIdentity?>(null) }
-  var draftFieldValue by remember { mutableStateOf(TextFieldValue()) }
-  var draftImportText by remember { mutableStateOf("") }
+  var draftFields by remember { mutableStateOf<DraftFieldBuffers?>(null) }
   val switchAdmission = remember { ProjectSwitchAdmission() }
   var pendingSwitch by remember { mutableStateOf<PendingProjectSwitch?>(null) }
   var chooserOpen by remember { mutableStateOf(false) }
@@ -421,18 +466,8 @@ internal fun MiniOrcaApp(
       layout = layout.withEditorSurface(EditorSurface.Source)
     }
   }
-  val activeDraftFieldIdentity = draftFieldIdentity(appState.review.editor)
-  LaunchedEffect(activeDraftFieldIdentity) {
-    draftFieldKey = activeDraftFieldIdentity
-    draftFieldValue = TextFieldValue(appState.review.editor?.declaration.orEmpty())
-    draftImportText = appState.review.editor?.imports?.joinToString(", ").orEmpty()
-  }
-  val activeDraftFieldValue =
-      if (draftFieldKey == activeDraftFieldIdentity) draftFieldValue
-      else TextFieldValue(appState.review.editor?.declaration.orEmpty())
-  val activeDraftImportText =
-      if (draftFieldKey == activeDraftFieldIdentity) draftImportText
-      else appState.review.editor?.imports?.joinToString(", ").orEmpty()
+  val activeDraftFields = reconcileDraftFields(draftFields, appState.review.editor)
+  SideEffect { draftFields = reconcileDraftFields(draftFields, appState.review.editor) }
   LaunchedEffect(presenter) { presenter.start() }
   DisposableEffect(presenter, terminal) {
     terminal.onFocusLeft = { presenter.refreshSelectedFile() }
@@ -745,8 +780,8 @@ internal fun MiniOrcaApp(
                   chatFocus = chatFocusRequester,
                   draftFocus = draftFocusRequester,
                   messageInput = chatMessage,
-                  draftInput = activeDraftFieldValue,
-                  importInput = activeDraftImportText,
+                  draftInput = activeDraftFields?.declaration,
+                  importInput = activeDraftFields?.imports,
                   selectedSymbol = appState.selectedSymbol,
                   targetValidation = targetValidation,
                   advancedConstraintsInput = advancedConstraints,
@@ -808,20 +843,20 @@ internal fun MiniOrcaApp(
                   },
                   validate = presenter::validateEditableDraft,
                   updateDeclarationValue = { value ->
-                    val previous =
-                        if (draftFieldKey == activeDraftFieldIdentity) draftFieldValue
-                        else activeDraftFieldValue
-                    val event = declarationTextEdit(previous, value)
-                    draftFieldValue = value
-                    if (event != null) presenter.dispatch(event)
+                    val current = reconcileDraftFields(draftFields, appState.review.editor)
+                    if (current != null) {
+                      val event = declarationTextEdit(current.declaration, value)
+                      draftFields = current.copy(declaration = value)
+                      if (event != null) presenter.dispatch(event)
+                    }
                   },
-                  updateImportText = { value ->
-                    val previous =
-                        if (draftFieldKey == activeDraftFieldIdentity) draftImportText
-                        else activeDraftImportText
-                    val event = importTextEdit(previous, value)
-                    draftImportText = value
-                    if (event != null) presenter.dispatch(event)
+                  updateImportValue = { value ->
+                    val current = reconcileDraftFields(draftFields, appState.review.editor)
+                    if (current != null) {
+                      val event = importTextEdit(current.imports.text, value.text)
+                      draftFields = current.copy(imports = value)
+                      if (event != null) presenter.dispatch(event)
+                    }
                   },
               ),
           modifier = modifier,
