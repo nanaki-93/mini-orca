@@ -991,3 +991,11 @@ while a request is pending. After validation, **Review focused checks** opens Re
 without executing checks. Validation composes a candidate in memory; it does not
 run tests or write source. A response for different candidate content cannot approve
 the draft, and a changed source identity blocks current validation evidence.
+
+Review keeps Validation, Focused checks and Source unchanged together. Check details
+and full available output are local disclosures; rerunning requires its own explicit
+action even after a pass. A generated focused test shows its exact command and draft
+scope before **Trust local execution & run checks**. Trust must still match the
+project revision and candidate when execution starts. Missing or skipped check rows
+are labeled without claiming readiness; failed attempts retain prior output without
+reusing it as current approval.

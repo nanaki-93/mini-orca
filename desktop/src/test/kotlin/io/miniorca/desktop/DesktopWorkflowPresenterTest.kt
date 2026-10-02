@@ -37,6 +37,91 @@ import kotlinx.serialization.json.jsonPrimitive
 class DesktopWorkflowPresenterTest {
 
   @Test
+  fun focusedChecksRecheckCandidateAndTrustIdentityBeforeEveryPrivilegedRequest() {
+    for (scenario in
+        listOf("valid", "foreign-preview", "foreign-ack", "denied", "edit-preview", "edit-ack")) {
+      val main = QueuedDispatcher()
+      val io = QueuedDispatcher()
+      val scope = CoroutineScope(SupervisorJob() + main)
+      val calls = mutableListOf<String>()
+      lateinit var owner: DesktopWorkflowPresenter
+      val current =
+          draft()
+              .copy(
+                  taskSpec =
+                      BugTaskSpec(
+                          targetPath = "main.go",
+                          targetSymbol = "Run",
+                          goTestCandidate =
+                              GoTestCandidateSpec("TestRun", "func TestRun(t *testing.T) {}")))
+      owner =
+          presenter(parentScope = scope, ioDispatcher = io, interceptTrust = false) {
+              method,
+              path,
+              _ ->
+            if (path.contains("execution-trust")) {
+              calls += method
+              val preview = method == "GET"
+              if (scenario == if (preview) "edit-preview" else "edit-ack")
+                  owner.dispatch(
+                      DesktopEvent.DraftEdited(declaration = "func Run() int { return 2 }"))
+              val foreign = scenario == if (preview) "foreign-preview" else "foreign-ack"
+              response(
+                  Json.encodeToString(
+                      ExecutionTrust(
+                          if (foreign) "other" else "project",
+                          "revision",
+                          trusted = scenario != "denied",
+                          commands =
+                              listOf(
+                                  if (preview) listOf("go", "test", "./...", "-run", "^TestRun$")
+                                  else listOf("go", "test", "./...")))))
+            } else if (path.endsWith("/drafts/draft/checks")) {
+              calls += "checks"
+              response(
+                  Json.encodeToString(
+                      DraftCheckReport(
+                          "main.go",
+                          true,
+                          listOf(DraftCheck("focused test", true, "passed")),
+                          current.id,
+                          current.revision,
+                          current.hash)))
+            } else creationFileResponse(path) ?: error("Unexpected $path")
+          }
+      try {
+        loadQueuedChatFile(owner, main, io)
+        owner.dispatch(DesktopEvent.DraftLoaded(current))
+        owner.runDraftChecks()
+        repeat(4) {
+          main.runPending()
+          io.runPending()
+        }
+        assertEquals(
+            when (scenario) {
+              "valid" -> listOf("GET", "POST", "checks")
+              "foreign-preview",
+              "edit-preview" -> listOf("GET")
+              else -> listOf("GET", "POST")
+            },
+            calls,
+            scenario)
+        if (scenario.startsWith("edit")) {
+          assertEquals(DraftEditorStatus.Dirty, owner.snapshot.value.state.review.editor?.status)
+          assertNull(owner.snapshot.value.state.checks)
+        } else if (scenario != "valid") {
+          assertEquals(
+              ValidationAttemptStatus.Failed,
+              owner.snapshot.value.state.review.checkAttempt?.status)
+        }
+      } finally {
+        owner.close()
+        scope.cancel()
+      }
+    }
+  }
+
+  @Test
   fun contextInspectionPublishesLoadingAndOnlyAResponseCanProduceReady() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()

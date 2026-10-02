@@ -2091,15 +2091,31 @@ class DesktopWorkflowPresenter(
         scope.launch {
           try {
             val checks = io {
+              fun requireCurrentCandidate() {
+                val current = snapshot.value.state
+                if (closed ||
+                    currentDraftIdentity() != identity ||
+                    current.review.editor?.status != DraftEditorStatus.Valid ||
+                    current.review.checkAttempt !=
+                        CheckAttempt(
+                            request, CheckCandidate(draft), ValidationAttemptStatus.Running))
+                    throw CancellationException("Focused check candidate changed.")
+              }
+              requireCurrentCandidate()
               if (taskTestName != null) {
                 val expectedCommand = listOf("go", "test", "./...", "-run", "^$taskTestName$")
                 val trustScope = api.executionTrust(project.projectRevision, taskTestName)
-                if (trustScope.commands != listOf(expectedCommand)) {
-                  throw IllegalStateException(
-                      "Local execution command scope changed; review it again before trusting execution.")
+                requireCurrentCandidate()
+                validateProjectExecutionTrust(
+                    trustScope, identity.file.project, listOf(expectedCommand))
+                val acknowledgment = api.trustProjectExecution(project.projectRevision)
+                requireCurrentCandidate()
+                validateProjectExecutionTrust(acknowledgment, identity.file.project)
+                check(acknowledgment.trusted) {
+                  "Project-code execution trust was not confirmed; review and retry."
                 }
-                api.trustProjectExecution(project.projectRevision)
               }
+              requireCurrentCandidate()
               api.checkDraft(draft.id, project.projectRevision, draft.revision, draft.hash)
             }
             if (activeDraft == identity &&
@@ -2231,11 +2247,11 @@ class DesktopWorkflowPresenter(
                 val trustScope = api.executionTrust(request.project.revision)
                 if (!canInvokeVerifiedScanAction(request)) null
                 else {
-                  validateVerifiedScanTrust(trustScope, request.project)
+                  validateProjectExecutionTrust(trustScope, request.project)
                   val acknowledgment = api.trustProjectExecution(request.project.revision)
                   if (!canInvokeVerifiedScanAction(request)) null
                   else {
-                    validateVerifiedScanTrust(acknowledgment, request.project)
+                    validateProjectExecutionTrust(acknowledgment, request.project)
                     check(acknowledgment.trusted) {
                       "Project-code execution trust was not confirmed; review and retry."
                     }
@@ -2267,9 +2283,10 @@ class DesktopWorkflowPresenter(
     }
   }
 
-  private fun validateVerifiedScanTrust(
+  private fun validateProjectExecutionTrust(
       trust: ExecutionTrust,
       identity: WorkflowProjectIdentity,
+      commands: List<List<String>> = listOf(listOf("go", "test", "./...")),
   ) {
     check(
         trust.projectId.isNotBlank() &&
@@ -2278,7 +2295,7 @@ class DesktopWorkflowPresenter(
             trust.projectRevision == identity.revision) {
           "Project-code execution trust identity changed; review and retry."
         }
-    check(trust.commands == listOf(listOf("go", "test", "./..."))) {
+    check(trust.commands == commands) {
       "Local execution command scope changed; review it again before trusting execution."
     }
   }

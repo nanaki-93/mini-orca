@@ -282,11 +282,7 @@ class ReviewToolWindowTest {
           }
           .use { fixture ->
             fixture.render("review-$name-300-400-1.5")
-            if (name == "ready" || name == "skipped") {
-              if (name == "skipped") {
-                assertTrue(fixture.hasText("Skipped"))
-                assertTrue(fixture.hasText("0 of 1 required check passed"))
-              }
+            if (name == "ready") {
               fixture.revealText("Updates GetUser in internal/api/user.go.", "review-action-scroll")
               fixture.render("review-$name-short-action")
               fixture.assertTextFits("Apply change")
@@ -302,11 +298,12 @@ class ReviewToolWindowTest {
               val recovery =
                   if (name == "running" || name == "reported-running")
                       "Wait for current focused check evidence before reviewing Apply."
-                  else "Edit draft"
+                  else if (name == "skipped") "Run focused checks" else "Edit draft"
               fixture.revealText(recovery, "review-action-scroll")
               fixture.render("review-$name-short-recovery")
               fixture.assertTextFits(recovery, maxLines = 5)
               assertFalse(fixture.hasText("Ready to apply"))
+              assertFalse(fixture.hasText("Ready to apply."))
             }
             assertEquals(0, mutations)
           }

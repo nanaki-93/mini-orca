@@ -1879,6 +1879,7 @@ class DesktopWorkflowController(initial: DesktopState = DesktopState()) {
           matchesFile(file) &&
           sessionMatches(
               file, draft.projectId, draft.projectRevision, draft.targetPath, draft.baseFileHash) &&
+          checks.targetPath == draft.targetPath &&
           checks.draftId == draft.id &&
           checks.draftRevision == draft.revision &&
           checks.draftHash == draft.hash)
@@ -2004,6 +2005,7 @@ fun draftApplyEligibility(
 
 private fun checksPassForDraft(checks: DraftCheckReport?, draft: DeclarationDraft): Boolean =
     checks?.applicable == true &&
+        checks.targetPath == draft.targetPath &&
         checks.draftId == draft.id &&
         checks.draftRevision == draft.revision &&
         checks.draftHash == draft.hash &&

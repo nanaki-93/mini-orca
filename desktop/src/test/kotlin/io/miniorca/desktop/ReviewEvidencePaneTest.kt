@@ -9,6 +9,22 @@ import kotlin.test.assertTrue
 class ReviewEvidencePaneTest {
 
   @Test
+  fun missingAndSkippedCheckRowsNeverAdvertiseReadiness() {
+    val base = editorComparisonReviewFixture()
+    for (checks in listOf(emptyList(), listOf(DraftCheck("test", true, "skipped")))) {
+      val report = base.checks!!.copy(checks = checks)
+      val evidence =
+          reviewEvidenceUiState(base.project, base.selected, base.editor, base.draft, report)
+      val decision =
+          applyDecisionUiState(base.project, base.selected, base.editor, base.draft, report, null)
+      assertFalse(reviewReadinessTitle(evidence, decision) == "Ready to apply")
+      assertEquals(
+          ReviewNextActionKind.RunChecks,
+          reviewNextActionUiState(evidence, decision, base.draft, report, base.session, false).kind)
+    }
+  }
+
+  @Test
   fun validationCannotPassForAChangedSourceOrDifferentCandidate() {
     val base = editorComparisonReviewFixture()
     for ((file, draft) in
@@ -78,6 +94,7 @@ class ReviewEvidencePaneTest {
             DraftCheckReport(
                 path,
                 true,
+                checks = listOf(DraftCheck("gofmt", true, "passed")),
                 draftId = current.id,
                 draftRevision = current.revision,
                 draftHash = current.hash),
@@ -310,6 +327,7 @@ class ReviewEvidencePaneTest {
         DraftCheckReport(
             "main.go",
             true,
+            checks = listOf(DraftCheck("gofmt", true, "passed")),
             draftId = current.id,
             draftRevision = current.revision,
             draftHash = "previous")
@@ -413,6 +431,7 @@ class ReviewEvidencePaneTest {
         DraftCheckReport(
             "main.go",
             true,
+            checks = listOf(DraftCheck("gofmt", true, "passed")),
             draftId = current.id,
             draftRevision = current.revision,
             draftHash = current.hash)
@@ -445,6 +464,7 @@ class ReviewEvidencePaneTest {
         DraftCheckReport(
             "main.go",
             true,
+            checks = listOf(DraftCheck("gofmt", true, "passed")),
             draftId = current.id,
             draftRevision = current.revision,
             draftHash = current.hash)
@@ -477,6 +497,7 @@ class ReviewEvidencePaneTest {
         DraftCheckReport(
             "main.go",
             true,
+            checks = listOf(DraftCheck("gofmt", true, "passed")),
             draftId = current.id,
             draftRevision = current.revision,
             draftHash = "old-hash")
@@ -505,6 +526,7 @@ class ReviewEvidencePaneTest {
         DraftCheckReport(
             "main.go",
             true,
+            checks = listOf(DraftCheck("gofmt", true, "passed")),
             draftId = current.id,
             draftRevision = current.revision,
             draftHash = current.hash)
@@ -533,6 +555,7 @@ class ReviewEvidencePaneTest {
         DraftCheckReport(
             "main.go",
             true,
+            checks = listOf(DraftCheck("gofmt", true, "passed")),
             draftId = current.id,
             draftRevision = current.revision,
             draftHash = current.hash)
