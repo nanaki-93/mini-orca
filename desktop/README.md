@@ -1019,3 +1019,11 @@ when validation, checks or source identity block it. An explicit Apply starts on
 guarded request; a second activation while it is pending sends nothing. The running
 state waits for a daemon receipt. Failure and conflict diagnostics stay beside the
 action; a conflict marks the draft stale and preserves it for recovery.
+
+A returned Apply receipt records its submitted declaration/file and the daemon's
+project revision, resulting hash and supplied audit details. **Refresh source**
+retries only the source read. Undo becomes available after the refreshed file and
+project match that receipt; an external edit, expired backup or conflict blocks it.
+A pending or failed Undo keeps the Apply receipt and its local diagnostic. A
+successful Undo refreshes source and cannot expose an older Undo chain, even if a
+server response advertises one. Accepting a new candidate replaces the prior receipt.

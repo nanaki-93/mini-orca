@@ -2233,13 +2233,20 @@ class DesktopWorkflowPresenter(
               if (isCurrentFile(identity.file)) refreshSelectedFile()
               return@launch
             }
-            dispatch(DesktopEvent.Applied(result))
+            val receiptScope =
+                AppliedDeclarationScope(
+                    project.projectId,
+                    draft.targetPath,
+                    draft.targetSymbol,
+                    DraftMutationOperation.Apply)
+            validateMutationReceipt(result, receiptScope)
+            dispatch(DesktopEvent.Applied(result, receiptScope))
             dispatch(
                 DesktopEvent.Status(
                     "Applied ${draft.targetPath}." +
                         if (result.undoAvailable) " Undo is available while source is unchanged."
                         else " Undo is unavailable."))
-            reloadAfterMutation(identity.file, result.projectRevision)
+            reloadAfterMutation(identity.file)
           } catch (canceled: CancellationException) {
             failed(canceled.message ?: "Apply canceled; refresh source before retrying.")
             throw canceled
@@ -2253,25 +2260,81 @@ class DesktopWorkflowPresenter(
 
   fun undoAppliedDraft() {
     val state = snapshot.value.state
-    val project = state.project ?: return
+    if (closed || mutationJob?.isActive == true) return
     val result = state.review.applied ?: return
-    val file = state.selectedFile ?: return
-    val identity = file.identity(project)
-    benchmarkWorkflow.invalidate()
-    dispatch(DesktopEvent.Loading)
-    dispatch(DesktopEvent.Status("Undoing the applied declaration draft…"))
-    scope.launch {
-      try {
-        val undo = io { api.undo(project.projectId, result.projectRevision, result.postApplyHash) }
-        if (!isCurrentFile(identity)) return@launch
-        dispatch(DesktopEvent.Applied(undo))
-        reloadAfterMutation(identity, undo.projectRevision)
-      } catch (_: CancellationException) {
-        throw CancellationException()
-      } catch (error: Exception) {
-        if (isCurrentFile(identity)) dispatch(DesktopEvent.Failed(error.message ?: "Undo failed"))
-      }
+    val receiptScope = state.review.receiptScope ?: return
+    val eligibility =
+        undoEligibility(
+            state.project,
+            state.selectedFile,
+            result,
+            receiptScope,
+            state.review.mutation,
+            state.review.receiptRefreshError)
+    if (!eligibility.eligible) {
+      dispatch(
+          DesktopEvent.DraftMutationUpdated(
+              DraftMutationAttempt(
+                  DraftMutationOperation.Undo, DraftMutationStatus.Conflict, eligibility.reason)))
+      return
     }
+    val project = state.project ?: return
+    val identity = state.selectedFile?.identity(project) ?: return
+    fun currentReceipt() =
+        !closed && isCurrentFile(identity) && snapshot.value.state.review.applied == result
+    fun failed(message: String, conflict: Boolean = false) {
+      if (!currentReceipt()) return
+      dispatch(
+          DesktopEvent.DraftMutationUpdated(
+              DraftMutationAttempt(
+                  DraftMutationOperation.Undo,
+                  if (conflict) DraftMutationStatus.Conflict else DraftMutationStatus.Failed,
+                  message)))
+      dispatch(DesktopEvent.Failed(message))
+    }
+    benchmarkWorkflow.invalidate()
+    dispatch(
+        DesktopEvent.DraftMutationUpdated(
+            DraftMutationAttempt(
+                DraftMutationOperation.Undo,
+                DraftMutationStatus.Running,
+                "Waiting for the guarded Undo receipt.")))
+    dispatch(DesktopEvent.Loading)
+    mutationJob =
+        scope.launch {
+          try {
+            val undo = io {
+              if (!currentReceipt())
+                  throw CancellationException("Undo receipt or source changed before dispatch.")
+              api.undo(project.projectId, result.projectRevision, result.postApplyHash)
+            }
+            if (!currentReceipt()) return@launch
+            val undoneScope = receiptScope.copy(operation = DraftMutationOperation.Undo)
+            validateMutationReceipt(undo, undoneScope)
+            dispatch(DesktopEvent.Applied(undo, undoneScope))
+            reloadAfterMutation(identity)
+          } catch (canceled: CancellationException) {
+            failed(canceled.message ?: "Undo canceled; refresh source before continuing.")
+            throw canceled
+          } catch (error: ApiException) {
+            failed(error.message ?: "Undo failed", error.status == 409)
+          } catch (error: Exception) {
+            failed(error.message ?: "Undo failed")
+          }
+        }
+  }
+
+  fun refreshReceiptSource() {
+    val state = snapshot.value.state
+    if (state.review.applied == null || mutationJob?.isActive == true) return
+    val receipt = state.review.receiptScope ?: return
+    val project = state.project ?: return
+    if (project.projectId != receipt.projectId ||
+        state.selectedFile?.path?.let { it != receipt.path } == true)
+        return
+    reloadAfterMutation(
+        WorkflowFileIdentity(
+            project.identity(), receipt.path, state.selectedFile?.contentHash.orEmpty()))
   }
 
   // Existing page intents converge on the unified admission; old checkboxes cannot grant it
@@ -2699,21 +2762,35 @@ class DesktopWorkflowPresenter(
     return true
   }
 
-  private fun reloadAfterMutation(file: WorkflowFileIdentity, revision: String) {
+  private fun reloadAfterMutation(file: WorkflowFileIdentity) {
+    val receipt = snapshot.value.state.review.applied ?: return
+    fun currentReceipt() =
+        matchesProject(file.project) &&
+            snapshot.value.state.review.applied == receipt &&
+            snapshot.value.state.selectedFile?.path?.let { it == file.path } != false
     scope.launch {
       try {
         val (index, loaded, symbols) =
             io { Triple(api.index(), api.fileInfo(file.path), api.symbols(file.path).symbols) }
-        if (!matchesProject(file.project)) return@launch
+        if (!currentReceipt()) return@launch
+        require(
+            index.projectId == file.project.id &&
+                loaded.path == file.path &&
+                loaded.contentHash.isNotBlank()) {
+              "Refreshed source identity does not match the applied file."
+            }
         dispatch(DesktopEvent.IndexRefreshed(index))
         dispatch(DesktopEvent.FileLoaded(loaded, symbols))
         dispatch(DesktopEvent.Status("Project refreshed."))
-        refreshProjectWorkspace(WorkflowProjectIdentity(file.project.id, revision))
+        refreshProjectWorkspace(WorkflowProjectIdentity(file.project.id, index.projectRevision))
       } catch (_: CancellationException) {
         throw CancellationException()
       } catch (error: Exception) {
-        if (matchesProject(file.project))
-            dispatch(DesktopEvent.Failed(error.message ?: "Project refresh failed"))
+        if (currentReceipt()) {
+          val message = error.message ?: "Project refresh failed"
+          dispatch(DesktopEvent.ReceiptRefreshFailed(message))
+          dispatch(DesktopEvent.Failed(message))
+        }
       }
     }
   }

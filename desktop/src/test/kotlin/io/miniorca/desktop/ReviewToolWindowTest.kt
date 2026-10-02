@@ -209,7 +209,15 @@ class ReviewToolWindowTest {
   fun receiptUsesHumanReadableTargetAndOnlyOffersReturnedUndo() {
     val applied =
         applyDecisionUiState(
-            project(), file(), null, null, null, ApplyResult("next", "after", true))
+            project().copy(projectRevision = "next"),
+            file().copy(contentHash = "after"),
+            null,
+            null,
+            null,
+            ApplyResult("next", "after", true),
+            receiptScope =
+                AppliedDeclarationScope(
+                    project().projectId, "main.go", "Run", DraftMutationOperation.Apply))
     val undone =
         applyDecisionUiState(
             project(),
@@ -221,7 +229,7 @@ class ReviewToolWindowTest {
                 "restored", "base", false, audit = AuditEntry("undo", "main.go", "applied", "now")))
 
     assertEquals("Change applied", applied.receiptTitle)
-    assertEquals("Selected file was updated.", applied.receiptDetail)
+    assertEquals("main.go was updated.", applied.receiptDetail)
     assertEquals("Undo this change", applied.undoLabel)
     assertEquals("Change undone", undone.receiptTitle)
     assertEquals("Undo is no longer available", undone.undoLabel)
@@ -242,6 +250,14 @@ class ReviewToolWindowTest {
                     applies++
                     state =
                         state.copy(
+                            project = state.project!!.copy(projectRevision = "next"),
+                            selected = state.selected!!.copy(contentHash = "after"),
+                            receiptScope =
+                                AppliedDeclarationScope(
+                                    state.project!!.projectId,
+                                    state.draft!!.targetPath,
+                                    state.draft!!.targetSymbol,
+                                    DraftMutationOperation.Apply),
                             applied =
                                 ApplyResult(
                                     "next",
@@ -254,13 +270,14 @@ class ReviewToolWindowTest {
                     undoes++
                     state =
                         state.copy(
+                            receiptScope =
+                                state.receiptScope!!.copy(operation = DraftMutationOperation.Undo),
                             applied =
                                 ApplyResult(
                                     "restored",
                                     "base",
                                     false,
-                                    AuditEntry(
-                                        "undo", state.draft!!.targetPath, "restored", "now")))
+                                    AuditEntry("undo", state.draft!!.targetPath, "undone", "now")))
                   }))
         }
         .use { fixture ->

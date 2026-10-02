@@ -258,7 +258,13 @@ data class AuditEntry(
     val action: String,
     @SerialName("target_path") val targetPath: String,
     val outcome: String,
-    val timestamp: String
+    val timestamp: String,
+    val id: String = "",
+    @SerialName("before_hash") val beforeHash: String = "",
+    @SerialName("after_hash") val afterHash: String = "",
+    @SerialName("project_id") val projectId: String = "",
+    @SerialName("project_revision") val projectRevision: String = "",
+    @SerialName("generation_id") val generationId: String = "",
 )
 
 @Serializable
