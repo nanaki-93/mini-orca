@@ -56,9 +56,18 @@ internal sealed interface PendingDraftDiscard {
     override val nextLabel: String = "edit ${request.target.symbol}"
   }
 
+  enum class CreationIntent {
+    Fresh,
+    ChangeKind
+  }
+
   data class Create(
       override val currentDraft: CurrentEditIdentity,
+      val intent: CreationIntent,
       val kind: DeclarationCreationKind,
+      val priorKind: DeclarationCreationKind,
+      val priorMode: ChatEditMode,
+      val name: String,
       val project: ProjectAnalysis?,
       val index: ProjectIndex?,
       val file: ProjectFileInfo,
@@ -473,11 +482,23 @@ internal fun MiniOrcaApp(
         }
   }
 
+  fun applyCreationKind(kind: DeclarationCreationKind) {
+    presenter.contextCreationTargetChanged(newChatSymbol, kind.noun)
+    creationKind = kind
+  }
+
   fun changeCreationKind(kind: DeclarationCreationKind) {
-    routeCreationKindChange(workflow, chatMode, creationKind, kind) {
-      presenter.contextCreationTargetChanged(newChatSymbol, kind.noun)
-      creationKind = kind
-    }
+    routeCreationKindChange(
+        workflow,
+        chatMode,
+        creationKind,
+        kind,
+        newChatSymbol,
+        chatMessage,
+        advancedConstraints,
+        ::applyCreationKind) {
+          pendingDraftDiscard = it
+        }
   }
 
   fun requestCreateDeclaration(kind: DeclarationCreationKind) {
@@ -487,7 +508,10 @@ internal fun MiniOrcaApp(
         ::startCreateDeclaration,
         { pendingDraftDiscard = it },
         chatMessage,
-        advancedConstraints)
+        advancedConstraints,
+        creationKind,
+        newChatSymbol,
+        chatMode)
   }
 
   fun sendComposerMessage() {
@@ -512,7 +536,12 @@ internal fun MiniOrcaApp(
         { advancedConstraints = TextFieldValue() },
         { chatMessage to advancedConstraints },
         ::startReplaceEdit,
-        ::startCreateDeclaration)
+        ::startCreateDeclaration,
+        ::applyCreationKind,
+        { Triple(chatMode, creationKind, newChatSymbol) })
+    if (pending is PendingDraftDiscard.Create &&
+        pending.intent == PendingDraftDiscard.CreationIntent.ChangeKind)
+        focusComposerControl(ComposerFocusTarget.Name)
   }
 
   fun updatePendingSwitch() {
@@ -1043,6 +1072,9 @@ internal fun MiniOrcaApp(
   pendingDraftDiscard?.let { pending ->
     DraftDiscardDialog(pending.currentDraft, pending.nextLabel, ::discardDraftAndContinue) {
       pendingDraftDiscard = null
+      if (pending is PendingDraftDiscard.Create &&
+          pending.intent == PendingDraftDiscard.CreationIntent.ChangeKind)
+          focusComposerControl(ComposerFocusTarget.Name)
     }
   }
 }
@@ -1073,6 +1105,8 @@ private fun continueAfterDraftDiscard(
     currentInput: () -> Pair<TextFieldValue, TextFieldValue>,
     replace: (DirectEditRequest) -> Unit,
     create: (DeclarationCreationKind) -> Unit,
+    changeKind: (DeclarationCreationKind) -> Unit,
+    currentCreation: () -> Triple<ChatEditMode, DeclarationCreationKind, String>,
 ) {
   when (pending) {
     is PendingDraftDiscard.Replace -> {
@@ -1080,7 +1114,8 @@ private fun continueAfterDraftDiscard(
       replace(pending.request)
     }
     is PendingDraftDiscard.Create ->
-        confirmCreationDiscard(pending, presenter, currentInput, create)
+        confirmCreationDiscard(
+            pending, presenter, currentInput, currentCreation, create, changeKind)
     is PendingDraftDiscard.FileNavigation ->
         confirmFileNavigationDiscard(presenter, pending, currentInput, clearComposer)
     is PendingDraftDiscard.PerformancePreparation ->
@@ -1110,7 +1145,9 @@ internal fun confirmCreationDiscard(
     pending: PendingDraftDiscard.Create,
     presenter: DesktopWorkflowPresenter,
     currentInput: () -> Pair<TextFieldValue, TextFieldValue>,
+    currentCreation: () -> Triple<ChatEditMode, DeclarationCreationKind, String>,
     create: (DeclarationCreationKind) -> Unit,
+    changeKind: (DeclarationCreationKind) -> Unit,
 ) {
   val workflow = presenter.snapshot.value
   val state = workflow.state
@@ -1120,11 +1157,19 @@ internal fun confirmCreationDiscard(
       state.review != pending.review ||
       state.chat != pending.chat ||
       currentEditIdentity(state) != pending.currentDraft ||
+      state.review.draft?.let { it.id to it.revision } !=
+          pending.review.draft?.let { it.id to it.revision } ||
+      currentCreation() != Triple(pending.priorMode, pending.priorKind, pending.name) ||
+      (pending.intent == PendingDraftDiscard.CreationIntent.ChangeKind &&
+          pending.priorKind == pending.kind) ||
       currentInput() != (pending.message to pending.constraints) ||
       declarationCreationBlockedReason(state.selectedFile, workflow.creationInProgress) != null)
       return
   presenter.discardDraft()
-  create(pending.kind)
+  when (pending.intent) {
+    PendingDraftDiscard.CreationIntent.Fresh -> create(pending.kind)
+    PendingDraftDiscard.CreationIntent.ChangeKind -> changeKind(pending.kind)
+  }
 }
 
 internal fun sourceLineSelectionAction(
@@ -1529,16 +1574,33 @@ internal fun routeCreationKindChange(
     mode: ChatEditMode,
     currentKind: DeclarationCreationKind,
     requestedKind: DeclarationCreationKind,
-    change: () -> Unit,
+    name: String,
+    message: TextFieldValue,
+    constraints: TextFieldValue,
+    change: (DeclarationCreationKind) -> Unit,
+    confirmDiscard: (PendingDraftDiscard.Create) -> Unit,
 ) {
   if (mode != ChatEditMode.CreateSymbol || currentKind == requestedKind) return
   val state = workflow.state
   if (declarationCreationBlockedReason(
       state.selectedFile,
       workflow.creationInProgress || state.review.editor?.status == DraftEditorStatus.Validating) !=
-      null || currentEditIdentity(state)?.hasDraft == true)
+      null)
       return
-  change()
+  val draft = currentEditIdentity(state)?.takeIf { it.hasDraft }
+  if (draft == null) change(requestedKind)
+  else
+      confirmDiscard(
+          creationDiscard(
+              workflow,
+              draft,
+              PendingDraftDiscard.CreationIntent.ChangeKind,
+              requestedKind,
+              currentKind,
+              mode,
+              name,
+              message,
+              constraints))
 }
 
 internal fun routeCreationRequest(
@@ -1548,6 +1610,9 @@ internal fun routeCreationRequest(
     confirmDiscard: (PendingDraftDiscard.Create) -> Unit,
     message: TextFieldValue = TextFieldValue(),
     constraints: TextFieldValue = TextFieldValue(),
+    currentKind: DeclarationCreationKind = DeclarationCreationKind.Function,
+    name: String = "",
+    mode: ChatEditMode = ChatEditMode.CreateSymbol,
 ) {
   val state = workflow.state
   if (declarationCreationBlockedReason(state.selectedFile, workflow.creationInProgress) != null)
@@ -1556,16 +1621,44 @@ internal fun routeCreationRequest(
   if (currentDraft == null) start(kind)
   else
       confirmDiscard(
-          PendingDraftDiscard.Create(
+          creationDiscard(
+              workflow,
               currentDraft,
+              PendingDraftDiscard.CreationIntent.Fresh,
               kind,
-              state.project,
-              state.index,
-              requireNotNull(state.selectedFile),
-              state.review,
-              state.chat,
+              currentKind,
+              mode,
+              name,
               message,
               constraints))
+}
+
+private fun creationDiscard(
+    workflow: DesktopWorkflowSnapshot,
+    draft: CurrentEditIdentity,
+    intent: PendingDraftDiscard.CreationIntent,
+    kind: DeclarationCreationKind,
+    priorKind: DeclarationCreationKind,
+    priorMode: ChatEditMode,
+    name: String,
+    message: TextFieldValue,
+    constraints: TextFieldValue,
+): PendingDraftDiscard.Create {
+  val state = workflow.state
+  return PendingDraftDiscard.Create(
+      draft,
+      intent,
+      kind,
+      priorKind,
+      priorMode,
+      name,
+      state.project,
+      state.index,
+      requireNotNull(state.selectedFile),
+      state.review,
+      state.chat,
+      message,
+      constraints)
 }
 
 private fun submitComposerMessage(

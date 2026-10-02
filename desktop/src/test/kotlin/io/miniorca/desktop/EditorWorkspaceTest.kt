@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
@@ -765,7 +766,9 @@ class EditorWorkspaceTest {
           approval,
           navigation.presenter,
           { TextFieldValue("changed") to TextFieldValue() },
-          { prepared++ })
+          { Triple(ChatEditMode.CreateSymbol, DeclarationCreationKind.Function, "") },
+          { prepared++ },
+          { error("Not a kind change") })
       assertEquals(before, navigation.presenter.snapshot.value.state.review)
       assertEquals(0, prepared)
 
@@ -773,7 +776,12 @@ class EditorWorkspaceTest {
           DesktopEvent.DraftLoaded(requireNotNull(before.draft).copy(revision = 2)))
       val changedDraft = navigation.presenter.snapshot.value.state.review
       confirmCreationDiscard(
-          approval, navigation.presenter, { message to TextFieldValue() }, { prepared++ })
+          approval,
+          navigation.presenter,
+          { message to TextFieldValue() },
+          { Triple(ChatEditMode.CreateSymbol, DeclarationCreationKind.Function, "") },
+          { prepared++ },
+          { error("Not a kind change") })
       assertEquals(changedDraft, navigation.presenter.snapshot.value.state.review)
       assertEquals(0, prepared)
       assertEquals(emptyList(), navigation.calls)
@@ -788,9 +796,120 @@ class EditorWorkspaceTest {
           requireNotNull(pending),
           navigation.presenter,
           { TextFieldValue() to TextFieldValue() },
-          { prepared++ })
+          { Triple(ChatEditMode.CreateSymbol, DeclarationCreationKind.Function, "") },
+          { prepared++ },
+          { error("Not a kind change") })
       assertEquals(1, prepared)
       assertNull(navigation.presenter.snapshot.value.state.review.draft)
+      assertEquals(emptyList(), navigation.calls)
+    }
+  }
+
+  @Test
+  fun kindChangeKeepDraftPreservesInputsAndEvidence() {
+    FileNavigationUiFixture("draft").use { navigation ->
+      val before = navigation.presenter.snapshot.value.state
+      val message = TextFieldValue("Return value", TextRange(3, 6))
+      val constraints = TextFieldValue("No imports", TextRange(2))
+      var kind = DeclarationCreationKind.Function
+      var pending: PendingDraftDiscard.Create? = null
+      routeCreationKindChange(
+          navigation.presenter.snapshot.value,
+          ChatEditMode.CreateSymbol,
+          kind,
+          DeclarationCreationKind.Type,
+          "Build",
+          message,
+          constraints,
+          { kind = it },
+          { pending = it })
+      val approval = requireNotNull(pending)
+      assertEquals(PendingDraftDiscard.CreationIntent.ChangeKind, approval.intent)
+      assertEquals("Build", approval.name)
+      assertEquals(message, approval.message)
+      assertEquals(constraints, approval.constraints)
+      pending = null // Keep draft / Escape does not run the continuation.
+      assertNull(pending)
+      assertEquals(DeclarationCreationKind.Function, kind)
+      assertEquals(before.review, navigation.presenter.snapshot.value.state.review)
+      assertEquals(before.chat, navigation.presenter.snapshot.value.state.chat)
+      assertEquals(emptyList(), navigation.calls)
+    }
+  }
+
+  @Test
+  fun confirmedKindChangeDiscardsCandidateButPreservesComposer() {
+    FileNavigationUiFixture("draft").use { navigation ->
+      val message = TextFieldValue("Return value", TextRange(3, 6))
+      val constraints = TextFieldValue("No imports", TextRange(2))
+      var kind = DeclarationCreationKind.Function
+      val name = "Build"
+      var pending: PendingDraftDiscard.Create? = null
+      routeCreationKindChange(
+          navigation.presenter.snapshot.value,
+          ChatEditMode.CreateSymbol,
+          kind,
+          DeclarationCreationKind.Type,
+          name,
+          message,
+          constraints,
+          { kind = it },
+          { pending = it })
+      confirmCreationDiscard(
+          requireNotNull(pending),
+          navigation.presenter,
+          { message to constraints },
+          { Triple(ChatEditMode.CreateSymbol, kind, name) },
+          { error("Must not reset inputs") },
+          { kind = it })
+      assertEquals(DeclarationCreationKind.Type, kind)
+      assertEquals("Build", name)
+      assertEquals(TextFieldValue("Return value", TextRange(3, 6)), message)
+      assertEquals(TextFieldValue("No imports", TextRange(2)), constraints)
+      assertNull(navigation.presenter.snapshot.value.state.review.draft)
+      assertNull(navigation.presenter.snapshot.value.state.chat.session)
+      assertEquals(emptyList(), navigation.calls)
+    }
+  }
+
+  @Test
+  fun staleKindChangeApprovalCannotDiscardNewerWork() {
+    FileNavigationUiFixture("draft").use { navigation ->
+      val message = TextFieldValue("Return value", TextRange(3, 6))
+      val constraints = TextFieldValue("No imports", TextRange(2))
+      var kind = DeclarationCreationKind.Function
+      var name = "Build"
+      var pending: PendingDraftDiscard.Create? = null
+      routeCreationKindChange(
+          navigation.presenter.snapshot.value,
+          ChatEditMode.CreateSymbol,
+          kind,
+          DeclarationCreationKind.Type,
+          name,
+          message,
+          constraints,
+          { kind = it },
+          { pending = it })
+      val approval = requireNotNull(pending)
+      fun attempt() =
+          confirmCreationDiscard(
+              approval,
+              navigation.presenter,
+              { message to constraints },
+              { Triple(ChatEditMode.CreateSymbol, kind, name) },
+              { error("Stale fresh creation") },
+              { error("Stale kind change") })
+      name = "Changed"
+      attempt()
+      name = "Build"
+      val original = requireNotNull(navigation.presenter.snapshot.value.state.review.draft)
+      navigation.presenter.dispatch(
+          DesktopEvent.DraftLoaded(original.copy(revision = original.revision + 1)))
+      val newer = navigation.presenter.snapshot.value.state
+      attempt()
+      assertEquals(newer.review, navigation.presenter.snapshot.value.state.review)
+      assertEquals(newer.chat, navigation.presenter.snapshot.value.state.chat)
+      assertEquals(DeclarationCreationKind.Function, kind)
       assertEquals(emptyList(), navigation.calls)
     }
   }
