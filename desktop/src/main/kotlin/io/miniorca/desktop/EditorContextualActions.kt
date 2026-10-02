@@ -13,7 +13,7 @@ internal fun editorContextualActions(
     state: DesktopState,
     mode: ChatEditMode,
     requestedSymbol: String,
-    message: String,
+    rawIntent: String,
     sending: Boolean,
     functionModel: ScopedModel,
     remoteProviderConfirmed: Boolean,
@@ -57,7 +57,7 @@ internal fun editorContextualActions(
       canFocusDraft = draftCurrent,
       canGenerate =
           target.valid &&
-              hasFunctionChangeIntent(message) &&
+              hasFunctionChangeIntent(rawIntent) &&
               !sending &&
               (!functionModel.remoteProvider || remoteProviderConfirmed),
       canValidateDraft = canValidate,

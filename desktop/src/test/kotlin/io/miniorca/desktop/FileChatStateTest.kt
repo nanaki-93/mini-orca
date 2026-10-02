@@ -129,15 +129,37 @@ class FileChatStateTest {
 
   @Test
   fun changePresetsPrepareOnlyAShortIntentAndKeepConstraintsOptional() {
-    assertEquals("Fix a bug: ", FunctionChangePreset.BugFix.preparedMessage())
-    assertEquals("Improve performance: ", FunctionChangePreset.Performance.preparedMessage())
-    assertEquals("Change behavior: ", FunctionChangePreset.Behavior.preparedMessage())
-    assertFalse(hasFunctionChangeIntent(FunctionChangePreset.BugFix.preparedMessage()))
-    assertTrue(hasFunctionChangeIntent("Fix a bug: preserve order while deduplicating"))
+    assertEquals("Fix a bug: ", FunctionChangePreset.Fix.preparedMessage())
+    assertEquals(
+        "Refactor without changing behavior: ", FunctionChangePreset.Refactor.preparedMessage())
+    assertEquals(
+        "Document without changing behavior: ", FunctionChangePreset.Document.preparedMessage())
+    assertEquals(
+        listOf("Fix", "Refactor", "Document"), FunctionChangePreset.entries.map { it.label })
     assertEquals(
         "Fix a bug: preserve order while deduplicating\n\nConstraints:\nDo not allocate a second map.",
         functionChangeRequest(
             " Fix a bug: preserve order while deduplicating ", " Do not allocate a second map. "))
+    assertEquals("Preserve order.", functionChangeRequest(" Preserve order. ", "  \n "))
+  }
+
+  @Test
+  fun rawIntentAdmissionRejectsBlankAndPresetOnlyEvenWithConstraints() {
+    val constraints = "Keep the public signature."
+    listOf("", "  \n  ").forEach { rawIntent ->
+      assertFalse(hasFunctionChangeIntent(rawIntent))
+      assertEquals(
+          "Constraints:\n$constraints", functionChangeRequest(rawIntent, constraints).trim())
+    }
+    FunctionChangePreset.entries.forEach { preset ->
+      assertFalse(hasFunctionChangeIntent(preset.preparedMessage()))
+      assertFalse(hasFunctionChangeIntent(" \n ${preset.preparedMessage()} \t"))
+      assertTrue(
+          functionChangeRequest(preset.preparedMessage(), constraints).contains("Constraints:"))
+      assertTrue(hasFunctionChangeIntent(preset.preparedMessage() + "Explain the change."))
+    }
+    assertTrue(hasFunctionChangeIntent("Preserve order while deduplicating"))
+    assertTrue(hasFunctionChangeIntent("Describe the new type"))
   }
 
   @Test
