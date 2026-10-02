@@ -11,6 +11,32 @@ import kotlin.test.assertTrue
 
 class ReviewToolWindowTest {
   @Test
+  fun comparisonKeepsCandidateIdentityImportsAndBothReadOnlySidesAtEverySize() {
+    val draft = editorComparisonReviewFixture().draft!!.copy(imports = listOf("fmt", "strings"))
+    for ((width, height) in
+        listOf(1600 to 1000, 1440 to 900, 1024 to 768, 800 to 650, 1280 to 600)) {
+      for (scale in listOf(1f, 1.25f, 1.5f)) {
+        ComposeVisualFixture(width, height, scale) { ReviewDiffCanvas(draft) }
+            .use { fixture ->
+              fixture.render("f32-comparison-$width-$height-$scale")
+              assertTrue(fixture.hasText("GetUser · Candidate revision 1"))
+              assertTrue(fixture.hasText(reviewComparisonScope(draft)))
+              assertFalse(fixture.hasEditableText("Read-only composed diff"))
+              assertTrue(fixture.taggedBounds("diff-Current-column").height > height / 2f)
+              assertTrue(fixture.taggedBounds("diff-Candidate-column").width > 0f)
+              fixture.clickDescription("Unified diff")
+              fixture.render()
+              assertTrue(fixture.hasText("Current → Candidate"))
+              fixture.clickDescription("Side-by-side diff")
+              fixture.render()
+              assertTrue(fixture.hasText("Current"))
+              assertTrue(fixture.hasText("Candidate"))
+            }
+      }
+    }
+  }
+
+  @Test
   fun repairAndManualRecoveryRemainExplicitWithDetailsCollapsed() {
     val base = editorComparisonReviewFixture()
     val task =

@@ -122,11 +122,14 @@ internal fun ReviewTargetHeader(scope: ToolWindowScope, onEditDraft: (() -> Unit
                 Text("Edit draft", style = IdeTypography.action)
               }
         }
-    Text(
-        scope.path,
-        color = SecondaryText,
-        style = IdeTypography.workspaceMetadata,
-        modifier = Modifier.semantics { contentDescription = "Review target path: ${scope.path}" })
+    SelectionContainer {
+      Text(
+          scope.path,
+          color = SecondaryText,
+          style = IdeTypography.workspaceMetadata,
+          modifier =
+              Modifier.semantics { contentDescription = "Review target path: ${scope.path}" })
+    }
   }
 }
 

@@ -118,9 +118,13 @@ internal fun editorChromeUiState(
         draft != null && progress.progress == EditorProgress.Edit -> "DRAFT EDITED"
         else -> "SOURCE"
       }
-  val symbol = selectedSymbol?.name?.takeIf(String::isNotBlank)
+  val symbol =
+      (if (activeSurface == EditorSurface.Review) draft?.targetSymbol else selectedSymbol?.name)
+          ?.takeIf(String::isNotBlank)
   val inspectionLabel =
-      if (file != null && selectedSymbol != null && symbol != null) {
+      if (activeSurface == EditorSurface.Review && draft != null) {
+        "Reviewing candidate: ${draft.targetSymbol} · revision ${draft.revision}"
+      } else if (file != null && selectedSymbol != null && symbol != null) {
         val approximate =
             if (selectedSymbol.confidence.equals("exact", ignoreCase = true)) ""
             else " · Approximate · read-only"
