@@ -43,11 +43,37 @@ private val goKeywords =
         "var")
 
 fun validateChatTarget(
+    selection: FileSelectionState,
+    mode: ChatEditMode,
+    requestedSymbol: String,
+): ChatTargetValidation =
+    validateChatTarget(
+        selection.selectedFile,
+        selection.symbols,
+        selection.selectedSymbol,
+        mode,
+        requestedSymbol,
+        snapshotLoaded =
+            selection.pendingFilePath == null &&
+                selection.failedFilePath != selection.selectedFile?.path &&
+                (selection.fileReadError == null || selection.failedFilePath != null))
+
+fun validateChatTarget(
     selectedFile: ProjectFileInfo?,
     symbols: List<SymbolInfo>,
     selectedSymbol: SymbolInfo?,
     mode: ChatEditMode,
     requestedSymbol: String,
+): ChatTargetValidation =
+    validateChatTarget(selectedFile, symbols, selectedSymbol, mode, requestedSymbol, true)
+
+private fun validateChatTarget(
+    selectedFile: ProjectFileInfo?,
+    symbols: List<SymbolInfo>,
+    selectedSymbol: SymbolInfo?,
+    mode: ChatEditMode,
+    requestedSymbol: String,
+    snapshotLoaded: Boolean,
 ): ChatTargetValidation {
   if (selectedFile == null)
       return ChatTargetValidation(message = "Open one Go file before starting a conversation.")
@@ -89,10 +115,20 @@ fun validateChatTarget(
             ChatTargetValidation(message = "$name is a Go keyword. Choose a different name.")
         !goIdentifier.matches(name) ->
             ChatTargetValidation(message = "Enter a valid new Go function or type name.")
+        name in setOf("_", "init", "main") ->
+            ChatTargetValidation(
+                message = "$name is reserved for this creation workflow. Choose another name.")
+        !snapshotLoaded ->
+            ChatTargetValidation(
+                message =
+                    "Wait for the current file and its symbols to load before creating a declaration. Reopen the file if loading failed.")
         symbols.any { it.name == name } ->
             ChatTargetValidation(
                 message = "${name} already exists in this file; select it to replace instead.")
-        else -> ChatTargetValidation(ChatTarget(mode, name))
+        else ->
+            ChatTargetValidation(
+                ChatTarget(mode, name),
+                "Name absent in the current file snapshot; the daemon rechecks before generation.")
       }
     }
   }

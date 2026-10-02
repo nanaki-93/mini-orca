@@ -43,11 +43,12 @@ class FileChatStateTest {
   fun createRequiresAValidAbsentGoName() {
     val existing = symbol("Run")
 
+    val absent =
+        validateChatTarget(file(), listOf(existing), null, ChatEditMode.CreateSymbol, " NewRun ")
+    assertEquals("NewRun", absent.target?.symbol)
     assertEquals(
-        "NewRun",
-        validateChatTarget(file(), listOf(existing), null, ChatEditMode.CreateSymbol, "NewRun")
-            .target
-            ?.symbol)
+        "Name absent in the current file snapshot; the daemon rechecks before generation.",
+        absent.message)
     assertFalse(
         validateChatTarget(file(), listOf(existing), null, ChatEditMode.CreateSymbol, "Run").valid)
     assertEquals(
@@ -58,6 +59,16 @@ class FileChatStateTest {
         "Enter a valid new Go function or type name.",
         validateChatTarget(file(), listOf(existing), null, ChatEditMode.CreateSymbol, "not valid")
             .message)
+    listOf(
+            existing.copy(confidence = "approximate", atomicTarget = false),
+            existing.copy(kind = "type", atomicTarget = false))
+        .forEach { collision ->
+          assertEquals(
+              "Run already exists in this file; select it to replace instead.",
+              validateChatTarget(
+                      file(), listOf(collision), null, ChatEditMode.CreateSymbol, " Run ")
+                  .message)
+        }
     assertNull(
         functionChangePresetBoundary(
             ChatEditMode.CreateSymbol,
@@ -72,6 +83,12 @@ class FileChatStateTest {
       val result =
           validateChatTarget(file(), emptyList(), null, ChatEditMode.CreateSymbol, " $name ")
       assertEquals(ChatTarget(ChatEditMode.CreateSymbol, name), result.target, name)
+    }
+    listOf("_", "init", "main").forEach { name ->
+      val result = validateChatTarget(file(), emptyList(), null, ChatEditMode.CreateSymbol, name)
+      assertNull(result.target, name)
+      assertEquals(
+          "$name is reserved for this creation workflow. Choose another name.", result.message)
     }
     listOf("func", "type", "var", "package", "range", "fallthrough", "interface").forEach { name ->
       val result = validateChatTarget(file(), emptyList(), null, ChatEditMode.CreateSymbol, name)
@@ -114,9 +131,26 @@ class FileChatStateTest {
                 file().copy(binary = true), emptyList(), null, ChatEditMode.CreateSymbol, name)
             .message)
     val packageOnly = file().copy(content = "package main\n")
-    val target =
-        validateChatTarget(packageOnly, emptyList(), symbol("Old"), ChatEditMode.CreateSymbol, name)
-            .target!!
+    val loaded = FileSelectionState(selectedFile = packageOnly)
+    val target = validateChatTarget(loaded, ChatEditMode.CreateSymbol, name).target!!
+    listOf(
+            loaded.copy(pendingFilePath = packageOnly.path),
+            loaded.copy(pendingFilePath = "next.go"),
+            loaded.copy(failedFilePath = packageOnly.path, fileReadError = "Read failed"))
+        .forEach { unavailable ->
+          val result = validateChatTarget(unavailable, ChatEditMode.CreateSymbol, name)
+          assertNull(result.target)
+          assertTrue(result.message.contains("load before creating"))
+          assertFalse(result.message.contains("absent"))
+        }
+    // A failed navigation to another file does not erase the last successfully loaded snapshot.
+    assertEquals(
+        target,
+        validateChatTarget(
+                loaded.copy(failedFilePath = "next.go", fileReadError = "Read failed"),
+                ChatEditMode.CreateSymbol,
+                name)
+            .target)
     val createSession = session().copy(mode = "create_symbol", targetSymbol = name)
     assertTrue(chatSessionMatches(createSession, packageOnly, project(), target))
     assertFalse(chatSessionMatches(createSession, file(hash = "changed"), project(), target))

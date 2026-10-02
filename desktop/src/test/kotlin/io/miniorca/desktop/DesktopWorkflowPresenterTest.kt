@@ -7635,24 +7635,97 @@ class DesktopWorkflowPresenterTest {
       assertTrue(presenter.snapshot.value.state.symbols.isEmpty())
       assertNull(presenter.snapshot.value.state.selectedSymbol)
       assertTrue(requests.isEmpty())
-      presenter.sendChatMessage(ChatEditMode.CreateSymbol, "func", "Return one.")
-      dispatcher.runPending()
-      assertTrue(requests.isEmpty())
-      assertEquals(
-          "func is a Go keyword. Choose a different name.", presenter.snapshot.value.state.error)
+      listOf("func", "_", "init", "main", "bad.name").forEach { rejected ->
+        presenter.sendChatMessage(ChatEditMode.CreateSymbol, rejected, "Return one.")
+        dispatcher.runPending()
+        assertTrue(requests.isEmpty(), rejected)
+        if (rejected == "func")
+            assertEquals(
+                "func is a Go keyword. Choose a different name.",
+                presenter.snapshot.value.state.error)
+      }
       presenter.sendChatMessage(ChatEditMode.CreateSymbol, "新規", " ")
       dispatcher.runPending()
       assertTrue(requests.isEmpty())
-      presenter.sendChatMessage(ChatEditMode.CreateSymbol, "新規", "Return one.")
+      presenter.sendChatMessage(
+          ChatEditMode.CreateSymbol,
+          " 新規 ",
+          "Return one.",
+          creationKind = DeclarationCreationKind.Function)
       dispatcher.runPending()
       val state = presenter.snapshot.value.state
       assertEquals(2, requests.size)
+      assertTrue(state.chat.attempts.last().requestText.contains("function named 新規"))
       assertEquals("create_symbol", state.chat.session?.mode)
       assertEquals("新規", state.review.draft?.targetSymbol)
       assertNull(state.review.draft?.validation)
       assertNull(state.review.checks)
       assertEquals("package main", state.selectedFile?.content)
       assertFalse(presenter.snapshot.value.generating)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      dispatcher.runPending()
+    }
+  }
+
+  @Test
+  fun creationCannotSendWhileTheSelectedFileSnapshotIsPendingOrFailed() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val posts = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, _ ->
+          if (method == "POST") posts += path
+          creationFileResponse(path) ?: error("unexpected request $method $path")
+        }
+    try {
+      loadProject(presenter)
+      presenter.selectFile("main.go")
+      // No file/symbol response has been loaded yet.
+      presenter.sendChatMessage(ChatEditMode.CreateSymbol, "NewRun", "Return one.")
+      assertTrue(posts.isEmpty())
+      dispatcher.runPending()
+      assertEquals("main.go", presenter.snapshot.value.state.selectedFile?.path)
+      presenter.dispatch(DesktopEvent.FileLoadFailed("Read failed", "main.go"))
+      presenter.sendChatMessage(ChatEditMode.CreateSymbol, "NewRun", "Return one.")
+      dispatcher.runPending()
+      assertTrue(posts.isEmpty())
+      assertTrue(presenter.snapshot.value.state.error.orEmpty().contains("load before creating"))
+      assertNull(presenter.snapshot.value.state.review.draft)
+      assertNull(presenter.snapshot.value.state.chat.session)
+    } finally {
+      presenter.close()
+      scope.cancel()
+      dispatcher.runPending()
+    }
+  }
+
+  @Test
+  fun reportedNonAtomicNameCollisionNeverOpensACreationSession() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val posts = mutableListOf<String>()
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, _ ->
+          if (method == "POST") posts += path
+          creationFileResponse(path) ?: error("unexpected request $method $path")
+        }
+    try {
+      loadProject(presenter)
+      presenter.dispatch(
+          DesktopEvent.FileLoaded(
+              file(),
+              listOf(
+                  SymbolInfo(
+                      "Build", "function", confidence = "approximate", atomicTarget = false))))
+      presenter.sendChatMessage(ChatEditMode.CreateSymbol, " Build ", "Return one.")
+      dispatcher.runPending()
+      assertTrue(posts.isEmpty())
+      assertEquals(
+          "Build already exists in this file; select it to replace instead.",
+          presenter.snapshot.value.state.error)
+      assertNull(presenter.snapshot.value.state.review.draft)
     } finally {
       presenter.close()
       scope.cancel()

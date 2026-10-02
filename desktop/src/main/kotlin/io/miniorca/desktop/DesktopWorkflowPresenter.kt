@@ -1810,8 +1810,7 @@ class DesktopWorkflowPresenter(
     if (state.chat.pendingRequestId != 0L) return
     val project = state.project ?: return
     val file = state.selectedFile
-    val target =
-        validateChatTarget(file, state.symbols, state.selectedSymbol, mode, requestedSymbol)
+    val target = validateChatTarget(state.selection, mode, requestedSymbol)
     val workflow = snapshot.value
     val destination = workflow.model(ModelScope.Function)
     val remoteConfirmed = workflow.providerConfirmed(ModelScope.Function)
@@ -1831,12 +1830,12 @@ class DesktopWorkflowPresenter(
       return
     }
     if (file == null) return
+    val chatTarget = target.target ?: return
     val request = functionChangeRequest(rawIntent, constraints)
     val content =
         if (mode == ChatEditMode.CreateSymbol && creationKind != null)
-            creationMessage(creationKind, requestedSymbol, request)
+            creationMessage(creationKind, chatTarget.symbol, request)
         else request
-    val chatTarget = target.target ?: return
     val taskSpec =
         state.preparedTaskSpec?.takeIf {
           it.targetPath == file.path &&
