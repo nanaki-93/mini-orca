@@ -84,9 +84,11 @@ class DesktopAccessibilityTest {
           fixture.assertColorVisible(FocusAccent)
           assertTrue(fixture.requestFocus("Validate draft for Run"))
           fixture.render()
+          fixture.awaitFocusedTextVisible("Validate draft for Run")
           fixture.assertColorVisible(FocusAccent)
           assertTrue(fixture.requestFocus("Discard draft…"))
           fixture.render()
+          fixture.awaitFocusedTextVisible("Discard draft…")
           fixture.assertColorVisible(FocusAccent)
           editor =
               editor.copy(

@@ -20,13 +20,18 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -575,30 +580,69 @@ internal fun reviewComparisonScope(draft: DeclarationDraft): String {
 
 @Composable
 internal fun ReviewDiffCanvas(draft: DeclarationDraft?, modifier: Modifier = Modifier) {
+  var scopeVisible by rememberSaveable(draft?.id) { mutableStateOf(false) }
+  var restoreScopeFocus by remember { mutableStateOf(false) }
+  val scopeFocus = remember { FocusRequester() }
+  fun dismissScope() {
+    scopeVisible = false
+    restoreScopeFocus = true
+  }
   BoxWithConstraints(modifier.fillMaxSize()) {
+    val compactScope = maxHeight < 380.dp
     val maximumScopeHeight = maxHeight * 0.25f
-    Column(Modifier.fillMaxSize()) {
-      if (draft != null) {
-        SelectionContainer {
-          Column(
-              Modifier.fillMaxWidth()
-                  .heightIn(max = maximumScopeHeight)
-                  .verticalScroll(rememberScrollState())
-                  .padding(12.dp)
-                  .testTag("comparison-scope")) {
-                Text(
-                    "${draft.targetSymbol} · Candidate revision ${draft.revision}",
-                    color = PrimaryText,
-                    style = IdeTypography.workspaceMetadata)
-                Text(draft.targetPath, color = SecondaryText, style = IdeTypography.resultCode)
-                Text(
-                    reviewComparisonScope(draft),
-                    color = SecondaryText,
-                    style = IdeTypography.compactBody)
-              }
-        }
+    LaunchedEffect(scopeVisible, restoreScopeFocus, compactScope) {
+      if (!scopeVisible && restoreScopeFocus) {
+        withFrameNanos {}
+        if (compactScope) scopeFocus.requestFocus()
+        restoreScopeFocus = false
       }
-      DiffViewer(draft?.validation?.diff, Modifier.weight(1f).fillMaxWidth().padding(8.dp))
+    }
+    Column(Modifier.fillMaxSize()) {
+      if (draft != null && !compactScope) {
+        Column(
+            Modifier.fillMaxWidth()
+                .heightIn(max = maximumScopeHeight)
+                .verticalScroll(rememberScrollState())
+                .padding(12.dp)
+                .testTag("comparison-scope")) {
+              ComparisonScopeDetails(draft)
+            }
+      }
+      DiffViewer(
+          draft?.validation?.diff,
+          Modifier.weight(1f).fillMaxWidth().padding(8.dp),
+          leadingControl =
+              if (draft != null && compactScope) {
+                {
+                  ChromeButton(
+                      onClick = { scopeVisible = true },
+                      accessibleName = "Candidate scope",
+                      modifier = Modifier.focusRequester(scopeFocus)) {
+                        DesktopLineIcon(DesktopIcon.Document, "Candidate scope", iconSize = 16.dp)
+                      }
+                }
+              } else null)
+    }
+  }
+  if (scopeVisible && draft != null) {
+    IdeDialog(
+        onDismissRequest = ::dismissScope,
+        title = { Text("Candidate scope") },
+        content = { ComparisonScopeDetails(draft) },
+        actions = { MiniOrcaButton(onClick = ::dismissScope) { Text("Close") } })
+  }
+}
+
+@Composable
+private fun ComparisonScopeDetails(draft: DeclarationDraft) {
+  SelectionContainer {
+    Column {
+      Text(
+          "${draft.targetSymbol} · Candidate revision ${draft.revision}",
+          color = PrimaryText,
+          style = IdeTypography.workspaceMetadata)
+      Text(draft.targetPath, color = SecondaryText, style = IdeTypography.resultCode)
+      Text(reviewComparisonScope(draft), color = SecondaryText, style = IdeTypography.compactBody)
     }
   }
 }
@@ -912,7 +956,7 @@ private fun ReviewActionRegion(
         if (action.kind == ReviewNextActionKind.RunChecks &&
             state.draft?.taskSpec?.goTestCandidate != null)
             ReviewExecutionScope(state.draft)
-        if (action.kind == ReviewNextActionKind.Undo)
+        if (action.kind == ReviewNextActionKind.Undo && action.detail != state.mutation?.message)
             Text(action.detail, color = PrimaryText, style = IdeTypography.workspaceMetadata)
         if (action.kind == ReviewNextActionKind.EditDraft ||
             action.kind == ReviewNextActionKind.RunChecks ||

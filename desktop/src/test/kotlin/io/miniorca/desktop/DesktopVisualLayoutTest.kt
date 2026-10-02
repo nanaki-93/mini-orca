@@ -8222,6 +8222,11 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(800, 360, 1.3f) {
           ReviewToolWindow(
               invalidReviewState.copy(
+                  project = project.copy(projectRevision = "next"),
+                  selected = file.copy(contentHash = "post-hash"),
+                  receiptScope =
+                      AppliedDeclarationScope(
+                          project.projectId, file.path, symbol.name, DraftMutationOperation.Apply),
                   checks = null,
                   applied =
                       ApplyResult(
@@ -12702,6 +12707,22 @@ internal class ComposeVisualFixture(
           }
           .mapNotNull { it.config.getOrNull(SemanticsProperties.StateDescription) }
           .firstOrNull()
+
+  fun awaitFocusedTextVisible(label: String) {
+    fun visible() =
+        isFocused(label) &&
+            textNodes(label).any { node ->
+              node.boundsInRoot.width >= node.size.width - 1f &&
+                  node.boundsInRoot.height >= node.size.height - 1f &&
+                  node.size.height > 0
+            }
+    val deadline = System.nanoTime() + 2_000_000_000L
+    while (!visible() && System.nanoTime() < deadline) {
+      Thread.sleep(10)
+      render()
+    }
+    assertTrue(visible(), "$label must retain focus and become fully visible after focus scrolling")
+  }
 
   fun requestFocus(label: String): Boolean =
       textNodes(label)

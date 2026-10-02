@@ -142,8 +142,10 @@ Closing the application also waits for all terminal sessions to clean up; a shel
 that cannot stop keeps the window open with the failure visible. A running shell
 is never silently moved to another project's directory.
 
-Returning from the terminal, or later entering Editor/Review, reads the selected
-file again. Changed content invalidates old draft/check/file-analysis evidence
+Returning from the terminal, regaining app focus while Editor/Review is open, or
+later entering Editor/Review reads the selected file again for the terminal’s project.
+A pending Apply/Undo uses its own receipt refresh instead of starting an overlapping
+read. Changed content invalidates old draft/check/file-analysis evidence
 and marks the captured project analysis stale until reindexing. A failed read also
 blocks the old draft. Use **Re-index project** in the project menu after shell
 commands add, remove or rename files. No terminal output is parsed, persisted by Mini-Orca or sent to a

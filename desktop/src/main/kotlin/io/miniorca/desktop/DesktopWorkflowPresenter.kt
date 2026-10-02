@@ -616,6 +616,9 @@ class DesktopWorkflowPresenter(
    * Read-only return from a shell: retain the draft if unchanged, invalidate evidence if changed.
    */
   fun refreshSelectedFile() {
+    // The operation's own receipt refresh owns source observation while a write is pending.
+    if (closed || snapshot.value.state.review.mutation?.status == DraftMutationStatus.Running)
+        return
     val project = snapshot.value.state.project?.identity() ?: return
     val selected = snapshot.value.state.selectedFile ?: return
     fileFreshnessJob?.cancel()

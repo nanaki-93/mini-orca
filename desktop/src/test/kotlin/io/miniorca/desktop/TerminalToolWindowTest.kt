@@ -5,7 +5,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.Text
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.platform.testTag
 import java.io.ByteArrayOutputStream
 import java.io.PipedInputStream
@@ -24,8 +31,122 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 class TerminalToolWindowTest {
+  @Test
+  fun appFocusReturnRechecksOwnedShellSourceAndFailsClosedWithoutStartingAnotherShell() =
+      withWorkspace { workspace, _, starts, path ->
+        val source = java.nio.file.Path.of(path).resolve("main.go")
+        val base = editorComparisonReviewFixture()
+        val project = base.project!!.copy(path = path)
+        val file = base.selected!!.copy(path = "main.go", content = "package main\n")
+        Files.writeString(source, file.content)
+        var failRead = false
+        val reads = AtomicInteger()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val presenter =
+            DesktopWorkflowPresenter(
+                ApiClient(
+                    transport =
+                        DaemonTransport { method, route, _ ->
+                          check(method == "GET") { "Focus cannot perform $method $route" }
+                          if (route.contains("files/info")) {
+                            reads.incrementAndGet()
+                            if (failRead)
+                                TransportResponse(503, """{"message":"Source unreadable"}""")
+                            else {
+                              val content = Files.readString(source)
+                              TransportResponse(
+                                  200,
+                                  Json.encodeToString(
+                                      file.copy(
+                                          content = content,
+                                          contentHash =
+                                              if (content == file.content) file.contentHash
+                                              else "externally-edited")))
+                            }
+                          } else
+                              TransportResponse(
+                                  200,
+                                  Json.encodeToString(
+                                      SymbolsResponse(
+                                          project.projectId, project.projectRevision, file.path)))
+                        }),
+                LastProjectStore(InMemoryPreferences()),
+                scope,
+                Dispatchers.Unconfined)
+        val window =
+            object : WindowInfo {
+              override var isWindowFocused by mutableStateOf(false)
+            }
+        try {
+          presenter.dispatch(
+              DesktopEvent.ProjectLoaded(
+                  project, ProjectIndex(project.projectId, project.projectRevision)))
+          presenter.dispatch(DesktopEvent.FileLoaded(file, emptyList()))
+          presenter.dispatch(DesktopEvent.WorkspaceSelected(Workspace.Editor))
+          val draft =
+              base.draft!!.copy(
+                  projectId = project.projectId,
+                  projectRevision = project.projectRevision,
+                  targetPath = file.path,
+                  baseFileHash = file.contentHash)
+          presenter.dispatch(DesktopEvent.DraftLoaded(draft))
+          ComposeVisualFixture(800, 650) {
+                val state by presenter.snapshot.collectAsState()
+                CompositionLocalProvider(LocalWindowInfo provides window) {
+                  TerminalSourceRefreshEffect(
+                      state.state, DesktopLayoutState(), workspace, presenter)
+                }
+              }
+              .use { fixture ->
+                fixture.render()
+                window.isWindowFocused = true
+                fixture.render()
+                assertEquals(0, reads.get(), "Restoring a layout does not start or inspect a shell")
+                assertEquals(0, starts.get())
+                window.isWindowFocused = false
+                fixture.render()
+                edt { workspace.activate(path) }
+                eventually { workspace.state.value.widget != null }
+                Files.writeString(source, "package main\n// external shell edit\n")
+                fixture.render()
+                assertEquals(0, reads.get())
+                window.isWindowFocused = true
+                fixture.render()
+                assertEquals(1, reads.get())
+                assertEquals(
+                    "externally-edited", presenter.snapshot.value.state.selectedFile?.contentHash)
+                assertEquals(
+                    DraftEditorStatus.Stale, presenter.snapshot.value.state.review.editor?.status)
+                assertNull(presenter.snapshot.value.state.review.checks)
+                window.isWindowFocused = false
+                fixture.render()
+                failRead = true
+                window.isWindowFocused = true
+                fixture.render()
+                assertEquals(2, reads.get())
+                assertNull(presenter.snapshot.value.state.selectedFile)
+                assertTrue(
+                    presenter.snapshot.value.state.selection.fileReadError!!.contains(
+                        "Source unreadable"))
+                assertEquals(
+                    draft.declaration, presenter.snapshot.value.state.review.editor?.declaration)
+                assertEquals(1, starts.get())
+              }
+        } finally {
+          presenter.close()
+          scope.cancel()
+          Files.deleteIfExists(source)
+        }
+      }
+
   @Test
   fun nativeWidgetTextScalingKeepsItsReaderAndHistory() =
       withWorkspace { workspace, process, starts, path ->
