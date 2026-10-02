@@ -768,10 +768,19 @@ class AssistantToolWindowTest {
     val constraints = TextFieldValue("Keep it stable.", TextRange(5))
     var invalidations = 0
     fun select(requested: DeclarationCreationKind) {
-      routeCreationKindChange(workflow, ChatEditMode.CreateSymbol, kind, requested) {
-        invalidations++
-        kind = requested
-      }
+      routeCreationKindChange(
+          workflow,
+          ChatEditMode.CreateSymbol,
+          kind,
+          requested,
+          name,
+          behavior,
+          constraints,
+          { selected ->
+            invalidations++
+            kind = selected
+          },
+          { error("No draft to discard") })
     }
 
     select(DeclarationCreationKind.Function)
@@ -796,9 +805,15 @@ class AssistantToolWindowTest {
     var changes = 0
     fun attempt(snapshot: DesktopWorkflowSnapshot, mode: ChatEditMode = ChatEditMode.CreateSymbol) {
       routeCreationKindChange(
-          snapshot, mode, DeclarationCreationKind.Function, DeclarationCreationKind.Type) {
-            changes++
-          }
+          snapshot,
+          mode,
+          DeclarationCreationKind.Function,
+          DeclarationCreationKind.Type,
+          "",
+          TextFieldValue(),
+          TextFieldValue(),
+          { changes++ },
+          { error("No draft to discard") })
     }
     attempt(workflow.copy(state = workflow.state.copy(selection = FileSelectionState())))
     attempt(
