@@ -5,6 +5,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -1630,132 +1631,163 @@ internal fun ContextInspectorDialog(
   IdeDialog(
       onDismissRequest = onDismiss,
       title = { Text("Context inspector · read-only") },
-      content = {
+      content = { ContextInspectorContent(inspection) },
+      actions = { ContextInspectorActions(inspection, onDismiss, onRetry, onCancel) })
+}
+
+@Composable
+internal fun RowScope.ContextInspectorActions(
+    inspection: ContextInspectionState,
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit,
+    onCancel: () -> Unit,
+) {
+  when (inspection.status) {
+    ContextInspectionStatus.Loading ->
+        MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Cancel") }
+    ContextInspectionStatus.Ready,
+    ContextInspectionStatus.Failed,
+    ContextInspectionStatus.Stale,
+    ContextInspectionStatus.Canceled ->
+        MiniOrcaButton(onClick = onRetry, tone = ActionTone.Neutral) { Text("Retry") }
+    ContextInspectionStatus.Closed -> Unit
+  }
+  MiniOrcaButton(onClick = onDismiss, tone = ActionTone.Neutral) { Text("Close") }
+}
+
+@Composable
+internal fun ContextInspectorContent(inspection: ContextInspectionState) {
+  Column(Modifier.fillMaxWidth()) {
+    SelectionContainer {
+      Column {
+        Text(contextInspectionLabel(inspection), color = PrimaryText, fontSize = 12.sp)
+        inspection.identity?.let { identity ->
+          Text(
+              "Project-relative path: ${identity.file.path}", color = PrimaryText, fontSize = 11.sp)
+          val target =
+              if (identity.creationKind.isNotEmpty())
+                  "Create ${identity.creationKind}: ${identity.creationName.ifBlank { "unavailable name" }}"
+              else identity.symbol?.let { "${it.kind}: ${it.name}" } ?: "No declaration selected"
+          Text("Assistant target: $target", color = SecondaryText, fontSize = 11.sp)
+          Text(
+              "Assistant intent: ${identity.intent} · File preview action: ${identity.action}",
+              color = SecondaryText,
+              fontSize = 11.sp)
+        }
+        Text(
+            "File-scoped preview, not the exact declaration request. Declaration requests may include different context and prompt material.",
+            color = SecondaryText,
+            fontSize = 11.sp)
+        Text(
+            "Local inspection only; no provider request or consent. Send and Explain require separate authorization.",
+            color = SecondaryText,
+            fontSize = 11.sp)
+      }
+    }
+    val manifest = inspection.manifest.takeIf { inspection.status == ContextInspectionStatus.Ready }
+    if (manifest != null) {
+      Column(Modifier.fillMaxWidth()) {
+        IdePaneHeader("Destination")
+        SelectionContainer {
+          Column(Modifier.fillMaxWidth()) {
+            val scope =
+                ModelScope.entries.firstOrNull { it.wireValue == manifest.scope }?.label
+                    ?: manifest.scope.ifBlank { "unavailable" }
+            val classification =
+                when (manifest.remoteProvider) {
+                  true -> "Remote provider · confirmation required before sending project context"
+                  false -> "Local provider · project context stays on this machine"
+                  null -> "Unavailable"
+                }
+            Text("Scope: $scope", color = SecondaryText, fontSize = 12.sp)
+            Text(
+                "Model: ${manifest.model.ifBlank { "unavailable" }}",
+                color = SecondaryText,
+                fontSize = 12.sp)
+            Text(
+                "Sanitized provider origin: ${manifest.providerOrigin.ifBlank { "unavailable" }}",
+                color = SecondaryText,
+                fontSize = 12.sp)
+            Text(
+                "Provider classification: $classification",
+                color = if (manifest.remoteProvider == true) Warning else SecondaryText,
+                fontSize = 12.sp)
+          }
+        }
+      }
+      IdeHorizontalSeparator(Modifier.padding(top = 10.dp))
+      SelectionContainer {
         Column {
+          Text(
+              contextManifestSummary(manifest),
+              color = PrimaryText,
+              fontSize = 12.sp,
+              modifier = Modifier.padding(top = 10.dp))
+          Text(
+              "Token limit: ${manifest.tokenLimit?.takeIf { it > 0 }?.let { "$it tokens" } ?: "unavailable"}",
+              color = SecondaryText,
+              fontSize = 11.sp)
+          Text(
+              "Byte limit: ${manifest.byteLimit?.takeIf { it > 0 }?.let { "$it bytes" } ?: "unavailable"}",
+              color = SecondaryText,
+              fontSize = 11.sp)
+        }
+      }
+      Column(Modifier.fillMaxWidth()) {
+        Text(
+            "Included",
+            color = PrimaryText,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 10.dp))
+        Text("Inclusion reasons: not supplied.", color = SecondaryText, fontSize = 11.sp)
+        if (manifest.included.isEmpty())
+            Text("No files included.", color = SecondaryText, fontSize = 11.sp)
+        manifest.included.forEachIndexed { index, file ->
           SelectionContainer {
-            Column {
-              Text(contextInspectionLabel(inspection), color = PrimaryText, fontSize = 12.sp)
-              inspection.identity?.let { identity ->
-                Text(
-                    "Project-relative path: ${identity.file.path}",
-                    color = PrimaryText,
-                    fontSize = 11.sp)
-                val target =
-                    if (identity.creationKind.isNotEmpty())
-                        "Create ${identity.creationKind}: ${identity.creationName.ifBlank { "unavailable name" }}"
-                    else
-                        identity.symbol?.let { "${it.kind}: ${it.name}" }
-                            ?: "No declaration selected"
-                Text("Assistant target: $target", color = SecondaryText, fontSize = 11.sp)
-                Text(
-                    "Assistant intent: ${identity.intent} · File preview action: ${identity.action}",
-                    color = SecondaryText,
-                    fontSize = 11.sp)
-              }
+            Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+              Text("Included file ${index + 1}", color = PrimaryText, fontSize = 11.sp)
+              Text("Path: ${file.path}", color = SecondaryText, fontSize = 11.sp)
               Text(
-                  "File-scoped preview, not the exact declaration request. Declaration requests may include different context and prompt material.",
+                  "Reported file size: ${file.sizeBytes} bytes",
                   color = SecondaryText,
                   fontSize = 11.sp)
               Text(
-                  "Local inspection only; no provider request or consent. Send and Explain require separate authorization.",
+                  "Estimated tokens: ${file.estimatedTokens?.toString() ?: "unavailable"}",
+                  color = SecondaryText,
+                  fontSize = 11.sp)
+              Text(
+                  "Hash: ${file.hash.ifBlank { "unavailable" }}",
+                  color = SecondaryText,
+                  fontSize = 11.sp)
+              Text(
+                  "File truncation: ${truncationLabel(file.truncated)}",
                   color = SecondaryText,
                   fontSize = 11.sp)
             }
           }
-          val manifest =
-              inspection.manifest.takeIf { inspection.status == ContextInspectionStatus.Ready }
-          if (manifest != null) {
-            Column(Modifier.fillMaxWidth()) {
-              IdePaneHeader("Destination")
-              SelectionContainer {
-                Column(Modifier.fillMaxWidth()) {
-                  val scope =
-                      ModelScope.entries.firstOrNull { it.wireValue == manifest.scope }?.label
-                          ?: manifest.scope.ifBlank { "unavailable" }
-                  val classification =
-                      when (manifest.remoteProvider) {
-                        true ->
-                            "Remote provider · confirmation required before sending project context"
-                        false -> "Local provider · project context stays on this machine"
-                        null -> "Unavailable"
-                      }
-                  Text("Scope: $scope", color = SecondaryText, fontSize = 12.sp)
-                  Text(
-                      "Model: ${manifest.model.ifBlank { "unavailable" }}",
-                      color = SecondaryText,
-                      fontSize = 12.sp)
-                  Text(
-                      "Sanitized provider origin: ${manifest.providerOrigin.ifBlank { "unavailable" }}",
-                      color = SecondaryText,
-                      fontSize = 12.sp)
-                  Text(
-                      "Provider classification: $classification",
-                      color = if (manifest.remoteProvider == true) Warning else SecondaryText,
-                      fontSize = 12.sp)
-                }
-              }
-            }
-            IdeHorizontalSeparator(Modifier.padding(top = 10.dp))
-            SelectionContainer {
-              Column {
-                Text(
-                    contextManifestSummary(manifest),
-                    color = PrimaryText,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(top = 10.dp))
-                Text(
-                    "Token limit: ${manifest.tokenLimit?.takeIf { it > 0 }?.let { "$it tokens" } ?: "unavailable"}",
-                    color = SecondaryText,
-                    fontSize = 11.sp)
-                Text(
-                    "Byte limit: ${manifest.byteLimit?.takeIf { it > 0 }?.let { "$it bytes" } ?: "unavailable"}",
-                    color = SecondaryText,
-                    fontSize = 11.sp)
-              }
-            }
-            SelectionContainer {
-              Column {
-                Text(
-                    "Included",
-                    color = PrimaryText,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 10.dp))
-                if (manifest.included.isEmpty())
-                    Text("No files included.", color = SecondaryText, fontSize = 11.sp)
-                manifest.included.forEach {
-                  Text(
-                      "${it.path} · ${formatBytes(it.sizeBytes)} · ${it.estimatedTokens?.toString() ?: "unavailable"} estimated tokens · ${truncationLabel(it.truncated)}",
-                      color = SecondaryText,
-                      fontSize = 11.sp)
-                }
-                Text(
-                    "Excluded",
-                    color = PrimaryText,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 10.dp))
-                if (manifest.excluded.isEmpty())
-                    Text("No files excluded.", color = SecondaryText, fontSize = 11.sp)
-                manifest.excluded.forEach {
-                  Text("${it.path} · ${it.reason}", color = SecondaryText, fontSize = 11.sp)
-                }
-              }
+        }
+        Text(
+            "Excluded",
+            color = PrimaryText,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 10.dp))
+        if (manifest.excluded.isEmpty())
+            Text("No files excluded.", color = SecondaryText, fontSize = 11.sp)
+        manifest.excluded.forEachIndexed { index, decision ->
+          SelectionContainer {
+            Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+              Text("Excluded file ${index + 1}", color = PrimaryText, fontSize = 11.sp)
+              Text("Path: ${decision.path}", color = SecondaryText, fontSize = 11.sp)
+              Text(
+                  "Reason: ${decision.reason.ifBlank { "unavailable (not supplied)" }}",
+                  color = SecondaryText,
+                  fontSize = 11.sp)
             }
           }
         }
-      },
-      actions = {
-        when (inspection.status) {
-          ContextInspectionStatus.Loading ->
-              MiniOrcaButton(onClick = onCancel, tone = ActionTone.Neutral) { Text("Cancel") }
-          ContextInspectionStatus.Ready,
-          ContextInspectionStatus.Failed,
-          ContextInspectionStatus.Stale,
-          ContextInspectionStatus.Canceled ->
-              MiniOrcaButton(onClick = onRetry, tone = ActionTone.Neutral) { Text("Retry") }
-          ContextInspectionStatus.Closed -> Unit
-        }
-        MiniOrcaButton(onClick = onDismiss, tone = ActionTone.Neutral) { Text("Close") }
-      })
+      }
+    }
+  }
 }
 
 internal fun contextInspectionLabel(inspection: ContextInspectionState): String =

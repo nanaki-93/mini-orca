@@ -34,6 +34,7 @@ class DesktopShellTest {
           fixture.render()
           assertTrue(fixture.hasText("Loading context preview…"))
           assertFalse(fixture.hasText("No files included."))
+          assertFalse(fixture.hasText("No files excluded."))
           fixture.clickText("Cancel")
           assertEquals(1, cancels)
           inspection =
@@ -49,12 +50,14 @@ class DesktopShellTest {
           fixture.render()
           assertTrue(fixture.hasText("Context preview failed: Daemon unavailable"))
           assertFalse(fixture.hasText("No files included."))
+          assertFalse(fixture.hasText("No files excluded."))
           inspection =
               ContextInspectionState(
                   status = ContextInspectionStatus.Ready, manifest = ContextManifest())
           fixture.render()
           assertTrue(fixture.hasText("Context preview ready"))
           assertTrue(fixture.hasText("No files included."))
+          assertTrue(fixture.hasText("No files excluded."))
           inspection = ContextInspectionState(status = ContextInspectionStatus.Loading)
           fixture.render()
           assertFalse(fixture.hasText("No files included."))
@@ -142,6 +145,66 @@ class DesktopShellTest {
           assertFalse(fixture.hasText("No files included."))
           assertTrue(fixture.hasText("Retry"))
           assertTrue(fixture.hasText("Close"))
+        }
+  }
+
+  @Test
+  fun inspectorPreservesEveryFileDecisionIncludingDuplicatesAndMissingReasons() {
+    val file = ContextFile("src/repeated.go", 1234, "sha-abc", 0, false)
+    var inspection by
+        mutableStateOf(
+            ContextInspectionState(
+                status = ContextInspectionStatus.Ready,
+                manifest =
+                    ContextManifest(
+                        included = listOf(file, file.copy(truncated = true)),
+                        excluded =
+                            listOf(
+                                ContextDecision("src/repeated.go", false, "Policy: excluded"),
+                                ContextDecision("src/repeated.go", false, "")))))
+    ComposeVisualFixture(800, 650) { ContextInspectorDialog(inspection, {}, {}, {}) }
+        .use { fixture ->
+          fixture.render()
+          for (label in
+              listOf(
+                  "Inclusion reasons: not supplied.",
+                  "Included file 1",
+                  "Included file 2",
+                  "Path: src/repeated.go",
+                  "Reported file size: 1234 bytes",
+                  "Estimated tokens: 0",
+                  "Hash: sha-abc",
+                  "File truncation: not truncated",
+                  "File truncation: truncated",
+                  "Excluded file 1",
+                  "Excluded file 2",
+                  "Reason: Policy: excluded",
+                  "Reason: unavailable (not supplied)")) assertTrue(fixture.hasText(label), label)
+          assertEquals(4, fixture.textCount("Path: src/repeated.go"))
+          assertEquals(2, fixture.textCount("Hash: sha-abc"))
+          assertFalse(fixture.hasText("No files included."))
+          assertFalse(fixture.hasText("No files excluded."))
+          inspection =
+              inspection.copy(
+                  manifest =
+                      ContextManifest(
+                          included = listOf(ContextFile("src/unknown.go", 0, "")),
+                          excluded =
+                              listOf(ContextDecision("src/space.go", false, " policy detail "))))
+          fixture.render()
+          for (label in
+              listOf(
+                  "Path: src/unknown.go",
+                  "Reported file size: 0 bytes",
+                  "Estimated tokens: unavailable",
+                  "Hash: unavailable",
+                  "File truncation: truncation unavailable",
+                  "Reason:  policy detail ")) assertTrue(fixture.hasText(label), label)
+          inspection =
+              ContextInspectionState(status = ContextInspectionStatus.Failed, message = "Offline")
+          fixture.render()
+          assertFalse(fixture.hasText("Included file 1"))
+          assertFalse(fixture.hasText("No files excluded."))
         }
   }
 

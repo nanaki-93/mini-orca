@@ -166,6 +166,89 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun contextPreviewFileDecisionsWrapRemainSelectableAndReachTheLastRecord() {
+    val longPath = "Path: src/${"deepsegment".repeat(24)}/final.go"
+    val longHash = "Hash: ${"abcdef0123456789".repeat(8)}"
+    val longReason = "Reason: ${"Excluded by source policy. ".repeat(16)}"
+    val manifest =
+        ContextManifest(
+            included =
+                (1..16).map { index ->
+                  ContextFile(
+                      if (index == 16) longPath.removePrefix("Path: ") else "src/file-$index.go",
+                      1024L + index,
+                      if (index == 16) longHash.removePrefix("Hash: ") else "hash-$index",
+                      if (index == 16) 0 else index,
+                      index == 16)
+                },
+            excluded =
+                (1..16).map { index ->
+                  ContextDecision(
+                      "excluded/file-$index.go",
+                      false,
+                      if (index == 16) longReason.removePrefix("Reason: ") else "Reason $index")
+                })
+    for ((width, height) in listOf(800 to 650, 1280 to 600)) {
+      val inspection =
+          ContextInspectionState(status = ContextInspectionStatus.Ready, manifest = manifest)
+      ComposeVisualFixture(width, height, 1.5f) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+              IdeDialogSurface(
+                  maxHeight = (height - 64).coerceAtMost(520).dp,
+                  title = { Text("Context inspector · read-only") },
+                  content = { ContextInspectorContent(inspection) },
+                  actions = { ContextInspectorActions(inspection, {}, {}, {}) })
+            }
+          }
+          .use { fixture ->
+            fixture.render("context-file-decisions-$width-$height")
+            val body = fixture.taggedBounds("ide-dialog-body")
+            val close = fixture.firstVisibleTextBounds("Close")
+            assertTrue(body.height > 0 && body.bottom <= close.top)
+            assertTrue(close.bottom <= height)
+            assertTrue(fixture.hasText("Inclusion reasons: not supplied."))
+            for (index in 1..16) {
+              assertEquals(1, fixture.textCount("Included file $index"))
+              assertEquals(1, fixture.textCount("Excluded file $index"))
+              assertEquals(
+                  1, fixture.textCount(if (index == 16) longPath else "Path: src/file-$index.go"))
+              assertEquals(1, fixture.textCount(if (index == 16) longHash else "Hash: hash-$index"))
+              assertEquals(1, fixture.textCount("Path: excluded/file-$index.go"))
+              assertEquals(
+                  1, fixture.textCount(if (index == 16) longReason else "Reason: Reason $index"))
+            }
+            fixture.assertTextOrder(
+                listOf(
+                    "Included file 1", "Included file 16", "Excluded file 1", "Excluded file 16"))
+            for (text in
+                listOf(
+                    longPath,
+                    "Reported file size: 1040 bytes",
+                    "Estimated tokens: 0",
+                    longHash,
+                    "File truncation: truncated",
+                    "Excluded file 16",
+                    "Path: excluded/file-16.go",
+                    longReason)) {
+              fixture.assertEveryTextLineReachable(text, "ide-dialog-body")
+            }
+            for (text in listOf(longPath, longHash, longReason, "Path: excluded/file-16.go")) {
+              fixture.revealText(text, "ide-dialog-body")
+              val viewport = fixture.taggedBounds("ide-dialog-body")
+              fixture.scrollBy(
+                  fixture.firstVisibleTextBounds(text).top - viewport.top - 8f, "ide-dialog-body")
+              fixture.render()
+              val firstLine = fixture.firstVisibleTextBounds(text).top
+              assertTrue(firstLine >= viewport.top && firstLine < viewport.bottom, text)
+              assertTrue(fixture.copyTextByDragging(text, text).isNotBlank())
+            }
+            fixture.assertTextFits("Close")
+            fixture.assertTextFits("Retry")
+          }
+    }
+  }
+
+  @Test
   fun f20ScanScopeWarningsRecoveryAndActionsStayReachableWithDiagnosticsCollapsed() {
     val viewports = listOf(1440 to 900, 1600 to 1000, 800 to 400, 800 to 650)
     for ((width, height) in viewports) for (scale in listOf(1f, 1.25f, 1.5f)) {
