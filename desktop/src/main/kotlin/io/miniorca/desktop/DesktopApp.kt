@@ -448,6 +448,72 @@ internal class ProjectSwitchAdmission {
       else SwitchReviewStage.Final
 }
 
+private fun directDiscardFocus(discarded: Boolean, chatMode: ChatEditMode): ComposerFocusTarget =
+    if (discarded) composerFocusAfterDiscard(chatMode) else ComposerFocusTarget.Discard
+
+private fun discardDismissFocus(
+    pending: PendingDraftDiscard,
+    chatMode: ChatEditMode,
+): ComposerFocusTarget? =
+    when (pending) {
+      is PendingDraftDiscard.Direct -> ComposerFocusTarget.Discard
+      is PendingDraftDiscard.Create -> composerFocusAfterDiscard(chatMode)
+      else -> null
+    }
+
+private fun directDiscardRequest(
+    state: DesktopState,
+    fields: DraftFieldBuffers?
+): PendingDraftDiscard.Direct? {
+  val identity = directDraftIdentity(state, fields) ?: return null
+  val draft = state.review.draft ?: return null
+  val mode = ChatEditMode.entries.find { it.wireValue == draft.mode } ?: return null
+  return PendingDraftDiscard.Direct(
+      CurrentEditIdentity(mode, draft.targetPath, draft.targetSymbol, true), identity)
+}
+
+private fun draftEditorActions(
+    presenter: DesktopWorkflowPresenter,
+    fields: () -> DraftFieldBuffers?,
+    setFields: (DraftFieldBuffers) -> Unit,
+    requestDiscard: (PendingDraftDiscard.Direct) -> Unit,
+): DraftEditorActions =
+    DraftEditorActions(
+        updateDeclaration = { text ->
+          if (text != presenter.snapshot.value.state.review.editor?.declaration)
+              presenter.dispatch(DesktopEvent.DraftEdited(declaration = text))
+        },
+        updateImportValue = { value ->
+          val current = reconcileDraftFields(fields(), presenter.snapshot.value.state.review.editor)
+          if (current != null) {
+            val event = importTextEdit(current.imports.text, value.text)
+            setFields(
+                current.copy(
+                    imports = value,
+                    localEditGeneration =
+                        current.localEditGeneration + if (event != null) 1 else 0))
+            if (event != null) presenter.dispatch(event)
+          }
+        },
+        validate = presenter::validateEditableDraft,
+        discard = {
+          val state = presenter.snapshot.value.state
+          directDiscardRequest(state, reconcileDraftFields(fields(), state.review.editor))
+              ?.let(requestDiscard)
+        },
+        updateDeclarationValue = { value ->
+          val current = reconcileDraftFields(fields(), presenter.snapshot.value.state.review.editor)
+          if (current != null) {
+            val event = declarationTextEdit(current.declaration, value)
+            setFields(
+                current.copy(
+                    declaration = value,
+                    localEditGeneration =
+                        current.localEditGeneration + if (event != null) 1 else 0))
+            if (event != null) presenter.dispatch(event)
+          }
+        })
+
 @Composable
 internal fun MiniOrcaApp(
     terminal: DesktopTerminalWorkspace = remember { DesktopTerminalWorkspace() },
@@ -676,8 +742,7 @@ internal fun MiniOrcaApp(
               reconcileDraftFields(draftFields, state.review.editor),
               presenter::discardDraft)
       pendingDraftDiscard = null
-      focusAssistantControl(
-          if (discarded) composerFocusAfterDiscard(chatMode) else ComposerFocusTarget.Discard)
+      focusAssistantControl(directDiscardFocus(discarded, chatMode))
       return
     }
     pendingDraftDiscard = null
@@ -937,50 +1002,8 @@ internal fun MiniOrcaApp(
                   updateAdvancedConstraintsValue = { advancedConstraints = it },
               ),
           editorActions =
-              DraftEditorActions(
-                  updateDeclaration = {
-                    if (it != appState.review.editor?.declaration)
-                        presenter.dispatch(DesktopEvent.DraftEdited(declaration = it))
-                  },
-                  validate = presenter::validateEditableDraft,
-                  discard = {
-                    val state = presenter.snapshot.value.state
-                    val fields = reconcileDraftFields(draftFields, state.review.editor)
-                    val identity = directDraftIdentity(state, fields)
-                    val draft = state.review.draft
-                    val mode = ChatEditMode.entries.find { it.wireValue == draft?.mode }
-                    if (identity != null && draft != null && mode != null)
-                        pendingDraftDiscard =
-                            PendingDraftDiscard.Direct(
-                                CurrentEditIdentity(
-                                    mode, draft.targetPath, draft.targetSymbol, true),
-                                identity)
-                  },
-                  updateDeclarationValue = { value ->
-                    val current = reconcileDraftFields(draftFields, appState.review.editor)
-                    if (current != null) {
-                      val event = declarationTextEdit(current.declaration, value)
-                      draftFields =
-                          current.copy(
-                              declaration = value,
-                              localEditGeneration =
-                                  current.localEditGeneration + if (event != null) 1 else 0)
-                      if (event != null) presenter.dispatch(event)
-                    }
-                  },
-                  updateImportValue = { value ->
-                    val current = reconcileDraftFields(draftFields, appState.review.editor)
-                    if (current != null) {
-                      val event = importTextEdit(current.imports.text, value.text)
-                      draftFields =
-                          current.copy(
-                              imports = value,
-                              localEditGeneration =
-                                  current.localEditGeneration + if (event != null) 1 else 0)
-                      if (event != null) presenter.dispatch(event)
-                    }
-                  },
-              ),
+              draftEditorActions(
+                  presenter, { draftFields }, { draftFields = it }, { pendingDraftDiscard = it }),
           modifier = modifier,
       )
       ComposerFocusEffect(
@@ -1281,11 +1304,7 @@ internal fun MiniOrcaApp(
         onCancel = {
           if (pendingDiscardIsCurrent(pending, pendingDraftDiscard)) {
             pendingDraftDiscard = null
-            if (pending is PendingDraftDiscard.Direct) {
-              focusAssistantControl(ComposerFocusTarget.Discard)
-            } else if (pending is PendingDraftDiscard.Create) {
-              focusAssistantControl(composerFocusAfterDiscard(chatMode))
-            }
+            discardDismissFocus(pending, chatMode)?.let(::focusAssistantControl)
           }
         })
   }
