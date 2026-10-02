@@ -123,8 +123,14 @@ Import, restore, navigation, indexing, parsing, and `gofmt`/`go vet` source anal
 Create a session with the imported `project_id`, current `project_revision`,
 selected-file `base_file_hash`, project-relative `open_path`, and either
 `replace_symbol` or `create_symbol` mode. A replace target must be one exact Go
-symbol; a create target must be an absent valid top-level Go identifier. Those
-values are immutable for session messages.
+symbol. A create target must be a valid top-level Go identifier absent from the
+indexed open file's symbols (including inexact or non-atomic symbols). Go keywords
+and the workflow-reserved names `_`, `init`, and `main` are rejected; valid names
+such as `_helper` and `any` are allowed. Admission checks the current project,
+revision and file hash; it does not guarantee package-wide name uniqueness.
+Function versus Type is preparation conveyed in the message, not a separate
+session mode or request field. Those session values are immutable for messages.
+A session and message do not themselves validate or apply source changes.
 
 A successful session message yields an isolated `Draft`: declaration text,
 optional imports, revision, hash, target identity, and state. It never returns

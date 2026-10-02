@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -137,12 +138,14 @@ internal fun ToolWindowScopeHeader(
 ) {
   Column(modifier.fillMaxWidth()) {
     IdePaneHeader(title = label, stateLabel = scope.target)
-    Text(
-        scope.path,
-        color = PrimaryText,
-        fontFamily = FontFamily.Monospace,
-        fontSize = 11.sp,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
+    SelectionContainer {
+      Text(
+          scope.path,
+          color = PrimaryText,
+          fontFamily = FontFamily.Monospace,
+          fontSize = 11.sp,
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp))
+    }
     IdeHorizontalSeparator()
   }
 }
