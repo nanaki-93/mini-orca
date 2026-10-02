@@ -943,7 +943,7 @@ class DesktopWorkflowPresenterTest {
       io.runPending()
       main.runPending()
       val failed = presenter.snapshot.value.state.review.editor!!
-      assertEquals(DraftEditorStatus.Generated, failed.status)
+      assertEquals(DraftEditorStatus.Dirty, failed.status)
       assertEquals(ValidationAttemptStatus.Failed, failed.validationAttempt?.status)
       assertTrue(failed.validationAttempt?.message?.isNotBlank() == true)
       assertEquals("func Run() { println(1) }", failed.declaration)
@@ -957,8 +957,7 @@ class DesktopWorkflowPresenterTest {
       assertEquals(
           ValidationAttemptStatus.Canceled,
           presenter.snapshot.value.state.review.editor?.validationAttempt?.status)
-      assertEquals(
-          DraftEditorStatus.Generated, presenter.snapshot.value.state.review.editor?.status)
+      assertEquals(DraftEditorStatus.Dirty, presenter.snapshot.value.state.review.editor?.status)
       presenter.validateEditableDraft()
       val replacement = presenter.snapshot.value.state.review.editor?.validationAttempt
       assertEquals(ValidationAttemptStatus.Running, replacement?.status)

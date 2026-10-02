@@ -293,6 +293,7 @@ internal fun AssistantToolWindow(
                 state.draftFocus,
                 state.draft.engineeringInsight,
                 state.draft.state.equals("stale", ignoreCase = true),
+                draftCreationKind(state.draft, state.attempts),
                 editorActions)
           }
           IdePaneHeader(
@@ -387,6 +388,7 @@ private fun AssistantDraftEditorSection(
     draftFocus: FocusRequester,
     insight: EngineeringInsight?,
     stale: Boolean,
+    creationKind: DeclarationCreationKind?,
     actions: DraftEditorActions
 ) {
   Column(Modifier.fillMaxWidth()) {
@@ -400,13 +402,18 @@ private fun AssistantDraftEditorSection(
         actionsBelow = true,
         stateLabel = "Candidate for review",
         stateTint = ResultAccent,
-        actions = { IdeLabelBadge(editor.status.name, draftEditorStatusColor(editor.status)) })
+        actions = {
+          IdeLabelBadge(
+              draftEditorStatusLabel(editor.status), draftEditorStatusColor(editor.status))
+        })
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-      Text(
-          "Target: ${draft.targetSymbol} in ${draft.targetPath}.",
-          color = SecondaryText,
-          fontFamily = FontFamily.Monospace,
-          style = IdeTypography.resultCode)
+      SelectionContainer {
+        Text(
+            draftIdentityLabel(draft, creationKind),
+            color = SecondaryText,
+            fontFamily = FontFamily.Monospace,
+            style = IdeTypography.resultCode)
+      }
       CompactMultilineField(
           value = declaration,
           onValueChange = actions.updateDeclarationValue,
@@ -421,12 +428,22 @@ private fun AssistantDraftEditorSection(
           enabled = editor.status !in setOf(DraftEditorStatus.Validating, DraftEditorStatus.Stale),
           label = "Required imports",
           modifier = Modifier.fillMaxWidth().padding(top = 7.dp))
-      DraftValidationDiagnostics(editor.diagnostics, retained = editor.diagnosticsAreRetained)
+      DraftValidationDiagnostics(
+          editor.diagnostics, retained = draftDiagnosticsAreEarlierEvidence(editor))
       Text(
           draftEditorStatusMessage(editor.status),
           color = draftEditorStatusColor(editor.status),
           style = IdeTypography.body,
           modifier = Modifier.padding(top = 5.dp))
+      editor.validationAttempt
+          ?.takeIf { it.status != ValidationAttemptStatus.Running }
+          ?.let {
+            Text(
+                "Validation ${it.status.name.lowercase()}: ${it.message}",
+                color = Warning,
+                style = IdeTypography.body,
+                modifier = Modifier.padding(top = 5.dp))
+          }
       MiniOrcaButton(
           onClick = actions.validate,
           enabled = canValidate,
@@ -642,6 +659,53 @@ internal data class DraftEditorActions(
 
 internal fun parseRequiredImports(value: String): List<String> =
     value.split(',').map { it.trim() }.filter { it.isNotBlank() }
+
+internal fun draftCreationKind(
+    draft: DeclarationDraft,
+    attempts: List<ChatRequestAttempt>,
+): DeclarationCreationKind? =
+    attempts
+        .lastOrNull { attempt ->
+          val outcome = attempt.outcome as? ChatRequestOutcome.Succeeded
+          outcome?.draftId == draft.id &&
+              attempt.scope.projectId == draft.projectId &&
+              attempt.scope.projectRevision == draft.projectRevision &&
+              attempt.scope.path == draft.targetPath &&
+              attempt.scope.baseFileHash == draft.baseFileHash &&
+              attempt.scope.target.mode.wireValue == draft.mode &&
+              attempt.scope.target.symbol == draft.targetSymbol
+        }
+        ?.creationKind
+        ?.let { noun -> DeclarationCreationKind.entries.find { it.noun == noun } }
+
+internal fun draftIdentityLabel(
+    draft: DeclarationDraft,
+    creationKind: DeclarationCreationKind?,
+): String {
+  val scope =
+      when (draft.mode) {
+        ChatEditMode.ReplaceSymbol.wireValue -> "Replace declaration"
+        ChatEditMode.CreateSymbol.wireValue ->
+            creationKind?.let { "New ${it.noun}" } ?: "New declaration (kind unavailable)"
+        else -> "Draft scope unavailable"
+      }
+  return "$scope · ${draft.targetSymbol} · ${draft.targetPath} · Server draft revision ${draft.revision}"
+}
+
+internal fun draftDiagnosticsAreEarlierEvidence(editor: EditableDraftState): Boolean =
+    editor.diagnosticsAreRetained ||
+        editor.status in
+            setOf(DraftEditorStatus.Dirty, DraftEditorStatus.Validating, DraftEditorStatus.Stale)
+
+internal fun draftEditorStatusLabel(status: DraftEditorStatus): String =
+    when (status) {
+      DraftEditorStatus.Generated -> "Generated · not validated"
+      DraftEditorStatus.Dirty -> "Locally edited · needs validation"
+      DraftEditorStatus.Validating -> "Validating"
+      DraftEditorStatus.Valid -> "Validated"
+      DraftEditorStatus.Invalid -> "Invalid"
+      DraftEditorStatus.Stale -> "Stale"
+    }
 
 internal fun draftEditorStatusMessage(status: DraftEditorStatus): String =
     when (status) {

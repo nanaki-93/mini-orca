@@ -1121,6 +1121,66 @@ class AssistantToolWindowTest {
   }
 
   @Test
+  fun draftIdentityShowsExactServerRevisionScopeAndFullPath() {
+    val path = "internal/" + "nested/".repeat(20) + "run.go"
+    val draft = editableDraftForFindingTest().serverDraft.copy(targetPath = path, revision = 17)
+    assertEquals(
+        "Replace declaration · Run · $path · Server draft revision 17",
+        draftIdentityLabel(draft, null))
+    assertEquals(
+        "New function · Run · $path · Server draft revision 17",
+        draftIdentityLabel(draft.copy(mode = "create_symbol"), DeclarationCreationKind.Function))
+    assertEquals(
+        "New type · Run · $path · Server draft revision 17",
+        draftIdentityLabel(draft.copy(mode = "create_symbol"), DeclarationCreationKind.Type))
+    assertTrue(
+        draftIdentityLabel(draft.copy(mode = "create_symbol"), null).contains("kind unavailable"))
+  }
+
+  @Test
+  fun draftCreationKindFollowsAcceptedCandidateNotCurrentComposer() {
+    val draft = editableDraftForFindingTest().serverDraft.copy(mode = "create_symbol")
+    val scope =
+        ChatRequestScope(
+            draft.projectId,
+            draft.projectRevision,
+            draft.targetPath,
+            draft.baseFileHash,
+            ChatTarget(ChatEditMode.CreateSymbol, draft.targetSymbol))
+    val attempt =
+        ChatRequestAttempt(
+            1,
+            scope,
+            ScopedModel(),
+            false,
+            "request",
+            0,
+            ChatRequestOutcome.Succeeded("session", draft.id),
+            creationKind = DeclarationCreationKind.Type.noun)
+    assertEquals(DeclarationCreationKind.Type, draftCreationKind(draft, listOf(attempt)))
+    assertEquals(null, draftCreationKind(draft.copy(id = "replacement"), listOf(attempt)))
+    assertEquals(null, draftCreationKind(draft.copy(targetPath = "other.go"), listOf(attempt)))
+    assertEquals(null, draftCreationKind(draft.copy(projectRevision = "new"), listOf(attempt)))
+    assertEquals(
+        null, draftCreationKind(draft, listOf(attempt.copy(outcome = ChatRequestOutcome.Canceled))))
+  }
+
+  @Test
+  fun draftStatusSeparatesLocalEditsFromServerRevisionAndEarlierDiagnostics() {
+    val draft = editableDraftForFindingTest().serverDraft.copy(revision = 9)
+    val editor = editableDraft(draft)
+    assertEquals("Generated · not validated", draftEditorStatusLabel(editor.status))
+    assertEquals(
+        "Locally edited · needs validation", draftEditorStatusLabel(editDraft(editor).status))
+    assertTrue(draftDiagnosticsAreEarlierEvidence(editDraft(editor)))
+    assertEquals("Validating", draftEditorStatusLabel(DraftEditorStatus.Validating))
+    assertEquals("Validated", draftEditorStatusLabel(DraftEditorStatus.Valid))
+    assertEquals("Invalid", draftEditorStatusLabel(DraftEditorStatus.Invalid))
+    assertEquals("Stale", draftEditorStatusLabel(DraftEditorStatus.Stale))
+    assertFalse(draftDiagnosticsAreEarlierEvidence(editor))
+  }
+
+  @Test
   fun preparedPresetTextPlacesTheCaretAfterTheRequestLead() {
     val prepared = preparedFunctionChangeMessage(FunctionChangePreset.Refactor)
 
