@@ -239,6 +239,26 @@ class FileChatStateTest {
   }
 
   @Test
+  fun attemptScopeSeparatesIdenticalNamesByProjectFileRevisionHashModeAndTask() {
+    val target = ChatTarget(ChatEditMode.ReplaceSymbol, "Run")
+    val task = BugTaskSpec("1", "main.go", "Run", "func Run()", listOf("Return an error."))
+    val scope = ChatRequestScope("project", "revision", "main.go", "base", target, task)
+    val matching = session().copy(taskSpec = task)
+    assertTrue(scope.matches(matching))
+    listOf(
+            matching.copy(projectId = "other"),
+            matching.copy(projectRevision = "next"),
+            matching.copy(openPath = "other.go"),
+            matching.copy(baseFileHash = "new-hash"),
+            matching.copy(mode = "create_symbol"),
+            matching.copy(targetSymbol = "Other"),
+            matching.copy(taskSpec = task.copy(targetSignature = "func Run() error")))
+        .forEach { assertFalse(scope.matches(it), it.toString()) }
+    assertFalse(scope.matches(matching.copy(taskSpec = null)))
+    assertFalse(scope.copy(taskSpec = null).matches(matching))
+  }
+
+  @Test
   fun proposalMayPinAMissingParentProofButCannotReplaceIt() {
     val task = BugTaskSpec("1", "main.go", "Run", "func Run()", listOf("Return an error."))
     val proof = GoTestCandidateSpec("TestRun", "package main\nfunc TestRun() {}")

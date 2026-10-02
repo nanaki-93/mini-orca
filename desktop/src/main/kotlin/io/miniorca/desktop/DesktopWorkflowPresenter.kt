@@ -1814,7 +1814,6 @@ class DesktopWorkflowPresenter(
               "Confirm the Function edits model destination before sending context."))
       return
     }
-    val (requestId, fileRequest) = controller.beginChatLoad() ?: return
     val chatTarget = target.target ?: return
     val taskSpec =
         state.preparedTaskSpec?.takeIf {
@@ -1824,6 +1823,18 @@ class DesktopWorkflowPresenter(
         }
     val identity =
         WorkflowTaskIdentity(file.identity(project), chatTarget.mode, chatTarget.symbol, taskSpec)
+    val (requestId, fileRequest) =
+        controller.beginChatAttempt(
+            ChatRequestScope(
+                project.projectId,
+                project.projectRevision,
+                file.path,
+                file.contentHash,
+                chatTarget,
+                taskSpec,
+                if (mode == ChatEditMode.ReplaceSymbol) state.selectedSymbol else null),
+            snapshot.value.model(ModelScope.Function),
+            content) ?: return
     activeTask = identity
     val matchingSession =
         state.chat.session?.takeIf { chatSessionMatches(it, file, project, chatTarget, taskSpec) }
@@ -1873,11 +1884,12 @@ class DesktopWorkflowPresenter(
             if (controller.cancelChatLoad(requestId, fileRequest)) publish()
             throw CancellationException()
           } catch (error: Exception) {
-            if (activeTask == identity && controller.cancelChatLoad(requestId, fileRequest)) {
-              val message =
-                  modelRequestFailureMessage(error, ModelScope.Function, "Chat request failed")
-              dispatch(DesktopEvent.ChatRequestFailed(ChatRequestFailure(chatTarget, message)))
-            }
+            if (activeTask == identity &&
+                controller.chatAttemptFailed(
+                    requestId,
+                    fileRequest,
+                    modelRequestFailureMessage(error, ModelScope.Function, "Chat request failed")))
+                publish()
           } finally {
             if (chatJob === coroutineContext[Job]) setOperation(generating = false)
           }

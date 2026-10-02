@@ -2798,7 +2798,7 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
-  fun generationFailureSurvivesOtherStatusAndClearsBeforeRetryOrFileChange() {
+  fun generationFailureSurvivesOtherStatusAndRetryUntilFileChange() {
     val main = QueuedDispatcher()
     val io = QueuedDispatcher()
     val scope = CoroutineScope(SupervisorJob() + main)
@@ -2839,8 +2839,13 @@ class DesktopWorkflowPresenterTest {
       assertEquals(failure, presenter.snapshot.value.state.chat.failure)
       presenter.sendChatMessage(
           ChatEditMode.ReplaceSymbol, "", "Try preserving the public signature again")
-      assertNull(presenter.snapshot.value.state.chat.failure)
+      assertEquals(
+          failure,
+          presenter.snapshot.value.state.chat.attempts.first().let {
+            ChatRequestFailure(it.scope.target, (it.outcome as ChatRequestOutcome.Failed).message)
+          })
       drain()
+      assertEquals(2, presenter.snapshot.value.state.chat.attempts.size)
       assertTrue(
           presenter.confirmFileNavigationIntent(presenter.fileNavigationIntent("other.go")!!))
       drain()
