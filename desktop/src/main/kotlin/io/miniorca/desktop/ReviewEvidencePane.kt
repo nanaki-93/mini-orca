@@ -145,7 +145,7 @@ internal fun reviewNextActionUiState(
       )
   if (evidence.checkAttemptStatus == null &&
       decision.eligible &&
-      evidence.checks.status in setOf(ReviewEvidenceStatus.Passed, ReviewEvidenceStatus.Skipped))
+      evidence.checks.status == ReviewEvidenceStatus.Passed)
       return ReviewNextActionUiState(
           ReviewNextActionKind.Apply,
           decision.actionLabel,
@@ -160,7 +160,7 @@ internal fun reviewNextActionUiState(
           ReviewNextActionKind.RunChecks,
           evidence.runChecksLabel,
           scope,
-          decision.reason,
+          evidence.checks.detail,
           true,
       )
   if (evidence.checks.status == ReviewEvidenceStatus.Failed) {
@@ -222,9 +222,7 @@ internal fun reviewProgressionRows(
                 ReviewEvidenceStatus.Running
             decision.eligible &&
                 evidence.validation.status == ReviewEvidenceStatus.Passed &&
-                evidence.checks.status in
-                    setOf(ReviewEvidenceStatus.Passed, ReviewEvidenceStatus.Skipped) ->
-                ReviewEvidenceStatus.Passed
+                evidence.checks.status == ReviewEvidenceStatus.Passed -> ReviewEvidenceStatus.Passed
             evidence.validation.status == ReviewEvidenceStatus.Stale ||
                 evidence.checks.status == ReviewEvidenceStatus.Stale -> ReviewEvidenceStatus.Stale
             evidence.validation.status == ReviewEvidenceStatus.Failed ||
@@ -373,6 +371,7 @@ internal fun reviewValidationSummary(
 internal fun checksMatchDraft(checks: DraftCheckReport?, draft: DeclarationDraft?): Boolean =
     checks != null &&
         draft != null &&
+        checks.targetPath == draft.targetPath &&
         checks.draftId == draft.id &&
         checks.draftRevision == draft.revision &&
         checks.draftHash == draft.hash
@@ -466,7 +465,10 @@ private fun focusedChecksEvidence(
       when {
         states.any { it == "running" } -> ReviewEvidenceStatus.Running
         states.any { it in setOf("failed", "error") } -> ReviewEvidenceStatus.Failed
-        states.isNotEmpty() && states.all { it == "skipped" } -> ReviewEvidenceStatus.Skipped
+        states.isEmpty() -> ReviewEvidenceStatus.Missing
+        checks.checks.any { it.required && it.state.lowercase() == "skipped" } ->
+            ReviewEvidenceStatus.Skipped
+        states.all { it == "skipped" } -> ReviewEvidenceStatus.Skipped
         states.all { it in setOf("passed", "skipped") } -> ReviewEvidenceStatus.Passed
         else -> ReviewEvidenceStatus.Missing
       }
@@ -475,7 +477,8 @@ private fun focusedChecksEvidence(
       when (status) {
         ReviewEvidenceStatus.Passed ->
             "${checks.checks.size} checks (${required} required) are current."
-        ReviewEvidenceStatus.Skipped -> "${checks.checks.size} checks were skipped."
+        ReviewEvidenceStatus.Skipped ->
+            "Required or all focused checks were skipped; passing evidence is unavailable."
         ReviewEvidenceStatus.Running -> "Focused checks are running."
         ReviewEvidenceStatus.Failed -> "At least one focused check failed."
         ReviewEvidenceStatus.Canceled -> "Focused check execution was canceled."
@@ -614,11 +617,8 @@ internal fun ReviewToolWindow(
                     when {
                       evidence.validation.status != ReviewEvidenceStatus.Passed ->
                           evidence.validation.detail
-                      evidence.checks.status in
-                          setOf(
-                              ReviewEvidenceStatus.Running,
-                              ReviewEvidenceStatus.Failed,
-                              ReviewEvidenceStatus.Canceled) -> evidence.checks.detail
+                      evidence.checks.status != ReviewEvidenceStatus.Passed ->
+                          evidence.checks.detail
                       nextAction.kind == ReviewNextActionKind.Apply ->
                           "Validation and check evidence match this candidate."
                       else -> decision.reason
@@ -699,9 +699,7 @@ internal fun reviewReadinessTitle(
       evidence.checks.status == ReviewEvidenceStatus.Failed -> "Checks failed"
       evidence.checks.status == ReviewEvidenceStatus.Canceled -> "Checks canceled"
       evidence.checks.status == ReviewEvidenceStatus.Stale -> "Checks are stale"
-      decision.eligible &&
-          evidence.checks.status in
-              setOf(ReviewEvidenceStatus.Passed, ReviewEvidenceStatus.Skipped) -> "Ready to apply"
+      decision.eligible && evidence.checks.status == ReviewEvidenceStatus.Passed -> "Ready to apply"
       evidence.checks.status == ReviewEvidenceStatus.Skipped -> "Checks skipped"
       else -> "Checks needed"
     }
@@ -775,8 +773,7 @@ private fun ReviewDetails(
         checkHash = state.checks?.draftHash,
         expanded = expanded,
         onToggle = { expanded = !expanded })
-    if (expanded &&
-        state.checkAttempt == null &&
+    if (state.checkAttempt == null &&
         evidence.canRunChecks &&
         next.kind !in setOf(ReviewNextActionKind.RunChecks, ReviewNextActionKind.Waiting)) {
       if (state.draft?.taskSpec?.goTestCandidate != null) ReviewExecutionScope(state.draft)
@@ -800,7 +797,15 @@ private fun ReviewExecutionScope(draft: DeclarationDraft?) {
       "Trust local execution for this project revision:",
       color = PrimaryText,
       style = IdeTypography.workspaceMetadata)
-  Text(draftProjectCodeCommand(draft), color = PrimaryText, style = IdeTypography.resultCode)
+  SelectionContainer {
+    Column {
+      Text(
+          "${draft?.targetPath} · ${draft?.targetSymbol} · revision ${draft?.revision}",
+          color = SecondaryText,
+          style = IdeTypography.workspaceMetadata)
+      Text(draftProjectCodeCommand(draft), color = PrimaryText, style = IdeTypography.resultCode)
+    }
+  }
   Text(
       "gofmt and go vet are source-only.", color = SecondaryText, style = IdeTypography.compactBody)
 }
