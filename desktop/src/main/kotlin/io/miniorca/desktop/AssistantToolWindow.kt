@@ -200,7 +200,12 @@ internal fun AssistantToolWindow(
                   onClick = conversationActions.inspectContext,
                   enabled = !state.sending,
                   tone = ActionTone.Neutral,
-                  modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                  modifier =
+                      Modifier.fillMaxWidth()
+                          .padding(top = 8.dp)
+                          .then(
+                              state.inspectContextFocus?.let { Modifier.focusRequester(it) }
+                                  ?: Modifier)) {
                     Text("Inspect context")
                   }
               if (state.sending)
@@ -365,6 +370,7 @@ internal data class AssistantToolWindowState(
     val creationKind: DeclarationCreationKind = DeclarationCreationKind.Function,
     val creationNameFocus: FocusRequester? = null,
     val requestFailure: ChatRequestFailure? = null,
+    val inspectContextFocus: FocusRequester? = null,
 )
 
 /** Conversation intents that do not mutate the editable declaration. */

@@ -1888,37 +1888,141 @@ class DesktopKeyboardNavigationTest {
   }
 
   @Test
-  fun contextDismissalFallsBackToEditorWhenWorkspaceHidesItsOwner() {
+  fun inspectContextCloseAndEscapeReturnToTheButtonWithoutAnotherRequest() {
+    var requests = 0
     var operations = 0
+    var dismissals = 0
+    var cancels = 0
+    val inspectFocus = androidx.compose.ui.focus.FocusRequester()
+    var inspectOrigin by mutableStateOf<ContextInspectFocusOrigin?>(null)
     var state by
         mutableStateOf(
             shellFocusState(resultProjectFixture()).let {
               it.copy(
                   app = it.app.copy(workspace = Workspace.Editor),
-                  layout = it.layout.copy(lastFocusedRegion = DesktopFocusRegion.RightToolWindow),
-                  context = it.context.copy(inspection = ContextInspectionState()))
+                  layout =
+                      it.layout.copy(
+                          activeRightToolWindow = RightToolWindow.Assistant,
+                          lastFocusedRegion = DesktopFocusRegion.RightToolWindow))
             })
     ComposeVisualFixture(1_280, 800) {
-          FocusTestShell(state, onState = { state = it }, onOperation = { operations++ })
+          FocusTestShell(
+              state,
+              onState = {
+                if (state.context.visible && !it.context.visible) dismissals++
+                state = it
+              },
+              onOperation = { operations++ },
+              inspectFocus = inspectFocus,
+              inspectOrigin = inspectOrigin,
+              onCancelContext = {
+                cancels++
+                state =
+                    state.copy(
+                        context =
+                            state.context.copy(
+                                inspection =
+                                    ContextInspectionState(
+                                        status = ContextInspectionStatus.Canceled)))
+              },
+              onInspect = {
+                inspectOrigin =
+                    ContextInspectFocusOrigin(
+                        state.app.project?.projectId, state.app.workspace, inspectFocus)
+                requests++
+                state =
+                    state.copy(
+                        context =
+                            state.context.copy(
+                                inspection =
+                                    ContextInspectionState(
+                                        status = ContextInspectionStatus.Loading)))
+              })
         }
         .use { fixture ->
           fixture.render()
           repeat(2) { escape ->
-            // Focus a live non-canvas control so fallback restoration cannot pass vacuously.
+            assertTrue(fixture.requestFocus("Inspect context"))
+            fixture.clickText("Inspect context")
+            fixture.render()
+            assertTrue(fixture.hasText("Context inspector · read-only"))
+            // Offscreen popup windows do not steal host focus; move it to a surviving
+            // shell control to establish that restoration targets the exact opener.
             assertTrue(fixture.requestDescriptionFocus("Search files, symbols, commands"))
             fixture.render()
-            assertFalse(fixture.isTaggedNodeFocused("desktop-canvas-focus"))
-            state =
-                state.copy(
-                    context =
-                        state.context.copy(
-                            inspection =
-                                ContextInspectionState(status = ContextInspectionStatus.Loading)))
+            assertFalse(fixture.isFocusedControl("Inspect context"))
+            if (escape == 0) fixture.clickText("Close")
+            else assertTrue(fixture.pressKey(Key.Escape))
+            fixture.render()
+            assertFalse(fixture.hasText("Context inspector · read-only"))
+            assertTrue(fixture.isFocusedControl("Inspect context"))
+            assertEquals(escape + 1, requests)
+            assertEquals(escape + 1, dismissals)
+            assertEquals(0, operations)
+            // Recomposition alone cannot re-open the dismissed inspection.
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Inspect context"))
+          }
+          fixture.clickText("Inspect context")
+          fixture.render()
+          fixture.clickText("Cancel")
+          fixture.render()
+          assertTrue(fixture.hasText("Context preview canceled: "))
+          fixture.clickText("Close")
+          fixture.render()
+          assertTrue(fixture.isFocusedControl("Inspect context"))
+          assertEquals(3, requests)
+          assertEquals(3, dismissals)
+          assertEquals(1, cancels)
+          assertEquals(0, operations)
+        }
+  }
+
+  @Test
+  fun contextDismissalFallsBackToEditorWhenWorkspaceHidesItsOwner() {
+    var operations = 0
+    var requests = 0
+    val inspectFocus = androidx.compose.ui.focus.FocusRequester()
+    var inspectOrigin by mutableStateOf<ContextInspectFocusOrigin?>(null)
+    var state by
+        mutableStateOf(
+            shellFocusState(resultProjectFixture()).let {
+              it.copy(
+                  app = it.app.copy(workspace = Workspace.Editor),
+                  layout =
+                      it.layout.copy(
+                          activeRightToolWindow = RightToolWindow.Assistant,
+                          lastFocusedRegion = DesktopFocusRegion.RightToolWindow))
+            })
+    ComposeVisualFixture(1_280, 800) {
+          FocusTestShell(
+              state,
+              onState = { state = it },
+              onOperation = { operations++ },
+              inspectFocus = inspectFocus,
+              inspectOrigin = inspectOrigin,
+              onInspect = {
+                inspectOrigin =
+                    ContextInspectFocusOrigin(
+                        state.app.project?.projectId, state.app.workspace, inspectFocus)
+                requests++
+                state =
+                    state.copy(
+                        context =
+                            state.context.copy(
+                                inspection =
+                                    ContextInspectionState(
+                                        status = ContextInspectionStatus.Loading)))
+              })
+        }
+        .use { fixture ->
+          fixture.render()
+          repeat(2) { escape ->
+            fixture.clickText("Inspect context")
             fixture.render()
             assertTrue(fixture.hasText("Context inspector · read-only"))
             state = state.copy(app = state.app.copy(workspace = Workspace.Summary))
             fixture.render()
-            assertFalse(fixture.isTaggedNodeFocused("desktop-canvas-focus"))
             if (escape == 0) fixture.clickText("Close")
             else assertTrue(fixture.pressKey(Key.Escape))
             fixture.render()
@@ -1926,12 +2030,118 @@ class DesktopKeyboardNavigationTest {
             assertTrue(
                 fixture.isTaggedNodeFocused("desktop-canvas-focus"),
                 "Summary canvas must own focus after dismissal")
+            assertEquals(escape + 1, requests)
             assertEquals(0, operations)
             if (escape == 0) {
               state = state.copy(app = state.app.copy(workspace = Workspace.Editor))
               fixture.render()
             }
           }
+        }
+  }
+
+  @Test
+  fun contextDismissalUsesCanvasWhenAssistantControlIsRemoved() {
+    var requests = 0
+    var dismissals = 0
+    val inspectFocus = androidx.compose.ui.focus.FocusRequester()
+    var inspectOrigin by mutableStateOf<ContextInspectFocusOrigin?>(null)
+    var state by
+        mutableStateOf(
+            shellFocusState(resultProjectFixture()).let {
+              it.copy(
+                  app = it.app.copy(workspace = Workspace.Editor),
+                  layout = it.layout.copy(activeRightToolWindow = RightToolWindow.Assistant))
+            })
+    ComposeVisualFixture(1_280, 800) {
+          FocusTestShell(
+              state,
+              onState = {
+                if (state.context.visible && !it.context.visible) dismissals++
+                state = it
+              },
+              onOperation = {},
+              inspectFocus = inspectFocus,
+              inspectOrigin = inspectOrigin,
+              onInspect = {
+                inspectOrigin =
+                    ContextInspectFocusOrigin(
+                        state.app.project?.projectId, state.app.workspace, inspectFocus)
+                requests++
+                state =
+                    state.copy(
+                        context =
+                            state.context.copy(
+                                inspection =
+                                    ContextInspectionState(
+                                        status = ContextInspectionStatus.Loading)))
+              })
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("Inspect context")
+          fixture.render()
+          state = state.copy(layout = state.layout.copy(rightToolWindowVisible = false))
+          fixture.render()
+          fixture.clickText("Close")
+          fixture.render()
+          assertFalse(fixture.hasText("Context inspector · read-only"))
+          assertTrue(fixture.isTaggedNodeFocused("desktop-canvas-focus"))
+          assertEquals(1, requests)
+          assertEquals(1, dismissals)
+        }
+  }
+
+  @Test
+  fun contextProjectReplacementDoesNotRestoreTheOldAssistantButton() {
+    var requests = 0
+    val inspectFocus = androidx.compose.ui.focus.FocusRequester()
+    var inspectOrigin by mutableStateOf<ContextInspectFocusOrigin?>(null)
+    var state by
+        mutableStateOf(
+            shellFocusState(resultProjectFixture()).let {
+              it.copy(
+                  app = it.app.copy(workspace = Workspace.Editor),
+                  layout = it.layout.copy(activeRightToolWindow = RightToolWindow.Assistant))
+            })
+    ComposeVisualFixture(1_280, 800) {
+          FocusTestShell(
+              state,
+              onState = { state = it },
+              onOperation = {},
+              inspectFocus = inspectFocus,
+              inspectOrigin = inspectOrigin,
+              onInspect = {
+                inspectOrigin =
+                    ContextInspectFocusOrigin(
+                        state.app.project?.projectId, state.app.workspace, inspectFocus)
+                requests++
+                state =
+                    state.copy(
+                        context =
+                            state.context.copy(
+                                inspection =
+                                    ContextInspectionState(
+                                        status = ContextInspectionStatus.Loading)))
+              })
+        }
+        .use { fixture ->
+          fixture.render()
+          fixture.clickText("Inspect context")
+          fixture.render()
+          state =
+              state.copy(
+                  app =
+                      state.app.copy(
+                          projectState =
+                              ProjectWorkspaceState(
+                                  resultProjectFixture().copy(projectId = "replacement"))),
+                  context = state.context.copy(inspection = ContextInspectionState()))
+          fixture.render()
+          assertFalse(fixture.hasText("Context inspector · read-only"))
+          assertTrue(fixture.isFocusedControl("Search files, symbols, commands"))
+          assertFalse(fixture.isFocusedControl("Inspect context"))
+          assertEquals(1, requests)
         }
   }
 
@@ -2408,8 +2618,14 @@ class DesktopKeyboardNavigationTest {
       onOperation: () -> Unit,
       terminal: DesktopTerminalWorkspace? = null,
       onPaletteOpen: () -> Unit = {},
+      inspectFocus: androidx.compose.ui.focus.FocusRequester? = null,
+      inspectOrigin: ContextInspectFocusOrigin? = null,
+      onInspect: () -> Unit = {},
+      onCancelContext: () -> Unit = onOperation,
   ) {
     DesktopShell(
+        contextInspectOpener = inspectOrigin,
+        contextInspectControlPresent = inspectFocus != null,
         state = state,
         layoutActions = DesktopShellLayoutActions({ onState(state.copy(layout = it)) }, {}),
         projectActions = DesktopShellProjectActions(onOperation, onOperation, onOperation),
@@ -2432,7 +2648,7 @@ class DesktopKeyboardNavigationTest {
                 },
                 createDeclaration = onOperation,
                 retryContext = onOperation,
-                cancelContext = onOperation),
+                cancelContext = onCancelContext),
         analysisActions =
             DesktopShellAnalysisActions(
                 refreshStatus = onOperation,
@@ -2469,7 +2685,31 @@ class DesktopKeyboardNavigationTest {
         panes =
             DesktopShellPanes(
                 explorer = { _, _ -> },
-                rightToolWindows = { _, _ -> },
+                rightToolWindows = { selected, modifier ->
+                  if (selected == RightToolWindow.Assistant && inspectFocus != null) {
+                    AssistantToolWindow(
+                        AssistantToolWindowState(
+                            state.app.project,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            ChatEditMode.ReplaceSymbol,
+                            "",
+                            "",
+                            false,
+                            ScopedModel(),
+                            false,
+                            androidx.compose.ui.focus.FocusRequester(),
+                            androidx.compose.ui.focus.FocusRequester(),
+                            inspectContextFocus = inspectFocus),
+                        AssistantConversationActions(
+                            {}, {}, {}, onInspect, onOperation, onOperation),
+                        DraftEditorActions({}, {}, {}),
+                        modifier)
+                  }
+                },
                 rightToolWindowBadges = emptyMap(),
                 terminalContent = {},
                 terminalState = terminal?.state?.value ?: TerminalWorkspaceState(),
