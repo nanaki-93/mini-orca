@@ -219,6 +219,15 @@ declaration proposals use `function`. A non-loopback scope requires
 scope never authorizes another. Restore, reindex, scans, validation, checks,
 Apply, and Undo never require provider confirmation.
 
+Context policy reads `.gitignore` and `.mini-orcaignore` in each traversed
+directory. Patterns use directory-relative Git ignore semantics, including
+anchored paths, directory exclusions, `**`, and ordered negation; an excluded
+parent must be reopened before a child can be included. Explicit context-policy
+include/exclude overrides retain their precedence, but cannot include secret,
+generated, metadata, or symlink paths. Nested ignore changes participate in the
+policy fingerprint. Policy version 2 makes evidence captured under the previous
+ignore interpretation stale; refreshing it requires the usual explicit analysis.
+
 Configuration is local-only in `config.yaml` (ignored by Git); begin with
 `config.example.yaml`. The API never returns configured credentials. All API
 failures use a structured error object with `type`, `message`, and
