@@ -11,6 +11,25 @@ import kotlinx.serialization.json.Json
 
 class ApiClientContractTest {
   @Test
+  fun savedResultCountsAndRetainedFileIdentitiesDecodeIndependentlyOfRunProgress() {
+    val run = analysisRunFixture()
+    val response =
+        """{
+      "identity":${Json.encodeToString(run.identity)},
+      "progress":{"category":"bugs","status":"failed","coverage":{"total":1,"failed":1},"finding_count":null},
+      "saved_finding_count":5,
+      "retained_files":[{"path":"helper.go","content_hash":"saved-hash","language":"Go"}],
+      "semantic":[],"performance":[],"security":[],"unclassified":[]
+    }"""
+    val api = ApiClient(transport = DaemonTransport { _, _, _ -> TransportResponse(200, response) })
+    val result = api.analysisResults(run.identity, "bugs")
+    assertNull(result.progress.findingCount)
+    assertEquals(5, result.savedFindingCount)
+    assertEquals(
+        AnalysisFileIdentity("helper.go", "saved-hash", "Go"), result.retainedFiles.single())
+  }
+
+  @Test
   fun unifiedAnalysisUsesExplicitScopeLimitsAndFullRunGuardsWithoutFlatteningEvidence() {
     val requests = mutableListOf<Triple<String, String, String?>>()
     val run = analysisRunFixture()

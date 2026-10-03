@@ -940,6 +940,13 @@ data class PerformanceFileReport(
 )
 
 @Serializable
+data class AnalysisFileIdentity(
+    val path: String,
+    @SerialName("content_hash") val contentHash: String,
+    val language: String,
+)
+
+@Serializable
 data class AnalysisSectionResults(
     val identity: AnalysisRunIdentity,
     val progress: AnalysisSectionProgress,
@@ -948,4 +955,6 @@ data class AnalysisSectionResults(
     val performance: List<PerformanceFileReport> = emptyList(),
     val security: List<SecurityFileReport> = emptyList(),
     val unclassified: List<UnifiedFinding> = emptyList(),
+    @SerialName("saved_finding_count") val savedFindingCount: Int? = null,
+    @SerialName("retained_files") val retainedFiles: List<AnalysisFileIdentity> = emptyList(),
 )

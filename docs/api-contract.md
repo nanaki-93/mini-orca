@@ -347,6 +347,11 @@ resume echoes the option and retains the admitted file set even after reports
 become fresh. Excluded files remain accounted for in the inventory. An empty
 selection produces no model requests and is reported as unavailable, not clean.
 
+Unfiltered result reads retain saved evidence from eligible files omitted only by
+the stale/failed selection. `retained_files` supplies those current indexed file
+identities; user and source-policy exclusions remain excluded. The dispatch plan,
+run coverage and file-filter guards still describe the admitted retry scope.
+
 Resume first requests a new preview with `resume_run` identifying the existing
 run. It preserves that run's captured scope, limits and cumulative attempt counts,
 but recalculates remaining request bounds. Control echoes the run identity,
@@ -449,6 +454,18 @@ invalid anchors, and oversized responses. A terminal `partial`
 section has useful evidence and incomplete coverage, with no work still pending
 or running. An all-failed/unavailable section cannot claim zero findings. Stale
 counts are historical and must not contribute to fresh navigation badges.
+
+Result reads also return nullable `saved_finding_count`, the total of the returned
+classified semantic, Performance and Security findings. It includes retained stale
+reports and is independent of `progress.finding_count`, which still measures the
+current run. Unfinished, failed or canceled stages do not hide their last saved
+reports. A successful producer review replaces that file's previous report,
+including a successful empty review; repeated reads and retries do not add old
+totals to new ones. Stale reports retain their original revision/hash and stale
+labels. Missing saved evidence remains null, and unclassified risks are excluded
+from this total. File-filtered reads count only their returned findings. These
+totals are read from producer stores after restart; no run-schema migration is
+needed.
 
 Overall completion requires all eligible file-stage units to be completely covered. A mixed
 terminal outcome with useful evidence is partial; no successful evidence yields

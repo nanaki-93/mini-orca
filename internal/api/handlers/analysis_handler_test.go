@@ -152,7 +152,7 @@ func TestAnalysisHandlerPreflightStartControlsAndReadOnlySections(t *testing.T) 
 		}
 		var result app.AnalysisSectionResults
 		_ = json.Unmarshal(w.Body.Bytes(), &result)
-		if result.Progress.FindingCount == nil || *result.Progress.FindingCount != 0 || result.Identity != run.Identity {
+		if result.Progress.FindingCount == nil || *result.Progress.FindingCount != 0 || result.SavedFindingCount == nil || *result.SavedFindingCount != 0 || result.Identity != run.Identity {
 			t.Fatalf("result=%+v", result)
 		}
 	}

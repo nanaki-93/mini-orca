@@ -11911,6 +11911,44 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
+  fun analysisCardsKeepSavedTotalsAlongsideFailedRetryState() {
+    val run =
+        analysisRunFixture()
+            .copy(
+                status = "failed",
+                sections =
+                    analysisRunFixture().sections.map {
+                      it.copy(status = "failed", findingCount = null)
+                    })
+    val sections =
+        AnalysisResultType.entries.associate { type ->
+          AnalysisResultKey(type.category) to
+              AnalysisSectionState(
+                  results = analysisResultsFixture(run, type.category).copy(savedFindingCount = 7))
+        }
+    for ((width, scale) in listOf(800 to 1f, 800 to 1.5f, 1440 to 1f)) {
+      val navigations = mutableListOf<Workspace>()
+      ComposeVisualFixture(width, 1000, scale) {
+            AnalysisCategoryPanels(
+                AnalysisWorkspacePaneState(
+                    resultProjectFixture(),
+                    ProjectAnalysisRunState(run = run, sections = sections)),
+                navigations::add)
+          }
+          .use { fixture ->
+            fixture.render("analysis-retained-counts-$width-$scale")
+            assertEquals(3, fixture.textCount("7"))
+            assertEquals(3, fixture.textCount("Failed"))
+            assertEquals(3, fixture.textCount("Saved findings"))
+            AnalysisResultType.entries.forEach {
+              fixture.clickVisibleDescription("View ${it.workspace.name} results")
+            }
+            assertEquals(AnalysisResultType.entries.map { it.workspace }, navigations)
+          }
+    }
+  }
+
+  @Test
   fun summaryIssuesKeepPriorityBreakdownAndNeutralZeroCounts() {
     val (baseRun, section) = summaryBugFixture(listOf("high", "high", "high", "low"))
     val run =

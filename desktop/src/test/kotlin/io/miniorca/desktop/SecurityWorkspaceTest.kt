@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -174,6 +175,33 @@ class SecurityWorkspaceTest {
     assertEquals(SecuritySectionOperationStatus.Failed, failed.security.aiOperation.status)
     assertEquals("provider unavailable", failed.security.aiOperation.message)
     assertEquals(SecuritySectionOperationStatus.Idle, failed.security.sourceOperation.status)
+  }
+
+  @Test
+  fun retainedReportsFromEarlierRevisionsStayReadableWithoutAuthorizingFixes() {
+    val base = securityPageFixture()
+    val saved = requireNotNull(base.results)
+    val page =
+        base.copy(
+            section =
+                base.section.copy(
+                    results =
+                        saved.copy(
+                            security =
+                                saved.security.map {
+                                  it.copy(
+                                      projectRevision = "previous",
+                                      contentHash = "old",
+                                      status = "stale")
+                                })))
+    val rows = securityResults(page)
+    assertEquals(2, rows.size)
+    rows.forEach { result ->
+      assertTrue(result.stale)
+      assertTrue(securityResultIsLoaded(result, page))
+      assertNotNull(securitySourceTarget(result, page, resultIndexFixture()))
+      assertBlocked(result, resultIndexFixture(), "Analyze again")
+    }
   }
 
   @Test

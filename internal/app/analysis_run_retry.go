@@ -5,6 +5,8 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
+const analysisRetryExclusion = "No stale or failed analysis for this file."
+
 // Resume keeps the admitted file set even as this run replaces stale reports.
 // New starts recompute selection, so changed evidence invalidates an old preview.
 func (s *Service) scopeAnalysisRetryPreview(ctx context.Context, preview *AnalysisRunPreview, resume *AnalysisRunIdentity) error {
@@ -43,7 +45,7 @@ func (s *Service) scopeAnalysisRetryPreview(ctx context.Context, preview *Analys
 		if include {
 			selected = append(selected, file)
 		} else {
-			preview.Excluded = append(preview.Excluded, AnalysisExcludedFile{Path: file.Path, Reason: "No stale or failed analysis for this file."})
+			preview.Excluded = append(preview.Excluded, AnalysisExcludedFile{Path: file.Path, Reason: analysisRetryExclusion})
 		}
 	}
 	preview.Files = selected

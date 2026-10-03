@@ -51,18 +51,20 @@ internal fun summaryIssueMetrics(
           }
       SummaryIssueMetric(
           label = type.workspace.name,
-          value = page.reportedCount,
+          value = page.displayCount,
           status =
               if (statusCode == "completed" &&
                   !completedEmpty &&
                   page.progress?.status == "completed_empty")
-                  "Completed · details not confirmed"
+                  if ((page.savedCount ?: 0) > 0) "Completed · saved findings retained"
+                  else "Completed · details not confirmed"
               else page.statusLabel,
           statusCode = statusCode,
           detailStatus =
               when {
                 section.loading -> "Loading details…"
                 section.error != null -> "Details unavailable"
+                page.savedCount != null -> "Saved findings"
                 page.reportedCount == 0 && !completedEmpty -> "Details unconfirmed"
                 else -> null
               },
@@ -77,7 +79,7 @@ internal fun summaryIssueMetrics(
     }
 
 private fun summaryBugPriorities(page: AnalysisResultPageState): SummaryBugPriorities? {
-  val count = page.reportedCount ?: return null
+  val count = page.displayCount ?: return null
   if (count == 0) {
     return if (page.emptyPresentation(0).availability == AnalysisResultAvailability.CompletedEmpty)
         SummaryBugPriorities(0, 0, 0, 0)

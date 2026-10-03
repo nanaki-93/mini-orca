@@ -219,7 +219,7 @@ internal fun performanceResults(page: AnalysisResultPageState): List<Performance
         .orEmpty()
         .filter {
           it.projectId == page.project?.projectId &&
-              it.projectRevision == page.run?.identity?.projectRevision
+              (it.status == "stale" || it.projectRevision == page.run?.identity?.projectRevision)
         }
         .flatMap { report ->
           report.findings.map {

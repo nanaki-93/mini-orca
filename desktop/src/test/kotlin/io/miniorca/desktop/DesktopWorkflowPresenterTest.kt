@@ -4236,7 +4236,21 @@ class DesktopWorkflowPresenterTest {
           }
         }
     try {
-      val page = performancePageFixture()
+      val base = performancePageFixture()
+      val saved = requireNotNull(base.results)
+      val page =
+          base.copy(
+              section =
+                  base.section.copy(
+                      results =
+                          saved.copy(
+                              performance =
+                                  saved.performance.map {
+                                    it.copy(
+                                        projectRevision = "previous",
+                                        contentHash = "old",
+                                        status = "stale")
+                                  })))
       presenter.dispatch(DesktopEvent.ProjectLoaded(resultProjectFixture(), resultIndexFixture()))
       presenter.dispatch(
           DesktopEvent.AnalysisRunUpdated(

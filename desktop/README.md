@@ -517,15 +517,21 @@ observed in this app session, **Previous observed run** discloses that snapshot'
 identity, scope, lifecycle, reported time, timestamps and failures. At most one
 previous terminal run is retained in memory; polling or continuing the same run
 does not add history. It survives workspace navigation but clears on project
-replacement. Older details are unavailable after restart: the current API restores
+replacement. Earlier run metadata is unavailable after restart: the current API restores
 only the latest saved run, not an archive. Previous runs cannot supply current
 progress, result rows or lifecycle controls; revision-mismatched history is marked
 outdated.
 
 Bugs, Performance and Security cards beside the overview remain navigable during
-active and stopped runs. They distinguish run-reported counts from matching loaded
-saved findings; unknown counts are not zero, and zero loaded findings alone does
-not prove a completed-empty result. **About counts** reveals the count explanation
+active and stopped runs. Their **Saved findings** totals retain earlier findings
+while a new run is pending, failed, canceled or incomplete, including findings in
+files omitted by a stale/failed retry. A successful review replaces that producer's
+old findings for the file, including when it finds none. Totals are restored from
+saved reports after restart and retain stale evidence with its warning. While
+replacement details load or a read fails, the last known total stays visible.
+Run coverage and failures remain separate; unknown counts are not zero, and zero
+loaded findings alone does not prove a completed-empty result. **About counts**
+reveals the count explanation
 without changing the visible cards or starting work. Opening a card only navigates;
 retained rows and result-read errors remain visible in their category.
 

@@ -55,15 +55,16 @@ func (s *Service) ReadAnalysisSection(ctx context.Context, identity AnalysisRunI
 
 // This projection owns only a captured read snapshot; all callers hold the run locks.
 type analysisSectionReader struct {
-	service  *Service
-	root     string
-	run      *AnalysisRun
-	analysis *project.Analysis
-	index    *project.ProjectIndex
-	policy   *project.ContextPolicy
-	captured map[string]AnalysisRunFile
-	statuses map[string]string
-	result   *AnalysisSectionResults
+	service     *Service
+	root        string
+	run         *AnalysisRun
+	analysis    *project.Analysis
+	index       *project.ProjectIndex
+	policy      *project.ContextPolicy
+	captured    map[string]AnalysisRunFile
+	statuses    map[string]string
+	result      *AnalysisSectionResults
+	hasEvidence bool
 }
 
 func (s *Service) analysisSectionReader(run *AnalysisRun, category project.FindingCategory, path, root string) (*analysisSectionReader, error) {
@@ -90,6 +91,23 @@ func (s *Service) analysisSectionReader(run *AnalysisRun, category project.Findi
 	if path != "" {
 		if _, ok := captured[path]; !ok {
 			return nil, project.ErrRevisionConflict
+		}
+	}
+	// A selective retry changes dispatch scope, not the saved findings inventory.
+	// User/policy exclusions remain excluded; only retry-omitted files are retained.
+	if path == "" && run.Plan.RetryStaleFailed {
+		retained := make(map[string]bool)
+		for _, file := range run.Plan.Excluded {
+			retained[file.Path] = file.Reason == analysisRetryExclusion
+		}
+		for _, file := range index.Files {
+			if !retained[file.Path] {
+				continue
+			}
+			identity := AnalysisFileIdentity{Path: file.Path, ContentHash: file.ContentHash, Language: file.Language}
+			captured[file.Path] = AnalysisRunFile{AnalysisFileIdentity: identity, Stages: make([]AnalysisStageProgress, len(analysisStages))}
+			hashes[file.Path] = file.ContentHash
+			result.RetainedFiles = append(result.RetainedFiles, identity)
 		}
 	}
 	statuses, err := loadAnalysisTriage(root, identity, hashes)
@@ -143,6 +161,16 @@ func (reader *analysisSectionReader) read(ctx context.Context, path string) erro
 			}
 		}
 	}
+	if reader.hasEvidence {
+		count := len(reader.result.Semantic)
+		for _, report := range reader.result.Performance {
+			count += len(report.Findings)
+		}
+		for _, report := range reader.result.Security {
+			count += len(report.Findings)
+		}
+		reader.result.SavedFindingCount = &count
+	}
 	return nil
 }
 
@@ -159,6 +187,7 @@ func (reader *analysisSectionReader) readSemantic(indexed project.IndexFile, fil
 		return project.ErrRevisionConflict
 	}
 	if semantic != nil && semantic.ProjectID == reader.run.Identity.ProjectID {
+		reader.hasEvidence = reader.hasEvidence || semantic.Status == project.AnalysisStatusFresh
 		reader.appendSemanticFindings(semantic, file)
 	}
 
@@ -184,41 +213,41 @@ func (reader *analysisSectionReader) appendSemanticFindings(semantic *project.Fi
 			reader.result.Unclassified = append(reader.result.Unclassified, finding)
 			continue
 		}
-		if finding.Category != reader.result.Progress.Category || file.Stages[0].FindingCount == nil {
+		if finding.Category != reader.result.Progress.Category {
 			continue
 		}
 		if fresh {
 			finding.Freshness = project.FindingFreshnessFresh
 		}
 		reader.result.Semantic = append(reader.result.Semantic, finding)
+		reader.hasEvidence = true
 	}
 }
 
 func (reader *analysisSectionReader) readPerformance(file AnalysisRunFile) error {
-	if file.Stages[1].FindingCount == nil {
-		return nil
-	}
 	report, err := project.LoadPerformanceFileReport(reader.root, file.Path, file.ContentHash, reader.policy)
 	if err != nil {
 		return err
 	}
 	if report == nil {
-		return project.ErrRevisionConflict
+		if file.Stages[1].FindingCount != nil {
+			return project.ErrRevisionConflict
+		}
+		return nil
 	}
-	if report.ProjectID == reader.run.Identity.ProjectID && report.ProjectRevision == reader.run.Identity.ProjectRevision {
-		if reader.run.Status == AnalysisRunStale || !analysisPerformanceCacheUsable(report, *reader.analysis, reader.service.runtimes.analyze) {
+	if report.ProjectID == reader.run.Identity.ProjectID {
+		hasEvidence := report.Status == "completed" || report.Status == "completed_empty" || report.Status == "partial" || len(report.Findings) > 0
+		if hasEvidence && (reader.run.Status == AnalysisRunStale || !analysisPerformanceCacheUsable(report, *reader.analysis, reader.service.runtimes.analyze)) {
 			report.Status = "stale"
 		}
 		reader.result.Performance = append(reader.result.Performance, *report)
+		reader.hasEvidence = reader.hasEvidence || hasEvidence
 	}
 	return nil
 }
 
 func (reader *analysisSectionReader) readSecurity(indexed project.IndexFile, file AnalysisRunFile) error {
 	for j := 2; j <= 3; j++ {
-		if file.Stages[j].FindingCount == nil {
-			continue
-		}
 		input := analysisSecurityCacheInput(*reader.analysis, indexed, reader.service.runtimes.analyze, reader.policy.Version())
 		if j == 2 {
 			input = securityRulesInput(securityRulesSnapshot{analysis: *reader.analysis, file: indexed, policyVersion: reader.policy.Version()})
@@ -228,13 +257,18 @@ func (reader *analysisSectionReader) readSecurity(indexed project.IndexFile, fil
 			return err
 		}
 		if report == nil {
-			return project.ErrRevisionConflict
+			if file.Stages[j].FindingCount != nil {
+				return project.ErrRevisionConflict
+			}
+			continue
 		}
-		if report.ProjectID == reader.run.Identity.ProjectID && report.ProjectRevision == reader.run.Identity.ProjectRevision {
-			if reader.run.Status == AnalysisRunStale {
+		if report.ProjectID == reader.run.Identity.ProjectID {
+			hasEvidence := securityStageCacheUsable(report) || len(report.Findings) > 0
+			if hasEvidence && reader.run.Status == AnalysisRunStale {
 				report.Status = project.SecurityStatusStale
 			}
 			reader.result.Security = append(reader.result.Security, *report)
+			reader.hasEvidence = reader.hasEvidence || hasEvidence
 		}
 	}
 	return nil
