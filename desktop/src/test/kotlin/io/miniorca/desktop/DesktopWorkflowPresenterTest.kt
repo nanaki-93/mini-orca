@@ -6737,27 +6737,40 @@ class DesktopWorkflowPresenterTest {
   @Test
   fun reconnectPublishesDaemonFailuresAndThenTheRecoveredConnection() {
     val attempts = AtomicInteger()
-    val presenter = presenter { _, path, _ ->
-      when (path) {
-        "/status" ->
-            if (attempts.incrementAndGet() == 1) error("daemon down")
-            else response("{\"status\":\"ok\",\"version\":\"v1\"}")
-        "/api/models/current" ->
-            response(
-                "{\"scopes\":{\"function\":{\"scope\":\"function\",\"profile\":\"local\",\"model\":\"fixture\"}}}")
-        else -> error("unexpected request $path")
-      }
-    }
+    val main = QueuedDispatcher()
+    val io = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + main)
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = io) { _, path, _ ->
+          when (path) {
+            "/status" ->
+                if (attempts.incrementAndGet() == 1) error("daemon down")
+                else response("{\"status\":\"ok\",\"version\":\"v1\"}")
+            "/api/models/current" ->
+                response(
+                    "{\"scopes\":{\"function\":{\"scope\":\"function\",\"profile\":\"local\",\"model\":\"fixture\"}}}")
+            else -> error("unexpected request $path")
+          }
+        }
     try {
       presenter.refreshConnection()
-      eventually { attempts.get() == 1 && !presenter.snapshot.value.state.connection.connected }
+      main.runPending()
+      io.runPending()
+      main.runPending()
+      assertEquals(1, attempts.get())
+      assertEquals("Daemon unavailable", presenter.snapshot.value.state.connection.label)
+      assertFalse(presenter.snapshot.value.state.connection.connected)
       presenter.refreshConnection()
-      eventually { presenter.snapshot.value.state.connection.connected }
+      main.runPending()
+      io.runPending()
+      main.runPending()
 
+      assertTrue(presenter.snapshot.value.state.connection.connected)
       assertEquals("Daemon connected", presenter.snapshot.value.state.connection.label)
       assertEquals("fixture", presenter.snapshot.value.model(ModelScope.Function).model)
     } finally {
       presenter.close()
+      scope.cancel()
     }
   }
 
