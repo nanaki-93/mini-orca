@@ -1566,9 +1566,9 @@ components:
         undo_available: {type: boolean}
         audit: {type: object, description: Source-free receipt of the actual mutation; warnings indicate if durable audit persistence failed.}
         index:
-          type: object
-          nullable: true
-          allOf: [{$ref: '#/components/schemas/ProjectIndex'}]
+          oneOf:
+            - {$ref: '#/components/schemas/ProjectIndex'}
+            - {type: object, nullable: true, enum: [null]}
         warnings:
           type: array
           items: {type: string}
