@@ -84,14 +84,31 @@ func (m *Manager) Reindex() (*ProjectIndex, error) {
 	if err != nil {
 		return nil, err
 	}
+	detection := detectProject(root)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.root != root || m.analysis == nil || m.analysis.ProjectID != id {
 		return nil, ErrRevisionConflict
 	}
 	m.analysis.ProjectRevision = revision
+	m.analysis.Type = detection.Type
+	m.analysis.BuildFile = detection.BuildFile
+	m.analysis.FileCount = len(index.Files)
+	m.analysis.SourceFileCount = 0
+	m.analysis.TotalLines = 0
+	m.analysis.Languages = make(map[string]int)
+	m.analysis.Files = make([]string, 0, len(index.Files))
+	for _, file := range index.Files {
+		m.analysis.Files = append(m.analysis.Files, file.Path)
+		if file.Language != "Text" {
+			m.analysis.SourceFileCount++
+			m.analysis.Languages[file.Language]++
+			m.analysis.TotalLines += file.LineCount
+		}
+	}
 	if m.analysis.Report.Status == ProjectAnalysisStatusFresh && m.analysis.Report.ProjectRevision != revision {
 		m.analysis.Report.Status = ProjectAnalysisStatusStale
+		m.analysis.AIStatus = ProjectAnalysisStatusStale
 	}
 	m.index = index
 	return cloneIndex(index), nil
