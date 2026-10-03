@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	indexSchemaVersion = "2"
+	indexSchemaVersion = "3"
 	indexRelativePath  = ".mini-orca/index.json"
 )
 
@@ -120,27 +120,28 @@ func buildIndexFile(root, relative string, previous IndexFile) (IndexFile, error
 	if err != nil {
 		return IndexFile{}, fmt.Errorf("stat index file %s: %w", relative, err)
 	}
-	data, err := os.ReadFile(fullPath)
+	content, err := readIndexContent(fullPath, info)
 	if err != nil {
 		return IndexFile{}, fmt.Errorf("read index file %s: %w", relative, err)
 	}
-	hash := contentHash(data)
 	entry := IndexFile{
-		Path: relative, ContentHash: hash, Language: detectLanguage(relative), SizeBytes: info.Size(),
-		ModifiedAt: info.ModTime().UTC(), Binary: isBinary(data), Imports: []string{}, Symbols: []SymbolInfo{}, AnalysisStatus: "missing",
+		Path: relative, ContentHash: content.hash, Language: detectLanguage(relative), SizeBytes: content.size,
+		ModifiedAt: info.ModTime().UTC(), Binary: content.binary, Imports: []string{}, Symbols: []SymbolInfo{}, AnalysisStatus: "missing",
 	}
 	if !entry.Binary {
-		entry.LineCount = countLines(data)
+		entry.LineCount = content.lines
 	}
-	if previous.Path == relative && previous.ContentHash == hash {
+	if previous.Path == relative && previous.ContentHash == content.hash {
 		entry.Imports = append([]string(nil), previous.Imports...)
 		entry.Symbols = append([]SymbolInfo(nil), previous.Symbols...)
 		entry.Diagnostics = append([]Diagnostic(nil), previous.Diagnostics...)
 		entry.AnalysisStatus = previous.AnalysisStatus
+	} else if !entry.Binary && content.size > maxFileViewBytes {
+		entry.Diagnostics = []Diagnostic{{Message: fmt.Sprintf("File exceeds %d bytes; symbol extraction is unavailable.", maxFileViewBytes)}}
 	} else if entry.Language == "Go" && !entry.Binary {
-		entry.Imports, entry.Symbols, entry.Diagnostics = extractGoFacts(relative, data)
+		entry.Imports, entry.Symbols, entry.Diagnostics = extractGoFacts(relative, content.source)
 	} else if !entry.Binary {
-		entry.Imports, entry.Symbols = extractGenericFacts(entry.Language, data)
+		entry.Imports, entry.Symbols = extractGenericFacts(entry.Language, content.source)
 	}
 	return entry, nil
 }

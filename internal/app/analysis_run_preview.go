@@ -138,11 +138,11 @@ func (s *Service) completeAnalysisPreviewLocked(ctx context.Context, root string
 func (s *Service) analysisStageCacheState(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, stage AnalysisStage) (bool, string, time.Time, error) {
 	switch stage {
 	case AnalysisStageSemantic:
-		cache, input, err := s.fileAnalysisCacheInput(&analysis, &file, file.ContentHash)
+		cache, err := project.NewFileAnalysisCache(s.manager.Root())
 		if err != nil {
 			return false, "", time.Time{}, err
 		}
-		report, err := cache.Load(input)
+		report, err := cache.Load(s.semanticCacheInput(&analysis, &file, file.ContentHash, policy.Version()))
 		if err != nil {
 			return false, "", time.Time{}, err
 		}
@@ -215,23 +215,24 @@ func validateAnalysisFiles(ctx context.Context, root string, plan *AnalysisRunPr
 	for _, file := range index.Files {
 		indexed[file.Path] = file
 	}
+	var sourceFiles []project.IndexFile
+	if sources {
+		sourceFiles = make([]project.IndexFile, 0, len(plan.Files))
+	}
 	for _, file := range plan.Files {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		current, ok := indexed[file.Path]
 		if !ok || current.ContentHash != file.ContentHash || current.Language != file.Language || current.SizeBytes != file.SizeBytes || !policy.Decide(file.Path).Include {
 			return project.ErrRevisionConflict
 		}
 		if sources {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			info, err := project.GetFileInfo(root, file.Path)
-			if err != nil {
-				return err
-			}
-			if info.ContentHash != file.ContentHash || info.Binary {
-				return project.ErrRevisionConflict
-			}
+			sourceFiles = append(sourceFiles, current)
 		}
+	}
+	if sources {
+		return project.VerifyIndexedSources(ctx, root, sourceFiles)
 	}
 	return nil
 }

@@ -208,7 +208,12 @@ falling back to an older change.
 ## Project intelligence and limits
 
 Import and reindex build deterministic metadata; neither starts a verified scan
-or Analyze-all. Go scans and semantic analysis are always user-started. A scan
+or Analyze-all. Indexing streams hashes and line counts for large files, while
+symbol extraction is limited to text files within the 1 MiB source-view limit.
+Larger text files retain full size, hash and line-count facts with a diagnostic
+that symbol extraction is unavailable. Index schema version 3 rebuilds older
+cached entries under this bounded extraction policy.
+Go scans and semantic analysis are always user-started. A scan
 prepares a bounded temporary copied workspace before parser, vet, and test phases;
 a resource failure is returned as a failed `workspace` phase with sanitized evidence.
 Findings keep source (`ai`, parser, vet, or test), confidence, severity, status,

@@ -54,16 +54,78 @@ func projectRevision(root string) (string, error) {
 }
 
 func hashFile(path string) (string, error) {
+	return hashFileContext(context.Background(), path, make([]byte, 32*1024), 0)
+}
+
+func hashFileContext(ctx context.Context, path string, buffer []byte, limit int64) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("source is not a regular file")
+	}
+	if limit > 0 && info.Size() > limit {
+		return "", ErrRevisionConflict
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
 	defer file.Close()
 	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
+	var size int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		n, err := file.Read(buffer)
+		size += int64(n)
+		if limit > 0 && size > limit {
+			return "", ErrRevisionConflict
+		}
+		_, _ = hash.Write(buffer[:n])
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
 	}
 	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// VerifyIndexedSources checks every captured source hash with one reusable read
+// buffer. It does not materialize source text or trust size/mtime as identity.
+func VerifyIndexedSources(ctx context.Context, root string, files []IndexFile) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	canonical, err := CanonicalRoot(root)
+	if err != nil {
+		return err
+	}
+	buffer := make([]byte, 32*1024)
+	for _, file := range files {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if file.Binary || file.SizeBytes > maxFileViewBytes {
+			return ErrRevisionConflict
+		}
+		path, err := resolveFile(canonical, file.Path)
+		if err != nil {
+			return err
+		}
+		hash, err := hashFileContext(ctx, path, buffer, maxFileViewBytes)
+		if err != nil {
+			return err
+		}
+		if hash != file.ContentHash {
+			return ErrRevisionConflict
+		}
+	}
+	return ctx.Err()
 }
 
 func contentHash(data []byte) string {

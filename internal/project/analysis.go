@@ -237,8 +237,8 @@ func GetFileInfo(root, relative string) (*FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	if stat.IsDir() {
-		return nil, fmt.Errorf("path is a directory")
+	if !stat.Mode().IsRegular() {
+		return nil, fmt.Errorf("source is not a regular file")
 	}
 	if stat.Size() > maxFileViewBytes {
 		return nil, fmt.Errorf("file is larger than %d bytes", maxFileViewBytes)

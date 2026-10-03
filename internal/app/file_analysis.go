@@ -335,8 +335,12 @@ func (s *Service) fileAnalysisCacheInput(analysis *project.Analysis, file *proje
 	if err != nil {
 		return nil, project.FileAnalysisInput{}, err
 	}
+	return cache, s.semanticCacheInput(analysis, file, contentHash, policy.Version()), nil
+}
+
+func (s *Service) semanticCacheInput(analysis *project.Analysis, file *project.IndexFile, contentHash, policyVersion string) project.FileAnalysisInput {
 	runtime := s.runtimes.bug
-	return cache, project.FileAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: file.Path, ContentHash: contentHash, Language: file.Language, Model: runtime.profile.Model, Profile: runtime.effective.Profile, Scope: runtime.effective.Scope, ProviderOrigin: runtime.effective.ProviderOrigin, ReasoningEffort: runtime.effective.ReasoningEffort, PromptVersion: semanticAnalysisPromptVersion, ContextPolicyVersion: policy.Version()}, nil
+	return project.FileAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: file.Path, ContentHash: contentHash, Language: file.Language, Model: runtime.profile.Model, Profile: runtime.effective.Profile, Scope: runtime.effective.Scope, ProviderOrigin: runtime.effective.ProviderOrigin, ReasoningEffort: runtime.effective.ReasoningEffort, PromptVersion: semanticAnalysisPromptVersion, ContextPolicyVersion: policyVersion}
 }
 
 func (s *Service) syncFileAnalysisStatus(input project.FileAnalysisInput, status string) error {

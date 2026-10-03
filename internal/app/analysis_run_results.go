@@ -147,11 +147,11 @@ func (reader *analysisSectionReader) read(ctx context.Context, path string) erro
 }
 
 func (reader *analysisSectionReader) readSemantic(indexed project.IndexFile, file AnalysisRunFile) error {
-	cache, input, err := reader.service.fileAnalysisCacheInput(reader.analysis, &indexed, file.ContentHash)
+	cache, err := project.NewFileAnalysisCache(reader.root)
 	if err != nil {
 		return err
 	}
-	semantic, err := cache.Load(input)
+	semantic, err := cache.Load(reader.service.semanticCacheInput(reader.analysis, &indexed, file.ContentHash, reader.policy.Version()))
 	if err != nil {
 		return err
 	}

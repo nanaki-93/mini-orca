@@ -33,15 +33,21 @@ func CanonicalRoot(path string) (string, error) {
 
 // ResolveFile safely resolves a relative path inside root, including symlinks.
 func ResolveFile(root, relative string) (string, error) {
+	canonical, err := CanonicalRoot(root)
+	if err != nil {
+		return "", err
+	}
+	return resolveFile(canonical, relative)
+}
+
+// Batch readers canonicalize their root once, then retain the same containment
+// and symlink checks for every file in that snapshot.
+func resolveFile(root, relative string) (string, error) {
 	if strings.TrimSpace(relative) == "" {
 		return "", fmt.Errorf("file path is required")
 	}
 	if filepath.IsAbs(relative) {
 		return "", fmt.Errorf("file path must be relative to the project")
-	}
-	root, err := CanonicalRoot(root)
-	if err != nil {
-		return "", err
 	}
 	candidate := filepath.Join(root, filepath.Clean(relative))
 	resolved, err := filepath.EvalSymlinks(candidate)
