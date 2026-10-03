@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -270,7 +272,12 @@ internal fun EditorWorkspace(
   BoxWithConstraints(modifier.fillMaxSize().background(EditorCanvas)) {
     // Retained work and recovery can outgrow short windows. Scroll only the chrome rather
     // than squeezing away the selectable source or replacing its composition on reflow.
-    val chromeHeight = (maxHeight - 120.dp * LocalDensity.current.fontScale).coerceAtLeast(0.dp)
+    val textScale = LocalDensity.current.fontScale
+    val canvasReserve = if (chrome.activeSurface == EditorSurface.Review) 200.dp else 120.dp
+    val chromeHeight =
+        (maxHeight - canvasReserve * textScale)
+            .coerceAtLeast(56.dp * textScale)
+            .coerceAtMost(maxHeight * 0.65f)
     Column(Modifier.fillMaxSize()) {
       Column(
           Modifier.fillMaxWidth()
@@ -360,6 +367,7 @@ private fun EditorReviewProgression(rows: List<ReviewEvidenceRow>) {
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun ActiveFileEditorChrome(
     state: EditorChromeUiState,
     onSelectSurface: (EditorSurface) -> Unit,
@@ -378,10 +386,9 @@ private fun ActiveFileEditorChrome(
         contentDescription = state.accessibleDescription
       },
   ) {
-    Column {
+    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
       Row(
-          Modifier.fillMaxWidth()
-              .horizontalScroll(rememberScrollState())
+          Modifier.horizontalScroll(rememberScrollState())
               .onFocusChanged { tabGroupHasFocus = it.hasFocus }
               .focusable()
               .onPreviewKeyEvent { event ->
@@ -475,8 +482,7 @@ private fun EditorDraftActions(
     onEdit: (() -> Unit)?,
 ) {
   Row(
-      Modifier.fillMaxWidth()
-          .horizontalScroll(rememberScrollState())
+      Modifier.horizontalScroll(rememberScrollState())
           .padding(horizontal = 8.dp, vertical = 4.dp)
           .testTag("editor-draft-actions"),
       horizontalArrangement = Arrangement.spacedBy(8.dp),
