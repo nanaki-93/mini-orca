@@ -2,9 +2,11 @@ package io.miniorca.desktop
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -47,6 +49,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
@@ -972,7 +975,7 @@ internal fun openSummaryFinding(
 }
 
 // A single layout node changes placement without replacing the keyed pane compositions.
-// Compact children receive finite heights even though the outer container scrolls vertically.
+// Compact panes keep the editor first and use local jump controls to reach side tools.
 @Composable
 internal fun EditorPaneArrangement(
     resolved: ResolvedDesktopLayout,
@@ -988,6 +991,11 @@ internal fun EditorPaneArrangement(
   val compact = resolved.mode == DesktopLayoutMode.Compact
   val density = LocalDensity.current
   val scroll = rememberScrollState()
+  val scope = rememberCoroutineScope()
+  val paneOffsets = remember { mutableMapOf<String, Int>() }
+  var navigationHeight by remember { mutableStateOf(0) }
+  val showNavigation =
+      compact && (preferred.leftToolWindowVisible || preferred.rightToolWindowVisible)
   val filesReveal = remember { BringIntoViewRequester() }
   val canvasReveal = remember { BringIntoViewRequester() }
   val toolReveal = remember { BringIntoViewRequester() }
@@ -1001,86 +1009,139 @@ internal fun EditorPaneArrangement(
       }
     }
   }
-  Layout(
-      content = {
+  Column(Modifier.fillMaxSize()) {
+    if (showNavigation) {
+      CompactEditorNavigation(
+          preferred,
+          { pane -> scope.launch { scroll.scrollTo(paneOffsets[pane] ?: 0) } },
+          Modifier.onSizeChanged { navigationHeight = it.height })
+    }
+    Layout(
+        content = {
+          if (preferred.leftToolWindowVisible) {
+            key("files") {
+              left(
+                  Modifier.bringIntoViewRequester(filesReveal).onFocusChanged {
+                    if (it.hasFocus) focusedPane = "files"
+                  })
+            }
+            if (!compact) key("files-divider") { leftDivider() }
+          }
+          key("canvas") {
+            canvas(
+                Modifier.bringIntoViewRequester(canvasReveal).onFocusChanged {
+                  if (it.hasFocus) focusedPane = "canvas"
+                })
+          }
+          if (preferred.rightToolWindowVisible) {
+            if (!compact) key("tool-divider") { rightDivider() }
+            key("tool") {
+              right(
+                  Modifier.bringIntoViewRequester(toolReveal).onFocusChanged {
+                    if (it.hasFocus) focusedPane = "tool"
+                  })
+            }
+          }
+        },
+        modifier =
+            modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .then(if (compact) Modifier.verticalScroll(scroll) else Modifier),
+    ) { measurables, constraints ->
+      val width = constraints.maxWidth
+      val height =
+          if (compact)
+              (with(density) { viewportHeight.dp.roundToPx() } -
+                      if (showNavigation) navigationHeight else 0)
+                  .coerceAtLeast(0)
+          else constraints.maxHeight
+      val gap = with(density) { WORKSPACE_FRAME_INSET.dp.roundToPx() }
+      val divider = with(density) { RESIZE_DIVIDER_WIDTH.dp.roundToPx() }
+      // Side tools can scroll as a group; the editor fits the visible viewport so
+      // its own scrollable chrome cannot push source below the fold.
+      val toolHeight =
+          if (compact)
+              maxOf(
+                  height, with(density) { (MIN_WORKSPACE_PANE_HEIGHT * fontScale).dp.roundToPx() })
+          else height
+      val positions = mutableListOf<Pair<Int, Int>>()
+      val measured = mutableListOf<androidx.compose.ui.layout.Placeable>()
+      var index = 0
+      var x = 0
+      var y = 0
+      fun place(widthPx: Int, heightPx: Int) {
+        val placeable =
+            measurables[index++].measure(
+                Constraints.fixed(widthPx.coerceAtLeast(0), heightPx.coerceAtLeast(0)))
+        // Placeables are kept in source order; the mode changes coordinates, not identity.
+        measured += placeable
+        positions += if (compact) 0 to y else x to 0
+        if (compact) y += placeable.height + gap else x += placeable.width
+      }
+      if (preferred.leftToolWindowVisible) {
+        place(
+            if (compact) width else with(density) { resolved.explorerWidth.dp.roundToPx() },
+            if (compact) maxOf(height / 3, with(density) { 180.dp.roundToPx() }) else height)
+        if (!compact) place(divider, height)
+      }
+      val rightWidth =
+          if (preferred.rightToolWindowVisible && !compact)
+              with(density) { resolved.actionWidth.dp.roundToPx() }
+          else 0
+      val canvasWidth =
+          if (compact) width
+          else
+              (width - x - rightWidth - if (preferred.rightToolWindowVisible) divider else 0)
+                  .coerceAtLeast(0)
+      place(canvasWidth, height)
+      if (compact) {
+        paneOffsets["canvas"] = 0
         if (preferred.leftToolWindowVisible) {
-          key("files") {
-            left(
-                Modifier.bringIntoViewRequester(filesReveal).onFocusChanged {
-                  if (it.hasFocus) focusedPane = "files"
-                })
-          }
-          if (!compact) key("files-divider") { leftDivider() }
+          positions[0] = 0 to (height + gap)
+          positions[1] = 0 to 0
+          paneOffsets["files"] = height + gap
         }
-        key("canvas") {
-          canvas(
-              Modifier.bringIntoViewRequester(canvasReveal).onFocusChanged {
-                if (it.hasFocus) focusedPane = "canvas"
-              })
+        paneOffsets["tool"] = y
+      }
+      if (preferred.rightToolWindowVisible) {
+        if (!compact) place(divider, height)
+        place(if (compact) width else rightWidth, toolHeight)
+      }
+      layout(width, if (compact) (y - gap).coerceAtLeast(0) else height) {
+        // Measure results are retained by the layout pass, not recomposed across mode changes.
+        measured.forEachIndexed { i, child ->
+          child.placeRelative(positions[i].first, positions[i].second)
         }
-        if (preferred.rightToolWindowVisible) {
-          if (!compact) key("tool-divider") { rightDivider() }
-          key("tool") {
-            right(
-                Modifier.bringIntoViewRequester(toolReveal).onFocusChanged {
-                  if (it.hasFocus) focusedPane = "tool"
-                })
-          }
-        }
-      },
-      modifier =
-          modifier.fillMaxSize().then(if (compact) Modifier.verticalScroll(scroll) else Modifier),
-  ) { measurables, constraints ->
-    val width = constraints.maxWidth
-    val height =
-        if (compact) with(density) { viewportHeight.dp.roundToPx() } else constraints.maxHeight
-    val gap = with(density) { WORKSPACE_FRAME_INSET.dp.roundToPx() }
-    val divider = with(density) { RESIZE_DIVIDER_WIDTH.dp.roundToPx() }
-    // Compact panes scroll as a group; the Editor needs room for chrome and a source/diff viewport.
-    val childHeight =
-        if (compact)
-            maxOf(
-                height * 2 / 3,
-                with(density) { (MIN_WORKSPACE_PANE_HEIGHT * fontScale).dp.roundToPx() })
-        else height
-    val positions = mutableListOf<Pair<Int, Int>>()
-    val measured = mutableListOf<androidx.compose.ui.layout.Placeable>()
-    var index = 0
-    var x = 0
-    var y = 0
-    fun place(widthPx: Int, heightPx: Int) {
-      val placeable =
-          measurables[index++].measure(
-              Constraints.fixed(widthPx.coerceAtLeast(0), heightPx.coerceAtLeast(0)))
-      // Placeables are kept in source order; the mode changes coordinates, not identity.
-      measured += placeable
-      positions += if (compact) 0 to y else x to 0
-      if (compact) y += placeable.height + gap else x += placeable.width
+      }
+    }
+  }
+}
+
+@Composable
+private fun CompactEditorNavigation(
+    preferred: DesktopLayoutState,
+    reveal: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+  Row(
+      modifier
+          .fillMaxWidth()
+          .background(ToolWindowSurface)
+          .padding(horizontal = 6.dp, vertical = 2.dp),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
+    ChromeButton(onClick = { reveal("canvas") }, accessibleName = "Show editor pane") {
+      Text("Editor", style = IdeTypography.action)
     }
     if (preferred.leftToolWindowVisible) {
-      place(
-          if (compact) width else with(density) { resolved.explorerWidth.dp.roundToPx() },
-          if (compact) maxOf(height / 3, with(density) { 180.dp.roundToPx() }) else height)
-      if (!compact) place(divider, height)
+      ChromeButton(onClick = { reveal("files") }, accessibleName = "Show files pane") {
+        Text("Files", style = IdeTypography.action)
+      }
     }
-    val rightWidth =
-        if (preferred.rightToolWindowVisible && !compact)
-            with(density) { resolved.actionWidth.dp.roundToPx() }
-        else 0
-    val canvasWidth =
-        if (compact) width
-        else
-            (width - x - rightWidth - if (preferred.rightToolWindowVisible) divider else 0)
-                .coerceAtLeast(0)
-    place(canvasWidth, childHeight)
     if (preferred.rightToolWindowVisible) {
-      if (!compact) place(divider, height)
-      place(if (compact) width else rightWidth, childHeight)
-    }
-    layout(width, if (compact) (y - gap).coerceAtLeast(0) else height) {
-      // Measure results are retained by the layout pass, not recomposed across mode changes.
-      measured.forEachIndexed { i, child ->
-        child.placeRelative(positions[i].first, positions[i].second)
+      ChromeButton(onClick = { reveal("tool") }, accessibleName = "Show tools pane") {
+        Text("Tools", style = IdeTypography.action)
       }
     }
   }

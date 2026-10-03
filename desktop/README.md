@@ -229,9 +229,12 @@ bundle together; do not edit `src/main/resources/mermaid/renderer.js` manually.
 The app requests a maximized native window at startup and remains resizable.
 Editor places visible Files, source/diff canvas and Context/Assistant/Review panes
 side by side when the measured workspace can fit their readable minima at the
-current text scale. Below that boundary they stack in a vertical scroller, with
-bounded inner panes; hidden panes stay hidden. Source and composed diffs remain
-selectable/read-only; only the isolated draft is editable. Tabs, draft actions and
+current text scale. Below that boundary the editor appears first in a vertical
+scroller, followed by Files and the tools pane. The fixed **Editor**, **Files** and
+**Tools** shortcuts scroll directly to each visible pane and support keyboard
+activation. The source/diff canvas fits the visible area; its header scrolls
+separately when space is tight. Hidden panes stay hidden. Source and composed diffs
+remain selectable/read-only; only the isolated draft is editable. Tabs, draft actions and
 long file paths remain available through local reflow or scrolling. Results also
 switch from list/detail columns to separately scrollable stacked regions when
 local width or text scale requires it; selection and filters are retained.

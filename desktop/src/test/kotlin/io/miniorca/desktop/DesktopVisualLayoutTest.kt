@@ -2123,19 +2123,25 @@ class DesktopVisualLayoutTest {
                   assertTrue(files.right <= canvas.left && canvas.right <= tool.left, label)
                   assertTrue(canvas.bottom <= dock.top, label)
                 } else {
-                  assertTrue(files.width > 0, label)
-                  fixture.scrollBy(380f * density, "f04-arrangement")
+                  assertTrue(canvas.height > 0 && canvas.top < dock.top, label)
+                  val initialViewport =
+                      fixture.taggedBounds(
+                          if (review) "diff-Current-vertical" else "source-viewport")
+                  assertTrue(
+                      initialViewport.height >= 100f * density,
+                      "$label: source must be visible before scrolling: $initialViewport")
+                  assertTrue(fixture.requestDescriptionFocus("Show files pane"))
+                  fixture.pressKey(Key.Enter)
                   fixture.render()
-                  assertTrue(fixture.taggedBounds("f04-canvas").height > 0, label)
-                  if (review && width == 800 && height == 650 && scale == 1.5f) {
-                    val viewport = fixture.taggedBounds("diff-Current-vertical")
-                    assertTrue(viewport.height >= 100f * density, "$label: $viewport")
-                  }
-                  fixture.scrollBy(100_000f, "f04-arrangement")
+                  assertTrue(fixture.taggedBounds("f04-files").height > 0, label)
+                  fixture.clickVisibleDescription("Show tools pane")
                   fixture.render("$label-tool-revealed")
                   val revealed = fixture.taggedBounds("f04-tool")
                   assertTrue(revealed.width > 0 && revealed.height > 0, "$label: $revealed")
                   assertTrue(revealed.top < dock.top, label)
+                  fixture.clickVisibleDescription("Show editor pane")
+                  fixture.render()
+                  assertEquals(canvas.top, fixture.taggedBounds("f04-canvas").top, density, label)
                 }
                 if (review && width == 1440 && height == 900 && scale == 1.5f) {
                   val viewport = fixture.taggedBounds("diff-Current-vertical")
@@ -2311,11 +2317,13 @@ class DesktopVisualLayoutTest {
               fixture.clickDescription("Editor tool window, selected")
               fixture.render("$label-pending-files")
               assertTrue(layout.leftToolWindowVisible)
-              assertTrue(fixture.descriptionBounds("Indexed file tree").height > 0f, label)
               if (resolveDesktopLayout(layout, width.toFloat(), scale).mode ==
                   DesktopLayoutMode.Compact) {
+                fixture.clickVisibleDescription("Show files pane")
+                fixture.render()
                 fixture.revealTagFullyWithin("explorer-header-scroll", "f04-arrangement")
               }
+              assertTrue(fixture.descriptionBounds("Indexed file tree").height > 0f, label)
               assertTrue(fixture.hasDescription("Pending destination: $destination"), label)
               read = FileReadUiState.Failed(destination, "Local read unavailable.")
               fixture.render("$label-failed-files")
