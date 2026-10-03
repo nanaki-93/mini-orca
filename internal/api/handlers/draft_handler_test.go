@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
@@ -80,6 +82,41 @@ func TestDraftEndpointsAreRevisionAndHashGuarded(t *testing.T) {
 	handler.UpdateDraft(staleResponse, staleUpdate)
 	if staleResponse.Code != http.StatusConflict {
 		t.Fatalf("stale update = %d: %s", staleResponse.Code, staleResponse.Body.String())
+	}
+	assertApplyReceiptAfterMetadataFailure(t, root, handler, validated)
+}
+
+func assertApplyReceiptAfterMetadataFailure(t *testing.T, root string, handler *DraftHandler, draft app.Draft) {
+	t.Helper()
+	request := app.ApplyRequest{DraftID: draft.ID, DraftRevision: draft.Revision, DraftHash: draft.Hash, ProjectID: draft.ProjectID, ProjectRevision: draft.ProjectRevision, BaseFileHash: draft.BaseFileHash}
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rejected := httptest.NewRecorder()
+	handler.Apply(rejected, httptest.NewRequest(http.MethodPost, "/api/projects/current/apply", bytes.NewReader(body)))
+	if rejected.Code != http.StatusBadRequest {
+		t.Fatalf("unconfirmed Apply = %d: %s", rejected.Code, rejected.Body.String())
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".mini-orca/sessions/apply-state.json"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	request.Confirm = true
+	body, err = json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	handler.Apply(response, httptest.NewRequest(http.MethodPost, "/api/projects/current/apply", bytes.NewReader(body)))
+	if response.Code != http.StatusOK {
+		t.Fatalf("Apply with metadata failure = %d: %s", response.Code, response.Body.String())
+	}
+	var applied app.ApplyResult
+	if err := json.NewDecoder(response.Body).Decode(&applied); err != nil {
+		t.Fatal(err)
+	}
+	if len(applied.Warnings) == 0 || !applied.UndoAvailable || applied.Audit.Outcome != "applied" {
+		t.Fatalf("missing partial-completion receipt: %+v", applied)
 	}
 }
 

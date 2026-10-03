@@ -250,7 +250,8 @@ data class ApplyResult(
     @SerialName("post_apply_hash") val postApplyHash: String,
     @SerialName("undo_available") val undoAvailable: Boolean,
     val audit: AuditEntry? = null,
-    val index: ProjectIndex? = null
+    val index: ProjectIndex? = null,
+    val warnings: List<String> = emptyList(),
 )
 
 @Serializable

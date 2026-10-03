@@ -193,6 +193,18 @@ Undo similarly requires the post-apply hash and explicit confirmation; it
 restores only the immediately preceding unchanged apply. The audit omits source,
 draft text, prompts, and secret-like values.
 
+Apply saves a source-free recovery journal before replacing the file. A failure
+before replacement leaves source unchanged. After replacement, Apply and Undo
+return a successful mutation receipt even if indexing, audit persistence, or
+metadata cleanup fails; the optional `warnings` array explains those failures.
+The desktop displays these warnings alongside the actual mutation outcome.
+If indexing fails, `index` is null and `project_revision` retains the last known
+revision; `post_apply_hash` still identifies the resulting source. Re-index to
+refresh deterministic project facts. Apply retains its recovery journal when
+completion is partial, allowing guarded Undo after restart when the file still
+matches the applied hash. A mismatched recovery journal blocks Undo rather than
+falling back to an older change.
+
 ## Project intelligence and limits
 
 Import and reindex build deterministic metadata; neither starts a verified scan

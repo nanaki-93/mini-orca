@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -78,12 +79,15 @@ type ApplyResult struct {
 	PostApplyHash   string                `json:"post_apply_hash"`
 	UndoAvailable   bool                  `json:"undo_available"`
 	Index           *project.ProjectIndex `json:"index"`
+	Warnings        []string              `json:"warnings,omitempty"`
 }
 
 // ApplyDraft is the only retained source-write path. It accepts identity and
 // confirmation, never source text, and rechecks the source immediately before
 // the atomic replacement.
 func (s *Service) ApplyDraft(ctx context.Context, request ApplyRequest) (*ApplyResult, error) {
+	s.jobLifecycleMu.Lock()
+	defer s.jobLifecycleMu.Unlock()
 	identity, err := validateApplyRequest(ctx, request)
 	if err != nil {
 		return nil, err
@@ -112,10 +116,18 @@ func (s *Service) ApplyDraft(ctx context.Context, request ApplyRequest) (*ApplyR
 	if err != nil {
 		return nil, err
 	}
-	if err := atomicWrite(current.path, []byte(composition.Source)); err != nil {
+	journal, err := prepareApplyJournal(current, state, composition, backupPath)
+	if err != nil {
 		return nil, err
 	}
-	return s.persistDraftApply(current, state, composition, backupPath)
+	if _, err := s.verifyApplyBeforeWrite(ctx, current, state); err != nil {
+		return nil, errors.Join(err, restorePendingApply(current.root, journal))
+	}
+	writeErr := atomicWrite(current.path, []byte(composition.Source))
+	if writeErr != nil && !sourceWasReplaced(writeErr) {
+		return nil, errors.Join(writeErr, restorePendingApply(current.root, journal))
+	}
+	return s.persistDraftApply(current.root, journal, writeErr), nil
 }
 
 type currentApplyProject struct {
@@ -229,24 +241,10 @@ func (s *Service) verifyApplyBeforeWrite(ctx context.Context, current currentApp
 	return source, nil
 }
 
-func (s *Service) persistDraftApply(current currentApplyProject, state applyDraftState, composition project.GoDeclarationComposition, backupPath string) (*ApplyResult, error) {
-	postHash := composition.CompositionHash
-	index, err := s.Reindex()
-	if err != nil {
-		return nil, err
-	}
-	audit := AuditEntry{ID: "apply-" + shortHash(postHash), Action: "apply", TargetPath: state.target.file.path, GenerationID: state.draft.ID, BeforeHash: state.target.file.baseHash, AfterHash: postHash, ProjectID: state.draft.ProjectID, ProjectRevision: index.ProjectRevision, Model: state.draft.EffectiveModel.Model, Profile: state.draft.EffectiveModel.Profile, Validation: true, Checks: auditChecks(state.checks.Checks), Outcome: "applied", Timestamp: time.Now().UTC()}
-	if err := appendAudit(current.root, audit); err != nil {
-		return nil, err
-	}
-	if err := writeApplyState(current.root, applyState{ProjectID: state.draft.ProjectID, TargetPath: state.target.file.path, BeforeHash: state.target.file.baseHash, AfterHash: postHash, BackupPath: backupPath, AuditID: audit.ID, AppliedAt: audit.Timestamp}); err != nil {
-		return nil, err
-	}
-	return &ApplyResult{Audit: audit, ProjectRevision: index.ProjectRevision, PostApplyHash: postHash, UndoAvailable: true, Index: index}, nil
-}
-
 // UndoDraft restores only the last unchanged applied file.
 func (s *Service) UndoDraft(ctx context.Context, request UndoRequest) (*ApplyResult, error) {
+	s.jobLifecycleMu.Lock()
+	defer s.jobLifecycleMu.Unlock()
 	if !request.Confirm {
 		return nil, fmt.Errorf("explicit undo confirmation is required")
 	}
@@ -257,10 +255,11 @@ func (s *Service) UndoDraft(ctx context.Context, request UndoRequest) (*ApplyRes
 	if err != nil {
 		return nil, err
 	}
-	if err := restoreUndoBackup(path, state); err != nil {
-		return nil, err
+	writeErr := s.restoreUndoBackup(ctx, request, path, state)
+	if writeErr != nil && !sourceWasReplaced(writeErr) {
+		return nil, writeErr
 	}
-	return s.persistDraftUndo(state)
+	return s.persistDraftUndo(state, request.ProjectRevision, writeErr), nil
 }
 
 func (s *Service) undoStateForRequest(request UndoRequest) (*applyState, string, error) {
@@ -281,7 +280,7 @@ func (s *Service) undoStateForRequest(request UndoRequest) (*applyState, string,
 	return state, path, nil
 }
 
-func restoreUndoBackup(path string, state *applyState) error {
+func (s *Service) restoreUndoBackup(ctx context.Context, request UndoRequest, path string, state *applyState) error {
 	backup, err := os.ReadFile(state.BackupPath)
 	if err != nil {
 		return fmt.Errorf("read apply backup: %w", err)
@@ -289,25 +288,16 @@ func restoreUndoBackup(path string, state *applyState) error {
 	if contentHash(backup) != state.BeforeHash {
 		return fmt.Errorf("apply backup integrity check failed")
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.ValidateMutableRequest(request.ProjectID, request.ProjectRevision, state.TargetPath, state.AfterHash); err != nil {
+		return err
+	}
 	if err := atomicWrite(path, backup); err != nil {
 		return err
 	}
 	return nil
-}
-
-func (s *Service) persistDraftUndo(state *applyState) (*ApplyResult, error) {
-	index, err := s.Reindex()
-	if err != nil {
-		return nil, err
-	}
-	audit := AuditEntry{ID: "undo-" + shortHash(state.BeforeHash), Action: "undo", TargetPath: state.TargetPath, BeforeHash: state.AfterHash, AfterHash: state.BeforeHash, ProjectID: state.ProjectID, ProjectRevision: index.ProjectRevision, Validation: true, Outcome: "undone", Timestamp: time.Now().UTC()}
-	if err := appendAudit(s.manager.Root(), audit); err != nil {
-		return nil, err
-	}
-	if err := os.Remove(filepath.Join(s.manager.Root(), applyStateRelativePath)); err != nil && !os.IsNotExist(err) {
-		return nil, err
-	}
-	return &ApplyResult{Audit: audit, ProjectRevision: index.ProjectRevision, PostApplyHash: state.BeforeHash, UndoAvailable: false, Index: index}, nil
 }
 
 func writeBackup(root, target string, content []byte) (string, error) {
@@ -359,8 +349,10 @@ func atomicWrite(path string, content []byte) error {
 	if err == nil {
 		defer directory.Close()
 		if err := directory.Sync(); err != nil {
-			return err
+			return &sourceWriteError{err}
 		}
+	} else {
+		return &sourceWriteError{err}
 	}
 	return nil
 }
@@ -369,6 +361,9 @@ func writeApplyState(root string, state applyState) error {
 	return writeJSONAtomic(filepath.Join(root, applyStateRelativePath), state)
 }
 func readApplyState(root string) (*applyState, error) {
+	if pending, err := readPendingApplyState(root); pending != nil || err != nil {
+		return pending, err
+	}
 	var state applyState
 	if err := readJSON(filepath.Join(root, applyStateRelativePath), &state); err != nil {
 		if os.IsNotExist(err) {
@@ -377,6 +372,17 @@ func readApplyState(root string) (*applyState, error) {
 		return nil, err
 	}
 	return &state, nil
+}
+
+type sourceWriteError struct{ cause error }
+
+func (err *sourceWriteError) Error() string {
+	return "source replaced; directory sync failed: " + err.cause.Error()
+}
+func (err *sourceWriteError) Unwrap() error { return err.cause }
+func sourceWasReplaced(err error) bool {
+	var replaced *sourceWriteError
+	return errors.As(err, &replaced)
 }
 func appendAudit(root string, entry AuditEntry) error {
 	entries, err := readAudit(root)
