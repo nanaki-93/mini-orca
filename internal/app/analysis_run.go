@@ -377,13 +377,15 @@ type AnalysisRun struct {
 // risks are routed by explicit category; performance hypotheses and Security rule/AI
 // reports keep their existing identities. File filtering only changes this read view.
 type AnalysisSectionResults struct {
-	Identity     AnalysisRunIdentity             `json:"identity"`
-	Progress     AnalysisSectionProgress         `json:"progress"`
-	Path         string                          `json:"path,omitempty"`
-	Semantic     []project.UnifiedFinding        `json:"semantic"`
-	Performance  []project.PerformanceFileReport `json:"performance"`
-	Security     []project.SecurityFileReport    `json:"security"`
-	Unclassified []project.UnifiedFinding        `json:"unclassified"`
+	Identity          AnalysisRunIdentity             `json:"identity"`
+	Progress          AnalysisSectionProgress         `json:"progress"`
+	SavedFindingCount *int                            `json:"saved_finding_count"`
+	RetainedFiles     []AnalysisFileIdentity          `json:"retained_files,omitempty"`
+	Path              string                          `json:"path,omitempty"`
+	Semantic          []project.UnifiedFinding        `json:"semantic"`
+	Performance       []project.PerformanceFileReport `json:"performance"`
+	Security          []project.SecurityFileReport    `json:"security"`
+	Unclassified      []project.UnifiedFinding        `json:"unclassified"`
 }
 
 var errAnalysisRunPersistence = errors.New("analysis progress could not be saved; resume or cancel to recover")

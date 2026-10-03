@@ -649,7 +649,25 @@ internal class DesktopAnalysisWorkflow(
           current.copy(
               run = run,
               previousRun = previousRun,
-              sections = emptyMap(),
+              sections =
+                  if (run != null && prior?.identity?.projectId == run.identity.projectId)
+                      AnalysisResultType.entries.associate { type ->
+                        val key = AnalysisResultKey(type.category)
+                        val page =
+                            AnalysisResultPageState(
+                                type,
+                                state().project,
+                                prior,
+                                current.sections[key] ?: AnalysisSectionState())
+                        key to
+                            AnalysisSectionState(
+                                previousFindingCount =
+                                    page.displayCount
+                                        ?: prior.sections
+                                            .firstOrNull { it.category == type.category }
+                                            ?.findingCount)
+                      }
+                  else emptyMap(),
               admission = null,
               previewIntent =
                   current.previewIntent.takeUnless {
@@ -697,44 +715,67 @@ internal class DesktopAnalysisWorkflow(
           try {
             val result = io { api.analysisResults(run.identity, category, path) }
             if (!isCurrentResult(project, run.identity, key, token)) return@launch
+            val files =
+                run.files.map { AnalysisFileIdentity(it.path, it.contentHash, it.language) } +
+                    result.retainedFiles
             require(
                 result.identity == run.identity &&
                     result.progress.category == category &&
                     result.path == path &&
+                    result.retainedFiles.all { retained ->
+                      run.plan.retryStaleFailed &&
+                          path.isEmpty() &&
+                          retained.contentHash.isNotBlank() &&
+                          retained.language.isNotBlank() &&
+                          run.plan.excluded.any {
+                            it.path == retained.path &&
+                                it.reason == "No stale or failed analysis for this file."
+                          }
+                    } &&
+                    files.map { it.path }.distinct().size == files.size &&
+                    (result.savedFindingCount == null ||
+                        result.savedFindingCount ==
+                            result.semantic.size +
+                                result.performance.sumOf { it.findings.size } +
+                                result.security.sumOf { it.findings.size }) &&
                     result.semantic.all {
                       it.category == category &&
                           it.projectId == project.id &&
-                          run.files.any { file -> file.path == it.location.path } &&
+                          files.any { file -> file.path == it.location.path } &&
                           (path.isEmpty() || it.location.path == path) &&
                           (it.freshness != "fresh" ||
                               it.projectRevision == project.revision &&
-                                  run.files.any { file ->
+                                  files.any { file ->
                                     file.path == it.location.path && file.contentHash == it.fileHash
                                   })
                     } &&
                     result.unclassified.all {
                       it.category !in setOf("bugs", "performance", "security") &&
                           it.projectId == project.id &&
-                          run.files.any { file -> file.path == it.location.path } &&
+                          files.any { file -> file.path == it.location.path } &&
                           (path.isEmpty() || it.location.path == path)
                     } &&
                     (category == "performance" || result.performance.isEmpty()) &&
                     (category == "security" || result.security.isEmpty()) &&
                     result.performance.all {
                       it.projectId == project.id &&
-                          it.projectRevision == project.revision &&
-                          run.files.any { file ->
-                            file.path == it.path && file.contentHash == it.contentHash
-                          } &&
+                          files.any { file -> file.path == it.path } &&
+                          (it.status == "stale" ||
+                              it.projectRevision == project.revision &&
+                                  files.any { file ->
+                                    file.path == it.path && file.contentHash == it.contentHash
+                                  }) &&
                           (path.isEmpty() || it.path == path)
                     } &&
                     result.security.all {
                       it.source in setOf("ai", "deterministic") &&
                           it.projectId == project.id &&
-                          it.projectRevision == project.revision &&
-                          run.files.any { file ->
-                            file.path == it.path && file.contentHash == it.contentHash
-                          } &&
+                          files.any { file -> file.path == it.path } &&
+                          (it.status == "stale" ||
+                              it.projectRevision == project.revision &&
+                                  files.any { file ->
+                                    file.path == it.path && file.contentHash == it.contentHash
+                                  }) &&
                           (path.isEmpty() || it.path == path)
                     }) {
                   "The returned evidence does not match this analysis section."

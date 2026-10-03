@@ -132,7 +132,7 @@ internal fun securityResults(page: AnalysisResultPageState): List<SecurityResult
         .orEmpty()
         .filter {
           it.projectId == page.project?.projectId &&
-              it.projectRevision == page.run?.identity?.projectRevision
+              (it.status == "stale" || it.projectRevision == page.run?.identity?.projectRevision)
         }
         .flatMap { report ->
           report.findings.map {
@@ -160,7 +160,8 @@ internal fun securityResultIsLoaded(
       result.page.project != page.project ||
       result.page.run?.identity != page.run?.identity ||
       result.report.projectId != page.project?.projectId ||
-      result.report.projectRevision != page.run?.identity?.projectRevision)
+      result.report.status != "stale" &&
+          result.report.projectRevision != page.run?.identity?.projectRevision)
       return false
   val owner = result.report
   val reports =

@@ -189,6 +189,7 @@ data class AnalysisSectionState(
     val results: AnalysisSectionResults? = null,
     val loading: Boolean = false,
     val error: String? = null,
+    val previousFindingCount: Int? = null,
 )
 
 enum class AdmissionRecovery {

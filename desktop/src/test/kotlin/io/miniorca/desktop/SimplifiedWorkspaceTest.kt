@@ -94,7 +94,8 @@ class SimplifiedWorkspaceTest {
   fun analysisCountHelpDoesNotHideResultsOrDispatchWork() {
     for ((width, height, scale) in listOf(Triple(1440, 900, 1f), Triple(800, 650, 1.5f))) {
       var requests = 0
-      val help = "Reported counts · open a category for loaded findings"
+      val help =
+          "Saved findings stay visible during retries. Successful reviews replace each file’s previous findings; run coverage is shown separately."
       ComposeVisualFixture(width, height, scale) {
             AnalysisWorkspacePane(
                 AnalysisWorkspacePaneState(visualFixtureProject, roundedAnalysisStateFixture()),

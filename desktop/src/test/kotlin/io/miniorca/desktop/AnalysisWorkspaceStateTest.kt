@@ -9,6 +9,44 @@ import kotlin.test.assertTrue
 class AnalysisWorkspaceStateTest {
 
   @Test
+  fun savedTotalsStaySeparateFromFailedOrEmptyRetryCoverage() {
+    for (status in
+        listOf("queued", "running", "paused", "failed", "canceled", "stale", "completed_empty")) {
+      for (type in AnalysisResultType.entries) {
+        val base = resultPageFixture(type.category)
+        val progress =
+            base.progress!!.copy(
+                status = status, findingCount = if (status == "failed") null else 0)
+        val run = base.run!!.copy(status = status, sections = listOf(progress))
+        val results = base.results!!.copy(progress = progress, savedFindingCount = 4)
+        val section = AnalysisSectionState(results = results)
+        val page = base.copy(run = run, section = section)
+        assertEquals(4, page.displayCount, "$type $status")
+        assertEquals("4 saved findings", page.countLabel(4))
+        assertFalse(
+            page.emptyPresentation(0).availability == AnalysisResultAvailability.CompletedEmpty)
+        val metric =
+            summaryIssueMetrics(
+                    page.project, run, mapOf(AnalysisResultKey(type.category) to section))
+                .first { it.type == type }
+        assertEquals(4, metric.value)
+        assertEquals("Saved findings", metric.detailStatus)
+        assertFalse(metric.statusCode == "completed_empty")
+        val advanced =
+            page.copy(
+                run =
+                    run.copy(
+                        sections =
+                            listOf(
+                                progress.copy(
+                                    coverage = AnalysisRunCoverage(total = 2, running = 2)))))
+        assertNull(advanced.results)
+        assertEquals(4, advanced.displayCount)
+      }
+    }
+  }
+
+  @Test
   fun lifecycleExplanationSeparatesRequestFromAcceptedAndStoppedOutcomes() {
     val project = resultProjectFixture()
     val run = analysisRunFixture().copy(status = "running")

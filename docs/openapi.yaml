@@ -1845,10 +1845,21 @@ components:
     AnalysisSectionResults:
       type: object
       required: [identity, progress, semantic, performance, security, unclassified]
-      description: Only the selected category is populated. Legacy unclassified evidence never contributes to fresh counts.
+      description: Only the selected category is populated. Saved producer evidence survives unsuccessful replacement stages. Run progress remains separate from saved totals. Legacy unclassified evidence never contributes to category counts.
       properties:
         identity: {$ref: '#/components/schemas/AnalysisRunIdentity'}
         progress: {$ref: '#/components/schemas/AnalysisSectionProgress'}
+        saved_finding_count: {type: integer, nullable: true, minimum: 0, description: "Count of the returned classified saved findings, including stale evidence; null when no saved evidence is available. Independent of this run's finding_count and coverage."}
+        retained_files:
+          type: array
+          description: Current indexed identities for files omitted only by stale/failed retry selection, included in unfiltered saved result reads. Never includes user or policy exclusions and never authorizes dispatch.
+          items:
+            type: object
+            required: [path, content_hash, language]
+            properties:
+              path: {type: string}
+              content_hash: {type: string}
+              language: {type: string}
         path: {type: string, description: Optional read-only file filter; progress remains project-wide.}
         semantic: {type: array, items: {$ref: '#/components/schemas/UnifiedFinding'}}
         performance: {type: array, items: {$ref: '#/components/schemas/PerformanceFileReport'}}

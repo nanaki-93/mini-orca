@@ -1394,6 +1394,122 @@ class DesktopAnalysisWorkflowTest {
   }
 
   @Test
+  fun replacementKeepsSavedCountersWhileDetailsLoadOrFailAndAcceptsNewTotals() {
+    Harness().use { h ->
+      h.transformResults = { result ->
+        result.copy(
+            savedFindingCount =
+                result.semantic.size +
+                    result.performance.sumOf { it.findings.size } +
+                    result.security.sumOf { it.findings.size })
+      }
+      h.workflow.refresh()
+      h.drain()
+      assertEquals(
+          listOf(1, 0, 1),
+          AnalysisResultType.entries.map { h.state.analysisResultPage(it.category).displayCount })
+      h.run =
+          h.run.copy(
+              identity = h.run.identity.copy(id = "retry"),
+              status = "running",
+              sections = h.run.sections.map { it.copy(status = "running", findingCount = 0) })
+      h.failure = "/analysis/results?"
+      h.workflow.refresh()
+      h.drain()
+      assertEquals(
+          listOf(1, 0, 1),
+          AnalysisResultType.entries.map { h.state.analysisResultPage(it.category).displayCount })
+      assertTrue(
+          h.runUpdates
+              .filter { it.run?.identity == h.run.identity }
+              .all { update ->
+                AnalysisResultType.entries.map { type ->
+                  AnalysisResultPageState(
+                          type,
+                          h.state.project,
+                          update.run,
+                          update.sections.getValue(AnalysisResultKey(type.category)))
+                      .displayCount
+                } == listOf(1, 0, 1)
+              })
+      assertTrue(h.state.analysisRun.sections.values.all { it.error != null && it.results == null })
+      h.failure = ""
+      h.transformResults = { result ->
+        result.copy(
+            semantic = emptyList(),
+            performance = emptyList(),
+            security = emptyList(),
+            savedFindingCount = 0)
+      }
+      h.workflow.refresh()
+      h.drain()
+      assertEquals(
+          listOf(0, 0, 0),
+          AnalysisResultType.entries.map { h.state.analysisResultPage(it.category).displayCount })
+      h.dispatch(
+          DesktopEvent.ProjectLoaded(
+              analysisProjectFixture().copy(projectId = "another"),
+              ProjectIndex("another", "revision")))
+      assertTrue(
+          AnalysisResultType.entries.all {
+            h.state.analysisResultPage(it.category).displayCount == null
+          })
+      assertTrue(h.calls.all { it.first == "GET" })
+    }
+  }
+
+  @Test
+  fun savedResultsAcceptRetryOmissionsAndHistoricalEvidenceButRejectUncapturedOrMiscountedRows() {
+    for (invalid in listOf("", "path", "exclusion", "count", "duplicate", "fresh")) {
+      Harness().use { h ->
+        h.run =
+            h.run.copy(
+                plan =
+                    h.run.plan.copy(
+                        retryStaleFailed = true,
+                        excluded =
+                            listOf(
+                                AnalysisExcludedFile(
+                                    "helper.go",
+                                    if (invalid == "exclusion") "Excluded by analysis selection."
+                                    else "No stale or failed analysis for this file."))))
+        h.transformResults = { result ->
+          if (result.progress.category != "bugs") result
+          else
+              result.copy(
+                  savedFindingCount = if (invalid == "count") 2 else 1,
+                  retainedFiles =
+                      List(if (invalid == "duplicate") 2 else 1) {
+                        AnalysisFileIdentity(
+                            if (invalid == "path") "unknown.go" else "helper.go", "current", "Go")
+                      },
+                  semantic =
+                      result.semantic.map {
+                        it.copy(
+                            location = FindingLocation("helper.go"),
+                            fileHash = "old",
+                            projectRevision = "old-revision",
+                            freshness = if (invalid == "fresh") "fresh" else "stale")
+                      })
+        }
+        h.workflow.refresh()
+        h.drain()
+        val page = h.state.analysisResultPage("bugs")
+        if (invalid.isEmpty()) {
+          assertNull(page.section.error)
+          assertEquals(1, page.displayCount)
+          assertEquals("helper.go", page.semantic.single().location.path)
+          assertEquals("stale", page.semantic.single().freshness)
+        } else {
+          assertNotNull(page.section.error, invalid)
+          assertNull(page.results, invalid)
+        }
+        assertTrue(h.calls.all { it.first == "GET" })
+      }
+    }
+  }
+
+  @Test
   fun failedSectionAndFilteredReadsRetainOtherTypedEvidenceAndNeverDispatchModels() {
     Harness().use { h ->
       h.workflow.refresh()
@@ -2548,6 +2664,7 @@ class DesktopAnalysisWorkflowTest {
     var selection = selectionFixture()
     var failure = ""
     var wrongResult = false
+    var transformResults: (AnalysisSectionResults) -> AnalysisSectionResults = { it }
     var wrongRetryPreview = false
     var wrongResumeGeneration = false
     var wrongResumePlan = false
@@ -2661,7 +2778,8 @@ class DesktopAnalysisWorkflowTest {
                             path.contains("/analysis/results?") -> {
                               val category = path.substringAfter("category=").substringBefore('&')
                               val filter = path.substringAfter("&path=", "")
-                              var result = analysisResultsFixture(run, category, filter)
+                              var result =
+                                  transformResults(analysisResultsFixture(run, category, filter))
                               if (wrongResult) result = result.copy(path = "wrong.go")
                               TransportResponse(200, Json.encodeToString(result))
                             }

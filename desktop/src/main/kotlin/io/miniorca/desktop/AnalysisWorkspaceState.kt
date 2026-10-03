@@ -466,6 +466,22 @@ internal data class AnalysisResultPageState(
   val reportedCount: Int?
     get() = if (stale) null else progress?.findingCount
 
+  // Keep the last saved total while progress advances ahead of its next detail read.
+  val savedCount: Int?
+    get() =
+        if (run == null || project == null || run.identity.projectId != project.projectId) null
+        else
+            section.results
+                ?.takeIf {
+                  it.identity == run.identity &&
+                      it.progress.category == category &&
+                      it.path.isEmpty()
+                }
+                ?.savedFindingCount ?: section.previousFindingCount
+
+  val displayCount: Int?
+    get() = savedCount ?: reportedCount
+
   val coverageLabel: String?
     get() = if (stale) null else analysisCoverageLabel(progress?.coverage)
 
@@ -473,6 +489,7 @@ internal data class AnalysisResultPageState(
   private val completedZeroDetails: Boolean
     get() =
         reportedCount == 0 &&
+            (savedCount == null || savedCount == 0) &&
             !section.loading &&
             section.error == null &&
             run?.status in setOf("completed", "completed_empty") &&
@@ -492,6 +509,9 @@ internal data class AnalysisResultPageState(
             } == true
 
   fun countLabel(loadedCount: Int): String {
+    savedCount?.let {
+      return "$it saved ${if (it == 1) "finding" else "findings"}"
+    }
     val count = reportedCount
     if (count == loadedCount &&
         !section.loading &&
@@ -602,7 +622,7 @@ internal data class AnalysisResultPageState(
             .filter {
               it.category == category &&
                   it.projectId == project?.projectId &&
-                  it.projectRevision == run?.identity?.projectRevision
+                  (it.freshness == "stale" || it.projectRevision == run?.identity?.projectRevision)
             }
             .map { if (stale) it.copy(freshness = "stale") else it }
 

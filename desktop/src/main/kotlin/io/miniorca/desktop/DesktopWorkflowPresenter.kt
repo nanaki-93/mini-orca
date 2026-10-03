@@ -886,7 +886,8 @@ class DesktopWorkflowPresenter(
     val index = state.index ?: return null
     if (result.page.run?.identity != runIdentity ||
         result.report.projectId != project.projectId ||
-        result.report.projectRevision != project.projectRevision ||
+        result.report.status != "stale" &&
+            result.report.projectRevision != project.projectRevision ||
         runIdentity.projectId != project.projectId ||
         runIdentity.projectRevision != project.projectRevision ||
         performanceResults(page).count {

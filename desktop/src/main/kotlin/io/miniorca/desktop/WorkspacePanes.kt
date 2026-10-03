@@ -101,7 +101,7 @@ internal fun AnalysisWorkspacePane(
                       })
                   if (resultsHelpExpanded)
                       Text(
-                          "Reported counts · open a category for loaded findings",
+                          "Saved findings stay visible during retries. Successful reviews replace each file’s previous findings; run coverage is shown separately.",
                           color = SecondaryText,
                           style = IdeTypography.workspaceMetadata)
                   AnalysisCategoryPanels(state, actions.openResults)

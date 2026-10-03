@@ -75,7 +75,7 @@ private fun AnalysisCategoryPanel(
       }
   AnalysisCategoryBox(
       type = page.type,
-      count = page.reportedCount,
+      count = page.displayCount,
       status = metric.statusCode,
       statusLabel =
           when {
@@ -93,7 +93,7 @@ private fun AnalysisCategoryPanel(
               color = if (page.section.error != null) Error else SecondaryText,
               style = IdeTypography.compactBody)
         }
-        if (loadedCount != null && loadedCount != page.reportedCount && metric.detailStatus == null)
+        if (loadedCount != null && loadedCount != page.displayCount && metric.detailStatus == null)
             Text(
                 "$loadedCount loaded",
                 color = SecondaryText,
