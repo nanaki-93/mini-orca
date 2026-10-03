@@ -75,6 +75,7 @@ internal fun validateMutationReceipt(
 internal fun ApplyReceiptDetails(result: ApplyResult, scope: AppliedDeclarationScope?) {
   SelectionContainer {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      result.warnings.forEach { DiagnosticText(it) }
       scope?.let {
         Text(
             "${it.symbol} · ${it.path}",

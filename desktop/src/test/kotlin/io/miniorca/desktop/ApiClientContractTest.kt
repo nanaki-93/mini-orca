@@ -632,7 +632,7 @@ class ApiClientContractTest {
                       assertContains(body.orEmpty(), "\"confirm\":true")
                       TransportResponse(
                           200,
-                          """{"project_revision":"next","post_apply_hash":"after","undo_available":true}""")
+                          """{"project_revision":"next","post_apply_hash":"after","undo_available":true,"warnings":["Index refresh failed"]}""")
                     }
                     else -> error("unexpected request: $method $path")
                   }
@@ -652,6 +652,7 @@ class ApiClientContractTest {
     assertEquals(emptyList(), proposal.contextManifest.included)
     assertEquals("draft", checks.draftId)
     assertEquals("next", applied.projectRevision)
+    assertEquals(listOf("Index refresh failed"), applied.warnings)
   }
 
   @Test

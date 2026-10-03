@@ -667,7 +667,7 @@ paths:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/ApplyRequest'}}}
       responses:
-        '200': {description: Atomic one-file apply result with Undo metadata}
+        '200': {description: Source was replaced; inspect warnings for incomplete metadata updates, content: {application/json: {schema: {$ref: '#/components/schemas/ApplyResult'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/undo:
@@ -678,7 +678,7 @@ paths:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/UndoRequest'}}}
       responses:
-        '200': {description: Atomic one-file undo result}
+        '200': {description: Source was restored; inspect warnings for incomplete metadata updates, content: {application/json: {schema: {$ref: '#/components/schemas/ApplyResult'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/context:
@@ -1557,6 +1557,22 @@ components:
         project_revision: {type: string}
         base_file_hash: {type: string}
         confirm: {type: boolean, description: Must be true after the user reviews the file and declaration named by the draft.}
+    ApplyResult:
+      type: object
+      required: [project_revision, post_apply_hash, undo_available, audit, index]
+      properties:
+        project_revision: {type: string, description: Refreshed revision or the last known revision when indexing fails.}
+        post_apply_hash: {type: string, description: Hash of the source after the mutation.}
+        undo_available: {type: boolean}
+        audit: {type: object, description: Source-free receipt of the actual mutation; warnings indicate if durable audit persistence failed.}
+        index:
+          type: object
+          nullable: true
+          allOf: [{$ref: '#/components/schemas/ProjectIndex'}]
+        warnings:
+          type: array
+          items: {type: string}
+          description: Nonfatal failures after source replacement. Source changed even when metadata updates failed.
     UndoRequest:
       type: object
       required: [project_id, project_revision, post_apply_hash, confirm]

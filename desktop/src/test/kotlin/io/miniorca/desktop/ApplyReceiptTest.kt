@@ -37,11 +37,37 @@ class ApplyReceiptTest {
   }
 
   @Test
+  fun metadataWarningKeepsAppliedReceiptAndGuardedUndoVisible() {
+    val warning = "Source changed, but the audit could not be saved."
+    val state =
+        base.copy(
+            project = project,
+            selected = file,
+            applied = receipt.copy(warnings = listOf(warning)),
+            receiptScope = scope,
+        )
+    var undoes = 0
+    ComposeVisualFixture(400, 600) {
+          ReviewToolWindow(
+              state, ReviewToolWindowActions({}, {}, {}), DraftApplicationActions({}, { undoes++ }))
+        }
+        .use { fixture ->
+          fixture.render("receipt-metadata-warning")
+          assertTrue(fixture.hasText("Change applied"))
+          assertTrue(fixture.hasText(warning))
+          fixture.clickText("Undo this change")
+          fixture.render("receipt-metadata-warning-undo")
+          assertEquals(1, undoes)
+        }
+  }
+
+  @Test
   fun optionalAuditFieldsDecodeAndContradictoryReceiptsAreRejected() {
     val result =
         Json.decodeFromString<ApplyResult>(
             """{"project_revision":"next","post_apply_hash":"after","undo_available":true,"audit":{"id":"apply-1","action":"apply","target_path":"${scope.path}","outcome":"applied","timestamp":"2026-10-03T00:00:00Z","before_hash":"before","after_hash":"after","project_id":"${scope.projectId}","project_revision":"next","generation_id":"draft-1"}}""")
     validateMutationReceipt(result, scope)
+    assertEquals(emptyList(), result.warnings)
     assertEquals("before", result.audit!!.beforeHash)
     assertEquals("draft-1", result.audit.generationId)
     for (invalid in
