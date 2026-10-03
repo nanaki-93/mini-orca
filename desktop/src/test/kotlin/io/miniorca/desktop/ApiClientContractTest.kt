@@ -385,6 +385,25 @@ class ApiClientContractTest {
   }
 
   @Test
+  fun cliModelCatalogPreservesDestinationsAndConsentWithUnavailableSamplingMetadata() {
+    val client =
+        ApiClient(
+            transport =
+                DaemonTransport { method, path, _ ->
+                  assertEquals("GET", method)
+                  assertEquals("/api/models/current", path)
+                  TransportResponse(
+                      200,
+                      """{"scopes":{"analyze":{"scope":"analyze","profile":"analyze","model":"agy-model","provider_origin":"cli://agy","remote_provider":true,"temperature":null,"max_tokens":null},"function":{"scope":"function","profile":"function","model":"pi-model","provider_origin":"cli://pi","remote_provider":true,"temperature":null,"max_tokens":null}}}""")
+                })
+    val catalog = client.modelCatalog()
+    assertEquals("cli://agy", catalog.forScope(ModelScope.Analyze).providerOrigin)
+    assertEquals("cli://pi", catalog.forScope(ModelScope.Function).providerOrigin)
+    assertTrue(catalog.forScope(ModelScope.Analyze).remoteProvider)
+    assertTrue(catalog.forScope(ModelScope.Function).remoteProvider)
+  }
+
+  @Test
   fun fileAnalysisSendsRemoteProviderConfirmation() {
     val client =
         ApiClient(

@@ -1,6 +1,9 @@
 # Copy this file to ignored config.yaml and replace each placeholder model ID.
 # Mini-Orca accepts only this strict YAML schema; it does not read environment
 # variables into profile values or support legacy llm/agents/skills sections.
+# Each scope defaults to provider: openai. For provider: agy or provider: pi,
+# keep model/context_max_tokens/reasoning_effort, remove API and sampling fields,
+# and optionally set cli_path to an absolute executable path. See CONFIG.md.
 
 model_scopes:
   # Project import, architectural summaries, and explicit source-based Performance reviews.

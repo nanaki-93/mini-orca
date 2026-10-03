@@ -1293,6 +1293,7 @@ class DesktopKeyboardNavigationTest {
               diagramRender = { MermaidImage(ImageBitmap(32, 32), 32f, 32f) })
         }
         .use { fixture ->
+          fixture.expandSummarySection("Project details")
           fixture.render()
           fixture.revealText("Expand diagram", "summary-scroll")
           assertTrue(fixture.requestDescriptionFocus("Expand Architecture diagram"))
@@ -1375,6 +1376,7 @@ class DesktopKeyboardNavigationTest {
               diagramRender = { MermaidImage(ImageBitmap(32, 32), 32f, 32f) })
         }
         .use { fixture ->
+          fixture.expandSummarySection("Project details")
           fixture.render()
           fixture.revealText("Expand diagram", "summary-scroll")
           fixture.clickDescription("Expand Architecture diagram")
@@ -2843,6 +2845,7 @@ class DesktopKeyboardNavigationTest {
             fixture.render()
             val label =
                 "Inspect ${row.title} in ${row.target.category.workspace.name} results at ${row.location}"
+            fixture.expandSummarySection("Project details")
             fixture.revealText("Selected findings", "summary-scroll")
             fixture.render()
             when (index % 3) {
@@ -2890,11 +2893,13 @@ class DesktopKeyboardNavigationTest {
           }
           .use { fixture ->
             fixture.render()
+            fixture.expandSummarySection("File evidence")
             fixture.revealText("All files", "summary-scroll")
             assertTrue(fixture.requestFocus("All files"))
             fixture.render("f10-keyboard-ledger-${density}x")
             assertTrue(fixture.isFocusedControl("All files"))
             fixture.assertColorVisible(FocusAccent)
+            fixture.expandSummarySection("Project details")
             fixture.revealText("Selected findings", "summary-scroll")
             val inspect = "Inspect ${row.title} in Bugs results at ${row.location}"
             assertTrue(fixture.requestDescriptionFocus(inspect))
@@ -2916,6 +2921,11 @@ class DesktopKeyboardNavigationTest {
             assertTrue(fixture.pressKey(Key.Tab))
             fixture.render()
             assertTrue(fixture.isFocusedControl("All Security results"))
+            assertTrue(fixture.pressKey(Key.Tab))
+            fixture.render()
+            assertTrue(fixture.isFocusedControl("Expand Editing guide"))
+            assertTrue(fixture.pressKey(Key.Enter))
+            fixture.render()
             assertTrue(fixture.pressKey(Key.Tab))
             fixture.render()
             assertTrue(fixture.isFocusedControl("Open Editor"))
@@ -3009,6 +3019,7 @@ class DesktopKeyboardNavigationTest {
         .use { fixture ->
           fixture.render()
           repeat(3) { gesture ->
+            fixture.expandSummarySection("Editing guide")
             fixture.revealText("Open Editor", "summary-scroll")
             fixture.render()
             assertEquals(0, operations)
@@ -4068,7 +4079,8 @@ class DesktopKeyboardNavigationTest {
           assertEquals(
               listOf(Workspace.Analysis, Workspace.Bugs, Workspace.Performance, Workspace.Security),
               destinations)
-          fixture.scrollBy(100_000f)
+          fixture.expandSummarySection("Project details")
+          fixture.revealText("Engineering insight", "summary-scroll")
           fixture.render()
           assertTrue(fixture.tryClick("Expand More insight"))
           fixture.render()

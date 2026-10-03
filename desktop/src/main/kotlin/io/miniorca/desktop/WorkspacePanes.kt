@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,6 +58,7 @@ internal fun AnalysisWorkspacePane(
         },
 ) {
   val analysis = state.analysis
+  var resultsHelpExpanded by remember(state.project?.projectId) { mutableStateOf(false) }
   BoxWithConstraints(Modifier.fillMaxSize()) {
     val density = LocalDensity.current
     var headerHeight by remember { mutableStateOf<Int?>(null) }
@@ -83,15 +85,25 @@ internal fun AnalysisWorkspacePane(
             Column(
                 Modifier.fillMaxWidth().onSizeChanged { categoryHeight = it.height },
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                  Text(
-                      "Saved results · Bugs / Performance / Security",
-                      color = PrimaryText,
-                      style = IdeTypography.resultHeading,
-                      modifier = Modifier.semantics { heading() })
-                  Text(
-                      "Reported counts are run summaries; loaded findings are matching saved details. Zero loaded does not confirm an empty result. Open a category to inspect retained evidence and read errors.",
-                      color = SecondaryText,
-                      style = IdeTypography.workspaceMetadata)
+                  IdePaneHeader(
+                      title = "Saved results",
+                      actions = {
+                        ChromeButton(
+                            onClick = { resultsHelpExpanded = !resultsHelpExpanded },
+                            accessibleName = "About result counts",
+                            modifier =
+                                Modifier.semantics {
+                                  stateDescription =
+                                      if (resultsHelpExpanded) "Expanded" else "Collapsed"
+                                }) {
+                              Text(if (resultsHelpExpanded) "Hide help" else "About counts")
+                            }
+                      })
+                  if (resultsHelpExpanded)
+                      Text(
+                          "Counts come from the run summary. Open a category for matching findings and diagnostics. Zero loaded findings does not confirm an empty result.",
+                          color = SecondaryText,
+                          style = IdeTypography.workspaceMetadata)
                   AnalysisCategoryPanels(state, actions.openResults)
                 }
           }

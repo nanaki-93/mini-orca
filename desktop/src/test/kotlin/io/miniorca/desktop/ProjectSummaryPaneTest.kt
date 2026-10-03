@@ -680,6 +680,8 @@ class ProjectSummaryPaneTest {
               diagramRender = { MermaidImage(ImageBitmap(12, 12), 12f, 12f).also { renders++ } })
         }
         .use { fixture ->
+          fixture.expandSummarySection("Editing guide")
+          fixture.expandSummarySection("Project details")
           fixture.awaitDescription("Architecture diagram preview\n$architecture")
           fixture.awaitDescription("Flow 1 diagram preview\n$flow")
           fixture.render()
@@ -720,6 +722,7 @@ class ProjectSummaryPaneTest {
               })
         }
         .use { fixture ->
+          fixture.expandSummarySection("Project details")
           fixture.awaitDescription("Architecture diagram preview\n$original")
           fixture.clickDescription("Expand Architecture diagram")
           fixture.awaitDescription("Architecture diagram\n$original")
@@ -803,6 +806,11 @@ class ProjectSummaryPaneTest {
         }
         .use { fixture ->
           fixture.render()
+          fixture.revealText("Show full response")
+          fixture.clickDescription("Expand full response")
+          fixture.render()
+          fixture.expandSummarySection("Project details")
+          fixture.render()
           fixture.revealText("Expand diagram", "summary-scroll")
           fixture.awaitDescription("Expand Architecture diagram", "Preview")
           fixture.clickDescription("Expand Architecture diagram")
@@ -861,6 +869,7 @@ class ProjectSummaryPaneTest {
                 })
           }
           .use { fixture ->
+            fixture.expandSummarySection("Project details")
             fixture.awaitDescription("Expand Architecture diagram", "Rendering diagram")
             overview = overview.copy(analysis = overview.analysis.copy(architecture = next))
             fixture.awaitDescription("Expand Architecture diagram", "Preview")
@@ -903,6 +912,7 @@ class ProjectSummaryPaneTest {
               })
         }
         .use { fixture ->
+          fixture.expandSummarySection("Project details")
           fixture.awaitDescription("Expand Flow 1 diagram", "Preview")
           fixture.awaitDescription("Expand Flow 2 diagram", "Preview")
           fixture.clickDescription("Expand Flow 1 diagram")
@@ -956,6 +966,7 @@ class ProjectSummaryPaneTest {
               })
         }
         .use { fixture ->
+          fixture.expandSummarySection("Project details")
           fixture.awaitDescription("Expand Architecture diagram", "Preview")
           fixture.clickDescription("Expand Architecture diagram")
           fixture.awaitDescription("Architecture diagram\n$source")
@@ -970,6 +981,7 @@ class ProjectSummaryPaneTest {
 
           currentProject = currentProject.copy(projectId = "second", projectRevision = "two")
           currentOverview = currentOverview.copy(projectId = "second", projectRevision = "two")
+          fixture.expandSummarySection("Project details")
           fixture.awaitDescription("Expand Architecture diagram", "Preview")
           assertFalse(fixture.hasText("Mermaid source"))
           fixture.clickDescription("Expand Architecture diagram")
@@ -980,6 +992,7 @@ class ProjectSummaryPaneTest {
           assertEquals(2, renders)
           currentProject = currentProject.copy(projectRevision = "three")
           currentOverview = currentOverview.copy(projectRevision = "three")
+          fixture.expandSummarySection("Project details")
           fixture.awaitDescription("Expand Architecture diagram", "Preview")
           fixture.clickDescription("Expand Architecture diagram")
           fixture.awaitDescription("Architecture diagram\n$source")
@@ -1026,7 +1039,13 @@ class ProjectSummaryPaneTest {
           ProjectSummaryPane(overview, project, navigations::add, analysisActions = actions)
         }
         .use { fixture ->
+          fixture.render()
+          fixture.revealText("Show full response")
+          fixture.clickDescription("Expand full response")
+          fixture.render()
+          fixture.expandSummarySection("Project details")
           fun reveal() {
+            fixture.expandSummarySection("Project details")
             fixture.revealText("More insight")
             fixture.render()
           }
@@ -1122,6 +1141,7 @@ class ProjectSummaryPaneTest {
           ProjectSummaryPane(overview, project, navigations::add)
         }
         .use { fixture ->
+          fixture.expandSummarySection("Project details")
           fixture.render()
           fixture.clickDescription("Expand Architecture diagram")
           assertTrue(fixture.tryClick("Expand More insight"))
@@ -1132,6 +1152,7 @@ class ProjectSummaryPaneTest {
           fixture.revealText("More insight")
           assertEquals("Expanded", fixture.stateDescription("More insight"))
           assertTrue(fixture.hasText("Trade-off"))
+          fixture.expandSummarySection("Editing guide")
           fixture.revealText("Open Editor")
           fixture.clickText("Open Editor")
           assertEquals(listOf(Workspace.Editor), navigations)
@@ -1166,6 +1187,7 @@ class ProjectSummaryPaneTest {
     assertEquals(listOf("Packages / modules", "Flows"), presentation.details.map { it.title })
     ComposeVisualFixture(1000, 2400) { ProjectSummaryPane(overview, project, {}) }
         .use { fixture ->
+          fixture.expandSummarySection("Project details")
           fixture.render()
           assertEquals(0, fixture.tagCount("summary-architecture"))
           assertEquals(1, fixture.tagCount("summary-insight"))
@@ -1196,6 +1218,7 @@ class ProjectSummaryPaneTest {
               {})
         }
         .use { fixture ->
+          fixture.expandSummarySection("Project details")
           fixture.render()
           assertEquals(0, fixture.tagCount("summary-insight"))
           assertEquals(0, fixture.tagCount("summary-modules"))
@@ -1215,6 +1238,8 @@ class ProjectSummaryPaneTest {
     val navigations = mutableListOf<Workspace>()
     ComposeVisualFixture(1000, 1800) { ProjectSummaryPane(overview, project, navigations::add) }
         .use { fixture ->
+          fixture.expandSummarySection("Editing guide")
+          fixture.expandSummarySection("Project details")
           fixture.render()
           assertEquals(1, fixture.tagCount("summary-flows"))
           assertEquals(1, fixture.tagCount("summary-change-lifecycle"))
@@ -1227,7 +1252,9 @@ class ProjectSummaryPaneTest {
                   "Edit only an isolated declaration/import draft. Apply is an explicit, guarded one-file source change; Undo is guarded and available only when the change is still eligible."))
           val flows = fixture.taggedBounds("summary-flows")
           val lifecycle = fixture.taggedBounds("summary-change-lifecycle")
-          assertEquals(MiniOrcaSpacing.section.value, lifecycle.top - flows.bottom, 1f)
+          val guide = fixture.taggedBounds("summary-editing-guide-toggle")
+          assertTrue(guide.top > flows.bottom)
+          assertTrue(lifecycle.top > guide.bottom)
           assertFalse(fixture.requestFocus("Request → Draft → Validate → Checks → Review → Apply"))
           fixture.clickText("Open Editor")
           assertEquals(listOf(Workspace.Editor), navigations)
@@ -1240,19 +1267,24 @@ class ProjectSummaryPaneTest {
     val project = resultProjectFixture()
     ComposeVisualFixture(1000, 1800) { ProjectSummaryPane(null, project, destinations::add) }
         .use { fixture ->
+          fixture.expandSummarySection("Editing guide")
+          fixture.expandSummarySection("Project details")
           fixture.render()
           val coverage = fixture.taggedBounds("summary-coverage-results")
           val findings = fixture.taggedBounds("summary-selected-findings")
           val lifecycle = fixture.taggedBounds("summary-change-lifecycle")
-          assertEquals(MiniOrcaSpacing.section.value, findings.top - coverage.bottom, 1f)
-          assertEquals(MiniOrcaSpacing.section.value, lifecycle.top - findings.bottom, 1f)
+          assertTrue(findings.top > coverage.bottom)
+          assertTrue(lifecycle.top > findings.bottom)
           assertEquals(0, fixture.tagCount("summary-lower-composition"))
         }
     ComposeVisualFixture(800, 650, 1.5f) { ProjectSummaryPane(null, project, destinations::add) }
         .use { fixture ->
+          fixture.expandSummarySection("Editing guide")
+          fixture.expandSummarySection("Project details")
           fixture.render()
           listOf("summary-architecture", "summary-insight", "summary-modules", "summary-flows")
               .forEach { assertEquals(0, fixture.tagCount(it)) }
+          fixture.expandSummarySection("Editing guide")
           fixture.revealText("Open Editor")
           fixture.render()
           assertEquals(1, fixture.tagCount("summary-change-lifecycle"))
@@ -1283,6 +1315,7 @@ class ProjectSummaryPaneTest {
               onFindingSelected = activations::add)
         }
         .use { fixture ->
+          fixture.expandSummarySection("Project details")
           fixture.render()
           assertEquals(0, fixture.tagCount("summary-lower-composition"))
           assertEquals(1, fixture.tagCount("summary-selected-findings"))
@@ -1717,6 +1750,7 @@ class ProjectSummaryPaneTest {
         }
         .use { fixture ->
           fixture.render()
+          fixture.expandSummarySection("File evidence")
           fixture.revealText("File evidence")
           assertTrue(fixture.hasText("Showing 3 of 4 selected files · saved status"))
           assertTrue(
@@ -1779,6 +1813,7 @@ class ProjectSummaryPaneTest {
           }
           .use { fixture ->
             fixture.render()
+            fixture.expandSummarySection("File evidence")
             fixture.revealText("File evidence")
             assertTrue(fixture.hasText(expected), expected)
             if (selection.error != null)
@@ -2576,6 +2611,8 @@ class ProjectSummaryPaneTest {
           fixture.resize(530, 650)
           fixture.render()
           assertTrue(fixture.hasText("helper.go"))
+          fixture.expandSummarySection("Project details")
+          fixture.expandSummarySection("Editing guide")
           fixture.revealText("Open Editor")
           assertTrue(fixture.requestFocus("Open Editor"))
           fixture.scrollBy(100_000f, "summary-scroll")

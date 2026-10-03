@@ -3,6 +3,7 @@ package project
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -33,8 +34,8 @@ var languageByExtension = map[string]string{
 	".yml": "YAML", ".json": "JSON", ".md": "Markdown", ".xml": "XML",
 }
 
-type chatClient interface {
-	Chat(context.Context, []llm.ChatMessage) (*llm.ChatResponse, error)
+type projectAnalysisClient interface {
+	ChatWithJSONSchema(context.Context, []llm.ChatMessage, llm.JSONSchema) (*llm.ChatResponse, error)
 }
 
 // Analysis is the persisted and API-facing summary for an imported project.
@@ -72,7 +73,7 @@ type FileInfo struct {
 
 // Analyzer scans projects and asks the configured model for an architectural summary.
 type Analyzer struct {
-	llm             chatClient
+	llm             projectAnalysisClient
 	model           string
 	profile         string
 	scope           string
@@ -82,7 +83,7 @@ type Analyzer struct {
 
 // NewAnalyzerWithProvenance records the effective scope and sanitized provider
 // origin alongside the configured model for cache freshness.
-func NewAnalyzerWithProvenance(client chatClient, model, scope, providerOrigin, reasoningEffort string) *Analyzer {
+func NewAnalyzerWithProvenance(client projectAnalysisClient, model, scope, providerOrigin, reasoningEffort string) *Analyzer {
 	profile := scope
 	if profile == "" {
 		profile = "analysis"
@@ -108,10 +109,10 @@ func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) 
 		report.Status = ProjectAnalysisStatusUnavailable
 		report.Failure = "AI analysis is unavailable because no LLM client is configured."
 	} else {
-		response, chatErr := a.llm.Chat(ctx, projectAnalysisMessages(contextText))
-		if chatErr != nil || response == nil || len(response.Choices) == 0 {
+		response, chatErr := a.llm.ChatWithJSONSchema(ctx, projectAnalysisMessages(contextText), projectAnalysisResponseSchema())
+		if failure := projectAnalysisResponseFailure(ctx, response, chatErr); failure != "" {
 			report.Status = ProjectAnalysisStatusFailed
-			report.Failure = "AI analysis could not be completed. The factual project inventory below is still valid."
+			report.Failure = failure + " The factual project inventory below is still valid."
 		} else {
 			parsed, parseErr := parseProjectAnalysisResponse(response.Choices[0].Message.Content)
 			if parseErr != nil {
@@ -140,6 +141,32 @@ func (a *Analyzer) Analyze(ctx context.Context, root string) (*Analysis, error) 
 		return nil, err
 	}
 	return analysis, nil
+}
+
+func projectAnalysisResponseFailure(ctx context.Context, response *llm.ChatResponse, err error) string {
+	switch {
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return "AI analysis timed out before completing the report. Retry or increase the import timeout."
+	case ctx.Err() != nil:
+		return "AI analysis was canceled before completing the report."
+	case errors.Is(err, llm.ErrStructuredRequestRejected):
+		return "AI analysis provider rejected the structured report request. Check the Analyze model and provider settings."
+	case err != nil || response == nil || len(response.Choices) == 0:
+		return "AI analysis could not be completed."
+	}
+	choice := response.Choices[0]
+	if choice.Message.Refusal != "" || choice.FinishReason == "content_filter" {
+		return "AI analysis provider declined to return a project report."
+	}
+	switch choice.FinishReason {
+	case "length":
+		return "AI analysis reached the provider's output limit before completing the report. Increase the Analyze model's output limit and retry."
+	case "", "stop":
+		// Some compatible providers omit finish_reason on a successful reply.
+		return ""
+	default:
+		return "AI analysis did not finish normally. Retry the project description."
+	}
 }
 
 // Restore reloads deterministic facts and the persisted project interpretation

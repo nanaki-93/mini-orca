@@ -114,10 +114,11 @@ func TestModelCatalogAndConfirmationAreScopeSpecific(t *testing.T) {
 }
 
 func TestEffectiveModelKeepsCatalogDraftAndPreviewMetadataShapes(t *testing.T) {
+	temperature := float32(0.2)
 	metadata := EffectiveModel{
 		Scope: "function", Profile: "function", Model: "fixture-model", ReasoningEffort: "high",
 		ProviderOrigin: "https://provider.example", RemoteProvider: true,
-		Temperature: 0.2, MaxTokens: 4096, ContextMaxTokens: 8192, Timeout: "5m0s", MaxRetries: 3,
+		Temperature: &temperature, MaxTokens: intPointer(4096), ContextMaxTokens: 8192, Timeout: "5m0s", MaxRetries: 3,
 	}
 	wantMetadata := `{"scope":"function","profile":"function","model":"fixture-model","reasoning_effort":"high","provider_origin":"https://provider.example","remote_provider":true,"temperature":0.2,"max_tokens":4096,"context_max_tokens":8192,"timeout":"5m0s","max_retries":3}`
 	encodedMetadata, err := json.Marshal(metadata)

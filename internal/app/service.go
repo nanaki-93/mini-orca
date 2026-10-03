@@ -19,17 +19,17 @@ import (
 
 // EffectiveModel is the non-secret metadata for one configured generation scope.
 type EffectiveModel struct {
-	Scope            string  `json:"scope"`
-	Profile          string  `json:"profile"`
-	Model            string  `json:"model"`
-	ReasoningEffort  string  `json:"reasoning_effort,omitempty"`
-	ProviderOrigin   string  `json:"provider_origin"`
-	RemoteProvider   bool    `json:"remote_provider"`
-	Temperature      float32 `json:"temperature"`
-	MaxTokens        int     `json:"max_tokens"`
-	ContextMaxTokens int     `json:"context_max_tokens"`
-	Timeout          string  `json:"timeout"`
-	MaxRetries       int     `json:"max_retries"`
+	Scope            string   `json:"scope"`
+	Profile          string   `json:"profile"`
+	Model            string   `json:"model"`
+	ReasoningEffort  string   `json:"reasoning_effort,omitempty"`
+	ProviderOrigin   string   `json:"provider_origin"`
+	RemoteProvider   bool     `json:"remote_provider"`
+	Temperature      *float32 `json:"temperature"`
+	MaxTokens        *int     `json:"max_tokens"`
+	ContextMaxTokens int      `json:"context_max_tokens"`
+	Timeout          string   `json:"timeout"`
+	MaxRetries       int      `json:"max_retries"`
 }
 
 // ModelCatalog exposes the configured model metadata for each fixed scope.
@@ -130,12 +130,23 @@ func newModelRuntime(profile config.ModelProfile, timeout time.Duration, maxRetr
 		effective: EffectiveModel{
 			Scope: string(profile.Scope), Profile: string(profile.Scope), Model: profile.Model,
 			ReasoningEffort: profile.ReasoningEffort,
-			ProviderOrigin:  providerOrigin(profile.APIBaseURL), RemoteProvider: !isLoopbackURL(profile.APIBaseURL),
-			Temperature: profile.Temperature, MaxTokens: profile.MaxTokens, ContextMaxTokens: profile.ContextMaxTokens,
-			Timeout: timeout.String(), MaxRetries: maxRetries,
+			ProviderOrigin:  modelProviderOrigin(profile), RemoteProvider: profile.IsCLI() || !isLoopbackURL(profile.APIBaseURL),
+			ContextMaxTokens: profile.ContextMaxTokens,
+			Timeout:          timeout.String(), MaxRetries: maxRetries,
 		},
 	}
+	if !profile.IsCLI() {
+		runtime.effective.Temperature = &profile.Temperature
+		runtime.effective.MaxTokens = &profile.MaxTokens
+	}
 	return runtime
+}
+
+func modelProviderOrigin(profile config.ModelProfile) string {
+	if profile.IsCLI() {
+		return "cli://" + string(profile.Provider)
+	}
+	return providerOrigin(profile.APIBaseURL)
 }
 
 func configuredDuration(seconds int, defaultValue time.Duration) time.Duration {
@@ -261,7 +272,7 @@ func (s *Service) retryRequestAuthorized(ctx context.Context, runtime modelRunti
 			return result, nil
 		}
 		lastErr = err
-		if ctx.Err() != nil || errors.Is(err, llm.ErrRedirectRejected) || errors.Is(err, llm.ErrStructuredRequestRejected) || attempt == runtime.effective.MaxRetries {
+		if ctx.Err() != nil || errors.Is(err, llm.ErrRedirectRejected) || (runtime.profile.IsCLI() && errors.Is(err, llm.ErrRequestRejected)) || errors.Is(err, llm.ErrStructuredRequestRejected) || attempt == runtime.effective.MaxRetries {
 			break
 		}
 		wait := s.retryBase << attempt

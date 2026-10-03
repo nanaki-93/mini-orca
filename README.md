@@ -38,7 +38,8 @@ languages have conservative analysis and symbol information.
 
 Use Go 1.22+ and the desktop's pinned JBR 25 toolchain. Read
 [desktop setup](desktop/README.md#runtime-and-build) before the first launch.
-Configure all three model scopes using [CONFIG.md](CONFIG.md).
+Configure all three model scopes using [CONFIG.md](CONFIG.md). Each scope supports
+an OpenAI-compatible HTTP provider, Antigravity CLI (`agy`), or Pi (`pi`).
 
 ```sh
 cp config.example.yaml config.yaml
@@ -51,7 +52,7 @@ MINI_ORCA_JBR25_HOME=/path/to/jbr-25 \
 
 The daemon defaults to `127.0.0.1:9090`; the desktop uses
 `http://localhost:9090` unless `MINI_ORCA_URL` is set. Keep `config.yaml` local.
-Each prompt-bearing request to a non-loopback model needs scope-specific
+Each prompt-bearing request to a non-loopback HTTP or CLI provider needs scope-specific
 confirmation. Provider keys are not part of API metadata.
 
 ## Project intelligence

@@ -15,7 +15,7 @@ import (
 
 const (
 	projectAnalysisSchemaVersion = "1"
-	projectAnalysisPromptVersion = "project-analysis-v4"
+	projectAnalysisPromptVersion = "project-analysis-v5"
 	projectAnalysisReportPath    = ".mini-orca/project-analysis.json"
 	maxProjectAnalysisBytes      = 64 * 1024
 	maxProjectAnalysisItems      = 32
@@ -113,13 +113,13 @@ func newProjectAnalysisReportWithProvenance(projectID, revision, model, profile,
 
 const projectDiagramPromptInstructions = "For architecture, return a compact Mermaid flowchart TD string showing the actual modules and their evidenced dependencies, using subgraph groups where useful. " +
 	"For each flows item, return a Mermaid flowchart TD or sequenceDiagram string for one important execution path, including evidenced branches or return messages. " +
-	"Use at most 16 nodes per diagram and stay within 2048 characters per field/item. Use plain quoted node labels; no Markdown fences, HTML, click actions, URLs, style directives or initialization directives. " +
+	"Use at most 16 nodes per diagram and stay within 2048 UTF-8 bytes per field/item. Use plain quoted node labels; escape newlines and double quotes inside diagram strings as JSON escapes. No Markdown fences, HTML, click actions, URLs, style directives or initialization directives. " +
 	"Do not invent connections; if relationships are not evidenced, show only the known nodes. " +
 	"For components, list packages/modules as path (Human-readable module name): responsibility, using actual project-relative paths from the supplied context. "
 
 func projectAnalysisMessages(contextText string) []llm.ChatMessage {
 	return []llm.ChatMessage{
-		{Role: "system", Content: "You are a software architect. Analyze only the supplied project facts and context. Return exactly one JSON object with these fields and no Markdown or prose: purpose (non-empty string), architecture (non-empty string), components (string array), entry_points (string array), flows (string array), risks ({severity,summary,engineering_insight?} array), next_steps (string array), engineering_insight? ({mechanism,why_it_matters_here,tradeoff_or_failure_mode?,transferable_lesson?}). " + EngineeringInsightPromptInstructions + projectDiagramPromptInstructions + "Do not invent files or dependencies. Risks are suggestions, not verified findings."},
+		{Role: "system", Content: "You are a software architect. Analyze only the supplied project facts and context. Return exactly one JSON object matching the supplied schema and no Markdown or prose: purpose (non-empty string), architecture (non-empty string), components (string array), entry_points (string array), flows (string array), risks ({severity,summary,engineering_insight} array), next_steps (string array), engineering_insight (null or {mechanism,why_it_matters_here,tradeoff_or_failure_mode,transferable_lesson}). " + EngineeringInsightPromptInstructions + "Use null for omitted insights at both report and risk level; otherwise include all four non-empty insight fields, at most 250 Unicode characters each. Risk severity must be low, medium, or high. Limit every array to 32 items and every other string to 2048 UTF-8 bytes; keep the complete JSON response within 64 KiB. " + projectDiagramPromptInstructions + "Do not invent files or dependencies. Risks are suggestions, not verified findings."},
 		{Role: "user", Content: contextText},
 	}
 }

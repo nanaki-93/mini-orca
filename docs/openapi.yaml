@@ -9,7 +9,7 @@ info:
     applying it. Source and diff views are read-only; no route creates multi-file
     changes, writes automatically, or exposes a browser IDE.
     Project import, semantic analysis, Analyze-all, and chat messages can send
-    prompt content; a non-loopback provider requires explicit confirmation for
+    prompt content; a non-loopback HTTP or CLI provider requires explicit confirmation for
     each of those requests. Verified scans, validation, checks, Apply, and Undo
     do not send prompts and never run automatically.
 servers:
@@ -744,11 +744,11 @@ components:
         scope: {type: string, enum: [analyze, bug, function]}
         profile: {type: string, enum: [analyze, bug, function]}
         model: {type: string}
-        reasoning_effort: {type: string, enum: [none, minimal, low, medium, high, xhigh, max], description: Optional configured Chat Completions reasoning effort.}
-        provider_origin: {type: string, description: Sanitized scheme, host, and optional port only.}
-        remote_provider: {type: boolean}
-        temperature: {type: number}
-        max_tokens: {type: integer}
+        reasoning_effort: {type: string, enum: [none, minimal, low, medium, high, xhigh, max], description: Optional configured reasoning effort supported by the selected provider.}
+        provider_origin: {type: string, description: 'Sanitized HTTP origin, or cli://agy or cli://pi. Never includes a CLI executable path.'}
+        remote_provider: {type: boolean, description: CLI providers always require confirmation because their downstream destination is not independently verified.}
+        temperature: {type: number, nullable: true, description: Null for CLI providers without sampling controls.}
+        max_tokens: {type: integer, nullable: true, description: Null for CLI providers without output-token controls.}
         context_max_tokens: {type: integer}
         timeout: {type: string}
         max_retries: {type: integer}
@@ -1288,7 +1288,7 @@ components:
         truncated: {type: boolean}
         scope: {type: string, enum: [analyze, bug, function]}
         model: {type: string}
-        provider_origin: {type: string, description: Sanitized scheme, host, and optional port only.}
+        provider_origin: {type: string, description: 'Sanitized HTTP origin, or cli://agy or cli://pi. Never includes a CLI executable path.'}
         remote_provider: {type: boolean}
     ContextFile:
       type: object

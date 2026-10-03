@@ -110,6 +110,14 @@ configuration; it does not contact a provider or execute project code. Editor
 owns one declaration change. Go, Java and Kotlin
 projects show a type icon beside the project name in the top bar.
 
+Summary starts with the project, analysis status and three result categories.
+**File evidence**, **Project details** and **Editing guide** start collapsed;
+expand them locally when needed. Their state survives scrolling and resets when
+the project or revision changes. Errors, selection warnings and run controls
+remain visible without opening these sections. Long project descriptions use
+**Show full response** to reveal the complete selectable text; the expansion
+survives scrolling until the description or project changes.
+
 Summary introduces the project name with its metadata-derived type beside it (Go,
 Java, Kotlin or a generic/unknown label), followed by available purpose, build
 metadata, indexed files, lines and languages. The description is visibly qualified:
@@ -155,9 +163,9 @@ is safe. Bug priority counts require matching current details. Overall tool-repo
 issues and AI suggestions appear separately below the cards, since those totals
 cannot be reliably assigned to individual categories.
 
-**File evidence** below the cards shows up to three project-relative paths, sorted
-by path, with their saved analysis states and explanations. Its “Showing N of M
-selected files” label counts the confirmed selection, excluding excluded files;
+Expanding **File evidence** below the cards shows up to three project-relative
+paths, sorted by path, with their saved analysis states and explanations. Its
+“Showing N of M selected files” label counts the confirmed selection, excluding excluded files;
 active-run progress and pending selection edits do not change these saved rows.
 Loading, saving or a failed selection read/save can retain the last confirmed
 selection with a visible notice. A confirmed empty selection is labeled separately
@@ -166,9 +174,9 @@ dial but cannot provide file paths, so File evidence says paths are unavailable.
 **All files** opens Analysis for the complete file inventory without changing the
 selection or opening a source-editing target.
 
-Architecture and Engineering insight sit beside each other at readable local
-widths and stack in that order at narrower widths or larger text. A lone available
-panel uses the full width. Packages / modules and Selected findings sit beside
+Inside **Project details**, Architecture and Engineering insight sit beside each
+other at readable local widths and stack at narrower widths or larger text. A lone
+available panel uses the full width. Packages / modules and Selected findings sit beside
 each other where both columns are readable, stacking in that order at narrow
 widths or larger text. Without modules, findings use the full width; absent
 narrative sections leave no empty cards. Insight retains its lead content and
@@ -176,8 +184,8 @@ narrative sections leave no empty cards. Insight retains its lead content and
 remain selectable/readable. Entry points and next steps are omitted from Summary.
 **Selected findings** appears after narrative, beside or below modules (if
 present), before the project's saved Flows (if present) and the separate
-Change lifecycle. It remains visible without narrative or modules. It shows
-up to five loaded Bugs, Performance and Security results, with category,
+Editing guide. It remains available inside Project details without narrative or
+modules. It shows up to five loaded Bugs, Performance and Security results, with category,
 severity or impact, exact location, evidence origin and material state. “Showing N of M loaded findings” is a bounded
 preview of loaded evidence, not the run-reported category counts on the cards.
 The panel labels not-loaded or failed details and retained stale, partial or canceled
@@ -196,16 +204,18 @@ category routes and **All files** are local inspection/navigation, not analysis,
 scanning, fix preparation, project-code execution or source writes. The Summary
 scroll keeps lower sections reachable.
 
-The separate **Change lifecycle** section describes Mini-Orca's editing workflow,
-not the analyzed project's Flows: Request → Draft → Validate → Checks → Review →
+The separate **Editing guide** opens the **Change lifecycle** section describing
+Mini-Orca's editing workflow, not the analyzed project's Flows:
+Request → Draft → Validate → Checks → Review →
 Apply. Only the isolated declaration/import draft is editable; Apply explicitly
 changes one file under guards, and Undo is available only while its guards hold.
 The stages are information, not actions or readiness indicators. **Open Editor**
 only navigates to Editor; it does not change the draft or run any editing step.
 
-Architecture and each project Flow show a bounded, locally rendered preview of
-saved Mermaid flowcharts or sequence diagrams. **Expand diagram** opens a local
-viewer without leaving Summary. It provides two-axis scrolling, 75–200% zoom in
+After expanding Project details, Architecture and each project Flow show a
+bounded, locally rendered preview of saved Mermaid flowcharts or sequence
+diagrams. **Expand diagram** opens a local viewer without leaving Summary.
+It provides two-axis scrolling, 75–200% zoom in
 25-point steps with reset, and a **Mermaid source** disclosure with selectable,
 read-only original content and **Copy source**. Closing retains the diagram's zoom
 and scroll position while the same Summary result is present. Loading and render
@@ -513,8 +523,9 @@ outdated.
 Bugs, Performance and Security cards beside the overview remain navigable during
 active and stopped runs. They distinguish run-reported counts from matching loaded
 saved findings; unknown counts are not zero, and zero loaded findings alone does
-not prove a completed-empty result. Opening a card only navigates; retained rows
-and result-read errors remain visible in their category.
+not prove a completed-empty result. **About counts** reveals the count explanation
+without changing the visible cards or starting work. Opening a card only navigates;
+retained rows and result-read errors remain visible in their category.
 
 Each result page shows all loaded findings for its category. Search by title or
 path and filter by severity (including unknown severity); **Clear filters**
