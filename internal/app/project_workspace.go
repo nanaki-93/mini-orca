@@ -169,6 +169,10 @@ func (s *Service) listFindings(analysis *project.Analysis, index *project.Projec
 
 func (s *Service) refreshAISuggestions(analysis *project.Analysis, index *project.ProjectIndex, input project.FindingInput) error {
 	reported := project.SuggestedFindingsForProject(analysis.Report)
+	policy, err := project.NewContextPolicy(s.manager.Root())
+	if err != nil {
+		return err
+	}
 	cache, err := project.NewFileAnalysisCache(s.manager.Root())
 	if err != nil {
 		return err
@@ -178,10 +182,7 @@ func (s *Service) refreshAISuggestions(analysis *project.Analysis, index *projec
 		if file.Binary {
 			continue
 		}
-		_, cacheInput, err := s.fileAnalysisCacheInput(analysis, file, file.ContentHash)
-		if err != nil {
-			return err
-		}
+		cacheInput := s.semanticCacheInput(analysis, file, file.ContentHash, policy.Version())
 		cached, err := cache.Load(cacheInput)
 		if err != nil {
 			return err
