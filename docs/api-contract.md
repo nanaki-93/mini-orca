@@ -108,11 +108,20 @@ advisory model interpretations. Older prose values remain supported. New `compon
 items use `path (Module name): responsibility` for display; clients must retain readable
 fallbacks for existing freeform strings.
 
-Declaration explanation requests bind `project_id`, `project_revision`, `base_file_hash`, `target_path`, and `target_symbol`. The target must resolve to one exact atomic declaration in an eligible indexed Go file. A non-loopback Function provider also requires `confirm_remote_provider: true` on that request. The daemon rechecks the project and file identity after provider work before returning the bounded explanation, source line anchor, optional engineering insight, and `ContextManifest` provenance.
+Project import sends a strict `json_schema` response format for the description,
+diagrams, string lists, risks and nullable engineering insights. Prompt version
+`project-analysis-v5` specifies JSON escaping and the existing report limits;
+earlier successful reports remain readable but are stale. Provider rejection of the structured
+request does not trigger a fallback to unconstrained chat. Truncated or refused
+replies cannot become fresh reports, even when their content parses as JSON.
+Failed descriptions retain the factual inventory and persist a source-free failure
+reason; restore reads that outcome without contacting the provider.
+
+Declaration explanation requests bind `project_id`, `project_revision`, `base_file_hash`, `target_path`, and `target_symbol`. The target must resolve to one exact atomic declaration in an eligible indexed Go file. A non-loopback HTTP or CLI Function provider also requires `confirm_remote_provider: true` on that request. The daemon rechecks the project and file identity after provider work before returning the bounded explanation, source line anchor, optional engineering insight, and `ContextManifest` provenance.
 
 Explanation responses are transient. This route does not create chat sessions or drafts, persist chat or analysis history, run checks, or change Apply/Undo state. Cancellation, malformed provider output, and stale request identity return an error without publishing a result.
 
-Security review requests require `project_id`, `project_revision`, `base_file_hash`, `path`, and `confirm_remote_provider`; `symbol` is optional but must identify one exact atomic indexed declaration. The request uses the configured Analyze scope and requires fresh `confirm_remote_provider: true` before a non-loopback provider receives source. It sends at most 64 KiB and accepts at most 64 KiB of one strict JSON response with at most five advisory `model_suspicion` findings. The provider receives a strict `json_schema` response format with lowercase rule/category identifiers and file-specific path, line bounds and symbol choices. Provider rejection of structured output fails the stage without falling back to unconstrained output. Prompt version `security-file-v2` also requires source-free explanations and an empty findings array when no concrete security concern is supported, including documentation and ignore files. Earlier prompt versions remain readable but are stale for current reviews. The service rechecks project, revision, file hash, policy, focused declaration, and provider identity before delivery, after response, before caching, and before returning. Reports omit source, redact stored/returned prose, and reject meaningful source-line token sequences even when spacing or punctuation changes. Findings are advisory suspicions, and `completed_empty` means no findings were returned; it does not mean the file is secure. The route never runs suggested exploit code, subprocesses, scans, or project code.
+Security review requests require `project_id`, `project_revision`, `base_file_hash`, `path`, and `confirm_remote_provider`; `symbol` is optional but must identify one exact atomic indexed declaration. The request uses the configured Analyze scope and requires fresh `confirm_remote_provider: true` before a non-loopback HTTP or CLI provider receives source. It sends at most 64 KiB and accepts at most 64 KiB of one strict JSON response with at most five advisory `model_suspicion` findings. The provider receives a strict `json_schema` response format with lowercase rule/category identifiers and file-specific path, line bounds and symbol choices. Provider rejection of structured output fails the stage without falling back to unconstrained output. Prompt version `security-file-v2` also requires source-free explanations and an empty findings array when no concrete security concern is supported, including documentation and ignore files. Earlier prompt versions remain readable but are stale for current reviews. The service rechecks project, revision, file hash, policy, focused declaration, and provider identity before delivery, after response, before caching, and before returning. Reports omit source, redact stored/returned prose, and reject meaningful source-line token sequences even when spacing or punctuation changes. Findings are advisory suspicions, and `completed_empty` means no findings were returned; it does not mean the file is secure. The route never runs suggested exploit code, scans, or project code; a configured CLI runs only as the model transport.
 
 ## Trusted local execution
 
@@ -231,7 +240,7 @@ The daemon binds to loopback by default. It filters ignored, generated,
 configuration, and secret-like paths before assembling model context. Each
 prompt request checks the effective scope shown by `/api/models/current`: project
 import and explicit source-based Performance reviews use `analyze`, selected-file analysis and Analyze-all use `bug`, and
-declaration proposals use `function`. A non-loopback scope requires
+declaration proposals use `function`. A non-loopback HTTP or CLI scope requires
 `confirm_remote_provider: true` for that request only; confirmation for one
 scope never authorizes another. Restore, reindex, scans, validation, checks,
 Apply, and Undo never require provider confirmation.
@@ -253,14 +262,24 @@ guards return `409 Conflict` when their captured base is no longer current.
 
 `model_scopes` is loaded only when the daemon starts, and all fixed scopes are
 required. A changed model, provider, or reasoning effort makes old AI cache
-entries stale. Providers must support OpenAI Chat Completions JSON; native
-Anthropic/Gemini endpoints, vendor SDKs, streaming, tool calls, and
+entries stale. HTTP providers must support OpenAI Chat Completions JSON; native
+Anthropic/Gemini HTTP endpoints, vendor SDKs, API streaming, tool calls, and
 credential-vault features are outside this API. An optional scope
 `reasoning_effort` is safe metadata and is included in a Chat Completions
 request only when configured. Keys belong only in ignored local config and are
 neither logged nor returned.
 
-Prompt-bearing provider requests never follow HTTP redirects. Mini-Orca rejects
+Scopes can instead select `provider: agy` or `provider: pi` in local configuration.
+These CLI transports feed the same analysis and draft workflows; they add no
+command-execution API. Catalog and provenance identify them as `cli://agy` or
+`cli://pi`, always with `remote_provider: true` and the same scope-specific
+confirmation requirement. CLI `temperature` and `max_tokens` metadata are
+`null` (unavailable), while HTTP values remain numeric. Executable paths and
+CLI credentials are not exposed. CLI responses must complete successfully;
+structured responses are also validated locally before entering domain parsers.
+See [CLI configuration and boundaries](../CONFIG.md#cli-providers).
+
+Prompt-bearing HTTP provider requests never follow redirects. Mini-Orca rejects
 every 3xx response at the configured provider origin and returns a status-only
 error; it does not send the prompt, request body, or authorization header to a
 redirect target, and it does not retry a rejected redirect. Update the configured

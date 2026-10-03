@@ -22,6 +22,8 @@ const (
 // ModelProfile is a complete immutable model configuration selected at startup.
 type ModelProfile struct {
 	Scope            ModelScope
+	Provider         ModelProvider
+	CLIPath          string
 	APIBaseURL       string
 	APIKey           string
 	Model            string
@@ -64,6 +66,15 @@ func ResolveModelProfiles(cfg *Config) (ModelProfiles, error) {
 }
 
 func resolveProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfile, error) {
+	if configured.Provider == AgyProvider || configured.Provider == PiProvider {
+		return resolveCLIProfile(scope, configured)
+	}
+	if configured.Provider != "" && configured.Provider != OpenAIProvider {
+		return ModelProfile{}, fmt.Errorf("model_scopes.%s.provider must be openai, agy, or pi", scope)
+	}
+	if configured.CLIPath != "" {
+		return ModelProfile{}, fmt.Errorf("model_scopes.%s.cli_path requires an agy or pi provider", scope)
+	}
 	if strings.TrimSpace(configured.APIBaseURL) == "" {
 		if profileConfigHasValues(configured) {
 			return ModelProfile{}, missingFieldError(scope, "api_base_url")
@@ -80,6 +91,7 @@ func resolveProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfi
 
 	profile := ModelProfile{
 		Scope:            scope,
+		Provider:         OpenAIProvider,
 		APIBaseURL:       apiBase,
 		APIKey:           configured.APIKey,
 		Model:            strings.TrimSpace(configured.Model),
@@ -109,7 +121,7 @@ func resolveProfile(scope ModelScope, configured ModelProfileConfig) (ModelProfi
 }
 
 func profileConfigHasValues(configured ModelProfileConfig) bool {
-	return configured.APIKey != "" ||
+	return configured.Provider != "" || configured.CLIPath != "" || configured.APIKey != "" ||
 		strings.TrimSpace(configured.Model) != "" ||
 		strings.TrimSpace(configured.ReasoningEffort) != "" ||
 		configured.Temperature != nil ||

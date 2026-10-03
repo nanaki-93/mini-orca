@@ -13,8 +13,8 @@ import (
 func FileAnalysisEvaluationProvider(profile config.ModelProfile) EffectiveModel {
 	return EffectiveModel{
 		Scope: string(profile.Scope), Model: profile.Model,
-		ProviderOrigin:   providerOrigin(profile.APIBaseURL),
-		RemoteProvider:   !isLoopbackURL(profile.APIBaseURL),
+		ProviderOrigin:   modelProviderOrigin(profile),
+		RemoteProvider:   profile.IsCLI() || !isLoopbackURL(profile.APIBaseURL),
 		ContextMaxTokens: profile.ContextMaxTokens,
 	}
 }

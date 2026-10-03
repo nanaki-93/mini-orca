@@ -39,7 +39,8 @@ func (s *Service) analysisProviders() ([]AnalysisProviderRequirement, error) {
 			Endpoint   string
 			Configured bool
 			Prompts    []string
-		}{entry.runtime.effective, entry.runtime.profile.APIBaseURL, entry.runtime.client != nil, entry.prompts})
+			CLIPath    string `json:",omitempty"`
+		}{entry.runtime.effective, entry.runtime.profile.APIBaseURL, entry.runtime.client != nil, entry.prompts, entry.runtime.profile.CLIPath})
 		if err != nil {
 			return nil, err
 		}

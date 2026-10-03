@@ -144,7 +144,7 @@ type ChatResponse struct {
 	Usage   ChatUsage    `json:"usage"`
 }
 
-// Client owns the one provider-neutral Chat Completions request flow.
+// Client owns the configured HTTP or CLI model transport and response validation.
 type Client struct {
 	profile               config.ModelProfile
 	transport             http.RoundTripper
@@ -180,8 +180,8 @@ func (c *Client) WithOptionalFinalContent() *Client {
 	return &copy
 }
 
-// Chat sends one OpenAI-compatible Chat Completions request and validates the
-// provider result before application code receives it.
+// Chat sends one request through the configured provider and validates its
+// result before application code receives it.
 func (c *Client) Chat(ctx context.Context, messages []ChatMessage) (*ChatResponse, error) {
 	return c.chat(ctx, messages, nil)
 }
@@ -199,6 +199,9 @@ func (c *Client) ChatWithJSONSchema(ctx context.Context, messages []ChatMessage,
 func (c *Client) chat(ctx context.Context, messages []ChatMessage, responseFormat *ResponseFormat) (*ChatResponse, error) {
 	if len(messages) == 0 {
 		return nil, fmt.Errorf("llm client: messages are required")
+	}
+	if c.profile.IsCLI() {
+		return c.chatCLI(ctx, messages, responseFormat)
 	}
 	requestBody, err := json.Marshal(ChatRequest{
 		Model:           c.profile.Model,

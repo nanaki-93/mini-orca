@@ -525,6 +525,10 @@ internal fun ProjectSummaryPane(
         }
       }
   val insightExpansion = remember(ownerIdentity, pieces) { mutableStateOf(false) }
+  val purposeExpansion = remember(ownerIdentity, presentation.purpose) { mutableStateOf(false) }
+  var projectDetailsExpanded by remember(ownerIdentity) { mutableStateOf(false) }
+  var fileEvidenceExpanded by remember(ownerIdentity) { mutableStateOf(false) }
+  var editingGuideExpanded by remember(ownerIdentity) { mutableStateOf(false) }
   // Inspection is local to the confirmed coverage owner, outside the lazy item lifecycle.
   val coverageOwner =
       when (val coverage = presentation.coverage) {
@@ -565,9 +569,11 @@ internal fun ProjectSummaryPane(
         verticalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.section),
     ) {
       if (!presentation.hasProject) {
-        item { SystemStateMessage("No project selected", "", modifier = Modifier.fillMaxWidth()) }
+        item("empty") {
+          SystemStateMessage("No project selected", "", modifier = Modifier.fillMaxWidth())
+        }
       } else {
-        item {
+        item("heading") {
           Text(
               "Summary",
               color = PrimaryText,
@@ -577,12 +583,16 @@ internal fun ProjectSummaryPane(
         val visibleRun = run?.takeIf { it.identity.projectId == project?.projectId }
         val stripState = analysisState ?: ProjectAnalysisRunState(run = run, sections = sections)
         val runPaneState = AnalysisWorkspacePaneState(project, stripState.copy(run = visibleRun))
-        item {
+        item("introduction") {
           SummaryIntroduction(
-              presentation, runPaneState, analysisActions, showActionFeedback = visibleRun == null)
+              presentation,
+              runPaneState,
+              analysisActions,
+              purposeExpansion,
+              showActionFeedback = visibleRun == null)
         }
         if (visibleRun != null)
-            item {
+            item("run") {
               AnalysisRunStrip(
                   runPaneState,
                   analysisActions,
@@ -590,7 +600,7 @@ internal fun ProjectSummaryPane(
                   Modifier.testTag("summary-analysis-run-strip"),
                   onOpenAnalysis = { selectWorkspace(Workspace.Analysis) })
             }
-        item {
+        item("coverage") {
           BoxWithConstraints(Modifier.fillMaxWidth().testTag("summary-coverage-results")) {
             val paired = !coverageResultsStacked(maxWidth, LocalDensity.current.fontScale)
             val coverage: @Composable (Modifier) -> Unit = { modifier ->
@@ -605,9 +615,12 @@ internal fun ProjectSummaryPane(
                   modifier.testTag("summary-results"),
                   verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SummaryCategories(presentation.issueMetrics, selectWorkspace)
-                    SummaryFileEvidence(presentation.fileLedger) {
-                      selectWorkspace(Workspace.Analysis)
-                    }
+                    SummaryFileEvidence(
+                        presentation.fileLedger,
+                        fileEvidenceExpanded,
+                        { fileEvidenceExpanded = !fileEvidenceExpanded }) {
+                          selectWorkspace(Workspace.Analysis)
+                        }
                     Text(
                         "Overall findings · " +
                             presentation.findingMetrics.joinToString(" · ") {
@@ -631,36 +644,53 @@ internal fun ProjectSummaryPane(
             }
           }
         }
-        if (architecture != null || pieces.isNotEmpty()) {
-          item {
-            SummaryLowerComposition(
-                presentation,
-                ownerIdentity,
-                architectureView,
-                insightExpansion,
-                diagramScope,
-                diagramRender)
+        item("project-details-toggle") {
+          IdeDisclosureHeader(
+              title = "Project details",
+              expanded = projectDetailsExpanded,
+              onToggle = { projectDetailsExpanded = !projectDetailsExpanded },
+              modifier = Modifier.testTag("summary-project-details-toggle"))
+        }
+        if (projectDetailsExpanded) {
+          if (architecture != null || pieces.isNotEmpty()) {
+            item("narrative") {
+              SummaryLowerComposition(
+                  presentation,
+                  ownerIdentity,
+                  architectureView,
+                  insightExpansion,
+                  diagramScope,
+                  diagramRender)
+            }
+          }
+          item("findings") {
+            SummaryModulesAndFindings(
+                presentation.details.firstOrNull { it.title == "Packages / modules" },
+                findingPreview,
+                summaryFindingEmptyMessage(findingState, findingPreview),
+                selectWorkspace,
+                onFindingSelected)
+          }
+          if (flows.isNotEmpty()) {
+            item("flows") {
+              SummaryFlows(
+                  requireNotNull(presentation.details.firstOrNull { it.title == "Flows" }),
+                  ownerIdentity,
+                  flowViews,
+                  diagramScope,
+                  diagramRender)
+            }
           }
         }
-        item {
-          SummaryModulesAndFindings(
-              presentation.details.firstOrNull { it.title == "Packages / modules" },
-              findingPreview,
-              summaryFindingEmptyMessage(findingState, findingPreview),
-              selectWorkspace,
-              onFindingSelected)
+        item("editing-guide-toggle") {
+          IdeDisclosureHeader(
+              title = "Editing guide",
+              expanded = editingGuideExpanded,
+              onToggle = { editingGuideExpanded = !editingGuideExpanded },
+              modifier = Modifier.testTag("summary-editing-guide-toggle"))
         }
-        if (flows.isNotEmpty()) {
-          item {
-            SummaryFlows(
-                requireNotNull(presentation.details.firstOrNull { it.title == "Flows" }),
-                ownerIdentity,
-                flowViews,
-                diagramScope,
-                diagramRender)
-          }
-        }
-        item { SummaryChangeLifecycle { selectWorkspace(Workspace.Editor) } }
+        if (editingGuideExpanded)
+            item("editing-guide") { SummaryChangeLifecycle { selectWorkspace(Workspace.Editor) } }
       }
     }
     if (architecture != null) RestoreDiagramFocus(architectureView)
@@ -685,6 +715,7 @@ private fun SummaryIntroduction(
     presentation: ProjectSummaryPresentation,
     runState: AnalysisWorkspacePaneState,
     actions: AnalysisWorkspaceActions?,
+    purposeExpansion: MutableState<Boolean>,
     showActionFeedback: Boolean,
 ) {
   val type = projectTypePresentation(presentation.projectType)
@@ -708,7 +739,7 @@ private fun SummaryIntroduction(
               modifier = Modifier.testTag("summary-project-type"))
         }
     presentation.purpose?.let {
-      ModelResultContent(it, preview = false, style = IdeTypography.workspaceBody)
+      ModelResultContent(it, style = IdeTypography.workspaceBody, expansion = purposeExpansion)
     }
     Text(
         presentation.interpretationMessage,
@@ -777,58 +808,73 @@ private fun SummaryCategories(metrics: List<SummaryIssueMetric>, openResults: (W
 }
 
 @Composable
-private fun SummaryFileEvidence(ledger: SummaryFileLedger, onOpenAnalysis: () -> Unit) {
-  WorkspaceSection("File evidence", Modifier.testTag("summary-file-evidence")) {
-    ledger.selectionNotice?.let {
-      Text(
-          it,
-          color = SecondaryText,
-          style = IdeTypography.workspaceMetadata,
-          modifier = Modifier.testTag("summary-file-selection-notice"))
-    }
-    when (ledger) {
-      is SummaryFileLedger.Selected -> {
-        Text(
-            "Showing ${ledger.rows.size} of ${ledger.totalSelected} selected files · saved status",
-            color = SecondaryText,
-            style = IdeTypography.workspaceMetadata)
-        SelectionContainer {
-          Column(
-              Modifier.fillMaxWidth().testTag("summary-file-paths"),
-              verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ledger.rows.forEach { row ->
-                  Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(row.file.path, color = PrimaryText, style = IdeTypography.resultCode)
-                    DiagnosticText(
-                        "${row.status.label} · ${row.explanation}", color = SecondaryText)
-                  }
+private fun SummaryFileEvidence(
+    ledger: SummaryFileLedger,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onOpenAnalysis: () -> Unit,
+) {
+  Column(
+      Modifier.fillMaxWidth().testTag("summary-file-evidence"),
+      verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        IdeDisclosureHeader("File evidence", expanded, onToggle)
+        if (expanded) {
+          WorkspaceSection {
+            ledger.selectionNotice?.let {
+              Text(
+                  it,
+                  color = SecondaryText,
+                  style = IdeTypography.workspaceMetadata,
+                  modifier = Modifier.testTag("summary-file-selection-notice"))
+            }
+            when (ledger) {
+              is SummaryFileLedger.Selected -> {
+                Text(
+                    "Showing ${ledger.rows.size} of ${ledger.totalSelected} selected files · saved status",
+                    color = SecondaryText,
+                    style = IdeTypography.workspaceMetadata)
+                SelectionContainer {
+                  Column(
+                      Modifier.fillMaxWidth().testTag("summary-file-paths"),
+                      verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ledger.rows.forEach { row ->
+                          Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                row.file.path,
+                                color = PrimaryText,
+                                style = IdeTypography.resultCode)
+                            DiagnosticText(
+                                "${row.status.label} · ${row.explanation}", color = SecondaryText)
+                          }
+                        }
+                      }
                 }
               }
+              is SummaryFileLedger.Empty ->
+                  Text(
+                      "No files selected in the confirmed selection.",
+                      color = SecondaryText,
+                      style = IdeTypography.workspaceBody)
+              is SummaryFileLedger.AggregateOnly ->
+                  Text(
+                      "File paths unavailable · ${ledger.totalReported} files in saved aggregate coverage. Load a confirmed selection to inspect file evidence.",
+                      color = SecondaryText,
+                      style = IdeTypography.workspaceBody)
+              is SummaryFileLedger.Unavailable ->
+                  Text(
+                      "File evidence unavailable · no confirmed file selection or saved file paths.",
+                      color = SecondaryText,
+                      style = IdeTypography.workspaceBody)
+            }
+            MiniOrcaButton(
+                onClick = onOpenAnalysis,
+                tone = ActionTone.Navigation,
+                modifier = Modifier.testTag("summary-all-files")) {
+                  Text("All files", style = IdeTypography.action)
+                }
+          }
         }
       }
-      is SummaryFileLedger.Empty ->
-          Text(
-              "No files selected in the confirmed selection.",
-              color = SecondaryText,
-              style = IdeTypography.workspaceBody)
-      is SummaryFileLedger.AggregateOnly ->
-          Text(
-              "File paths unavailable · ${ledger.totalReported} files in saved aggregate coverage. Load a confirmed selection to inspect file evidence.",
-              color = SecondaryText,
-              style = IdeTypography.workspaceBody)
-      is SummaryFileLedger.Unavailable ->
-          Text(
-              "File evidence unavailable · no confirmed file selection or saved file paths.",
-              color = SecondaryText,
-              style = IdeTypography.workspaceBody)
-    }
-    MiniOrcaButton(
-        onClick = onOpenAnalysis,
-        tone = ActionTone.Navigation,
-        modifier = Modifier.testTag("summary-all-files")) {
-          Text("All files", style = IdeTypography.action)
-        }
-  }
 }
 
 @Composable

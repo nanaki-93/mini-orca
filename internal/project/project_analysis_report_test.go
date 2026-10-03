@@ -13,12 +13,16 @@ import (
 )
 
 type projectAnalysisFixtureClient struct {
-	output string
-	calls  int
+	output         string
+	calls          int
+	beforeResponse func()
 }
 
-func (c *projectAnalysisFixtureClient) Chat(context.Context, []llm.ChatMessage) (*llm.ChatResponse, error) {
+func (c *projectAnalysisFixtureClient) ChatWithJSONSchema(context.Context, []llm.ChatMessage, llm.JSONSchema) (*llm.ChatResponse, error) {
 	c.calls++
+	if c.beforeResponse != nil {
+		c.beforeResponse()
+	}
 	return &llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: c.output}}}}, nil
 }
 
@@ -159,6 +163,29 @@ func TestAnalyzerRestoreLoadsStoredReportWithoutContactingModel(t *testing.T) {
 	}
 }
 
+func TestAnalyzerDoesNotPublishSuccessfulReportAfterCancellation(t *testing.T) {
+	root := t.TempDir()
+	writeIndexFixture(t, root, "main.go", "package main\nfunc main() {}\n")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	client := &projectAnalysisFixtureClient{
+		output:         `{"purpose":"Late report.","architecture":"One package.","components":[],"entry_points":[],"flows":[],"risks":[],"next_steps":[]}`,
+		beforeResponse: cancel,
+	}
+	analyzer := NewAnalyzerWithProvenance(client, "fixture-model", "analyze", "", "")
+	analysis, err := analyzer.Analyze(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if analysis.AIStatus != ProjectAnalysisStatusFailed || analysis.Report.Purpose != "" || !strings.Contains(analysis.Report.Failure, "canceled") || analysis.FileCount != 1 {
+		t.Fatalf("canceled analysis = %+v", analysis)
+	}
+	restored, err := analyzer.Restore(root)
+	if err != nil || restored.AIStatus != ProjectAnalysisStatusFailed || restored.Report.Purpose != "" || client.calls != 1 {
+		t.Fatalf("restored analysis = %+v, calls = %d, error = %v", restored, client.calls, err)
+	}
+}
+
 func TestProjectAnalysisReportRequiresGeneratedTime(t *testing.T) {
 	report := newProjectAnalysisReportWithProvenance("project", "revision", "model", "analysis", "analysis", "", "")
 	report.Purpose = "Purpose"
@@ -191,12 +218,17 @@ func TestProjectDiagramsSurvivePersistenceAndOldPromptRemainsReadable(t *testing
 	if err != nil || stored == nil || stored.Architecture != architecture || len(stored.Flows) != 1 || stored.Flows[0] != flow || stored.Components[0] != parsed.Components[0] {
 		t.Fatalf("diagram report = %+v, %v", stored, err)
 	}
-	report.PromptVersion, report.Architecture = "project-analysis-v3", "API delegates to storage."
-	if err := StoreProjectAnalysisReport(root, report); err != nil {
-		t.Fatal(err)
-	}
-	stored, err = LoadProjectAnalysisReport(root, input)
-	if err != nil || stored == nil || stored.Status != ProjectAnalysisStatusStale || stored.Architecture != report.Architecture {
-		t.Fatalf("legacy report = %+v, %v", stored, err)
+	for version, legacyArchitecture := range map[string]string{
+		"project-analysis-v3": "API delegates to storage.",
+		"project-analysis-v4": architecture,
+	} {
+		report.PromptVersion, report.Architecture = version, legacyArchitecture
+		if err := StoreProjectAnalysisReport(root, report); err != nil {
+			t.Fatal(err)
+		}
+		stored, err = LoadProjectAnalysisReport(root, input)
+		if err != nil || stored == nil || stored.Status != ProjectAnalysisStatusStale || stored.Architecture != report.Architecture {
+			t.Fatalf("legacy %s report = %+v, %v", version, stored, err)
+		}
 	}
 }

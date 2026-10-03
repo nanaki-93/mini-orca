@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,9 +50,11 @@ internal fun ModelResultContent(
     modifier: Modifier = Modifier,
     preview: Boolean = true,
     style: TextStyle = IdeTypography.body,
+    expansion: MutableState<Boolean>? = null,
 ) {
   val formatted = remember(response) { formatModelResult(response) }
-  var expanded by remember(response) { mutableStateOf(false) }
+  val expandedState = expansion ?: remember(response) { mutableStateOf(false) }
+  var expanded by expandedState
   var overflowsPreview by remember(response) { mutableStateOf(false) }
   Column(modifier, verticalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact)) {
     SelectionContainer {

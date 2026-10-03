@@ -2178,6 +2178,7 @@ class DesktopVisualLayoutTest {
               assertTrue(fixture.hasDescription("View Bugs results"))
               assertTrue(fixture.hasDescription("View Security results"))
               if (width == 800 && scale == 1.5f && density == 1f) {
+                fixture.expandSummarySection("Project details")
                 fixture.revealText("Expand diagram")
                 fixture.clickText("Expand diagram")
                 fixture.render("f04-summary-help-expanded-800-650-1.5-1x")
@@ -4130,6 +4131,7 @@ class DesktopVisualLayoutTest {
                     assertTrue(
                         coverage.bottom <= results.top,
                         "stacked results at $width/$scale: $coverage / $results")
+                fixture.expandSummarySection("Project details")
                 fixture.revealText("Engineering insight")
                 val architecture = fixture.taggedBounds("summary-architecture")
                 val insight = fixture.taggedBounds("summary-insight")
@@ -4141,6 +4143,7 @@ class DesktopVisualLayoutTest {
                     assertTrue(
                         architecture.bottom <= insight.top,
                         "stacked narrative at $width/$scale: $architecture / $insight")
+                fixture.expandSummarySection("Editing guide")
                 fixture.revealText("Open Editor")
                 assertTrue(fixture.hasText("Change lifecycle"))
               }
@@ -4149,6 +4152,7 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(1440, 900) { ProjectSummaryPane(insightOnly, project, {}) }
         .use { fixture ->
           fixture.render()
+          fixture.expandSummarySection("Project details")
           fixture.revealText("Engineering insight")
           assertEquals(0, fixture.tagCount("summary-architecture"))
           val row = fixture.taggedBounds("summary-narrative-row")
@@ -4160,6 +4164,7 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(1440, 900) { ProjectSummaryPane(architectureOnly, project, {}) }
         .use { fixture ->
           fixture.render()
+          fixture.expandSummarySection("Project details")
           fixture.revealText("Architecture")
           assertEquals(0, fixture.tagCount("summary-insight"))
           assertEquals(
@@ -4210,8 +4215,10 @@ class DesktopVisualLayoutTest {
                 fixture.assertTextFits("Start analysis")
                 fixture.revealText("Analysis coverage")
                 fixture.render("$label-coverage")
+                fixture.expandSummarySection("Project details")
                 fixture.revealText("Engineering insight")
                 fixture.render("$label-narrative")
+                fixture.expandSummarySection("Editing guide")
                 fixture.revealText("Open Editor")
                 fixture.assertTextFits("Open Editor")
                 fixture.render("$label-lifecycle")
@@ -4243,6 +4250,7 @@ class DesktopVisualLayoutTest {
             fixture.assertTextFits("Go project")
             fixture.revealText("Analysis coverage")
             fixture.render("f08-summary-$name-coverage-800-650-1.5")
+            fixture.expandSummarySection("Editing guide")
             fixture.revealText("Open Editor")
             fixture.render("f08-summary-$name-lifecycle-800-650-1.5")
             if (name == "failed") {
@@ -4269,6 +4277,7 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(1440, 900) { ProjectSummaryPane(insightOverview, project, {}) }
         .use { fixture ->
           fixture.render()
+          fixture.expandSummarySection("Project details")
           fixture.revealText("Engineering insight")
           fixture.render("f08-summary-disclosures-collapsed-1440")
           fixture.clickDescription("Expand Architecture diagram")
@@ -9355,7 +9364,7 @@ class DesktopVisualLayoutTest {
                 }
               }
               if (width == 1600 && scale == 1f) {
-                fixture.revealText("Saved results · Bugs / Performance / Security", "analysis-page")
+                fixture.revealText("Saved results", "analysis-page")
                 fixture.assertAnalysisCategoryGeometry()
                 fixture.revealText("Refresh files", "analysis-page")
                 fixture.scrollBy(180f, "analysis-page")
@@ -9590,8 +9599,8 @@ class DesktopVisualLayoutTest {
           for (phase in listOf("running", "failed")) {
             status = phase
             fixture.render("f15-categories-$phase")
-            fixture.revealText("Saved results · Bugs / Performance / Security", "analysis-page")
-            fixture.assertTextFits("Saved results · Bugs / Performance / Security")
+            fixture.revealText("Saved results", "analysis-page")
+            fixture.assertTextFits("Saved results")
             assertTrue(fixture.hasText("Saved details unavailable · 1 reported"))
             for (type in AnalysisResultType.entries) {
               fixture.revealText(type.workspace.name, "analysis-page")
@@ -9644,7 +9653,7 @@ class DesktopVisualLayoutTest {
           current = run.copy(sections = run.sections.map { it.copy(findingCount = null) })
           sections = emptyMap()
           fixture.render("f15-categories-unknown-reported")
-          fixture.revealText("Saved results · Bugs / Performance / Security", "analysis-page")
+          fixture.revealText("Saved results", "analysis-page")
           assertTrue(fixture.hasText("Count unavailable"))
           assertEquals(3, fixture.textCount("—"))
           assertTrue(fixture.hasText("Loaded details · unavailable"))
@@ -10307,6 +10316,7 @@ class DesktopVisualLayoutTest {
                             transferableLesson = "Validate at the request boundary.")))
     ComposeVisualFixture(1440, 1600) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
+          fixture.expandSummarySection("Project details")
           fixture.awaitDescription("Expand Architecture diagram", "Preview")
           fixture.awaitDescription("Expand Flow 1 diagram", "Preview")
           fixture.awaitDescription(
@@ -10384,6 +10394,7 @@ class DesktopVisualLayoutTest {
                 visualFixtureOverview.analysis.copy(flows = emptyList(), engineeringInsight = null))
     ComposeVisualFixture(1440, 900) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
+          fixture.expandSummarySection("Project details")
           fixture.render("summary-lower-one-sided-1440")
           val introduction = fixture.taggedBounds("summary-introduction")
           val architecture = fixture.taggedBounds("summary-architecture")
@@ -10416,6 +10427,7 @@ class DesktopVisualLayoutTest {
           }
           .use { fixture ->
             fixture.render("summary-right-only-$width-$scale")
+            fixture.expandSummarySection("Project details")
             fixture.revealText("Engineering insight")
             fixture.render()
             assertEquals(0, fixture.tagCount("summary-architecture"))
@@ -10424,9 +10436,11 @@ class DesktopVisualLayoutTest {
             val insight = fixture.taggedBounds("summary-insight")
             assertEquals(item.top, insight.top, 1f, "Insight starts at the item top")
             assertEquals(item.width, insight.width, 1f)
+            fixture.expandSummarySection("Project details")
             fixture.revealText("Selected findings")
             fixture.render()
             assertEquals(item.width, fixture.taggedBounds("summary-selected-findings").width, 1f)
+            fixture.expandSummarySection("Project details")
             fixture.revealText("Flows")
             fixture.scrollBy(100_000f)
             fixture.render()
@@ -10452,6 +10466,7 @@ class DesktopVisualLayoutTest {
           ProjectSummaryPane(overview, visualFixtureProject, {})
         }
         .use { fixture ->
+          fixture.expandSummarySection("Project details")
           fixture.render("summary-lower-compact-800-150")
           fixture.assertNarrativeSectionOrder(withInsight = true)
           assertEquals(
@@ -10468,6 +10483,7 @@ class DesktopVisualLayoutTest {
           ProjectSummaryPane(visualFixtureOverview, visualFixtureProject, { navigations++ })
         }
         .use { fixture ->
+          fixture.expandSummarySection("Project details")
           fixture.awaitDescription("Expand Architecture diagram", "Preview")
           fixture.awaitDescription("Expand Flow 1 diagram", "Preview")
           fixture.clickDescription("Expand Architecture diagram")
@@ -10565,6 +10581,7 @@ class DesktopVisualLayoutTest {
             }
             .use { fixture ->
               fixture.render("summary-narratives-single-column-$width-$scale")
+              fixture.expandSummarySection("Project details")
               fixture.assertNarrativeSectionOrder()
             }
       }
@@ -10650,6 +10667,7 @@ class DesktopVisualLayoutTest {
                 }
                 if (state == "failed")
                     assertTrue(fixture.hasText("File selection needs attention"), label)
+                fixture.expandSummarySection("Editing guide")
                 fixture.revealText("Open Editor")
                 fixture.render("$label-lower")
                 fixture.assertTextFits("Open Editor")
@@ -10688,7 +10706,7 @@ class DesktopVisualLayoutTest {
   }
 
   @Test
-  fun summaryDashboardShowsCompleteLongProseInThePage() {
+  fun summaryPreviewsLongProseAndKeepsTheCompleteResponseReachable() {
     val longPurpose = "This purpose remains readable directly in the dashboard. ".repeat(60)
     val overview =
         visualFixtureOverview.copy(
@@ -10696,11 +10714,15 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(800, 650, 1.5f) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
           fixture.render()
+          fixture.revealText("Show full response")
+          fixture.clickDescription("Expand full response")
+          fixture.render()
           fixture.scrollBy(500f)
           fixture.render("summary-dashboard-long-purpose-800-150")
           fixture.assertTextWrapsWithoutClipping(longPurpose)
           assertFalse(fixture.hasText("Show full response"))
           assertEquals(1, fixture.scrollableContentCount())
+          fixture.expandSummarySection("Project details")
           repeat(12) {
             fixture.scrollBy(500f)
             fixture.render()
@@ -10801,6 +10823,7 @@ class DesktopVisualLayoutTest {
           }
           .use { fixture ->
             fixture.render("summary-file-evidence-$width-$height-$scale")
+            fixture.expandSummarySection("File evidence")
             fixture.revealText("File evidence")
             fixture.render("summary-file-evidence-revealed-$width-$height-$scale")
             assertTrue(fixture.hasText(path))
@@ -10808,6 +10831,7 @@ class DesktopVisualLayoutTest {
             assertTrue(
                 fixture.hasText(
                     "Outdated · ${analysisFileStatus(selection.files.first()).explanation}"))
+            fixture.expandSummarySection("File evidence")
             fixture.revealText("All files")
             fixture.assertTextFits("All files")
             val panel = fixture.taggedBounds("summary-file-evidence")
@@ -10883,6 +10907,7 @@ class DesktopVisualLayoutTest {
                 }
             .use { fixture ->
               fixture.render("$label-populated")
+              fixture.expandSummarySection("File evidence")
               fixture.revealText("File evidence", "summary-scroll")
               fixture.render("$label-ledger")
               assertTrue(fixture.hasText(path), label)
@@ -10893,16 +10918,20 @@ class DesktopVisualLayoutTest {
                     fixture.copyTextByDragging(path).isNotBlank(),
                     "Ledger path must remain selectable")
               }
+              fixture.expandSummarySection("File evidence")
               fixture.revealText("All files", "summary-scroll")
               fixture.assertTextFits("All files")
+              fixture.expandSummarySection("Project details")
               fixture.revealText("Selected findings", "summary-scroll")
               fixture.revealText(title, "summary-scroll")
               fixture.assertTextFits(title, 12)
               fixture.revealText(row.location, "summary-scroll")
               fixture.render("$label-findings")
               fixture.assertTextFits(row.location, 12)
+              fixture.expandSummarySection("Project details")
               fixture.revealText("All Security results", "summary-scroll")
               fixture.assertTextFits("All Security results")
+              fixture.expandSummarySection("Editing guide")
               fixture.revealText("Open Editor", "summary-scroll")
               fixture.assertTextFits("Open Editor")
               assertTrue(fixture.requestFocus("Open Editor"))
@@ -10939,6 +10968,7 @@ class DesktopVisualLayoutTest {
           }
           .use { fixture ->
             fixture.render("f10-summary-$name-800-650-150")
+            fixture.expandSummarySection("File evidence")
             fixture.revealText("File evidence", "summary-scroll")
             fixture.render("f10-summary-$name-ledger-800-650-150")
             when (name) {
@@ -10956,10 +10986,12 @@ class DesktopVisualLayoutTest {
               }
               else -> assertTrue(fixture.hasText(path))
             }
+            fixture.expandSummarySection("File evidence")
             fixture.revealText("All files", "summary-scroll")
             fixture.render("f10-summary-$name-ledger-action-800-650-150")
             fixture.assertTextFits("All files")
             if (name == "failed-retained") {
+              fixture.expandSummarySection("Project details")
               fixture.revealText(
                   "Bugs · Partial · 1 loaded · Saved details unavailable · Saved detail read failed",
                   "summary-scroll")
@@ -11001,6 +11033,7 @@ class DesktopVisualLayoutTest {
                 }
             .use { fixture ->
               fixture.render()
+              fixture.expandSummarySection("Project details")
               fixture.revealText(title, "summary-scroll")
               val label = "f10-modules-findings-$width-$height-$scale-${density}x"
               fixture.render(label)
@@ -11017,6 +11050,7 @@ class DesktopVisualLayoutTest {
                 assertTrue(modules.right <= findings.left, label)
                 assertTrue(modules.width > 0 && findings.width > 0, label)
               }
+              fixture.expandSummarySection("Project details")
               fixture.revealText("All Security results", "summary-scroll")
               fixture.assertTextFits("All Security results")
             }
@@ -11030,6 +11064,7 @@ class DesktopVisualLayoutTest {
             }
             .use { fixture ->
               fixture.render()
+              fixture.expandSummarySection("Project details")
               fixture.revealText("Selected findings", "summary-scroll")
               fixture.render("f10-modules-findings-boundary-$width-$scale")
               val row = fixture.taggedBounds("summary-evidence-row")
@@ -11071,8 +11106,10 @@ class DesktopVisualLayoutTest {
               } else {
                 assertTrue(coverage.right <= results.left)
               }
+              fixture.expandSummarySection("File evidence")
               fixture.revealText("All files", "summary-scroll")
               fixture.assertTextFits("All files")
+              fixture.expandSummarySection("Project details")
               fixture.revealText("All Security results", "summary-scroll")
               fixture.assertTextFits("All Security results")
             }
@@ -13074,6 +13111,18 @@ internal class ComposeVisualFixture(
           .mapNotNull { it.config.getOrNull(SemanticsActions.Dismiss)?.action }
           .firstOrNull()
           ?.invoke() ?: false
+
+  fun expandSummarySection(title: String) {
+    render()
+    if (hasDescription("Collapse $title")) return
+    revealText(title, "summary-scroll")
+    if (hasDescription("Expand $title")) clickDescription("Expand $title")
+    render()
+    revealText(title, "summary-scroll")
+    assertTrue(hasDescription("Collapse $title"))
+    scrollBy(-100_000f, "summary-scroll")
+    render()
+  }
 
   fun revealText(label: String, scrollTag: String? = null) {
     fun visible(): Boolean =

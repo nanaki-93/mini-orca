@@ -13,7 +13,7 @@ import (
 
 type mockChatClient struct{}
 
-func (mockChatClient) Chat(context.Context, []llm.ChatMessage) (*llm.ChatResponse, error) {
+func (mockChatClient) ChatWithJSONSchema(context.Context, []llm.ChatMessage, llm.JSONSchema) (*llm.ChatResponse, error) {
 	return &llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{
 		Role: "assistant", Content: `{"purpose":"A small test project.","architecture":"One Go package.","components":["main package"],"entry_points":["main.main"],"flows":["main invokes work"],"risks":[],"next_steps":["Add tests"]}`,
 	}}}}, nil
@@ -21,9 +21,9 @@ func (mockChatClient) Chat(context.Context, []llm.ChatMessage) (*llm.ChatRespons
 
 type recordingChatClient struct{ messages []llm.ChatMessage }
 
-func (c *recordingChatClient) Chat(_ context.Context, messages []llm.ChatMessage) (*llm.ChatResponse, error) {
+func (c *recordingChatClient) ChatWithJSONSchema(ctx context.Context, messages []llm.ChatMessage, schema llm.JSONSchema) (*llm.ChatResponse, error) {
 	c.messages = append([]llm.ChatMessage(nil), messages...)
-	return mockChatClient{}.Chat(context.Background(), messages)
+	return mockChatClient{}.ChatWithJSONSchema(ctx, messages, schema)
 }
 
 func TestResolveFileRejectsSiblingPrefixAndSymlinkEscape(t *testing.T) {
