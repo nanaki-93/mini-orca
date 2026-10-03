@@ -78,12 +78,18 @@ func TestApplyAndUndoIndexFailuresReportActualMutation(t *testing.T) {
 		t.Fatal(err)
 	}
 	blockMutationMetadata(t, root, ".mini-orca/index.json")
+	if _, err := service.TrustProjectExecution(draft.ProjectRevision, true); err != nil {
+		t.Fatal(err)
+	}
 	applied, err := service.ApplyDraft(context.Background(), applyDraftRequest(draft))
 	if err != nil || applied == nil || applied.Index != nil || len(applied.Warnings) == 0 || !applied.UndoAvailable {
 		t.Fatalf("Apply = %+v, %v; want a receipt despite failed indexing", applied, err)
 	}
 	if applied.ProjectRevision != draft.ProjectRevision || contentHash([]byte(readApplySource(t, root))) != applied.PostApplyHash {
 		t.Fatal("failed indexing must retain the known revision and report the actual source hash")
+	}
+	if trust, err := service.ExecutionTrust(applied.ProjectRevision, ""); err != nil || trust.Trusted {
+		t.Fatalf("execution trust must expire after source mutation despite failed indexing: %+v, %v", trust, err)
 	}
 	undone, err := service.UndoDraft(context.Background(), UndoRequest{ProjectID: draft.ProjectID, ProjectRevision: applied.ProjectRevision, PostApplyHash: applied.PostApplyHash, Confirm: true})
 	if err != nil || undone == nil || undone.Index != nil || undone.UndoAvailable || len(undone.Warnings) == 0 || readApplySource(t, root) != original {

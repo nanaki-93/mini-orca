@@ -82,6 +82,8 @@ func (s *Service) persistDraftUndo(state *applyState, revision string, writeErr 
 
 func (s *Service) mutationReceipt(audit AuditEntry, undo bool, writeErr error) *ApplyResult {
 	result := &ApplyResult{Audit: audit, ProjectRevision: audit.ProjectRevision, PostApplyHash: audit.AfterHash, UndoAvailable: undo}
+	// Source has changed even if indexing cannot publish a new revision.
+	s.clearExecutionTrust()
 	if writeErr != nil {
 		result.Warnings = append(result.Warnings, writeErr.Error())
 	}
