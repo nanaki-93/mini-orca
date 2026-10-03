@@ -84,7 +84,6 @@ internal data class SourceViewportRow(
  */
 internal fun sourceViewportRows(
     source: String,
-    expandIndentation: Boolean,
     selectable: Boolean,
     symbols: List<SymbolInfo>,
 ): List<SourceViewportRow> =
@@ -92,9 +91,7 @@ internal fun sourceViewportRows(
       val line = index + 1
       SourceViewportRow(
           line = line,
-          highlightedText =
-              highlightedCode(
-                  if (expandIndentation) expandedEditorIndentation(sourceLine) else sourceLine),
+          highlightedText = highlightedCode(sourceLine),
           selection = if (selectable) sourceLineSelection(symbols, line) else null,
       )
     }
@@ -175,26 +172,6 @@ internal fun sourceLineContentDescription(
     sourceLineDescription(line, emphasis) +
         declarationSymbol?.let { ", selectable declaration ${it.name}" }.orEmpty()
 
-/**
- * Widens only a source line's leading whitespace for easier visual nesting in the read-only editor.
- */
-internal fun expandedEditorIndentation(sourceLine: String): String {
-  val indentationEnd = sourceLine.indexOfFirst { !it.isWhitespace() }
-  if (indentationEnd <= 0) return sourceLine
-  val indentation = sourceLine.take(indentationEnd)
-  val visualIndentationWidth =
-      indentation.count { it != '\t' } + indentation.count { it == '\t' } * 4
-  val additionalSpaces = maxOf(1, visualIndentationWidth / 4)
-  return buildString(sourceLine.length + indentationEnd) {
-    indentation.forEach { character ->
-      append(character)
-      append(character)
-    }
-    repeat(additionalSpaces) { append(' ') }
-    append(sourceLine.drop(indentationEnd))
-  }
-}
-
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 internal fun SourceEditorPane(
@@ -219,7 +196,6 @@ internal fun SourceEditorPane(
       remember(source, selected?.path, selected?.contentHash, canSelectSource, symbols) {
         sourceViewportRows(
             source = source,
-            expandIndentation = selected != null,
             selectable = canSelectSource,
             symbols = symbols,
         )

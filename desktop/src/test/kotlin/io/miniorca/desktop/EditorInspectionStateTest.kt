@@ -66,20 +66,12 @@ class EditorInspectionStateTest {
   }
 
   @Test
-  fun sourceEditorExpandsLeadingIndentationWithoutChangingCodeContent() {
-    assertEquals("         return result", expandedEditorIndentation("    return result"))
-    assertEquals("\t\t result := run()", expandedEditorIndentation("\tresult := run()"))
-    assertEquals("result  := run()", expandedEditorIndentation("result  := run()"))
-  }
-
-  @Test
   fun sourceViewportKeepsGutterAndTextRowsAlignedForEmptyAndIndentedLines() {
     assertEquals(20.dp, readOnlyCodeRowMinimumHeight)
     assertEquals(62.dp, sourceEditorGutterWidth)
     val rows =
         sourceViewportRows(
             source = "first\n\n    nested",
-            expandIndentation = true,
             selectable = true,
             symbols = emptyList(),
         )
@@ -87,7 +79,7 @@ class EditorInspectionStateTest {
     assertEquals(listOf(1, 2, 3), rows.map { it.line })
     assertEquals("first", rows[0].highlightedText.text)
     assertEquals("", rows[1].highlightedText.text)
-    assertEquals("         nested", rows[2].highlightedText.text)
+    assertEquals("    nested", rows[2].highlightedText.text)
     assertEquals(SourceLineSelection(2, null), rows[1].selection)
   }
 
@@ -146,7 +138,6 @@ class EditorInspectionStateTest {
     val rows =
         sourceViewportRows(
             source = source,
-            expandIndentation = true,
             selectable = true,
             symbols = listOf(nested),
         )

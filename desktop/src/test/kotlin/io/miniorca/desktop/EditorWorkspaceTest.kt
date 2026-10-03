@@ -303,6 +303,23 @@ class EditorWorkspaceTest {
   }
 
   @Test
+  fun sourceClipboardPreservesWhitespaceInsideRawStrings() {
+    val source = "package main\n\nvar message = `first\n    literal indentation\n\tliteral tab\n`"
+    val file = testFile("main.go").copy(content = source)
+    ComposeVisualFixture(600, 300) {
+          SourceEditorPane(resultProjectFixture(), file, emptyList(), null, 0, emptyList()) {}
+        }
+        .use { fixture ->
+          fixture.render("source-literal-whitespace")
+          fixture.dragSourceText(1, 0, 6, 1)
+          fixture.pressKey(Key.Copy)
+          fixture.render()
+          assertEquals(source, fixture.clipboardText())
+          assertFalse(fixture.hasTextMutationSemantics("source-viewport"))
+        }
+  }
+
+  @Test
   fun productionSourceTapInspectsButMultilineDragCopyAndMutationAttemptsRetainWork() {
     val source =
         "package worker\n\nfunc Run() {\n    work()\n}\n\nfunc Other() {\n    more()\n}\n\n// " +
@@ -400,7 +417,7 @@ class EditorWorkspaceTest {
             assertEquals(retainedReview, state.review)
             assertEquals(retainedChat, state.chat)
             val inspected = state.selection
-            val displayedLines = source.lines().map(::expandedEditorIndentation)
+            val displayedLines = source.lines()
             fun assertMutationIsRejected() {
               assertFalse(fixture.hasTextMutationSemantics("source-viewport"))
               fixture.setClipboardText("MUST_NOT_REPLACE_SOURCE_OR_DRAFT")
@@ -431,8 +448,7 @@ class EditorWorkspaceTest {
               }
               val offset = if (scroll == 0f) 0 else 8
               val expected =
-                  (if (scroll == 0f) "func Run" else "") +
-                      "() {\n         work()\n}\n\nfunc Other()"
+                  (if (scroll == 0f) "func Run" else "") + "() {\n    work()\n}\n\nfunc Other()"
               for (reverse in listOf(false, true)) {
                 fixture.setClipboardText("")
                 if (reverse) fixture.dragSourceText(7, 12, 3, offset)
