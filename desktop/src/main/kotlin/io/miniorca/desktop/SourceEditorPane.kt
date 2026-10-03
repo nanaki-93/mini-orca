@@ -186,10 +186,9 @@ internal fun SourceEditorPane(
   val source =
       when {
         selected != null ->
-            if (selected.binary) "Binary file: source preview is unavailable." else selected.content
+            if (selected.binary) "Binary file · preview unavailable" else selected.content
         project != null -> project.summary
-        else ->
-            "Select Import to analyze a project. Mini-Orca indexes only policy-eligible project files."
+        else -> "Open a project"
       }
   val canSelectSource = selected != null && !selected.binary && selected.content.isNotEmpty()
   val rows =

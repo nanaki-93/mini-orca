@@ -520,8 +520,8 @@ class AnalysisFileStatusTest {
                   fixture.assertTextFits(
                       label, maxLines = if (status == "completed_empty") 3 else 1)
                   if (status == "completed_empty")
-                      assertEquals(3, fixture.textCount("0 reported · details not confirmed"))
-                  if (status != "stale") assertEquals(3, fixture.textCount("0/1 stages covered"))
+                      assertEquals(3, fixture.textCount("Details unconfirmed"))
+                  assertEquals(0, fixture.textCount("0/1 stages covered"))
                   fixture.clickVisibleDescription("View Security results")
                   assertEquals(Workspace.Security, navigations.last())
                 }
@@ -553,9 +553,7 @@ class AnalysisFileStatusTest {
         .use { fixture ->
           fixture.render()
           assertEquals(
-              1,
-              fixture.taggedTextCount(
-                  "analysis-category-content-bugs", "Saved details unavailable · 2 reported"))
+              1, fixture.taggedTextCount("analysis-category-content-bugs", "Details unavailable"))
           assertEquals(1, fixture.taggedTextCount("analysis-category-content-bugs", "Interrupted"))
           assertEquals(0, fixture.textCount("No results"))
         }
@@ -579,14 +577,12 @@ class AnalysisFileStatusTest {
       val key = AnalysisResultKey(type.category)
       val cases =
           listOf(
-              AnalysisSectionState() to "0 reported · details not confirmed",
-              AnalysisSectionState(error = "Saved read failed") to
-                  "Saved details unavailable · 0 reported",
+              AnalysisSectionState() to "Details unconfirmed",
+              AnalysisSectionState(error = "Saved read failed") to "Details unavailable",
               AnalysisSectionState(results = saved, error = "Saved read failed") to
-                  "Saved details unavailable · 0 reported",
-              AnalysisSectionState(results = saved.copy(path = "main.go")) to
-                  "0 reported · details not confirmed",
-              AnalysisSectionState(results = saved) to "0 reported")
+                  "Details unavailable",
+              AnalysisSectionState(results = saved.copy(path = "main.go")) to "Details unconfirmed",
+              AnalysisSectionState(results = saved) to "No results")
       cases.forEach { (section, detail) ->
         ComposeVisualFixture(800, 650, 1.5f) {
               AnalysisCategoryPanels(

@@ -11,14 +11,15 @@ import (
 )
 
 type cliResponseDecoder struct {
-	profile  config.ModelProfile
-	response *ChatResponse
-	started  bool
-	finished bool
+	profile    config.ModelProfile
+	response   *ChatResponse
+	structured bool
+	started    bool
+	finished   bool
 }
 
-func decodeCLIResponse(profile config.ModelProfile, output []byte) (*ChatResponse, error) {
-	decoder := cliResponseDecoder{profile: profile}
+func decodeCLIResponse(profile config.ModelProfile, output []byte, structured bool) (*ChatResponse, error) {
+	decoder := cliResponseDecoder{profile: profile, structured: structured}
 	scanner := bufio.NewScanner(bytes.NewReader(output))
 	scanner.Buffer(make([]byte, 4096), maxProviderResponseBytes)
 	for scanner.Scan() {
@@ -53,9 +54,10 @@ func (d *cliResponseDecoder) agyEvent(data []byte) error {
 			Type string `json:"step_type"`
 		} `json:"step_update"`
 		Result struct {
-			Status   string `json:"status"`
-			Response string `json:"response"`
-			Usage    struct {
+			Status           string          `json:"status"`
+			Response         string          `json:"response"`
+			StructuredOutput json.RawMessage `json:"structured_output"`
+			Usage            struct {
 				Input  int `json:"input_tokens"`
 				Output int `json:"output_tokens"`
 				Total  int `json:"total_tokens"`
@@ -67,8 +69,9 @@ func (d *cliResponseDecoder) agyEvent(data []byte) error {
 	}
 	switch event.Event {
 	case "init":
-		if d.started || event.Init.Tools == nil || len(*event.Init.Tools) != 0 || event.Init.Agent != "mini-orca" || event.Init.Model != d.profile.Model {
-			return unusableCLIResponse("agy did not select the configured model and tool-free agent")
+		// init.tools is the CLI's catalog, not the custom agent's allowed tools.
+		if d.started || event.Init.Tools == nil || event.Init.Agent != "mini-orca" || event.Init.Model != d.profile.Model {
+			return unusableCLIResponse("agy did not select the configured model and agent")
 		}
 		d.started = true
 	case "step_update":
@@ -79,14 +82,33 @@ func (d *cliResponseDecoder) agyEvent(data []byte) error {
 		if !d.started || d.finished || event.Result.Status != "SUCCESS" {
 			return unusableCLIResponse("agy did not complete successfully")
 		}
+		content, err := agyFinalContent(event.Result.Response, event.Result.StructuredOutput, d.structured)
+		if err != nil {
+			return err
+		}
 		d.finished = true
-		d.response = cliChatResponse(d.profile.Model, event.Result.Response, ChatUsage{
+		d.response = cliChatResponse(d.profile.Model, content, ChatUsage{
 			PromptTokens: event.Result.Usage.Input, CompletionTokens: event.Result.Usage.Output, TotalTokens: event.Result.Usage.Total,
 		})
 	default:
 		return unusableCLIResponse("unrecognized agy event")
 	}
 	return nil
+}
+
+func agyFinalContent(response string, output json.RawMessage, structured bool) (string, error) {
+	if !structured {
+		return response, nil
+	}
+	if len(output) != 0 {
+		return string(output), nil
+	}
+	// Preserve the existing optional blank-review contract. Nonempty prose is
+	// never a substitute for the native schema result, even if it parses as JSON.
+	if strings.TrimSpace(response) == "" {
+		return response, nil
+	}
+	return "", unusableCLIResponse("agy did not return the required structured output")
 }
 
 func (d *cliResponseDecoder) piEvent(data []byte) error {

@@ -1348,6 +1348,97 @@ class DesktopWorkflowPresenterTest {
   }
 
   @Test
+  fun descriptionRegenerationImportsOnceAfterConsentAndReplacesTheSavedFailure() {
+    val dispatcher = QueuedDispatcher()
+    val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    val calls = mutableListOf<Pair<String, String>>()
+    val fresh =
+        StructuredProjectAnalysis(
+            status = "fresh", purpose = "New project description.", model = "current-model")
+    val presenter =
+        presenter(parentScope = scope, ioDispatcher = dispatcher) { method, path, body ->
+          calls += method to path
+          when (path) {
+            "/api/models/current" ->
+                response(
+                    """{"scopes":{"analyze":{"scope":"analyze","model":"current-model","provider_origin":"cli://agy","remote_provider":true}}}""")
+            "/api/projects/import" -> {
+              val request = Json.parseToJsonElement(body!!).jsonObject
+              assertEquals("/tmp/project", request["project_path"]?.jsonPrimitive?.content)
+              assertEquals("true", request["confirm_remote_provider"]?.jsonPrimitive?.content)
+              response(projectJson().replace("\"missing\"", "\"fresh\""))
+            }
+            "/api/projects/current/overview?project_revision=revision" ->
+                response(
+                    Json.encodeToString(
+                        ProjectOverview(
+                            projectId = "project", projectRevision = "revision", analysis = fresh)))
+            else -> projectStartupResponse(method, path)
+          }
+        }
+    try {
+      presenter.refreshConnection()
+      dispatcher.runPending()
+      loadProject(presenter)
+      presenter.dispatch(
+          DesktopEvent.OverviewLoaded(
+              ProjectOverview(
+                  projectId = "project",
+                  projectRevision = "revision",
+                  analysis =
+                      StructuredProjectAnalysis(
+                          status = "failed",
+                          failure = "Unusable structured report.",
+                          model = "old-model"))))
+      val admission = ProjectSwitchAdmission()
+      assertTrue(admitProjectDescriptionRegeneration(presenter.snapshot.value, false, admission))
+      val canceled = admission.pending!!
+      assertEquals(SwitchReviewStage.Provider, canceled.stage)
+      admission.dismiss(canceled.requestId)
+      dispatcher.runPending()
+      assertEquals("failed", presenter.snapshot.value.state.overview?.analysis?.status)
+      assertTrue(calls.none { it.first == "POST" })
+
+      assertTrue(admitProjectDescriptionRegeneration(presenter.snapshot.value, false, admission))
+      val request = admission.pending!!
+      presenter.setProviderConfirmation(ModelScope.Analyze, true)
+      admission.approveProvider(request.requestId, ProjectSwitchContext(presenter.snapshot.value))
+      assertEquals(SwitchReviewStage.Final, admission.pending?.stage)
+      assertTrue(calls.none { it.first == "POST" })
+      repeat(2) {
+        commitProjectSwitch(
+            request.requestId,
+            admission,
+            { ProjectSwitchContext(presenter.snapshot.value) },
+            { projectOpenAvailable(presenter.snapshot.value.state.projectState.openingAttempt) },
+            SwitchTerminalCleanup(
+                {
+                  java.util.concurrent.CompletableFuture.completedFuture(TerminalWorkspaceState())
+                },
+                { TerminalWorkspaceState() }),
+            presenter::discardDraft,
+            { presenter.loadProject(it, restore = false) },
+            {},
+            { error -> assertNull(error) },
+            { it() },
+            { {} })
+      }
+      dispatcher.runPending()
+      assertEquals(listOf("POST" to "/api/projects/import"), calls.filter { it.first == "POST" })
+      val state = presenter.snapshot.value.state
+      assertEquals("/tmp/project", state.project?.path)
+      assertEquals("fresh", state.project?.aiStatus)
+      assertEquals(fresh, state.overview?.analysis)
+      assertEquals(
+          "New project description.",
+          projectSummaryPresentation(state.overview, state.project).purpose)
+    } finally {
+      presenter.close()
+      scope.cancel()
+    }
+  }
+
+  @Test
   fun failedRestorePreservesTheRememberedProjectWithoutImportingOrCallingAModel() {
     val preferences = InMemoryPreferences()
     val store = LastProjectStore(preferences)

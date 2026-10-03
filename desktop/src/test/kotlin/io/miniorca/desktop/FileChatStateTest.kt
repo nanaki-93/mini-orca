@@ -39,7 +39,7 @@ class FileChatStateTest {
         applyDecisionUiState(base.project, base.selected, editableDraft(draft), draft, report, null)
     val action = reviewNextActionUiState(evidence, decision, draft, report, session, false)
     assertEquals(ReviewNextActionKind.ReviseWithCheckOutput, action.kind)
-    assertTrue(action.detail.contains("3 of 3"))
+    assertTrue(action.detail.contains("3/3"))
   }
 
   @Test

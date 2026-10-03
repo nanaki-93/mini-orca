@@ -96,7 +96,7 @@ class DesktopAccessibilityTest {
                   retainedValidation = draft.validation,
                   serverDraft = draft.copy(validation = null))
           fixture.render()
-          assertTrue(fixture.hasText("Locally edited · needs validation"))
+          assertTrue(fixture.hasText("Edited · not validated"))
           assertTrue(fixture.hasText("Previous validation diagnostics"))
           assertEquals(0, actions)
         }
@@ -184,9 +184,7 @@ class DesktopAccessibilityTest {
           fixture.render()
           assertTrue(fixture.isDescriptionDisabled("New Go function"))
           assertTrue(fixture.hasText("Wait for the current generation or validation to finish."))
-          assertTrue(
-              fixture.hasText(
-                  "Request running · Cancel keeps the existing draft and conversation."))
+          assertTrue(fixture.hasText("Generating"))
           assertFalse(fixture.hasText("Generate type"))
           assertTrue(fixture.hasText("Cancel request"))
           assertEquals(0, sends)
@@ -299,9 +297,7 @@ class DesktopAccessibilityTest {
           assertEquals(listOf("preset"), calls)
           state = state.copy(sending = true)
           fixture.render()
-          assertTrue(
-              fixture.hasText(
-                  "Request running · Cancel keeps the existing draft and conversation."))
+          assertTrue(fixture.hasText("Generating"))
           assertFalse(fixture.hasText("Send message"))
           assertTrue(fixture.requestFocus("Cancel request"))
           fixture.render()
@@ -924,7 +920,7 @@ class DesktopAccessibilityTest {
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("Checks running"))
-          assertTrue(fixture.hasText("Previous check report (retained; not current approval)"))
+          assertTrue(fixture.hasText("Previous checks · not current"))
           assertFalse(fixture.hasText("Ready to apply"))
           assertFalse(fixture.hasText("Apply change"))
         }
@@ -990,7 +986,7 @@ class DesktopAccessibilityTest {
                   "Editing guide"),
               fixture.semanticHeadingTexts(),
               "Visible Summary headings must follow the page's reading order")
-          assertTrue(fixture.hasText("Project description: stale · source may have changed"))
+          assertTrue(fixture.hasText("AI description · stale"))
           assertTrue(fixture.hasText("Outdated"))
           assertTrue(fixture.hasText("View analysis"))
           fixture.expandSummarySection("Project details")
@@ -1200,9 +1196,7 @@ class DesktopAccessibilityTest {
               "Selected for analysis", fixture.descriptionStateDescription("Analyze helper.go"))
           assertEquals(ToggleableState.On, fixture.descriptionToggleableState("Analyze helper.go"))
           assertTrue(fixture.hasDescription("Files finished: 0 of 1"))
-          assertTrue(
-              fixture.hasText(
-                  "Selection locked. Finish or cancel the current run to change files."))
+          assertTrue(fixture.hasText("Selection locked · run in progress"))
         }
   }
 
@@ -1230,8 +1224,8 @@ class DesktopAccessibilityTest {
           fixture.render()
           fixture.clickDescription("Collapse Files")
           fixture.render()
-          assertTrue(fixture.hasText("Selection changes unavailable."))
-          assertTrue(
+          assertTrue(fixture.hasText("Selection locked"))
+          assertFalse(
               fixture.hasText(
                   "File selection is independent of the open Editor file and does not start analysis."))
           assertTrue(fixture.requestFocus("Refresh files"))
@@ -1418,8 +1412,9 @@ class DesktopAccessibilityTest {
           assertTrue(fixture.hasText("Start analysis"))
           fixture.clickText("Start analysis")
           assertEquals(1, starts)
-          assertTrue(fixture.hasText("Attention · 1 failed"))
+          assertTrue(fixture.hasText("1 failure"))
           assertFalse(fixture.hasText(reason))
+          fixture.expandAnalysisRunDetails()
           fixture.revealText("Code analysis · 1/1 finished · 1 failed", "analysis-page")
           fixture.clickText("Code analysis · 1/1 finished · 1 failed")
           fixture.render()

@@ -1,6 +1,5 @@
 package io.miniorca.desktop
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -87,25 +86,10 @@ internal fun AnalysisRunStrip(
         }
         if (analysisRunOutdated(run, state.project))
             Text(
-                if (analysisRunRevisionOutdated(run, state.project))
-                    "Outdated · run belongs to an older project revision; not current evidence."
-                else "Outdated · run belongs to another project; not current evidence.",
+                if (analysisRunRevisionOutdated(run, state.project)) "Outdated · previous revision"
+                else "Outdated · another project",
                 color = Warning,
                 style = IdeTypography.workspaceMetadata)
-        if (scope == AnalysisRunStripScope.Summary && run != null) {
-          val stopped =
-              run.status in
-                  setOf("paused", "interrupted", "canceled", "failed", "partial", "unavailable")
-          if (stopped || run.reason.isNotBlank()) {
-            val reason = run.reason.ifBlank { "No stop reason was supplied for this run." }
-            SelectionContainer {
-              Text(
-                  "${if (stopped) "Stop reason" else "Run diagnostic"} · ${sanitizedOutputText(reason, 180).substringBefore('\n')}",
-                  color = Warning,
-                  style = IdeTypography.workspaceMetadata)
-            }
-          }
-        }
         if (scope == AnalysisRunStripScope.Analysis) {
           if (run?.plan?.compatibilityStage?.isNotBlank() == true)
               Text(
@@ -148,10 +132,11 @@ private fun AnalysisRunPanel(
   }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      AnalysisLifecycleIndicator(run, presentation)
+      AnalysisLifecycleIndicator(run, presentation, state.analysis)
       AnalysisRunContent(
           run,
           presentation,
+          state.analysis,
           pathsExpanded,
           onTogglePaths,
           Modifier.weight(1f).testTag("analysis-run-content"))
@@ -168,7 +153,7 @@ private fun AnalysisRunPanel(
                     .testTag("analysis-refresh-status")) {
               Text("Refresh status", style = IdeTypography.action)
             }
-    AnalysisRunRecoveryContext(run, presentation, commands)
+    AnalysisRunDiagnostic(run)
     AnalysisRunControls(
         state,
         commands,
@@ -179,63 +164,86 @@ private fun AnalysisRunPanel(
           else if (focusedCommand == command && command in currentCommands) focusedCommand = null
         })
     if (pathsExpanded) AnalysisExpandedPaths(presentation.currentFiles)
-    if (run != null) AnalysisStageRows(run, presentation)
-    if ((run != null && !run.isActive()) || state.analysis.previousRun != null)
+    if (run != null || state.analysis.previousRun != null) {
+      var detailsExpanded by
+          remember(run?.identity ?: state.analysis.previousRun?.identity) { mutableStateOf(false) }
+      IdeDisclosureHeader("Run details", detailsExpanded, { detailsExpanded = !detailsExpanded })
+      if (detailsExpanded) {
+        if (run != null) {
+          analysisRunSupplementalMetadata(run, presentation)?.let {
+            Text(it, color = SecondaryText, style = IdeTypography.workspaceMetadata)
+          }
+          Text(
+              presentation.reportedAttempts?.let { "$it attempts" } ?: "Attempts unavailable",
+              color = SecondaryText,
+              style = IdeTypography.workspaceMetadata)
+          AnalysisStageRows(run, presentation)
+        }
         AnalysisRunHistory(state.project, run, state.analysis.previousRun)
-  }
-}
-
-@Composable
-private fun AnalysisLifecycleIndicator(run: AnalysisRun?, presentation: ProjectRunPresentation) {
-  val tint = analysisRunDisplayTint(run, presentation)
-  Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
-    if (presentation.isActive) {
-      IdeBusyIndicator(Modifier.size(22.dp), color = tint, strokeWidth = 2.dp)
-    } else {
-      Canvas(Modifier.size(10.dp)) { drawCircle(tint) }
+      }
     }
   }
 }
 
 @Composable
+private fun AnalysisLifecycleIndicator(
+    run: AnalysisRun?,
+    presentation: ProjectRunPresentation,
+    analysis: ProjectAnalysisRunState
+) {
+  val uncertain = analysisLifecycleStatusLabel(presentation, analysis) != presentation.status
+  val tint = if (uncertain) Warning else analysisRunDisplayTint(run, presentation)
+  Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
+    if (presentation.isActive) {
+      IdeBusyIndicator(Modifier.size(22.dp), color = tint, strokeWidth = 2.dp)
+    } else {
+      DesktopLineIcon(
+          if (uncertain) DesktopIcon.Warning
+          else analysisStatusIcon(if (presentation.status == "Stale") "stale" else run?.status),
+          "",
+          tint = tint)
+    }
+  }
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun AnalysisRunContent(
     run: AnalysisRun?,
     presentation: ProjectRunPresentation,
+    analysis: ProjectAnalysisRunState,
     pathsExpanded: Boolean,
     onTogglePaths: () -> Unit,
     modifier: Modifier,
 ) {
   Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    Column {
-      Text(analysisRunTitle(run, presentation), style = IdeTypography.workspaceHeading)
-      Text(
-          analysisFileProgressLabel(presentation),
-          color = SecondaryText,
-          style = IdeTypography.compactBody)
-      if (run != null) AnalysisRunAttention(run, presentation)
-    }
+    val lifecycle = analysisLifecycleStatusLabel(presentation, analysis)
+    Text(
+        if (lifecycle != presentation.status) lifecycle else analysisRunTitle(run, presentation),
+        style = IdeTypography.workspaceHeading)
     if (run != null) {
-      AnalysisRunProgressTrack(
-          presentation,
-          analysisRunDisplayTint(run, presentation),
-          Modifier.fillMaxWidth(),
-          showPercent = true)
+      val outcome = analysisRunOutcomeLabel(presentation)
+      FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (outcome == null || presentation.isActive)
+            Text(
+                analysisFileProgressLabel(presentation),
+                color = SecondaryText,
+                style = IdeTypography.compactBody)
+        if (outcome != null)
+            Text(
+                outcome,
+                color = Warning,
+                style = IdeTypography.compactBody,
+                modifier = Modifier.testTag("analysis-run-attention"))
+      }
+      if (presentation.isActive)
+          AnalysisRunProgressTrack(
+              presentation,
+              analysisRunDisplayTint(run, presentation),
+              Modifier.fillMaxWidth(),
+              showPercent = true)
     }
-    if (run != null && presentation.progressAvailability == RunProgressAvailability.Available)
-        Text(
-            "Finished includes partial and failed outcomes; it does not mean successful.",
-            color = SecondaryText,
-            style = IdeTypography.workspaceMetadata)
     AnalysisCurrentFiles(presentation.currentFiles, pathsExpanded, onTogglePaths)
-    analysisRunSupplementalMetadata(run, presentation)?.let { metadata ->
-      Text(metadata, color = SecondaryText, style = IdeTypography.workspaceMetadata)
-    }
-    if (run != null)
-        Text(
-            presentation.reportedAttempts?.let { "Cumulative attempts reported · $it" }
-                ?: "Cumulative attempts unavailable",
-            color = SecondaryText,
-            style = IdeTypography.workspaceMetadata)
   }
 }
 
@@ -260,63 +268,28 @@ internal fun analysisStageBreakdown(stage: AnalysisStageSummary): String =
         }
         .joinToString(" · ")
 
-@Composable
-private fun AnalysisRunAttention(run: AnalysisRun, presentation: ProjectRunPresentation) {
-  val evidence = buildList {
-    presentation.stages
-        .flatMap { it.files }
-        .filter {
-          it.eligible && it.status in setOf("failed", "unavailable", "interrupted", "partial")
-        }
+internal fun analysisRunOutcomeLabel(presentation: ProjectRunPresentation): String? {
+  val stages = presentation.stages.flatMap { it.files }.filter { it.eligible }
+  val facts = buildList {
+    val failures = stages.count { it.status == "failed" }
+    if (failures > 0) add("$failures ${if (failures == 1) "failure" else "failures"}")
+    val missing = stages.filter { it.status == null }.map { it.path }.distinct().size
+    if (missing > 0) add("$missing missing ${if (missing == 1) "file" else "files"}")
+    stages
+        .filter { it.status in setOf("unavailable", "interrupted", "partial") }
         .groupingBy { it.status!! }
         .eachCount()
         .forEach { (status, count) -> add("$count ${analysisStatusLabel(status).lowercase()}") }
   }
-  val runNeedsAttention = run.status in setOf("failed", "unavailable", "partial", "interrupted")
-  if (evidence.isNotEmpty() || runNeedsAttention || run.reason.isNotBlank()) {
-    val summary =
-        evidence.takeIf { it.isNotEmpty() }?.joinToString(" · ")
-            ?: if (runNeedsAttention) analysisStatusLabel(run.status) else "Run diagnostic reported"
-    Text(
-        "Attention · $summary",
-        color = Warning,
-        style = IdeTypography.compactBody,
-        modifier = Modifier.testTag("analysis-run-attention"))
-  }
+  return facts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 }
 
 @Composable
-private fun AnalysisRunRecoveryContext(
-    run: AnalysisRun?,
-    presentation: ProjectRunPresentation,
-    commands: List<AnalysisRunCommand>,
-) {
-  presentation.lifecycleExplanation?.let {
-    Text(it, color = SecondaryText, style = IdeTypography.compactBody)
-  }
-  if (AnalysisRunCommand.Cancel in commands || run?.status in setOf("canceling", "canceled"))
-      Text(
-          "Cancel stops active requests and future dispatch; completed evidence stays available.",
-          color = SecondaryText,
-          style = IdeTypography.workspaceMetadata)
-  if (run != null &&
-      run.status in
-          setOf("paused", "interrupted", "canceled", "failed", "partial", "unavailable")) {
-    val reason = run.reason.ifBlank { "No stop reason was supplied for this run." }
-    val preview = sanitizedOutputText(reason, 180).substringBefore('\n')
-    SelectionContainer {
-      Text("Stop reason · $preview", color = Warning, style = IdeTypography.compactBody)
-    }
-    var expanded by remember(run.identity) { mutableStateOf(false) }
-    IdeDisclosureHeader("Run diagnostic", expanded, { expanded = !expanded })
-    if (expanded)
-        DiagnosticText(
-            run.reason.ifBlank { "No diagnostic was supplied for this run." }, color = Warning)
-  } else if (run?.reason?.isNotBlank() == true) {
-    var expanded by remember(run.identity) { mutableStateOf(false) }
-    IdeDisclosureHeader("Run diagnostic", expanded, { expanded = !expanded })
-    if (expanded) DiagnosticText(run.reason, color = Warning)
-  }
+private fun AnalysisRunDiagnostic(run: AnalysisRun?) {
+  if (run?.reason?.isNotBlank() != true) return
+  var expanded by remember(run.identity) { mutableStateOf(false) }
+  IdeDisclosureHeader("Run diagnostic", expanded, { expanded = !expanded })
+  if (expanded) DiagnosticText(run.reason, color = Warning)
 }
 
 @Composable
@@ -397,12 +370,7 @@ private fun AnalysisRunHistory(
         }
       }
     }
-    if (previous == null || previous.identity == current?.identity) {
-      Text(
-          "Older run details unavailable in this session · only the latest saved run is restored after restart.",
-          color = SecondaryText,
-          style = IdeTypography.workspaceMetadata)
-    } else {
+    if (previous != null && previous.identity != current?.identity) {
       var expanded by remember(current?.identity, previous.identity) { mutableStateOf(false) }
       IdeDisclosureHeader(
           "Previous observed run · ${analysisStatusLabel(previous.status)}",
@@ -542,40 +510,18 @@ private fun SummaryRunPanel(
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
     AnalysisRunMetadata(
         run, presentation, state.analysis, currentPaths, pathsExpanded, onTogglePaths)
-    if (run != null) {
-      AnalysisRunProgressTrack(
-          presentation, analysisRunDisplayTint(run, presentation), Modifier.fillMaxWidth())
-      if (presentation.progressAvailability == RunProgressAvailability.Available)
-          Text(
-              "Finished includes partial and failed outcomes; it does not mean successful.",
-              color = SecondaryText,
-              style = IdeTypography.workspaceMetadata)
-    }
-    presentation.lifecycleExplanation?.let {
-      Text(it, color = SecondaryText, style = IdeTypography.compactBody)
-    }
-    if (run != null &&
+    if (run != null && presentation.isActive)
+        AnalysisRunProgressTrack(
+            presentation, analysisRunDisplayTint(run, presentation), Modifier.fillMaxWidth())
+    AnalysisRunDiagnostic(run)
+    if (onOpenAnalysis != null &&
+        run != null &&
         (state.analysis.statusUnavailable ||
-            state.analysis.controlRequest?.outcome == AnalysisControlOutcome.Unconfirmed ||
             state.analysis.error != null ||
-            run.status in
-                setOf(
-                    "paused",
-                    "interrupted",
-                    "canceling",
-                    "canceled",
-                    "failed",
-                    "partial",
-                    "unavailable"))) {
-      Text(
-          "View Analysis for full run recovery and status details.",
-          color = SecondaryText,
-          style = IdeTypography.workspaceMetadata)
-      if (onOpenAnalysis != null)
-          MiniOrcaButton(onClick = onOpenAnalysis, tone = ActionTone.Navigation) {
-            Text("View analysis", style = IdeTypography.action)
-          }
-    }
+            state.analysis.controlRequest?.outcome == AnalysisControlOutcome.Unconfirmed))
+        MiniOrcaButton(onClick = onOpenAnalysis, tone = ActionTone.Navigation) {
+          Text("View analysis", style = IdeTypography.action)
+        }
     AnalysisRunControls(state, commands, actions)
     if (pathsExpanded) AnalysisExpandedPaths(currentPaths)
   }
@@ -590,12 +536,11 @@ private fun analysisRunDisplayTint(
 private fun analysisFileProgressLabel(presentation: ProjectRunPresentation): String =
     when (presentation.progressAvailability) {
       RunProgressAvailability.Available ->
-          "${presentation.finishedFiles} of ${presentation.totalFiles} files finished"
-      RunProgressAvailability.EmptyScope -> "No files in captured scope"
-      RunProgressAvailability.Incomplete ->
-          "File progress incomplete · captured records missing or inconsistent"
+          "${presentation.finishedFiles}/${presentation.totalFiles} files finished"
+      RunProgressAvailability.EmptyScope -> "Empty run scope"
+      RunProgressAvailability.Incomplete -> "Progress incomplete"
       RunProgressAvailability.NotStarted,
-      RunProgressAvailability.Unavailable -> "File progress unavailable"
+      RunProgressAvailability.Unavailable -> "Progress unavailable"
     }
 
 internal fun analysisLifecycleStatusLabel(
@@ -630,19 +575,29 @@ private fun AnalysisRunMetadata(
       modifier = modifier,
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        val status =
+            if (run == null) "Ready" else analysisLifecycleStatusLabel(presentation, analysis)
+        val uncertain = status != presentation.status && run != null
+        val outcome = analysisRunOutcomeLabel(presentation)
         IdeLabelBadge(
-            if (run == null) "Ready" else analysisLifecycleStatusLabel(presentation, analysis),
-            analysisRunDisplayTint(run, presentation))
+            listOfNotNull(status, outcome).joinToString(" · "),
+            if (uncertain) Warning else analysisRunDisplayTint(run, presentation),
+            icon =
+                if (uncertain) DesktopIcon.Warning
+                else
+                    analysisStatusIcon(
+                        if (presentation.status == "Stale") "stale" else run?.status))
         if (run != null) {
-          if (analysisLifecycleStatusLabel(presentation, analysis) != presentation.status)
+          if (uncertain)
               Text(
-                  "Last accepted run · ${presentation.status}",
+                  "Saved · ${presentation.status}",
                   color = SecondaryText,
                   style = IdeTypography.workspaceMetadata)
-          Text(
-              analysisFileProgressLabel(presentation),
-              color = SecondaryText,
-              style = IdeTypography.workspaceMetadata)
+          if (outcome == null || presentation.isActive)
+              Text(
+                  analysisFileProgressLabel(presentation),
+                  color = SecondaryText,
+                  style = IdeTypography.workspaceMetadata)
         }
         AnalysisCurrentFiles(currentPaths, pathsExpanded, onTogglePaths)
       }
@@ -670,9 +625,8 @@ private fun AnalysisCurrentFiles(
               stateDescription = if (pathsExpanded) "Expanded" else "Collapsed"
             }) {
           Text(
-              if (pathsExpanded) "Hide active files"
-              else if (currentPaths.size == 1) "Show full path"
-              else "+${currentPaths.size - 1} active files · Show full paths",
+              if (pathsExpanded) "Hide paths"
+              else if (currentPaths.size == 1) "Full path" else "+${currentPaths.size - 1} files",
               style = IdeTypography.workspaceMetadata)
         }
   }
@@ -742,7 +696,6 @@ internal fun AnalysisActionFeedback(analysis: ProjectAnalysisRunState) {
                 color = SelectionText)
           }
   analysis.error?.let {
-    Text("Analysis action needs attention", color = Error, style = IdeTypography.compactBody)
     DiagnosticText(it.ifBlank { "No failure details available." }, color = Error)
   }
 }

@@ -100,15 +100,15 @@ class BugsWorkspaceStateTest {
     assertEquals(VerifiedScanAction.Start, progress.action)
     assertTrue(
         progress.summary.contains(
-            "Reported phases: parse — Passed; go vet — Failed; go test — Skipped; future phase — Partial"))
-    assertTrue(progress.summary.contains("Completion is not proof that every phase passed."))
+            "parse — Passed · go vet — Failed · go test — Skipped · future phase — Partial"))
+    assertFalse(progress.summary.contains("Completion is not proof that every phase passed."))
     assertTrue(
         verifiedScanProgress(
                 project,
                 VerifiedScanState(read = VerifiedScanRead.Loaded),
                 report.copy(phases = emptyList()))
             .summary
-            .contains("No phases reported; no check outcome is available."))
+            .contains("Phase outcomes unavailable"))
   }
 
   @Test
@@ -136,13 +136,9 @@ class BugsWorkspaceStateTest {
           assertTrue(
               fixture.hasText(
                   "Project: ${project.projectId} · Revision: ${project.projectRevision}"))
-          assertTrue(
-              fixture.hasText(
-                  "Whole-project checks, independent of the Analysis file selection: parser inspection of indexed Go source; go vet ./...; go test ./..."))
-          assertTrue(
-              fixture.hasText(
-                  "Checks run in a temporary copied workspace; the scan does not edit original source. Tests and package initialization can execute project code. A copy is not a security sandbox."))
-          assertTrue(
+          assertTrue(fixture.hasText("Whole project · Go parser · go vet ./... · go test ./..."))
+          assertTrue(fixture.hasText("Executes project code in a temporary copy · not sandboxed"))
+          assertFalse(
               fixture.hasText(
                   "Local tool evidence is scoped to these checks, not a general safety assurance. Model suggestions are separate results below."))
           assertTrue(fixture.hasText("Trust project-code execution & run checks"))
@@ -602,7 +598,7 @@ class BugsWorkspaceStateTest {
     val confirmedAbsent = unavailable.reduce(DesktopEvent.GoScanLoaded(null))
     assertEquals(VerifiedScanRead.Absent, confirmedAbsent.verifiedScan.read)
     assertEquals("No current report", verifiedScanProgress(confirmedAbsent).statusLabel)
-    assertTrue(verifiedScanProgress(confirmedAbsent).summary.contains("Earlier scan evidence"))
+    assertEquals("Previous scan retained", verifiedScanProgress(confirmedAbsent).summary)
     assertFalse(
         verifiedScanProgress(confirmedAbsent).summary.contains("No verified checks have run"))
     assertEquals(VerifiedScanAction.Start, verifiedScanProgress(confirmedAbsent).action)

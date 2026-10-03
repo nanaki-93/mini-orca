@@ -193,10 +193,8 @@ class ResultWorkspaceLayoutTest {
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("Completed"))
-          assertTrue(
-              fixture.hasText(
-                  "Verified checks completed; Reported phases: go vet — Failed. Review command and output for details. Completion is not proof that every phase passed."))
-          assertTrue(
+          assertTrue(fixture.hasText("go vet — Failed"))
+          assertFalse(
               fixture.hasText(
                   "Local tool evidence is scoped to these checks, not a general safety assurance. Model suggestions are separate results below."))
           assertFalse(fixture.hasText("vet error"))
@@ -240,14 +238,14 @@ class ResultWorkspaceLayoutTest {
           assertTrue(fixture.hasText("Exit code: -1"))
           assertTrue(fixture.hasText("Exit code: 143"))
           listOf(0, 3, 7, 9).forEach { assertFalse(fixture.hasText("Exit code: $it")) }
-          assertTrue(fixture.hasText("No output reported for this phase."))
-          assertTrue(fixture.hasText("No command reported for this phase."))
+          assertTrue(fixture.hasText("No recorded output"))
+          assertTrue(fixture.hasText("Command unavailable"))
           assertTrue(fixture.hasText("unknown tool state"))
         }
     ComposeVisualFixture(800, 650) { VerifiedScanDiagnostics(report.copy(phases = emptyList())) }
         .use { fixture ->
           fixture.render()
-          assertTrue(fixture.hasText("No phases reported; no check outcome is available."))
+          assertTrue(fixture.hasText("Check outcome unavailable"))
           assertFalse(fixture.hasText("Passed"))
         }
   }
@@ -263,10 +261,8 @@ class ResultWorkspaceLayoutTest {
     ComposeVisualFixture(800, 650, 1.5f) { VerifiedScanDiagnostics(report) }
         .use { fixture ->
           fixture.render()
-          assertTrue(
-              fixture.hasText(
-                  "Daemon output limit reached; text beyond the recorded output is unavailable."))
-          assertTrue(
+          assertTrue(fixture.hasText("Recorded output truncated"))
+          assertFalse(
               fixture.hasText(
                   "UI previews are limited; Show full available output reveals all recorded text."))
           assertTrue(fixture.hasText("… output truncated"))
@@ -291,9 +287,7 @@ class ResultWorkspaceLayoutTest {
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("short output\n[output truncated]"))
-          assertTrue(
-              fixture.hasText(
-                  "Daemon output limit reached; text beyond the recorded output is unavailable."))
+          assertTrue(fixture.hasText("Recorded output truncated"))
           assertFalse(fixture.hasText("UI previews are limited"))
           assertFalse(fixture.hasText("Show full available output"))
           assertFalse(fixture.hasText("… output truncated"))
@@ -304,9 +298,9 @@ class ResultWorkspaceLayoutTest {
         }
         .use { fixture ->
           fixture.render()
-          assertTrue(fixture.hasText("No output reported for this phase."))
+          assertTrue(fixture.hasText("No recorded output"))
           assertFalse(fixture.hasText("Exit code: 0"))
-          assertTrue(fixture.hasText("No command reported for this phase."))
+          assertTrue(fixture.hasText("Command unavailable"))
           assertFalse(fixture.hasText("Daemon output limit reached"))
         }
     ComposeVisualFixture(800, 650) {
@@ -626,10 +620,10 @@ class ResultWorkspaceLayoutTest {
     }
 
     listOf(
-            Triple("running", null, "Analysis is in progress."),
+            Triple("running", null, "Analysis running"),
             Triple("completed", 0, "No findings in the analyzed scope."),
-            Triple("partial", 0, "Analysis completed partially."),
-            Triple("failed", 0, "Analysis failed for this category."))
+            Triple("partial", 0, "Partial analysis"),
+            Triple("failed", 0, "Analysis failed"))
         .forEach { (status, findingCount, message) ->
           var openedAnalysis = 0
           ComposeVisualFixture(800, 650, 1.5f) {
@@ -923,9 +917,7 @@ class ResultWorkspaceLayoutTest {
             fixture.render()
             fixture.assertTextFits("Loading results…")
             assertFalse(fixture.hasText("Retry loading results"))
-            assertTrue(
-                fixture.hasText(
-                    "Reading saved ${type.workspace.name} results. Previously loaded results remain available below."))
+            assertTrue(fixture.hasText("Previous results retained"))
             assertTrue(fixture.hasText("Evidence for finding-20"))
             assertEquals(index, browser.listState.firstVisibleItemIndex)
             assertEquals(offset, browser.listState.firstVisibleItemScrollOffset)
@@ -1055,7 +1047,7 @@ class ResultWorkspaceLayoutTest {
         .use { fixture ->
           fixture.render()
           fixture.assertTextFits("— reported (count unavailable)")
-          fixture.assertTextFits("Analysis is unavailable for this category.")
+          fixture.assertTextFits("Analysis unavailable")
           assertFalse(fixture.hasText("No findings in the analyzed scope."))
           assertFalse(fixture.hasText("0 findings"))
         }
@@ -1077,9 +1069,7 @@ class ResultWorkspaceLayoutTest {
           .use { fixture ->
             fixture.render()
             fixture.assertTextFits("Loading results…")
-            assertTrue(
-                fixture.hasText(
-                    "Reading saved ${type.workspace.name} results; no new analysis is being started."))
+            assertTrue(fixture.hasText("Saved results"))
             assertFalse(fixture.hasText("No findings in the analyzed scope."))
             page = original.copy(section = AnalysisSectionState(error = ""))
             fixture.render()
@@ -1164,14 +1154,12 @@ class ResultWorkspaceLayoutTest {
           fixture.render()
           fixture.revealText("Prepare fix", "result-detail")
           assertTrue(fixture.hasText("Model suggestion"))
-          assertTrue(
-              fixture.hasText(
-                  "Unmeasured recommendation. Benchmark the affected workload before claiming an improvement."))
+          assertTrue(fixture.hasText("Unmeasured"))
           assertFalse(fixture.hasText("Dismiss"))
           assertEquals(0, fixes)
           assertTrue(fixture.hasText("Workload conditions"))
-          assertTrue(fixture.hasText("Potential impact · qualitative, not a measured gain"))
-          assertTrue(fixture.hasText("Model confidence · not a measurement or speedup probability"))
+          assertTrue(fixture.hasText("Potential impact"))
+          assertTrue(fixture.hasText("Model confidence"))
           assertTrue(fixture.hasText("Trade-offs"))
           assertTrue(fixture.hasText("Verification plan"))
           fixture.assertTextWrapsWithoutClipping(longTradeoff)
@@ -1194,8 +1182,7 @@ class ResultWorkspaceLayoutTest {
     val reports = requireNotNull(original.results)
     val source = reports.security.first()
     val ai = reports.security.last()
-    val warning =
-        "Security findings describe analyzed evidence, not proof of safety. No findings does not mean the project is secure; unavailable evidence and incomplete coverage remain unknown."
+    val warning = "Analyzed scope"
     val completedProgress =
         requireNotNull(original.progress).copy(status = "completed_empty", findingCount = 0)
     val completed =
@@ -1309,8 +1296,7 @@ class ResultWorkspaceLayoutTest {
             section =
                 original.section.copy(
                     results = original.results!!.copy(security = listOf(source, ai))))
-    val warning =
-        "Security findings describe analyzed evidence, not proof of safety. No findings does not mean the project is secure; unavailable evidence and incomplete coverage remain unknown."
+    val warning = "Analyzed scope"
     ComposeVisualFixture(800, 650, 1.5f) {
           SecurityWorkspacePane(
               SecurityWorkspacePaneState(page, resultIndexFixture()),
@@ -1527,9 +1513,7 @@ class ResultWorkspaceLayoutTest {
           fixture.clickDescription("Inspect Credential-like assignment")
           fixture.render()
           assertTrue(fixture.hasText("Source rule"))
-          assertTrue(
-              fixture.hasText(
-                  "A source rule match identifies a pattern; it does not confirm a vulnerability."))
+          assertTrue(fixture.hasText("Pattern match · unverified vulnerability"))
           listOf(
                   "High",
                   "Reported range",
@@ -1570,9 +1554,7 @@ class ResultWorkspaceLayoutTest {
           fixture.clickDescription("Inspect Hypothesis about the same boundary")
           fixture.render()
           assertTrue(fixture.hasText("Model hypothesis"))
-          assertTrue(
-              fixture.hasText(
-                  "Unverified model hypothesis. Validate the preconditions and source evidence before remediation."))
+          assertTrue(fixture.hasText("Unverified · review evidence"))
           assertTrue(fixture.hasText("Not supplied."))
           assertFalse(fixture.hasText("package boundary"))
           fixture.revealText("Report metadata", "result-detail")
@@ -1636,9 +1618,7 @@ class ResultWorkspaceLayoutTest {
           fixture.render()
           fixture.revealText("Prepare fix", "result-detail")
           assertTrue(fixture.hasText("Source rule"))
-          assertTrue(
-              fixture.hasText(
-                  "A source rule match identifies a pattern; it does not confirm a vulnerability."))
+          assertTrue(fixture.hasText("Pattern match · unverified vulnerability"))
           assertTrue(fixture.hasText(longWarning))
           assertTrue(fixture.hasText("Preconditions / unknowns"))
           assertTrue(fixture.hasText("Safe verification idea · not performed"))

@@ -44,13 +44,10 @@ class ProjectSummaryIssuesTest {
     val destinations = mutableListOf<Workspace>()
     val cases =
         listOf(
-            Triple(null, emptyMap(), "Count unavailable"),
-            Triple(run, emptyMap(), "0 reported · details not confirmed"),
+            Triple(null, emptyMap(), "—"),
+            Triple(run, emptyMap(), "Details unconfirmed"),
             Triple(run, bugSections(details), "No results"),
-            Triple(
-                run,
-                bugSections(details.copy(error = "Read failed")),
-                "Saved details unavailable · 0 reported"))
+            Triple(run, bugSections(details.copy(error = "Read failed")), "Details unavailable"))
     cases.forEachIndexed { index, (currentRun, sections, expected) ->
       val metric = summaryIssueMetrics(project, currentRun, sections).first()
       if (index == 2) assertEquals("completed_empty", metric.statusCode)
@@ -137,7 +134,7 @@ class ProjectSummaryIssuesTest {
     assertEquals(0, pending.value)
     assertNull(pending.priorities)
     assertEquals("Completed · details not confirmed", pending.status)
-    assertEquals("0 reported · details not confirmed", pending.detailStatus)
+    assertEquals("Details unconfirmed", pending.detailStatus)
     assertEquals("completed", pending.statusCode)
     assertEquals(FaintText, summaryIssueTint(pending))
 
@@ -145,7 +142,7 @@ class ProjectSummaryIssuesTest {
     assertEquals(SummaryBugPriorities(0, 0, 0, 0), completed.priorities)
     assertEquals("completed_empty", completed.statusCode)
     assertEquals("Completed · no findings", completed.status)
-    assertEquals("0 reported", completed.detailStatus)
+    assertNull(completed.detailStatus)
 
     val result = requireNotNull(details.results)
     listOf(
@@ -189,11 +186,7 @@ class ProjectSummaryIssuesTest {
     assertEquals(listOf(7, 8, 9), metrics.map { it.value })
     assertNull(metrics.first().priorities, "Mismatched evidence cannot classify a newer count")
     assertEquals(
-        listOf(
-            "7 reported",
-            "Loading saved details · 8 reported",
-            "Saved details unavailable · 9 reported"),
-        metrics.map { it.detailStatus })
+        listOf(null, "Loading details…", "Details unavailable"), metrics.map { it.detailStatus })
   }
 }
 

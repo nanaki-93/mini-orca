@@ -133,13 +133,8 @@ internal fun AssistantToolWindow(
                   state.creationKind),
               Modifier)
           IdePaneHeader(
-              title =
-                  if (creating) "New ${state.creationKind.noun}"
-                  else "Request an isolated candidate",
-              icon = DesktopIcon.Editor,
-              stateLabel =
-                  if (creating) "Generate a candidate; source changes only after Review and Apply"
-                  else "Replace one declaration; source changes only after Review and Apply")
+              title = if (creating) "New ${state.creationKind.noun}" else "Edit declaration",
+              icon = DesktopIcon.Editor)
           Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
             if (!creating) {
               Text(
@@ -224,10 +219,6 @@ internal fun AssistantToolWindow(
                                 ?: Modifier)) {
                   Text("Inspect context")
                 }
-            Text(
-                "File-scoped preview only · no Function request or confirmation.",
-                color = SecondaryText,
-                style = IdeTypography.compactBody)
             val model = state.functionModel
             if (model.remoteProvider || functionDestinationMetadataComplete(model)) {
               RemoteProviderConfirmation(
@@ -247,15 +238,15 @@ internal fun AssistantToolWindow(
                 "Function provider origin: ${model.providerOrigin.takeIf { it.isNotBlank() }?.let { sanitizedOutputText(it, 256) } ?: "unavailable"}",
                 color = SecondaryText,
                 style = IdeTypography.compactBody)
-            Text(
-                if (state.sending)
-                    "Request running · Cancel keeps the existing draft and conversation."
-                else
-                    blockedReason
-                        ?: "Ready to send · Generates one isolated candidate, not a source edit.",
-                color = if (blockedReason != null && !state.sending) Warning else SecondaryText,
-                style = IdeTypography.compactBody,
-                modifier = Modifier.padding(top = 6.dp))
+            if (state.sending) IdeLabelBadge("Generating", Information, icon = DesktopIcon.Refresh)
+            else
+                blockedReason?.let {
+                  Text(
+                      it,
+                      color = Warning,
+                      style = IdeTypography.compactBody,
+                      modifier = Modifier.padding(top = 6.dp))
+                }
             if (state.sending)
                 MiniOrcaButton(
                     onClick = conversationActions.cancel,
@@ -399,7 +390,6 @@ private fun AssistantDraftEditorSection(
         title = "Editable draft",
         icon = DesktopIcon.Document,
         actionsBelow = true,
-        stateLabel = "Candidate for review",
         stateTint = ResultAccent,
         actions = {
           IdeLabelBadge(
@@ -687,8 +677,8 @@ internal fun draftDiagnosticsAreEarlierEvidence(editor: EditableDraftState): Boo
 
 internal fun draftEditorStatusLabel(status: DraftEditorStatus): String =
     when (status) {
-      DraftEditorStatus.Generated -> "Generated · not validated"
-      DraftEditorStatus.Dirty -> "Locally edited · needs validation"
+      DraftEditorStatus.Generated -> "Not validated"
+      DraftEditorStatus.Dirty -> "Edited · not validated"
       DraftEditorStatus.Validating -> "Validating"
       DraftEditorStatus.Valid -> "Validated"
       DraftEditorStatus.Invalid -> "Invalid"

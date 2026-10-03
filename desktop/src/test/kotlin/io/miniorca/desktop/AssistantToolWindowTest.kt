@@ -327,15 +327,13 @@ class AssistantToolWindowTest {
           fixture.render()
           assertTrue(fixture.hasText(path))
           assertTrue(fixture.hasText("Replace selected declaration · Run"))
-          assertTrue(
+          assertFalse(
               fixture.hasText(
                   "Replace one declaration; source changes only after Review and Apply"))
           assertTrue(fixture.hasText("Intent"))
-          assertTrue(
-              fixture.hasText(
-                  "Function edits: function-profile · edit-model · local provider · project context stays on this machine"))
+          assertTrue(fixture.hasText("Function edits: function-profile · edit-model · local"))
           assertTrue(fixture.hasText("Function provider origin: http://localhost:11434"))
-          assertTrue(
+          assertFalse(
               fixture.hasText("File-scoped preview only · no Function request or confirmation."))
           assertEquals(30, assistantHistoryEntries(state).size)
           assertTrue(fixture.hasText("previous 1"))
@@ -412,10 +410,7 @@ class AssistantToolWindowTest {
             assertTrue(
                 fixture.hasText(
                     "Function provider origin: ${sanitizedOutputText(base.functionModel.providerOrigin, 256)}"))
-            assertTrue(
-                fixture
-                    .hasText("Request running · Cancel keeps the existing draft and conversation.")
-                    .equals(running))
+            assertTrue(fixture.hasText("Generating").equals(running))
             fixture.clickText(if (running) "Cancel request" else "Send message")
             assertEquals(1, activated)
           }
@@ -570,9 +565,7 @@ class AssistantToolWindowTest {
         }
         .use { fixture ->
           fixture.render()
-          assertTrue(
-              fixture.hasText(
-                  "Request running · Cancel keeps the existing draft and conversation."))
+          assertTrue(fixture.hasText("Generating"))
           assertFalse(fixture.hasText("Send message"))
           fixture.clickText("Cancel request")
           assertEquals(1, canceled)
@@ -1021,7 +1014,7 @@ class AssistantToolWindowTest {
               fixture.hasText(
                   "Name absent in the current file snapshot; the daemon rechecks before generation."))
           assertTrue(fixture.hasText("Behavior"))
-          assertTrue(
+          assertFalse(
               fixture.hasText("Generate a candidate; source changes only after Review and Apply"))
           assertEquals("Collapsed", fixture.stateDescription("Advanced constraints"))
           assertTrue(fixture.hasText("Confirm the Function remote destination before sending."))
@@ -1365,9 +1358,8 @@ class AssistantToolWindowTest {
   fun draftStatusSeparatesLocalEditsFromServerRevisionAndEarlierDiagnostics() {
     val draft = editableDraftForFindingTest().serverDraft.copy(revision = 9)
     val editor = editableDraft(draft)
-    assertEquals("Generated · not validated", draftEditorStatusLabel(editor.status))
-    assertEquals(
-        "Locally edited · needs validation", draftEditorStatusLabel(editDraft(editor).status))
+    assertEquals("Not validated", draftEditorStatusLabel(editor.status))
+    assertEquals("Edited · not validated", draftEditorStatusLabel(editDraft(editor).status))
     assertTrue(draftDiagnosticsAreEarlierEvidence(editDraft(editor)))
     assertEquals("Validating", draftEditorStatusLabel(DraftEditorStatus.Validating))
     assertEquals("Validated", draftEditorStatusLabel(DraftEditorStatus.Valid))

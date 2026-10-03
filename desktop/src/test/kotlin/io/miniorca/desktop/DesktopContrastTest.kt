@@ -105,7 +105,6 @@ class DesktopContrastTest {
                 val title = analysisRunTitle(run, presentation)
                 fixture.assertTextFits(title, maxLines = 3)
                 fixture.assertTextContrast(title, Panel)
-                assertTrue(!fixture.hasText(presentation.headline))
                 fixture.assertColorVisible(color)
               }
         }

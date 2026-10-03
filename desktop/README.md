@@ -470,9 +470,10 @@ requested” means the current stage can finish but no new stage will start;
 work is stopping: Cancel stops active requests and future dispatch, but keeps
 completed evidence. The daemon may report a settled state immediately or finish
 work before a control takes effect; follow the reported status rather than
-assuming the requested outcome. Stopped runs show the reported stop reason beside
-recovery, or say when no reason was supplied. Full diagnostics remain under
-**Run diagnostic**.
+assuming the requested outcome. Summary shows a compact status with attention counts,
+for example **Partial · 1 failure**. Colors and icons supplement the text. Full
+reported reasons remain under **Run diagnostic**; completed runs omit the progress
+bar and instructional subtitles.
 
 **Resume → fresh preview** is available for a current paused or interrupted run,
 including a run stopped at its dispatch limit. It requests a new continuation
@@ -481,9 +482,10 @@ as applicable before **Resume analysis** in the admission dialog. Neither
 startup, navigation nor closing a dialog resumes a run or reuses consent. A
 canceled run has no Resume: use **Start new analysis** to request a new preview,
 then explicitly admit it with the required confirmations. Completed evidence
-and reported attempts remain available after Pause or Cancel. The run shows
-**Cumulative attempts reported** when its captured file-stage inventory is
-complete and valid; otherwise it says **Cumulative attempts unavailable**.
+and reported attempts remain available after Pause or Cancel. **Run details**
+contains stage breakdowns, attempts, timing and saved-run history. Attempts are
+shown when the captured file-stage inventory is complete and valid; otherwise
+they are labeled unavailable.
 Each file-stage contributes once (including shared semantic work); attempts are
 reported accounting, not findings or a count of billable provider requests.
 
@@ -501,8 +503,8 @@ file path/hash and planned-stage records contribute progress. Missing or inconsi
 records show incomplete or unavailable progress, not a percentage; a valid empty
 scope is shown separately. Finished files include partial and failed stage outcomes:
 finished does not mean successful, current or safe. Expand active paths to inspect
-full names, and captured stage rows to see running, pending, finished and attention
-breakdowns. Stage details show matching paths, statuses, reported attempts, reuse
+full names, and **Run details** for captured stage rows with running, pending,
+finished and attention breakdowns. Stage details show matching paths, statuses, reported attempts, reuse
 and reasons (or a missing-diagnostic fallback). Attempts are not provider-call
 counts. Ineligible stages keep their plan reasons without counting as operational
 failures. Run failures are visible near status, with bounded diagnostic details.
@@ -998,6 +1000,13 @@ Changing the selection does not rewrite a previous run.
 Summary's overall status and coverage follow the current selected files, including
 selection changes. The saved project description keeps its own freshness in the
 status details; an older description does not mark current file analysis outdated.
+The description is generated on import, separately from file analysis. If it is
+failed or stale, **Regenerate description…** in Summary opens the existing import
+review with the current project's path already selected. Review the current
+Analyze destination, any draft discard and shell cleanup, then **Re-import
+project** (or **Close shells and re-import**) to request a new description. Opening
+or canceling that review makes no model request. Restore, Re-index and Start
+analysis do not regenerate the description.
 
 Validation is an explicit stage in the isolated draft. It shows the server revision
 (and any local edits), current or retained diagnostics, and **Cancel validation**

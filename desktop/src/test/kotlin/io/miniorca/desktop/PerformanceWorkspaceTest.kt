@@ -72,7 +72,7 @@ class PerformanceWorkspaceTest {
 
     assertEquals(3, metric.value)
     assertEquals("Partial", metric.status)
-    assertEquals("Saved details unavailable · 3 reported", metric.detailStatus)
+    assertEquals("Details unavailable", metric.detailStatus)
     assertEquals(
         "1 loaded · 3 reported", resultPage.countLabel(performanceResults(resultPage).size))
     assertEquals("Model suggestion", performanceResults(resultPage).single().row().source)
@@ -222,8 +222,7 @@ class PerformanceWorkspaceTest {
         performanceBenchmarkPresentation(
             comparison, comparison.identity(), choice, priorEvidence = true)
     assertEquals("Prior evidence · Measured · selected benchmark", prior.stateLabel)
-    assertTrue(
-        prior.summary.startsWith("Prior comparison only; it does not confirm the latest attempt."))
+    assertTrue(prior.summary.startsWith("Prior comparison ·"))
     assertTrue(prior.insights.all { it.startsWith("Prior observation:") })
     current.metrics.forEach { metric ->
       assertTrue(prior.rows.contains(metric.label to metric.display(historical = true)))
@@ -255,7 +254,7 @@ class PerformanceWorkspaceTest {
         performanceBenchmarkStatusPresentation(
                 comparison, comparison.identity(), selectedChoice, eligibility = eligibility)
             .summary
-            .contains("does not measure this model suggestion"))
+            .contains("suggestion unmeasured"))
     assertEquals(
         "Stale · candidate identity changed",
         performanceBenchmarkStatusPresentation(
@@ -278,7 +277,7 @@ class PerformanceWorkspaceTest {
               selectedChoice,
               eligibility = eligibility)
       assertEquals(label, presentation.stateLabel)
-      assertTrue(presentation.summary.contains("does not measure this model suggestion"))
+      assertTrue(presentation.summary.contains("suggestion unmeasured"))
     }
     assertEquals(
         "Inconclusive · incomplete measurement evidence",
@@ -605,7 +604,7 @@ class PerformanceWorkspaceTest {
     assertTrue(presentation.rows.contains("Workload" to "BenchmarkWork"))
     assertTrue(presentation.rows.any { it.first == "ns/op" && it.second.contains("-10.0%") })
     assertTrue(presentation.rows.any { it.first == "B/op" && it.second.contains("+20.0%") })
-    assertTrue(presentation.summary.contains("higher memory use"))
+    assertTrue(presentation.summary.contains("higher memory"))
     assertTrue(presentation.insights.single().contains("trade-off"))
   }
 
@@ -618,7 +617,7 @@ class PerformanceWorkspaceTest {
     assertEquals("Inconclusive · noisy samples", noisyPresentation.stateLabel)
     assertTrue(noisyPresentation.inconclusive)
     assertFalse(noisyPresentation.isMeasured)
-    assertTrue(noisyPresentation.summary.contains("too variable"))
+    assertTrue(noisyPresentation.summary.contains("variable"))
     assertTrue(noisyPresentation.rows.any { it == ("Variability" to "high: ns/op") })
 
     val incomplete =
@@ -628,7 +627,7 @@ class PerformanceWorkspaceTest {
 
     assertEquals(
         "Inconclusive · incomplete measurement evidence", incompletePresentation.stateLabel)
-    assertTrue(incompletePresentation.summary.contains("complete comparable"))
+    assertTrue(incompletePresentation.summary.contains("5 valid samples per side"))
 
     val zeroAllocation =
         noisy.copy(
@@ -673,7 +672,7 @@ class PerformanceWorkspaceTest {
     assertTrue(
         presentation.rows.any { it.first == "B/op" && "4/5 valid observations" in it.second })
     assertTrue(presentation.summary.contains("B/op"))
-    assertTrue(presentation.insights.single().contains("cannot establish a performance win"))
+    assertTrue(presentation.insights.single().contains("Memory"))
   }
 
   @Test
@@ -706,7 +705,7 @@ class PerformanceWorkspaceTest {
             it.first == metric.label && "0/5 valid observations" in it.second
           })
     }
-    assertFalse(presentation.summary.contains("CPU is lower"))
+    assertFalse(presentation.summary.contains("Lower CPU"))
   }
 
   @Test
@@ -730,7 +729,7 @@ class PerformanceWorkspaceTest {
     assertTrue(presentation.rows.any { it.first == "B/op" && it.second.contains("+20.0%") })
     assertTrue(presentation.rows.any { it.first == "allocs/op" && it.second.contains("-50.0%") })
     assertTrue(presentation.summary.contains("B/op increased while allocs/op decreased"))
-    assertTrue(presentation.insights.single().contains("cannot establish a performance win"))
+    assertTrue(presentation.insights.single().contains("Memory"))
   }
 
   @Test
@@ -795,7 +794,7 @@ class PerformanceWorkspaceTest {
             })
         assertTrue(
             presentation.rows.any { it.first == "ns/op" && "${median.toInt()}" in it.second })
-        assertFalse(presentation.summary.contains("CPU is lower"))
+        assertFalse(presentation.summary.contains("Lower CPU"))
       }
     }
   }
@@ -857,7 +856,7 @@ class PerformanceWorkspaceTest {
     assertEquals(BenchmarkMetricAvailability.Partial, allocations.availability)
     assertFalse(presentation.isMeasured)
     assertTrue(presentation.inconclusive)
-    assertTrue(presentation.insights.single().contains("cannot establish a performance win"))
+    assertTrue(presentation.insights.single().contains("Memory"))
   }
 
   @Test
@@ -940,7 +939,7 @@ class PerformanceWorkspaceTest {
       }
       assertFalse(stale.isMeasured)
       assertTrue(stale.isStale)
-      assertTrue(stale.summary.contains("Historical assessment"))
+      assertTrue(stale.summary.contains("prior:"))
     }
     for (status in listOf("failed", "canceled", "unavailable", "unknown")) {
       val terminal =
@@ -1107,7 +1106,7 @@ class PerformanceWorkspaceTest {
       current.metrics.forEach { metric ->
         assertTrue(stale.rows.contains(metric.label to metric.display(historical = true)))
       }
-      assertTrue(stale.summary.contains("Historical assessment"))
+      assertTrue(stale.summary.contains("prior:"))
       assertTrue(stale.insights.all { it.startsWith("Historical observation:") })
     }
   }
@@ -1238,7 +1237,7 @@ class PerformanceWorkspaceTest {
           fixture.clickDescription("Expand Measurement details")
           fixture.render("f22-finding-selection-current-evidence")
           assertTrue(fixture.hasText("Benchmark evidence"))
-          assertTrue(fixture.hasText("CPU is lower for the selected benchmark."))
+          assertTrue(fixture.hasText("Lower CPU · selected benchmark"))
           assertFalse(fixture.hasText("Prior benchmark evidence"))
           assertEquals(0, requests)
         }
@@ -1376,8 +1375,8 @@ class PerformanceWorkspaceTest {
               assertTrue(fixture.hasDescription("Selected benchmark argv"))
               assertEquals("Read-only", fixture.descriptionState("Selected benchmark argv"))
               assertFalse(fixture.hasText("Finding ID"), "Optional report metadata is collapsed")
-              assertTrue(fixture.hasText("Running benchmarks executes imported project code."))
-              assertTrue(fixture.hasText("This is broader than benchmark-only permission."))
+              assertTrue(fixture.hasText("Executes project code · file and network access"))
+              assertTrue(fixture.hasText("Trust scope: go test ./... · includes other Go tests"))
             } else {
               assertFalse(fixture.hasText("Run selected benchmark"))
               assertTrue(fixture.hasText("Discovery invalidated"))
@@ -1500,7 +1499,7 @@ class PerformanceWorkspaceTest {
               comparison, comparison.identity(), choice, discovery, admission)
       assertEquals(label, status.stateLabel)
       assertTrue(status.priorEvidence)
-      assertFalse(status.summary.contains("does not measure this model suggestion"))
+      assertFalse(status.summary.contains("suggestion unmeasured"))
       if (discovery is BenchmarkDiscoveryOutcome.Failed)
           assertEquals(discovery.message, status.summary)
       if (admission is BenchmarkAdmissionOutcome.Failed)

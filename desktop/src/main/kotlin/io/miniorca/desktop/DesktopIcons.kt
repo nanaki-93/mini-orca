@@ -44,6 +44,9 @@ internal enum class DesktopIcon(private val path: String) {
   Close("M6 6l12 12 M6 18L18 6"),
   Lock("M6 10h12v10H6Z M8 10V7a4 4 0 0 1 8 0v3"),
   Check("M4 12l5 5L20 6"),
+  Warning("M12 3L2 21h20Z M12 9v5 M12 17v1"),
+  Pause("M8 4v16 M16 4v16"),
+  Unknown("M9 8a3 3 0 1 1 5 2c-2 1-2 2-2 4 M12 18v1"),
   ;
 
   val image: ImageVector by lazy {

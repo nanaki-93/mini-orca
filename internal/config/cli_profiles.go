@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"unicode"
 )
 
 type ModelProvider string
@@ -56,6 +57,9 @@ func validateCLISettings(scope ModelScope, configured ModelProfileConfig) error 
 	}
 	if configured.Temperature != nil || configured.MaxTokens != nil || configured.TopP != nil || configured.TopK != nil || configured.MinP != nil || configured.PresencePenalty != nil || configured.RepeatPenalty != nil {
 		return fmt.Errorf("model_scopes.%s: CLI providers do not expose sampling or output-token controls; omit temperature, max_tokens, top_p, top_k, min_p, presence_penalty, and repeat_penalty", scope)
+	}
+	if configured.Provider == AgyProvider && strings.IndexFunc(strings.TrimSpace(configured.Model), unicode.IsSpace) >= 0 {
+		return fmt.Errorf("model_scopes.%s.model must be a slug from agy models, not a display name", scope)
 	}
 	return nil
 }

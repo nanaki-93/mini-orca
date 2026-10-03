@@ -525,18 +525,21 @@ internal fun IdeLabelBadge(
     tint: Color,
     modifier: Modifier = Modifier,
     accessibleName: String = label,
+    icon: DesktopIcon? = null,
 ) {
-  Text(
-      label,
-      color = tint,
-      style = IdeTypography.resultLabel,
+  Row(
       modifier =
           modifier
               .background(Panel, MiniOrcaShapes.control)
               .border(BorderStroke(1.dp, tint.copy(alpha = 0.75f)), MiniOrcaShapes.control)
               .semantics { contentDescription = accessibleName }
               .padding(horizontal = MiniOrcaSpacing.standard, vertical = MiniOrcaSpacing.compact),
-  )
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(4.dp),
+  ) {
+    icon?.let { Icon(it.image, null, Modifier.size(14.dp), tint) }
+    Text(label, color = tint, style = IdeTypography.resultLabel)
+  }
 }
 
 /** A compact disclosure target with independently composable trailing actions. */

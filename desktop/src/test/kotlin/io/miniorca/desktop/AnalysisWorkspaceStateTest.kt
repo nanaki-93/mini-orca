@@ -149,7 +149,7 @@ class AnalysisWorkspaceStateTest {
   }
 
   @Test
-  fun headerUsesStoredProgressAndTimeWithoutInventingMissingFacts() {
+  fun runDetailsUseStoredTimeWithoutInventingMissingFacts() {
     val run =
         analysisRunFixture()
             .copy(
@@ -170,33 +170,16 @@ class AnalysisWorkspaceStateTest {
                                 AnalysisStageProgress("semantic", "completed", 1, false),
                                 AnalysisStageProgress("performance", "pending", 0, false)))))
     assertEquals(
-        "Current run · 3 files processed in current window · Reported run time · 125s · Current window · 42s · Created · 2026-09-15T14:00:00Z · Updated · 2026-09-15T15:30:00Z",
-        projectRunPresentation(resultProjectFixture(), ProjectAnalysisRunState(run = run)).headline)
+        listOf(
+            "Reported run time · 125s",
+            "Current window · 42s",
+            "Created · 2026-09-15T14:00:00Z",
+            "Updated · 2026-09-15T15:30:00Z"),
+        analysisRunTimeMetadata(run))
     assertEquals(
-        "Last run · Paused · 1 of 2 stages · Reported run time · 125s · Current window · 42s · Created · 2026-09-15T14:00:00Z · Updated · 2026-09-15T15:30:00Z",
-        projectRunPresentation(
-                resultProjectFixture(), ProjectAnalysisRunState(run = run.copy(status = "paused")))
-            .headline)
-    assertEquals(
-        "Last run · 1 of 2 stages · Reported run time · 125s · Current window · 42s · Created · 2026-09-15T14:00:00Z",
-        projectRunPresentation(
-                resultProjectFixture(),
-                ProjectAnalysisRunState(run = run.copy(status = "completed", updatedAt = "")))
-            .headline)
-    assertEquals(
-        "Current run · Reported run time · unavailable",
-        projectRunPresentation(
-                resultProjectFixture(),
-                ProjectAnalysisRunState(
-                    run =
-                        run.copy(
-                            files = emptyList(),
-                            elapsedSeconds = 0,
-                            windowFilesCompleted = 0,
-                            windowElapsedSeconds = 0,
-                            createdAt = "",
-                            updatedAt = "")))
-            .headline)
+        listOf("Reported run time · unavailable"),
+        analysisRunTimeMetadata(
+            run.copy(elapsedSeconds = 0, windowElapsedSeconds = 0, createdAt = "", updatedAt = "")))
     listOf("interrupted", "failed", "partial", "completed_empty", "canceled").forEach { status ->
       val metadata = analysisRunTimeMetadata(run.copy(status = status, windowElapsedSeconds = 0))
       assertEquals("Reported run time · 125s", metadata.first())
@@ -255,9 +238,11 @@ class AnalysisWorkspaceStateTest {
         }
         .use { fixture ->
           fixture.render()
-          assertTrue(fixture.hasText("Attention · 1 failed"))
+          assertTrue(fixture.hasText("1 failure"))
           assertFalse(fixture.hasText(failure))
+          fixture.expandAnalysisRunDetails()
           fixture.revealText("Code analysis · 1/1 finished · 1 failed", "analysis-page")
+          fixture.expandAnalysisRunDetails()
           fixture.clickDescription("Expand Code analysis · 1/1 finished · 1 failed")
           fixture.render()
           assertTrue(fixture.hasText(failure.replace('\u0000', ' ').take(4_096)))
@@ -350,7 +335,7 @@ class AnalysisWorkspaceStateTest {
     assertTrue(outdated.currentFiles.isEmpty())
     assertFalse(outdated.isActive)
     assertTrue(outdated.commands.isEmpty())
-    assertTrue(outdated.headline.startsWith("Last run · Stale"))
+    assertEquals("Analysis out of date", analysisRunTitle(run, outdated))
   }
 
   @Test
@@ -406,7 +391,7 @@ class AnalysisWorkspaceStateTest {
     assertTrue(presentation.currentFiles.isEmpty())
     assertFalse(presentation.isActive)
     assertTrue(presentation.commands.isEmpty())
-    assertTrue(presentation.headline.startsWith("Last run · Stale"))
+    assertEquals("Analysis out of date", analysisRunTitle(run, presentation))
   }
 
   @Test
@@ -1141,7 +1126,7 @@ class AnalysisWorkspaceStateTest {
   @Test
   fun categoryCountKeepsReportedEvidenceSeparateFromMatchingLoadedDetails() {
     val page = resultPageFixture("bugs")
-    assertEquals("1 loaded · 1 reported", page.countLabel(page.semantic.size))
+    assertEquals("1 reported", page.countLabel(page.semantic.size))
     val noReport =
         page.copy(
             run =
@@ -1160,7 +1145,7 @@ class AnalysisWorkspaceStateTest {
     assertEquals("1 reported", wrongRun.countLabel(0))
     val readFailure = page.copy(section = page.section.copy(error = "Saved read failed"))
     assertEquals(1, readFailure.semantic.size)
-    assertEquals("1 loaded · 1 reported", readFailure.countLabel(1))
+    assertEquals("1 reported", readFailure.countLabel(1))
     assertEquals(
         AnalysisResultAvailability.Error,
         readFailure
@@ -1207,17 +1192,16 @@ class AnalysisWorkspaceStateTest {
             .availability)
     assertEquals(
         AnalysisResultAvailability.Running, projected("running").emptyPresentation(0).availability)
-    assertEquals("Analysis is in progress.", projected("running").emptyPresentation(0).message)
+    assertEquals("Analysis running", projected("running").emptyPresentation(0).message)
     assertTrue(projected("running").emptyPresentation(0).detail.contains("stages covered"))
     assertEquals(
-        "0 findings reported so far; results are not final. · 1/1 stages covered",
+        "0 reported · in progress · 1/1 stages covered",
         projected("running", reportedCount = 0).emptyPresentation(0).detail)
     assertEquals(
         AnalysisResultAvailability.PendingDetails,
         projected("running", reportedCount = 2).emptyPresentation(0).availability)
     assertEquals(
-        "No results loaded yet.",
-        projected("running", reportedCount = 2).emptyPresentation(0).message)
+        "No results loaded", projected("running", reportedCount = 2).emptyPresentation(0).message)
     assertEquals(
         AnalysisResultAvailability.Paused,
         projected("paused", reportedCount = 2).emptyPresentation(0).availability)
@@ -1247,7 +1231,7 @@ class AnalysisWorkspaceStateTest {
   }
 
   @Test
-  fun completedEmptyRequiresMatchingCurrentZeroDetailAndTimeStaysProjectScoped() {
+  fun completedEmptyRequiresMatchingCurrentZeroDetail() {
     fun completedPage(reportedCount: Int?): AnalysisResultPageState {
       val original = resultPageFixture("bugs")
       val progress =
@@ -1271,7 +1255,6 @@ class AnalysisWorkspaceStateTest {
     val completed = completedPage(0)
     assertEquals(
         AnalysisResultAvailability.CompletedEmpty, completed.emptyPresentation(0).availability)
-    assertEquals("Run time · 42s", completed.runTimeLabel)
     assertEquals(
         AnalysisResultAvailability.PendingDetails,
         completed.copy(section = AnalysisSectionState()).emptyPresentation(0).availability)
@@ -1285,17 +1268,9 @@ class AnalysisWorkspaceStateTest {
     assertEquals("— reported (count unavailable)", completedPage(null).countLabel(0))
     assertEquals("2 reported", completedPage(2).countLabel(0))
     assertEquals("0 reported", completed.copy(section = AnalysisSectionState()).countLabel(0))
-    assertNull(
-        completed
-            .copy(
-                run =
-                    completed.run!!.copy(
-                        identity = completed.run.identity.copy(projectId = "other")))
-            .runTimeLabel)
 
     val stale = completed.copy(project = completed.project!!.copy(projectRevision = "next"))
     assertEquals(AnalysisResultAvailability.Stale, stale.emptyPresentation(0).availability)
-    assertEquals("Run time · 42s", stale.runTimeLabel)
     assertEquals(
         AnalysisResultAvailability.Error,
         completed

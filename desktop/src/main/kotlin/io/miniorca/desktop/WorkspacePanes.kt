@@ -101,7 +101,7 @@ internal fun AnalysisWorkspacePane(
                       })
                   if (resultsHelpExpanded)
                       Text(
-                          "Counts come from the run summary. Open a category for matching findings and diagnostics. Zero loaded findings does not confirm an empty result.",
+                          "Reported counts · open a category for loaded findings",
                           color = SecondaryText,
                           style = IdeTypography.workspaceMetadata)
                   AnalysisCategoryPanels(state, actions.openResults)
@@ -253,11 +253,11 @@ private fun VerifiedChecksActionRow(
                 style = IdeTypography.compactBody,
                 color = SecondaryText)
             Text(
-                "Whole-project checks, independent of the Analysis file selection: parser inspection of indexed Go source; go vet ./...; go test ./...",
+                "Whole project · Go parser · go vet ./... · go test ./...",
                 style = IdeTypography.compactBody,
                 color = SecondaryText)
             Text(
-                "Checks run in a temporary copied workspace; the scan does not edit original source. Tests and package initialization can execute project code. A copy is not a security sandbox.",
+                "Executes project code in a temporary copy · not sandboxed",
                 style = IdeTypography.compactBody,
                 color = Warning)
             Text(progress.summary, style = IdeTypography.compactBody, color = SecondaryText)
@@ -281,13 +281,10 @@ private fun VerifiedChecksActionRow(
                       style = IdeTypography.compactBody,
                       color = Warning)
               VerifiedScanFindingsRefresh.Stale ->
-                  Text(
-                      "Tool findings may be stale; scan diagnostics remain available.",
-                      style = IdeTypography.compactBody,
-                      color = Warning)
+                  Text("Tool findings · stale", style = IdeTypography.compactBody, color = Warning)
               VerifiedScanFindingsRefresh.Refreshing ->
                   Text(
-                      "Refreshing tool findings; previous rows remain available.",
+                      "Refreshing findings…",
                       style = IdeTypography.compactBody,
                       color = SecondaryText)
               else -> Unit
@@ -322,17 +319,12 @@ private fun VerifiedChecksActionRow(
                         Text("Refresh scan status")
                       }
             }
-        Text(
-            "Local tool evidence is scoped to these checks, not a general safety assurance. Model suggestions are separate results below.",
-            style = IdeTypography.compactBody,
-            color = SecondaryText)
       }
 }
 
 @Composable
 internal fun VerifiedScanDiagnostics(scan: GoScanReport) {
-  if (scan.phases.isEmpty())
-      Text("No phases reported; no check outcome is available.", style = IdeTypography.compactBody)
+  if (scan.phases.isEmpty()) Text("Check outcome unavailable", style = IdeTypography.compactBody)
   scan.phases.forEach { phase ->
     IdeHorizontalSeparator(Modifier.padding(vertical = 8.dp))
     SelectionContainer {
@@ -345,10 +337,7 @@ internal fun VerifiedScanDiagnostics(scan: GoScanReport) {
         phase.state.takeIf { it.isNotBlank() }?.let(::analysisStatusLabel) ?: "State unavailable",
         evidenceColor(checkStatus(phase.state)))
     if (phase.command.isEmpty())
-        Text(
-            "No command reported for this phase.",
-            style = IdeTypography.compactBody,
-            color = SecondaryText)
+        Text("Command unavailable", style = IdeTypography.compactBody, color = SecondaryText)
     else {
       DiagnosticText("\$ ${phase.command.joinToString(" ")}", color = SecondaryText)
       // Zero is also the wire default when a command never produced an exit result.
@@ -360,21 +349,10 @@ internal fun VerifiedScanDiagnostics(scan: GoScanReport) {
               color = SecondaryText)
     }
     if (phase.output.isBlank())
-        Text(
-            "No output reported for this phase.",
-            style = IdeTypography.compactBody,
-            color = SecondaryText)
+        Text("No recorded output", style = IdeTypography.compactBody, color = SecondaryText)
     else {
       if (phase.output.trimEnd().endsWith("\n[output truncated]"))
-          Text(
-              "Daemon output limit reached; text beyond the recorded output is unavailable.",
-              style = IdeTypography.compactBody,
-              color = Warning)
-      if (diagnosticOutputPreviewTruncated(phase.output))
-          Text(
-              "UI previews are limited; Show full available output reveals all recorded text.",
-              style = IdeTypography.compactBody,
-              color = SecondaryText)
+          Text("Recorded output truncated", style = IdeTypography.compactBody, color = Warning)
       DiagnosticText(phase.output)
     }
   }

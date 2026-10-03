@@ -83,13 +83,11 @@ fun verifiedScanStatusLabel(scan: GoScanReport?): String =
 
 /** Lifecycle completion does not attest to the outcome of any individual phase. */
 internal fun verifiedScanPhaseSummary(report: GoScanReport): String =
-    if (report.phases.isEmpty()) "No phases reported; no check outcome is available."
+    if (report.phases.isEmpty()) "Phase outcomes unavailable"
     else
-        "Reported phases: " +
-            report.phases.joinToString("; ") { phase ->
-              "${phase.name.ifBlank { "Unnamed scan phase" }} — ${phase.state.takeIf { it.isNotBlank() }?.let(::analysisStatusLabel) ?: "State unavailable"}"
-            } +
-            ". Review command and output for details."
+        report.phases.joinToString(" · ") { phase ->
+          "${phase.name.ifBlank { "Unnamed scan phase" }} — ${phase.state.takeIf { it.isNotBlank() }?.let(::analysisStatusLabel) ?: "State unavailable"}"
+        }
 
 /**
  * Eligibility uses the current project's identity and the last confirmed status, never old evidence
@@ -121,15 +119,10 @@ internal fun verifiedScanProgress(
 
   return when (operation) {
     VerifiedScanOperation.Starting ->
-        VerifiedScanProgress(
-            "Starting",
-            "Requesting trust and starting verified checks; previous results remain available.",
-            VerifiedScanAction.Waiting)
+        VerifiedScanProgress("Starting", "Requesting execution trust", VerifiedScanAction.Waiting)
     VerifiedScanOperation.CancellationRequested ->
         VerifiedScanProgress(
-            "Cancellation requested",
-            "Waiting for a terminal scan status; cancellation is not confirmed yet.",
-            VerifiedScanAction.Waiting)
+            "Cancellation requested", "Cancellation unconfirmed", VerifiedScanAction.Waiting)
     is VerifiedScanOperation.StartUncertain ->
         VerifiedScanProgress("Start unconfirmed", operation.message, VerifiedScanAction.Waiting)
     is VerifiedScanOperation.CancellationUnconfirmed ->
@@ -141,12 +134,9 @@ internal fun verifiedScanProgress(
         when (read) {
           VerifiedScanRead.Unread ->
               VerifiedScanProgress(
-                  "Status unread",
-                  "Read scan status before starting checks.",
-                  VerifiedScanAction.Waiting)
+                  "Status unread", "Refresh scan status", VerifiedScanAction.Waiting)
           VerifiedScanRead.Reading ->
-              VerifiedScanProgress(
-                  "Reading status", "Checking the current scan status.", VerifiedScanAction.Waiting)
+              VerifiedScanProgress("Reading status", "Reading status…", VerifiedScanAction.Waiting)
           is VerifiedScanRead.Unavailable ->
               VerifiedScanProgress("Status unavailable", read.message, VerifiedScanAction.Waiting)
           is VerifiedScanRead.PollUnavailable ->
@@ -155,31 +145,26 @@ internal fun verifiedScanProgress(
           VerifiedScanRead.Absent ->
               VerifiedScanProgress(
                   if (report == null) "Not run" else "No current report",
-                  if (report == null)
-                      "No verified checks have run. Importing or reindexing never starts them automatically."
-                  else
-                      "No current scan report was found. Earlier scan evidence remains available; importing or reindexing never starts checks automatically.",
+                  if (report == null) "Not run" else "Previous scan retained",
                   VerifiedScanAction.Start)
           VerifiedScanRead.Loaded -> {
             if (report == null ||
                 report.projectId != project?.projectId ||
                 report.projectRevision != project.projectRevision)
                 VerifiedScanProgress(
-                    "Status unknown",
-                    "The scan report does not match the current project. Refresh status.",
-                    VerifiedScanAction.Waiting)
+                    "Status unknown", "Stale scan · refresh status", VerifiedScanAction.Waiting)
             else
                 when (report.status.lowercase()) {
                   "running" ->
                       VerifiedScanProgress(
                           verifiedScanStatusLabel(report),
-                          "Verified checks are running in a temporary copied workspace; source remains unchanged.",
+                          "Running in a temporary copy",
                           VerifiedScanAction.Cancel)
                   "pausing",
                   "canceling" ->
                       VerifiedScanProgress(
                           verifiedScanStatusLabel(report),
-                          "Verified checks are ${report.status.lowercase()} in a temporary copied workspace; source remains unchanged.",
+                          "${report.status.replaceFirstChar { it.uppercase() }}",
                           VerifiedScanAction.Waiting)
                   "completed",
                   "failed",
@@ -187,10 +172,7 @@ internal fun verifiedScanProgress(
                   "cancelled" ->
                       VerifiedScanProgress(
                           verifiedScanStatusLabel(report),
-                          "Verified checks ${report.status.lowercase()}; ${verifiedScanPhaseSummary(report)}" +
-                              if (report.status.equals("completed", ignoreCase = true))
-                                  " Completion is not proof that every phase passed."
-                              else "",
+                          verifiedScanPhaseSummary(report),
                           VerifiedScanAction.Start)
                   else ->
                       VerifiedScanProgress(

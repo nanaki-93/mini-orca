@@ -903,10 +903,9 @@ class DesktopKeyboardNavigationTest {
                 fixture.hasText("Benchmark evidence"), "Optional measurements stay collapsed")
             for (required in
                 listOf(
-                    "Running benchmarks executes imported project code.",
-                    "Baseline and candidate use copied workspaces; these are not a security sandbox.",
-                    "Trust contract (separate from selected argv): go test ./...",
-                    "This is broader than benchmark-only permission.")) {
+                    "Executes project code · file and network access",
+                    "Temporary copies · not sandboxed",
+                    "Trust scope: go test ./... · includes other Go tests")) {
               assertTrue(fixture.hasText(required), required)
             }
             // Revisit the disclosure from admission as well as from the selected choice.

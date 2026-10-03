@@ -51,8 +51,8 @@ func TestCLIProvidersSendOnlyControlledArgumentsAndValidateStructuredResponses(t
 				t.Fatalf("request directory was retained: %v", err)
 			}
 			assertCLIFlags(t, provider, request.Args)
-			if provider == config.AgyProvider && (!strings.Contains(request.System, "tools: []") || !strings.Contains(request.System, "commandExecutionPolicy: off")) {
-				t.Fatal("agy agent must have no tools")
+			if provider == config.AgyProvider && (!strings.Contains(request.System, "tools: [finish]") || !strings.Contains(request.System, "inheritMcp: false") || !strings.Contains(request.System, "commandExecutionPolicy: off") || !strings.Contains(request.System, "# System Prompt\n")) {
+				t.Fatal("agy agent must load the system prompt and permit only structured completion")
 			}
 			if provider == config.PiProvider && !strings.Contains(request.Settings, `"enabled":false`) {
 				t.Fatal("pi automatic retry and compaction must be disabled")
@@ -144,7 +144,7 @@ func TestCLIProtocolRejectsIncorrectModelsAndExtraTurns(t *testing.T) {
 			"extra turn":    valid + valid,
 		} {
 			t.Run(string(provider)+"/"+name, func(t *testing.T) {
-				if _, err := decodeCLIResponse(profile, []byte(output)); !errors.Is(err, ErrUnusableResponse) {
+				if _, err := decodeCLIResponse(profile, []byte(output), false); !errors.Is(err, ErrUnusableResponse) {
 					t.Fatalf("invalid CLI protocol = %v", err)
 				}
 			})
@@ -157,7 +157,7 @@ func TestCLIPiAcceptsUserEventsAndRejectsToolsAndRetries(t *testing.T) {
 	valid := cliFixtureOutput(config.PiProvider, "success")
 	user := "{\"type\":\"message_end\",\"message\":{\"role\":\"user\",\"content\":\"input\"}}\n"
 	withUser := strings.Replace(valid, "{\"type\":\"agent_start\"}\n", "{\"type\":\"agent_start\"}\n"+user, 1)
-	if _, err := decodeCLIResponse(profile, []byte(withUser)); err != nil {
+	if _, err := decodeCLIResponse(profile, []byte(withUser), false); err != nil {
 		t.Fatal(err)
 	}
 	for name, output := range map[string]string{
@@ -166,7 +166,7 @@ func TestCLIPiAcceptsUserEventsAndRejectsToolsAndRetries(t *testing.T) {
 		"retry":        strings.Replace(valid, `"willRetry":false`, `"willRetry":true`, 1),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := decodeCLIResponse(profile, []byte(output)); !errors.Is(err, ErrUnusableResponse) {
+			if _, err := decodeCLIResponse(profile, []byte(output), false); !errors.Is(err, ErrUnusableResponse) {
 				t.Fatalf("invalid Pi protocol = %v", err)
 			}
 		})
@@ -328,7 +328,7 @@ func TestCLIHelperProcess(t *testing.T) {
 	input, _ := io.ReadAll(os.Stdin)
 	directory, _ := os.Getwd()
 	info, _ := os.Stat(directory)
-	agentFile := ".agents/agents/mini-orca.md"
+	agentFile := ".agents/agents/mini-orca/agent.md"
 	if os.Getenv("MINI_ORCA_TEST_PROVIDER") == "pi" {
 		agentFile = "system.txt"
 	}
@@ -364,18 +364,31 @@ func cliFixtureOutput(provider config.ModelProvider, mode string) string {
 		content = ""
 	}
 	if provider == config.AgyProvider {
-		init := `{"event":"init","init":{"agent":"mini-orca","model":"fixture-model","tools":[]}}` + "\n"
+		// Agy reports its global catalog even when the custom agent denies these tools.
+		init := `{"event":"init","init":{"agent":"mini-orca","model":"fixture-model","tools":["view_file","run_command","finish"]}}` + "\n"
 		if mode == "partial" {
 			return init
 		}
 		if mode == "tool" {
-			return strings.Replace(init, `"tools":[]`, `"tools":["run_command"]`, 1)
+			return init + `{"event":"step_update","step_update":{"step_type":"tool","tool_name":"run_command"}}` + "\n"
 		}
 		status := "SUCCESS"
 		if mode == "failed" {
 			status = "WAITING"
 		}
-		result, _ := json.Marshal(map[string]any{"event": "result", "result": map[string]any{"status": status, "response": content, "usage": map[string]int{"input_tokens": 10, "output_tokens": 20, "total_tokens": 30}}})
+		payload := map[string]any{"status": status, "response": content, "usage": map[string]int{"input_tokens": 10, "output_tokens": 20, "total_tokens": 30}}
+		if content != "" && mode != "missing-structured" {
+			payload["structured_output"] = json.RawMessage(content)
+			payload["response"] = `{"answer":"café 世界","toolAction":"Completing task","toolSummary":"Task completion"}`
+		}
+		if mode == "invalid-structured" || mode == "null-structured" {
+			payload["response"] = content
+			payload["structured_output"] = json.RawMessage(`{"answer":42}`)
+			if mode == "null-structured" {
+				payload["structured_output"] = json.RawMessage(`null`)
+			}
+		}
+		result, _ := json.Marshal(map[string]any{"event": "result", "result": payload})
 		return init + string(result) + "\n"
 	}
 	start := "{\"type\":\"agent_start\"}\n"
