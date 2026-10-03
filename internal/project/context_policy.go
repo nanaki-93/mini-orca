@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-const contextPolicyVersion = "1"
+const contextPolicyVersion = "2"
 
 // ContextDecision explains whether a project file may enter an LLM prompt.
 type ContextDecision struct {
@@ -24,12 +24,12 @@ type ContextDecision struct {
 type ContextPolicy struct {
 	root    string
 	ignores []ignoreRule
-	include []ignoreRule
-	exclude []ignoreRule
+	include []contextRule
+	exclude []contextRule
 	version string
 }
 
-type ignoreRule struct {
+type contextRule struct {
 	pattern string
 	regexp  *regexp.Regexp
 }
@@ -45,12 +45,9 @@ func NewContextPolicy(root string) (*ContextPolicy, error) {
 		return nil, err
 	}
 	p := &ContextPolicy{root: canonical}
-	for _, name := range []string{".gitignore", ".mini-orcaignore"} {
-		rules, err := readIgnoreRules(filepath.Join(canonical, name))
-		if err != nil {
-			return nil, err
-		}
-		p.ignores = append(p.ignores, rules...)
+	p.ignores, err = projectIgnoreRules(canonical)
+	if err != nil {
+		return nil, err
 	}
 	configPath := filepath.Join(canonical, ".mini-orca", "context-policy.json")
 	data, err := os.ReadFile(configPath)
@@ -77,9 +74,13 @@ func NewContextPolicy(root string) (*ContextPolicy, error) {
 
 func (p *ContextPolicy) Version() string { return p.version }
 
-func policyVersion(groups ...[]ignoreRule) string {
+func policyVersion(ignores []ignoreRule, groups ...[]contextRule) string {
 	hash := sha256.New()
 	_, _ = hash.Write([]byte(contextPolicyVersion + "\n"))
+	for _, rule := range ignores {
+		_, _ = fmt.Fprintf(hash, "%s\x00%s\n", rule.base, rule.pattern)
+	}
+	_, _ = hash.Write([]byte("\n"))
 	for _, group := range groups {
 		for _, rule := range group {
 			_, _ = hash.Write([]byte(rule.pattern + "\n"))
@@ -91,7 +92,7 @@ func policyVersion(groups ...[]ignoreRule) string {
 
 func (p *ContextPolicy) Decide(relative string) ContextDecision {
 	path := filepath.ToSlash(filepath.Clean(relative))
-	if path == "." || strings.HasPrefix(path, "../") || filepath.IsAbs(relative) {
+	if path == "." || path == ".." || strings.HasPrefix(path, "../") || filepath.IsAbs(relative) {
 		return ContextDecision{Path: path, Reason: "unsafe path"}
 	}
 	if path == ".mini-orca" || strings.HasPrefix(path, ".mini-orca/") {
@@ -113,7 +114,7 @@ func (p *ContextPolicy) Decide(relative string) ContextDecision {
 	if matches(p.include, path) {
 		return ContextDecision{Path: path, Include: true, Reason: "project context-policy include"}
 	}
-	if matches(p.ignores, path) {
+	if ignoredPath(p.ignores, path, false) {
 		return ContextDecision{Path: path, Reason: "ignored by .gitignore or .mini-orcaignore"}
 	}
 	return ContextDecision{Path: path, Include: true, Reason: "eligible source or text file"}
@@ -150,26 +151,8 @@ func generatedOrLockFile(name string) bool {
 	return false
 }
 
-func readIgnoreRules(path string) ([]ignoreRule, error) {
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read ignore file: %w", err)
-	}
-	var patterns []string
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" && !strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "!") {
-			patterns = append(patterns, line)
-		}
-	}
-	return compileRules(patterns)
-}
-
-func compileRules(patterns []string) ([]ignoreRule, error) {
-	rules := make([]ignoreRule, 0, len(patterns))
+func compileRules(patterns []string) ([]contextRule, error) {
+	rules := make([]contextRule, 0, len(patterns))
 	for _, pattern := range patterns {
 		pattern = strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(pattern)), "/")
 		if pattern == "" {
@@ -186,12 +169,12 @@ func compileRules(patterns []string) ([]ignoreRule, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid context-policy pattern %q: %w", pattern, err)
 		}
-		rules = append(rules, ignoreRule{pattern: pattern, regexp: re})
+		rules = append(rules, contextRule{pattern: pattern, regexp: re})
 	}
 	return rules, nil
 }
 
-func matches(rules []ignoreRule, path string) bool {
+func matches(rules []contextRule, path string) bool {
 	for _, rule := range rules {
 		if rule.regexp.MatchString(path) {
 			return true
