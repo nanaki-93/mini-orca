@@ -33,10 +33,6 @@ internal fun DraftValidationStage(editor: EditableDraftState, actions: DraftEdit
         ?.takeIf { it.status != ValidationAttemptStatus.Running }
         ?.let { DiagnosticText("Validation ${it.status.name.lowercase()}: ${it.message}") }
     if (editor.status == DraftEditorStatus.Valid) {
-      Text(
-          "Validation composes this candidate in memory. It does not run tests or write source.",
-          color = SecondaryText,
-          style = IdeTypography.body)
       actions.review?.let { review ->
         MiniOrcaButton(
             onClick = review,

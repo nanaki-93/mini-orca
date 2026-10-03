@@ -896,9 +896,7 @@ class DesktopStateTest {
       assertEquals(original.declaration, stopped.review.editor?.declaration)
       assertEquals(2, stopped.review.editor?.serverDraft?.revision)
       assertEquals(DraftEditorStatus.Dirty, stopped.review.editor?.status)
-      assertEquals(
-          "Locally edited · needs validation",
-          draftEditorStatusLabel(stopped.review.editor!!.status))
+      assertEquals("Edited · not validated", draftEditorStatusLabel(stopped.review.editor!!.status))
       assertEquals(outcome, stopped.review.editor.validationAttempt?.status)
       assertEquals("Connection lost", stopped.review.editor.validationAttempt?.message)
       assertNull(stopped.review.draft?.validation)

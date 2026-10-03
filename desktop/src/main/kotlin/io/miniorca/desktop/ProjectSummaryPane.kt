@@ -276,7 +276,7 @@ internal fun projectSummaryPresentation(
   val interpretationAvailable = normalizedStatus in setOf("fresh", "stale")
   val descriptionMessage =
       if (normalizedStatus == "fresh" && analysis?.purpose.isNullOrBlank())
-          "Project description: unavailable · no purpose provided"
+          "AI description · unavailable"
       else summaryAnalysisMessage(normalizedStatus, analysis?.failure.orEmpty())
   val currentSelectionState =
       selectionState.takeIf { state ->
@@ -340,9 +340,9 @@ internal fun projectSummaryPresentation(
       runMessage =
           currentRun?.let {
             if (lifecycle != null && lifecycleLabel != null && lifecycleLabel != lifecycle.status)
-                "$lifecycleLabel · Last accepted analysis run: ${lifecycle.status} · separate from saved coverage."
+                "$lifecycleLabel · saved run: ${lifecycle.status}"
             else
-                "${if (it.isActive()) "Current" else "Last"} analysis run: ${analysisStatusLabel(it.status)} · separate from saved coverage."
+                "${if (it.isActive()) "Current" else "Last"} run · ${analysisStatusLabel(it.status)}"
           },
       analysisMessage =
           listOfNotNull(
@@ -445,25 +445,22 @@ private fun summarySelectionNotice(
       "File selection $operation failed · ${if (confirmed) "Showing last confirmed selection." else "No confirmed selection available."} ${state.error}"
     }
     state.saving ->
-        if (confirmed)
-            "Saving file selection · showing last confirmed selection until the save succeeds."
-        else "Saving file selection · no confirmed selection available."
+        if (confirmed) "Saving selection · last saved" else "Saving selection · no saved selection"
     state.loading ->
-        if (confirmed) "Loading file selection · showing last confirmed selection."
-        else "Loading file selection · no confirmed selection available."
+        if (confirmed) "Loading selection · last saved"
+        else "Loading selection · no saved selection"
     else -> null
   }
 }
 
 private fun summaryAnalysisMessage(status: String, failure: String): String =
     when (status) {
-      "fresh" -> "Project description: current · AI-generated"
-      "stale" -> "Project description: stale · source may have changed"
-      "failed" ->
-          "Project description: failed · ${failure.ifBlank { "No failure details available" }}"
-      "running" -> "Project description: running"
-      "missing" -> "Project description: unavailable"
-      else -> "Project description: ${status.replace('_', ' ')}"
+      "fresh" -> "AI description"
+      "stale" -> "AI description · stale"
+      "failed" -> "AI description · failed: ${failure.ifBlank { "Details unavailable" }}"
+      "running" -> "AI description · generating"
+      "missing" -> "AI description · unavailable"
+      else -> "AI description · ${status.replace('_', ' ')}"
     }
 
 private fun projectSummaryDetails(
@@ -491,6 +488,8 @@ internal fun ProjectSummaryPane(
     fileSelection: AnalysisFileSelection? = null,
     analysisState: ProjectAnalysisRunState? = null,
     analysisActions: AnalysisWorkspaceActions? = null,
+    regenerateDescription: (() -> Unit)? = null,
+    descriptionRegenerationEnabled: Boolean = true,
     findingState: DesktopState =
         DesktopState(
             projectState = ProjectWorkspaceState(project = project),
@@ -589,6 +588,8 @@ internal fun ProjectSummaryPane(
               runPaneState,
               analysisActions,
               purposeExpansion,
+              regenerateDescription,
+              descriptionRegenerationEnabled,
               showActionFeedback = visibleRun == null)
         }
         if (visibleRun != null)
@@ -716,6 +717,8 @@ private fun SummaryIntroduction(
     runState: AnalysisWorkspacePaneState,
     actions: AnalysisWorkspaceActions?,
     purposeExpansion: MutableState<Boolean>,
+    regenerateDescription: (() -> Unit)?,
+    descriptionRegenerationEnabled: Boolean,
     showActionFeedback: Boolean,
 ) {
   val type = projectTypePresentation(presentation.projectType)
@@ -741,11 +744,20 @@ private fun SummaryIntroduction(
     presentation.purpose?.let {
       ModelResultContent(it, style = IdeTypography.workspaceBody, expansion = purposeExpansion)
     }
-    Text(
+    IdeLabelBadge(
         presentation.interpretationMessage,
-        color = if (presentation.interpretationStatus == "failed") Error else SecondaryText,
-        style = IdeTypography.workspaceMetadata,
+        tint = summaryAnalysisTint(presentation.interpretationStatus),
+        icon = analysisStatusIcon(presentation.interpretationStatus),
         modifier = Modifier.testTag("summary-interpretation-status"))
+    if (regenerateDescription != null) {
+      MiniOrcaButton(
+          onClick = regenerateDescription,
+          enabled = descriptionRegenerationEnabled,
+          tone = ActionTone.Neutral,
+          modifier = Modifier.testTag("summary-regenerate-description")) {
+            Text("Regenerate description…", style = IdeTypography.action)
+          }
+    }
     val facts =
         listOf(presentation.buildMetadata) +
             presentation.projectMetrics.map { metric ->
@@ -852,17 +864,17 @@ private fun SummaryFileEvidence(
               }
               is SummaryFileLedger.Empty ->
                   Text(
-                      "No files selected in the confirmed selection.",
+                      "No files selected",
                       color = SecondaryText,
                       style = IdeTypography.workspaceBody)
               is SummaryFileLedger.AggregateOnly ->
                   Text(
-                      "File paths unavailable · ${ledger.totalReported} files in saved aggregate coverage. Load a confirmed selection to inspect file evidence.",
+                      "${ledger.totalReported} files · paths unavailable",
                       color = SecondaryText,
                       style = IdeTypography.workspaceBody)
               is SummaryFileLedger.Unavailable ->
                   Text(
-                      "File evidence unavailable · no confirmed file selection or saved file paths.",
+                      "File evidence unavailable",
                       color = SecondaryText,
                       style = IdeTypography.workspaceBody)
             }
@@ -1052,18 +1064,10 @@ private fun SummarySelectedFindings(
 private fun SummaryChangeLifecycle(onOpenEditor: () -> Unit) {
   WorkspaceSection("Change lifecycle", Modifier.testTag("summary-change-lifecycle")) {
     Text(
-        "Mini-Orca editing workflow (not a project Flow)",
-        color = SecondaryText,
-        style = IdeTypography.workspaceBody)
-    Text(
         "Request → Draft → Validate → Checks → Review → Apply",
         color = PrimaryText,
         style = IdeTypography.workspaceMetadata,
         modifier = Modifier.testTag("summary-change-stages"))
-    Text(
-        "Edit only an isolated declaration/import draft. Apply is an explicit, guarded one-file source change; Undo is guarded and available only when the change is still eligible.",
-        color = SecondaryText,
-        style = IdeTypography.workspaceBody)
     MiniOrcaButton(
         onClick = onOpenEditor,
         tone = ActionTone.Navigation,

@@ -4,6 +4,7 @@ import java.io.File
 import java.util.concurrent.CompletableFuture
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -12,6 +13,55 @@ class DesktopProjectSwitchTest {
   private val draft = DeclarationDraft(id = "draft-1", revision = 1, hash = "hash-1")
   private val remote =
       ScopedModel(scope = "analyze", profile = "remote", model = "m1", remoteProvider = true)
+
+  @Test
+  fun descriptionRegenerationReviewsTheCurrentProjectAndProviderWithoutDispatching() {
+    val workflow =
+        DesktopWorkflowSnapshot(
+            state = DesktopState(projectState = ProjectWorkspaceState(project)),
+            modelCatalog = ModelCatalog(mapOf("analyze" to remote)))
+    val admission = ProjectSwitchAdmission()
+    assertTrue(admitProjectDescriptionRegeneration(workflow, false, admission))
+    val request = admission.pending!!
+    assertEquals(project.path, request.path)
+    assertTrue(request.reimportsCurrentProject)
+    assertEquals(SwitchReviewStage.Provider, request.stage)
+    assertEquals(SwitchAnalyzeDestination(remote), request.context.destination)
+    assertNull(admission.commit(request.requestId, request.context))
+    assertFalse(admitProjectDescriptionRegeneration(workflow, false, admission))
+    admission.dismiss(request.requestId)
+    assertNull(admission.pending)
+    assertEquals(project, workflow.state.project)
+  }
+
+  @Test
+  fun descriptionRegenerationRequiresAnIdleLoadedProject() {
+    val loaded = ProjectWorkspaceState(project)
+    val states =
+        listOf(
+            ProjectWorkspaceState(),
+            loaded.copy(project = project.copy(path = "")),
+            loaded.copy(
+                openingAttempt = ProjectOpeningAttempt(1, "/next", ProjectOpeningKind.Import)),
+            loaded.copy(
+                indexingAttempt =
+                    ProjectIndexingAttempt(
+                        1, project.projectId, project.projectRevision, project.path)))
+    for (state in states) {
+      val admission = ProjectSwitchAdmission()
+      assertFalse(
+          admitProjectDescriptionRegeneration(
+              DesktopWorkflowSnapshot(state = DesktopState(projectState = state)),
+              false,
+              admission))
+      assertNull(admission.pending)
+    }
+    val admission = ProjectSwitchAdmission()
+    assertFalse(
+        admitProjectDescriptionRegeneration(
+            DesktopWorkflowSnapshot(state = DesktopState(projectState = loaded)), true, admission))
+    assertNull(admission.pending)
+  }
 
   private fun context(
       project: ProjectAnalysis? = this.project,

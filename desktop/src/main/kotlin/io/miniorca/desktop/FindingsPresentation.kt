@@ -472,22 +472,16 @@ internal fun ResultSectionHeader(
                           page.countLabel(loadedCount),
                           color = SecondaryText,
                           style = IdeTypography.workspaceMetadata)
-                      statusText?.let { IdeLabelBadge(it, analysisStatusTint(status)) }
-                      page.coverageLabel?.let {
-                        Text(it, color = SecondaryText, style = IdeTypography.workspaceMetadata)
-                      }
-                      page.runTimeLabel?.let {
-                        Text(it, color = SecondaryText, style = IdeTypography.workspaceMetadata)
+                      statusText?.let {
+                        IdeLabelBadge(
+                            it, analysisStatusTint(status), icon = analysisStatusIcon(status))
                       }
                     }
               }
               ResultAnalysisAction(openAnalysis)
             }
         if (page.stale && page.run != null && loadedCount > 0)
-            Text(
-                "Retained results are out of date. Start a new analysis for current evidence.",
-                color = Warning,
-                style = IdeTypography.workspaceMetadata)
+            Text("Stale · reanalyze", color = Warning, style = IdeTypography.workspaceMetadata)
       }
 }
 
@@ -509,10 +503,7 @@ internal fun ResultReadFeedback(
             WorkspaceSection {
               Text("Loading results…", color = PrimaryText, style = IdeTypography.workspaceBody)
               Text(
-                  if (hasRetainedRows)
-                      "Reading saved ${page.type.workspace.name} results. Previously loaded results remain available below."
-                  else
-                      "Reading saved ${page.type.workspace.name} results; no new analysis is being started.",
+                  if (hasRetainedRows) "Previous results retained" else "Saved results",
                   color = SecondaryText,
                   style = IdeTypography.workspaceMetadata)
             }
@@ -528,7 +519,7 @@ internal fun ResultReadFeedback(
                 style = IdeTypography.workspaceMetadata)
             if (hasRetainedRows)
                 Text(
-                    "Previously loaded results remain available below.",
+                    "Previous results retained",
                     color = SecondaryText,
                     style = IdeTypography.workspaceMetadata)
             if (retryResults != null &&

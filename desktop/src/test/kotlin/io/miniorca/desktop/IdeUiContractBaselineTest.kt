@@ -120,8 +120,8 @@ class IdeUiContractBaselineTest {
                 model = "remote-model",
                 remoteProvider = true))
 
-    assertTrue(destination.contains("remote provider"))
-    assertTrue(destination.contains("confirmation required"))
+    assertTrue(destination.contains("remote"))
+    assertTrue(destination.contains("sends project context"))
   }
 
   private fun project() =

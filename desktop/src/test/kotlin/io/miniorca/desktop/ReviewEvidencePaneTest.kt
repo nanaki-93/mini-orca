@@ -120,9 +120,8 @@ class ReviewEvidencePaneTest {
           fixture.scrollBy(100_000f, "review-action-scroll")
           fixture.render()
           assertTrue(fixture.verticalScrollValue("review-action-scroll") > 0f)
-          fixture.assertTextWrapsWithoutClipping("Updates Run in $path.")
-          assertTrue(
-              fixture.firstVisibleTextBounds("Updates Run in $path.").bottom <= action.bottom)
+          fixture.assertTextWrapsWithoutClipping("Run · $path")
+          assertTrue(fixture.firstVisibleTextBounds("Run · $path").bottom <= action.bottom)
           assertTrue(fixture.hasDescription("Apply Run to $path"))
           fixture.revealText("Apply change", "review-action-scroll")
           assertTrue(fixture.requestDescriptionFocus("Apply Run to $path"))
@@ -590,10 +589,10 @@ class ReviewEvidencePaneTest {
     assertEquals(ReviewEvidenceStatus.Failed, evidence.validation.status)
     assertEquals(
         "Only one declaration may change.", invalid.validation!!.diagnostics.single().message)
-    assertTrue(advisoryImpactLabel(impact).contains("read-only"))
+    assertTrue(advisoryImpactLabel(impact) == "1 indexed dependents")
     assertTrue(
         gitContextLabel(GitStatus(true, "main", "modified", "changed")).contains("read-only"))
-    assertTrue(gitContextLabel(null).contains("read-only"))
+    assertEquals("Git unavailable", gitContextLabel(null))
   }
 
   @Test
@@ -771,8 +770,7 @@ class ReviewEvidencePaneTest {
               .use { fixture ->
                 fixture.render()
                 assertTrue(fixture.hasText(title))
-                assertTrue(
-                    fixture.hasText("Previous check report (retained; not current approval)"))
+                assertTrue(fixture.hasText("Previous checks · not current"))
                 assertFalse(fixture.hasText("Ready to apply"))
                 assertFalse(fixture.hasText("Apply change"))
                 assertFalse(fixture.hasText("Revise with check output"))

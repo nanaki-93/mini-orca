@@ -217,10 +217,6 @@ internal fun AnalysisFileSelector(
                       Text("Refresh files")
                     }
           }
-      Text(
-          "File selection is independent of the open Editor file and does not start analysis.",
-          color = SecondaryText,
-          style = IdeTypography.workspaceMetadata)
     }
     state.error?.let { error ->
       FlowRow(
@@ -245,7 +241,7 @@ internal fun AnalysisFileSelector(
                 }
           }
       Text(
-          "${if (selection == null) "No confirmed selection is loaded." else "The last confirmed selection is still shown."} Refresh files reads the saved selection; it does not retry a failed change or start analysis.",
+          if (selection == null) "No saved selection" else "Last saved selection",
           color = SecondaryText,
           style = IdeTypography.workspaceMetadata)
       DiagnosticText(error, color = Error)
@@ -257,8 +253,7 @@ internal fun AnalysisFileSelector(
         ) {
           DesktopLineIcon(DesktopIcon.Lock, "", iconSize = 15.dp, tint = SecondaryText)
           Text(
-              if (lockedByRun) "Selection locked. Finish or cancel the current run to change files."
-              else "Selection changes unavailable.",
+              if (lockedByRun) "Selection locked · run in progress" else "Selection locked",
               color = SecondaryText,
               style = IdeTypography.workspaceMetadata)
         }
@@ -271,14 +266,11 @@ internal fun AnalysisFileSelector(
               color = SecondaryText,
               style = IdeTypography.workspaceMetadata)
       Text(
-          "Select all and Exclude all affect every eligible file, regardless of search or filter matches.",
+          "Bulk actions include filtered files",
           color = SecondaryText,
           style = IdeTypography.workspaceMetadata)
       if (selection != null && eligible.isNotEmpty() && selectedCount == 0)
-          Text(
-              "All eligible files are excluded; no files are selected for analysis.",
-              color = SecondaryText,
-              style = IdeTypography.workspaceMetadata)
+          Text("No files selected", color = SecondaryText, style = IdeTypography.workspaceMetadata)
       if (!locked) {
         FlowRow(
             Modifier.fillMaxWidth().testTag("analysis-file-footer"),

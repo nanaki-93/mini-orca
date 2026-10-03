@@ -554,6 +554,25 @@ internal fun analysisStatusTint(status: String?): Color =
       else -> SecondaryText
     }
 
+internal fun analysisStatusIcon(status: String?): DesktopIcon =
+    when (status) {
+      "fresh",
+      "completed",
+      "completed_empty" -> DesktopIcon.Check
+      "queued",
+      "running",
+      "pausing",
+      "canceling" -> DesktopIcon.Refresh
+      "paused" -> DesktopIcon.Pause
+      "stale",
+      "partial",
+      "interrupted" -> DesktopIcon.Warning
+      "failed",
+      "canceled",
+      "cancelled" -> DesktopIcon.Close
+      else -> DesktopIcon.Unknown
+    }
+
 @Composable
 internal fun MiniOrcaPanel(
     modifier: Modifier = Modifier,
@@ -667,6 +686,7 @@ internal fun StatusBadge(status: String, modifier: Modifier = Modifier) {
       tint = style.color,
       modifier = modifier,
       accessibleName = "Status: ${style.label}",
+      icon = analysisStatusIcon(status),
   )
 }
 
@@ -680,8 +700,10 @@ internal fun SystemStateMessage(
 ) {
   MiniOrcaPanel(modifier = modifier, raised = true) {
     Text(title, color = PrimaryText, fontWeight = FontWeight.SemiBold)
-    Spacer(Modifier.height(MiniOrcaSpacing.standard))
-    Text(message, color = accent, style = IdeTypography.body)
+    if (message.isNotBlank()) {
+      Spacer(Modifier.height(MiniOrcaSpacing.standard))
+      Text(message, color = accent, style = IdeTypography.body)
+    }
     if (action != null) {
       Spacer(Modifier.height(MiniOrcaSpacing.roomy))
       action()

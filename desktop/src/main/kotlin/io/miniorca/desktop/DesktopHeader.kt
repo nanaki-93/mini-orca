@@ -187,13 +187,10 @@ private fun ProjectOpeningFeedback(
           },
       message =
           when {
-            failure != null ->
-                "The requested project did not open. The current project is unchanged."
-            attempt.outcome == ProjectOpeningOutcome.Opening && restoring ->
-                "Reading saved local project data; no model request is made. The current project remains open."
-            attempt.outcome == ProjectOpeningOutcome.Opening ->
-                "Import may use the configured Analyze provider and require confirmation. The current project remains open."
-            else -> "The current project remains open. Switch project… to choose another folder."
+            failure != null -> "Current project unchanged"
+            attempt.outcome == ProjectOpeningOutcome.Opening && restoring -> "Loading saved project"
+            attempt.outcome == ProjectOpeningOutcome.Opening -> "Analyze provider"
+            else -> "Current project unchanged"
           },
       accent = if (failure != null) Error else SecondaryText,
       modifier =
@@ -259,13 +256,10 @@ private fun ProjectIndexingFeedback(
           },
       message =
           when {
-            running ->
-                "Refreshing local inventory and freshness. No progress estimate is available."
-            failure != null ->
-                "Previous inventory and saved evidence remain available with their existing freshness labels."
-            success != null -> "Inventory revision accepted. This does not refresh model findings."
-            else ->
-                "Previous inventory and saved evidence remain available with their existing freshness labels."
+            running -> ""
+            failure != null -> "Previous inventory retained"
+            success != null -> ""
+            else -> "Previous inventory retained"
           },
       accent = if (failure != null) Error else SecondaryText,
       modifier =
@@ -313,9 +307,7 @@ private fun ProjectIndexingFeedback(
           }
           when (val details = state.detailsOutcome) {
             is ProjectDetailsOutcome.Unavailable -> {
-              Text(
-                  "Workspace details unavailable; retained findings keep their existing freshness labels.",
-                  color = Warning)
+              Text("Workspace details unavailable", color = Warning)
               DiagnosticText(details.message, color = Warning)
             }
             ProjectDetailsOutcome.Refreshing ->
@@ -346,7 +338,7 @@ private fun ProjectIndexingFeedback(
             }
         if (helpExpanded) {
           Text(
-              "Re-index refreshes project inventory and freshness without a model request or project-code execution. It does not run analysis or refresh findings.",
+              "Refreshes inventory · analysis unchanged",
               color = SecondaryText,
               style = IdeTypography.body)
         }
@@ -516,7 +508,7 @@ private fun ProjectActionsMenu(
               icon = DesktopIcon.Refresh)
           if (reconnectAvailable) {
             Text(
-                "Daemon disconnected. Reconnect reads daemon status and model configuration; it does not contact a provider or run project code.",
+                "Daemon disconnected",
                 color = Error,
                 style = IdeTypography.compactBody,
                 modifier = Modifier.widthIn(max = 280.dp).padding(8.dp))

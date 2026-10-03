@@ -375,17 +375,13 @@ private fun PerformanceFindingDetails(
   var technical by remember(result.row().key) { mutableStateOf(false) }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
     ResultDetailHeader(result.row())
-    Text(
-        "Unmeasured recommendation. Benchmark the affected workload before claiming an improvement.",
-        color = SecondaryText,
-        style = IdeTypography.compactBody)
+    IdeLabelBadge("Unmeasured", Warning, icon = DesktopIcon.Performance)
     PerformanceField("Report status", result.report.status.ifBlank { "Not supplied." })
     PerformanceField(
         "Freshness", if (result.stale) "Stale · saved evidence" else "Current for this analysis")
     PerformanceField("Observed pattern", finding.observedPattern)
-    PerformanceField("Potential impact · qualitative, not a measured gain", finding.potentialImpact)
-    PerformanceField(
-        "Model confidence · not a measurement or speedup probability", finding.confidence)
+    PerformanceField("Potential impact", finding.potentialImpact)
+    PerformanceField("Model confidence", finding.confidence)
     PerformanceField("Recommendation", finding.recommendation)
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(MiniOrcaSpacing.compact),
@@ -404,8 +400,8 @@ private fun PerformanceFindingDetails(
         Text(preparation.reason, color = SecondaryText, style = IdeTypography.compactBody)
     if (result.stale || result.report.status == "partial")
         Text(
-            if (result.stale) "Saved evidence may not match current source. Analyze again."
-            else "Partial report; some evidence may be missing.",
+            if (result.stale) "Outdated · analyze again"
+            else "Partial report · incomplete evidence",
             color = Warning,
             style = IdeTypography.compactBody)
     PerformanceField("Report warning", result.report.warning)
@@ -705,22 +701,15 @@ internal fun performanceBenchmarkStatusPresentation(
       PerformanceBenchmarkStatusPresentation(label, summary, priorEvidence = prior)
   return when {
     admission == BenchmarkAdmissionOutcome.Admitting ->
-        current(
-            "Admitting · execution trust", "Checking execution trust for the selected benchmark.")
+        current("Admitting · execution trust", "Checking execution trust")
     admission == BenchmarkAdmissionOutcome.Running ->
-        current(
-            "Running · explicit local execution",
-            "The selected benchmark is running in isolated copies for the current candidate.")
+        current("Running · explicit local execution", "Running in temporary copies")
     discovery == BenchmarkDiscoveryOutcome.Loading ->
-        current(
-            "Listing · read-only discovery",
-            "Looking up compatible benchmarks. No project code is executed by discovery.")
+        current("Listing · read-only discovery", "Loading compatible benchmarks…")
     admission is BenchmarkAdmissionOutcome.Failed ->
         current("Benchmark admission failed", admission.message)
     admission == BenchmarkAdmissionOutcome.Stopped ->
-        current(
-            "Benchmark admission stopped",
-            "The local benchmark operation stopped. Prior evidence does not confirm this operation completed.")
+        current("Benchmark admission stopped", "Stopped · previous evidence retained")
     latestOutcome != null &&
         (latestOutcome.status != BenchmarkComparisonStatus.Completed ||
             latestOutcome.response != comparison) ->
@@ -744,17 +733,11 @@ internal fun performanceBenchmarkStatusPresentation(
     discovery is BenchmarkDiscoveryOutcome.Unavailable ->
         current(
             "Discovery unavailable",
-            discovery.reason.ifBlank {
-              "No compatible benchmark is available for this candidate. Refresh the catalog to check again."
-            })
+            discovery.reason.ifBlank { "No compatible benchmark · refresh catalog" })
     discovery == BenchmarkDiscoveryOutcome.Invalidated ->
-        current(
-            "Discovery invalidated",
-            "Benchmark catalog and selection are no longer current. Validate the candidate if needed, then refresh compatible benchmarks.")
+        current("Discovery invalidated", "Catalog outdated · refresh benchmarks")
     discovery == BenchmarkDiscoveryOutcome.Loaded && catalog?.benchmarks?.isEmpty() == true ->
-        current(
-            "No compatible benchmarks",
-            "No compatible benchmarks were found for this candidate. Refresh to check again; no benchmark is selected.")
+        current("No compatible benchmarks", "No compatible benchmarks")
     discovery == BenchmarkDiscoveryOutcome.Loaded && eligibility?.canCompare == false ->
         current("Comparison blocked", eligibility.comparisonBlockedReason!!)
     comparison != null ->
@@ -765,16 +748,13 @@ internal fun performanceBenchmarkStatusPresentation(
             .let {
               PerformanceBenchmarkStatusPresentation(
                   it.stateLabel,
-                  (listOf(it.summary) +
-                          it.insights +
-                          "Benchmark evidence is candidate-specific and does not measure this model suggestion.")
+                  (listOf(it.summary) + it.insights + "Candidate benchmark · suggestion unmeasured")
                       .joinToString("\n"),
                   priorEvidence = it.isStale)
             }
     else ->
         PerformanceBenchmarkStatusPresentation(
-            "Not measured · explicit local execution",
-            "No benchmark evidence is available for the current candidate. Listing is read-only; running a benchmark requires explicit local execution.")
+            "Not measured · explicit local execution", "Not benchmarked")
   }
 }
 
@@ -824,7 +804,7 @@ private fun PerformanceBenchmarkControls(
         SelectionContainer { Text(it, color = Warning, fontSize = 11.sp, lineHeight = 16.sp) }
       }
       Text(
-          "Listing compatible benchmarks is read-only and does not execute project code. Refresh clears the selection; select again after reviewing the returned catalog.",
+          "Refresh clears the benchmark selection",
           color = SecondaryText,
           fontSize = 11.sp,
           lineHeight = 16.sp)
@@ -852,20 +832,13 @@ private fun PerformanceBenchmarkControls(
         return@Column
       }
       if (catalog.benchmarks.isEmpty()) {
-        Text(
-            "No compatible benchmarks were found for this candidate. Refresh to check again; no benchmark is selected.",
-            color = Warning,
-            style = IdeTypography.compactBody)
+        Text("No compatible benchmarks", color = Warning, style = IdeTypography.compactBody)
         return@Column
       }
       eligibility.comparisonBlockedReason?.let {
         SelectionContainer { Text(it, color = Warning, fontSize = 11.sp, lineHeight = 16.sp) }
       }
-      Text(
-          "Select one existing benchmark. The daemon-built argv below is the only command this action can run.",
-          color = SecondaryText,
-          fontSize = 11.sp,
-          lineHeight = 16.sp)
+      Text("Select a benchmark", color = SecondaryText, fontSize = 11.sp, lineHeight = 16.sp)
       catalog.benchmarks.forEachIndexed { index, choice ->
         ChromeButton(
             onClick = { actions.selectBenchmark(choice) },
@@ -949,7 +922,7 @@ private fun PerformanceBenchmarkAdmissionDisclosure(
               Text("$label: $value", color = SecondaryText, style = IdeTypography.compactBody)
             }
             Text(
-                "The working directory is relative to the project root; . means project root. The scope guard is opaque identity metadata, not a directory.",
+                "Directory relative to project root",
                 color = SecondaryText,
                 style = IdeTypography.compactBody)
           }
@@ -1026,28 +999,20 @@ private fun PerformanceBenchmarkAdmissionDisclosure(
             }
         SelectionContainer {
           Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                "Each JSON-quoted entry is one argument, not a shell command. No shell parsing or editable command is used.",
-                color = SecondaryText,
-                style = IdeTypography.compactBody)
+            Text("Arguments · no shell", color = SecondaryText, style = IdeTypography.compactBody)
             listOf(
-                    "Running benchmarks executes imported project code.",
-                    "Execution may have external effects, including file and network access.",
-                    "Baseline and candidate use copied workspaces; these are not a security sandbox.")
+                    "Executes project code · file and network access",
+                    "Temporary copies · not sandboxed")
                 .forEach { Text(it, color = Warning, style = IdeTypography.compactBody) }
             Text(
-                if (trusted)
-                    "The catalog reports session execution trust for this project/revision."
-                else
-                    "Trust and run grants session execution trust for this project/revision, then runs the selected benchmark.",
+                if (trusted) "Execution trusted · current project revision"
+                else "Requires execution trust for this revision",
                 color = SecondaryText,
                 style = IdeTypography.compactBody)
             listOf(
-                    "Trust contract (separate from selected argv): go test ./...",
-                    "This is broader than benchmark-only permission.",
-                    "Trust lasts for this project revision in the daemon session.",
-                    "Granting trust does not execute “go test ./...”.",
-                    "The combined action requests the selected benchmark separately.")
+                    "Trust scope: go test ./... · includes other Go tests",
+                    "Trust duration: current project revision · daemon session",
+                    "Runs the selected benchmark command")
                 .forEach { Text(it, color = Warning, style = IdeTypography.compactBody) }
           }
         }
@@ -1146,8 +1111,7 @@ internal fun performanceBenchmarkPresentation(
       assessment.copy(
           stateLabel = "Prior evidence · ${assessment.stateLabel}",
           rows = benchmarkHistoricalRows(assessment),
-          summary =
-              "Prior comparison only; it does not confirm the latest attempt. Recorded assessment: ${assessment.summary}",
+          summary = "Prior comparison · ${assessment.summary}",
           insights = assessment.insights.map { "Prior observation: $it" },
           isMeasured = false)
   else assessment
@@ -1161,26 +1125,21 @@ private fun benchmarkFreshnessPresentation(
 ): PerformanceBenchmarkPresentation {
   val stale =
       when {
-        expectedIdentity == null ->
-            "Stale · no current candidate" to
-                "This comparison is retained, but no current draft identity can verify it."
+        expectedIdentity == null -> "Stale · no current candidate" to "No current draft"
         comparison.identityOrNull() != expectedIdentity ->
-            "Stale · candidate identity changed" to
-                "This comparison is for a different draft or source revision and is not usable."
+            "Stale · candidate identity changed" to "Draft or source changed"
         expectedChoice == null ->
-            "Stale · no current benchmark selection" to
-                "This comparison is retained, but no eligible catalog selection can verify it. Refresh compatible benchmarks and select a current choice."
+            "Stale · no current benchmark selection" to "Select a compatible benchmark"
         comparison.benchmark != expectedChoice.name ||
             comparison.scope != expectedChoice.scope ||
             comparison.command != expectedChoice.command ->
-            "Stale · selected benchmark changed" to
-                "This comparison is for a different benchmark selection and is not usable."
+            "Stale · selected benchmark changed" to "Benchmark selection changed"
         else -> null
       } ?: return assessment
   return assessment.copy(
       stateLabel = stale.first,
       rows = benchmarkHistoricalRows(assessment),
-      summary = "${stale.second} Historical assessment: ${assessment.summary}",
+      summary = "${stale.second} · prior: ${assessment.summary}",
       insights = assessment.insights.map { "Historical observation: $it" },
       isMeasured = false,
       isStale = true,
@@ -1209,8 +1168,7 @@ private fun benchmarkMeasurementPresentation(
                   metrics.map { it.label to it.display() } +
                   metrics.flatMap { it.invalidRows() }.distinct(),
           conditions = benchmarkConditions(comparison),
-          summary =
-              "The selected benchmark did not return a complete comparable measurement; five valid samples per side are required.",
+          summary = "Incomplete · requires 5 valid samples per side",
           insights = emptyList(),
           isMeasured = false,
           isStale = false,
@@ -1219,7 +1177,7 @@ private fun benchmarkMeasurementPresentation(
   if (comparison.status != "completed")
       return presentation.copy(
           stateLabel = benchmarkTerminalLabel(comparison),
-          summary = comparison.reason.ifBlank { "No completed comparison is available." },
+          summary = comparison.reason.ifBlank { "Comparison unavailable" },
           inconclusive = comparison.status != "unavailable")
   if (metrics.any {
     it.base.availability == BenchmarkMetricAvailability.Invalid ||
@@ -1227,19 +1185,15 @@ private fun benchmarkMeasurementPresentation(
   })
       return presentation.copy(
           stateLabel = "Inconclusive · invalid samples",
-          summary =
-              "Invalid observations remain inspectable; only valid observations contribute to the displayed medians. No complete comparison is established.")
+          summary = "Invalid samples · valid-only medians")
   if (comparison.benchmark.isBlank() || !metrics.first().isComplete) return presentation
 
   val incompleteMemoryMetrics = metrics.drop(1).filter { !it.isComplete }
   if (incompleteMemoryMetrics.isNotEmpty())
       return presentation.copy(
           stateLabel = "Inconclusive · incomplete memory evidence",
-          summary =
-              "Inconclusive: ${incompleteMemoryMetrics.joinToString { it.label }} is missing from some samples or one side of the comparison.",
-          insights =
-              listOf(
-                  "CPU measurements cannot establish a performance win until memory evidence is complete."))
+          summary = "Incomplete ${incompleteMemoryMetrics.joinToString { it.label }}",
+          insights = listOf("Memory evidence incomplete"))
 
   val variableMetrics = metrics.filter { it.variability > benchmarkVariabilityLimit }
   val cpu = metrics.first()
@@ -1248,16 +1202,12 @@ private fun benchmarkMeasurementPresentation(
   val opposingMemorySignals = memoryRegressions.isNotEmpty() && memoryImprovements.isNotEmpty()
   val cpuImproved = cpu.candidate.median!! < cpu.base.median!!
   val insights = buildList {
-    if (opposingMemorySignals)
-        add(
-            "Memory metrics disagree; CPU measurements cannot establish a performance win until the trade-off is understood.")
+    if (opposingMemorySignals) add("Memory metrics disagree")
     else if (cpuImproved && memoryRegressions.isNotEmpty())
         add(
             "CPU median is lower, while ${memoryRegressions.joinToString { it.label }} increased; " +
                 "this is a trade-off, not an unconditional win.")
-    else if (cpuImproved)
-        add(
-            "CPU median is lower for ${comparison.benchmark}; this does not establish project-wide performance.")
+    else if (cpuImproved) add("Lower CPU median · ${comparison.benchmark} only")
     if (variableMetrics.isNotEmpty())
         add(
             "${variableMetrics.joinToString { it.label }} varies by more than " +
@@ -1269,12 +1219,11 @@ private fun benchmarkMeasurementPresentation(
         opposingMemorySignals ->
             "Inconclusive: ${memoryRegressions.joinToString { it.label }} increased while " +
                 "${memoryImprovements.joinToString { it.label }} decreased."
-        inconclusive ->
-            "Inconclusive: ${variableMetrics.joinToString { it.label }} is too variable across the selected samples."
+        inconclusive -> "Inconclusive · variable ${variableMetrics.joinToString { it.label }}"
         cpuImproved && memoryRegressions.isNotEmpty() ->
-            "CPU is lower for the selected benchmark, with higher memory use."
-        cpuImproved -> "CPU is lower for the selected benchmark."
-        else -> "The candidate did not lower CPU median for the selected benchmark."
+            "Lower CPU · higher memory · selected benchmark"
+        cpuImproved -> "Lower CPU · selected benchmark"
+        else -> "No CPU improvement · selected benchmark"
       }
   return presentation.copy(
       stateLabel =

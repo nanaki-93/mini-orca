@@ -350,7 +350,10 @@ internal data class PendingProjectSwitch(
     val path: String,
     val context: ProjectSwitchContext,
     val stage: SwitchReviewStage,
-)
+) {
+  val reimportsCurrentProject: Boolean
+    get() = context.project?.path == path
+}
 
 /**
  * Admission records intent only. The caller owns the Analyze confirmation and performs cleanup
@@ -1154,6 +1157,13 @@ internal fun MiniOrcaApp(
               reindexProject = ::reindexProject,
               reconnect = presenter::refreshConnection,
               retryRestore = ::retryRestore,
+              regenerateDescription = {
+                admitProjectDescriptionRegeneration(
+                    presenter.snapshot.value,
+                    projectSwitchPending(chooserOpen, switchAdmission.pending),
+                    switchAdmission)
+                updatePendingSwitch()
+              },
           ),
       editorActions =
           DesktopShellEditorActions(
@@ -1750,6 +1760,23 @@ private fun admitProjectChooser(
   }
 }
 
+internal fun admitProjectDescriptionRegeneration(
+    workflow: DesktopWorkflowSnapshot,
+    switchPending: Boolean,
+    admission: ProjectSwitchAdmission,
+): Boolean {
+  val state = workflow.state
+  if (!projectActionAvailability(
+          state.project,
+          state.projectState.openingAttempt,
+          state.projectState.indexingAttempt,
+          switchPending)
+      .reindex)
+      return false
+  val path = state.project?.path ?: return false
+  return admission.choose(path, ProjectSwitchContext(workflow)) != null
+}
+
 private fun scheduleSwitchCleanupTimeout(onTimeout: () -> Unit): () -> Unit {
   val timer = Timer(15_000) { onTimeout() }
   timer.isRepeats = false
@@ -2047,7 +2074,8 @@ internal fun ProjectSwitchReviewDialog(
               SwitchReviewStage.Draft -> "Review draft before switching"
               SwitchReviewStage.Provider -> "Confirm project analysis destination"
               SwitchReviewStage.Review -> "Review changed project switch"
-              SwitchReviewStage.Final -> "Switch project?"
+              SwitchReviewStage.Final ->
+                  if (pending.reimportsCurrentProject) "Re-import project?" else "Switch project?"
               SwitchReviewStage.Committed ->
                   if (cleanupOutstanding) "Closing project shells…" else "Project switch stopped"
             })
@@ -2087,16 +2115,18 @@ internal fun ProjectSwitchReviewBody(
     Column {
       Text("Current project: ${pending.context.project?.path ?: "None open"}")
       Text("Requested project: ${pending.path}")
+      if (pending.reimportsCurrentProject) {
+        Text("Re-import generates a new description with the current Analyze model.")
+      }
       if (pending.context.draft.hasWork) {
         val target =
             pending.context.draft.draft?.targetPath?.takeIf(String::isNotBlank)
                 ?: pending.context.draft.session?.openPath?.takeIf(String::isNotBlank)
         Text(
-            "If you switch, the in-memory conversation, editable draft and focused checks${target?.let { " for $it" } ?: ""} will be discarded. Continuing this review does not discard them yet.")
+            "Switching discards the conversation, draft and checks${target?.let { " for $it" } ?: ""}.")
       }
       if (terminal.tabs.isNotEmpty()) {
-        Text(
-            "Switching will close all ${terminal.tabs.size} project shell tabs and their child processes, including hidden and exited tabs.")
+        Text("Closes all ${terminal.tabs.size} shell tabs and child processes.")
         terminal.tabs.forEach { Text(it.title) }
       }
       if (pending.stage == SwitchReviewStage.Provider) {
@@ -2150,7 +2180,12 @@ internal fun ProjectSwitchReviewActions(
           MiniOrcaButton(onClick = onReviewApproved) { Text("Continue to switch review") }
       SwitchReviewStage.Final ->
           MiniOrcaButton(onClick = onCommit, tone = ActionTone.Destructive) {
-            Text(if (terminal.tabs.isEmpty()) "Switch project" else "Close shells and switch")
+            Text(
+                if (pending.reimportsCurrentProject) {
+                  if (terminal.tabs.isEmpty()) "Re-import project" else "Close shells and re-import"
+                } else {
+                  if (terminal.tabs.isEmpty()) "Switch project" else "Close shells and switch"
+                })
           }
       SwitchReviewStage.Committed -> Unit
     }

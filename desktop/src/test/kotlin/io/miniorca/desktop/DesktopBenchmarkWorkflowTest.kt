@@ -52,9 +52,7 @@ class DesktopBenchmarkWorkflowTest {
             fixture.render()
             assertTrue(
                 fixture.hasText(performanceBenchmarkStatusPresentation(null, null, null).summary))
-            assertTrue(
-                fixture.hasText(
-                    "Listing compatible benchmarks is read-only and does not execute project code. Refresh clears the selection; select again after reviewing the returned catalog."))
+            assertTrue(fixture.hasText("Refresh clears the benchmark selection"))
             assertTrue(fixture.isDisabled("List compatible benchmarks"))
             harness.completeRequest()
             assertTrue(

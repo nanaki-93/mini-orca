@@ -277,9 +277,7 @@ class AnalysisFileSelectionTest {
                     if (failure == AnalysisSelectionFailure.Save) "Could not save file selection"
                     else "Could not refresh file selection"))
             fixture.assertTextFits("Refresh files")
-            assertTrue(
-                fixture.hasText(
-                    "The last confirmed selection is still shown. Refresh files reads the saved selection; it does not retry a failed change or start analysis."))
+            assertTrue(fixture.hasText("Last saved selection"))
             assertTrue(fixture.requestFocus("Refresh files"))
             assertTrue(fixture.pressKey(Key.Enter))
             assertEquals(0, saves)
@@ -682,9 +680,7 @@ class AnalysisFileSelectionTest {
 
           fullSize.render()
           assertTrue(fullSize.hasText("0 selected · 3 excluded"))
-          assertTrue(
-              fullSize.hasText(
-                  "All eligible files are excluded; no files are selected for analysis."))
+          assertTrue(fullSize.hasText("No files selected"))
           fullSize.clickText("Select all")
           assertEquals(
               emptyList(), saves.last(), "Bulk scope must still include both eligible files")
@@ -776,10 +772,8 @@ class AnalysisFileSelectionTest {
             }
             fixture.assertTextFits("Refresh files")
             assertTrue(fixture.hasText("3 of 3 files match"))
-            assertTrue(
-                fixture.hasText(
-                    "Select all and Exclude all affect every eligible file, regardless of search or filter matches."))
-            assertTrue(
+            assertTrue(fixture.hasText("Bulk actions include filtered files"))
+            assertFalse(
                 fixture.hasText(
                     "File selection is independent of the open Editor file and does not start analysis."))
           }
@@ -862,9 +856,7 @@ class AnalysisFileSelectionTest {
                   fileSelection = state.value.fileSelection.copy(error = "Save failed"))
           fixture.render("analysis-files-locked-collapsed")
           assertTrue(fixture.hasText("Save failed"))
-          assertTrue(
-              fixture.hasText(
-                  "Selection locked. Finish or cancel the current run to change files."))
+          assertTrue(fixture.hasText("Selection locked · run in progress"))
           fixture.clickDescription("Expand Files")
           fixture.render()
           assertFalse(fixture.hasText("Select all"))
@@ -922,10 +914,8 @@ class AnalysisFileSelectionTest {
           selectionState.value =
               AnalysisSelectionState(selection = selectionFixture().copy(editable = false))
           fixture.render("f12-files-daemon-locked")
-          assertTrue(fixture.hasText("Selection changes unavailable."))
-          assertFalse(
-              fixture.hasText(
-                  "Selection locked. Finish or cancel the current run to change files."))
+          assertTrue(fixture.hasText("Selection locked"))
+          assertFalse(fixture.hasText("Selection locked · run in progress"))
         }
   }
 

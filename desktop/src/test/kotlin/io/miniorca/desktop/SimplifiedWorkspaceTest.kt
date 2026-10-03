@@ -46,7 +46,7 @@ class SimplifiedWorkspaceTest {
           .use { fixture ->
             fixture.render("simplified-summary-$width-$height-$scale")
             assertTrue(fixture.hasText("Start analysis"))
-            assertTrue(fixture.hasText("Project description: current · AI-generated"))
+            assertTrue(fixture.hasText("AI description"))
             assertEquals(0, fixture.tagCount("summary-lower-composition"))
             assertEquals(0, fixture.tagCount("summary-selected-findings"))
             assertEquals(0, fixture.tagCount("summary-change-lifecycle"))
@@ -94,8 +94,7 @@ class SimplifiedWorkspaceTest {
   fun analysisCountHelpDoesNotHideResultsOrDispatchWork() {
     for ((width, height, scale) in listOf(Triple(1440, 900, 1f), Triple(800, 650, 1.5f))) {
       var requests = 0
-      val help =
-          "Counts come from the run summary. Open a category for matching findings and diagnostics. Zero loaded findings does not confirm an empty result."
+      val help = "Reported counts · open a category for loaded findings"
       ComposeVisualFixture(width, height, scale) {
             AnalysisWorkspacePane(
                 AnalysisWorkspacePaneState(visualFixtureProject, roundedAnalysisStateFixture()),

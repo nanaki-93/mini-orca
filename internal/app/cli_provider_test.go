@@ -92,7 +92,7 @@ func TestCLIProvidersAnalyzeAndProposeDraftsWithScopeConsent(t *testing.T) {
 
 func cliAppProfile(t *testing.T, provider config.ModelProvider, model, content, calls string) config.ModelProfileConfig {
 	t.Helper()
-	var output string
+	var output, structuredOutput string
 	if provider == config.PiProvider {
 		message, err := json.Marshal(map[string]any{"type": "message_end", "message": map[string]any{"role": "assistant", "model": model, "stopReason": "stop", "content": []map[string]string{{"type": "text", "text": content}}}})
 		if err != nil {
@@ -100,12 +100,18 @@ func cliAppProfile(t *testing.T, provider config.ModelProvider, model, content, 
 		}
 		output = "{\"type\":\"agent_start\"}\n" + string(message) + "\n{\"type\":\"agent_end\"}\n"
 	} else {
-		init, _ := json.Marshal(map[string]any{"event": "init", "init": map[string]any{"agent": "mini-orca", "model": model, "tools": []string{}}})
-		result, _ := json.Marshal(map[string]any{"event": "result", "result": map[string]string{"status": "SUCCESS", "response": content}})
+		init, _ := json.Marshal(map[string]any{"event": "init", "init": map[string]any{"agent": "mini-orca", "model": model, "tools": []string{"view_file", "run_command", "finish"}}})
+		result, _ := json.Marshal(map[string]any{"event": "result", "result": map[string]any{"status": "SUCCESS", "response": "Task completed.", "structured_output": json.RawMessage(content)}})
+		structuredOutput = string(init) + "\n" + string(result) + "\n"
+		result, _ = json.Marshal(map[string]any{"event": "result", "result": map[string]string{"status": "SUCCESS", "response": content}})
 		output = string(init) + "\n" + string(result) + "\n"
 	}
 	path := filepath.Join(t.TempDir(), "fake-agent")
-	script := "#!/bin/sh\ncat >/dev/null\nprintf x >> '" + strings.ReplaceAll(calls, "'", "'\\''") + "'\ncat <<'MINI_ORCA_RESPONSE'\n" + output + "MINI_ORCA_RESPONSE\n"
+	script := "#!/bin/sh\ncat >/dev/null\nprintf x >> '" + strings.ReplaceAll(calls, "'", "'\\''") + "'\n"
+	if structuredOutput != "" {
+		script += "for arg in \"$@\"; do\nif [ \"$arg\" = --json-schema ]; then\ncat <<'MINI_ORCA_RESPONSE'\n" + structuredOutput + "MINI_ORCA_RESPONSE\nexit 0\nfi\ndone\n"
+	}
+	script += "cat <<'MINI_ORCA_RESPONSE'\n" + output + "MINI_ORCA_RESPONSE\n"
 	if err := os.WriteFile(path, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}

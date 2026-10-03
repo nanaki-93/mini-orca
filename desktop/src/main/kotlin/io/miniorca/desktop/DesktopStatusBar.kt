@@ -142,9 +142,7 @@ internal fun DesktopStatusDetailsDialog(
                 modifier = Modifier.padding(bottom = 6.dp),
             )
           }
-          DiagnosticText(
-              "Daemon connectivity is separate from provider configuration. These details do not check provider health or send project context.",
-              color = SecondaryText)
+          DiagnosticText("Provider health · unchecked", color = SecondaryText)
         }
       },
       actions = {
@@ -167,7 +165,7 @@ private fun capturedRunProviderPresentation(
         "${provider.model.scope}: ${provider.model.profile} · ${provider.model.model} · ${provider.model.providerOrigin} · ${if (provider.model.remoteProvider) "remote" else "local"}"
       }
   return DesktopStatusProviderPresentation(
-      "Captured providers for the displayed run: $detail. This describes the run configuration, not a live connection.",
+      "Run configuration · $detail",
       remoteProvider = remote > 0,
       capturedRun = true,
   )
@@ -181,8 +179,7 @@ private fun providerPresentation(
       return null
   return DesktopStatusProviderPresentation(
       if (modelConfigurationAvailable(model)) modelDestinationLabel(provider.scope, model)
-      else
-          "${provider.scope.label}: Configuration unavailable; model or destination metadata is missing.",
+      else "${provider.scope.label}: Configuration unavailable",
       remoteProvider = model.remoteProvider,
   )
 }

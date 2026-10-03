@@ -181,7 +181,7 @@ class ContextToolWindowTest {
           assertEquals(1, fixture.scrollableContentCount())
           assertFalse(fixture.hasText("Explanation source"))
           assertTrue(fixture.hasText("Current explanation"))
-          assertTrue(
+          assertFalse(
               fixture.hasText(
                   "On-demand · matches the selected loaded source and declaration; not a disk check."))
           state = state.copy(result = result.copy(summary = "Replacement explanation."))
@@ -946,7 +946,7 @@ class ContextToolWindowTest {
 
     assertEquals("Keep request boundaries explicit.", summary.purpose)
     assertEquals("stale", summary.analysisStatus)
-    assertTrue(summary.analysisMessage.contains("source may have changed"))
+    assertTrue(summary.analysisMessage.contains("stale"))
   }
 
   private fun inspector(

@@ -53,7 +53,7 @@ class SecurityWorkspaceTest {
           fixture.render()
           fixture.revealText("Review Security intent", "result-overview")
           assertTrue(fixture.hasText("Review Security intent"))
-          assertTrue(
+          assertFalse(
               fixture.hasText(
                   "AI Security review is admitted through whole-project Analysis, not a Security-only scan. Open Analysis, then use its Start or Resume preview to review scope, destinations and separate Security intent before dispatch."))
           assertEquals(emptyList(), calls)
@@ -222,7 +222,7 @@ class SecurityWorkspaceTest {
     val metric = summaryIssueMetrics(page.project, run, emptyMap())[2]
     assertEquals(0, metric.value)
     assertEquals("Completed · details not confirmed", metric.status)
-    assertEquals("0 reported · details not confirmed", metric.detailStatus)
+    assertEquals("Details unconfirmed", metric.detailStatus)
     assertEquals(
         AnalysisResultAvailability.PendingDetails, pending.emptyPresentation(0).availability)
     assertEquals("0 reported", pending.countLabel(0))
@@ -235,7 +235,7 @@ class SecurityWorkspaceTest {
                 })
     val unknown = summaryIssueMetrics(page.project, unknownRun, emptyMap())[2]
     assertNull(unknown.value)
-    assertEquals("Count unavailable", unknown.detailStatus)
+    assertNull(unknown.detailStatus)
     assertTrue(
         page
             .copy(run = unknownRun, section = AnalysisSectionState())
@@ -255,18 +255,13 @@ class SecurityWorkspaceTest {
 
     assertEquals(SecurityEvidencePresentation.SourceRule, securityEvidencePresentation(source))
     assertEquals(
-        "A source rule match identifies a pattern; it does not confirm a vulnerability.",
-        securityEvidencePresentation(source).warning)
+        "Pattern match · unverified vulnerability", securityEvidencePresentation(source).warning)
     assertEquals(SecurityEvidencePresentation.ModelHypothesis, securityEvidencePresentation(model))
-    assertTrue(
-        securityEvidencePresentation(model).warning.startsWith("Unverified model hypothesis."))
+    assertTrue(securityEvidencePresentation(model).warning.startsWith("Unverified"))
     assertEquals(SecurityEvidencePresentation.Unavailable, securityEvidencePresentation(unexpected))
     assertEquals(
         SecurityEvidencePresentation.Unavailable, securityEvidencePresentation(unavailable))
-    assertTrue(
-        securityEvidencePresentation(unavailable)
-            .warning
-            .contains("Do not treat this finding as verified."))
+    assertTrue(securityEvidencePresentation(unavailable).warning.contains("Unverified"))
     assertEquals("Evidence type unavailable", unexpected.row().source)
     assertEquals("Evidence type unavailable", unavailable.row().source)
     assertEquals("main.go:2", source.row().location)
@@ -313,7 +308,7 @@ class SecurityWorkspaceTest {
                 page.section.copy(results = page.results!!.copy(security = listOf(source, failed))))
     assertEquals(1, securityResults(loaded).size)
     assertEquals("Source rule", securityResults(loaded).single().row().source)
-    assertTrue(loaded.countLabel(1).contains("loaded"))
+    assertEquals("1 reported", loaded.countLabel(1))
     assertFalse(loaded.countLabel(1).contains("0 hypotheses"))
     assertTrue(securityResults(loaded).single().row().state.contains("Partial"))
   }

@@ -22,6 +22,49 @@ import kotlinx.coroutines.withContext
 
 class ProjectSummaryPaneTest {
   @Test
+  fun savedDescriptionFailureCanBeRegeneratedIndependentlyOfFinishedFileAnalysis() {
+    val project = resultProjectFixture()
+    val run = analysisRunFixture().copy(status = "completed")
+    val overview =
+        ProjectOverview(
+            projectId = project.projectId,
+            projectRevision = project.projectRevision,
+            analysis =
+                StructuredProjectAnalysis(
+                    status = "failed",
+                    failure = "AI analysis returned an unusable structured report.",
+                    model = "previous-model"),
+            analysisRun = run)
+    for ((width, scale) in listOf(1280 to 1f, 800 to 1.5f)) {
+      var enabled by mutableStateOf(true)
+      var requests = 0
+      ComposeVisualFixture(width, 900, scale) {
+            ProjectSummaryPane(
+                overview,
+                project,
+                {},
+                regenerateDescription = { requests++ },
+                descriptionRegenerationEnabled = enabled)
+          }
+          .use { fixture ->
+            fixture.render("description-recovery-$width-$scale")
+            assertEquals(0, requests)
+            assertTrue(
+                fixture.hasText(
+                    "AI description · failed: AI analysis returned an unusable structured report."))
+            fixture.assertTextFits("Regenerate description…")
+            fixture.clickText("Regenerate description…")
+            assertEquals(1, requests)
+            enabled = false
+            fixture.render()
+            assertTrue(fixture.isDisabled("Regenerate description…"))
+            assertFalse(fixture.tryClick("Regenerate description…"))
+            assertEquals(1, requests)
+          }
+    }
+  }
+
+  @Test
   fun localGridBreakpointsRespectTextScaleAndExactBoundary() {
     listOf(1f, 1.25f, 1.5f).forEach { scale ->
       listOf(8.dp, 12.dp).forEach { gap ->
@@ -89,8 +132,8 @@ class ProjectSummaryPaneTest {
     assertTrue(summary.coverageMetrics.all { it.value == null })
     assertFalse(summary.toString().contains("revision"))
     assertEquals("missing", summary.interpretationStatus)
-    assertEquals("Project description: unavailable", summary.interpretationMessage)
-    assertEquals("Project description: unavailable", summary.analysisMessage)
+    assertEquals("AI description · unavailable", summary.interpretationMessage)
+    assertEquals("AI description · unavailable", summary.analysisMessage)
   }
 
   @Test
@@ -154,7 +197,7 @@ class ProjectSummaryPaneTest {
     assertEquals(null, summary.purpose)
     assertTrue(summary.details.isEmpty())
     assertTrue(summary.issueMetrics.all { it.value == null })
-    assertEquals("Project description: unavailable", summary.interpretationMessage)
+    assertEquals("AI description · unavailable", summary.interpretationMessage)
     val otherProject =
         projectSummaryPresentation(old.copy(projectId = "other", projectRevision = "new"), project)
     assertEquals(summary.projectMetrics, otherProject.projectMetrics)
@@ -164,7 +207,7 @@ class ProjectSummaryPaneTest {
     val currentSelection = selectionFixture().copy(projectRevision = "new")
     val selected = projectSummaryPresentation(old, project, fileSelection = currentSelection)
     assertTrue(selected.analysisMessage.contains("Selected files:"))
-    assertTrue(selected.analysisMessage.contains("Project description: unavailable"))
+    assertTrue(selected.analysisMessage.contains("AI description · unavailable"))
     assertTrue(selected.findingMetrics.all { it.value == null })
   }
 
@@ -176,13 +219,12 @@ class ProjectSummaryPaneTest {
                 StructuredProjectAnalysis(status = "fresh", purpose = "Model interpretation"))
     val described = projectSummaryPresentation(overview, null)
     assertEquals("Model interpretation", described.purpose)
-    assertEquals("Project description: current · AI-generated", described.interpretationMessage)
+    assertEquals("AI description", described.interpretationMessage)
     val blank =
         projectSummaryPresentation(
             overview.copy(analysis = overview.analysis.copy(purpose = "  ")), null)
     assertEquals(null, blank.purpose)
-    assertEquals(
-        "Project description: unavailable · no purpose provided", blank.interpretationMessage)
+    assertEquals("AI description · unavailable", blank.interpretationMessage)
     assertTrue(blank.analysisMessage.contains(blank.interpretationMessage))
     ComposeVisualFixture(800, 650) { ProjectSummaryPane(overview, null, {}) }
         .use { fixture ->
@@ -214,7 +256,7 @@ class ProjectSummaryPaneTest {
     val selection = selectionFixture().copy(excludedPaths = listOf("main.go"))
     val summary = projectSummaryPresentation(overview, project, fileSelection = selection)
     assertEquals("fresh", summary.summaryStatus)
-    assertEquals("Project description: failed · Model timed out.", summary.interpretationMessage)
+    assertEquals("AI description · failed: Model timed out.", summary.interpretationMessage)
     assertEquals(null, summary.purpose)
     assertTrue(summary.analysisMessage.contains(summary.interpretationMessage))
     ComposeVisualFixture(800, 650) {
@@ -252,8 +294,8 @@ class ProjectSummaryPaneTest {
     assertEquals("stale", summary.analysisStatus)
     assertEquals("Coordinate requests through one handler.", summary.purpose)
     assertEquals("stale", summary.interpretationStatus)
-    assertTrue(summary.interpretationMessage.contains("source may have changed"))
-    assertTrue(summary.analysisMessage.contains("source may have changed"))
+    assertTrue(summary.interpretationMessage.contains("stale"))
+    assertTrue(summary.analysisMessage.contains("stale"))
     assertEquals(listOf(2, 20), summary.projectMetrics.map { it.value })
     assertEquals(listOf(2, 3), summary.findingMetrics.map { it.value })
     assertEquals("Tool-reported issues", summary.findingMetrics.first().label)
@@ -326,10 +368,10 @@ class ProjectSummaryPaneTest {
                 analysis = StructuredProjectAnalysis(status = "failed", failure = "Timed out.")),
             null)
 
-    assertEquals("Project description: running", running.interpretationMessage)
-    assertTrue(running.analysisMessage.contains(": running"))
-    assertEquals("Project description: failed · Timed out.", failed.interpretationMessage)
-    assertEquals("Project description: failed · Timed out.", failed.analysisMessage)
+    assertEquals("AI description · generating", running.interpretationMessage)
+    assertTrue(running.analysisMessage.contains("generating"))
+    assertEquals("AI description · failed: Timed out.", failed.interpretationMessage)
+    assertEquals("AI description · failed: Timed out.", failed.analysisMessage)
     assertEquals(null, failed.purpose)
   }
 
@@ -377,8 +419,7 @@ class ProjectSummaryPaneTest {
     val summary = projectSummaryPresentation(null, project, pausedRun, sections)
     assertEquals("paused", summary.summaryStatus)
     assertEquals("paused", summary.issueMetrics.first().statusCode)
-    assertEquals(
-        "Saved details unavailable · 0 reported", summary.issueMetrics.first().detailStatus)
+    assertEquals("Details unavailable", summary.issueMetrics.first().detailStatus)
     listOf("interrupted", "canceled").forEach { lifecycle ->
       val other =
           projectSummaryPresentation(
@@ -390,16 +431,18 @@ class ProjectSummaryPaneTest {
               sections)
       assertEquals(lifecycle, other.summaryStatus)
       assertEquals(lifecycle, other.issueMetrics.first().statusCode)
-      assertEquals(
-          "Saved details unavailable · 0 reported", other.issueMetrics.first().detailStatus)
+      assertEquals("Details unavailable", other.issueMetrics.first().detailStatus)
     }
     ComposeVisualFixture(800, 650) {
           ProjectSummaryPane(null, project, {}, run = pausedRun, sections = sections)
         }
         .use { fixture ->
           fixture.render()
-          assertTrue(fixture.hasText("Saved details unavailable · 0 reported"))
-          assertTrue(fixture.hasText("Stop reason · Paused by user"))
+          assertTrue(fixture.hasText("Details unavailable"))
+          assertFalse(fixture.hasText("Paused by user"))
+          fixture.clickDescription("Expand Run diagnostic")
+          fixture.render()
+          assertTrue(fixture.hasText("Paused by user"))
           assertFalse(fixture.hasText("No results"))
         }
   }
@@ -1245,9 +1288,9 @@ class ProjectSummaryPaneTest {
           assertEquals(1, fixture.tagCount("summary-change-lifecycle"))
           assertTrue(fixture.hasText("Saved project flow"))
           assertTrue(fixture.hasText("Change lifecycle"))
-          assertTrue(fixture.hasText("Mini-Orca editing workflow (not a project Flow)"))
+          assertFalse(fixture.hasText("Mini-Orca editing workflow (not a project Flow)"))
           assertTrue(fixture.hasText("Request → Draft → Validate → Checks → Review → Apply"))
-          assertTrue(
+          assertFalse(
               fixture.hasText(
                   "Edit only an isolated declaration/import draft. Apply is an explicit, guarded one-file source change; Undo is guarded and available only when the change is still eligible."))
           val flows = fixture.taggedBounds("summary-flows")
@@ -1419,7 +1462,7 @@ class ProjectSummaryPaneTest {
         .use { fixture ->
           fixture.render("summary-current-selection-old-description-800-150")
           fixture.assertSummaryStatusPlacement("Updated")
-          assertTrue(fixture.hasText("Project description: stale · source may have changed"))
+          assertTrue(fixture.hasText("AI description · stale"))
           assertFalse(fixture.hasText("Outdated"))
         }
     val current = projectSummaryPresentation(overview, project, fileSelection = selection)
@@ -1428,7 +1471,7 @@ class ProjectSummaryPaneTest {
     assertEquals("stale", current.analysisStatus)
     assertEquals("stale", current.interpretationStatus)
     assertEquals("Saved description", current.purpose)
-    assertTrue(current.analysisMessage.contains("source may have changed"))
+    assertTrue(current.analysisMessage.contains("stale"))
     assertEquals(listOf("Up to date"), current.coverageMetrics.map { it.label })
     val included =
         projectSummaryPresentation(
@@ -1653,7 +1696,7 @@ class ProjectSummaryPaneTest {
             SummaryCoverageOwner("project", "revision", "selection"),
             retainedEmpty.selectionNotice),
         retainedEmpty.fileLedger)
-    assertTrue(retainedEmpty.fileLedger.selectionNotice!!.contains("last confirmed selection"))
+    assertTrue(retainedEmpty.fileLedger.selectionNotice!!.contains("last saved"))
     val foreign =
         projectSummaryPresentation(
             overview, project, fileSelection = excluded.copy(projectRevision = "old"))
@@ -1710,7 +1753,9 @@ class ProjectSummaryPaneTest {
             ledger.rows.map { it.status })
         assertEquals(2, ledger.totalSelected)
         assertEquals(summary.selectionNotice, ledger.selectionNotice)
-        assertTrue(ledger.selectionNotice!!.contains("last confirmed selection"))
+        assertTrue(
+            ledger.selectionNotice!!.contains(
+                if (state.error == null) "last saved" else "last confirmed selection"))
         assertTrue(ledger.rows.none { it.file.path == "pending.go" })
       }
     }
@@ -1786,18 +1831,9 @@ class ProjectSummaryPaneTest {
     val empty = selectionFixture().copy(excludedPaths = listOf("helper.go", "main.go"))
     val scenarios =
         listOf(
-            Triple(
-                aggregate,
-                AnalysisSelectionState(),
-                "File paths unavailable · 6 files in saved aggregate coverage. Load a confirmed selection to inspect file evidence."),
-            Triple(
-                null,
-                AnalysisSelectionState(empty),
-                "No files selected in the confirmed selection."),
-            Triple(
-                null,
-                AnalysisSelectionState(),
-                "File evidence unavailable · no confirmed file selection or saved file paths."),
+            Triple(aggregate, AnalysisSelectionState(), "6 files · paths unavailable"),
+            Triple(null, AnalysisSelectionState(empty), "No files selected"),
+            Triple(null, AnalysisSelectionState(), "File evidence unavailable"),
             Triple(
                 null,
                 AnalysisSelectionState(
@@ -1816,10 +1852,7 @@ class ProjectSummaryPaneTest {
             fixture.expandSummarySection("File evidence")
             fixture.revealText("File evidence")
             assertTrue(fixture.hasText(expected), expected)
-            if (selection.error != null)
-                assertTrue(
-                    fixture.hasText(
-                        "File evidence unavailable · no confirmed file selection or saved file paths."))
+            if (selection.error != null) assertTrue(fixture.hasText("File evidence unavailable"))
             assertTrue(fixture.hasText("All files"))
           }
     }
@@ -1963,9 +1996,8 @@ class ProjectSummaryPaneTest {
             assertTrue(fixture.hasText("Up to date · 1 of 2 selected files"))
             val notice =
                 when {
-                  pending.loading -> "Loading file selection · showing last confirmed selection."
-                  pending.saving ->
-                      "Saving file selection · showing last confirmed selection until the save succeeds."
+                  pending.loading -> "Loading selection · last saved"
+                  pending.saving -> "Saving selection · last saved"
                   pending.failure == AnalysisSelectionFailure.Read ->
                       "File selection load failed · Showing last confirmed selection. Refresh timed out."
                   else ->
@@ -1996,7 +2028,7 @@ class ProjectSummaryPaneTest {
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("File counts unavailable"))
-          assertTrue(fixture.hasText("Loading file selection · no confirmed selection available."))
+          assertTrue(fixture.hasText("Loading selection · no saved selection"))
           selection =
               AnalysisSelectionState(
                   error = "Selection endpoint unavailable.",
@@ -2057,9 +2089,7 @@ class ProjectSummaryPaneTest {
             assertTrue(fixture.hasText("100%"))
             assertTrue(fixture.hasText("1 of 1 selected files are up to date"))
             assertTrue(fixture.hasText("helper.go"))
-            assertTrue(
-                fixture.hasText(
-                    "${if (status == "completed") "Last" else "Current"} analysis run: ${analysisStatusLabel(status)} · separate from saved coverage."))
+            assertTrue(fixture.hasText(analysisStatusLabel(status)))
             assertEquals(1, fixture.tagCount("summary-analysis-run-strip"))
           }
           state = state.copy(fileSelection = AnalysisSelectionState(selectionFixture()))
@@ -2088,10 +2118,8 @@ class ProjectSummaryPaneTest {
           assertEquals(0, fixture.tagCount("summary-coverage-inspection"))
           assertEquals(0, fixture.tagCount("summary-coverage-run-status"))
           assertEquals(1, fixture.tagCount("summary-analysis-run-strip"))
-          assertTrue(
-              fixture.hasText(
-                  "Outdated · run belongs to an older project revision; not current evidence."))
-          assertTrue(fixture.hasText("File progress unavailable"))
+          assertTrue(fixture.hasText("Outdated · previous revision"))
+          assertTrue(fixture.hasText("Progress unavailable"))
           assertFalse(fixture.hasText("Pause"))
           assertFalse(fixture.hasText("Other selection failed."))
         }
@@ -2167,11 +2195,12 @@ class ProjectSummaryPaneTest {
                 projectSummaryPresentation(null, project, state.run, runState = state)
                     .runLifecycleLabel,
                 name)
-            presentation.lifecycleExplanation?.let { assertTrue(fixture.hasText(it), name) }
+            if (state.controlRequest?.outcome != AnalysisControlOutcome.Requesting)
+                presentation.lifecycleExplanation?.let { assertFalse(fixture.hasText(it), name) }
             if (label != presentation.status) {
-              assertTrue(fixture.hasText("Last accepted run · ${presentation.status}"), name)
+              assertTrue(fixture.hasText("Saved · ${presentation.status}"), name)
               assertEquals(
-                  "$label · Last accepted analysis run: ${presentation.status} · separate from saved coverage.",
+                  "$label · saved run: ${presentation.status}",
                   projectSummaryPresentation(null, project, state.run, runState = state).runMessage,
                   name)
             }
@@ -2189,7 +2218,7 @@ class ProjectSummaryPaneTest {
                     "unavailable",
                     "unconfirmed",
                     "failed refresh"))
-                assertTrue(
+                assertFalse(
                     fixture.hasText("Stop reason · No stop reason was supplied for this run."),
                     name)
             if (name == "running" ||
@@ -2256,11 +2285,11 @@ class ProjectSummaryPaneTest {
           for (status in listOf("running", "paused", "interrupted", "partial", "failed")) {
             state = state.copy(run = planned.copy(status = status, files = listOf(reported)))
             fixture.render()
-            fixture.assertTextFits(analysisStatusLabel(status))
-            fixture.assertTextFits("1 of 1 files finished")
+            fixture.assertTextFits("${analysisStatusLabel(status)} · 1 partial")
+            if (status == "running") fixture.assertTextFits("1/1 files finished")
             fixture.revealText("1 of 2 selected files are up to date", "summary-scroll")
             assertTrue(fixture.hasText("1 of 2 selected files are up to date"))
-            assertTrue(
+            assertFalse(
                 fixture.hasText(
                     "Finished includes partial and failed outcomes; it does not mean successful."))
             assertEquals(1, fixture.tagCount("summary-analysis-run-strip"))
@@ -2278,7 +2307,7 @@ class ProjectSummaryPaneTest {
                                               AnalysisStageProgress(
                                                   "semantic", "running", 1, false))))))
           fixture.render()
-          fixture.revealText("Show full path", "summary-scroll")
+          fixture.revealText("Full path", "summary-scroll")
           assertTrue(fixture.requestDescriptionFocus("Show active files"))
           fixture.pressKey(androidx.compose.ui.input.key.Key.Enter)
           fixture.render()
@@ -2286,8 +2315,7 @@ class ProjectSummaryPaneTest {
           assertTrue(fixture.hasText("Current: $path"))
           state = state.copy(run = requireNotNull(state.run).copy(files = emptyList()))
           fixture.render()
-          fixture.assertTextFits(
-              "File progress incomplete · captured records missing or inconsistent", maxLines = 3)
+          fixture.assertTextFits("Progress incomplete", maxLines = 3)
           assertFalse(fixture.hasText("Current: $path"))
           state =
               state.copy(
@@ -2299,8 +2327,8 @@ class ProjectSummaryPaneTest {
                                   identity = planned.plan.identity.copy(queueId = "foreign")),
                           files = listOf(reported)))
           fixture.render()
-          fixture.assertTextFits("File progress unavailable")
-          assertFalse(fixture.hasText("1 of 1 files finished"))
+          fixture.assertTextFits("Progress unavailable")
+          assertFalse(fixture.hasText("1/1 files finished"))
           assertFalse(fixture.hasText("Current: $path"))
           assertEquals(0, dispatches)
         }
@@ -2341,7 +2369,7 @@ class ProjectSummaryPaneTest {
 
           state = state.copy(action = "", error = "Preview timed out. Try again.")
           fixture.render()
-          assertTrue(fixture.hasText("Analysis action needs attention"))
+          assertFalse(fixture.hasText("Analysis action needs attention"))
           assertTrue(fixture.hasText("Preview timed out. Try again."))
           assertFalse(fixture.isDisabled("Start analysis"))
           assertEquals(1, previews.size)

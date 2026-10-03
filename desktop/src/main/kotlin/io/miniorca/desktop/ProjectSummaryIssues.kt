@@ -40,7 +40,6 @@ internal fun summaryIssueMetrics(
       val section = sections[AnalysisResultKey(type.category)] ?: AnalysisSectionState()
       val page = AnalysisResultPageState(type, project, run, section)
       val priorities = if (type == AnalysisResultType.Bugs) summaryBugPriorities(page) else null
-      val countDetail = page.reportedCount?.let { "$it reported" } ?: "count unavailable"
       val completedEmpty =
           page.reportedCount == 0 &&
               page.emptyPresentation(0).availability == AnalysisResultAvailability.CompletedEmpty
@@ -62,10 +61,10 @@ internal fun summaryIssueMetrics(
           statusCode = statusCode,
           detailStatus =
               when {
-                section.loading -> "Loading saved details · $countDetail"
-                section.error != null -> "Saved details unavailable · $countDetail"
-                page.reportedCount == 0 && !completedEmpty -> "0 reported · details not confirmed"
-                else -> countDetail.replaceFirstChar { it.uppercase() }
+                section.loading -> "Loading details…"
+                section.error != null -> "Details unavailable"
+                page.reportedCount == 0 && !completedEmpty -> "Details unconfirmed"
+                else -> null
               },
           detailState =
               when {

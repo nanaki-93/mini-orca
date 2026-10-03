@@ -119,16 +119,16 @@ internal fun DesktopAnalysisAdmissionContent(
     if (state.action == "preview") {
       Text(
           when (state.previewMode()) {
-            "continuation" -> "Preparing continuation preview for this analysis run…"
-            "stale & failed" -> "Preparing stale & failed analysis preview…"
-            else -> "Preparing full project analysis preview…"
+            "continuation" -> "Preparing continuation…"
+            "stale & failed" -> "Preparing stale & failed preview…"
+            else -> "Preparing project preview…"
           })
     } else if (state.admission == null) {
       state.error?.let { error ->
         Text(
             when (state.admissionRecovery) {
-              AdmissionRecovery.Rejected -> "This preview can no longer be admitted."
-              AdmissionRecovery.Uncertain -> "The admission response is uncertain."
+              AdmissionRecovery.Rejected -> "Preview expired"
+              AdmissionRecovery.Uncertain -> "Start unconfirmed"
               null ->
                   when (state.previewMode()) {
                     "continuation" -> "Continuation preview failed."
@@ -142,13 +142,13 @@ internal fun DesktopAnalysisAdmissionContent(
         Text(
             when {
               state.admissionRecovery == AdmissionRecovery.Rejected && state.canRetryPreview() ->
-                  "Review a fresh ${state.previewMode()} preview before starting or resuming. All destinations and Security intent must be confirmed again."
+                  "Review a new ${state.previewMode()} preview · confirmations required"
               state.admissionRecovery == AdmissionRecovery.Rejected ->
-                  "This scope is no longer available for review. Close and choose a current Analysis action (Resume analysis if available for the current run) to request a new preview."
+                  "Scope unavailable · reopen Analysis for a new preview"
               state.admissionRecovery == AdmissionRecovery.Uncertain ->
-                  "Analysis may already have started. Close and check the current Analysis run before choosing a new Analysis action; do not retry this admission."
-              state.canRetryPreview() -> "Retry this preview with the same scope, or Close."
-              else -> "Close and request a new preview from Analysis."
+                  "May have started · check Analysis status before retrying"
+              state.canRetryPreview() -> "Retry preview"
+              else -> "Open Analysis for a new preview"
             },
             color = SecondaryText)
       }
@@ -171,34 +171,28 @@ internal fun DesktopAnalysisAdmissionContent(
             else -> "Full project scope: $included · $exclusions"
           },
           color = SecondaryText)
-      Text("Reviewing this preview sends nothing to a model.", color = SecondaryText)
       if (preview.files.isEmpty())
           Text(
               if (preview.retryStaleFailed) "No stale or failed files to analyze."
               else "No eligible files to analyze.")
       Text("Your confirmation", color = PrimaryText, style = IdeTypography.resultHeading)
       Text(
-          "Start or Resume may send eligible source and project context for this previewed scope to the listed models under the existing context policy. This preview describes the plan, not the exact content sent to a model. One Start or Resume may initiate multiple model requests; analysis does not execute project code or modify source files. This consent does not grant function-edit permission or execution trust.",
+          "May send source + project context to listed models · multiple requests possible",
           color = SecondaryText)
       val outstanding =
           preview.providers.filter {
             it.remoteConfirmationRequired && it.id !in admission.providerIds
           }
-      when {
-        outstanding.isEmpty() &&
-            (!preview.securityReviewIntentRequired || admission.securityReview) ->
-            Text(
-                if (preview.files.isEmpty()) "Confirmations complete; no included files to analyze."
-                else "Confirmations complete for this preview.",
-                color = SecondaryText)
-        else -> {
-          Text("Still needed before Start or Resume:", color = Warning)
-          for (provider in outstanding) Text(
-              "Destination still needed: ${provider.confirmationLabel()}", color = Warning)
-          if (preview.securityReviewIntentRequired && !admission.securityReview)
-              Text("Security intent still needed: Include AI Security review.", color = Warning)
-        }
-      }
+      val confirmationsNeeded =
+          outstanding.size +
+              if (preview.securityReviewIntentRequired && !admission.securityReview) 1 else 0
+      IdeLabelBadge(
+          label =
+              if (confirmationsNeeded > 0)
+                  "$confirmationsNeeded ${if (confirmationsNeeded == 1) "confirmation" else "confirmations"} needed"
+              else if (preview.files.isEmpty()) "Confirmed · no eligible files" else "Confirmed",
+          tint = if (confirmationsNeeded > 0) Warning else Success,
+          icon = if (confirmationsNeeded > 0) DesktopIcon.Warning else DesktopIcon.Check)
       for (provider in preview.providers.filter { it.remoteConfirmationRequired }) {
         val checked = provider.id in admission.providerIds
         IdeCheckbox(
@@ -216,27 +210,17 @@ internal fun DesktopAnalysisAdmissionContent(
             accessibleName = "Include AI Security review",
             stateLabel = if (admission.securityReview) "Confirmed" else "Not confirmed",
             label = "Include AI Security review")
-        Text(
-            "AI Security review of eligible source is advisory. Model findings are unverified, not a verified scan or safety assurance. This acknowledgment does not change the returned stage plan.",
-            color = SecondaryText)
+        Text("AI Security findings · unverified", color = SecondaryText)
       }
       IdeHorizontalSeparator()
       Text("Preview details", color = PrimaryText, style = IdeTypography.resultHeading)
-      Text("Expected model requests without retries: ${preview.expectedModelRequests}")
-      Text("Inclusive maximum model requests with retries: ${preview.maxModelRequests}")
-      Text(
-          "Dispatch window: up to ${preview.limits.batchFiles} files and ${preview.limits.budgetSeconds} seconds. These limits bound this dispatch, not the project inventory or an ETA.")
-      Text(
-          "Up to ${preview.limits.maxAttemptsPerStage} attempts per stage, including the initial attempt. Further work requires explicit continuation.")
+      Text("Requests before retries: ${preview.expectedModelRequests}")
+      Text("Request limit with retries: ${preview.maxModelRequests}")
+      Text("Dispatch limit: ${preview.limits.batchFiles} files · ${preview.limits.budgetSeconds} s")
+      Text("${preview.limits.maxAttemptsPerStage} attempts per stage")
       if (preview.compatibilityStage.isNotBlank())
-          Text(
-              "This saved run covers only ${analysisStageLabel(preview.compatibilityStage)}.",
-              color = Warning)
-      Text(
-          if (preview.refresh) "Refresh policy: request fresh evidence for eligible stages."
-          else "Reuse policy: refresh is off; eligible existing evidence may be reused.")
-      if (preview.retryStaleFailed)
-          Text("Selective retry: the daemon returned the stale & failed scope.")
+          Text("Limited run · ${analysisStageLabel(preview.compatibilityStage)}", color = Warning)
+      Text(if (preview.refresh) "Fresh evidence" else "Reuse eligible evidence")
       AnalysisStageSummary(preview)
       if (preview.files.isNotEmpty()) {
         IdeHorizontalSeparator()
@@ -289,14 +273,14 @@ private fun AnalysisIncludedFile(file: AnalysisPlannedFile, number: Int) {
       onToggle = { expanded = !expanded })
   SelectionContainer { Text(file.path, color = SecondaryText) }
   if (expanded) {
-    if (file.stages.isEmpty()) Text("No stages returned for this file.", color = SecondaryText)
+    if (file.stages.isEmpty()) Text("Stages unavailable", color = SecondaryText)
     file.stages.forEach { stage ->
       SelectionContainer {
         Column {
           Text(analysisStageLabel(stage.stage), color = PrimaryText)
-          Text(if (stage.eligible) "Eligible stage" else "Ineligible stage on included file")
+          Text(if (stage.eligible) "Eligible" else "Not applicable")
           Text(if (stage.cached) "Cached/reused" else "Not cached")
-          Text("Maximum model requests for this stage: ${stage.maxModelRequests}")
+          Text("Request limit: ${stage.maxModelRequests}")
           Text("Reason: ${stage.reason.availableMetadata()}", color = SecondaryText)
         }
       }

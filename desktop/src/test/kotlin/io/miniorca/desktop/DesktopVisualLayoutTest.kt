@@ -72,6 +72,13 @@ import kotlin.test.assertTrue
 import kotlinx.coroutines.Dispatchers
 import org.jetbrains.skia.Surface
 
+internal fun ComposeVisualFixture.expandAnalysisRunDetails() {
+  if (hasDescription("Collapse Run details")) return
+  revealText("Run details", "analysis-page")
+  clickDescription("Expand Run details")
+  render()
+}
+
 /** Renders production components with explicit test data, without a daemon or provider. */
 class DesktopVisualLayoutTest {
   @Test
@@ -540,10 +547,7 @@ class DesktopVisualLayoutTest {
                     assertTrue(fixture.isDisabled(actionText), label)
                   }
                   if (name == "running") {
-                    assertTrue(
-                        fixture.hasText(
-                            "Request running · Cancel keeps the existing draft and conversation."),
-                        label)
+                    assertTrue(fixture.hasText("Generating"), label)
                     assertTrue(fixture.isDescriptionDisabled("New Go type"), label)
                   }
                   if (name == "unsupported")
@@ -843,7 +847,7 @@ class DesktopVisualLayoutTest {
                 assertFalse(fixture.hasText("Constraints"), label)
                 assertTrue(fixture.hasText("Inspect context"), label)
                 assertTrue(fixture.hasText("Conversation"), label)
-                assertTrue(
+                assertFalse(
                     fixture.hasText(
                         "File-scoped preview only · no Function request or confirmation."),
                     label)
@@ -878,10 +882,7 @@ class DesktopVisualLayoutTest {
                   assertFalse(fixture.hasText("Confirm remote destination"), label)
                 }
                 if (name == "running") {
-                  assertTrue(
-                      fixture.hasText(
-                          "Request running · Cancel keeps the existing draft and conversation."),
-                      label)
+                  assertTrue(fixture.hasText("Generating"), label)
                   assertTrue(fixture.hasText("Pending request"), label)
                 }
                 if (name == "ineligible")
@@ -1124,9 +1125,8 @@ class DesktopVisualLayoutTest {
                       listOf(
                           "Project-relative path: src/contexts/request.go",
                           "Assistant target: Create function: Build",
-                          "File-scoped preview, not the exact declaration request. Declaration requests may include different context and prompt material.",
-                          "Local inspection only; no provider request or consent. Send and Explain require separate authorization.") +
-                          labels) {
+                          "File preview · declaration context may differ",
+                          "Read-only preview") + labels) {
                     fixture.assertEveryTextLineReachable(text, "ide-dialog-body")
                     fixture.assertTextFits(text, maxLines = 12)
                   }
@@ -1283,8 +1283,7 @@ class DesktopVisualLayoutTest {
                   fixture.revealTextFullyWithin("Refresh scan status", "result-overview")
                   fixture.assertTextFits("Refresh scan status")
                 } else assertFalse(fixture.hasText("Refresh scan status"))
-                fixture.revealTextFullyWithin(verifiedScanEvidenceCopy, "result-overview")
-                fixture.assertTextFits(verifiedScanEvidenceCopy, maxLines = 12)
+                assertFalse(fixture.hasText(verifiedScanEvidenceCopy))
                 fixture.revealTextFullyWithin("Command and output", "result-overview")
                 assertEquals("Collapsed", fixture.descriptionState("Expand Command and output"))
                 assertEquals(0, fixture.tagCount("scan-diagnostics"))
@@ -1417,11 +1416,8 @@ class DesktopVisualLayoutTest {
         listOf(
             Triple(
                 "completed-empty", emptyPage("completed", 0), "No findings in the analyzed scope."),
-            Triple("canceled", emptyPage("canceled", null), "Analysis was canceled."),
-            Triple(
-                "unavailable",
-                emptyPage("unavailable", null),
-                "Analysis is unavailable for this category."))
+            Triple("canceled", emptyPage("canceled", null), "Analysis canceled"),
+            Triple("unavailable", emptyPage("unavailable", null), "Analysis unavailable"))
     for ((name, page, message) in states) {
       ComposeVisualFixture(800, 650, 1.5f) {
             BugsWorkspacePane(
@@ -1515,26 +1511,20 @@ class DesktopVisualLayoutTest {
                 if (facts.isActive || facts.totalSteps == 0) metadata.joinToString(" · ")
                 else
                     "${facts.finishedSteps} of ${facts.totalSteps} stages · ${metadata.joinToString(" · ")}"
+            assertFalse(fixture.hasText(metadataLine))
+            fixture.expandAnalysisRunDetails()
             fixture.revealText(metadataLine, "analysis-page")
             assertTrue(fixture.hasText(metadataLine))
-            fixture.revealText("Cumulative attempts reported · 2", "analysis-page")
-            assertTrue(fixture.hasText("Cumulative attempts reported · 2"))
+            fixture.revealText("2 attempts", "analysis-page")
+            assertTrue(fixture.hasText("2 attempts"))
             when (name) {
               "requesting-pause" -> {
                 assertTrue(fixture.hasText("Requesting pause…"))
-                assertFalse(
-                    fixture.hasText(
-                        "Pause requested; waiting for the current stage boundary. No new stage will start."))
+                assertFalse(fixture.hasText("Pausing analysis"))
               }
-              "pausing" ->
-                  assertTrue(
-                      fixture.hasText(
-                          "Pause requested; waiting for the current stage boundary. No new stage will start."))
+              "pausing" -> assertTrue(fixture.hasText("Pausing analysis"))
               "requesting-cancel" -> assertTrue(fixture.hasText("Requesting cancellation…"))
-              "canceling" ->
-                  assertTrue(
-                      fixture.hasText(
-                          "Cancellation accepted; active work is stopping. Completed evidence remains available."))
+              "canceling" -> assertTrue(fixture.hasText("Canceling analysis"))
               "paused",
               "interrupted" -> {
                 fixture.revealText("Resume → fresh preview", "analysis-page")
@@ -1546,30 +1536,20 @@ class DesktopVisualLayoutTest {
                 assertFalse(fixture.hasText("Resume → fresh preview"))
               }
               "unknown" -> assertFalse(fixture.hasText("Resume → fresh preview"))
-              "status-unavailable" ->
-                  assertTrue(
-                      fixture.hasText(
-                          "Current run status unavailable; the last accepted snapshot is retained."))
+              "status-unavailable" -> assertTrue(fixture.hasText("Status unavailable"))
             }
-            if (name in
-                setOf("paused", "interrupted", "canceled", "failed", "partial", "unavailable")) {
-              val reasonLabel =
-                  if (name == "paused")
-                      "Stop reason · ${sanitizedOutputText(reason, 180).substringBefore('\n')}"
-                  else "Stop reason · No stop reason was supplied for this run."
-              fixture.revealText(reasonLabel, "analysis-page")
-              assertTrue(fixture.hasText(reasonLabel))
-              if (name == "paused") {
-                assertFalse(fixture.hasText(reason))
-                fixture.revealText("Run diagnostic", "analysis-page")
-                fixture.clickText("Run diagnostic")
-                fixture.render("f16-analysis-$name-expanded")
-                fixture.revealText("Show full available output", "analysis-page")
-                fixture.clickDescription("Expand available diagnostic output")
-                fixture.render()
-                assertTrue(fixture.hasText(reason.trim()))
-                assertTrue(fixture.taggedBounds("diagnostic-output-scroll").height <= 240f * 1.5f)
-              }
+            if (name == "paused") {
+              assertFalse(fixture.hasText(reason))
+              fixture.revealText("Run diagnostic", "analysis-page")
+              fixture.clickText("Run diagnostic")
+              fixture.render("f16-analysis-$name-expanded")
+              fixture.revealText("Show full available output", "analysis-page")
+              fixture.clickDescription("Expand available diagnostic output")
+              fixture.render()
+              assertTrue(fixture.hasText(reason.trim()))
+              assertTrue(fixture.taggedBounds("diagnostic-output-scroll").height <= 240f * 1.5f)
+            } else {
+              assertFalse(fixture.hasText("Run diagnostic"))
             }
             assertEquals(0, calls)
           }
@@ -1633,15 +1613,10 @@ class DesktopVisualLayoutTest {
                     analysisLifecycleStatusLabel(
                         projectRunPresentation(project, analysis), analysis)
                 fixture.assertTextFits(status, maxLines = 3)
-                if (name == "paused") {
-                  assertTrue(
-                      fixture.hasText(
-                          "Stop reason · ${sanitizedOutputText(reason, 180).substringBefore('\n')}"))
+                if (name in setOf("paused", "requesting-pause")) {
+                  assertTrue(fixture.hasDescription("Expand Run diagnostic"))
                   assertFalse(fixture.hasText(reason.trim()))
-                }
-                if (name == "requesting-pause") {
-                  assertTrue(fixture.hasText("Run diagnostic · Stage save needs attention"))
-                  assertFalse(fixture.hasText("Stop reason · Stage save needs attention"))
+                  assertFalse(fixture.hasText("Stage save needs attention"))
                 }
               }
         }
@@ -1669,7 +1644,7 @@ class DesktopVisualLayoutTest {
               val label = "f06-landing-$width-$height-$scale-${density}x"
               fixture.render("$label-empty")
               fixture.assertTextFits("Open project…")
-              assertTrue(fixture.hasText("No project remembered on this device."))
+              assertTrue(fixture.hasText("None"))
               assertFalse(fixture.hasText("Retry restore"))
               app = app.copy(projectState = app.projectState.copy(rememberedPath = path))
               fixture.render("$label-remembered")
@@ -1871,9 +1846,7 @@ class DesktopVisualLayoutTest {
               fixture.render("$label-details-unavailable")
               fixture.revealText("Saved details unavailable", "project-indexing-scroll")
               assertTrue(fixture.hasText("inventory-next"))
-              assertTrue(
-                  fixture.hasText(
-                      "Workspace details unavailable; retained findings keep their existing freshness labels."))
+              assertTrue(fixture.hasText("Workspace details unavailable"))
               assertFalse(fixture.hasText("Retry re-index"))
               assertEquals(0, calls)
             }
@@ -1939,9 +1912,7 @@ class DesktopVisualLayoutTest {
               fixture.render("$label-draft")
               fixture.assertTextFits("Cancel switch")
               fixture.assertTextFits("Approve draft discard for switch")
-              assertTrue(
-                  fixture.hasText(
-                      "If you switch, the in-memory conversation, editable draft and focused checks will be discarded. Continuing this review does not discard them yet."))
+              assertTrue(fixture.hasText("Switching discards the conversation, draft and checks."))
               fixture.revealText("Requested project: $path", "ide-dialog-body")
               assertTrue(fixture.hasText("Hidden shell"))
               pending = pending.copy(stage = SwitchReviewStage.Provider)
@@ -2960,11 +2931,8 @@ class DesktopVisualLayoutTest {
                         assertTrue(fixture.hasText("No eligible files to analyze."), label)
                   }
                   "loading" -> {
-                    assertTrue(
-                        fixture.hasText("Preparing continuation preview for this analysis run…"),
-                        label)
-                    assertFalse(
-                        fixture.hasText("Expected model requests without retries: 3"), label)
+                    assertTrue(fixture.hasText("Preparing continuation…"), label)
+                    assertFalse(fixture.hasText("Requests before retries: 3"), label)
                   }
                   else -> {
                     fixture.revealText(diagnostic, "ide-dialog-body")
@@ -3115,8 +3083,7 @@ class DesktopVisualLayoutTest {
                 fixture.assertTextFits("Close")
                 when (variant) {
                   "loading" ->
-                      assertTrue(
-                          fixture.hasText("Preparing stale & failed analysis preview…"), label)
+                      assertTrue(fixture.hasText("Preparing stale & failed preview…"), label)
                   "failure" -> {
                     fixture.revealText("Preview unavailable: connection refused", "ide-dialog-body")
                     fixture.render("$label-diagnostic")
@@ -3125,12 +3092,11 @@ class DesktopVisualLayoutTest {
                   else -> {
                     assertTrue(
                         fixture.hasText(
-                            "Expected model requests without retries: ${state.admission!!.preview.expectedModelRequests}"),
+                            "Requests before retries: ${state.admission!!.preview.expectedModelRequests}"),
                         label)
                     if (variant == "empty") assertTrue(fixture.isDisabled("Start analysis"), label)
                     if (variant == "resume")
-                        assertTrue(
-                            fixture.hasText("This saved run covers only Code analysis."), label)
+                        assertTrue(fixture.hasText("Limited run · Code analysis"), label)
                     if (variant != "resume")
                         fixture.revealText("Source policy exclusion", "ide-dialog-body")
                     fixture.render("$label-exclusions")
@@ -3372,6 +3338,7 @@ class DesktopVisualLayoutTest {
             fixture.revealText(error, "ide-dialog-body")
             fixture.assertTextWrapsWithoutClipping(error)
             fixture.revealText("Remote destination: https://bug.example", "ide-dialog-body")
+            assertTrue(fixture.verticalScrollValue("ide-dialog-body") > 0f)
             fixture.revealText("Include AI Security review", "ide-dialog-body")
             val consent = fixture.firstVisibleTextBounds("Include AI Security review")
             assertTrue(consent.bottom <= height, "Consent must be reachable by body scrolling")
@@ -3379,7 +3346,6 @@ class DesktopVisualLayoutTest {
               val bounds = fixture.firstVisibleTextBounds(label)
               assertTrue(bounds.top >= 0 && bounds.bottom <= height, "$label must remain visible")
             }
-            assertTrue(fixture.verticalScrollValue("ide-dialog-body") > 0f)
             assertEquals(0, starts)
             assertEquals(0, confirmations)
           }
@@ -3546,7 +3512,7 @@ class DesktopVisualLayoutTest {
           when (surface) {
             "summary" -> fixture.assertTextFits("Analysis coverage")
             "analysis" -> {
-              fixture.assertTextFits("8 of 12 files finished")
+              fixture.assertTextFits("8/12 files finished")
               fixture.assertTextFits("Current: internal/api/user.go")
               fixture.assertTextFits("Pause")
               fixture.assertTextFits("Cancel")
@@ -3794,12 +3760,14 @@ class DesktopVisualLayoutTest {
                 fixture.taggedTextCount(
                     "analysis-run-content", analysisRunTitle(run, presentation)))
             assertEquals(0, fixture.taggedTextCount("analysis-run-content", presentation.status))
-            assertFalse(fixture.hasText(presentation.headline))
             if (status == "completed") {
-              assertTrue(fixture.hasText("1 of 1 files finished"))
-              assertTrue(fixture.hasText("100%"))
+              assertTrue(fixture.hasText("1/1 files finished"))
+              assertFalse(fixture.hasText("100%"))
             }
-            assertFalse(fixture.hasText("Run details"))
+            if (run != null) {
+              fixture.revealText("Run details", "analysis-page")
+              assertTrue(fixture.hasDescription("Expand Run details"))
+            } else assertFalse(fixture.hasText("Run details"))
             assertFalse(fixture.hasText("Run limits"))
           }
       listOf("bugs", "performance", "security").forEach { category ->
@@ -3862,8 +3830,9 @@ class DesktopVisualLayoutTest {
               .use { fixture ->
                 fixture.render("analysis-run-metadata-${run.status}")
                 fixture.assertTextFits(analysisRunTitle(run, presentation))
+                assertFalse(fixture.hasText(metadata))
+                fixture.expandAnalysisRunDetails()
                 fixture.assertTextFits(metadata, maxLines = 3)
-                assertFalse(fixture.hasText(presentation.headline))
               }
         }
   }
@@ -3923,14 +3892,16 @@ class DesktopVisualLayoutTest {
           }
           .use { fixture ->
             fixture.render("history-latest-$width")
+            fixture.expandAnalysisRunDetails()
             fixture.revealText("Latest saved run", "analysis-page")
             assertTrue(fixture.hasText(savedRunIdentityLabel(current)))
-            assertTrue(
+            assertFalse(
                 fixture.hasText(
                     "Older run details unavailable in this session · only the latest saved run is restored after restart."))
             assertFalse(fixture.hasText("No stage failures reported in this saved run."))
             snapshot = snapshot.copy(previousRun = previous)
             fixture.render("history-collapsed-$width")
+            fixture.expandAnalysisRunDetails()
             fixture.revealText("Previous observed run · Failed", "analysis-page")
             assertTrue(fixture.hasDescription("Expand Previous observed run · Failed"))
             assertTrue(fixture.requestDescriptionFocus("Expand Previous observed run · Failed"))
@@ -3955,6 +3926,7 @@ class DesktopVisualLayoutTest {
                 snapshot.copy(
                     run = current.copy(identity = current.identity.copy(generation = "next")))
             fixture.render("history-replaced-$width")
+            fixture.expandAnalysisRunDetails()
             fixture.revealText("Previous observed run · Failed", "analysis-page")
             assertTrue(fixture.hasDescription("Expand Previous observed run · Failed"))
             snapshot =
@@ -4021,6 +3993,7 @@ class DesktopVisualLayoutTest {
           }
           .use { fixture ->
             fixture.render("history-incomplete-$status")
+            fixture.expandAnalysisRunDetails()
             fixture.revealText(
                 "Previous observed run · ${analysisStatusLabel(status)}", "analysis-page")
             fixture.clickDescription(
@@ -4254,8 +4227,8 @@ class DesktopVisualLayoutTest {
             fixture.revealText("Open Editor")
             fixture.render("f08-summary-$name-lifecycle-800-650-1.5")
             if (name == "failed") {
-              fixture.revealText("Project description: failed · Provider unavailable")
-              fixture.assertTextFits("Project description: failed · Provider unavailable", 2)
+              fixture.revealText("AI description · failed: Provider unavailable")
+              fixture.assertTextFits("AI description · failed: Provider unavailable", 2)
             }
             if (name == "unknown") {
               fixture.revealText(
@@ -4454,7 +4427,7 @@ class DesktopVisualLayoutTest {
           .use { fixture ->
             fixture.render("summary-run-strip-$width-$scale")
             fixture.assertTextFits("Running")
-            fixture.assertTextFits("0 of 2 files finished")
+            fixture.assertTextFits("0/2 files finished")
             fixture.assertTextFits("Pause")
             fixture.assertTextFits("Cancel")
             assertFalse(fixture.hasText("Start analysis"))
@@ -4463,7 +4436,7 @@ class DesktopVisualLayoutTest {
             assertEquals(0, fixture.tagCount("analysis-run-content"))
             assertEquals(0, fixture.tagCount("analysis-run-controls"))
             fixture.assertTextFits("Running")
-            fixture.assertTextFits("0 of 2 files finished")
+            fixture.assertTextFits("0/2 files finished")
             fixture.assertTextFits("Current: ${paths.first()}", maxLines = 2)
             fixture.assertTextFits("Pause")
             fixture.clickText("Pause")
@@ -4517,18 +4490,17 @@ class DesktopVisualLayoutTest {
               }
               .use { fixture ->
                 fixture.render("analysis-progress-unknown-$status-800-1.5")
-                fixture.assertTextFits(analysisStatusLabel(status))
                 fixture.assertTextFits(
-                    "File progress incomplete · captured records missing or inconsistent",
-                    maxLines = 2)
+                    if (status == "paused") "Analysis paused" else "Analyzing selected files")
+                fixture.assertTextFits("Progress incomplete", maxLines = 2)
                 fixture.assertTextFits(expectedAction)
                 fixture.assertTextFits("Cancel")
                 assertFalse(fixture.hasText(absentAction))
-                assertFalse(fixture.hasText("0 of 0 files finished"))
-                assertEquals(1, fixture.tagCount("analysis-run-progress-track"))
-                assertTrue(
-                    fixture.hasDescription(
-                        "File progress incomplete · captured records missing or inconsistent"))
+                assertFalse(fixture.hasText("0/0 files finished"))
+                assertEquals(
+                    if (status == "running") 1 else 0,
+                    fixture.tagCount("analysis-run-progress-track"))
+                if (status == "running") assertTrue(fixture.hasDescription("Progress incomplete"))
               }
         }
   }
@@ -4687,8 +4659,9 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("stage-collapsed")
-          assertTrue(fixture.hasText("Attention · 1 interrupted"))
+          assertTrue(fixture.hasText("1 interrupted"))
           assertFalse(fixture.hasText(path))
+          fixture.expandAnalysisRunDetails()
           fixture.revealText("Code analysis · 0/1 finished · 1 interrupted", "analysis-page")
           val toggle = "Expand Code analysis · 0/1 finished · 1 interrupted"
           assertTrue(fixture.requestDescriptionFocus(toggle))
@@ -4699,22 +4672,18 @@ class DesktopVisualLayoutTest {
           fixture.revealText("No diagnostic was supplied for this stage.", "analysis-page")
           assertTrue(fixture.hasText(path))
           assertTrue(fixture.hasText("Interrupted · Attempts reported: 2 · Reuse: reported reused"))
-          fixture.revealText("Run diagnostic", "analysis-page")
-          fixture.clickText("Run diagnostic")
-          fixture.render()
-          fixture.revealText("No diagnostic was supplied for this run.", "analysis-page")
-          assertTrue(fixture.hasText("No diagnostic was supplied for this run."))
+          assertFalse(fixture.hasText("Run diagnostic"))
           run = run.copy(updatedAt = "2026-09-28T10:00:00Z")
           fixture.render("stage-same-run-poll")
           assertTrue(fixture.hasText(path))
-          assertTrue(fixture.hasText("No diagnostic was supplied for this run."))
+          assertFalse(fixture.hasText("No diagnostic was supplied for this run."))
           run =
               run.copy(
                   identity = run.identity.copy(id = "new-run"),
                   plan = run.plan.copy(identity = run.identity.copy(id = "new-run").queue()))
           fixture.render("stage-new-run")
           assertFalse(fixture.hasText(path))
-          assertTrue(fixture.hasText("Stop reason · No stop reason was supplied for this run."))
+          assertTrue(fixture.hasText("Analysis interrupted"))
           assertEquals(0, dispatches)
         }
   }
@@ -4764,8 +4733,9 @@ class DesktopVisualLayoutTest {
           assertEquals(1, fixture.textCount("Analysis"))
           fixture.assertTextAbove("Analysis", "Bugs")
           fixture.assertTextAbove("Bugs", "Files")
-          fixture.assertTextAbove("Attention · 1 failed", "Files")
+          fixture.assertTextAbove("1 failure", "Files")
           assertFalse(fixture.hasText(failure))
+          fixture.expandAnalysisRunDetails()
           fixture.clickDescription("Expand Code analysis · 1/1 finished · 1 failed")
           fixture.render("analysis-hierarchy-stage-expanded")
           fixture.assertTextFits(failure)
@@ -4775,6 +4745,7 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(800, 650, 1.5f) { AnalysisWorkspacePane(state, actions) }
         .use { fixture ->
           fixture.render("analysis-stage-failure-reachable-800-150")
+          fixture.expandAnalysisRunDetails()
           fixture.revealText("Code analysis · 1/1 finished · 1 failed", "analysis-page")
           assertTrue(
               fixture.requestDescriptionFocus("Expand Code analysis · 1/1 finished · 1 failed"))
@@ -4893,9 +4864,7 @@ class DesktopVisualLayoutTest {
                   assertTrue(fixture.hasText("Prepare fix"))
                   if (category == "performance") {
                     assertTrue(fixture.hasText("Model suggestion"))
-                    assertTrue(
-                        fixture.hasText(
-                            "Unmeasured recommendation. Benchmark the affected workload before claiming an improvement."))
+                    assertTrue(fixture.hasText("Unmeasured"))
                   }
                   if (category == "bugs") {
                     assertTrue(fixture.hasText("Open source"))
@@ -4990,17 +4959,13 @@ class DesktopVisualLayoutTest {
               browser.choose(
                   securityResults(page).single { it.finding.id == "unknown-provenance" }.rowKey)
               fixture.render("$label-unknown")
-              assertTrue(
-                  fixture.hasText(
-                      "Evidence type was unavailable. Do not treat this finding as verified."))
+              assertTrue(fixture.hasText("Unverified · evidence type unavailable"))
               browser.choose(
                   securityResults(page).single { it.report.source == "deterministic" }.rowKey)
               fixture.render("$label-rule")
               assertTrue(fixture.hasText("Source rule"))
               assertTrue(fixture.hasText(path + ":4"))
-              assertTrue(
-                  fixture.hasText(
-                      "A source rule match identifies a pattern; it does not confirm a vulnerability."))
+              assertTrue(fixture.hasText("Pattern match · unverified vulnerability"))
               assertFalse(fixture.hasText("Scope"), "Optional report metadata starts collapsed")
               val list = fixture.taggedBounds("result-list")
               val detail = fixture.taggedBounds("result-detail")
@@ -5022,16 +4987,13 @@ class DesktopVisualLayoutTest {
               browser.choose(securityResults(page).single { it.report.source == "ai" }.rowKey)
               fixture.render("$label-model")
               assertTrue(fixture.hasText("Model hypothesis"))
-              assertTrue(
-                  fixture.hasText(
-                      "Unverified model hypothesis. Validate the preconditions and source evidence before remediation."))
+              assertTrue(fixture.hasText("Unverified · review evidence"))
               if (width == 800 && scale == 1.5f && density == 1f) {
                 browser.choose(
                     securityResults(page).single { it.report.source == "deterministic" }.rowKey)
                 fixture.render()
                 fixture.revealText(path + ":4", "result-detail")
-                val warning =
-                    "A source rule match identifies a pattern; it does not confirm a vulnerability."
+                val warning = "Pattern match · unverified vulnerability"
                 fixture.revealText(warning, "result-detail")
                 assertTrue(fixture.copyTextByDragging(warning, warning).isNotEmpty())
                 fixture.revealText("Report metadata", "result-detail")
@@ -5065,15 +5027,11 @@ class DesktopVisualLayoutTest {
           fixture.clickDescription("Inspect Credential-like assignment")
           fixture.render("security-source-rule-wide-1440-900")
           assertTrue(fixture.hasText("Source rule"))
-          assertTrue(
-              fixture.hasText(
-                  "A source rule match identifies a pattern; it does not confirm a vulnerability."))
+          assertTrue(fixture.hasText("Pattern match · unverified vulnerability"))
           fixture.clickDescription("Inspect Review input boundary")
           fixture.render("security-model-hypothesis-wide-1440-900")
           assertTrue(fixture.hasText("Model hypothesis"))
-          assertTrue(
-              fixture.hasText(
-                  "Unverified model hypothesis. Validate the preconditions and source evidence before remediation."))
+          assertTrue(fixture.hasText("Unverified · review evidence"))
           assertEquals(0, prepared)
           assertEquals(0, openedAnalysis)
         }
@@ -5099,9 +5057,7 @@ class DesktopVisualLayoutTest {
           fixture.clickDescription("Inspect Credential-like assignment")
           fixture.render("security-unavailable-evidence-detail-compact-800-650-150")
           assertTrue(fixture.hasText("Evidence type unavailable"))
-          assertTrue(
-              fixture.hasText(
-                  "Evidence type was unavailable. Do not treat this finding as verified."))
+          assertTrue(fixture.hasText("Unverified · evidence type unavailable"))
           assertEquals(0, prepared)
           assertEquals(0, openedAnalysis)
         }
@@ -5118,7 +5074,7 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("security-empty-compact-800-650-150")
-          fixture.assertTextFits("Analysis has not started.")
+          fixture.assertTextFits("Not analyzed")
           assertFalse(fixture.hasText("Prepare fix"))
           fixture.clickText("View analysis")
           assertEquals(1, openedAnalysis)
@@ -5259,8 +5215,7 @@ class DesktopVisualLayoutTest {
                             CheckAttempt(7, CheckCandidate(draft), ValidationAttemptStatus.Running))
                 fixture.render("$label-checks-running-after-pass")
                 assertTrue(fixture.hasText("Checks running"))
-                assertTrue(
-                    fixture.hasText("Previous check report (retained; not current approval)"))
+                assertTrue(fixture.hasText("Previous checks · not current"))
                 assertFalse(fixture.hasText("Ready to apply"))
                 assertFalse(fixture.hasText("Apply change"))
                 assertEquals(0, actions)
@@ -5299,9 +5254,7 @@ class DesktopVisualLayoutTest {
               fixture.clickDescription("Collapse Files")
               fixture.render("$label-selection-failed-collapsed")
               assertTrue(fixture.hasText("Could not save file selection"))
-              assertTrue(
-                  fixture.hasText(
-                      "The last confirmed selection is still shown. Refresh files reads the saved selection; it does not retry a failed change or start analysis."))
+              assertTrue(fixture.hasText("Last saved selection"))
               assertTrue(fixture.hasText("Refresh files"))
               fixture.assertTextFits("Refresh files")
               assertTrue(fixture.requestFocus("Refresh files"))
@@ -5419,7 +5372,7 @@ class DesktopVisualLayoutTest {
             }
             .use { fixture ->
               fixture.render("$label-interrupted-run-error")
-              assertTrue(fixture.hasText("Analysis action needs attention"))
+              assertFalse(fixture.hasText("Analysis action needs attention"))
               assertTrue(fixture.hasText("Daemon status read failed"))
               assertFalse(fixture.hasText("Ready to apply"))
             }
@@ -5443,9 +5396,9 @@ class DesktopVisualLayoutTest {
             }
             .use { fixture ->
               fixture.render("$label-summary-unavailable-details")
-              fixture.revealText("Saved details unavailable · 19 reported")
+              fixture.revealText("Details unavailable")
               fixture.render("$label-summary-details-revealed")
-              assertTrue(fixture.hasText("Saved details unavailable · 19 reported"))
+              assertTrue(fixture.hasText("Details unavailable"))
               assertFalse(fixture.hasText("No Security findings"))
             }
       }
@@ -5474,7 +5427,7 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.isDisabled("Prepare fix"))
           assertTrue(fixture.hasText("Stale"))
           assertTrue(fixture.hasText("Report warning"))
-          assertTrue(fixture.hasText("Saved evidence may not match current source. Analyze again."))
+          assertTrue(fixture.hasText("Outdated · analyze again"))
           assertTrue(fixture.hasText("Analyze again to prepare a fix from current source."))
           assertFalse(fixture.hasText("Prompt version"))
         }
@@ -5487,7 +5440,7 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render("results-empty-800-1.5")
           assertFalse(fixture.hasText("Reported findings"))
-          assertTrue(fixture.hasText("Analysis has not started."))
+          assertTrue(fixture.hasText("Not analyzed"))
         }
     ComposeVisualFixture(800, 650) {
           Column {
@@ -5564,11 +5517,10 @@ class DesktopVisualLayoutTest {
             fixture.render("performance-hypothesis-detail-$width-$scale")
             assertTrue(fixture.hasText("$path:4 · Run"))
             assertTrue(fixture.hasText("Partial"))
-            assertTrue(fixture.hasText("Partial report; some evidence may be missing."))
+            assertTrue(fixture.hasText("Partial report · incomplete evidence"))
             assertTrue(fixture.hasText("Model suggestion"))
-            assertTrue(fixture.hasText("Potential impact · qualitative, not a measured gain"))
-            assertTrue(
-                fixture.hasText("Model confidence · not a measurement or speedup probability"))
+            assertTrue(fixture.hasText("Potential impact"))
+            assertTrue(fixture.hasText("Model confidence"))
             assertTrue(fixture.hasText("high"))
             assertTrue(fixture.hasText("medium"))
             fixture.revealText(warning, "result-detail")
@@ -5689,10 +5641,7 @@ class DesktopVisualLayoutTest {
               fixture.assertTextFits("Prepare fix")
               fixture.clickText("Explore benchmark evidence")
               fixture.render("$label-evidence")
-              assertTrue(
-                  fixture.hasText(
-                      "No benchmark evidence is available for the current candidate. Listing is read-only; running a benchmark requires explicit local execution."),
-                  label)
+              assertTrue(fixture.hasText("Not benchmarked"), label)
               val list = fixture.taggedBounds("result-list")
               val detail = fixture.taggedBounds("result-detail")
               assertTrue(list.height > 0 && detail.height > 0, label)
@@ -5747,10 +5696,10 @@ class DesktopVisualLayoutTest {
                                     progress =
                                         emptyProgress.copy(
                                             status = "unavailable", findingCount = null)))) to
-                    "Analysis is unavailable for this category."),
+                    "Analysis unavailable"),
             "stale" to
                 (populated.copy(run = populated.run!!.copy(status = "stale")) to
-                    "Saved evidence may not match current source. Analyze again."),
+                    "Outdated · analyze again"),
             "partial" to
                 (populated.copy(
                     section =
@@ -5758,7 +5707,7 @@ class DesktopVisualLayoutTest {
                             results =
                                 populated.results!!.copy(
                                     performance = listOf(report.copy(status = "partial"))))) to
-                    "Partial report; some evidence may be missing."))
+                    "Partial report · incomplete evidence"))
     for ((name, expectation) in cases) {
       val (page, text) = expectation
       ComposeVisualFixture(800, 650, 1.5f) {
@@ -5980,16 +5929,14 @@ class DesktopVisualLayoutTest {
               fixture.revealTextFullyWithin(status.summary, "result-overview")
               fixture.assertTextFits(status.summary, maxLines = 30)
               when (name) {
-                "trade-off" ->
-                    assertTrue(status.summary.contains("trade-off, not an unconditional win"))
+                "trade-off" -> assertTrue(status.summary.contains("Lower CPU · higher memory"))
                 "partial",
                 "missing-side",
-                "empty-side" -> assertTrue(status.summary.contains("five valid samples per side"))
-                "missing-memory" ->
-                    assertTrue(status.summary.contains("cannot establish a performance win"))
-                "noisy" -> assertTrue(status.summary.contains("too variable"))
-                "stale" -> assertTrue(status.summary.contains("different draft or source revision"))
-                "running-prior" -> assertTrue(status.summary.contains("is running"))
+                "empty-side" -> assertTrue(status.summary.contains("5 valid samples per side"))
+                "missing-memory" -> assertTrue(status.summary.contains("Incomplete"))
+                "noisy" -> assertTrue(status.summary.contains("variable"))
+                "stale" -> assertTrue(status.summary.contains("Draft or source changed"))
+                "running-prior" -> assertTrue(status.summary.contains("Running"))
               }
               state.benchmarkLatestOutcome?.let { assertEquals(it.response.reason, status.summary) }
               assertFalse(
@@ -6004,7 +5951,7 @@ class DesktopVisualLayoutTest {
                 if (status.priorEvidence) {
                   fixture.revealTextFullyWithin(assessment.summary, "result-overview")
                   fixture.assertTextFits(assessment.summary, maxLines = 30)
-                  assertFalse(fixture.hasText("CPU is lower for the selected benchmark."))
+                  assertFalse(fixture.hasText("Lower CPU · selected benchmark"))
                 }
                 val details =
                     if (status.priorEvidence) "Prior measurement details" else "Measurement details"
@@ -6622,14 +6569,11 @@ class DesktopVisualLayoutTest {
                 }
                 for (text in
                     listOf(
-                        "Running benchmarks executes imported project code.",
-                        "Execution may have external effects, including file and network access.",
-                        "Baseline and candidate use copied workspaces; these are not a security sandbox.",
-                        "Trust contract (separate from selected argv): go test ./...",
-                        "This is broader than benchmark-only permission.",
-                        "Trust lasts for this project revision in the daemon session.",
-                        "Granting trust does not execute “go test ./...”.",
-                        "The combined action requests the selected benchmark separately.")) {
+                        "Executes project code · file and network access",
+                        "Temporary copies · not sandboxed",
+                        "Trust scope: go test ./... · includes other Go tests",
+                        "Trust duration: current project revision · daemon session",
+                        "Runs the selected benchmark command")) {
                   fixture.revealTextFullyWithin(text, "result-overview")
                   fixture.assertTextFits(text, maxLines = 15)
                 }
@@ -6667,7 +6611,7 @@ class DesktopVisualLayoutTest {
               fixture.assertTextFits(assessment.summary, maxLines = 15)
               if (status.priorEvidence) {
                 assertFalse(fixture.hasText("Measured · selected benchmark"))
-                assertFalse(fixture.hasText("CPU is lower for the selected benchmark."))
+                assertFalse(fixture.hasText("Lower CPU · selected benchmark"))
                 assertFalse(fixture.hasText("Measured trade-offs"))
               }
               fixture.render("f22-outcome-details-$name-$width-$height-$scale")
@@ -6950,12 +6894,10 @@ class DesktopVisualLayoutTest {
                         .map { (key, value) -> "$key: $value" } +
                         performanceBenchmarkArgv(choices.last().command).lines() +
                         listOf(
-                            "Running benchmarks executes imported project code.",
-                            "Execution may have external effects, including file and network access.",
-                            "Baseline and candidate use copied workspaces; these are not a security sandbox.",
-                            "Trust contract (separate from selected argv): go test ./...",
-                            "This is broader than benchmark-only permission.",
-                            "Granting trust does not execute “go test ./...”.")
+                            "Executes project code · file and network access",
+                            "Temporary copies · not sandboxed",
+                            "Trust scope: go test ./... · includes other Go tests",
+                            "Runs the selected benchmark command")
                 required.forEach { fixture.assertEveryTextLineReachable(it, "result-overview") }
                 fixture.revealTextFullyWithin("Trust and run selected benchmark", "result-overview")
                 fixture.assertTextFits("Trust and run selected benchmark")
@@ -7480,7 +7422,7 @@ class DesktopVisualLayoutTest {
           fixture.assertTextAboveDescription(destination, "Confirm remote destination")
           assertTrue(fixture.isDescriptionDisabled("Confirm remote destination"))
           fixture.assertTextFits("Explaining…")
-          assertTrue(fixture.hasText("Explanation in progress. Cancel to stop this request."))
+          assertFalse(fixture.hasText("Explanation in progress. Cancel to stop this request."))
           assertTrue(fixture.hasText("Saved file analysis · Fresh"))
           fixture.assertTextFits("Cancel explanation")
           assertFalse(fixture.isDisabled("Cancel explanation"))
@@ -7500,7 +7442,7 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.hasText(result.summary))
           fixture.assertTextFits("Refresh explanation")
           fixture.assertTextFits("Current explanation")
-          assertTrue(
+          assertFalse(
               fixture.hasText(
                   "On-demand · matches the selected loaded source and declaration; not a disk check."))
           state =
@@ -7510,7 +7452,7 @@ class DesktopVisualLayoutTest {
                           status = DeclarationExplanationStatus.Stale))
           fixture.render("context-explain-stale")
           assertFalse(fixture.hasText(result.summary))
-          assertTrue(fixture.hasText("Source or selection changed. Request a new explanation."))
+          assertTrue(fixture.hasText("Source changed · explain again"))
           fixture.assertTextFits("Explanation needs refresh")
           state =
               state.copy(
@@ -8371,13 +8313,13 @@ class DesktopVisualLayoutTest {
           assertTrue(fixture.hasText("Model response"))
           assertTrue(fixture.hasText(request))
           assertTrue(fixture.hasText(formatModelResult(response).text))
-          assertTrue(fixture.hasText("Candidate for review"))
+          assertFalse(fixture.hasText("Candidate for review"))
           assertTrue(fixture.hasText("missing closing brace"))
           assertTrue(fixture.taggedBounds("assistant-composer-scroll").height > 0f)
           assertTrue(fixture.taggedBounds("assistant-history-scroll").height > 0f)
           fixture.scrollBy(2000f, "assistant-history-scroll")
           fixture.render()
-          fixture.assertTextAboveDescription("Candidate for review", "Invalid")
+          fixture.assertTextAboveDescription("Editable draft", "Invalid")
           fixture.clickText("Show full response")
           fixture.render("assistant-response-expanded-800-1.3")
           assertEquals("Expanded", fixture.stateDescription("Show less"))
@@ -8725,7 +8667,7 @@ class DesktopVisualLayoutTest {
           assertEquals(1, fixture.taggedTextCount("summary-project-type", "Java project"))
           assertTrue(fixture.hasText("pom.xml · 23 indexed files · 1,800 lines · Java · Kotlin"))
           assertEquals(1, fixture.textCount("Java project"))
-          assertTrue(fixture.hasText("Project description: unavailable"))
+          assertTrue(fixture.hasText("AI description · unavailable"))
         }
   }
 
@@ -8752,7 +8694,7 @@ class DesktopVisualLayoutTest {
           assertTrue(nameBounds.bottom < typeBounds.top, "Long type must flow below long name")
           assertTrue(nameBounds.right <= identity.right && typeBounds.right <= identity.right)
           assertTrue(typeBounds.bottom <= identity.bottom)
-          assertTrue(fixture.hasText("Project description: unavailable"))
+          assertTrue(fixture.hasText("AI description · unavailable"))
           assertTrue(fixture.hasText("build.gradle.kts · 23 indexed files · 1,800 lines"))
         }
     ComposeVisualFixture(800, 650, 1.5f) { ProjectSummaryPane(null, project.copy(type = " "), {}) }
@@ -8945,8 +8887,11 @@ class DesktopVisualLayoutTest {
           }
           .use { fixture ->
             fixture.render("f16-analysis-lifecycle-$name")
-            fixture.assertTextFits(analysisRunTitle(analysis.run, presentation))
-            presentation.lifecycleExplanation?.let { assertTrue(fixture.hasText(it), name) }
+            fixture.assertTextFits(
+                if (label != presentation.status) label
+                else analysisRunTitle(analysis.run, presentation))
+            if (analysis.controlRequest?.outcome != AnalysisControlOutcome.Requesting)
+                presentation.lifecycleExplanation?.let { assertFalse(fixture.hasText(it), name) }
           }
       ComposeVisualFixture(1440, 900) {
             ToolbarVisualFixture(
@@ -8966,7 +8911,8 @@ class DesktopVisualLayoutTest {
             fixture.render("f16-summary-$name")
             fixture.assertTextFits(label, maxLines = 3)
             fixture.assertSummaryStatusPlacement(label)
-            presentation.lifecycleExplanation?.let { assertTrue(fixture.hasText(it), name) }
+            if (analysis.controlRequest?.outcome != AnalysisControlOutcome.Requesting)
+                presentation.lifecycleExplanation?.let { assertFalse(fixture.hasText(it), name) }
           }
     }
   }
@@ -9308,7 +9254,7 @@ class DesktopVisualLayoutTest {
             fixture.render()
             for (label in
                 listOf(
-                    "Selection locked. Finish or cancel the current run to change files.",
+                    "Selection locked · run in progress",
                     "Selection read failed: try refresh",
                     "Refresh files")) {
               fixture.revealText(label, "analysis-page")
@@ -9336,14 +9282,14 @@ class DesktopVisualLayoutTest {
               assertEquals(
                   1, fixture.taggedTextCount("analysis-run-content", "Analyzing selected files"))
               assertEquals(0, fixture.taggedTextCount("analysis-run-content", "Running"))
-              fixture.assertTextFits("8 of 12 files finished")
+              fixture.assertTextFits("8/12 files finished")
               fixture.assertTextFits("Current: internal/api/user.go")
               fixture.assertTextFits("Pause")
               fixture.assertTextFits("Cancel")
               fixture.assertAnalysisRunGeometry()
               if (width == 1600 && scale == 1f) {
                 assertTrue(fixture.hasText("67%"))
-                fixture.assertTextAbove("8 of 12 files finished", "Current: internal/api/user.go")
+                fixture.assertTextAbove("8/12 files finished", "Current: internal/api/user.go")
               }
               if (width >= 1440 && scale == 1f) {
                 fixture.revealText("Refresh files", "analysis-page")
@@ -9387,11 +9333,8 @@ class DesktopVisualLayoutTest {
               }
               fixture.revealText("Files", "analysis-page")
               assertTrue(fixture.hasDescription("Collapse Files"))
-              fixture.revealText(
-                  "Selection locked. Finish or cancel the current run to change files.",
-                  "analysis-page")
-              fixture.assertTextFits(
-                  "Selection locked. Finish or cancel the current run to change files.")
+              fixture.revealText("Selection locked · run in progress", "analysis-page")
+              fixture.assertTextFits("Selection locked · run in progress")
               fixture.render("analysis-files-frame-$width-$height-$scale")
               fixture.revealText("Refresh files", "analysis-page")
               fixture.assertTextFits("Refresh files")
@@ -9513,10 +9456,10 @@ class DesktopVisualLayoutTest {
                 fixture.render("$label-collapsed")
                 fixture.assertTextFits("Pause")
                 fixture.assertTextFits("Cancel")
-                fixture.revealText(
-                    "Finished includes partial and failed outcomes; it does not mean successful.",
-                    "analysis-page")
-                fixture.revealText("Show full path", "analysis-page")
+                assertFalse(
+                    fixture.hasText(
+                        "Finished includes partial and failed outcomes; it does not mean successful."))
+                fixture.revealText("Full path", "analysis-page")
                 fixture.clickDescription("Show active files")
                 fixture.render("$label-expanded")
                 fixture.revealText("Current: $path", "analysis-page")
@@ -9557,7 +9500,7 @@ class DesktopVisualLayoutTest {
                                         identity =
                                             run.identity.copy(generation = "new-generation"))))
                 fixture.render("$label-replaced")
-                fixture.revealText("Show full path", "analysis-page")
+                fixture.revealText("Full path", "analysis-page")
                 assertTrue(fixture.hasDescription("Show active files"))
                 assertEquals(0, dispatches)
               }
@@ -9601,12 +9544,10 @@ class DesktopVisualLayoutTest {
             fixture.render("f15-categories-$phase")
             fixture.revealText("Saved results", "analysis-page")
             fixture.assertTextFits("Saved results")
-            assertTrue(fixture.hasText("Saved details unavailable · 1 reported"))
+            assertTrue(fixture.hasText("Details unavailable"))
             for (type in AnalysisResultType.entries) {
               fixture.revealText(type.workspace.name, "analysis-page")
-              assertTrue(
-                  fixture.hasText(
-                      "Loaded · ${if (type == AnalysisResultType.Bugs) 1 else 0} matching ${if (type == AnalysisResultType.Bugs) "finding" else "findings"}"))
+              assertTrue(fixture.hasText("Details unavailable"))
               fixture.clickVisibleDescription("View ${type.workspace.name} results")
             }
           }
@@ -9647,16 +9588,16 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("f15-categories-unconfirmed-zero")
-          fixture.revealText("0 reported · details not confirmed", "analysis-page")
-          assertTrue(fixture.hasText("Loaded details · unavailable"))
+          fixture.revealText("Details unconfirmed", "analysis-page")
+          assertFalse(fixture.hasText("Loaded details · unavailable"))
           assertTrue(fixture.hasText("Completed · details not confirmed"))
           current = run.copy(sections = run.sections.map { it.copy(findingCount = null) })
           sections = emptyMap()
           fixture.render("f15-categories-unknown-reported")
           fixture.revealText("Saved results", "analysis-page")
-          assertTrue(fixture.hasText("Count unavailable"))
+          assertFalse(fixture.hasText("Count unavailable"))
           assertEquals(3, fixture.textCount("—"))
-          assertTrue(fixture.hasText("Loaded details · unavailable"))
+          assertFalse(fixture.hasText("Loaded details · unavailable"))
         }
   }
 
@@ -9683,8 +9624,8 @@ class DesktopVisualLayoutTest {
     ComposeVisualFixture(800, 650, 1.5f) { AnalysisWorkspacePane(state, actions) }
         .use { fixture ->
           fixture.render("f15-unavailable-progress")
-          fixture.assertTextFits("File progress unavailable")
-          assertFalse(fixture.hasText("0 of 0 files finished"))
+          fixture.assertTextFits("Progress unavailable")
+          assertFalse(fixture.hasText("0/0 files finished"))
           assertFalse(fixture.hasText("Current: internal/api/user.go"))
           fixture.assertTextFits("Pause")
           fixture.assertTextFits("Cancel")
@@ -9698,7 +9639,7 @@ class DesktopVisualLayoutTest {
           fixture.render("f15-not-started")
           fixture.revealText("Start analysis", "analysis-page")
           fixture.assertTextFits("Start analysis")
-          assertFalse(fixture.hasText("0 of 0 files finished"))
+          assertFalse(fixture.hasText("0/0 files finished"))
           assertEquals(0, starts + resumes + otherActions)
           fixture.clickText("Start analysis")
           assertEquals(1, starts)
@@ -10109,9 +10050,7 @@ class DesktopVisualLayoutTest {
           fixture.revealText("Filter files", "analysis-page")
           fixture.revealText(selectionError, "analysis-page")
           fixture.assertTextWrapsWithoutClipping(selectionError)
-          fixture.revealText(
-              "Selection locked. Finish or cancel the current run to change files.",
-              "analysis-page")
+          fixture.revealText("Selection locked · run in progress", "analysis-page")
           fixture.revealText("Refresh files", "analysis-page")
           fixture.revealText("cmd/server/main.go", "analysis-page")
           fixture.render()
@@ -10128,9 +10067,11 @@ class DesktopVisualLayoutTest {
               1f,
               "Measured content must converge without table-height instability")
           val stage = projectRunPresentation(state.project, state.analysis).stages.single()
+          fixture.expandAnalysisRunDetails()
           fixture.revealText("Code analysis · ${analysisStageBreakdown(stage)}", "analysis-page")
           fixture.clickText("Code analysis · ${analysisStageBreakdown(stage)}")
           fixture.render()
+          fixture.expandAnalysisRunDetails()
           fixture.revealText("Code analysis · ${analysisStageBreakdown(stage)}", "analysis-page")
           fixture.scrollBy(300f, "analysis-page")
           fixture.render()
@@ -10641,7 +10582,8 @@ class DesktopVisualLayoutTest {
               .use { fixture ->
                 fixture.render("$label-closed")
                 assertTrue(fixture.hasText("Analysis coverage"), label)
-                assertTrue(fixture.hasText("Saved coverage · Coverage, not a health score."), label)
+                assertFalse(
+                    fixture.hasText("Saved coverage · Coverage, not a health score."), label)
                 when (state) {
                   "mixed",
                   "failed" -> {
@@ -10972,12 +10914,8 @@ class DesktopVisualLayoutTest {
             fixture.revealText("File evidence", "summary-scroll")
             fixture.render("f10-summary-$name-ledger-800-650-150")
             when (name) {
-              "aggregate-only" ->
-                  assertTrue(
-                      fixture.hasText(
-                          "File paths unavailable · 2 files in saved aggregate coverage. Load a confirmed selection to inspect file evidence."))
-              "confirmed-empty" ->
-                  assertTrue(fixture.hasText("No files selected in the confirmed selection."))
+              "aggregate-only" -> assertTrue(fixture.hasText("2 files · paths unavailable"))
+              "confirmed-empty" -> assertTrue(fixture.hasText("No files selected"))
               "failed-retained" -> {
                 assertTrue(fixture.hasText(path))
                 assertTrue(
@@ -11161,7 +11099,7 @@ class DesktopVisualLayoutTest {
                 fixture.render()
                 assertTrue(fixture.hasDescription(description))
                 assertTrue(fixture.hasText(if (counts.fresh == 23) "100%" else "0%"))
-                assertTrue(fixture.hasText("Saved coverage · Coverage, not a health score."))
+                assertFalse(fixture.hasText("Saved coverage · Coverage, not a health score."))
               }
         }
     ComposeVisualFixture(1024, 768) {
@@ -11203,8 +11141,7 @@ class DesktopVisualLayoutTest {
             fixture.assertTextFits("1 of 1 selected files are up to date")
             fixture.assertTextFits("100%")
             fixture.assertTextFits("File selection needs attention", maxLines = 2)
-            fixture.assertTextFits(
-                "Current analysis run: Running · separate from saved coverage.", maxLines = 4)
+            fixture.assertTextFits("Running", maxLines = 4)
             assertTrue(
                 fixture.hasText(
                     "File selection load failed · Showing last confirmed selection. Selection refresh timed out."))
@@ -11254,7 +11191,7 @@ class DesktopVisualLayoutTest {
             analysis =
                 StructuredProjectAnalysis(status = "failed", failure = "Provider timed out."),
             analysisCoverage = AnalysisCoverage())
-    val description = "Project description: failed · Provider timed out."
+    val description = "AI description · failed: Provider timed out."
     ComposeVisualFixture(800, 650) { ProjectSummaryPane(overview, visualFixtureProject, {}) }
         .use { fixture ->
           fixture.render("summary-interpretation-failure")
@@ -11314,11 +11251,11 @@ class DesktopVisualLayoutTest {
         }
         .use { fixture ->
           fixture.render("summary-categories-details-compact-800-150")
-          fixture.revealText("Saved details unavailable · 19 reported", "summary-scroll")
+          fixture.revealText("Details unavailable", "summary-scroll")
           fixture.assertSummaryCategoryContentContained()
           fixture.assertTextFits("Interrupted")
           fixture.assertTextFits("High: 1 · Medium: 1 · Low: 1", maxLines = 2)
-          fixture.assertTextFits("Saved details unavailable · 19 reported")
+          fixture.assertTextFits("Details unavailable")
           val bugsCard = fixture.taggedBounds("summary-metric-Bugs")
           assertTrue(
               bugsCard.height > 132f,
@@ -11360,7 +11297,7 @@ class DesktopVisualLayoutTest {
           fixture.assertSummaryStatusPlacement("Updating")
           fixture.assertSummaryCategoryBoxesFit()
           listOf("17", "18", "19").forEach(fixture::assertTextFits)
-          fixture.assertTextFits("Loading saved details · 18 reported")
+          fixture.assertTextFits("Loading details…")
           AnalysisResultType.entries.forEach { type ->
             fixture.clickVisibleDescription("View ${type.workspace.name} results")
           }
@@ -11480,9 +11417,7 @@ class DesktopVisualLayoutTest {
         .use { fixture ->
           fixture.render("f15-outdated-analysis")
           assertTrue(fixture.hasText("Analysis out of date"))
-          assertTrue(
-              fixture.hasText(
-                  "Outdated · run belongs to an older project revision; not current evidence."))
+          assertTrue(fixture.hasText("Outdated · previous revision"))
           assertFalse(fixture.hasText("Current: main.go"))
           assertEquals(0, fixture.tagCount("analysis-run-controls"))
           assertFalse(fixture.hasText("Pause"))
@@ -11502,10 +11437,8 @@ class DesktopVisualLayoutTest {
           fixture.render("f15-outdated-summary")
           assertEquals(1, fixture.tagCount("summary-analysis-run-strip"))
           assertTrue(fixture.hasText("Stale"))
-          assertTrue(fixture.hasText("File progress unavailable"))
-          assertTrue(
-              fixture.hasText(
-                  "Outdated · run belongs to an older project revision; not current evidence."))
+          assertTrue(fixture.hasText("Progress unavailable"))
+          assertTrue(fixture.hasText("Outdated · previous revision"))
           assertFalse(fixture.hasText("Current: main.go"))
           assertEquals(0, fixture.tagCount("summary-start-analysis"))
           assertFalse(fixture.hasText("Pause"))
@@ -12198,9 +12131,9 @@ class DesktopVisualLayoutTest {
 }
 
 internal const val verifiedScanScopeCopy =
-    "Whole-project checks, independent of the Analysis file selection: parser inspection of indexed Go source; go vet ./...; go test ./..."
+    "Whole project · Go parser · go vet ./... · go test ./..."
 internal const val verifiedScanTrustCopy =
-    "Checks run in a temporary copied workspace; the scan does not edit original source. Tests and package initialization can execute project code. A copy is not a security sandbox."
+    "Executes project code in a temporary copy · not sandboxed"
 internal const val verifiedScanEvidenceCopy =
     "Local tool evidence is scoped to these checks, not a general safety assurance. Model suggestions are separate results below."
 
@@ -13438,7 +13371,7 @@ internal class ComposeVisualFixture(
     val progress = taggedBounds("analysis-run-progress-track")
     val controls = taggedBounds("analysis-run-controls")
     val title = textNodes("Analyzing selected files").single().boundsInRoot
-    val finished = textNodes("8 of 12 files finished").single().boundsInRoot
+    val finished = textNodes("8/12 files finished").single().boundsInRoot
     val current = textNodes("Current: internal/api/user.go").single().boundsInRoot
     assertTrue(title.bottom <= finished.top, "Run title must precede the finished-file count")
     assertTrue(finished.bottom <= progress.top, "Progress must follow the title and file count")

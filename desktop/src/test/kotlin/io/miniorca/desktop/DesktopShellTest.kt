@@ -107,12 +107,8 @@ class DesktopShellTest {
                   "Token limit: 2048 tokens",
                   "Byte limit: 4096 bytes")) assertTrue(fixture.hasText(label), label)
           assertFalse(fixture.hasText("Model: captured-model"))
-          assertTrue(
-              fixture.hasText(
-                  "File-scoped preview, not the exact declaration request. Declaration requests may include different context and prompt material."))
-          assertTrue(
-              fixture.hasText(
-                  "Local inspection only; no provider request or consent. Send and Explain require separate authorization."))
+          assertTrue(fixture.hasText("File preview · declaration context may differ"))
+          assertTrue(fixture.hasText("Read-only preview"))
           inspection =
               inspection.copy(
                   manifest =
@@ -929,15 +925,11 @@ class DesktopShellTest {
               state.copy(
                   openingAttempt = ProjectOpeningAttempt(3, target, ProjectOpeningKind.Import))
           fixture.render()
-          assertTrue(
-              fixture.hasText(
-                  "Import may use the configured Analyze provider and require confirmation. The current project remains open."))
+          assertTrue(fixture.hasText("Analyze provider"))
           assertTrue(!fixture.hasText("Retry restore"))
           fixture.clickText(project.name)
           fixture.render()
-          assertTrue(
-              fixture.hasText(
-                  "Daemon disconnected. Reconnect reads daemon status and model configuration; it does not contact a provider or run project code."))
+          assertTrue(fixture.hasText("Daemon disconnected"))
           fixture.clickText("Reconnect")
           assertEquals(1, reconnects)
           assertEquals(0, analyses)
@@ -973,15 +965,11 @@ class DesktopShellTest {
           assertTrue(fixture.hasText("Analysis · Running"))
           assertTrue(fixture.hasText("Daemon disconnected"))
           assertTrue(!fixture.hasText("Retry re-index"))
-          assertTrue(
-              !fixture.hasText(
-                  "Re-index refreshes project inventory and freshness without a model request or project-code execution. It does not run analysis or refresh findings."))
+          assertTrue(!fixture.hasText("Refreshes inventory · analysis unchanged"))
           fixture.revealText("About Re-index project", "project-indexing-scroll")
           fixture.clickText("About Re-index project")
           fixture.render()
-          fixture.revealText(
-              "Re-index refreshes project inventory and freshness without a model request or project-code execution. It does not run analysis or refresh findings.",
-              "project-indexing-scroll")
+          fixture.revealText("Refreshes inventory · analysis unchanged", "project-indexing-scroll")
           assertEquals(0, retries)
           state =
               state.copy(
@@ -1025,9 +1013,7 @@ class DesktopShellTest {
           fixture.revealText("Accepted inventory revision", "project-indexing-scroll")
           assertTrue(fixture.hasText("accepted-revision"))
           fixture.revealText("Details read denied", "project-indexing-scroll")
-          assertTrue(
-              fixture.hasText(
-                  "Workspace details unavailable; retained findings keep their existing freshness labels."))
+          assertTrue(fixture.hasText("Workspace details unavailable"))
           assertTrue(!fixture.hasText("Retry re-index"))
           state = state.copy(detailsOutcome = ProjectDetailsOutcome.Refreshing)
           fixture.render()
@@ -1200,7 +1186,7 @@ class DesktopShellTest {
         }
         .use { fixture ->
           fixture.render()
-          assertTrue(fixture.hasText("No project remembered on this device."))
+          assertTrue(fixture.hasText("None"))
           fixture.assertTextFits("Open project…")
           assertTrue(!fixture.hasText("Retry restore"))
           assertTrue(!fixture.hasText("Reconnect daemon"))
@@ -1221,7 +1207,7 @@ class DesktopShellTest {
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("Last project unknown; local preferences could not be read."))
-          assertTrue(!fixture.hasText("No project remembered on this device."))
+          assertTrue(!fixture.hasText("None"))
           assertTrue(fixture.hasText("Could not read last project preference"))
           assertTrue(fixture.hasText("Storage denied"))
           assertTrue(!fixture.isDisabled("Open project…"))
@@ -1665,9 +1651,9 @@ class DesktopShellTest {
     val local =
         ScopedModel(
             scope = "bug", profile = "bug", model = "local-model", reasoningEffort = "medium")
-    assertTrue(modelDestinationLabel(ModelScope.Function, remote).contains("remote provider"))
-    assertTrue(modelDestinationLabel(ModelScope.Function, remote).contains("confirmation required"))
-    assertTrue(modelDestinationLabel(ModelScope.Bug, local).contains("local provider"))
+    assertTrue(modelDestinationLabel(ModelScope.Function, remote).contains("remote"))
+    assertTrue(modelDestinationLabel(ModelScope.Function, remote).contains("sends project context"))
+    assertTrue(modelDestinationLabel(ModelScope.Bug, local).contains(" · local"))
     assertTrue(modelDestinationLabel(ModelScope.Bug, local).contains("local-model"))
     assertTrue(modelDestinationLabel(ModelScope.Bug, local).contains("reasoning: medium"))
     assertEquals(

@@ -134,7 +134,7 @@ internal fun ContextToolWindow(
         message =
             state.fileReadError?.let {
               "Reading local file data failed. ${it.ifBlank { "No details available." }} Select a file in Files to try again."
-            } ?: "Select a file in Files to inspect its declarations.",
+            } ?: "",
         accent = if (state.fileReadError != null) Error else SecondaryText,
         modifier = modifier,
         action =
@@ -691,15 +691,13 @@ internal fun DeclarationExplanationDetails(state: DeclarationExplanationState) {
     val status = explanationStatusStyle(state.status)
     IdeLabelBadge(status.label, status.color)
     val message = explanationStatusMessage(state)
-    Text(
-        message,
-        color = if (state.status == DeclarationExplanationStatus.Failed) Error else SecondaryText,
-        style = IdeTypography.compactBody,
-        modifier = Modifier.padding(top = 4.dp))
-    val recovery = explanationRecoveryAction(state.status)
-    if (recovery.isNotEmpty() && !message.contains(recovery, ignoreCase = true)) {
-      Text(recovery, color = SecondaryText, style = IdeTypography.compactBody)
-    }
+    if (message.isNotBlank())
+        Text(
+            message,
+            color =
+                if (state.status == DeclarationExplanationStatus.Failed) Error else SecondaryText,
+            style = IdeTypography.compactBody,
+            modifier = Modifier.padding(top = 4.dp))
     state.result
         ?.takeIf { state.status == DeclarationExplanationStatus.Current }
         ?.let { result -> ModelResultContent(result.summary) }
@@ -707,8 +705,7 @@ internal fun DeclarationExplanationDetails(state: DeclarationExplanationState) {
 }
 
 private fun explanationStatusMessage(state: DeclarationExplanationState): String {
-  if (state.status == DeclarationExplanationStatus.Current)
-      return "On-demand · matches the selected loaded source and declaration; not a disk check."
+  if (state.status == DeclarationExplanationStatus.Current) return ""
   return state.message.takeUnless {
     it.isBlank() ||
         (state.status != DeclarationExplanationStatus.Unavailable &&
@@ -717,25 +714,13 @@ private fun explanationStatusMessage(state: DeclarationExplanationState): String
   } ?: explanationRecoveryMessage(state.status)
 }
 
-private fun explanationRecoveryAction(status: DeclarationExplanationStatus): String =
-    when (status) {
-      DeclarationExplanationStatus.Loading -> "Cancel to stop this request."
-      DeclarationExplanationStatus.Stale,
-      DeclarationExplanationStatus.Canceled,
-      DeclarationExplanationStatus.Failed -> "Select Explain to retry."
-      else -> ""
-    }
-
 private fun explanationRecoveryMessage(status: DeclarationExplanationStatus): String =
     when (status) {
-      DeclarationExplanationStatus.Unavailable ->
-          "No on-demand explanation yet. Select Explain to request one."
-      DeclarationExplanationStatus.Loading ->
-          "Explanation in progress. Cancel to stop this request."
-      DeclarationExplanationStatus.Stale ->
-          "Source or selection changed. Request a new explanation."
-      DeclarationExplanationStatus.Canceled -> "Request canceled. Select Explain to retry."
-      DeclarationExplanationStatus.Failed -> "Explanation failed. Select Explain to retry."
+      DeclarationExplanationStatus.Unavailable -> ""
+      DeclarationExplanationStatus.Loading -> ""
+      DeclarationExplanationStatus.Stale -> "Source changed · explain again"
+      DeclarationExplanationStatus.Canceled -> ""
+      DeclarationExplanationStatus.Failed -> ""
       DeclarationExplanationStatus.Current -> ""
     }
 

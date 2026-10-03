@@ -40,7 +40,7 @@ func (c *Client) chatCLI(ctx context.Context, messages []ChatMessage, format *Re
 	if err != nil {
 		return nil, err
 	}
-	response, err = decodeCLIResponse(c.profile, output)
+	response, err = decodeCLIResponse(c.profile, output, format != nil)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func prepareCLIInvocation(profile config.ModelProfile, messages []ChatMessage, f
 }
 
 func cliPrompt(messages []ChatMessage, format *ResponseFormat) (string, string, error) {
-	system := "You are Mini-Orca's model provider. Answer the final user message in the supplied JSON conversation. Use only the supplied context. Return the requested answer, without tools, file access, or commands."
+	system := "You are Mini-Orca's model provider. Answer the final user message in the supplied JSON conversation. Use only the supplied context. Return the requested answer, without file access, commands, or external tools."
 	conversation := make([]ChatMessage, 0, len(messages))
 	for _, message := range messages {
 		switch message.Role {
@@ -120,8 +120,14 @@ func preparePi(directory string, profile config.ModelProfile, system string) ([]
 }
 
 func prepareAgy(directory string, profile config.ModelProfile, system string, format *ResponseFormat) ([]string, error) {
-	agent := "---\nname: mini-orca\ndescription: Mini-Orca completion provider\ntools: []\nmainAgent: true\nsubagent: false\ncommandExecutionPolicy: off\nmcpServers: []\nskills: []\nplugins: []\n---\n" + system
-	if err := writeCLIFile(directory, ".agents/agents/mini-orca.md", agent); err != nil {
+	allowedTools := "[]"
+	if format != nil {
+		// Native schema output requires finish; it only formats the final answer.
+		allowedTools = "[finish]"
+		system += "\n\nComplete the answer with the finish tool, using the required schema's fields as its arguments."
+	}
+	agent := "---\nname: mini-orca\ndescription: Mini-Orca completion provider\ntools: " + allowedTools + "\nmainAgent: true\nsubagent: false\ninheritMcp: false\ncommandExecutionPolicy: off\nmcpServers: []\nskills: []\nplugins: []\n---\n# System Prompt\n" + system
+	if err := writeCLIFile(directory, ".agents/agents/mini-orca/agent.md", agent); err != nil {
 		return nil, err
 	}
 	args := []string{"--input-format", "stream-json", "--output-format", "stream-json", "--agent", "mini-orca", "--disable-slash-commands", "--model", profile.Model, "--log-file", os.DevNull}

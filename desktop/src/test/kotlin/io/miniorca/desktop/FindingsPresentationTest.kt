@@ -91,14 +91,15 @@ class FindingsPresentationTest {
     val blankError = page.copy(section = page.section.copy(error = ""))
     listOf(
             unknown to "1 loaded · — reported (count unavailable)",
-            failed to "1 loaded · 1 reported",
-            blankError to "1 loaded · 1 reported",
-            page to "1 loaded · 1 reported")
+            failed to "1 reported",
+            blankError to "1 reported",
+            page to "1 reported")
         .forEach { (state, label) ->
           ComposeVisualFixture(800, 650) { ResultSectionHeader(state, 1) {} }
               .use { fixture ->
                 fixture.render()
                 fixture.assertTextFits(label)
+                assertFalse(fixture.hasText("1 finding"))
                 if (state.section.error != null)
                     assertFalse(
                         fixture.hasText(

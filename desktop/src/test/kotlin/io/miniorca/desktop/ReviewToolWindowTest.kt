@@ -52,7 +52,7 @@ class ReviewToolWindowTest {
           .use { fixture ->
             fixture.render("f33-apply-${status.name}-360-400-150")
             assertTrue(fixture.hasText("Apply this change"))
-            assertTrue(fixture.hasText("Candidate: GetUser in internal/api/user.go · revision 1"))
+            assertTrue(fixture.hasText("GetUser · internal/api/user.go"))
             assertTrue(fixture.hasText("Apply ${status.name.lowercase()}"))
             if (status == DraftMutationStatus.Running) {
               assertFalse(fixture.hasText("Ready to apply"))
@@ -427,10 +427,10 @@ class ReviewToolWindowTest {
           .use { fixture ->
             fixture.render("review-$name-300-400-1.5")
             if (name == "ready") {
-              fixture.revealText("Updates GetUser in internal/api/user.go.", "review-action-scroll")
+              fixture.revealText("GetUser · internal/api/user.go", "review-action-scroll")
               fixture.render("review-$name-short-action")
               fixture.assertTextFits("Apply change")
-              fixture.assertTextFits("Updates GetUser in internal/api/user.go.", maxLines = 3)
+              fixture.assertTextFits("GetUser · internal/api/user.go", maxLines = 3)
               assertTrue(fixture.hasDescription("Apply GetUser to internal/api/user.go"))
             } else {
               assertFalse(fixture.hasText("Apply change"))
@@ -478,10 +478,9 @@ class ReviewToolWindowTest {
           fixture.revealText("Apply change", "review-action-scroll")
           fixture.assertTextFits("Apply change")
           assertTrue(fixture.hasDescription("Apply GetUser to $path"))
-          fixture.revealText("Updates GetUser in $path.", "review-action-scroll")
+          fixture.assertEveryTextLineReachable("GetUser · $path", "review-action-scroll")
           fixture.render("review-long-target-scope-300-850-1.5")
           assertTrue(fixture.verticalScrollValue("review-action-scroll") > 0f)
-          fixture.assertTextWrapsWithoutClipping("Updates GetUser in $path.")
         }
   }
 

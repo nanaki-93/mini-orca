@@ -259,17 +259,6 @@ private fun SummaryCoverageDial(
       val caption: @Composable (Modifier) -> Unit = { modifier ->
         Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
           Text(readout, color = PrimaryText, style = IdeTypography.workspaceBody)
-          Text(
-              "Saved coverage · Coverage, not a health score.",
-              color = SecondaryText,
-              style = IdeTypography.workspaceMetadata)
-          presentation.runMessage?.let {
-            Text(
-                it,
-                color = SecondaryText,
-                style = IdeTypography.workspaceMetadata,
-                modifier = Modifier.testTag("summary-coverage-run-status"))
-          }
         }
       }
       if (coverageDialStacked(maxWidth, LocalDensity.current.fontScale)) {

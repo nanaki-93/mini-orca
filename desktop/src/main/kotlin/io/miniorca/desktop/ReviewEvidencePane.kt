@@ -186,7 +186,7 @@ internal fun reviewNextActionUiState(
         if (repair != null) "Revise with check output" else "Edit draft",
         scope,
         if (repair != null)
-            "Repair attempt ${(session?.repairCount ?: 0) + 1} of $MAX_DRAFT_REPAIRS. Send the failed check output to the Function edits destination. Fresh validation and checks are required afterward."
+            "Repair ${(session?.repairCount ?: 0) + 1}/$MAX_DRAFT_REPAIRS · sends check output to Function edits"
         else
             repairUnavailableReason(session, draft, checks)
                 ?: "Edit this declaration before validating and checking it again.",
@@ -488,17 +488,15 @@ private fun focusedChecksEvidence(
 
 internal fun advisoryImpactLabel(impact: ImpactPreview?): String =
     when {
-      impact?.references.isNullOrEmpty() ->
-          "No indexed dependents found. This is read-only context and cannot change project files."
-      else ->
-          "${impact.references.size} indexed dependents are visible as read-only context; they cannot be changed by this draft."
+      impact?.references.isNullOrEmpty() -> "No indexed dependents"
+      else -> "${impact.references.size} indexed dependents"
     }
 
 internal fun gitContextLabel(gitStatus: GitStatus?): String =
     if (gitStatus?.available == true) {
       "${gitStatus.branch.ifBlank { "unknown branch" }} · ${gitStatus.fileState.ifBlank { "clean" }} · ${gitStatus.diffState.ifBlank { "no file diff" }} · read-only context"
     } else {
-      "Git is unavailable for this project. This read-only context does not affect the one-file draft boundary."
+      "Git unavailable"
     }
 
 internal data class ApplyDecisionUiState(
@@ -720,8 +718,7 @@ internal fun ReviewToolWindow(
                           evidence.validation.detail
                       evidence.checks.status != ReviewEvidenceStatus.Passed ->
                           evidence.checks.detail
-                      nextAction.kind == ReviewNextActionKind.Apply ->
-                          "Validation and check evidence match this candidate."
+                      nextAction.kind == ReviewNextActionKind.Apply -> ""
                       else -> decision.reason
                     },
                     if (decision.pendingOperation != null) ReviewEvidenceStatus.Running
@@ -742,7 +739,8 @@ internal fun ReviewToolWindow(
                             label = row.label,
                             statusText = row.status.label,
                             statusTint = evidenceColor(row.status),
-                            detail = row.detail) {
+                            detail =
+                                if (row.status == ReviewEvidenceStatus.Passed) "" else row.detail) {
                               ReviewEvidenceMarker(row.status)
                             }
                         IdeHorizontalSeparator()
@@ -752,7 +750,7 @@ internal fun ReviewToolWindow(
                     checksMatchDraft(state.checks, state.draft) &&
                     state.checkAttempt?.candidate == state.draft?.let(::CheckCandidate))
                     Text(
-                        "Previous check report (retained; not current approval)",
+                        "Previous checks · not current",
                         color = Warning,
                         style = IdeTypography.workspaceMetadata)
                 requiredChecksSummary(state.checks, state.draft, state.checksRunning)?.let {
@@ -846,7 +844,8 @@ private fun ReviewReadiness(title: String, detail: String, status: ReviewEvidenc
               ReviewEvidenceMarker(status)
               Text(title, color = tint, style = IdeTypography.workspaceHeading)
             }
-        Text(detail, color = PrimaryText, style = IdeTypography.workspaceMetadata)
+        if (detail.isNotBlank())
+            Text(detail, color = PrimaryText, style = IdeTypography.workspaceMetadata)
       }
 }
 
@@ -941,7 +940,7 @@ private fun ReviewActionRegion(
             ?.let { draft ->
               SelectionContainer {
                 Text(
-                    "Candidate: ${draft.targetSymbol} in ${draft.targetPath} · revision ${draft.revision}",
+                    "${draft.targetSymbol} · ${draft.targetPath}",
                     color = SecondaryText,
                     style = IdeTypography.workspaceMetadata)
               }
@@ -983,11 +982,6 @@ private fun ReviewActionRegion(
             Text("Edit draft manually")
           }
         }
-        if (action.kind == ReviewNextActionKind.Apply)
-            Text(
-                "Updates ${action.scope}.",
-                color = SecondaryText,
-                style = IdeTypography.workspaceMetadata)
       }
 }
 

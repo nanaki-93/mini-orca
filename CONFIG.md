@@ -69,7 +69,7 @@ For example, replace the three scope blocks with:
 model_scopes:
   analyze:
     provider: agy
-    model: replace-with-agy-model-slug
+    model: gemini-3.8-flash-high
     reasoning_effort: high
   bug:
     provider: pi
@@ -88,19 +88,26 @@ sampling options. Unsupported settings fail startup instead of being ignored.
 Context budgets still limit Mini-Orca's supplied context. Pi maps reasoning
 `none` to `off`; agy supports `low`, `medium`, `high`, `xhigh`, and `max`.
 Use exact model identifiers, not Pi fuzzy patterns or thinking suffixes.
+For agy, copy the slug from `agy models`: for example, `gemini-3.8-flash-high`
+selects Gemini 3.8 Flash (High). Display names such as `Gemini 3.8 Flash` are
+invalid; names containing spaces fail configuration validation with instructions
+to use a slug. Model availability depends on the CLI account. Restart the daemon
+after changing its configuration.
 
 Each request starts a separate process in a private temporary directory, using
 Mini-Orca's supplied source context. Pi runs in JSON print mode with tools,
 extensions, skills, context-file discovery and session saving disabled. Its
 temporary project settings disable automatic retries and compaction. Agy uses
-a temporary `mini-orca` agent with an empty tool allowlist and command execution
-off, slash expansion disabled, and JSON stdin/stdout. These adapters require
+a temporary `mini-orca` agent with file, command, subagent and MCP tools disabled,
+slash expansion disabled, and JSON stdin/stdout. Schema requests permit only
+agy's `finish` tool, which formats the final answer. These adapters require
 CLI versions supporting those options and the documented event formats.
 See the [Pi CLI reference](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/cli.md)
 and [agy headless reference](https://www.antigravity.google/docs/cli/headless/).
 
 Only a successful final assistant response is accepted. Agy receives native
-JSON Schema constraints; Pi receives the schema in its system prompt. Mini-Orca
+JSON Schema constraints and its native `structured_output` is used instead of
+the prose response; Pi receives the schema in its system prompt. Mini-Orca
 validates both outputs against the schema locally, with no unconstrained
 fallback. Failed, truncated, tool-bearing or incomplete responses fail the request.
 CLI stderr and raw protocol errors are not returned or logged. Output is bounded

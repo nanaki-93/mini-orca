@@ -10,7 +10,7 @@ func TestLoadCLIProfilesAlongsideHTTP(t *testing.T) {
 model_scopes:
   analyze:
     provider: agy
-    model: test-agy-model
+    model: gemini-3.8-flash-high
     reasoning_effort: high
   bug:
     provider: openai
@@ -47,6 +47,8 @@ func TestCLIProfilesRejectAmbiguousOrUnsupportedSettings(t *testing.T) {
 		{"unknown provider", func(p *ModelProfileConfig) { p.Provider = "shell" }, "provider must be"},
 		{"missing model", func(p *ModelProfileConfig) { p.Model = " " }, "model is required"},
 		{"model option", func(p *ModelProfileConfig) { p.Model = "--unsafe" }, "model identifier"},
+		{"agy display name", func(p *ModelProfileConfig) { p.Model = "Gemini 3.8 Flash" }, "slug from agy models"},
+		{"agy model whitespace", func(p *ModelProfileConfig) { p.Model = "gemini-3.8-flash\thigh" }, "slug from agy models"},
 		{"API destination", func(p *ModelProfileConfig) { p.APIBaseURL = "https://example.test" }, "omit api_base_url"},
 		{"API credential", func(p *ModelProfileConfig) { p.APIKey = "private-marker" }, "own authentication"},
 		{"output tokens", func(p *ModelProfileConfig) { n := 100; p.MaxTokens = &n }, "output-token controls"},

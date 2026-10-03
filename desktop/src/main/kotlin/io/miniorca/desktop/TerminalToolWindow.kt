@@ -111,7 +111,7 @@ internal fun TerminalSessionContent(
               Column {
                 if (state.tabs.isEmpty()) {
                   Text(
-                      "New shell opens a local shell in the current project.",
+                      "No shell open",
                       color = SecondaryText,
                       style = IdeTypography.workspaceMetadata)
                 } else {
@@ -119,7 +119,7 @@ internal fun TerminalSessionContent(
                     Text("Opened in: $it", color = SecondaryText, style = IdeTypography.resultCode)
                   }
                   Text(
-                      "Ctrl+Shift+F12 returns to Editor",
+                      "Editor · Ctrl+Shift+F12",
                       color = SecondaryText,
                       style = IdeTypography.workspaceMetadata)
                   if (state.session.phase != TerminalSessionPhase.Running ||

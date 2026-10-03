@@ -103,12 +103,9 @@ internal val SecurityEvidencePresentation.label: String
 internal val SecurityEvidencePresentation.warning: String
   get() =
       when (this) {
-        SecurityEvidencePresentation.ModelHypothesis ->
-            "Unverified model hypothesis. Validate the preconditions and source evidence before remediation."
-        SecurityEvidencePresentation.SourceRule ->
-            "A source rule match identifies a pattern; it does not confirm a vulnerability."
-        SecurityEvidencePresentation.Unavailable ->
-            "Evidence type was unavailable. Do not treat this finding as verified."
+        SecurityEvidencePresentation.ModelHypothesis -> "Unverified · review evidence"
+        SecurityEvidencePresentation.SourceRule -> "Pattern match · unverified vulnerability"
+        SecurityEvidencePresentation.Unavailable -> "Unverified · evidence type unavailable"
       }
 
 internal fun securitySelectionGuard(
@@ -413,24 +410,13 @@ private fun SecurityReviewEntry(openAnalysis: () -> Unit) {
     MiniOrcaButton(onClick = openAnalysis, tone = ActionTone.Navigation) {
       Text("Review Security intent", style = IdeTypography.action)
     }
-    SelectionContainer {
-      Text(
-          "AI Security review is admitted through whole-project Analysis, not a Security-only scan. Open Analysis, then use its Start or Resume preview to review scope, destinations and separate Security intent before dispatch.",
-          color = SecondaryText,
-          style = IdeTypography.compactBody)
-    }
   }
 }
 
 // Report failures must be visible even when the affected producer supplied no finding row.
 @Composable
 private fun SecurityReportAvailability(page: AnalysisResultPageState) {
-  SelectionContainer {
-    Text(
-        "Security findings describe analyzed evidence, not proof of safety. No findings does not mean the project is secure; unavailable evidence and incomplete coverage remain unknown.",
-        color = Warning,
-        style = IdeTypography.compactBody)
-  }
+  IdeLabelBadge("Analyzed scope", Information, icon = DesktopIcon.Security)
   page.results?.security.orEmpty().forEach { report ->
     if (report.status in setOf("failed", "partial", "unavailable") || report.reason.isNotBlank()) {
       SelectionContainer {

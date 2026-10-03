@@ -87,25 +87,18 @@ private fun AnalysisCategoryPanel(
       onClick = { openResults(page.type.workspace) },
       modifier = modifier.testTag("analysis-category-${page.type.category}"),
       details = {
-        val loadedLabel =
-            loadedCount?.let {
-              "Loaded · $it matching ${if (it == 1) "finding" else "findings"}" +
-                  if (page.stale) " (outdated)" else ""
-            } ?: "Loaded details · unavailable"
         metric.detailStatus?.let {
           Text(
               it,
               color = if (page.section.error != null) Error else SecondaryText,
               style = IdeTypography.compactBody)
         }
-        Text(
-            loadedLabel,
-            color = SecondaryText,
-            style = IdeTypography.compactBody,
-            modifier = Modifier.testTag("analysis-category-loaded-${page.category}"))
-        page.coverageLabel?.let {
-          Text(it, color = SecondaryText, style = IdeTypography.compactBody)
-        }
+        if (loadedCount != null && loadedCount != page.reportedCount && metric.detailStatus == null)
+            Text(
+                "$loadedCount loaded",
+                color = SecondaryText,
+                style = IdeTypography.compactBody,
+                modifier = Modifier.testTag("analysis-category-loaded-${page.category}"))
       },
   )
 }

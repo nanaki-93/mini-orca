@@ -240,6 +240,7 @@ internal data class DesktopShellProjectActions(
     val reindexProject: () -> Unit,
     val reconnect: () -> Unit,
     val retryRestore: () -> Unit = {},
+    val regenerateDescription: (() -> Unit)? = null,
 )
 
 internal data class DesktopShellEditorActions(
@@ -753,6 +754,7 @@ internal fun DesktopShell(
                 DesktopCanvas(
                     state,
                     resultBrowsers,
+                    projectActions,
                     editorActions,
                     analysisActions,
                     findingActions,
@@ -791,6 +793,7 @@ internal fun DesktopShell(
                               DesktopCanvas(
                                   state,
                                   resultBrowsers,
+                                  projectActions,
                                   editorActions,
                                   analysisActions,
                                   findingActions,
@@ -1365,8 +1368,7 @@ internal fun ProjectLanding(
           Spacer(Modifier.height(12.dp))
           SystemStateMessage(
               title = "No project open",
-              message =
-                  "Open a project to inspect its files and analysis. Import may use the configured Analyze provider and require confirmation.",
+              message = "",
               action = {
                 MiniOrcaButton(
                     onClick = {
@@ -1396,11 +1398,11 @@ internal fun ProjectLanding(
                 "Last project",
                 if (projectState.preferenceReadWarning != null)
                     "Last project unknown; local preferences could not be read."
-                else "No project remembered on this device.")
+                else "None")
           } else {
             SystemStateMessage(
                 "Last project · ${projectPathLabel(remembered)}",
-                "Remembered locally; not open yet.",
+                "",
                 action = { LandingPath("Remembered path", remembered) })
           }
           if (attempt != null) {
@@ -1425,10 +1427,8 @@ internal fun ProjectLanding(
                     },
                 message =
                     if (failure != null) "The requested project did not open."
-                    else if (opening && restoring)
-                        "Reading saved local project data; no model request is made."
-                    else if (opening) "Import may use the configured Analyze provider."
-                    else "Open project… to choose another folder.",
+                    else if (opening && restoring) "Loading saved project"
+                    else if (opening) "Analyze provider" else "",
                 accent = if (failure != null) Error else SecondaryText,
                 action = {
                   LandingPath("Requested path", attempt.path)
@@ -1459,7 +1459,7 @@ internal fun ProjectLanding(
             Spacer(Modifier.height(12.dp))
             SystemStateMessage(
                 "Daemon disconnected",
-                "Reconnect reads daemon status and model configuration. It does not contact a provider or run project code.",
+                "",
                 accent = Error,
                 action = {
                   MiniOrcaButton(onClick = actions.reconnect, tone = ActionTone.Neutral) {
@@ -1512,6 +1512,7 @@ private fun LandingPath(label: String, path: String) {
 private fun DesktopCanvas(
     state: DesktopShellState,
     resultBrowsers: ResultBrowserStore,
+    projectActions: DesktopShellProjectActions,
     editorActions: DesktopShellEditorActions,
     analysisActions: DesktopShellAnalysisActions,
     findingActions: FindingActions,
@@ -1606,6 +1607,14 @@ private fun DesktopCanvas(
                     },
                 ),
             analysisActions = analysisActions.toWorkspaceActions(onWorkspaceSelected),
+            regenerateDescription = projectActions.regenerateDescription,
+            descriptionRegenerationEnabled =
+                projectActionAvailability(
+                        appState.project,
+                        appState.projectState.openingAttempt,
+                        appState.projectState.indexingAttempt,
+                        state.switchPending)
+                    .reindex,
             filesView = filesView,
             bugsActions =
                 BugsWorkspaceActions(
@@ -1654,6 +1663,8 @@ private fun ContentPane(
     state: ContentPaneState,
     navigation: ContentPaneNavigationActions,
     analysisActions: AnalysisWorkspaceActions,
+    regenerateDescription: (() -> Unit)?,
+    descriptionRegenerationEnabled: Boolean,
     filesView: AnalysisFilesViewState,
     bugsActions: BugsWorkspaceActions,
     performanceActions: PerformanceWorkspaceActions,
@@ -1672,6 +1683,8 @@ private fun ContentPane(
               fileSelection = state.analysis.analysis.fileSelection.selection,
               analysisState = state.analysis.analysis,
               analysisActions = analysisActions,
+              regenerateDescription = regenerateDescription,
+              descriptionRegenerationEnabled = descriptionRegenerationEnabled,
               findingState = state.findingState,
               onFindingSelected = navigation.selectFinding)
       Workspace.Editor ->
@@ -1750,9 +1763,9 @@ internal fun modelDestinationLabel(scope: ModelScope, model: ScopedModel): Strin
   val reasoningEffort =
       model.reasoningEffort.takeIf(String::isNotBlank)?.let { " · reasoning: $it" }.orEmpty()
   return if (model.remoteProvider) {
-    "${scope.label}: ${model.profile} · ${model.model}$reasoningEffort · remote provider · confirmation required before sending project context"
+    "${scope.label}: ${model.profile} · ${model.model}$reasoningEffort · remote · sends project context"
   } else {
-    "${scope.label}: ${model.profile} · ${model.model}$reasoningEffort · local provider · project context stays on this machine"
+    "${scope.label}: ${model.profile} · ${model.model}$reasoningEffort · local"
   }
 }
 
@@ -1820,13 +1833,10 @@ internal fun ContextInspectorContent(inspection: ContextInspectionState) {
               fontSize = 11.sp)
         }
         Text(
-            "File-scoped preview, not the exact declaration request. Declaration requests may include different context and prompt material.",
+            "File preview · declaration context may differ",
             color = SecondaryText,
             fontSize = 11.sp)
-        Text(
-            "Local inspection only; no provider request or consent. Send and Explain require separate authorization.",
-            color = SecondaryText,
-            fontSize = 11.sp)
+        Text("Read-only preview", color = SecondaryText, fontSize = 11.sp)
       }
     }
     val manifest = inspection.manifest.takeIf { inspection.status == ContextInspectionStatus.Ready }

@@ -49,9 +49,8 @@ class DesktopAnalysisAdmissionTest {
   private val analyzeConsent =
       "Confirm analyze destination · review-model (provider analyze-provider)"
   private val contextExplanation =
-      "Start or Resume may send eligible source and project context for this previewed scope to the listed models under the existing context policy. This preview describes the plan, not the exact content sent to a model. One Start or Resume may initiate multiple model requests; analysis does not execute project code or modify source files. This consent does not grant function-edit permission or execution trust."
-  private val securityExplanation =
-      "AI Security review of eligible source is advisory. Model findings are unverified, not a verified scan or safety assurance. This acknowledgment does not change the returned stage plan."
+      "May send source + project context to listed models · multiple requests possible"
+  private val securityExplanation = "AI Security findings · unverified"
 
   @Test
   fun shortAdmissionDialogScrollsLongDestinationsWithoutImplicitConsentOrStart() {
@@ -165,9 +164,6 @@ class DesktopAnalysisAdmissionTest {
     var state by mutableStateOf(ProjectAnalysisRunState(admission = AnalysisAdmission(preview)))
     var starts = 0
     var changes = 0
-    val bugMissing = "Destination still needed: $bugConsent"
-    val analyzeMissing = "Destination still needed: $analyzeConsent"
-    val securityMissing = "Security intent still needed: Include AI Security review."
     ComposeVisualFixture(640, 1300) {
           Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             IdeDialogSurface(
@@ -199,42 +195,48 @@ class DesktopAnalysisAdmissionTest {
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("Your confirmation"))
-          assertTrue(fixture.hasText("Still needed before Start or Resume:"))
-          assertTrue(fixture.hasText(bugMissing))
-          assertTrue(fixture.hasText(analyzeMissing))
-          assertTrue(fixture.hasText(securityMissing))
+          assertTrue(fixture.hasText("3 confirmations needed"))
+          for (label in listOf(bugConsent, analyzeConsent, "Include AI Security review")) {
+            assertEquals(ToggleableState.Off, fixture.descriptionToggleableState(label))
+          }
           assertTrue(fixture.isDisabled("Start analysis"))
           assertTrue(fixture.isFocusedControl("Close"))
           assertTrue(
               fixture.firstVisibleTextBounds("Your confirmation").top <
                   fixture.firstVisibleTextBounds("Preview details").top)
-          assertFalse(fixture.hasText("Eligible stage"))
+          assertFalse(fixture.hasText("Eligible"))
           assertEquals(0, changes + starts)
           assertTrue(fixture.requestDescriptionFocus(bugConsent))
           assertTrue(fixture.pressKey(Key.Spacebar))
           fixture.render()
-          assertFalse(fixture.hasText(bugMissing))
-          assertTrue(fixture.hasText(analyzeMissing))
-          assertTrue(fixture.hasText(securityMissing))
+          assertTrue(fixture.hasText("2 confirmations needed"))
+          assertEquals(ToggleableState.On, fixture.descriptionToggleableState(bugConsent))
+          assertEquals(ToggleableState.Off, fixture.descriptionToggleableState(analyzeConsent))
+          assertEquals(
+              ToggleableState.Off, fixture.descriptionToggleableState("Include AI Security review"))
           assertTrue(fixture.isDisabled("Start analysis"))
           assertTrue(fixture.requestDescriptionFocus("Include AI Security review"))
           assertTrue(fixture.pressKey(Key.Enter))
           fixture.render()
-          assertFalse(fixture.hasText(securityMissing))
-          assertTrue(fixture.hasText(analyzeMissing))
+          assertTrue(fixture.hasText("1 confirmation needed"))
+          assertEquals(
+              ToggleableState.On, fixture.descriptionToggleableState("Include AI Security review"))
+          assertEquals(ToggleableState.Off, fixture.descriptionToggleableState(analyzeConsent))
           assertTrue(fixture.isDisabled("Start analysis"))
           assertTrue(fixture.requestDescriptionFocus(analyzeConsent))
           assertTrue(fixture.pressKey(Key.Spacebar))
           fixture.render()
           assertFalse(fixture.hasText("Still needed before Start or Resume:"))
-          assertTrue(fixture.hasText("Confirmations complete for this preview."))
+          assertTrue(fixture.hasText("Confirmed"))
           assertFalse(fixture.isDisabled("Start analysis"))
           assertTrue(fixture.requestDescriptionFocus(bugConsent))
           assertTrue(fixture.pressKey(Key.Enter))
           fixture.render()
-          assertTrue(fixture.hasText(bugMissing))
-          assertFalse(fixture.hasText(analyzeMissing))
-          assertFalse(fixture.hasText(securityMissing))
+          assertTrue(fixture.hasText("1 confirmation needed"))
+          assertEquals(ToggleableState.Off, fixture.descriptionToggleableState(bugConsent))
+          assertEquals(ToggleableState.On, fixture.descriptionToggleableState(analyzeConsent))
+          assertEquals(
+              ToggleableState.On, fixture.descriptionToggleableState("Include AI Security review"))
           assertTrue(fixture.isDisabled("Start analysis"))
           assertEquals(4, changes)
           assertEquals(0, starts)
@@ -273,23 +275,21 @@ class DesktopAnalysisAdmissionTest {
           .use { fixture ->
             fixture.render()
             assertTrue(fixture.hasText(scope), scope)
-            assertTrue(fixture.hasText("Reviewing this preview sends nothing to a model."))
+            assertFalse(fixture.hasText("Reviewing this preview sends nothing to a model."))
             assertTrue(fixture.hasText(contextExplanation))
             assertTrue(fixture.hasText(securityExplanation))
             assertTrue(
                 fixture.hasText(
-                    if (preview.refresh)
-                        "Refresh policy: request fresh evidence for eligible stages."
-                    else "Reuse policy: refresh is off; eligible existing evidence may be reused."))
+                    if (preview.refresh) "Fresh evidence" else "Reuse eligible evidence"))
             if (preview.retryStaleFailed)
-                assertTrue(
+                assertFalse(
                     fixture.hasText(
                         "Selective retry: the daemon returned the stale & failed scope."))
             if (resumeRun != null) {
-              assertTrue(fixture.hasText("This saved run covers only Security rules."))
-              assertTrue(fixture.hasText("Expected model requests without retries: 0"))
-              assertTrue(fixture.hasText("Inclusive maximum model requests with retries: 0"))
-              assertFalse(fixture.hasText("Expected model requests without retries: 3"))
+              assertTrue(fixture.hasText("Limited run · Security rules"))
+              assertTrue(fixture.hasText("Requests before retries: 0"))
+              assertTrue(fixture.hasText("Request limit with retries: 0"))
+              assertFalse(fixture.hasText("Requests before retries: 3"))
             }
           }
     }
@@ -357,7 +357,7 @@ class DesktopAnalysisAdmissionTest {
           assertTrue(fixture.hasText(contextExplanation))
           assertTrue(fixture.hasText(securityExplanation))
           assertFalse(fixture.hasDescription(analyzeConsent))
-          assertTrue(fixture.hasText("Security intent still needed: Include AI Security review."))
+          assertTrue(fixture.hasText("1 confirmation needed"))
           assertEquals(
               ToggleableState.Off, fixture.descriptionToggleableState("Include AI Security review"))
           assertTrue(fixture.isDisabled("Start analysis"))
@@ -373,8 +373,8 @@ class DesktopAnalysisAdmissionTest {
           assertEquals(
               ToggleableState.On, fixture.descriptionToggleableState("Include AI Security review"))
           assertTrue(state.admission!!.isConfirmed())
-          assertFalse(fixture.hasText("Security intent still needed: Include AI Security review."))
-          assertTrue(fixture.hasText("Confirmations complete for this preview."))
+          assertFalse(fixture.hasText("1 confirmation needed"))
+          assertTrue(fixture.hasText("Confirmed"))
           assertEquals(preview, state.admission!!.preview)
           assertTrue(fixture.hasText("AI Security review"))
         }
@@ -416,7 +416,7 @@ class DesktopAnalysisAdmissionTest {
           assertTrue(fixture.hasText("Local destination: https://bug.example"))
           assertTrue(state.admission!!.isConfirmed())
           assertFalse(fixture.hasText("Still needed before Start or Resume:"))
-          assertTrue(fixture.hasText("Confirmations complete for this preview."))
+          assertTrue(fixture.hasText("Confirmed"))
           assertFalse(fixture.isDisabled("Start analysis"))
           fixture.revealText(contextExplanation, "ide-dialog-body")
           fixture.resize(440, 720)
@@ -458,7 +458,7 @@ class DesktopAnalysisAdmissionTest {
             fixture.render()
             assertTrue(admission.isConfirmed())
             assertTrue(fixture.hasText("No eligible files to analyze."))
-            assertTrue(fixture.hasText("Confirmations complete; no included files to analyze."))
+            assertTrue(fixture.hasText("Confirmed · no eligible files"))
             assertFalse(fixture.hasText("Still needed before Start or Resume:"))
             assertTrue(fixture.isDisabled("Start analysis"))
             assertFalse(fixture.tryClick("Start analysis"))
@@ -483,14 +483,10 @@ class DesktopAnalysisAdmissionTest {
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("Full project scope: 1 included file · 0 excluded"))
-          assertTrue(fixture.hasText("Expected model requests without retries: 47"))
-          assertTrue(fixture.hasText("Inclusive maximum model requests with retries: 83"))
-          assertTrue(
-              fixture.hasText(
-                  "Dispatch window: up to 7 files and 120 seconds. These limits bound this dispatch, not the project inventory or an ETA."))
-          assertTrue(
-              fixture.hasText(
-                  "Up to 3 attempts per stage, including the initial attempt. Further work requires explicit continuation."))
+          assertTrue(fixture.hasText("Requests before retries: 47"))
+          assertTrue(fixture.hasText("Request limit with retries: 83"))
+          assertTrue(fixture.hasText("Dispatch limit: 7 files · 120 s"))
+          assertTrue(fixture.hasText("3 attempts per stage"))
           assertFalse(fixture.hasText("Run limits"))
         }
   }
@@ -712,9 +708,8 @@ class DesktopAnalysisAdmissionTest {
                   "Model destination: bug-model · Remote https://bug.example (provider bug-provider)",
                   "Model destination: review-model · Remote https://analyze.example (provider analyze-provider)",
                   "Model destination: Unavailable (provider reference missing-provider)",
-                  "Expected model requests without retries: 41",
-                  "Inclusive maximum model requests with retries: 79")) assertTrue(
-              fixture.hasText(label), label)
+                  "Requests before retries: 41",
+                  "Request limit with retries: 79")) assertTrue(fixture.hasText(label), label)
           assertFalse(fixture.hasText("failed analysis"))
           assertFalse(state.admission!!.isConfirmed())
         }
@@ -785,8 +780,8 @@ class DesktopAnalysisAdmissionTest {
           assertTrue(
               fixture.hasText(
                   "1 returned · 1 applicable · 0 cached/reused · 0 with model requests planned · 1 with no model requests planned"))
-          assertTrue(fixture.hasText("Expected model requests without retries: 0"))
-          assertTrue(fixture.hasText("Inclusive maximum model requests with retries: 0"))
+          assertTrue(fixture.hasText("Requests before retries: 0"))
+          assertTrue(fixture.hasText("Request limit with retries: 0"))
           assertFalse(fixture.hasText("completed"))
           assertFalse(fixture.hasText("successful"))
           assertFalse(state.admission!!.isConfirmed())
@@ -816,7 +811,7 @@ class DesktopAnalysisAdmissionTest {
         .use { fixture ->
           fixture.render("analysis-empty-retry-preview")
           fixture.assertTextFits("No stale or failed files to analyze.")
-          assertTrue(fixture.hasText("Still needed before Start or Resume:"))
+          assertTrue(fixture.hasText("3 confirmations needed"))
           assertTrue(fixture.hasText("excluded.go"))
           assertTrue(fixture.hasText(preview.excluded.single().reason))
           assertTrue(fixture.hasDescription("Include AI Security review"))
@@ -847,7 +842,7 @@ class DesktopAnalysisAdmissionTest {
         .use { fixture ->
           fixture.render()
           assertTrue(fixture.hasText("No eligible files to analyze."))
-          assertTrue(fixture.hasText("Still needed before Start or Resume:"))
+          assertTrue(fixture.hasText("3 confirmations needed"))
           assertTrue(fixture.isDisabled("Start analysis"))
           fixture.revealText("src/private/skip.go", "ide-dialog-body")
           assertTrue(fixture.hasText(reason))
@@ -990,7 +985,7 @@ class DesktopAnalysisAdmissionTest {
           val label = "Included file 1 · $path"
           assertTrue(fixture.hasDescription("Expand $label"))
           assertEquals("Collapsed", fixture.descriptionStateDescription("Expand $label"))
-          assertFalse(fixture.hasText("Ineligible stage on included file"))
+          assertFalse(fixture.hasText("Not applicable"))
           fixture.revealTextFullyWithin(path, "ide-dialog-body")
           fixture.assertTextWrapsWithoutClipping(path)
           assertTrue(fixture.copyTextByDragging(path).isNotBlank())
@@ -1001,16 +996,16 @@ class DesktopAnalysisAdmissionTest {
           for (text in
               listOf(
                   "Code analysis",
-                  "Eligible stage",
+                  "Eligible",
                   "Cached/reused",
-                  "Maximum model requests for this stage: 0",
+                  "Request limit: 0",
                   "Reason: Reused saved evidence",
                   "AI Security review",
-                  "Ineligible stage on included file",
+                  "Not applicable",
                   "Not cached",
                   "Reason: $reason",
                   "new_stage",
-                  "Maximum model requests for this stage: 2",
+                  "Request limit: 2",
                   "Reason: Unavailable")) assertTrue(fixture.hasText(text), text)
           fixture.revealText("Reason: $reason", "ide-dialog-body")
           assertTrue(fixture.copyTextByDragging("Reason: $reason").isNotBlank())
@@ -1187,18 +1182,9 @@ class DesktopAnalysisAdmissionTest {
     val run = analysisRunFixture()
     val cases =
         listOf(
-            Triple(
-                "full project",
-                "Analyze whole project",
-                "Preparing full project analysis preview…"),
-            Triple(
-                "stale & failed",
-                "Analyze stale & failed",
-                "Preparing stale & failed analysis preview…"),
-            Triple(
-                "continuation",
-                "Continue project analysis",
-                "Preparing continuation preview for this analysis run…"))
+            Triple("full project", "Analyze whole project", "Preparing project preview…"),
+            Triple("stale & failed", "Analyze stale & failed", "Preparing stale & failed preview…"),
+            Triple("continuation", "Continue project analysis", "Preparing continuation…"))
     for ((mode, title, preparing) in cases) {
       val intent =
           AnalysisPreviewIntent(
@@ -1243,7 +1229,7 @@ class DesktopAnalysisAdmissionTest {
             fixture.render()
             assertTrue(fixture.hasText(title), mode)
             assertTrue(fixture.hasText(preparing), mode)
-            assertFalse(fixture.hasText("Expected model requests without retries: 3"), mode)
+            assertFalse(fixture.hasText("Requests before retries: 3"), mode)
             assertFalse(fixture.tryClick("Retry preview"), mode)
             assertEquals(0, retries + starts + closes, mode)
             state = state.copy(action = "", error = diagnostic)
@@ -1256,8 +1242,8 @@ class DesktopAnalysisAdmissionTest {
                 }
             assertTrue(fixture.hasText(failureTitle), mode)
             assertTrue(fixture.hasText(diagnostic), "Complete diagnostic for $mode")
-            assertTrue(fixture.hasText("Retry this preview with the same scope, or Close."), mode)
-            assertFalse(fixture.hasText("Expected model requests without retries: 3"), mode)
+            assertTrue(fixture.hasText("Retry preview"), mode)
+            assertFalse(fixture.hasText("Requests before retries: 3"), mode)
             assertFalse(fixture.tryClick("New preview"), mode)
             assertTrue(fixture.isFocusedControl("Close"), mode)
             assertTrue(fixture.requestFocus("Retry preview"), mode)
@@ -1341,11 +1327,11 @@ class DesktopAnalysisAdmissionTest {
           .use { fixture ->
             fixture.render()
             assertTrue(fixture.isFocusedControl("Close"), mode)
-            assertTrue(fixture.hasText("This preview can no longer be admitted."), mode)
+            assertTrue(fixture.hasText("Preview expired"), mode)
             assertTrue(fixture.hasText("Admission rejected: stale preview"), mode)
             assertTrue(
                 fixture.hasText(
-                    "Review a fresh ${if (mode == "full") "full project" else if (mode == "selective") "stale & failed" else "continuation"} preview before starting or resuming. All destinations and Security intent must be confirmed again."),
+                    "Review a new ${if (mode == "full") "full project" else if (mode == "selective") "stale & failed" else "continuation"} preview · confirmations required"),
                 mode)
             assertFalse(fixture.tryClick("Retry preview"), mode)
             assertFalse(fixture.tryClick("Start analysis"), mode)
@@ -1443,10 +1429,8 @@ class DesktopAnalysisAdmissionTest {
             fixture.render()
             assertTrue(
                 fixture.hasText(
-                    if (obsolete)
-                        "This scope is no longer available for review. Close and choose a current Analysis action (Resume analysis if available for the current run) to request a new preview."
-                    else
-                        "Analysis may already have started. Close and check the current Analysis run before choosing a new Analysis action; do not retry this admission."))
+                    if (obsolete) "Scope unavailable · reopen Analysis for a new preview"
+                    else "May have started · check Analysis status before retrying"))
             assertTrue(fixture.copyTextByDragging("Captured run changed").isNotBlank())
             assertFalse(fixture.tryClick("Review fresh preview"))
             assertFalse(fixture.tryClick("Retry preview"))
