@@ -163,10 +163,21 @@ Implement a shared proposal workflow in the Wails/React client: selected finding
 **Target files**
 - `internal/app/change_verify.go` — explicitly requested focused checks after Apply, with persisted verified/failed/unavailable states.
 - `internal/app/change_verify_test.go` — fresh post-Apply identity, trust, cancellation and failed verification.
+- `internal/app/change_types.go` — verification evidence in mutation receipts.
+- `internal/app/change_apply.go` — serialize proposal approval with grouped writes; bound recovery metadata and retain warnings.
+- `internal/app/change_apply_test.go` — concurrent approval invalidation and oversized recovery metadata.
+- `internal/app/change_checks.go` — focused check-admission helpers within existing complexity limits.
+- `internal/app/change_session.go` — focused capture/admission helpers within existing complexity limits.
+- `internal/app/change_context.go` — focused structured edit-validation helpers within existing complexity limits.
+- `internal/app/change_store.go` — count conversations independently of verification and feature metadata.
+- `internal/app/change_session_test.go` — bounded history and corrupted persisted identities.
+- `internal/app/feature_suggestions.go` — focused generation/validation helpers within existing complexity limits.
+- `internal/project/write_path.go` — separate canonical path validation rules within existing complexity limits.
 - `internal/api/handlers/change_handler.go` — verification endpoint.
 - `internal/api/handlers/change_handler_test.go` — verification request guards.
 - `cmd/daemon/main.go` — verification route.
 - `desktop/webapp/internal/bridge/client.go` — verification allowlist.
+- `desktop/webapp/internal/bridge/client_test.go` — verification allowlist contract.
 - `desktop/webapp/frontend/src/workspace.ts` — post-Apply verification action and evidence.
 - `desktop/webapp/frontend/src/change-workspace.tsx` — distinguish Applied from Verified; expose focused reanalysis.
 - `desktop/webapp/frontend/src/models.ts` — verification contract.
@@ -182,6 +193,8 @@ Implement a shared proposal workflow in the Wails/React client: selected finding
 
 **Implementation rules**
 - Applied is not Verified. Verification uses fresh source hashes and separately authorized project checks; optional source reanalysis requires its own provider consent and cannot certify a model hypothesis as resolved.
+- Persist bounded verification evidence for the latest grouped mutation and expose it through passive recovery reads. Serialize Apply with approval changes, retain partial-write warnings, and keep history limits independent of other workflow metadata.
+- Meet existing complexity limits by extracting cohesive helpers in the new workflow only; preserve external contracts and quality thresholds.
 - Keep legacy benchmark comparison accessible and label unmeasured optimization claims. Do not automatically mark original findings fixed solely because a write succeeded.
 - Document implemented behavior and supported languages honestly. Run all applicable gates and report unavailable gates with exact reasons; do not change thresholds or unrelated tooling to pass.
 - Review the full diff and commit each completed implementation task separately as explicitly requested.
