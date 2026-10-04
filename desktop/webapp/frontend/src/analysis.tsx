@@ -21,6 +21,7 @@ const stageNames: Record<string, string> = {
   performance: 'Performance',
   security_rules: 'Security rules',
   security_ai: 'Security AI',
+  feature_suggestions: 'New feature suggestions',
 };
 const defaults: Limits = { batch_files: 20, budget_seconds: 600, max_attempts_per_stage: 2 };
 export function Analysis({ s }: { s: State }) {
@@ -81,8 +82,9 @@ export function Analysis({ s }: { s: State }) {
       )}
       <Panel title="New feature suggestions" className="section-gap">
         <p>
-          Explore new capabilities using project goals and code context. Suggestions stay separate
-          from findings and check evidence.
+          Each analysis run also checks for new capabilities using saved project goals and
+          policy-filtered project context. Excluded files stay out of suggestion context.
+          Suggestions stay separate from findings and check evidence.
         </p>
         <Go page="features" icon="sparkles">
           Explore features
@@ -259,7 +261,7 @@ export function AnalysisPreview({ s }: { s: State }) {
       </Empty>
     );
   const ready =
-    p.files.length > 0 &&
+    (p.files.length > 0 || !!p.features?.max_model_requests) &&
     (p.providers || []).every(
       (provider) => !provider.remote_confirmation_required || providers.includes(provider.id),
     ) &&
@@ -342,6 +344,21 @@ export function AnalysisPreview({ s }: { s: State }) {
               </label>
             )}
           </Panel>
+          {p.features && (
+            <Panel title="New feature suggestions">
+              <p>
+                One project-wide step uses saved project goals, policy-filtered context and root
+                AGENTS.md. Your file exclusions also apply to this context.
+              </p>
+              <p className="small muted section-gap">
+                {p.features.reason ||
+                  (p.features.max_model_requests > 0
+                    ? 'Ideas are generated during this run and saved to Summary and Features.'
+                    : 'No remaining requests for this step.')}
+              </p>
+              <Go page="features">Review project goals</Go>
+            </Panel>
+          )}
         </div>
         <Panel title="Selected files">
           <div className="scroll-list">
@@ -432,6 +449,18 @@ export function AnalysisRun({ s }: { s: State }) {
         )}
       </Heading>
       {run.reason && <Notice>{run.reason}</Notice>}
+      {run.features && (
+        <Panel
+          title="New feature suggestions"
+          className="section-gap"
+          actions={<Badge value={run.features.status} />}
+        >
+          <div className="metric-number">{run.features.suggestion_count ?? '—'}</div>
+          <p className="small muted">Advisory ideas · {run.features.attempts} attempts</p>
+          {run.features.reason && <Notice>{run.features.reason}</Notice>}
+          <Go page="features">Open feature suggestions</Go>
+        </Panel>
+      )}
       <Panel>
         <div className="row between">
           <h2>{run.window_files_completed} files completed this batch</h2>

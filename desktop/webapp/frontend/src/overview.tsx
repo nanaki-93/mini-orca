@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { workspace as w, type State, type Page } from './workspace';
+import { FeatureSummary } from './features';
 import {
   Badge,
   Button,
@@ -297,6 +298,7 @@ export function Summary({ s }: { s: State }) {
         </div>
         <div className="stack">
           <InsightCard insight={overview?.analysis.engineering_insight} />
+          <FeatureSummary s={s} />
           <Panel
             title="Architecture"
             actions={

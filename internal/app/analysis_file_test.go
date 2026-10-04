@@ -100,6 +100,9 @@ func analysisResponseServer(t *testing.T, reply func(AnalysisStage) string) (*ht
 		if strings.HasPrefix(request.Messages[0].Content, "Review exactly one supplied") {
 			stage = AnalysisStagePerformance
 		}
+		if request.ResponseFormat != nil && request.ResponseFormat.JSONSchema != nil && request.ResponseFormat.JSONSchema.Name == "feature_suggestions" {
+			stage = AnalysisStageFeatures
+		}
 		calls.Add(1)
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Role: "assistant", Content: reply(stage)}, FinishReason: "stop"}}})
 	}))

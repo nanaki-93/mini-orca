@@ -37,6 +37,10 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
 - **Analysis** selects files, previews request limits and provider destinations,
   and runs, pauses, resumes or cancels the captured queue. Each new admission
   requires its own remote-provider and Security intent confirmations.
+  It also generates one project-wide set of feature suggestions using saved
+  goals and policy-filtered context, honoring file exclusions. Its progress and
+  request allowance stay separate from finding counts; completed ideas are reused
+  on resume. A failed feature step leaves other analysis results available.
 - **Bugs**, **Performance** and **Security** show searchable results and their
   evidence. Details retain complete model prose, provenance and verification
   guidance. Findings and performance hypotheses keep their reported confidence.
@@ -65,7 +69,10 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   Validate, run checks, inspect Review, then explicitly Apply. The receipt offers
   guarded Undo. Local edits invalidate prior checks. Returning to the editor or
   application rechecks the source; changed files need **Refresh facts**.
-- **Summary** previews saved architecture and project-flow charts. **Explore**
+- **Summary** previews active feature suggestions alongside saved architecture
+  and project-flow charts. Ideas retain estimated effort and stale/failure states;
+  **View all ideas** opens Features and **Discuss in chat** only seeds a request.
+  **Explore**
   opens the complete architecture and flows view. Plain Mermaid reports and
   Markdown-fenced charts render locally, with selectable source and a readable
   fallback for older prose or render failures.

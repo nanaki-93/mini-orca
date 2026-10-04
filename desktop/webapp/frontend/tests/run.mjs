@@ -855,6 +855,118 @@ try {
     assert.equal(await page.getByLabel('Read-only diff for internal/worker/process.go').count(), 0);
     await close();
   });
+  await test('Summary reads advisory ideas and Discuss only seeds Chat', async () => {
+    const { page, close } = await pageFor({ featuresReady: true });
+    await page.getByRole('heading', { name: 'New feature suggestions', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
+    await page.getByText('Estimated effort: medium', { exact: true }).waitFor();
+    const requests = await page.evaluate(() => window.fixture.requests);
+    assert.equal(
+      requests.some((r) => r.path.endsWith('/features') && r.method === 'GET'),
+      true,
+    );
+    assert.equal(
+      requests.some((r) => r.method !== 'GET' && r.path !== '/api/projects/restore'),
+      false,
+    );
+    await page.getByRole('button', { name: 'View all ideas', exact: true }).click();
+    await page.getByRole('heading', { name: 'Features', exact: true }).waitFor();
+    await nav(page, 'Summary');
+    await page.getByRole('button', { name: 'Discuss in chat', exact: true }).click();
+    await page.getByLabel('Change request', { exact: true }).waitFor();
+    assert.match(
+      await page.getByLabel('Change request', { exact: true }).inputValue(),
+      /Retry only eligible failed jobs/,
+    );
+    assert.equal(
+      await page.evaluate(() =>
+        window.fixture.requests.some(
+          (r) => r.method !== 'GET' && r.path !== '/api/projects/restore',
+        ),
+      ),
+      false,
+    );
+    await close();
+  });
+  await test('Summary retains unknown, empty, failed and stale suggestion states', async () => {
+    for (const options of [
+      {},
+      { featuresReadFail: true },
+      { featuresReady: true, featuresEmpty: true },
+      { featuresReady: true, featuresFail: true },
+      { featuresReady: true, featuresStale: true },
+    ]) {
+      const { page, close } = await pageFor(options);
+      await page.getByRole('heading', { name: 'New feature suggestions', exact: true }).waitFor();
+      if (options.featuresReadFail)
+        await page.getByRole('heading', { name: 'Suggestions unavailable', exact: true }).waitFor();
+      else if (!options.featuresReady)
+        await page
+          .getByRole('heading', { name: 'No suggestions generated', exact: true })
+          .waitFor();
+      else if (options.featuresEmpty)
+        await page.getByRole('heading', { name: 'No active suggestions', exact: true }).waitFor();
+      else {
+        await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
+        if (options.featuresFail)
+          await page
+            .getByText(
+              'Feature suggestions could not be generated. Previous ideas remain available.',
+              { exact: true },
+            )
+            .waitFor();
+        if (options.featuresStale)
+          assert.equal(
+            await page.getByRole('button', { name: 'Discuss in chat', exact: true }).isDisabled(),
+            true,
+          );
+      }
+      await page.setViewportSize({ width: 800, height: 900 });
+      await page.getByRole('button', { name: 'Larger text' }).click();
+      await layout(page, `summary-ideas-${JSON.stringify(options)}`);
+      await contrast(page, 'Summary feature ideas');
+      await close();
+    }
+  });
+  await test('Project analysis includes feature suggestions in preview, consent and Summary', async () => {
+    const { page, close } = await pageFor({ remote: true, analysisCompletes: true });
+    await nav(page, 'Analysis');
+    await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+    await idle(page);
+    await page
+      .getByText('Ideas are generated during this run and saved to Summary and Features.', {
+        exact: true,
+      })
+      .waitFor();
+    assert.equal(
+      await page.getByRole('button', { name: 'Start analysis', exact: true }).isDisabled(),
+      true,
+    );
+    await page.getByLabel('Allow selected context to this provider').check();
+    await page.getByLabel('Include AI Security review').check();
+    await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
+    await idle(page);
+    const requests = await page.evaluate(() => window.fixture.requests);
+    assert.equal(
+      requests.find((r) => r.path.endsWith('/analysis/preview')).body.include_features,
+      true,
+    );
+    const start = requests.find((r) => r.path.endsWith('/analysis/run') && r.method === 'POST');
+    assert.equal(start.body.include_features, true);
+    assert.deepEqual(start.body.confirmations.provider_ids, ['provider-1']);
+    await page.getByRole('heading', { name: 'New feature suggestions', exact: true }).waitFor();
+    await layout(page, 'analysis-with-features');
+    await nav(page, 'Summary');
+    await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
+    assert.equal(
+      await page.evaluate(() =>
+        window.fixture.requests.some((r) => r.path.endsWith('/features/generate')),
+      ),
+      false,
+    );
+    await layout(page, 'summary-analysis-features');
+    await close();
+  });
   await test('Feature goals and idea triage are local; Discuss only seeds Chat', async () => {
     const { page, close } = await pageFor({ remote: true });
     await nav(page, 'Analysis');

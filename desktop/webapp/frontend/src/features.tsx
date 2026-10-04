@@ -6,11 +6,81 @@ import {
   BulletContent,
   Disclosure,
   Empty,
+  Go,
   Heading,
   Notice,
   Panel,
   Prose,
 } from './ui';
+
+export function FeatureSummary({ s }: { s: State }) {
+  const report = s.features;
+  const suggestions = report?.suggestions.filter((idea) => idea.status !== 'dismissed') || [];
+  return (
+    <Panel
+      title="New feature suggestions"
+      actions={
+        <Go page="features" tone="ghost small">
+          View all ideas
+        </Go>
+      }
+    >
+      <div className="row wrap">
+        <Badge value={report?.status || 'unavailable'} />
+        {report?.freshness === 'stale' && <Badge value="stale" />}
+        <Badge value="ai_suggestion" />
+      </div>
+      <p className="small muted section-gap">
+        Analysis checks for new capabilities using your project goals. Suggestions are advisory.
+      </p>
+      {report?.failure && (
+        <Notice error>
+          {report.failure} {report.suggestions.length > 0 && 'Previous ideas remain available.'}
+        </Notice>
+      )}
+      {report?.freshness === 'stale' && (
+        <Notice>
+          These ideas use older project context or goals. Run analysis again to update them.
+        </Notice>
+      )}
+      {!report ? (
+        <Empty
+          title="Suggestions unavailable"
+          detail={
+            s.resourceErrors['feature suggestions'] || 'Refresh the summary to load saved ideas.'
+          }
+        />
+      ) : report.status === 'not_generated' ? (
+        <Empty
+          title="No suggestions generated"
+          detail="Run project analysis or request ideas from Features."
+        />
+      ) : suggestions.length === 0 ? (
+        <Empty
+          title={report.status === 'failed' ? 'No saved suggestions' : 'No active suggestions'}
+          detail="Open Features to review dismissed ideas, edit goals, or request another set."
+        />
+      ) : (
+        suggestions.slice(0, 3).map((idea) => (
+          <div className="content-section" key={idea.id}>
+            <div className="row between wrap">
+              <h3>{idea.title}</h3>
+              <Badge value={idea.status} />
+            </div>
+            <Prose text={idea.benefit} />
+            <p className="small muted">Estimated effort: {idea.effort}</p>
+            <Button
+              disabled={!!s.busy || report.freshness !== 'current'}
+              onClick={() => w.discussFeature(idea)}
+            >
+              Discuss in chat
+            </Button>
+          </div>
+        ))
+      )}
+    </Panel>
+  );
+}
 
 export function Features({ s }: { s: State }) {
   const report = s.features;

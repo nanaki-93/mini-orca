@@ -84,6 +84,16 @@ export function installFixture(options = {}) {
   };
   const limits = { batch_files: 20, budget_seconds: 600, max_attempts_per_stage: 2 };
   const stages = ['semantic', 'performance', 'security_rules', 'security_ai'];
+  const idea = {
+    id: 'idea-1',
+    title: 'Retry failed work',
+    benefit: 'Let users recover failed jobs without submitting them again.',
+    evidence: 'The worker queue already records failed jobs.',
+    paths: [files[0].path],
+    effort: 'medium',
+    acceptance_criteria: ['Retry only eligible failed jobs.', 'Show the new job status.'],
+    status: 'open',
+  };
   const preview = {
     preview_id: 'preview-1',
     identity: queue,
@@ -104,14 +114,22 @@ export function installFixture(options = {}) {
     providers: [
       {
         id: 'provider-1',
-        stages: ['semantic', 'performance', 'security_ai'],
+        stages: ['semantic', 'performance', 'security_ai', 'feature_suggestions'],
         model: model('analyze'),
         remote_confirmation_required: !!options.remote,
       },
     ],
-    expected_model_requests: 12,
-    max_model_requests: 24,
+    expected_model_requests: 13,
+    max_model_requests: 26,
     security_review_intent_required: true,
+    features: {
+      expected_hash: 'features-empty',
+      goals_hash: 'goals-hash',
+      workspace_hash: 'workspace-hash',
+      excluded_paths: [],
+      provider_id: 'provider-1',
+      max_model_requests: 2,
+    },
   };
   const run = {
     identity: { ...queue, id: 'run-1', generation: 'generation-1' },
@@ -229,9 +247,13 @@ export function installFixture(options = {}) {
       ...identity,
       hash: 'features-empty',
       goals: '',
-      status: 'not_generated',
-      freshness: 'current',
-      suggestions: [],
+      status: options.featuresReady ? (options.featuresFail ? 'failed' : 'ready') : 'not_generated',
+      freshness: options.featuresStale ? 'stale' : 'current',
+      suggestions: options.featuresReady && !options.featuresEmpty ? [{ ...idea }] : [],
+      failure:
+        options.featuresReady && options.featuresFail
+          ? 'Feature suggestions could not be generated.'
+          : '',
       context_manifest: context,
     },
     instructions: {
@@ -315,6 +337,14 @@ export function installFixture(options = {}) {
                 ? { ...state.changeReceipt, warnings: [] }
                 : state.changeReceipt,
             );
+          if (path === '/api/projects/current/features' && options.featuresReadFail)
+            return {
+              status: 503,
+              body: JSON.stringify({
+                type: 'unavailable',
+                user_message: 'Saved suggestions could not be read.',
+              }),
+            };
           if (path === '/api/projects/current/features')
             return response({
               ...state.features,
@@ -333,23 +363,7 @@ export function installFixture(options = {}) {
                 ? 'Feature suggestions could not be generated.'
                 : '';
               state.features.freshness = options.featuresStale ? 'stale' : 'current';
-              state.features.suggestions = options.featuresEmpty
-                ? []
-                : [
-                    {
-                      id: 'idea-1',
-                      title: 'Retry failed work',
-                      benefit: 'Let users recover failed jobs without submitting them again.',
-                      evidence: 'The worker queue already records failed jobs.',
-                      paths: [files[0].path],
-                      effort: 'medium',
-                      acceptance_criteria: [
-                        'Retry only eligible failed jobs.',
-                        'Show the new job status.',
-                      ],
-                      status: 'open',
-                    },
-                  ];
+              state.features.suggestions = options.featuresEmpty ? [] : [{ ...idea }];
             } else {
               state.features.suggestions.find((idea) => idea.id === path.split('/').at(-1)).status =
                 body.status;
@@ -623,7 +637,16 @@ export function installFixture(options = {}) {
               })),
             });
           }
-          if (path.endsWith('/analysis/preview')) return response(state.preview);
+          if (path.endsWith('/analysis/preview')) {
+            state.preview.features = body.include_features
+              ? {
+                  ...preview.features,
+                  expected_hash: state.features.hash,
+                  excluded_paths: state.excluded,
+                }
+              : undefined;
+            return response(state.preview);
+          }
           if (path.endsWith('/analysis/run/control')) {
             state.run.status = { pause: 'paused', resume: 'running', cancel: 'canceled' }[
               body.action
@@ -631,7 +654,28 @@ export function installFixture(options = {}) {
             return response(state.run);
           }
           if (path.endsWith('/analysis/run')) {
-            if (method === 'POST') state.run = { ...run, status: 'running' };
+            if (method === 'POST') {
+              state.run = {
+                ...run,
+                plan: { ...state.preview },
+                status: options.analysisCompletes ? 'completed' : 'running',
+              };
+              if (body.include_features) {
+                state.run.features = {
+                  status: options.analysisCompletes ? 'completed' : 'pending',
+                  attempts: options.analysisCompletes ? 1 : 0,
+                  suggestion_count: options.analysisCompletes ? 1 : null,
+                };
+                if (options.analysisCompletes)
+                  state.features = {
+                    ...state.features,
+                    hash: 'features-analysis',
+                    status: 'ready',
+                    freshness: 'current',
+                    suggestions: [{ ...idea }],
+                  };
+              }
+            }
             return response(state.run);
           }
           if (path.endsWith('/analysis/results')) {

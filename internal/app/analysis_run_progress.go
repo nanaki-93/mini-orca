@@ -14,6 +14,12 @@ func newAnalysisRun(preview AnalysisRunPreview) *AnalysisRun {
 	now := time.Now().UTC()
 	run := &AnalysisRun{SchemaVersion: AnalysisRunSchemaVersion, Identity: AnalysisRunIdentity{AnalysisQueueIdentity: preview.Identity, ID: newOpaqueID("analysis"), Generation: newOpaqueID("generation")},
 		Plan: preview, Status: AnalysisRunQueued, Files: []AnalysisRunFile{}, Sections: []AnalysisSectionProgress{}, CreatedAt: now, UpdatedAt: now}
+	if preview.Features != nil {
+		run.Features = &AnalysisFeatureProgress{Status: AnalysisStagePending, Reason: preview.Features.Reason}
+		if preview.Features.MaxModelRequests == 0 {
+			run.Features.Status = AnalysisStageUnavailable
+		}
+	}
 	for _, file := range preview.Files {
 		progress := AnalysisRunFile{AnalysisFileIdentity: file.AnalysisFileIdentity, Stages: []AnalysisStageProgress{}}
 		for _, stage := range file.Stages {
@@ -120,6 +126,12 @@ func analysisCoverageStatus(coverage AnalysisRunCoverage, count *int, lifecycle 
 func analysisFinishedStatus(run *AnalysisRun) AnalysisRunStatus {
 	coverage := AnalysisRunCoverage{}
 	count := 0
+	if run.Features != nil {
+		countAnalysisStage(&coverage, run.Features.Status)
+		if run.Features.SuggestionCount != nil {
+			count += *run.Features.SuggestionCount
+		}
+	}
 	for _, section := range run.Sections {
 		c := section.Coverage
 		coverage.Total += c.Total
@@ -190,6 +202,11 @@ func analysisFileFinished(file AnalysisRunFile) bool {
 }
 
 func interruptAnalysisStages(run *AnalysisRun, status AnalysisStageStatus) {
+	if run.Features != nil && run.Features.Status == AnalysisStageRunning {
+		run.Features.Status = status
+		run.Features.SuggestionCount = nil
+		run.Features.ReportHash = ""
+	}
 	for i := range run.Files {
 		for j := range run.Files[i].Stages {
 			stage := &run.Files[i].Stages[j]

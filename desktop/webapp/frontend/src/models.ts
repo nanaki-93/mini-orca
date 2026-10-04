@@ -148,6 +148,15 @@ export interface PlannedFile {
   }[];
 }
 export interface AnalysisPreview {
+  features?: {
+    expected_hash: string;
+    goals_hash: string;
+    workspace_hash: string;
+    excluded_paths: string[];
+    provider_id: string;
+    max_model_requests: number;
+    reason?: string;
+  };
   preview_id: string;
   identity: QueueIdentity;
   scope: string;
@@ -196,6 +205,13 @@ export interface RunFile {
   }[];
 }
 export interface AnalysisRun {
+  features?: {
+    status: string;
+    attempts: number;
+    suggestion_count: number | null;
+    report_hash?: string;
+    reason?: string;
+  };
   identity: RunIdentity;
   plan: AnalysisPreview;
   status: string;
