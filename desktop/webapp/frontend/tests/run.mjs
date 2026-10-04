@@ -94,6 +94,86 @@ async function layout(page, name) {
   );
   checks++;
 }
+async function contrast(page, name) {
+  const failures = await page.evaluate(() => {
+    const rgba = (color) => {
+      const channels = color.match(/[\d.]+/g).map(Number);
+      return [...channels.slice(0, 3), channels[3] ?? 1];
+    };
+    const background = (element) => {
+      const parents = [];
+      for (let current = element; current; current = current.parentElement) parents.push(current);
+      return parents.reverse().reduce(
+        (result, parent) => {
+          const color = rgba(getComputedStyle(parent).backgroundColor);
+          return result.map((channel, i) => color[i] * color[3] + channel * (1 - color[3]));
+        },
+        [255, 255, 255],
+      );
+    };
+    const luminance = (color) =>
+      color.slice(0, 3).reduce((sum, channel, i) => {
+        const value = channel / 255;
+        return (
+          sum +
+          (value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4) *
+            [0.2126, 0.7152, 0.0722][i]
+        );
+      }, 0);
+    const ratio = (foreground, surface) => {
+      const values = [luminance(foreground), luminance(surface)].sort((a, b) => b - a);
+      return (values[0] + 0.05) / (values[1] + 0.05);
+    };
+    const failures = [];
+    const selectors = [
+      '.muted',
+      '.eyebrow',
+      '.prose p',
+      '.panel-head h2',
+      '.metric-label',
+      '.metric-number',
+      '.coverage-ring strong',
+      '.legend span',
+      '.badge',
+      '.list-copy strong',
+      '.list-copy small',
+      '.connection',
+      '.nav-link:not(:disabled)',
+      '.button:not(:disabled)',
+      '.text-link:not(:disabled)',
+      '.file-item:not(:disabled)',
+      '.tab:not(:disabled)',
+      'summary',
+    ];
+    for (const element of document.querySelectorAll(selectors.join(','))) {
+      if (!element.getClientRects().length || element.closest('[hidden]')) continue;
+      const value = ratio(rgba(getComputedStyle(element).color), background(element));
+      if (value < 4.5)
+        failures.push(`${element.textContent.trim().slice(0, 60)}: ${value.toFixed(2)}:1 text`);
+    }
+    for (const element of document.querySelectorAll(
+      'input:not([type="checkbox"]):not(:disabled), textarea:not(:disabled), select.field:not(:disabled), .search-trigger',
+    )) {
+      if (!element.getClientRects().length || element.closest('[hidden]')) continue;
+      const value = ratio(rgba(getComputedStyle(element).borderTopColor), background(element));
+      if (value < 3) failures.push(`${element.tagName}: ${value.toFixed(2)}:1 control border`);
+    }
+    const focused = document.activeElement;
+    if (
+      focused?.matches(
+        'button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, pre:focus-visible, .diff:focus-visible',
+      )
+    ) {
+      const style = getComputedStyle(focused);
+      const value = ratio(rgba(style.outlineColor), background(focused.parentElement));
+      if (style.outlineStyle === 'none' || parseFloat(style.outlineWidth) < 2 || value < 3)
+        failures.push(`Keyboard focus: ${style.outlineWidth}, ${value.toFixed(2)}:1`);
+    }
+    return failures;
+  });
+  assert.deepEqual(failures, [], `${name}: insufficient contrast`);
+  checks++;
+}
 async function test(name, body) {
   await body();
   checks++;
@@ -101,6 +181,97 @@ async function test(name, body) {
 }
 
 try {
+  await test('Color hierarchy, readable themes and compact details preserve local navigation', async () => {
+    const { page, close } = await pageFor({ unknown: true });
+    assert.equal(await page.locator('[data-accent="performance"] .metric-number').innerText(), '—');
+    const categories = await page
+      .locator('.metric-card .metric-number')
+      .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).color));
+    assert.equal(new Set(categories).size, 3);
+    const before = await page.evaluate(() =>
+      window.fixture.requests.filter((request) => request.method !== 'GET'),
+    );
+    assert.equal(await page.getByText('HTTP API', { exact: true }).isVisible(), false);
+    await page.getByText('Components', { exact: true }).click();
+    assert.equal(await page.getByText('HTTP API', { exact: true }).isVisible(), true);
+    const why = page.getByText(
+      'Workers otherwise keep consuming resources after their caller has left.',
+      {
+        exact: true,
+      },
+    );
+    assert.equal(await why.isVisible(), false);
+    await page.getByText('Why & tradeoffs', { exact: true }).click();
+    assert.equal(await why.isVisible(), true);
+    assert.deepEqual(
+      await page.evaluate(() =>
+        window.fixture.requests.filter((request) => request.method !== 'GET'),
+      ),
+      before,
+    );
+    await page.getByText('Components', { exact: true }).click();
+    await page.getByText('Why & tradeoffs', { exact: true }).click();
+    for (const theme of ['dark', 'light']) {
+      if (theme === 'light')
+        await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+      for (const name of [
+        'Summary',
+        'Analysis',
+        'Bugs',
+        'Performance',
+        'Security',
+        'Models',
+        'Project',
+      ]) {
+        await nav(page, name);
+        await contrast(page, `${name}-${theme}`);
+      }
+      await nav(page, 'Summary');
+      await page.getByRole('button', { name: 'Analyze project', exact: true }).hover();
+      await contrast(page, `Primary action hover-${theme}`);
+      await openSource(page);
+      await page.getByRole('tab', { name: 'Source', exact: true }).focus();
+      await page.keyboard.press('Tab');
+      assert.equal(
+        await page
+          .getByRole('tab', { name: 'Context' })
+          .evaluate((element) => element === document.activeElement),
+        true,
+      );
+      await contrast(page, `Editor keyboard focus-${theme}`);
+      await page.keyboard.press('Enter');
+      await page.getByRole('heading', { name: 'Included files' }).waitFor();
+      await contrast(page, `Context-${theme}`);
+      await nav(page, 'Summary');
+      await page.setViewportSize({ width: 900, height: 640 });
+      await page.getByRole('button', { name: 'Larger text' }).click();
+      await layout(page, `matrix-summary-${theme}-900`);
+      await contrast(page, `Summary-${theme}-large-text`);
+      assert.deepEqual(
+        await page.locator('.sidebar .nav-link').evaluateAll((buttons) =>
+          buttons
+            .filter((button) => {
+              const rect = button.getBoundingClientRect();
+              return rect.top < 0 || rect.bottom > window.innerHeight;
+            })
+            .map((button) => button.getAttribute('aria-label')),
+        ),
+        [],
+        'Compact navigation must remain visible',
+      );
+      await page.getByRole('button', { name: 'Larger text' }).click();
+      await page.setViewportSize({ width: 1440, height: 1000 });
+    }
+    assert.deepEqual(
+      await page.evaluate(() =>
+        window.fixture.requests
+          .filter((request) => request.method !== 'GET')
+          .map((request) => request.path),
+      ),
+      ['/api/projects/restore'],
+    );
+    await close();
+  });
   await test('Navigation and disclosure do not dispatch providers, code, source writes or shells', async () => {
     const { page, close } = await pageFor({ unknown: true });
     await layout(page, 'summary');
@@ -136,6 +307,7 @@ try {
     await layout(page, 'draft');
     await validateAndCheck(page, true);
     await layout(page, 'review');
+    await contrast(page, 'Review and Apply');
     assert.equal(
       await page.getByRole('button', { name: 'Apply change', exact: true }).isEnabled(),
       true,
@@ -449,6 +621,7 @@ try {
       const { page, close } = await pageFor(options);
       await nav(page, 'Bugs');
       await layout(page, `results-${options.runStatus || 'empty'}`);
+      await contrast(page, `Results-${options.runStatus || 'empty'}`);
       await close();
     }
   });

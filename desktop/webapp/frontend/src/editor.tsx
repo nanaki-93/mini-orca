@@ -128,7 +128,7 @@ export function Editor({ s }: { s: State }) {
           ) : (
             <Empty
               title="Choose a file"
-              detail="Browse your project or find a file by name."
+              detail="Select a file to inspect or edit a declaration."
               icon="code"
             />
           )}
@@ -362,7 +362,7 @@ function Context({ s }: { s: State }) {
                   </strong>
                   <small>{item.reason}</small>
                 </span>
-                <Badge value={item.confidence} />
+                <Badge value={item.confidence} tone="violet" />
               </div>
             ))
           ) : (

@@ -80,6 +80,7 @@ function App() {
       <button
         key={page}
         className="nav-link"
+        data-accent={page}
         aria-label={label}
         disabled={!s.project && !['project', 'models'].includes(page)}
         aria-current={
@@ -142,17 +143,18 @@ function App() {
             <span className="project-avatar">{s.project?.name?.[0]?.toUpperCase() || '+'}</span>
             <span className="project-label">
               <strong>{s.project?.name || 'Open a project'}</strong>
-              <small>{s.project ? `${s.project.type} workspace` : 'Local workspace'}</small>
+              <small>{s.project ? s.project.type.toUpperCase() : 'Local workspace'}</small>
             </span>
             <Icon name="chevrons" />
           </button>
           <div className="nav-label">Workspace</div>
           <nav aria-label="Workspaces">{nav(mainNav)}</nav>
           <div className="sidebar-bottom">
+            <div className="nav-label">Tools</div>
             <nav aria-label="Tools">{nav(utilityNav)}</nav>
             <div className="local-label">
               <Icon name="laptop" />
-              On your computer<span className="shortcut">⌘ K</span>
+              Local workspace
             </div>
           </div>
         </aside>
@@ -173,7 +175,7 @@ function App() {
                 <span>Search</span>
                 <kbd>⌘ K</kbd>
               </button>
-              <div className="connection">
+              <div className={`connection ${s.connected ? '' : 'offline'}`}>
                 <span className={`status-dot ${s.connected ? '' : 'offline'}`} />
                 {s.connected ? 'Daemon connected' : 'Daemon offline'}
               </div>
@@ -196,7 +198,7 @@ function App() {
                 )}
               </div>
             )}
-            <div className="page">
+            <div className="page" data-accent={s.page}>
               {s.error && <Notice error>{s.error}</Notice>}
               {s.notice && <Notice>{s.notice}</Notice>}
               {Object.entries(s.resourceErrors).map(([key, error]) => (
@@ -212,7 +214,10 @@ function App() {
             <TerminalWorkspace s={s} visible={s.page === 'terminal'} />
           </div>
           <footer className="statusbar">
-            <span>{s.git?.available ? s.git.branch : 'Local workspace'}</span>
+            <span className="row">
+              <Icon name={s.git?.available ? 'branch' : 'laptop'} />
+              {s.git?.available ? s.git.branch : 'Local workspace'}
+            </span>
             <span>
               {s.project ? `${s.project.source_file_count ?? '—'} source files` : 'No project open'}
             </span>

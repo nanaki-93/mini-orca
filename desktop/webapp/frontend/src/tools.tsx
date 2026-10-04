@@ -230,10 +230,10 @@ function TerminalSession({ session, visible }: { session: TerminalUpdate; visibl
       cursorBlink: true,
       allowProposedApi: false,
       theme: {
-        background: '#131619',
-        foreground: '#e9eeee',
-        cursor: '#b4e5cb',
-        selectionBackground: '#355344',
+        background: '#060c09',
+        foreground: '#f1fff4',
+        cursor: '#5cfa8b',
+        selectionBackground: '#204b30',
       },
     });
     const addon = new FitAddon();
