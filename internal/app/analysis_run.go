@@ -653,7 +653,9 @@ func (s *Service) runAnalysisWindow(ctx context.Context, identity AnalysisRunIde
 			c.mu.Unlock()
 			return
 		}
-		if c.run.Features != nil && analysisStageNeedsWork(c.run.Features.Status) {
+		// Publish this batch's file results before waiting on project-wide ideas.
+		_, _, filesPending := nextAnalysisStage(c.run)
+		if c.run.Features != nil && analysisStageNeedsWork(c.run.Features.Status) && (!filesPending || c.run.WindowFilesCompleted >= c.run.Plan.Limits.BatchFiles) {
 			keepRunning := s.runAnalysisFeaturesLocked(ctx, identity)
 			c.mu.Unlock()
 			if !keepRunning {

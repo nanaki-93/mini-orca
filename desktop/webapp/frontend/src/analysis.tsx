@@ -417,6 +417,20 @@ export function AnalysisRun({ s }: { s: State }) {
       section.coverage.unavailable,
     0,
   );
+  const runningFile = run.files.find((file) =>
+    file.stages.some((stage) => stage.status === 'running'),
+  );
+  const runningStage = runningFile?.stages.find((stage) => stage.status === 'running');
+  const currentStep =
+    run.status === 'canceling'
+      ? 'Canceling analysis…'
+      : run.status === 'pausing'
+        ? 'Finishing the current step before pausing…'
+        : run.features?.status === 'running'
+          ? 'Generating feature suggestions…'
+          : runningStage
+            ? `${stageNames[runningStage.stage]} · ${runningFile!.path}`
+            : 'Preparing analysis…';
   return (
     <>
       <Heading
@@ -449,6 +463,25 @@ export function AnalysisRun({ s }: { s: State }) {
         )}
       </Heading>
       {run.reason && <Notice>{run.reason}</Notice>}
+      <Panel>
+        <div className="row between wrap">
+          <h2>{run.window_files_completed} files completed this batch</h2>
+          <span className="muted small">{run.elapsed_seconds}s elapsed</span>
+        </div>
+        {activeRun(run) && (
+          <div role="status" aria-label="Current analysis step" className="section-gap">
+            <p className="row wrap">
+              <span className="spinner" aria-hidden="true" />
+              {currentStep}
+            </p>
+            <p className="small muted">Open results to view findings saved so far.</p>
+          </div>
+        )}
+        <progress value={done} max={Math.max(total, 1)} aria-label="Analysis progress" />
+        <div className="small muted">
+          {done} of {total} category work units finished
+        </div>
+      </Panel>
       {run.features && (
         <Panel
           title="New feature suggestions"
@@ -456,21 +489,17 @@ export function AnalysisRun({ s }: { s: State }) {
           actions={<Badge value={run.features.status} />}
         >
           <div className="metric-number">{run.features.suggestion_count ?? '—'}</div>
-          <p className="small muted">Advisory ideas · {run.features.attempts} attempts</p>
+          <p className="small muted">
+            Advisory ideas · {run.features.attempts} of {run.plan.limits.max_attempts_per_stage}{' '}
+            attempts used
+          </p>
+          {run.features.status === 'pending' && (
+            <p className="small muted">Starts after file results for this batch are saved.</p>
+          )}
           {run.features.reason && <Notice>{run.features.reason}</Notice>}
           <Go page="features">Open feature suggestions</Go>
         </Panel>
       )}
-      <Panel>
-        <div className="row between">
-          <h2>{run.window_files_completed} files completed this batch</h2>
-          <span className="muted small">{run.elapsed_seconds}s elapsed</span>
-        </div>
-        <progress value={done} max={Math.max(total, 1)} aria-label="Analysis progress" />
-        <div className="small muted">
-          {done} of {total} category work units finished
-        </div>
-      </Panel>
       <div className="grid three-columns section-gap">
         {run.sections.map((section) => (
           <Panel

@@ -609,6 +609,77 @@ try {
     await layout(page, 'analysis-run');
     await close();
   });
+  await test('Analysis exposes provider progress and keeps saved results available', async () => {
+    const { page, close } = await pageFor();
+    await nav(page, 'Analysis');
+    await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+    await idle(page);
+    await page.getByLabel('Include AI Security review').check();
+    await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
+    await idle(page);
+    await page
+      .getByText('Starts after file results for this batch are saved.', { exact: true })
+      .waitFor();
+    await page.evaluate(() => {
+      window.fixture.state.run.features.status = 'running';
+      window.fixture.state.run.features.attempts = 1;
+      window.fixture.state.run.elapsed_seconds = 75;
+    });
+    const activity = page.getByRole('status', { name: 'Current analysis step' });
+    await activity.getByText('Generating feature suggestions…', { exact: true }).waitFor();
+    await page.getByText('75s elapsed', { exact: true }).waitFor();
+    await page.getByText('Advisory ideas · 1 of 2 attempts used', { exact: true }).waitFor();
+    await layout(page, 'analysis-feature-progress');
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.evaluate(() => document.documentElement.classList.add('large-text'));
+    await layout(page, 'analysis-feature-progress-large-text');
+    await page.getByRole('button', { name: 'Open results', exact: true }).first().click();
+    await page.waitForFunction(() =>
+      window.fixture.requests.some((r) => r.path.endsWith('/analysis/results')),
+    );
+    assert.equal(await page.evaluate(() => window.fixture.state.run.features.status), 'running');
+    await nav(page, 'Analysis');
+    await page.getByRole('button', { name: 'View run', exact: true }).click();
+    await page.evaluate(() => {
+      window.fixture.state.run.status = 'partial';
+      window.fixture.state.run.features.status = 'failed';
+      window.fixture.state.run.features.reason =
+        'The model request or response failed. Other analysis results remain available.';
+    });
+    await page
+      .getByText('The model request or response failed. Other analysis results remain available.', {
+        exact: true,
+      })
+      .waitFor();
+    assert.equal(await activity.count(), 0, 'Settled runs must stop showing active progress');
+    assert.equal(await page.getByRole('button', { name: 'Open results' }).count(), 3);
+    assert.equal(
+      await page.evaluate(
+        () =>
+          window.fixture.requests.filter(
+            (r) => r.method === 'POST' && r.path.endsWith('/analysis/run'),
+          ).length,
+      ),
+      1,
+      'Polling and opening saved results must not start another analysis',
+    );
+    await layout(page, 'analysis-feature-failure');
+    await close();
+  });
+  await test('Analysis progress identifies the active file and stage', async () => {
+    const { page, close } = await pageFor({ runStatus: 'running' });
+    await page.evaluate(() => {
+      window.fixture.state.run.files[0].stages[1].status = 'running';
+    });
+    await nav(page, 'Analysis');
+    await page.getByRole('button', { name: 'View run', exact: true }).click();
+    await page
+      .getByRole('status', { name: 'Current analysis step' })
+      .getByText('Performance · internal/worker/process.go', { exact: true })
+      .waitFor();
+    await layout(page, 'analysis-file-progress');
+    await close();
+  });
   await test('Late file responses cannot replace the current file', async () => {
     const { page, close } = await pageFor();
     await nav(page, 'Source');

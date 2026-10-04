@@ -79,6 +79,93 @@ func excludeFeatureAnalysisFiles(t *testing.T, s *Service, paths []string) {
 	}
 }
 
+func analysisBlockingFeatureServer(t *testing.T) (*httptest.Server, *atomic.Int32, chan struct{}, func()) {
+	t.Helper()
+	started, released := make(chan struct{}, 1), make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(released) }) }
+	server, calls := analysisResponseServer(t, func(stage AnalysisStage) string {
+		if stage == AnalysisStageFeatures {
+			started <- struct{}{}
+			<-released
+			return validFeatureResponse
+		}
+		return emptyAnalysisReply(stage)
+	})
+	t.Cleanup(unblock)
+	return server, calls, started, unblock
+}
+
+func TestAnalysisRunPublishesBatchResultsBeforeFeatureRequest(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		batch  int
+		cached bool
+	}{
+		{name: "whole project", batch: 100},
+		{name: "batch limit", batch: 1},
+		{name: "cached results", batch: 100, cached: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server, _, started, release := analysisBlockingFeatureServer(t)
+			s, _ := newSemanticAnalysisServiceWithHelper(t, server.URL, 0)
+			limits := AnalysisRunLimits{test.batch, 30, 2}
+			if test.cached {
+				preview := analysisRunPreviewFor(t, s, limits, nil)
+				if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+					t.Fatal(err)
+				}
+				completedAnalysisRun(t, s)
+			}
+			preview := featureAnalysisPreviewFor(t, s, limits, nil)
+			if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+				t.Fatal(err)
+			}
+			waitForTestSignal(t, started, "feature request after file results")
+			run, err := s.CurrentAnalysisRun(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			completed := min(test.batch, len(preview.Files))
+			if run.Status != AnalysisRunRunning || run.Features.Status != AnalysisStageRunning || run.WindowFilesCompleted != completed {
+				t.Fatalf("file results delayed by feature request: files=%d status=%s features=%+v", run.WindowFilesCompleted, run.Status, run.Features)
+			}
+			for i, section := range run.Sections {
+				result, err := s.ReadAnalysisSection(context.Background(), run.Identity, section.Category, "")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if result.SavedFindingCount == nil || result.Progress.Coverage.Succeeded != completed*(i+1) {
+					t.Fatalf("%s results unavailable during feature request: %+v", section.Category, result)
+				}
+			}
+			release()
+			settled := completedAnalysisRun(t, s)
+			want := AnalysisRunCompleted
+			if test.batch < len(preview.Files) {
+				want = AnalysisRunPaused
+			}
+			if settled.Status != want || settled.Features.Status != AnalysisStageCompleted {
+				t.Fatalf("file and feature work did not settle: %+v", settled)
+			}
+		})
+	}
+}
+
+func TestAnalysisRunGeneratesFeaturesWithoutFileStages(t *testing.T) {
+	server, calls := analysisResponseServer(t, func(AnalysisStage) string { return `{"suggestions":[]}` })
+	s, _ := newSemanticAnalysisService(t, server.URL, 0)
+	excludeFeatureAnalysisFiles(t, s, []string{"main.go"})
+	preview := featureAnalysisPreviewFor(t, s, AnalysisRunLimits{1, 30, 2}, nil)
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	run := completedAnalysisRun(t, s)
+	if run.Status != AnalysisRunCompletedEmpty || run.Features.Status != AnalysisStageCompletedEmpty || len(run.Files) != 0 || calls.Load() != 1 {
+		t.Fatalf("features without file stages: status=%s features=%+v files=%d calls=%d", run.Status, run.Features, len(run.Files), calls.Load())
+	}
+}
+
 func TestAnalysisRunFeaturesHonorContextAndSuggestedPathExclusions(t *testing.T) {
 	for _, target := range []string{"main.go", "helper.go"} {
 		t.Run(target, func(t *testing.T) {
@@ -247,7 +334,7 @@ func TestAnalysisRunFeatureFailureRetainsIdeasAndOtherAnalysis(t *testing.T) {
 func TestAnalysisRunFeaturesCancelAndSourceChangesRejectLatePublication(t *testing.T) {
 	for _, change := range []string{"cancel", "instructions"} {
 		t.Run(change, func(t *testing.T) {
-			server, calls, started, release := analysisBlockingServer(t)
+			server, calls, started, release := analysisBlockingFeatureServer(t)
 			s, root := newSemanticAnalysisService(t, server.URL, 0)
 			preview := featureAnalysisPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
 			run, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview))
@@ -268,8 +355,11 @@ func TestAnalysisRunFeaturesCancelAndSourceChangesRejectLatePublication(t *testi
 			}
 			release()
 			settled := completedAnalysisRun(t, s)
-			if settled.Status != want || settled.Features.SuggestionCount != nil || calls.Load() != 1 {
+			if settled.Status != want || settled.Features.SuggestionCount != nil || calls.Load() != 4 {
 				t.Fatalf("late feature publication=%+v calls=%d", settled, calls.Load())
+			}
+			if change == "cancel" {
+				assertSavedAnalysisCounts(t, s, settled, 0, 0, 0)
 			}
 			report, err := s.Features(context.Background())
 			if err != nil || report.Status != "not_generated" {
@@ -280,7 +370,7 @@ func TestAnalysisRunFeaturesCancelAndSourceChangesRejectLatePublication(t *testi
 }
 
 func TestAnalysisRunFeaturesAndReviewedApplyCompleteWithoutLockConflict(t *testing.T) {
-	server, _, started, releaseProvider := analysisBlockingServer(t)
+	server, _, started, releaseProvider := analysisBlockingFeatureServer(t)
 	s, root := newSemanticAnalysisService(t, server.URL, 0)
 	index, err := s.manager.Index()
 	if err != nil {
