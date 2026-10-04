@@ -83,7 +83,7 @@ export interface State {
   chosenPath?: string;
   change?: M.ChangeSession;
   changeSeed?: M.ChangeSeed;
-  changeHistory?: M.ChangeSession[];
+  changeHistory?: M.ChangeHistoryEntry[];
   changeReceipt?: M.ChangeMutation | null;
   features?: M.FeatureReport;
   instructionPreview?: M.InstructionPreview;
@@ -1330,13 +1330,27 @@ export class Workspace {
     await Promise.all([
       this.resource(
         'change history',
-        () => this.api.get<M.ChangeSession[]>(`${current}/changes`, identity),
+        () => this.api.get<M.ChangeHistoryEntry[]>(`${current}/changes`, identity),
         (changeHistory) => this.set({ changeHistory }),
       ),
       this.resource(
         'change recovery',
         () => this.api.get<M.ChangeMutation | null>(`${current}/changes/recovery`, identity),
-        (changeReceipt) => this.set({ changeReceipt }),
+        (changeReceipt) => {
+          const previous = this.state.changeReceipt;
+          if (
+            changeReceipt &&
+            previous?.session_id === changeReceipt.session_id &&
+            previous.hash === changeReceipt.hash
+          )
+            changeReceipt = {
+              ...changeReceipt,
+              warnings: [
+                ...new Set([...(previous.warnings || []), ...(changeReceipt.warnings || [])]),
+              ],
+            };
+          this.set({ changeReceipt });
+        },
       ),
     ]);
   }
@@ -1539,6 +1553,93 @@ export class Workspace {
         hash: receipt.hash,
       });
       await this.acceptChangeMutation(result);
+    });
+  }
+  async verifyChange() {
+    await this.act('Verify applied change', async () => {
+      const receipt = this.state.changeReceipt;
+      const change = this.state.change;
+      if (
+        !receipt ||
+        receipt.state !== 'applied' ||
+        !change ||
+        change.id !== receipt.session_id ||
+        this.state.uncertain
+      )
+        throw new Error('Resume the applied conversation and refresh its recovery status first.');
+      const epoch = this.epoch,
+        operation = this.operation;
+      if (change.changes.some((edit) => edit.path.endsWith('.go')) && !(await this.trust(true)))
+        return;
+      if (epoch !== this.epoch || operation !== this.operation) return;
+      const verification = await this.api.post<M.ChangeVerification>(
+        `${current}/changes/${encodeURIComponent(change.id)}/verify`,
+        {
+          ...this.identity(),
+          revision: change.revision,
+          hash: receipt.hash,
+        },
+      );
+      if (
+        epoch !== this.epoch ||
+        operation !== this.operation ||
+        this.state.changeReceipt?.hash !== receipt.hash
+      )
+        return;
+      if (
+        verification.session_id !== change.id ||
+        verification.proposal_hash !== receipt.hash ||
+        projectKey(verification) !== projectKey(this.state.project)
+      )
+        throw new Error('Verification belongs to another applied change.');
+      this.set({ changeReceipt: { ...receipt, verification } });
+    });
+  }
+  async reanalyzeChange() {
+    await this.act('Reanalyze changed files', async () => {
+      const change = this.state.change,
+        receipt = this.state.changeReceipt;
+      if (
+        !change ||
+        !receipt ||
+        receipt.state !== 'applied' ||
+        receipt.session_id !== change.id ||
+        this.state.uncertain
+      )
+        throw new Error('Choose the latest applied conversation first.');
+      const identity = this.identity(),
+        epoch = this.epoch,
+        operation = this.operation;
+      const paths = change.changes
+        .filter((edit) => edit.path.endsWith('.go'))
+        .map((edit) => edit.path);
+      const confirmed = await this.confirmModel('bug', 'Reanalyze changed files', false, paths);
+      if (confirmed === null || epoch !== this.epoch || operation !== this.operation) return;
+      let completed = 0;
+      for (const path of paths) {
+        if (epoch !== this.epoch || operation !== this.operation) return;
+        const analysis = await this.api.post<M.FileAnalysis>(`${current}/files/analysis`, {
+          path,
+          project_revision: identity.project_revision,
+          refresh: true,
+          confirm_remote_provider: confirmed,
+        });
+        if (epoch !== this.epoch || operation !== this.operation) return;
+        if (
+          projectKey(analysis) !== projectKey(identity) ||
+          analysis.path !== path ||
+          analysis.content_hash !== change.changes.find((edit) => edit.path === path)?.hash
+        )
+          throw new Error('Reanalysis belongs to an earlier source revision.');
+        if (!['success', 'fresh'].includes(analysis.status))
+          throw new Error(analysis.failure || `Reanalysis is ${analysis.status} for ${path}.`);
+        completed++;
+      }
+      await this.refreshProject();
+      if (epoch === this.epoch && operation === this.operation)
+        this.set({
+          notice: `Reanalyzed ${completed} changed files. Updated source suggestions are available with file details; original findings are not automatically marked fixed.`,
+        });
     });
   }
   private async writeChangeSource(id: string, action: 'apply' | 'undo', identity: object) {

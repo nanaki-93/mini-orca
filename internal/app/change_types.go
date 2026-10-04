@@ -57,6 +57,21 @@ type ChangeSession struct {
 	UpdatedAt          time.Time               `json:"updated_at"`
 }
 
+// Listing summaries keeps a full history within the native response bound;
+// source and conversation contents are returned only for the chosen session.
+type ChangeHistoryEntry struct {
+	ID              string    `json:"id"`
+	ProjectID       string    `json:"project_id"`
+	ProjectRevision string    `json:"project_revision"`
+	Kind            string    `json:"kind"`
+	Title           string    `json:"title"`
+	Revision        int64     `json:"revision"`
+	Hash            string    `json:"hash"`
+	State           string    `json:"state"`
+	Freshness       string    `json:"freshness"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
 type ChangeCreateRequest struct {
 	ProjectID          string   `json:"project_id"`
 	ProjectRevision    string   `json:"project_revision"`
@@ -104,4 +119,5 @@ type ChangeMutationResult struct {
 	UndoAvailable   bool                  `json:"undo_available"`
 	Index           *project.ProjectIndex `json:"index,omitempty"`
 	Warnings        []string              `json:"warnings"`
+	Verification    *ChangeVerification   `json:"verification,omitempty"`
 }

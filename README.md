@@ -1,7 +1,7 @@
 # Mini-Orca
 
-A local-first, Go-first coding assistant for one deliberate change: one project,
-one file, one declaration, an editable AI draft, checks and explicit Apply.
+A local-first, Go-first coding assistant for analysis and deliberate AI changes:
+describe a task in Chat, inspect checked file diffs, then explicitly Apply.
 The Wails/React desktop client talks to a Go daemon through a native bridge.
 
 ## Use it
@@ -10,15 +10,21 @@ The Wails/React desktop client talks to a Go daemon through a native bridge.
 2. Select **Prepare analysis** in Analysis. Review the whole-project inventory,
    request bounds and model destinations, then confirm the displayed run.
    Analysis tracks progress; Bugs, Performance and Security show separate results.
-3. Open a finding or select a declaration in Editor. To add a Go function, use
-   **New declaration** in Editor, including in a package-only file.
-   Enter an absent valid Go name and a short request in Assistant.
-4. Edit only the returned declaration/import draft; source and composed diffs stay
-   selectable/read-only. Changing the target of an existing draft requires discard.
-5. Validate, explicitly trust and run focused checks, then inspect Review. Apply
-   names the exact file and declaration. Undo restores the immediately preceding
-   unchanged Apply.
-6. Open **Terminal** and select **New terminal** for a local shell in the project.
+3. Use **Prepare fix** on a finding, or describe a feature in **Chat** with up to
+   eight explicit Go/Markdown paths, including new files. Preparation generates
+   a proposal, checks it and attempts at most three repairs of failed checks.
+   Project tests require execution trust; preparation stops at diff review.
+4. Read all proposed diffs, select **Review this diff**, then **Approve and apply**.
+   Confirm the displayed scope. Further chat revisions require new checks/review.
+   Guarded **Undo proposal** restores the latest unchanged grouped change.
+5. Use **Features** for goal-aware advisory ideas, with Save/Dismiss and a passive
+   handoff to Chat. Use **Instructions** to load root/directory AGENTS.md guides,
+   add editable presets or custom text, and review the resulting instruction diff.
+6. After Apply, explicitly **Verify applied change** or **Reanalyze changed files**.
+   Applied and verified results stay separate; original findings are not marked
+   fixed automatically. **Source** retains read-only inspection and the precise
+   declaration/import draft tools, including selected benchmark comparisons.
+7. Open **Terminal** and select **New terminal** for a local shell in the project.
    Hiding it preserves the process; closing its tab ends it. **⌘K / Ctrl+K** opens
    file and command search.
 
@@ -30,9 +36,10 @@ multiple model requests. Security intent is explicit even with a local provider.
 Verified Go scans, focused checks and selected benchmarks remain separate trusted
 execution actions. Source hypotheses are not runtime measurements.
 
-Mini-Orca does not automatically edit source, run scans, write tests to your
-project, commit or push. Exact declaration editing is currently Go-first; other
-languages have conservative analysis and symbol information.
+Source changes always require approval. Mini-Orca does not automatically run
+scans, commit or push. Shared proposals support Go and Markdown without deletions;
+other languages retain conservative analysis and symbol information. Optimization
+claims remain unmeasured unless a benchmark comparison provides measurements.
 
 ## Run
 
@@ -59,13 +66,16 @@ confirmation. Provider keys are not part of API metadata.
 The daemon owns indexing, context exclusions, model requests and guarded source
 mutation. The desktop renders state and rejects stale asynchronous results.
 Three configured scopes serve project/Performance/Security analysis (`analyze`), file/bug
-analysis (`bug`) and declaration proposals/repairs (`function`).
+analysis (`bug`) and change/declaration proposals/repairs (`function`).
 
 Project-local `.mini-orca/` stores `index.json`, `project-analysis.json`,
 `file-analysis/`, `findings.json`, `performance/files/`, unified progress in
 `analysis/run.json`, legacy job history under `sessions/`,
-Apply receipts/audit under `sessions/`, and Undo data under `backups/`. These are
-application metadata. Restore uses local persisted analysis without a model call.
+Apply receipts/audit under `sessions/`, and declaration Undo data under `backups/`.
+Private `changes/` files retain conversations, captured source and proposals,
+feature goals/ideas, the latest grouped recovery journal and verification evidence.
+AGENTS.md files stay in the project as the instruction source of truth. Restore
+uses local persisted analysis without a model call.
 See the [API guide](docs/api-contract.md) for current contracts and boundaries.
 
 ## Existing projects and preferences
@@ -86,7 +96,7 @@ authority; start a new run when they cannot be resumed. See the
 The web client remembers the last project path, theme and text size. Compose pane
 preferences remain separate. Terminal starts without launching a shell.
 Mini-Orca does not save terminal transcripts or send them to a model. Returning to
-Editor/Review rechecks the selected file and invalidates stale evidence; reindex
+Source/Review rechecks the selected file and invalidates stale evidence; reindex
 explicitly after adding, removing or renaming files in the terminal.
 
 ## Development and documentation

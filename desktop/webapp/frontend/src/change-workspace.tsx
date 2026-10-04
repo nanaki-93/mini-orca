@@ -74,7 +74,56 @@ export function ChangeWorkspace({ s }: { s: State }) {
           }
           actions={<Badge value={s.changeReceipt.state} />}
         >
-          <p>Applied changes still need independent verification.</p>
+          {s.changeReceipt.state === 'applied' && (
+            <>
+              <p>
+                Apply saved the files. Verification establishes the displayed checks; acceptance
+                criteria still need review.
+              </p>
+              <div className="actions section-gap">
+                <Button
+                  disabled={!!s.busy || s.uncertain || change?.id !== s.changeReceipt.session_id}
+                  onClick={() => void w.verifyChange()}
+                >
+                  Verify applied change
+                </Button>
+                {change?.changes.some((edit) => edit.path.endsWith('.go')) && (
+                  <Button
+                    disabled={!!s.busy || s.uncertain || change.id !== s.changeReceipt.session_id}
+                    onClick={() => void w.reanalyzeChange()}
+                  >
+                    Reanalyze changed files
+                  </Button>
+                )}
+              </div>
+              {s.changeReceipt.verification && (
+                <div className="section-gap" aria-label="Post-Apply verification">
+                  <div className="row wrap">
+                    <strong>Verification</strong>
+                    <Badge value={s.changeReceipt.verification.status} />
+                  </div>
+                  {s.changeReceipt.verification.reason && (
+                    <Notice error={s.changeReceipt.verification.status === 'failed'}>
+                      {s.changeReceipt.verification.reason}
+                    </Notice>
+                  )}
+                  {s.changeReceipt.verification.checks.map((check, i) => (
+                    <Disclosure
+                      key={i}
+                      title={
+                        <span className="row wrap">
+                          {check.name}
+                          <Badge value={check.state} />
+                        </span>
+                      }
+                    >
+                      <pre>{check.output || 'No diagnostics.'}</pre>
+                    </Disclosure>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
           {(s.changeReceipt.warnings || []).map((warning, i) => (
             <Notice error key={i}>
               {warning}

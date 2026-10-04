@@ -125,26 +125,38 @@ func parseChangeResponse(output string, session *ChangeSession) (string, []Chang
 	changes := []ChangeEdit{}
 	seen := map[string]bool{}
 	for _, wire := range response.Changes {
-		target := changeTarget(session, wire.Path)
-		if target == nil || seen[wire.Path] || !utf8.ValidString(wire.Content) || strings.ContainsRune(wire.Content, 0) || wire.Content == "" {
-			return "", nil, fmt.Errorf("proposal changed an uncaptured, repeated or invalid target")
+		if seen[wire.Path] {
+			return "", nil, fmt.Errorf("proposal repeated a target")
 		}
 		seen[wire.Path] = true
-		content := wire.Content
-		if filepath.Ext(wire.Path) == ".go" {
-			if formatted, err := format.Source([]byte(content)); err == nil {
-				content = string(formatted)
-			}
+		edit, err := makeChangeEdit(session, wire.Path, wire.Content)
+		if err != nil {
+			return "", nil, err
 		}
-		if target.Exists && content == target.Content {
-			continue
+		if edit != nil {
+			changes = append(changes, *edit)
 		}
-		changes = append(changes, ChangeEdit{Path: wire.Path, Content: content, Hash: contentHash([]byte(content)), Diff: changeDiff(wire.Path, target.Content, content)})
 	}
 	if len(changes) == 0 {
 		return "", nil, fmt.Errorf("proposal contains no changes")
 	}
 	return strings.TrimSpace(response.Explanation), changes, nil
+}
+
+func makeChangeEdit(session *ChangeSession, path, content string) (*ChangeEdit, error) {
+	target := changeTarget(session, path)
+	if target == nil || !utf8.ValidString(content) || strings.ContainsRune(content, 0) || content == "" {
+		return nil, fmt.Errorf("proposal changed an uncaptured or invalid target")
+	}
+	if filepath.Ext(path) == ".go" {
+		if formatted, err := format.Source([]byte(content)); err == nil {
+			content = string(formatted)
+		}
+	}
+	if target.Exists && content == target.Content {
+		return nil, nil
+	}
+	return &ChangeEdit{Path: path, Content: content, Hash: contentHash([]byte(content)), Diff: changeDiff(path, target.Content, content)}, nil
 }
 
 func changeTarget(session *ChangeSession, path string) *ChangeTarget {

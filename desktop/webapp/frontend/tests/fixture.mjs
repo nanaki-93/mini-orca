@@ -307,9 +307,14 @@ export function installFixture(options = {}) {
           });
           const rev = { ...identity, project_revision: state.project.project_revision };
           const pathFile =
-            state.files.find((f) => f.path === url.searchParams.get('path')) || state.files[0];
+            state.files.find((f) => f.path === (url.searchParams.get('path') || body?.path)) ||
+            state.files[0];
           if (path === '/api/projects/current/changes/recovery')
-            return response(state.changeReceipt);
+            return response(
+              options.recoveryDropsWarnings && state.changeReceipt
+                ? { ...state.changeReceipt, warnings: [] }
+                : state.changeReceipt,
+            );
           if (path === '/api/projects/current/features')
             return response({
               ...state.features,
@@ -509,7 +514,27 @@ export function installFixture(options = {}) {
               change.reviewed_hash = change.hash;
               return response(change);
             }
+            if (action === 'verify') {
+              state.changeReceipt.verification = {
+                ...rev,
+                session_id: change.id,
+                proposal_hash: change.hash,
+                workspace_hash: 'applied-workspace',
+                status: options.verificationFail ? 'failed' : 'verified',
+                reason: options.verificationFail ? 'An applied verification check failed.' : '',
+                checks: [
+                  {
+                    name: 'post-Apply tests',
+                    required: true,
+                    state: options.verificationFail ? 'failed' : 'passed',
+                    output: options.verificationFail ? 'Regression failure' : '',
+                  },
+                ],
+              };
+              return response(state.changeReceipt.verification);
+            }
             if (action === 'apply' || action === 'undo') {
+              state.trusted = false;
               change.state = action === 'apply' ? 'applied' : 'undone';
               state.project.project_revision = action === 'apply' ? 'revision-2' : 'revision-3';
               state.source = action === 'apply' ? change.changes[0].content : source;
@@ -531,7 +556,8 @@ export function installFixture(options = {}) {
                   project_revision: state.project.project_revision,
                   files: state.files,
                 },
-                warnings: [],
+                warnings:
+                  action === 'apply' && options.mutationWarning ? [options.mutationWarning] : [],
               };
               return response(state.changeReceipt);
             }
@@ -638,6 +664,13 @@ export function installFixture(options = {}) {
             });
           if (path.endsWith('/files/analysis'))
             return response({
+              ...rev,
+              content_hash:
+                state.applied || state.changeReceipt?.state === 'applied'
+                  ? Object.values(state.changes)
+                      .flatMap((change) => change.changes)
+                      .find((edit) => edit.path === pathFile.path)?.hash || pathFile.content_hash
+                  : pathFile.content_hash,
               path: pathFile.path,
               status: 'success',
               purpose: 'Processes one queued item.',

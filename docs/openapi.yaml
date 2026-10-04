@@ -24,12 +24,12 @@ paths:
   /api/projects/current/changes:
     get:
       tags: [Chat]
-      description: List local change conversations without generation.
+      description: List bounded local conversation summaries without generation or source contents.
       parameters:
         - {in: query, name: project_id, required: true, schema: {type: string}}
         - {in: query, name: project_revision, required: true, schema: {type: string}}
       responses:
-        '200': {description: Current guarded result, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ChangeSession'}}}}}
+        '200': {description: Current guarded result, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ChangeHistoryEntry'}}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
     post:
@@ -128,6 +128,17 @@ paths:
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeApplyRequest'}}}}
       responses:
         '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeMutationResult'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/verify:
+    parameters:
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Verify the latest applied source; Go tests/vet require fresh execution trust. No model request or source write.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeIdentity'}}}}
+      responses:
+        '200': {description: Persisted check outcome for the applied identity, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeVerification'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/instructions:
@@ -2165,6 +2176,36 @@ components:
         undo_available: {type: boolean}
         index: {$ref: '#/components/schemas/ProjectIndex'}
         warnings: {type: array, items: {type: string}}
+        verification: {$ref: '#/components/schemas/ChangeVerification'}
+    ChangeHistoryEntry:
+      type: object
+      description: Local conversation summary; use a guarded selected read or resume for contents.
+      required: [id, project_id, project_revision, kind, title, revision, hash, state, freshness, updated_at]
+      properties:
+        id: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        kind: {type: string}
+        title: {type: string}
+        revision: {type: integer}
+        hash: {type: string}
+        state: {type: string}
+        freshness: {type: string}
+        updated_at: {type: string, format: date-time}
+    ChangeVerification:
+      type: object
+      required: [schema_version, session_id, project_id, project_revision, proposal_hash, workspace_hash, status, checks, updated_at]
+      properties:
+        schema_version: {type: integer, enum: [1]}
+        session_id: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        proposal_hash: {type: string}
+        workspace_hash: {type: string}
+        status: {type: string, enum: [verified, failed, unavailable, canceled, stale]}
+        reason: {type: string}
+        checks: {type: array, items: {type: object}}
+        updated_at: {type: string, format: date-time}
     InstructionPreview:
       type: object
       properties:

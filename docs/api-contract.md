@@ -111,6 +111,7 @@ untrusted networks.
 | POST | `/api/projects/current/changes/{sessionID}/review` | Record diff review for the current checked hash. |
 | POST | `/api/projects/current/changes/{sessionID}/apply` | Explicitly apply the current reviewed proposal with grouped recovery. |
 | POST | `/api/projects/current/changes/{sessionID}/undo` | Restore the latest unchanged grouped Apply or recover an interrupted mutation. |
+| POST | `/api/projects/current/changes/{sessionID}/verify` | Explicitly verify the latest applied change with fresh identity and trust. |
 | GET | `/api/projects/current/instructions` | Preview applicable AGENTS.md content, origins and instruction presets. |
 | POST | `/api/projects/current/instructions/proposal` | Prepare an AGENTS.md proposal without a provider or source write. |
 | GET | `/api/projects/current/features` | Read saved goals and advisory feature suggestions. |
@@ -595,8 +596,10 @@ authority and rechecks source, policy, instruction and whole check-workspace has
 Local `.mini-orca/changes/` history intentionally contains source, proposed contents
 and conversations in private files; it is excluded from prompt context and Git
 source indexing. Limits are eight paths, 256 KiB prompt/response content, forty
-messages, 2 MiB per conversation and two hundred conversations. History reads are
-passive. Resume clears check/review authority; stale history is readable but cannot
+messages, 2 MiB per conversation/recovery journal and two hundred conversations.
+History lists return summaries (`id`, project identity, kind, title, revision,
+hash, state, freshness and updated time); selected reads/resume return full contents.
+History reads are passive. Resume clears check/review authority; stale history is readable but cannot
 be applied. Existing declaration sessions retain their in-memory behavior.
 
 Grouped writes are journaled before source replacement. A failed write rolls back
@@ -607,6 +610,22 @@ A mutation receipt reports the actual state, index (when available), warnings an
 Undo availability. Metadata failure after source changes does not erase the receipt.
 Undo verifies post-Apply hashes and removes files that the proposal created. The
 latest grouped change supersedes legacy declaration Undo.
+
+`POST /api/projects/current/changes/{sessionID}/verify` accepts `ChangeIdentity`:
+current `project_id`/`project_revision` plus applied proposal `revision`/`hash`.
+It requires the latest journal to be applied and every post-Apply target and
+workspace hash to match. Go verification requires fresh execution trust, then
+checks source parse/format and runs fixed `go test ./...` and `go vet ./...` in
+an isolated copy. Markdown-only verification checks text/file identities without
+executing code. It sends no model request and never changes source. Results carry
+`session_id`, project identity, `proposal_hash`, `workspace_hash`, `status`, optional
+`reason`, checks and timestamp. Status distinguishes `verified`, `failed`,
+`unavailable` and `canceled`; later source/project changes expose evidence as `stale`.
+Evidence is private journal metadata and appears in passive recovery receipts as
+`verification`. Undo clears it. Failed checks leave applied source in place.
+Verification proves only those checks; it does not certify all acceptance criteria
+or automatically resolve findings. Explicit focused reanalysis uses the existing
+file-analysis endpoint and its own Bug-scope provider consent.
 
 Features use the configured Analyze scope. Generation/goals bodies carry current
 project identity, `expected_hash`, `goals` (at most 4096 bytes), and generation's

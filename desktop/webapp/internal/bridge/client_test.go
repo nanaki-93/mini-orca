@@ -145,6 +145,7 @@ func TestBridgeSharedChangeRoutesRemainAllowlisted(t *testing.T) {
 		{"POST", "/api/projects/current/changes", "{}"},
 		{"POST", "/api/projects/current/changes/change-id/messages", "{}"},
 		{"POST", "/api/projects/current/changes/change-id/apply", "{}"},
+		{"POST", "/api/projects/current/changes/change-id/verify", "{}"},
 		{"POST", "/api/projects/current/instructions/proposal", "{}"},
 		{"POST", "/api/projects/current/features/generate", "{}"},
 		{"PATCH", "/api/projects/current/features/idea", "{}"},

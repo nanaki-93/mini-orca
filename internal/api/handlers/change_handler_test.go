@@ -80,6 +80,23 @@ func TestChangeHTTPInstructionProposalRequiresChecksReviewAndConfirmation(t *tes
 	if string(source) != request.Content {
 		t.Fatal("approved instructions were not applied")
 	}
+	var receipt app.ChangeMutationResult
+	if err := json.Unmarshal(applied.Body.Bytes(), &receipt); err != nil {
+		t.Fatal(err)
+	}
+	old := workflowResponse(t, handler.Verify, "POST", "/changes/id/verify", session.ID, identity)
+	if old.Code != 409 {
+		t.Fatal("verification accepted the pre-Apply project revision")
+	}
+	identity.ProjectRevision = receipt.ProjectRevision
+	verified := workflowResponse(t, handler.Verify, "POST", "/changes/id/verify", session.ID, identity)
+	if verified.Code != 200 {
+		t.Fatalf("text verification: %d %s", verified.Code, verified.Body.String())
+	}
+	var evidence app.ChangeVerification
+	if err := json.Unmarshal(verified.Body.Bytes(), &evidence); err != nil || evidence.Status != "verified" {
+		t.Fatalf("evidence: %+v, %v", evidence, err)
+	}
 }
 
 func TestChangeHTTPReadGuardsAndStrictRequests(t *testing.T) {

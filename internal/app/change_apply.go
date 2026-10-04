@@ -13,10 +13,12 @@ import (
 )
 
 type changeJournal struct {
-	Version           int           `json:"version"`
-	Session           ChangeSession `json:"session"`
-	State             string        `json:"state"`
-	PostWorkspaceHash string        `json:"post_workspace_hash"`
+	Version           int                 `json:"version"`
+	Session           ChangeSession       `json:"session"`
+	State             string              `json:"state"`
+	PostWorkspaceHash string              `json:"post_workspace_hash"`
+	Warnings          []string            `json:"warnings,omitempty"`
+	Verification      *ChangeVerification `json:"verification,omitempty"`
 }
 
 func writeChangeJournal(root string, journal *changeJournal) error {
@@ -27,6 +29,9 @@ func writeChangeJournal(root string, journal *changeJournal) error {
 	data, err := json.Marshal(journal)
 	if err != nil {
 		return err
+	}
+	if len(data) > 2*1024*1024 {
+		return fmt.Errorf("change recovery journal exceeds 2 MiB")
 	}
 	return storage.WriteFile(path, data, 0600)
 }
@@ -44,6 +49,9 @@ func readChangeJournal(root string) (*changeJournal, error) {
 		return nil, err
 	}
 	defer file.Close()
+	if err := boundedChangeFile(file); err != nil {
+		return nil, err
+	}
 	var journal changeJournal
 	decoder := json.NewDecoder(io.LimitReader(file, 2*1024*1024))
 	decoder.DisallowUnknownFields()
@@ -63,6 +71,8 @@ func (s *Service) ApplyChange(ctx context.Context, id string, request ChangeAppl
 func (s *Service) applyChangeWithWriter(ctx context.Context, id string, request ChangeApplyRequest, write func(string, []byte) error) (*ChangeMutationResult, error) {
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()
+	s.changesMu.Lock()
+	defer s.changesMu.Unlock()
 	if !request.Confirm {
 		return nil, fmt.Errorf("explicit Apply confirmation is required")
 	}
@@ -95,8 +105,6 @@ func (s *Service) applyChangeWithWriter(ctx context.Context, id string, request 
 }
 
 func (s *Service) changeApproved(session *ChangeSession) bool {
-	s.changesMu.Lock()
-	defer s.changesMu.Unlock()
 	return s.changeAuthority[session.ProjectID+"/"+session.ID] == "review:"+session.Hash && session.ReviewedHash == session.Hash && len(session.Checks) > 0 && requiredChecksPassed(session.Checks)
 }
 
@@ -107,7 +115,7 @@ func (s *Service) failedChangeMutation(root string, journal, previous *changeJou
 	}
 	if previous != nil {
 		if err := writeChangeJournal(root, previous); err != nil {
-			return nil, fmt.Errorf("Apply failed and original files restored; restoring previous recovery metadata failed: %w", err)
+			return nil, fmt.Errorf("apply failed and original files restored; restoring previous recovery metadata failed: %w", err)
 		}
 	} else {
 		path, err := changeMetadataPath(root, "last-mutation.json")
@@ -118,7 +126,7 @@ func (s *Service) failedChangeMutation(root string, journal, previous *changeJou
 			return nil, fmt.Errorf("original files restored; recovery journal cleanup failed: %w", err)
 		}
 	}
-	return nil, fmt.Errorf("Apply failed; original files restored: %w", cause)
+	return nil, fmt.Errorf("apply failed; original files restored: %w", cause)
 }
 
 func writeChangeFiles(ctx context.Context, root string, session *ChangeSession, write func(string, []byte) error) error {
@@ -211,6 +219,8 @@ func restoreChangeFiles(root string, journal *changeJournal, write func(string, 
 func (s *Service) UndoChange(ctx context.Context, id string, request ChangeApplyRequest) (*ChangeMutationResult, error) {
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()
+	s.changesMu.Lock()
+	defer s.changesMu.Unlock()
 	if !request.Confirm {
 		return nil, fmt.Errorf("explicit Undo confirmation is required")
 	}
@@ -226,7 +236,7 @@ func (s *Service) UndoChange(ctx context.Context, id string, request ChangeApply
 	if err != nil {
 		return nil, err
 	}
-	if journal == nil || journal.State == "undone" || journal.Session.ID != id || request.Hash != journal.Session.Hash || request.ProjectID != index.ProjectID || request.ProjectRevision != index.ProjectRevision || journal.Session.ProjectID != index.ProjectID {
+	if !matchesChangeUndo(journal, index, id, request) {
 		return nil, project.ErrRevisionConflict
 	}
 	if journal.State == "applied" && journal.PostWorkspaceHash != "" {
@@ -238,6 +248,7 @@ func (s *Service) UndoChange(ctx context.Context, id string, request ChangeApply
 		return nil, err
 	}
 	journal.State = "undoing"
+	journal.Verification = nil
 	if err := writeChangeJournal(root, journal); err != nil {
 		return nil, err
 	}
@@ -247,6 +258,10 @@ func (s *Service) UndoChange(ctx context.Context, id string, request ChangeApply
 	}
 	journal.State = "undone"
 	return s.completeChangeMutation(root, journal, nil), nil
+}
+
+func matchesChangeUndo(journal *changeJournal, index *project.ProjectIndex, id string, request ChangeApplyRequest) bool {
+	return journal != nil && journal.State != "undone" && journal.Session.ID == id && request.Hash == journal.Session.Hash && request.ProjectID == index.ProjectID && request.ProjectRevision == index.ProjectRevision && journal.Session.ProjectID == index.ProjectID
 }
 
 func (s *Service) completeChangeMutation(root string, journal *changeJournal, warnings []string) *ChangeMutationResult {
@@ -263,15 +278,14 @@ func (s *Service) completeChangeMutation(root string, journal *changeJournal, wa
 		result.Warnings = append(result.Warnings, "Source changed; workspace identity could not be captured: "+err.Error())
 	}
 	journal.Session.State = journal.State
+	journal.Warnings = append([]string{}, result.Warnings...)
 	if err := writeChangeJournal(root, journal); err != nil {
 		result.Warnings = append(result.Warnings, "Source changed; the prepared recovery journal was retained: "+err.Error())
 	}
 	if err := writeChangeSession(root, &journal.Session); err != nil {
 		result.Warnings = append(result.Warnings, "Source changed; history could not be updated: "+err.Error())
 	}
-	s.changesMu.Lock()
 	delete(s.changeAuthority, journal.Session.ProjectID+"/"+journal.Session.ID)
-	s.changesMu.Unlock()
 	removeLegacyChangeUndo(root, result)
 	return result
 }
@@ -293,5 +307,9 @@ func (s *Service) ChangeRecovery() (*ChangeMutationResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ChangeMutationResult{SessionID: journal.Session.ID, ProjectID: journal.Session.ProjectID, ProjectRevision: index.ProjectRevision, State: journal.State, Hash: journal.Session.Hash, UndoAvailable: journal.State != "undone", Warnings: []string{}}, nil
+	verification, err := s.currentChangeVerification(context.Background(), s.manager.Root(), journal, index)
+	if err != nil {
+		return nil, err
+	}
+	return &ChangeMutationResult{SessionID: journal.Session.ID, ProjectID: journal.Session.ProjectID, ProjectRevision: index.ProjectRevision, State: journal.State, Hash: journal.Session.Hash, UndoAvailable: journal.State != "undone", Warnings: append([]string{}, journal.Warnings...), Verification: verification}, nil
 }

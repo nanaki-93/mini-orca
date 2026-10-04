@@ -158,7 +158,7 @@ Implement a shared proposal workflow in the Wails/React client: selected finding
 **Verification command**
 `make web-test`
 
-## Task 8 — [ ] Verify applied changes and complete documentation/validation
+## Task 8 — [x] Verify applied changes and complete documentation/validation
 
 **Target files**
 - `internal/app/change_verify.go` — explicitly requested focused checks after Apply, with persisted verified/failed/unavailable states.
@@ -184,6 +184,7 @@ Implement a shared proposal workflow in the Wails/React client: selected finding
 - `desktop/webapp/frontend/tests/fixture.mjs` — verification fixture.
 - `desktop/webapp/frontend/tests/run.mjs` — verification/reanalysis behavior.
 - `README.md` — current product workflow and limits.
+- `AGENTS.md` — align product-boundary guidance with shared proposals and the retained declaration workflow.
 - `desktop/webapp/README.md` — chat, features, instructions, history and recovery use.
 - `docs/api-contract.md` — verification and final compatibility/limits.
 - `docs/openapi.yaml` — verification path/schema.

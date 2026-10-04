@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,6 +19,41 @@ import (
 
 func changeIdentity(session *ChangeSession) ChangeIdentity {
 	return ChangeIdentity{ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, Revision: session.Revision, Hash: session.Hash}
+}
+
+func TestChangeHistoryLimitCountsOnlyConversationsAndRejectsCorruption(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	session := openChangeFixture(t, service, "main.go")
+	initialID := session.ID
+	for i := 0; i < 200; i++ {
+		session.ID = fmt.Sprintf("change-%032x", i)
+		if err := writeChangeSession(root, session); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Remove the initial random entry; keep exactly 200 conversations plus
+	// metadata owned by other workflows.
+	if err := os.Remove(filepath.Join(root, ".mini-orca/changes", initialID+".json")); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"features.json", "last-mutation.json"} {
+		if err := os.WriteFile(filepath.Join(root, ".mini-orca/changes", name), []byte("other metadata"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	history, err := service.ChangeHistory(context.Background())
+	if err != nil || len(history) != 200 {
+		t.Fatalf("metadata changed conversation limit: %d, %v", len(history), err)
+	}
+	if _, err := service.OpenChangeSession(context.Background(), ChangeCreateRequest{ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, Kind: "feature", Title: "Above limit", Paths: []string{"main.go"}}); err == nil {
+		t.Fatal("conversation limit was not enforced")
+	}
+	session.Changes = []ChangeEdit{{Path: "main.go", Content: "package main\n", Hash: contentHash([]byte("package main\n"))}}
+	session.Hash = changeProposalHash(session.Changes)
+	session.Changes = append(session.Changes, session.Changes[0])
+	if err := writeChangeSession(root, session); err == nil {
+		t.Fatal("duplicate persisted changes accepted")
+	}
 }
 
 func openChangeFixture(t *testing.T, service *Service, paths ...string) *ChangeSession {

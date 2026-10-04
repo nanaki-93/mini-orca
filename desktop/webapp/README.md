@@ -40,7 +40,27 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
 - **Bugs**, **Performance** and **Security** show searchable results and their
   evidence. Details retain complete model prose, provenance and verification
   guidance. Findings and performance hypotheses keep their reported confidence.
-- **Editor** shows selectable read-only source. Choose a declaration or create a
+- **Features** uses project goals to suggest advisory new capabilities. Save,
+  dismiss or discuss an idea in Chat. Opening an idea does not generate code.
+- **Chat** captures up to eight explicit Go/Markdown paths, including new files.
+  Describe a task or use **Prepare fix** on a finding. Preparation generates and
+  checks a proposal, with at most three repairs of failed checks. Read every diff,
+  select **Review this diff**, then **Approve and apply** and confirm its scope.
+  Requested tests remain required; execution trust and remote-provider consent
+  are separate. New revisions clear earlier review. Local history restores a
+  conversation without generation or inherited check/review authority.
+- **Instructions** guides root or directory AGENTS.md loading, editable preset
+  additions and custom guidance. Existing files are registered by reading them;
+  inherited guides show their origins and scope. **Preview instruction diff**
+  creates a manual proposal in Chat with the same explicit Review/Apply workflow.
+- After Apply, **Verify applied change** checks the applied file identities and
+  runs Go tests/vet in a copied workspace with fresh execution trust. Markdown-only
+  verification checks text and hashes. **Reanalyze changed files** requests fresh
+  source suggestions using separate provider consent. Passing checks do not
+  certify acceptance criteria or automatically mark original findings fixed.
+  The latest unchanged grouped proposal offers **Undo proposal**; interrupted
+  writes expose recovery state and guarded restoration.
+- **Source** shows selectable read-only source. Choose a declaration or create a
   new one, describe a change, and edit only the returned declaration/import draft.
   Validate, run checks, inspect Review, then explicitly Apply. The receipt offers
   guarded Undo. Local edits invalidate prior checks. Returning to the editor or
@@ -58,7 +78,13 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   or closing. Terminal use never grants execution trust for checks or benchmarks.
 
 The interface remembers only the last project path, appearance and text size in
-webview storage. It does not persist source, drafts, consent or terminal output.
+webview storage. Private project-local `.mini-orca/changes/` metadata stores
+conversations, source captures/proposals, goals, ideas and grouped recovery/check
+evidence. Consent and execution trust are not restored. History lists return
+summaries; chosen sessions expose their complete contents. Bounds are eight paths,
+256 KiB context/response, forty messages, 2 MiB per conversation/recovery journal
+and two hundred conversations. Go/Markdown proposals cannot delete files.
+Performance changes remain unmeasured until an explicit benchmark comparison.
 Restoring a project never starts a provider request or shell. **⌘K / Ctrl+K** opens
 file and command search. Actions have visible focus and descriptive labels.
 
