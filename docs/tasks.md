@@ -67,7 +67,7 @@ Implement a shared proposal workflow in the Wails/React client: selected finding
 **Verification command**
 `go test ./internal/app -run 'TestChange'`
 
-## Task 4 — [ ] Generate and save goal-aware feature suggestions
+## Task 4 — [x] Generate and save goal-aware feature suggestions
 
 **Target files**
 - `internal/app/feature_suggestions.go` — separate source-free advisory suggestions, project goals, status and freshness.
