@@ -223,6 +223,8 @@ export function installFixture(options = {}) {
     performance,
     security,
     trusted: false,
+    changes: {},
+    changeReceipt: null,
     draft: undefined,
     session: undefined,
     applied: false,
@@ -293,6 +295,113 @@ export function installFixture(options = {}) {
           const rev = { ...identity, project_revision: state.project.project_revision };
           const pathFile =
             state.files.find((f) => f.path === url.searchParams.get('path')) || state.files[0];
+          if (path === '/api/projects/current/changes/recovery')
+            return response(state.changeReceipt);
+          if (path === '/api/projects/current/changes') {
+            if (method === 'GET') return response(Object.values(state.changes));
+            const change = {
+              ...rev,
+              id: `change-${Object.keys(state.changes).length + 1}`,
+              kind: body.kind,
+              title: body.title,
+              acceptance_criteria: body.acceptance_criteria || [],
+              revision: 0,
+              hash: 'empty',
+              state: 'draft',
+              freshness: 'current',
+              targets: body.paths.map((path) => ({
+                path,
+                exists: files.some((file) => file.path === path),
+                hash: 'base',
+                content: source,
+              })),
+              changes: [],
+              messages: [],
+              checks: [],
+              reviewed_hash: '',
+              repair_attempts: 0,
+              context_manifest: context,
+            };
+            state.changes[change.id] = change;
+            return response(change);
+          }
+          if (path.includes('/changes/')) {
+            const parts = path.split('/');
+            const change = state.changes[parts[5]];
+            const action = parts[6];
+            if (!change)
+              return {
+                status: 400,
+                body: JSON.stringify({ user_message: 'Conversation unavailable' }),
+              };
+            if (!action)
+              return response({ ...change, freshness: state.changed ? 'stale' : 'current' });
+            if (action === 'resume') {
+              change.checks = [];
+              change.reviewed_hash = '';
+              change.freshness = state.changed ? 'stale' : 'current';
+              return response(change);
+            }
+            if (action === 'messages') {
+              change.revision++;
+              change.hash = `proposal-${change.revision}`;
+              if (body.repair) change.repair_attempts++;
+              change.messages.push(
+                { role: 'user', content: body.message },
+                {
+                  role: 'assistant',
+                  content: 'The proposal handles cancellation and preserves its scope.',
+                },
+              );
+              change.changes = change.targets.map((target) => ({
+                path: target.path,
+                content: source.replace('return nil', 'return ctx.Err()'),
+                hash: `candidate-${change.revision}`,
+                diff: validation().diff,
+              }));
+              change.checks = [];
+              change.reviewed_hash = '';
+              return response(change);
+            }
+            if (action === 'checks') {
+              change.checks = [
+                { name: 'parse', required: true, state: 'passed' },
+                {
+                  name: 'tests',
+                  required: true,
+                  state: options.changeChecksFail ? 'failed' : 'passed',
+                  output: options.changeChecksFail ? 'Fixture test failure' : '',
+                },
+              ];
+              change.check_options = { run_tests: body.run_tests };
+              change.reviewed_hash = '';
+              return response(change);
+            }
+            if (action === 'review') {
+              change.reviewed_hash = change.hash;
+              return response(change);
+            }
+            if (action === 'apply' || action === 'undo') {
+              change.state = action === 'apply' ? 'applied' : 'undone';
+              state.project.project_revision = action === 'apply' ? 'revision-2' : 'revision-3';
+              state.source = action === 'apply' ? change.changes[0].content : source;
+              state.changeReceipt = {
+                project_id: identity.project_id,
+                project_revision: state.project.project_revision,
+                session_id: change.id,
+                state: change.state,
+                hash: change.hash,
+                undo_available: action === 'apply',
+                index: {
+                  ...identity,
+                  project_revision: state.project.project_revision,
+                  files: state.files,
+                },
+                warnings: [],
+              };
+              return response(state.changeReceipt);
+            }
+          }
           if (path === '/status')
             return response({
               status: 'running',

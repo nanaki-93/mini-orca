@@ -148,6 +148,25 @@ export function Results({ s }: { s: State }) {
           <Button disabled={!!s.busy} onClick={() => void open(detail, false)}>
             Open source
           </Button>
+          {detail.path && (
+            <Button
+              tone="primary"
+              disabled={!!s.busy || detail.freshness === 'stale'}
+              onClick={() => {
+                const seed = {
+                  title: detail.title.slice(0, 200),
+                  paths: [detail.path],
+                  kind: category === 'performance' ? 'performance' : 'fix',
+                  message: `Address this finding: ${detail.title}\n${detail.text.map(([label, text]) => `${label}: ${text}`).join('\n')}`,
+                  acceptance_criteria: detail.task?.acceptance_criteria || [],
+                };
+                w.seedChange(seed);
+                void w.prepareChange(seed, true);
+              }}
+            >
+              Prepare fix
+            </Button>
+          )}
           {detail.symbol && (
             <Button
               tone="primary"

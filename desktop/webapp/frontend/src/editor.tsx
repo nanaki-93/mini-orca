@@ -32,7 +32,10 @@ export function Editor({ s }: { s: State }) {
   ];
   return (
     <>
-      <Heading title={s.file?.name || 'Editor'} eyebrow={s.project!.name} detail={s.file?.path}>
+      <Heading title={s.file?.name || 'Source'} eyebrow={s.project!.name} detail={s.file?.path}>
+        <Go page="chat" icon="sparkles">
+          Implement in chat
+        </Go>
         <Go page="search" icon="search">
           Find file
         </Go>
