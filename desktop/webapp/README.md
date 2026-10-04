@@ -45,9 +45,13 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   Validate, run checks, inspect Review, then explicitly Apply. The receipt offers
   guarded Undo. Local edits invalidate prior checks. Returning to the editor or
   application rechecks the source; changed files need **Refresh facts**.
+- **Summary** previews saved architecture and project-flow charts. **Explore**
+  opens the complete architecture and flows view. Plain Mermaid reports and
+  Markdown-fenced charts render locally, with selectable source and a readable
+  fallback for older prose or render failures.
 - **Context** shows included/excluded files, hashes and the provider destination.
-  **Models** reads configuration without probing a provider. Diagrams render
-  locally; model-supplied links, HTML and remote images are inert.
+  **Models** reads configuration without probing a provider. Model-supplied links,
+  HTML and remote images are inert.
 - **Terminal** starts a shell only after an explicit action. Tabs keep running
   while hidden. Closing tabs, switching projects and exiting the app clean up
   their owned processes. A cleanup failure remains visible and blocks switching

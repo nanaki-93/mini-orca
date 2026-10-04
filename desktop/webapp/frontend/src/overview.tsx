@@ -305,7 +305,7 @@ export function Summary({ s }: { s: State }) {
               </Go>
             }
           >
-            <Prose text={overview?.analysis.architecture} />
+            <Prose text={overview?.analysis.architecture} diagramLabel="Architecture diagram" />
             {!overview?.analysis.architecture && (
               <p className="muted">No architecture overview saved.</p>
             )}
@@ -315,6 +315,16 @@ export function Summary({ s }: { s: State }) {
               </Disclosure>
             )}
           </Panel>
+          {!!overview?.analysis.flows?.length && (
+            <Panel title="Project flows">
+              {overview.analysis.flows.map((flow, i) => (
+                <div className="content-section" key={i}>
+                  <h3>Flow {i + 1}</h3>
+                  <Prose text={flow} diagramLabel={`Flow ${i + 1} diagram`} />
+                </div>
+              ))}
+            </Panel>
+          )}
         </div>
       </div>
       {s.run && (
@@ -389,13 +399,21 @@ export function Diagrams({ s }: { s: State }) {
       </Heading>
       <div className="stack">
         <Panel title="Architecture">
-          <Prose text={s.overview?.analysis.architecture} />
+          <Prose text={s.overview?.analysis.architecture} diagramLabel="Architecture diagram" />
+          {!s.overview?.analysis.architecture && (
+            <p className="muted">No architecture overview saved.</p>
+          )}
         </Panel>
         {(s.overview?.analysis.flows || []).map((flow, i) => (
           <Panel title={`Flow ${i + 1}`} key={i}>
-            <Prose text={flow} />
+            <Prose text={flow} diagramLabel={`Flow ${i + 1} diagram`} />
           </Panel>
         ))}
+        {!s.overview?.analysis.flows?.length && (
+          <Panel title="Project flows">
+            <p className="muted">No project flows saved.</p>
+          </Panel>
+        )}
         <Panel title="Next steps">
           <BulletContent title="" items={s.overview?.analysis.next_steps} />
         </Panel>

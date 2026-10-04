@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type ButtonHTMLAttributes } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode, type ButtonHTMLAttributes } from 'react';
 import { renderMermaidSVG } from 'beautiful-mermaid';
 import { icons } from './icons';
 import type { Insight } from './models';
@@ -199,12 +199,11 @@ export function InsightCard({ insight }: { insight?: Insight }) {
     </Panel>
   );
 }
-function Diagram({ source }: { source: string }) {
-  const [result, setResult] = useState<{ url?: string; error?: string }>({});
-  useEffect(() => {
+function Diagram({ source, label }: { source: string; label: string }) {
+  const result = useMemo<{ url?: string; error?: string }>(() => {
+    if (source.length > 16000 || source.split('\n').length > 160)
+      return { error: 'Diagram is too large to render.' };
     try {
-      if (source.length > 16000 || source.split('\n').length > 160)
-        throw new Error('Diagram is too large to render.');
       const svg = renderMermaidSVG(source, {
         bg: '#101b14',
         fg: '#f1fff4',
@@ -213,29 +212,43 @@ function Diagram({ source }: { source: string }) {
         padding: 24,
       });
       // SVG images cannot run scripts or activate model-authored links.
-      setResult({ url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` });
+      return { url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` };
     } catch {
-      setResult({ error: 'Diagram preview unavailable' });
+      return { error: 'Diagram preview unavailable' };
     }
   }, [source]);
   return (
     <div className="diagram">
-      {result.url && <img src={result.url} alt="Architecture diagram" />}
+      {result.url && <img src={result.url} alt={label} />}
       {result.error && <p>{result.error}</p>}
-      <Disclosure title="Diagram source">
-        <pre>{source}</pre>
+      <Disclosure title="Diagram source" open={!!result.error}>
+        <pre tabIndex={0}>{source}</pre>
       </Disclosure>
     </div>
   );
 }
-export function Prose({ text }: { text?: string }) {
+export function Prose({
+  text,
+  diagramLabel = 'Mermaid diagram',
+}: {
+  text?: string;
+  diagramLabel?: string;
+}) {
   if (!text) return null;
+  const source = text.trim();
+  // Project reports store Mermaid directly, without Markdown fences.
+  if (/^(flowchart|graph|sequenceDiagram)\b/.test(source))
+    return (
+      <div className="prose">
+        <Diagram source={source} label={diagramLabel} />
+      </div>
+    );
   const pieces = text.split(/(```[\s\S]*?```)/g);
   return (
     <div className="prose">
       {pieces.map((piece, i) => {
-        if (piece.startsWith('```mermaid\n'))
-          return <Diagram source={piece.slice(11, -3).trim()} key={i} />;
+        const mermaid = piece.match(/^```[ \t]*mermaid[ \t]*\r?\n([\s\S]*?)```$/i);
+        if (mermaid) return <Diagram source={mermaid[1].trim()} label={diagramLabel} key={i} />;
         if (piece.startsWith('```'))
           return <pre key={i}>{piece.replace(/^```[^\n]*\n?/, '').replace(/```$/, '')}</pre>;
         return piece
