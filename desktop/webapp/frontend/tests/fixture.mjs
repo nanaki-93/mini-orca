@@ -225,6 +225,19 @@ export function installFixture(options = {}) {
     trusted: false,
     changes: {},
     changeReceipt: null,
+    features: {
+      ...identity,
+      hash: 'features-empty',
+      goals: '',
+      status: 'not_generated',
+      freshness: 'current',
+      suggestions: [],
+      context_manifest: context,
+    },
+    instructions: {
+      'AGENTS.md': '# Project rules\n\nPreserve public APIs.\n',
+      'internal/AGENTS.md': '# Internal rules\n\nPropagate cancellation.\n',
+    },
     draft: undefined,
     session: undefined,
     applied: false,
@@ -297,6 +310,121 @@ export function installFixture(options = {}) {
             state.files.find((f) => f.path === url.searchParams.get('path')) || state.files[0];
           if (path === '/api/projects/current/changes/recovery')
             return response(state.changeReceipt);
+          if (path === '/api/projects/current/features')
+            return response({
+              ...state.features,
+              freshness:
+                options.featuresStale || state.changed ? 'stale' : state.features.freshness,
+            });
+          if (path.includes('/features/')) {
+            if (path.endsWith('/goals')) {
+              if (state.features.goals !== body.goals && state.features.suggestions.length)
+                state.features.freshness = 'stale';
+              state.features.goals = body.goals;
+            } else if (path.endsWith('/generate')) {
+              state.features.goals = body.goals;
+              state.features.status = options.featuresFail ? 'failed' : 'ready';
+              state.features.failure = options.featuresFail
+                ? 'Feature suggestions could not be generated.'
+                : '';
+              state.features.freshness = options.featuresStale ? 'stale' : 'current';
+              state.features.suggestions = options.featuresEmpty
+                ? []
+                : [
+                    {
+                      id: 'idea-1',
+                      title: 'Retry failed work',
+                      benefit: 'Let users recover failed jobs without submitting them again.',
+                      evidence: 'The worker queue already records failed jobs.',
+                      paths: [files[0].path],
+                      effort: 'medium',
+                      acceptance_criteria: [
+                        'Retry only eligible failed jobs.',
+                        'Show the new job status.',
+                      ],
+                      status: 'open',
+                    },
+                  ];
+            } else {
+              state.features.suggestions.find((idea) => idea.id === path.split('/').at(-1)).status =
+                body.status;
+            }
+            state.features.hash += '-next';
+            return response(state.features);
+          }
+          if (path === '/api/projects/current/instructions') {
+            const target = url.searchParams.get('path');
+            const inherited = Object.entries(state.instructions).filter(
+              ([file]) => file === 'AGENTS.md' || file === target,
+            );
+            return response({
+              ...rev,
+              path: target,
+              exists: target in state.instructions,
+              existing_content: state.instructions[target] || '',
+              effective: {
+                files: inherited.map(([path, content]) => ({
+                  path,
+                  content,
+                  hash: 'guide',
+                  scope: path === 'AGENTS.md' ? '.' : 'internal',
+                })),
+                excluded: [],
+                fingerprint: 'guide-1',
+              },
+              presets: [
+                {
+                  id: 'focused',
+                  label: 'Keep changes focused',
+                  content: 'Preserve unrelated work.',
+                },
+                {
+                  id: 'tests',
+                  label: 'Test meaningful behavior',
+                  content: 'Test behavior and error paths.',
+                },
+              ],
+            });
+          }
+          if (path === '/api/projects/current/instructions/proposal') {
+            const change = {
+              ...rev,
+              id: `change-${Object.keys(state.changes).length + 1}`,
+              kind: 'instructions',
+              title: body.title,
+              acceptance_criteria: body.acceptance_criteria,
+              revision: 1,
+              hash: 'instructions-1',
+              state: 'draft',
+              freshness: 'current',
+              targets: [
+                {
+                  path: body.paths[0],
+                  content: state.instructions[body.paths[0]] || '',
+                  exists: body.paths[0] in state.instructions,
+                  hash: 'guide',
+                },
+              ],
+              changes: [
+                {
+                  path: body.paths[0],
+                  content: body.content,
+                  hash: 'guide-next',
+                  diff: {
+                    lines: body.content
+                      .split('\n')
+                      .map((text, i) => ({ kind: 'add', text, new_line: i + 1 })),
+                  },
+                },
+              ],
+              messages: [],
+              checks: [],
+              repair_attempts: 0,
+              context_manifest: context,
+            };
+            state.changes[change.id] = change;
+            return response(change);
+          }
           if (path === '/api/projects/current/changes') {
             if (method === 'GET') return response(Object.values(state.changes));
             const change = {
@@ -385,6 +513,12 @@ export function installFixture(options = {}) {
               change.state = action === 'apply' ? 'applied' : 'undone';
               state.project.project_revision = action === 'apply' ? 'revision-2' : 'revision-3';
               state.source = action === 'apply' ? change.changes[0].content : source;
+              if (change.kind === 'instructions')
+                for (const edit of change.changes)
+                  state.instructions[edit.path] =
+                    action === 'apply'
+                      ? edit.content
+                      : change.targets.find((target) => target.path === edit.path).content;
               state.changeReceipt = {
                 project_id: identity.project_id,
                 project_revision: state.project.project_revision,

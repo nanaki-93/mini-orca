@@ -79,6 +79,15 @@ export function Analysis({ s }: { s: State }) {
           </div>
         </Panel>
       )}
+      <Panel title="New feature suggestions" className="section-gap">
+        <p>
+          Explore new capabilities using project goals and code context. Suggestions stay separate
+          from findings and check evidence.
+        </p>
+        <Go page="features" icon="sparkles">
+          Explore features
+        </Go>
+      </Panel>
       <div className="toolbar section-gap">
         <div className="input-wrap">
           <Icon name="search" />

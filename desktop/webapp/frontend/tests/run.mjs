@@ -392,6 +392,9 @@ try {
       'Bugs',
       'Performance',
       'Security',
+      'Features',
+      'Instructions',
+      'Chat',
       'Source',
       'Models',
       'Project',
@@ -851,6 +854,131 @@ try {
     await idle(page);
     assert.equal(await page.getByLabel('Read-only diff for internal/worker/process.go').count(), 0);
     await close();
+  });
+  await test('Feature goals and idea triage are local; Discuss only seeds Chat', async () => {
+    const { page, close } = await pageFor({ remote: true });
+    await nav(page, 'Analysis');
+    await page.getByRole('button', { name: 'Explore features' }).click();
+    await page.getByRole('heading', { name: 'No suggestions generated' }).waitFor();
+    await page
+      .getByLabel('Project goals', { exact: true })
+      .fill('Help operators recover failed jobs.');
+    await page.getByRole('button', { name: 'Save goals', exact: true }).click();
+    await idle(page);
+    assert.equal(
+      await page.evaluate(() =>
+        window.fixture.requests.some((r) => r.path.endsWith('/features/generate')),
+      ),
+      false,
+    );
+    await page.getByRole('button', { name: 'Suggest features', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
+    await idle(page);
+    await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Save idea', exact: true }).click();
+    await idle(page);
+    await page.getByLabel('Filter feature suggestions').selectOption('saved');
+    await layout(page, 'features-saved');
+    await contrast(page, 'Feature suggestions');
+    await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
+    await idle(page);
+    await page.getByRole('heading', { name: 'No matching suggestions' }).waitFor();
+    await page.getByLabel('Filter feature suggestions').selectOption('dismissed');
+    await page.getByRole('button', { name: 'Reopen', exact: true }).click();
+    await idle(page);
+    await page.getByLabel('Filter feature suggestions').selectOption('active');
+    await page.getByRole('button', { name: 'Discuss in chat', exact: true }).click();
+    await page.getByLabel('Change request', { exact: true }).waitFor();
+    assert.match(
+      await page.getByLabel('Change request', { exact: true }).inputValue(),
+      /Retry only eligible failed jobs/,
+    );
+    assert.equal(
+      await page.evaluate(() => window.fixture.requests.some((r) => r.path.endsWith('/messages'))),
+      false,
+    );
+    await close();
+  });
+  await test('Instruction wizard preserves inherited rules and requires diff review and Apply', async () => {
+    const { page, close } = await pageFor();
+    await nav(page, 'Instructions');
+    await page.getByLabel('Instruction path').fill('internal/AGENTS.md');
+    await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+    await page.getByLabel('Custom instructions').waitFor();
+    assert.match(
+      await page.getByLabel('Custom instructions').inputValue(),
+      /Propagate cancellation/,
+    );
+    await page.getByText('AGENTS.md · scope .', { exact: true }).click();
+    await page.getByText('Preserve public APIs.', { exact: true }).waitFor();
+    await page.getByLabel('Keep changes focused', { exact: true }).check();
+    await page.getByRole('button', { name: 'Add selected guidance', exact: true }).click();
+    const content = await page.getByLabel('Custom instructions').inputValue();
+    await page
+      .getByLabel('Custom instructions')
+      .fill(`${content}\nUse table-driven tests for boundary cases.\n`);
+    await layout(page, 'instructions-guidance');
+    await contrast(page, 'Instruction wizard');
+    await page.setViewportSize({ width: 900, height: 640 });
+    await page.getByRole('button', { name: 'Larger text' }).click();
+    await layout(page, 'instructions-large-text');
+    await page.getByRole('button', { name: 'Continue to preview', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview instruction diff', exact: true }).click();
+    await idle(page);
+    await page.getByLabel('Read-only diff for internal/AGENTS.md').waitFor();
+    const before = await page.evaluate(() => window.fixture.requests);
+    assert.equal(
+      before.some(
+        (r) =>
+          r.path.endsWith('/messages') ||
+          r.path.endsWith('/apply') ||
+          (r.path.endsWith('/execution-trust') && r.method === 'POST'),
+      ),
+      false,
+    );
+    assert.equal(await page.getByRole('button', { name: 'Approve and apply' }).isDisabled(), true);
+    await page.getByRole('button', { name: 'Review this diff' }).click();
+    await idle(page);
+    await page.getByRole('button', { name: 'Approve and apply' }).click();
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Apply proposal', exact: true })
+      .click();
+    await idle(page);
+    const instructions = await page.evaluate(() => window.fixture.state.instructions);
+    assert.equal(instructions['AGENTS.md'], '# Project rules\n\nPreserve public APIs.\n');
+    assert.match(
+      instructions['internal/AGENTS.md'],
+      /Propagate cancellation[\s\S]*Preserve unrelated work[\s\S]*table-driven tests/,
+    );
+    await close();
+  });
+  await test('Feature empty, failed and stale results keep their meanings', async () => {
+    for (const options of [
+      { featuresEmpty: true },
+      { featuresFail: true },
+      { featuresStale: true },
+    ]) {
+      const { page, close } = await pageFor(options);
+      await nav(page, 'Features');
+      await page.getByRole('button', { name: 'Suggest features' }).click();
+      await idle(page);
+      if (options.featuresEmpty)
+        await page.getByRole('heading', { name: 'No matching suggestions' }).waitFor();
+      if (options.featuresFail)
+        await page
+          .getByText('Feature suggestions could not be generated.', { exact: true })
+          .waitFor();
+      if (options.featuresStale)
+        assert.equal(
+          await page.getByRole('button', { name: 'Discuss in chat' }).isDisabled(),
+          true,
+        );
+      await page.setViewportSize({ width: 800, height: 900 });
+      await page.getByRole('button', { name: 'Larger text' }).click();
+      await layout(page, `features-${Object.keys(options)[0]}`);
+      await close();
+    }
   });
   assert.deepEqual(errors, []);
   console.log(`PASS ${checks} workflow and layout checks; no browser errors or external requests`);
