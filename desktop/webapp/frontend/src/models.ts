@@ -495,3 +495,35 @@ export interface ChangeSeed {
   paths: string[];
   acceptance_criteria: string[];
 }
+
+export interface FeatureSuggestion {
+  id: string;
+  title: string;
+  benefit: string;
+  evidence: string;
+  paths: string[];
+  effort: string;
+  acceptance_criteria: string[];
+  status: 'open' | 'saved' | 'dismissed';
+}
+export interface FeatureReport extends ProjectIdentity {
+  hash: string;
+  goals: string;
+  status: string;
+  freshness: string;
+  failure?: string;
+  suggestions: FeatureSuggestion[];
+  context_manifest: ContextManifest;
+}
+export interface InstructionPreview extends ProjectIdentity {
+  path: string;
+  exists: boolean;
+  existing_content: string;
+  presets: { id: string; label: string; content: string }[];
+  effective: {
+    files: { path: string; scope: string; content: string; hash: string }[];
+    excluded: { path: string; reason: string }[];
+    text: string;
+    fingerprint: string;
+  };
+}

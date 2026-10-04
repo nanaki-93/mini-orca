@@ -14,6 +14,8 @@ import { Analysis, AnalysisPreview, AnalysisRun } from './analysis';
 import { Results } from './results';
 import { Editor } from './editor';
 import { ChangeWorkspace } from './change-workspace';
+import { Features } from './features';
+import { Instructions } from './instructions';
 import { Benchmark, Scan, Receipt, TerminalWorkspace } from './tools';
 import './style.css';
 
@@ -23,10 +25,12 @@ const mainNav: [Page, string, string][] = [
   ['bugs', 'Bugs', 'bug'],
   ['performance', 'Performance', 'gauge'],
   ['security', 'Security', 'shield'],
+  ['features', 'Features', 'sparkles'],
   ['chat', 'Chat', 'sparkles'],
 ];
 const utilityNav: [Page, string, string][] = [
   ['editor', 'Source', 'code'],
+  ['instructions', 'Instructions', 'file'],
   ['terminal', 'Terminal', 'terminal'],
   ['models', 'Models', 'sparkles'],
   ['project', 'Project', 'folder'],
@@ -120,6 +124,8 @@ function App() {
   else if (['bugs', 'performance', 'security'].includes(s.page))
     content = <Results s={s} key={s.page} />;
   else if (s.page === 'chat') content = <ChangeWorkspace s={s} />;
+  else if (s.page === 'features') content = <Features s={s} />;
+  else if (s.page === 'instructions') content = <Instructions s={s} />;
   else if (editorPages.includes(s.page)) content = <Editor s={s} />;
   else if (s.page === 'benchmark') content = <Benchmark s={s} />;
   else if (s.page === 'scan') content = <Scan s={s} />;

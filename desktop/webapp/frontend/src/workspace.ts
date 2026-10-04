@@ -2,6 +2,8 @@ import { API, ApiError, current, errorMessage, native } from './api';
 import type * as M from './models';
 
 export type Page =
+  | 'features'
+  | 'instructions'
   | 'chat'
   | 'welcome'
   | 'summary'
@@ -83,6 +85,8 @@ export interface State {
   changeSeed?: M.ChangeSeed;
   changeHistory?: M.ChangeSession[];
   changeReceipt?: M.ChangeMutation | null;
+  features?: M.FeatureReport;
+  instructionPreview?: M.InstructionPreview;
 }
 const initial = (): State => ({
   page: 'welcome',
@@ -191,6 +195,8 @@ export class Workspace {
   private explicitProjectAction = false;
   private fileRefresh: Promise<void> = Promise.resolve();
   private resultRequests: Record<string, number> = {};
+  private featureRequest = 0;
+  private instructionRequest = 0;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -446,6 +452,9 @@ export class Workspace {
     if (['editor', 'draft', 'checks', 'review', 'assistant', 'benchmark'].includes(page))
       await this.refreshFile();
     if (page === 'chat') await this.loadChangeHistory();
+    if (page === 'features') await this.loadFeatures();
+    if (page === 'instructions')
+      await this.loadInstructions(this.state.instructionPreview?.path || 'AGENTS.md');
     if (['bugs', 'performance', 'security'].includes(page)) await this.loadResults(page);
     if (page === 'context' || page === 'manifest') await this.inspectContext();
   }
@@ -1185,6 +1194,131 @@ export class Workspace {
       error: '',
     });
     void this.loadChangeHistory();
+  }
+  async loadFeatures() {
+    if (!this.state.project) return;
+    const request = ++this.featureRequest;
+    await this.resource(
+      'feature suggestions',
+      () => this.api.get<M.FeatureReport>(`${current}/features`, this.identity()),
+      (features) => this.set({ features }),
+      () => request === this.featureRequest,
+    );
+  }
+  async updateFeatures(goals: string, generate = false) {
+    await this.act(generate ? 'Generate feature suggestions' : 'Save project goals', async () => {
+      const report = this.state.features;
+      if (!report) throw new Error('Load feature suggestions first.');
+      const epoch = this.epoch,
+        operation = this.operation;
+      const request = ++this.featureRequest;
+      const confirmed = generate
+        ? await this.confirmModel('analyze', 'Generate feature suggestions', false, [
+            'Policy-filtered project context and root AGENTS.md',
+          ])
+        : false;
+      if (confirmed === null || epoch !== this.epoch || operation !== this.operation) return;
+      try {
+        const features = await this.api.post<M.FeatureReport>(
+          `${current}/features/${generate ? 'generate' : 'goals'}`,
+          {
+            ...this.identity(),
+            expected_hash: report.hash,
+            goals,
+            confirm_remote_provider: confirmed,
+          },
+        );
+        if (epoch === this.epoch && operation === this.operation && request === this.featureRequest)
+          this.set({ features });
+      } catch (error) {
+        if (epoch === this.epoch && operation === this.operation) await this.loadFeatures();
+        throw error;
+      }
+    });
+  }
+  async setFeatureStatus(id: string, status: M.FeatureSuggestion['status']) {
+    await this.act('Save suggestion status', async () => {
+      const report = this.state.features;
+      if (!report) return;
+      const epoch = this.epoch,
+        operation = this.operation,
+        request = ++this.featureRequest;
+      const features = await this.api.request<M.FeatureReport>(
+        'PATCH',
+        `${current}/features/${encodeURIComponent(id)}`,
+        {
+          ...this.identity(),
+          expected_hash: report.hash,
+          goals: report.goals,
+          status,
+        },
+      );
+      if (epoch === this.epoch && operation === this.operation && request === this.featureRequest)
+        this.set({ features });
+    });
+  }
+  discussFeature(idea: M.FeatureSuggestion) {
+    this.seedChange({
+      title: idea.title,
+      kind: 'feature',
+      paths: idea.paths,
+      acceptance_criteria: idea.acceptance_criteria,
+      message: `${idea.title}\n\nBenefit: ${idea.benefit}\nContext: ${idea.evidence}\n\nAcceptance criteria:\n${idea.acceptance_criteria.map((item) => `- ${item}`).join('\n')}`,
+    });
+  }
+  async loadInstructions(path: string) {
+    if (!this.state.project) return false;
+    const request = ++this.instructionRequest;
+    this.set({ instructionPreview: undefined });
+    let loaded = false;
+    await this.resource(
+      'project instructions',
+      () =>
+        this.api.get<M.InstructionPreview>(`${current}/instructions`, { ...this.identity(), path }),
+      (instructionPreview) => {
+        this.set({ instructionPreview });
+        loaded = true;
+      },
+      () => request === this.instructionRequest,
+    );
+    return loaded;
+  }
+  clearInstructionScope() {
+    this.instructionRequest++;
+    this.set({ instructionPreview: undefined });
+  }
+  async proposeInstructions(content: string) {
+    await this.act('Preview instruction diff', async () => {
+      const preview = this.state.instructionPreview;
+      if (!preview || projectKey(preview) !== projectKey(this.state.project))
+        throw new Error('Load the current instruction scope first.');
+      const epoch = this.epoch,
+        operation = this.operation;
+      const change = await this.api.post<M.ChangeSession>(`${current}/instructions/proposal`, {
+        ...this.identity(),
+        kind: 'instructions',
+        title: `Instructions for ${preview.path}`,
+        paths: [preview.path],
+        acceptance_criteria: [
+          'Preserve existing rules and apply the requested instruction updates.',
+        ],
+        content,
+      });
+      if (
+        epoch !== this.epoch ||
+        operation !== this.operation ||
+        this.state.instructionPreview !== preview
+      )
+        return;
+      if (
+        projectKey(change) !== projectKey(preview) ||
+        change.targets.length !== 1 ||
+        change.targets[0].path !== preview.path
+      )
+        throw new Error('Instruction proposal belongs to another scope.');
+      this.set({ change, changeSeed: undefined, changeReceipt: undefined, page: 'chat' });
+      await this.requestChangeChecks(false);
+    });
   }
   newChange() {
     if (this.state.busy) return;

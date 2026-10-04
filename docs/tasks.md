@@ -134,7 +134,7 @@ Implement a shared proposal workflow in the Wails/React client: selected finding
 **Verification command**
 `make web-test`
 
-## Task 7 — [ ] Deliver Features and the AGENTS.md wizard
+## Task 7 — [x] Deliver Features and the AGENTS.md wizard
 
 **Target files**
 - `desktop/webapp/frontend/src/features.tsx` — goals, advisory suggestion cards, save/dismiss and chat handoff.
