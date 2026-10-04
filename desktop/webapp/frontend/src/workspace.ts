@@ -365,6 +365,7 @@ export class Workspace {
   async refreshProject() {
     const identity = this.identity();
     await Promise.all([
+      this.loadFeatures(),
       this.resource(
         'overview',
         () => this.api.get<M.Overview>(`${current}/overview`, identity),
@@ -452,7 +453,7 @@ export class Workspace {
     if (['editor', 'draft', 'checks', 'review', 'assistant', 'benchmark'].includes(page))
       await this.refreshFile();
     if (page === 'chat') await this.loadChangeHistory();
-    if (page === 'features') await this.loadFeatures();
+    if (page === 'features' || page === 'summary') await this.loadFeatures();
     if (page === 'instructions')
       await this.loadInstructions(this.state.instructionPreview?.path || 'AGENTS.md');
     if (['bugs', 'performance', 'security'].includes(page)) await this.loadResults(page);
@@ -509,6 +510,7 @@ export class Workspace {
       const preview = await this.api.post<M.AnalysisPreview>(`${current}/analysis/preview`, {
         ...this.identity(),
         scope: 'project',
+        include_features: run ? !!run.plan.features : true,
         limits: run?.plan.limits || limits,
         refresh: run?.plan.refresh || refresh,
         retry_stale_failed: run?.plan.retry_stale_failed || retry,
@@ -535,10 +537,12 @@ export class Workspace {
             preview_id: p.preview_id,
             limits: p.limits,
             refresh: p.refresh,
+            include_features: !!p.features,
             retry_stale_failed: p.retry_stale_failed || false,
             confirmations,
           });
       this.set({ run, preview: undefined, resume: undefined, results: {}, page: 'analysis-run' });
+      await this.loadFeatures();
     });
   }
   async controlRun(action: 'pause' | 'cancel') {

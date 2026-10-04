@@ -1803,7 +1803,7 @@ components:
       enum: [queued, running, pausing, paused, canceling, canceled, interrupted, completed, completed_empty, partial, failed, unavailable, stale]
     AnalysisStage:
       type: string
-      enum: [semantic, performance, security_rules, security_ai]
+      enum: [semantic, performance, security_rules, security_ai, feature_suggestions]
     AnalysisStageStatus:
       type: string
       enum: [pending, running, completed, completed_empty, partial, failed, skipped, unavailable, canceled, interrupted, stale]
@@ -1873,6 +1873,7 @@ components:
       additionalProperties: false
       required: [project_id, project_revision, scope, refresh, limits]
       properties:
+        include_features: {type: boolean, default: false, description: Add one project-wide advisory feature step using saved goals and honoring explicit file exclusions. Resume retains the original choice.}
         project_id: {type: string, minLength: 1}
         project_revision: {type: string, minLength: 1}
         scope: {type: string, enum: [project]}
@@ -1923,6 +1924,7 @@ components:
       type: object
       required: [schema_version, preview_id, identity, scope, refresh, limits, files, excluded, providers, expected_model_requests, max_model_requests, security_review_intent_required]
       properties:
+        features: {$ref: '#/components/schemas/AnalysisFeaturePlan'}
         compatibility_stage: {type: string, enum: [semantic, performance], description: Present only for a bounded legacy adapter run.}
         compatibility_budget_nanoseconds: {type: integer, minimum: 1, maximum: 3600000000000, description: Total active-time budget retained by the legacy Performance adapter.}
         schema_version: {type: string, enum: ['1']}
@@ -1950,6 +1952,7 @@ components:
       additionalProperties: false
       required: [identity, preview_id, limits, refresh, confirmations]
       properties:
+        include_features: {type: boolean, default: false, description: Must match the admitted preview.}
         identity: {$ref: '#/components/schemas/AnalysisQueueIdentity'}
         preview_id: {type: string, minLength: 1}
         limits: {$ref: '#/components/schemas/AnalysisRunLimits'}
@@ -2009,6 +2012,7 @@ components:
       type: object
       required: [schema_version, identity, plan, status, files, sections, elapsed_seconds, window_elapsed_seconds, window_files_completed, created_at, updated_at]
       properties:
+        features: {$ref: '#/components/schemas/AnalysisFeatureProgress'}
         compatibility_elapsed_nanoseconds: {type: integer, minimum: 0, maximum: 3600000000000}
         schema_version: {type: string, enum: ['1']}
         identity: {$ref: '#/components/schemas/AnalysisRunIdentity'}
@@ -2022,6 +2026,27 @@ components:
         reason: {type: string, description: Sanitized operational failure or pause reason.}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+    AnalysisFeaturePlan:
+      type: object
+      required: [expected_hash, goals_hash, workspace_hash, excluded_paths, provider_id, max_model_requests]
+      description: One project-wide step; goals and report prose remain in the feature store. Its requests count toward the preview budget and need Analyze consent.
+      properties:
+        expected_hash: {type: string, description: Captured feature-store hash used for compare-and-swap publication.}
+        goals_hash: {type: string}
+        workspace_hash: {type: string}
+        excluded_paths: {type: array, items: {type: string}, description: Explicit file exclusions honored by feature context and suggested paths.}
+        provider_id: {type: string}
+        max_model_requests: {type: integer, minimum: 0, maximum: 4, description: Remaining requests including retries; zero after this step completes.}
+        reason: {type: string}
+    AnalysisFeatureProgress:
+      type: object
+      required: [status, attempts, suggestion_count]
+      properties:
+        status: {$ref: '#/components/schemas/AnalysisStageStatus'}
+        attempts: {type: integer, minimum: 0, maximum: 4}
+        suggestion_count: {type: integer, nullable: true, minimum: 0, maximum: 5, description: Unknown until a successful report. Separate from finding counts.}
+        report_hash: {type: string}
+        reason: {type: string}
     AnalysisSectionResults:
       type: object
       required: [identity, progress, semantic, performance, security, unclassified]

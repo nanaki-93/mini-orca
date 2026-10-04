@@ -53,12 +53,30 @@ func (b *ContextBuilder) Build(root, target string) (string, error) {
 
 // BuildWithManifest returns the exact prompt context plus safe inspection metadata.
 func (b *ContextBuilder) BuildWithManifest(root, target string) (string, ContextManifest, error) {
+	return b.BuildWithExcludedFiles(root, target, nil)
+}
+
+// BuildWithExcludedFiles also honors explicit analysis exclusions in project context.
+func (b *ContextBuilder) BuildWithExcludedFiles(root, target string, excludedPaths []string) (string, ContextManifest, error) {
 	manifest := ContextManifest{Included: []ContextFile{}, Excluded: []ContextDecision{}, ByteLimit: maxContextBytes, TokenLimit: maxContextTokens}
 	canonical, files, excluded, err := contextFileInventory(root)
 	if err != nil {
 		return "", manifest, err
 	}
 	manifest.Excluded = excluded
+	ignored := make(map[string]bool, len(excludedPaths))
+	for _, file := range excludedPaths {
+		ignored[file] = true
+	}
+	eligible := make([]string, 0, len(files))
+	for _, file := range files {
+		if ignored[file] {
+			manifest.Excluded = append(manifest.Excluded, ContextDecision{Path: file, Reason: "excluded from project analysis by the user"})
+		} else {
+			eligible = append(eligible, file)
+		}
+	}
+	files = eligible
 	target, err = validateContextTarget(canonical, target, files)
 	if err != nil {
 		return "", manifest, err

@@ -24,7 +24,7 @@ func analysisFingerprint(value any) (string, error) {
 	return fmt.Sprintf("%x", sha256.Sum256(data)), nil
 }
 
-func (s *Service) analysisProviders() ([]AnalysisProviderRequirement, error) {
+func (s *Service) analysisProviders(includeFeatures bool) ([]AnalysisProviderRequirement, error) {
 	providers := make([]AnalysisProviderRequirement, 0, 2)
 	for _, entry := range []struct {
 		runtime modelRuntime
@@ -34,6 +34,10 @@ func (s *Service) analysisProviders() ([]AnalysisProviderRequirement, error) {
 		{s.runtimes.bug, []AnalysisStage{AnalysisStageSemantic}, []string{semanticAnalysisPromptVersion}},
 		{s.runtimes.analyze, []AnalysisStage{AnalysisStagePerformance, AnalysisStageSecurityAI}, []string{project.PerformancePromptVersion, project.SecurityPromptVersion}},
 	} {
+		if includeFeatures && entry.runtime.effective.Scope == "analyze" {
+			entry.stages = append(entry.stages, AnalysisStageFeatures)
+			entry.prompts = append(entry.prompts, "feature-suggestions-v1")
+		}
 		id, err := analysisFingerprint(struct {
 			Model      EffectiveModel
 			Endpoint   string
@@ -74,6 +78,7 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 		}
 		request.compatibilityStage = run.Plan.CompatibilityStage
 		request.compatibilityBudget = run.Plan.CompatibilityBudget
+		request.IncludeFeatures = run.Plan.Features != nil
 	}
 	analysis, index, policy, err := s.performanceInputs()
 	if err != nil {
@@ -82,7 +87,7 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 	if analysis.ProjectID != request.ProjectID || analysis.ProjectRevision != request.ProjectRevision {
 		return nil, project.ErrRevisionConflict
 	}
-	providers, err := s.analysisProviders()
+	providers, err := s.analysisProviders(request.IncludeFeatures)
 	if err != nil {
 		return nil, err
 	}
@@ -96,6 +101,11 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 	root := s.manager.Root()
 	if err := s.planAnalysisFiles(ctx, root, *analysis, index.Files, policy, request, preview); err != nil {
 		return nil, err
+	}
+	if request.IncludeFeatures {
+		if err := s.planAnalysisFeatures(ctx, root, preview); err != nil {
+			return nil, err
+		}
 	}
 	return s.completeAnalysisPreviewLocked(ctx, root, preview, request)
 }
@@ -191,7 +201,7 @@ func (s *Service) validateAnalysisQueue(ctx context.Context, root string, plan *
 	if err != nil {
 		return err
 	}
-	providers, err := s.analysisProviders()
+	providers, err := s.analysisProviders(plan.Features != nil)
 	if err != nil {
 		return err
 	}
@@ -207,6 +217,9 @@ func (s *Service) validateAnalysisQueue(ctx context.Context, root string, plan *
 		if err := validateAnalysisInventory(ctx, root, plan); err != nil {
 			return err
 		}
+	}
+	if err := s.validateAnalysisFeatureInputs(ctx, root, plan.Features, sources); err != nil {
+		return err
 	}
 	return validateAnalysisFiles(ctx, root, plan, index, policy, sources)
 }
@@ -243,32 +256,40 @@ func validateAnalysisConfirmations(preview *AnalysisRunPreview, confirmations An
 		return fmt.Errorf("analysis requires fresh Security review intent")
 	}
 	confirmed := make(map[string]bool, len(confirmations.ProviderIDs))
+	providers := make(map[string]AnalysisProviderRequirement, len(preview.Providers))
+	for _, provider := range preview.Providers {
+		providers[provider.ID] = provider
+	}
 	for _, id := range confirmations.ProviderIDs {
 		if confirmed[id] {
 			return fmt.Errorf("duplicate analysis provider confirmation")
 		}
 		confirmed[id] = true
-		known := false
-		for _, provider := range preview.Providers {
-			known = known || provider.ID == id
-		}
-		if !known {
+		if _, known := providers[id]; !known {
 			return fmt.Errorf("analysis provider confirmation does not match preview")
 		}
 	}
-	for _, file := range preview.Files {
-		for _, stage := range file.Stages {
-			if stage.MaxModelRequests == 0 {
-				continue
-			}
-			for _, provider := range preview.Providers {
-				if provider.ID == stage.ProviderID && provider.RemoteConfirmationRequired && !confirmed[provider.ID] {
-					return fmt.Errorf("analysis requires confirmation for each remote provider in the preview")
-				}
-			}
+	for id := range analysisRequestedProviders(preview) {
+		if providers[id].RemoteConfirmationRequired && !confirmed[id] {
+			return fmt.Errorf("analysis requires confirmation for each remote provider in the preview")
 		}
 	}
 	return nil
+}
+
+func analysisRequestedProviders(preview *AnalysisRunPreview) map[string]bool {
+	requested := make(map[string]bool)
+	for _, file := range preview.Files {
+		for _, stage := range file.Stages {
+			if stage.MaxModelRequests > 0 {
+				requested[stage.ProviderID] = true
+			}
+		}
+	}
+	if preview.Features != nil && preview.Features.MaxModelRequests > 0 {
+		requested[preview.Features.ProviderID] = true
+	}
+	return requested
 }
 
 // The run's own report writes cannot alter its immutable queue identity.
@@ -279,6 +300,10 @@ func analysisQueueFingerprint(preview *AnalysisRunPreview) (string, error) {
 	stable.ExpectedModelRequests = 0
 	stable.MaxModelRequests = 0
 	stable.SecurityReviewIntentRequired = false
+	if stable.Features != nil {
+		stable.Features.ExpectedHash = ""
+		stable.Features.MaxModelRequests = 0
+	}
 	for i := range stable.Files {
 		for j := range stable.Files[i].Stages {
 			stable.Files[i].Stages[j].Cached = false
@@ -431,10 +456,22 @@ func (s *Service) applyAnalysisResumeBudget(preview *AnalysisRunPreview, request
 			plan.MaxModelRequests = min(plan.MaxModelRequests, max(0, request.Limits.MaxAttemptsPerStage-progress.Attempts))
 		}
 	}
+	if preview.Features != nil {
+		progress := run.Features
+		if !analysisStageNeedsWork(progress.Status) {
+			preview.Features.MaxModelRequests = 0
+		} else {
+			preview.Features.MaxModelRequests = min(preview.Features.MaxModelRequests, max(0, request.Limits.MaxAttemptsPerStage-progress.Attempts))
+		}
+	}
 	return nil
 }
 
 func countAnalysisPreviewRequests(preview *AnalysisRunPreview) {
+	if preview.Features != nil && preview.Features.MaxModelRequests > 0 {
+		preview.ExpectedModelRequests++
+		preview.MaxModelRequests += preview.Features.MaxModelRequests
+	}
 	for _, file := range preview.Files {
 		for _, stage := range file.Stages {
 			if stage.MaxModelRequests > 0 {

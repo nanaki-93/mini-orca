@@ -50,6 +50,7 @@ const (
 	AnalysisStagePerformance   AnalysisStage = "performance"
 	AnalysisStageSecurityRules AnalysisStage = "security_rules"
 	AnalysisStageSecurityAI    AnalysisStage = "security_ai"
+	AnalysisStageFeatures      AnalysisStage = "feature_suggestions"
 )
 
 // Categories identifies consumers of a producer, not a classifier for its findings.
@@ -133,6 +134,7 @@ func (identity AnalysisRunIdentity) Validate() error {
 }
 
 type AnalysisPreviewRequest struct {
+	IncludeFeatures     bool                 `json:"include_features,omitempty"`
 	RetryStaleFailed    bool                 `json:"retry_stale_failed,omitempty"`
 	ProjectID           string               `json:"project_id"`
 	ProjectRevision     string               `json:"project_revision"`
@@ -198,6 +200,7 @@ type AnalysisExcludedFile struct {
 }
 
 type AnalysisRunPreview struct {
+	Features                     *AnalysisFeaturePlan          `json:"features,omitempty"`
 	RetryStaleFailed             bool                          `json:"retry_stale_failed,omitempty"`
 	CompatibilityStage           AnalysisStage                 `json:"compatibility_stage,omitempty"`
 	CompatibilityBudget          time.Duration                 `json:"compatibility_budget_nanoseconds,omitempty"`
@@ -223,6 +226,7 @@ type AnalysisRunConfirmations struct {
 }
 
 type AnalysisRunStartRequest struct {
+	IncludeFeatures  bool                     `json:"include_features,omitempty"`
 	RetryStaleFailed bool                     `json:"retry_stale_failed,omitempty"`
 	Identity         AnalysisQueueIdentity    `json:"identity"`
 	PreviewID        string                   `json:"preview_id"`
@@ -358,6 +362,7 @@ type AnalysisRunFile struct {
 // AnalysisRun persists only identities and operational progress. Result prose lives
 // in producer-owned report stores; no source, prompt, transcript or consent is saved here.
 type AnalysisRun struct {
+	Features             *AnalysisFeatureProgress  `json:"features,omitempty"`
 	CompatibilityElapsed time.Duration             `json:"compatibility_elapsed_nanoseconds,omitempty"`
 	SchemaVersion        string                    `json:"schema_version"`
 	Identity             AnalysisRunIdentity       `json:"identity"`
@@ -448,7 +453,7 @@ func (s *Service) startAnalysisRunLocked(ctx context.Context, request AnalysisRu
 			return cloneAnalysisRun(c.run), errAnalysisRunBusy
 		}
 	}
-	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: request.RetryStaleFailed, Refresh: request.Refresh, Limits: request.Limits, compatibilityStage: stage, compatibilityBudget: budget})
+	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{IncludeFeatures: request.IncludeFeatures, ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: request.RetryStaleFailed, Refresh: request.Refresh, Limits: request.Limits, compatibilityStage: stage, compatibilityBudget: budget})
 	if err != nil {
 		return nil, err
 	}
@@ -648,45 +653,50 @@ func (s *Service) runAnalysisWindow(ctx context.Context, identity AnalysisRunIde
 			c.mu.Unlock()
 			return
 		}
-		fileIndex, stageIndex, found := nextAnalysisStage(c.run)
-		if !found {
-			s.finishCompletedAnalysisRunLocked(ctx)
+		if c.run.Features != nil && analysisStageNeedsWork(c.run.Features.Status) {
+			keepRunning := s.runAnalysisFeaturesLocked(ctx, identity)
 			c.mu.Unlock()
-			return
-		}
-		if c.run.WindowFilesCompleted >= c.run.Plan.Limits.BatchFiles {
-			c.run.Status = AnalysisRunPaused
-			c.run.Reason = "The batch limit was reached; resume to continue pending files."
-			_ = s.saveAnalysisRunLocked(false)
-			c.mu.Unlock()
-			return
-		}
-		stage := &c.run.Files[fileIndex].Stages[stageIndex]
-		if stage.Stage != AnalysisStageSecurityRules && stage.Attempts >= c.run.Plan.Limits.MaxAttemptsPerStage && !c.admission.Files[fileIndex].Stages[stageIndex].Cached {
-			if err := s.failExhaustedAnalysisStageLocked(fileIndex, stageIndex); err != nil {
-				c.mu.Unlock()
+			if !keepRunning {
 				return
 			}
-			c.mu.Unlock()
 			continue
 		}
-		stage.Status = AnalysisStageRunning
-		stage.Reason = ""
-		if err := s.saveAnalysisRunLocked(false); err != nil {
-			c.mu.Unlock()
-			return
-		}
-		request := c.stageRequest(fileIndex, stageIndex)
-		authority := s.analysisRunAuthority(fileIndex, stageIndex)
-		c.mu.Unlock()
-		result, err := s.analyzeFileStage(ctx, request, authority)
-		c.mu.Lock()
-		keepRunning := s.recordAnalysisStageLocked(ctx, identity, fileIndex, stageIndex, result, err)
+		keepRunning := s.runAnalysisFileStageLocked(ctx, identity)
 		c.mu.Unlock()
 		if !keepRunning {
 			return
 		}
 	}
+}
+
+func (s *Service) runAnalysisFileStageLocked(ctx context.Context, identity AnalysisRunIdentity) bool {
+	c := s.analysisRun
+	fileIndex, stageIndex, found := nextAnalysisStage(c.run)
+	if !found {
+		s.finishCompletedAnalysisRunLocked(ctx)
+		return false
+	}
+	if c.run.WindowFilesCompleted >= c.run.Plan.Limits.BatchFiles {
+		c.run.Status = AnalysisRunPaused
+		c.run.Reason = "The batch limit was reached; resume to continue pending files."
+		_ = s.saveAnalysisRunLocked(false)
+		return false
+	}
+	stage := &c.run.Files[fileIndex].Stages[stageIndex]
+	if stage.Stage != AnalysisStageSecurityRules && stage.Attempts >= c.run.Plan.Limits.MaxAttemptsPerStage && !c.admission.Files[fileIndex].Stages[stageIndex].Cached {
+		return s.failExhaustedAnalysisStageLocked(fileIndex, stageIndex) == nil
+	}
+	stage.Status = AnalysisStageRunning
+	stage.Reason = ""
+	if err := s.saveAnalysisRunLocked(false); err != nil {
+		return false
+	}
+	request := c.stageRequest(fileIndex, stageIndex)
+	authority := s.analysisRunAuthority(fileIndex, stageIndex)
+	c.mu.Unlock()
+	result, err := s.analyzeFileStage(ctx, request, authority)
+	c.mu.Lock()
+	return s.recordAnalysisStageLocked(ctx, identity, fileIndex, stageIndex, result, err)
 }
 
 func (c *analysisRunController) stageRequest(fileIndex, stageIndex int) analysisFileStageRequest {

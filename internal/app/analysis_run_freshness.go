@@ -43,6 +43,15 @@ func (s *Service) refreshAnalysisRunFreshnessLocked(ctx context.Context) error {
 
 func analysisRunHasTerminalEvidence(run *AnalysisRun) bool {
 	evidence := false
+	if run.Features != nil {
+		switch run.Features.Status {
+		case AnalysisStageCompleted, AnalysisStageCompletedEmpty:
+			evidence = true
+		case AnalysisStageFailed, AnalysisStageUnavailable:
+		default:
+			return false
+		}
+	}
 	for _, file := range run.Files {
 		for _, stage := range file.Stages {
 			switch stage.Status {

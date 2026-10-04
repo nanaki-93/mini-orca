@@ -24,6 +24,11 @@ var errAnalysisRunCorrupt = errors.New("saved analysis progress is invalid; pres
 
 func cloneAnalysisPreview(plan AnalysisRunPreview) AnalysisRunPreview {
 	copy := plan
+	if plan.Features != nil {
+		features := *plan.Features
+		features.ExcludedPaths = append([]string{}, plan.Features.ExcludedPaths...)
+		copy.Features = &features
+	}
 	copy.Files = append([]AnalysisPlannedFile{}, plan.Files...)
 	for i := range copy.Files {
 		copy.Files[i].Stages = append([]AnalysisStagePlan{}, plan.Files[i].Stages...)
@@ -41,6 +46,14 @@ func cloneAnalysisRun(run *AnalysisRun) *AnalysisRun {
 		return nil
 	}
 	copy := *run
+	if run.Features != nil {
+		features := *run.Features
+		if features.SuggestionCount != nil {
+			count := *features.SuggestionCount
+			features.SuggestionCount = &count
+		}
+		copy.Features = &features
+	}
 	copy.Plan = cloneAnalysisPreview(run.Plan)
 	copy.Files = append([]AnalysisRunFile{}, run.Files...)
 	for i := range copy.Files {
@@ -247,6 +260,9 @@ func validateStoredAnalysisRun(run *AnalysisRun) error {
 		}
 	}
 	if err := validateStoredAnalysisSections(run, totalFindings); err != nil {
+		return err
+	}
+	if err := validateStoredAnalysisFeatures(run); err != nil {
 		return err
 	}
 	switch run.Status {

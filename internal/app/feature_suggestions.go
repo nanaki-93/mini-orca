@@ -164,6 +164,19 @@ func (s *Service) SaveFeatureGoals(request FeatureRequest) (*FeatureReport, erro
 }
 
 func (s *Service) GenerateFeatures(ctx context.Context, request FeatureRequest) (*FeatureReport, error) {
+	return s.generateFeatures(ctx, request, s.runtimes.analyze, nil, featureGenerationAuthority{Publish: func(write func() error) error {
+		s.changesMu.Lock()
+		defer s.changesMu.Unlock()
+		return write()
+	}})
+}
+
+type featureGenerationAuthority struct {
+	BeforeAttempt func(context.Context) error
+	Publish       func(func() error) error
+}
+
+func (s *Service) generateFeatures(ctx context.Context, request FeatureRequest, runtime modelRuntime, excluded []string, authority featureGenerationAuthority) (*FeatureReport, error) {
 	if err := s.RequireRemoteConfirmation(config.AnalyzeModelScope, request.ConfirmRemoteProvider); err != nil {
 		return nil, err
 	}
@@ -171,20 +184,10 @@ func (s *Service) GenerateFeatures(ctx context.Context, request FeatureRequest) 
 	if err != nil {
 		return nil, err
 	}
-	text, manifest, err := project.NewContextBuilder().BuildWithManifest(root, "")
+	text, manifest, fingerprint, err := featureContext(ctx, root, excluded)
 	if err != nil {
 		return nil, err
 	}
-	instructions, err := project.ResolveInstructions(root, "")
-	if err != nil {
-		return nil, err
-	}
-	text += instructions.Text
-	fingerprint, err := benchmarkSourceFingerprint(ctx, root)
-	if err != nil {
-		return nil, err
-	}
-	runtime := s.runtimes.analyze
 	if runtime.effective.ContextMaxTokens > 0 && len(text)+len(request.Goals) > runtime.effective.ContextMaxTokens*4 {
 		return nil, fmt.Errorf("feature context exceeds configured Analyze token limit")
 	}
@@ -193,33 +196,80 @@ func (s *Service) GenerateFeatures(ctx context.Context, request FeatureRequest) 
 	defer cancel()
 	schema := featureResponseSchema()
 	result, generationErr := s.retryRequestAuthorized(timed, runtime, messages, &schema, func(ctx context.Context) error {
+		if authority.BeforeAttempt != nil {
+			if err := authority.BeforeAttempt(ctx); err != nil {
+				return err
+			}
+		}
 		return s.verifyFeatureInput(ctx, root, previous, fingerprint, request)
 	})
 	var suggestions []FeatureSuggestion
 	if generationErr == nil {
-		suggestions, generationErr = s.parseFeatures(result.Content)
+		suggestions, generationErr = s.parseFeaturesForSelection(result.Content, excluded)
 	}
-	s.changesMu.Lock()
-	defer s.changesMu.Unlock()
-	if err := s.verifyFeatureInput(timed, root, previous, fingerprint, request); err != nil {
+	publish := func() error {
+		if err := s.verifyFeatureInput(timed, root, previous, fingerprint, request); err != nil {
+			return err
+		}
+		previous.Goals = request.Goals
+		if generationErr != nil {
+			previous.Status, previous.Failure = "failed", "Feature suggestions could not be generated. Review provider configuration or retry."
+		} else {
+			preserveFeatureStatus(previous.Suggestions, suggestions)
+			previous.ProjectRevision, previous.WorkspaceHash = request.ProjectRevision, fingerprint
+			previous.Status, previous.Freshness, previous.Failure = "ready", "current", ""
+			previous.Suggestions, previous.ContextManifest = suggestions, s.contextManifestForRuntime(manifest, runtime)
+		}
+		return writeFeatures(root, previous)
+	}
+	err = authority.Publish(publish)
+	if err != nil {
 		return nil, err
 	}
-	previous.Goals = request.Goals
 	if generationErr != nil {
-		previous.Status, previous.Failure = "failed", "Feature suggestions could not be generated. Review provider configuration or retry."
-		if err := writeFeatures(root, previous); err != nil {
-			return nil, err
-		}
 		return nil, generationErr
 	}
-	preserveFeatureStatus(previous.Suggestions, suggestions)
-	previous.ProjectRevision, previous.WorkspaceHash = request.ProjectRevision, fingerprint
-	previous.Status, previous.Freshness, previous.Failure = "ready", "current", ""
-	previous.Suggestions, previous.ContextManifest = suggestions, s.contextManifestForRuntime(manifest, runtime)
-	if err := writeFeatures(root, previous); err != nil {
+	return previous, nil
+}
+
+func featureContext(ctx context.Context, root string, excluded []string) (string, project.ContextManifest, string, error) {
+	text, manifest, err := project.NewContextBuilder().BuildWithExcludedFiles(root, "", excluded)
+	if err != nil {
+		return "", manifest, "", err
+	}
+	instructions, err := project.ResolveInstructions(root, "")
+	if err != nil {
+		return "", manifest, "", err
+	}
+	if !featurePathExcluded("AGENTS.md", excluded) {
+		text += instructions.Text
+	}
+	fingerprint, err := benchmarkSourceFingerprint(ctx, root)
+	return text, manifest, fingerprint, err
+}
+
+func (s *Service) parseFeaturesForSelection(output string, excluded []string) ([]FeatureSuggestion, error) {
+	suggestions, err := s.parseFeatures(output)
+	if err != nil {
 		return nil, err
 	}
-	return previous, nil
+	for _, idea := range suggestions {
+		for _, path := range idea.Paths {
+			if featurePathExcluded(path, excluded) {
+				return nil, fmt.Errorf("feature suggestion targets an excluded analysis file")
+			}
+		}
+	}
+	return suggestions, nil
+}
+
+func featurePathExcluded(path string, excluded []string) bool {
+	for _, file := range excluded {
+		if file == path {
+			return true
+		}
+	}
+	return false
 }
 
 func preserveFeatureStatus(previous, suggestions []FeatureSuggestion) {

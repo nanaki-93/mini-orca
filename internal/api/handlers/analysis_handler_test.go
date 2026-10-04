@@ -29,6 +29,9 @@ func newAnalysisHandlerFixture(t *testing.T) (*AnalysisHandler, *ProjectHandler,
 		if strings.HasPrefix(request.Messages[0].Content, "You summarize") {
 			reply = `{"purpose":"Explains this file.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[],"suggestions":[],"symbol_explanations":{}}`
 		}
+		if request.ResponseFormat != nil && request.ResponseFormat.JSONSchema != nil && request.ResponseFormat.JSONSchema.Name == "feature_suggestions" {
+			reply = `{"suggestions":[]}`
+		}
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: reply}}}})
 	}))
 	t.Cleanup(server.Close)
@@ -66,6 +69,36 @@ func analysisHandlerRequest(t *testing.T, handler http.HandlerFunc, method, targ
 	w := httptest.NewRecorder()
 	handler(w, r)
 	return w
+}
+
+func TestAnalysisHandlerFeatureStepRequiresMatchingAdmission(t *testing.T) {
+	h, _, analysis, calls := newAnalysisHandlerFixture(t)
+	request := app.AnalysisPreviewRequest{IncludeFeatures: true, ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision,
+		Scope: "project", Limits: app.AnalysisRunLimits{BatchFiles: 100, BudgetSeconds: 30, MaxAttemptsPerStage: 2}}
+	w := analysisHandlerRequest(t, h.Preview, "POST", "/analysis/preview", request)
+	if w.Code != 200 || calls.Load() != 0 {
+		t.Fatalf("feature preview=%d %s calls=%d", w.Code, w.Body, calls.Load())
+	}
+	var preview app.AnalysisRunPreview
+	if err := json.Unmarshal(w.Body.Bytes(), &preview); err != nil || preview.Features == nil || preview.ExpectedModelRequests != 4 {
+		t.Fatalf("feature plan=%+v %v", preview, err)
+	}
+	start := app.AnalysisRunStartRequest{Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits,
+		Confirmations: app.AnalysisRunConfirmations{SecurityReview: true}}
+	w = analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", start)
+	if w.Code != 409 || calls.Load() != 0 {
+		t.Fatalf("different feature scope=%d %s calls=%d", w.Code, w.Body, calls.Load())
+	}
+	assertStructuredError(t, w)
+	start.IncludeFeatures = true
+	w = analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", start)
+	if w.Code != 202 {
+		t.Fatalf("feature admission=%d %s", w.Code, w.Body)
+	}
+	run := waitHandlerAnalysis(t, h, analysis, app.AnalysisRunCompletedEmpty)
+	if run.Features == nil || run.Features.Status != app.AnalysisStageCompletedEmpty || run.Features.SuggestionCount == nil || *run.Features.SuggestionCount != 0 || calls.Load() != 4 {
+		t.Fatalf("empty feature evidence=%+v calls=%d", run.Features, calls.Load())
+	}
 }
 
 func TestAnalysisHandlerRetrySelectionRequiresMatchingAdmission(t *testing.T) {

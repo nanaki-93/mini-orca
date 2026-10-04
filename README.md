@@ -9,7 +9,8 @@ The Wails/React desktop client talks to a Go daemon through a native bridge.
 1. Open a local project and inspect its summary, files and symbols.
 2. Select **Prepare analysis** in Analysis. Review the whole-project inventory,
    request bounds and model destinations, then confirm the displayed run.
-   Analysis tracks progress; Bugs, Performance and Security show separate results.
+   Analysis also checks for new feature suggestions using saved project goals.
+   Summary previews the ideas; Bugs, Performance and Security show separate results.
 3. Use **Prepare fix** on a finding, or describe a feature in **Chat** with up to
    eight explicit Go/Markdown paths, including new files. Preparation generates
    a proposal, checks it and attempts at most three repairs of failed checks.
@@ -31,7 +32,8 @@ The Wails/React desktop client talks to a Go daemon through a native bridge.
 Bugs, Performance and Security offer search and impact filters over saved results.
 Pause waits for an active stage; Cancel stops further work. Resume uses a
 fresh preview and intent; completed or canceled runs need a new Start. The run coordinates specialized
-semantic, Performance, Security-rule and advisory Security stages and can make
+semantic, Performance, Security-rule, advisory Security and project-wide feature
+suggestion stages and can make
 multiple model requests. Security intent is explicit even with a local provider.
 Verified Go scans, focused checks and selected benchmarks remain separate trusted
 execution actions. Source hypotheses are not runtime measurements.

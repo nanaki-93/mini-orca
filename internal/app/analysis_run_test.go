@@ -283,7 +283,7 @@ func analysisStartFor(preview *AnalysisRunPreview) AnalysisRunStartRequest {
 	for _, provider := range preview.Providers {
 		confirmations.ProviderIDs = append(confirmations.ProviderIDs, provider.ID)
 	}
-	return AnalysisRunStartRequest{Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits, RetryStaleFailed: preview.RetryStaleFailed, Refresh: preview.Refresh, Confirmations: confirmations}
+	return AnalysisRunStartRequest{IncludeFeatures: preview.Features != nil, Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits, RetryStaleFailed: preview.RetryStaleFailed, Refresh: preview.Refresh, Confirmations: confirmations}
 }
 
 func waitAnalysisWindow(t *testing.T, s *Service) {
@@ -425,6 +425,9 @@ func analysisBlockingServer(t *testing.T) (*httptest.Server, *atomic.Int32, chan
 		reply := `{"findings":[]}`
 		if strings.HasPrefix(request.Messages[0].Content, "You summarize") {
 			reply = validSemanticAnalysis
+		}
+		if request.ResponseFormat != nil && request.ResponseFormat.JSONSchema != nil && request.ResponseFormat.JSONSchema.Name == "feature_suggestions" {
+			reply = validFeatureResponse
 		}
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: reply}}}})
 	}))

@@ -335,7 +335,7 @@ include the initial request and transport retries: default 2, maximum 4. Counter
 never reset on resume/restart. Cached work and passive Security rules make zero
 model requests; retries cannot be multiplied by an undisclosed outer retry loop.
 
-Four stage identities are fixed: `semantic`, `performance`, `security_rules`,
+Four per-file stage identities are fixed: `semantic`, `performance`, `security_rules`,
 `security_ai`. Semantic risks can feed all three result categories. Performance
 reviews feed Performance; Security rules and advisory reviews feed Security.
 The latter three retain their existing report types and provenance. A stage's
@@ -343,13 +343,27 @@ consumers do not classify its prose. Stage work counts once in request budgets,
 even when it feeds several result sections. The preview exposes expected model
 requests without retries and the inclusive maximum for the remaining work.
 
+Preview/start accept `include_features` (default false for existing clients),
+which must match at admission. The web client includes it on every new analysis.
+It adds one project-wide `feature_suggestions` step using saved goals, bounded
+policy-filtered context and root AGENTS.md; explicit file exclusions also apply
+to this context and suggested paths. `preview.features` captures goals/workspace
+hashes, the current feature-store hash, exclusions and the Analyze provider/request
+allowance. `run.features` exposes its status, cumulative attempts and nullable
+`suggestion_count`, separately from the three finding sections. The step runs once
+before file stages, shares the run's time/attempt allowance and fresh provider
+consent, and is not repeated after completion on resume. Failed generation keeps
+previous ideas and permits other stages to continue; overall progress reflects
+partial results. Cancellation and source/goal changes reject late publication.
+Saved schema-1 runs without feature fields retain their original behavior.
+
 `queue_id` binds project/revision, policy, provider fingerprints, ordered file/hash
 and stage identities, exclusions, refresh choice and limits. Effective provider
 identity includes scope, model, origin, reasoning, context/timeout/retry settings
 and prompt/rule versions. Cache availability is excluded from this stable identity:
 the run's own cache writes cannot invalidate its remaining queue. `preview_id`
 additionally binds current cache dispositions, remaining attempts/work and request
-bounds. Start echoes limits/refresh, `retry_stale_failed` and both identities; the daemon recomputes
+bounds. Start echoes limits/refresh, `retry_stale_failed`, `include_features` and both identities; the daemon recomputes
 them before admission. A changed preflight yields 409 and requires a fresh preview.
 
 Preview and start accept optional `retry_stale_failed` (default false). When true,
@@ -635,3 +649,7 @@ estimated effort and acceptance criteria. Ideas remain advisory and never enter
 Bugs/Performance/Security finding counts. Changed source/instructions/goals make
 ideas stale. Failed generation retains earlier ideas with an explicit failure; an
 empty successful array means no ideas were returned.
+
+Summary reads saved feature suggestions without generating them. It displays up
+to three active ideas, their advisory/estimated status and any stale/failure state,
+with navigation to all ideas and a passive handoff to Chat.
