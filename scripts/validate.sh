@@ -53,6 +53,7 @@ run_stage agent-dispatcher python3 -m unittest discover -s scripts/tests -p 'tes
 run_stage go-quality ./scripts/quality.sh --go-only
 run_stage desktop-static ./scripts/quality.sh --desktop-only
 run_stage desktop-test ./scripts/desktop-gradle.sh test
+run_stage desktop-web ./scripts/desktop-web.sh test
 
 if [ -n "$failed_stages" ]; then
   printf '\nValidation failed: %s\n' "$failed_stages" >&2

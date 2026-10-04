@@ -80,14 +80,31 @@ quality: ## Run Go and Desktop static, reachability, complexity, clone, and form
 desktop-test: ## Run desktop unit tests through the Gradle wrapper
 	@$(GRADLE) test
 
-desktop-build: ## Build the current OS desktop distribution through the wrapper
+compose-desktop-build: ## Build the legacy Compose desktop distribution
 	@$(GRADLE) clean packageDistributionForCurrentOS
 
-check: fmt-check test test-race vet agent-dispatcher desktop-test ## Run the complete supported validation path
+check: fmt-check test test-race vet agent-dispatcher desktop-test web-test ## Run the complete supported validation path
 
-desktop-run: ## Run the Compose Desktop client (daemon required at localhost:9090)
+compose-desktop-run: ## Run the legacy Compose desktop client
 	@echo "$(COLOR_GREEN)Starting the Mini-Orca desktop client...$(COLOR_RESET)"
 	@$(GRADLE) run
+
+.PHONY: web-test web-build web-run web-preview compose-desktop-build compose-desktop-run
+desktop-build: web-build ## Build the desktop web application
+
+desktop-run: web-run ## Run the desktop web application
+
+web-build: ## Package the Wails application for macOS arm64
+	@./scripts/desktop-web.sh build
+
+web-run: ## Build and run the Wails desktop client
+	@./scripts/desktop-web.sh run
+
+web-test: ## Check web UI workflows, layouts and native bridge/PTY lifecycle
+	@./scripts/desktop-web.sh test
+
+web-preview: ## Preview web UI assets in a browser (native actions unavailable)
+	@./scripts/desktop-web.sh ui
 
 # ─── Docker Build ──────────────────────────────────────────────────────────────
 docker-build: ## Build Docker image

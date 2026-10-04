@@ -1,0 +1,26 @@
+{
+  "name": "mini-orca-desktop-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run check && node build.mjs",
+    "test": "node tests/run.mjs",
+    "preview": "node preview.mjs",
+    "check": "tsc --noEmit && prettier --check \"src/**/*.{ts,tsx,css}\" \"tests/*.mjs\" \"*.mjs\" \"*.json\" index.html"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
+    "beautiful-mermaid": "1.1.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "esbuild": "0.28.2",
+    "prettier": "3.9.9",
+    "typescript": "7.0.2"
+  }
+}

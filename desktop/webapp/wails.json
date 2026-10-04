@@ -1,0 +1,10 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Mini-Orca",
+  "outputfilename": "mini-orca-desktop",
+  "frontend:dir": "frontend",
+  "frontend:install": "npm ci",
+  "frontend:build": "npm run build",
+  "author": {"name": "Mini-Orca"},
+  "info": {"companyName": "Mini-Orca", "productName": "Mini-Orca", "copyright": "Mini-Orca contributors"}
+}

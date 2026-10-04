@@ -1,5 +1,9 @@
 # Local interactive terminal
 
+The web client uses [creack/pty and xterm.js](webapp/README.md#implementation-and-checks).
+The dependency table and Compose-specific APIs below describe the legacy client;
+the session ownership and safety expectations apply to both clients.
+
 The terminal runs in the desktop process. It adds no command-execution HTTP API
 and does not use the daemon's copied-workspace check sandbox.
 

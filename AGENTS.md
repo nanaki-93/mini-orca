@@ -7,14 +7,14 @@ guides add local detail; keep shared rules here instead of copying them.
 | Work area | Read before editing |
 | --- | --- |
 | Go daemon and evaluation CLI (`cmd/`, `internal/`) | [internal/AGENTS.md](internal/AGENTS.md) |
-| Kotlin/Compose client (`desktop/`) | [desktop/AGENTS.md](desktop/AGENTS.md) |
+| Desktop clients (`desktop/`) | [desktop/AGENTS.md](desktop/AGENTS.md); for the web client, [desktop/webapp/AGENTS.md](desktop/webapp/AGENTS.md) |
 | Python/shell tooling, Makefile and CI | [scripts/AGENTS.md](scripts/AGENTS.md) |
 | Documentation and API descriptions | [docs/AGENTS.md](docs/AGENTS.md) |
 
 ## Project and ownership
 
-Mini-Orca is a local-first coding assistant: a Go 1.22 daemon, a Kotlin/Compose
-Desktop client and a loopback HTTP API. It supports project-wide analysis and
+Mini-Orca is a local-first coding assistant: a Go 1.22 daemon, a Wails/React
+desktop client, a legacy Kotlin/Compose client and a loopback HTTP API. It supports project-wide analysis and
 one deliberate Go declaration edit at a time, with an editable draft, checks,
 Review, explicit Apply and guarded Undo.
 
@@ -130,6 +130,7 @@ native review for task completion.
 | --- | --- |
 | Go code | `go fmt ./...`, `make fmt-check`, `go test ./...`, `make test-race`, `make vet`, `./scripts/quality.sh --go-only` |
 | Desktop code/build | `./scripts/desktop-gradle.sh test spotlessCheck detekt` |
+| Desktop web client/host | `make web-test`; native packaging changes also require `make web-build` on macOS arm64 |
 | Python/shell tooling | `python3 -m unittest discover -s scripts/tests -p 'test_*.py'` and syntax checks for changed shell scripts |
 | Prose-only documentation/instructions | `git diff --check`; verify referenced paths, commands and consistency with current code |
 | Cross-stack changes or full validation request | `./scripts/validate.sh` |

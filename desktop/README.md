@@ -1,5 +1,10 @@
 # Mini-Orca Desktop
 
+The default desktop client now uses the [Wails web UI](webapp/README.md).
+Run it with `make desktop-run`, or build its macOS application with
+`make desktop-build`. The remainder of this guide describes the legacy Compose
+client, available through `make compose-desktop-run`.
+
 The client uses `http://localhost:9090` by default; `MINI_ORCA_URL` overrides it.
 Start the Go daemon using the root [README](../README.md). All provider keys stay
 in the ignored daemon configuration, not desktop preferences.
