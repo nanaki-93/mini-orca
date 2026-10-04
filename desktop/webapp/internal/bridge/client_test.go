@@ -134,3 +134,28 @@ func TestCancellationBeforeDispatchDoesNotStartNetworkWork(t *testing.T) {
 		t.Fatalf("early cancellation dispatched work: %v (%d calls)", err, calls.Load())
 	}
 }
+
+func TestBridgeSharedChangeRoutesRemainAllowlisted(t *testing.T) {
+	for _, request := range [][3]string{
+		{"GET", "/api/projects/current/changes?project_id=p&project_revision=r", ""},
+		{"GET", "/api/projects/current/changes/recovery", ""},
+		{"GET", "/api/projects/current/changes/change-id", ""},
+		{"GET", "/api/projects/current/instructions?path=AGENTS.md", ""},
+		{"GET", "/api/projects/current/features", ""},
+		{"POST", "/api/projects/current/changes", "{}"},
+		{"POST", "/api/projects/current/changes/change-id/messages", "{}"},
+		{"POST", "/api/projects/current/changes/change-id/apply", "{}"},
+		{"POST", "/api/projects/current/instructions/proposal", "{}"},
+		{"POST", "/api/projects/current/features/generate", "{}"},
+		{"PATCH", "/api/projects/current/features/idea", "{}"},
+	} {
+		if !allowedRequest(request[0], request[1], request[2]) {
+			t.Errorf("blocked workflow request: %v", request)
+		}
+	}
+	for _, path := range []string{"/api/projects/current/changes/id/run", "/api/projects/current/instructions/write", "/api/projects/current/changes/id/delete"} {
+		if allowedRequest("POST", path, "{}") {
+			t.Errorf("allowed unsupported operation: %s", path)
+		}
+	}
+}

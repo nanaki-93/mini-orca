@@ -85,7 +85,7 @@ Implement a shared proposal workflow in the Wails/React client: selected finding
 **Verification command**
 `go test ./internal/app -run 'TestFeature'`
 
-## Task 5 — [ ] Expose guarded workflow and instruction APIs
+## Task 5 — [x] Expose guarded workflow and instruction APIs
 
 **Target files**
 - `internal/api/handlers/change_handler.go` — thin shared-change, history and instruction-preview handlers.

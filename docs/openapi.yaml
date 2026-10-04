@@ -3,11 +3,10 @@ info:
   title: Mini-Orca local daemon API
   version: 4.4.0
   description: |
-    Local REST API used by the Mini-Orca Compose Desktop client. The daemon is the
-    LLM boundary. A user opens one Go file and declaration, starts a file-scoped
-    conversation, then reviews an editable declaration draft before explicitly
-    applying it. Source and diff views are read-only; no route creates multi-file
-    changes, writes automatically, or exposes a browser IDE.
+    Local REST API used by the Mini-Orca desktop clients. The daemon is the LLM
+    boundary. Shared conversations capture up to eight Go/Markdown paths, produce
+    checked proposals and require diff review and explicit Apply. Legacy one-file
+    declaration APIs remain compatible. Source and diff views are read-only.
     Project import, semantic analysis, Analyze-all, and chat messages can send
     prompt content; a non-loopback HTTP or CLI provider requires explicit confirmation for
     each of those requests. Verified scans, validation, checks, Apply, and Undo
@@ -22,6 +21,176 @@ tags:
   - name: Chat
   - name: Drafts
 paths:
+  /api/projects/current/changes:
+    get:
+      tags: [Chat]
+      description: List local change conversations without generation.
+      parameters:
+        - {in: query, name: project_id, required: true, schema: {type: string}}
+        - {in: query, name: project_revision, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ChangeSession'}}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+    post:
+      tags: [Chat]
+      description: Capture a task and one to eight explicit Go/Markdown paths.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeCreateRequest'}}}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/recovery:
+    get:
+      tags: [Chat]
+      description: Read the latest grouped mutation or interrupted recovery journal.
+      parameters:
+        - {in: query, name: project_id, required: true, schema: {type: string}}
+        - {in: query, name: project_revision, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeMutationResult'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}:
+    parameters:
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    get:
+      tags: [Chat]
+      description: Read a proposal and recheck source freshness.
+      parameters:
+        - {in: query, name: project_id, required: true, schema: {type: string}}
+        - {in: query, name: project_revision, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/resume:
+    parameters:
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Restore history and clear check/review authority; no provider request.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeIdentity'}}}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/messages:
+    parameters:
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Generate a scoped proposal or explicitly request bounded check-driven repair.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeMessageRequest'}}}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/checks:
+    parameters:
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Check the current proposal; tests/vet require independent execution trust.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeCheckRequest'}}}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/review:
+    parameters:
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Record diff review for the current checked hash.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeIdentity'}}}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/apply:
+    parameters:
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Explicitly apply the current reviewed proposal with grouped recovery.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeApplyRequest'}}}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeMutationResult'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/undo:
+    parameters:
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Restore the latest unchanged grouped Apply or recover an interrupted mutation.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeApplyRequest'}}}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeMutationResult'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/instructions:
+    get:
+      tags: [Chat]
+      description: Preview applicable AGENTS.md content, origins and instruction presets.
+      parameters:
+        - {in: query, name: project_id, required: true, schema: {type: string}}
+        - {in: query, name: project_revision, required: true, schema: {type: string}}
+        - {in: query, name: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/InstructionPreview'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/instructions/proposal:
+    post:
+      tags: [Chat]
+      description: Prepare an AGENTS.md proposal without a provider or source write.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/InstructionProposalRequest'}}}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/features:
+    get:
+      tags: [Chat]
+      description: Read saved goals and advisory feature suggestions.
+      parameters:
+        - {in: query, name: project_id, required: true, schema: {type: string}}
+        - {in: query, name: project_revision, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/FeatureReport'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/features/goals:
+    post:
+      tags: [Chat]
+      description: Save goals and invalidate suggestions for changed goals.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/FeatureRequest'}}}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/FeatureReport'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/features/generate:
+    post:
+      tags: [Chat]
+      description: Explicitly generate bounded feature ideas with Analyze consent.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/FeatureRequest'}}}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/FeatureReport'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/features/{featureID}:
+    parameters:
+      - {in: path, name: featureID, required: true, schema: {type: string}}
+    patch:
+      tags: [Chat]
+      description: Save, dismiss or reopen an advisory feature suggestion.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/FeatureStatusRequest'}}}}
+      responses:
+        '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/FeatureReport'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/analysis/selection:
     get:
       tags: [Projects]
@@ -1885,3 +2054,179 @@ components:
         prompt_version: {type: string}
         context_policy_version: {type: string}
         generated_at: {type: string, format: date-time}
+    ChangeIdentity:
+      type: object
+      required: [project_id, project_revision, revision, hash]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        revision: {type: integer, minimum: 0}
+        hash: {type: string}
+    ChangeCreateRequest:
+      type: object
+      required: [project_id, project_revision, kind, title, paths]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        kind: {type: string, enum: [fix, performance, feature, instructions]}
+        title: {type: string, minLength: 1, maxLength: 200}
+        paths: {type: array, minItems: 1, maxItems: 8, uniqueItems: true, items: {type: string}}
+        acceptance_criteria: {type: array, maxItems: 16, items: {type: string, maxLength: 1024}}
+    InstructionProposalRequest:
+      description: ChangeCreateRequest fields plus content; exactly one AGENTS.md path and instructions kind.
+      allOf:
+        - {$ref: '#/components/schemas/ChangeCreateRequest'}
+        - type: object
+          required: [content]
+          properties:
+            content: {type: string, minLength: 1, maxLength: 32768}
+    ChangeMessageRequest:
+      allOf:
+        - {$ref: '#/components/schemas/ChangeIdentity'}
+        - type: object
+          properties:
+            message: {type: string, maxLength: 8192}
+            confirm_remote_provider: {type: boolean}
+            repair: {type: boolean}
+    ChangeCheckRequest:
+      allOf:
+        - {$ref: '#/components/schemas/ChangeIdentity'}
+        - type: object
+          properties:
+            run_tests: {type: boolean}
+            run_lint: {type: boolean}
+    ChangeApplyRequest:
+      allOf:
+        - {$ref: '#/components/schemas/ChangeIdentity'}
+        - type: object
+          required: [confirm]
+          properties:
+            confirm: {type: boolean, enum: [true]}
+    ChangeSession:
+      type: object
+      required: [id, project_id, project_revision, kind, title, revision, hash, state, freshness, targets, changes, messages, checks]
+      properties:
+        schema_version: {type: integer, enum: [1]}
+        id: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        kind: {type: string}
+        title: {type: string}
+        acceptance_criteria: {type: array, items: {type: string}}
+        revision: {type: integer}
+        hash: {type: string}
+        state: {type: string, enum: [draft, applied, undone, prepared, undoing, recovery_required]}
+        freshness: {type: string, enum: [current, stale]}
+        targets:
+          type: array
+          items:
+            type: object
+            properties:
+              path: {type: string}
+              hash: {type: string}
+              exists: {type: boolean}
+              content: {type: string}
+              mode: {type: integer}
+        changes:
+          type: array
+          items:
+            type: object
+            properties:
+              path: {type: string}
+              content: {type: string}
+              hash: {type: string}
+              diff: {$ref: '#/components/schemas/UnifiedDiff'}
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              role: {type: string}
+              content: {type: string}
+              created_at: {type: string, format: date-time}
+        checks: {type: array, items: {type: object}}
+        check_options: {type: object, properties: {run_tests: {type: boolean}, run_lint: {type: boolean}}}
+        reviewed_hash: {type: string}
+        repair_attempts: {type: integer, maximum: 3}
+        context_manifest: {$ref: '#/components/schemas/ContextManifest'}
+        instructions: {type: object, additionalProperties: {type: string}}
+        policy_fingerprint: {type: string}
+        workspace_hash: {type: string}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ChangeMutationResult:
+      type: object
+      properties:
+        session_id: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        state: {type: string}
+        hash: {type: string}
+        undo_available: {type: boolean}
+        index: {$ref: '#/components/schemas/ProjectIndex'}
+        warnings: {type: array, items: {type: string}}
+    InstructionPreview:
+      type: object
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        path: {type: string}
+        exists: {type: boolean}
+        existing_content: {type: string}
+        effective:
+          type: object
+          properties:
+            text: {type: string}
+            fingerprint: {type: string}
+            excluded: {type: array, items: {type: object}}
+            files:
+              type: array
+              items: {type: object, properties: {path: {type: string}, scope: {type: string}, content: {type: string}, hash: {type: string}}}
+        presets:
+          type: array
+          items: {type: object, properties: {id: {type: string}, label: {type: string}, content: {type: string}}}
+    FeatureRequest:
+      type: object
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        expected_hash: {type: string}
+        goals: {type: string, maxLength: 4096}
+        confirm_remote_provider: {type: boolean}
+      required: [project_id, project_revision, expected_hash]
+    FeatureStatusRequest:
+      allOf:
+        - {$ref: '#/components/schemas/FeatureRequest'}
+        - type: object
+          required: [status]
+          properties:
+            status: {type: string, enum: [open, saved, dismissed]}
+    FeatureReport:
+      type: object
+      properties:
+        schema_version: {type: integer, enum: [1]}
+        project_id: {type: string}
+        project_revision: {type: string}
+        hash: {type: string}
+        goals: {type: string}
+        status: {type: string, enum: [not_generated, ready, failed]}
+        freshness: {type: string, enum: [current, stale]}
+        failure: {type: string}
+        workspace_hash: {type: string}
+        context_manifest: {$ref: '#/components/schemas/ContextManifest'}
+        updated_at: {type: string, format: date-time}
+        suggestions:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            required: [id, title, benefit, evidence, paths, effort, acceptance_criteria, status]
+            properties:
+              id: {type: string}
+              title: {type: string}
+              benefit: {type: string}
+              evidence: {type: string}
+              paths: {type: array, items: {type: string}}
+              effort: {type: string, enum: [small, medium, large]}
+              acceptance_criteria: {type: array, items: {type: string}}
+              status: {type: string, enum: [open, saved, dismissed]}

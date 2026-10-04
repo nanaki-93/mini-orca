@@ -135,6 +135,24 @@ func newHTTPMux(
 	})
 
 	chatHandler := handlers.NewChatHandler(application)
+	changeHandler := handlers.NewChangeHandler(application, projectManager)
+	mux.HandleFunc("GET /api/projects/current/changes", changeHandler.List)
+	mux.HandleFunc("POST /api/projects/current/changes", changeHandler.Open)
+	mux.HandleFunc("GET /api/projects/current/changes/recovery", changeHandler.Recovery)
+	mux.HandleFunc("GET /api/projects/current/changes/{sessionID}", changeHandler.Get)
+	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/resume", changeHandler.Resume)
+	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/messages", changeHandler.Message)
+	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/checks", changeHandler.Checks)
+	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/review", changeHandler.Review)
+	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/apply", changeHandler.Apply)
+	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/undo", changeHandler.Undo)
+	mux.HandleFunc("GET /api/projects/current/instructions", changeHandler.Instructions)
+	mux.HandleFunc("POST /api/projects/current/instructions/proposal", changeHandler.ProposeInstructions)
+	featureHandler := handlers.NewFeatureHandler(application, projectManager)
+	mux.HandleFunc("GET /api/projects/current/features", featureHandler.Get)
+	mux.HandleFunc("POST /api/projects/current/features/goals", featureHandler.Goals)
+	mux.HandleFunc("POST /api/projects/current/features/generate", featureHandler.Generate)
+	mux.HandleFunc("PATCH /api/projects/current/features/{featureID}", featureHandler.Status)
 
 	// File-scoped chat session endpoints. A message has no target fields; its
 	// immutable project/file/symbol identity is established at session creation.
