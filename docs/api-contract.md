@@ -4,13 +4,13 @@
 **Base URL:** `http://localhost:9090`  
 **Content type:** `application/json`
 
-Mini-Orca is a local Compose Desktop client and loopback daemon for one active
-project. Its primary editing flow is deliberately narrow: open one Go file,
-select or name one declaration, talk in a conversation pinned to that target,
-edit the returned declaration draft, validate it, run scoped checks, and then
-explicitly confirm a one-file Apply. Source and composed-diff views are
-read-only. The daemon never creates multi-file changes, scans automatically,
-writes automatically, commits, or pushes.
+Mini-Orca uses a Wails/React client and loopback daemon for one active project.
+The shared change workflow captures up to eight explicit Go/Markdown paths,
+prepares versioned proposals, checks them, records diff review and explicitly
+applies them with guarded recovery/Undo. The legacy declaration APIs remain
+compatible with the Compose client and editable isolated declaration drafts.
+Source and composed diffs stay read-only. The daemon never writes source,
+runs project code, commits or pushes merely because a project or history is opened.
 
 `docs/openapi.yaml` is the machine-readable request/response contract. The
 route test in `cmd/daemon/main_test.go` compares both this table and the OpenAPI
@@ -101,6 +101,22 @@ untrusted networks.
 | POST | `/api/projects/current/drafts/{draftID}/benchmarks` | Compare one selected existing Go benchmark in isolated base and candidate copies. |
 | POST | `/api/projects/current/apply` | Apply one validated, checked declaration draft only after `confirm: true`. |
 | POST | `/api/projects/current/undo` | Restore only the immediately preceding unchanged apply after `confirm: true`. |
+| GET | `/api/projects/current/changes` | List local change conversations without generation. |
+| POST | `/api/projects/current/changes` | Capture a task and one to eight explicit Go/Markdown paths. |
+| GET | `/api/projects/current/changes/recovery` | Read the latest grouped mutation or interrupted recovery journal. |
+| GET | `/api/projects/current/changes/{sessionID}` | Read a proposal and recheck source freshness. |
+| POST | `/api/projects/current/changes/{sessionID}/resume` | Restore history and clear check/review authority; no provider request. |
+| POST | `/api/projects/current/changes/{sessionID}/messages` | Generate a scoped proposal or explicitly request bounded check-driven repair. |
+| POST | `/api/projects/current/changes/{sessionID}/checks` | Check the current proposal; tests/vet require independent execution trust. |
+| POST | `/api/projects/current/changes/{sessionID}/review` | Record diff review for the current checked hash. |
+| POST | `/api/projects/current/changes/{sessionID}/apply` | Explicitly apply the current reviewed proposal with grouped recovery. |
+| POST | `/api/projects/current/changes/{sessionID}/undo` | Restore the latest unchanged grouped Apply or recover an interrupted mutation. |
+| GET | `/api/projects/current/instructions` | Preview applicable AGENTS.md content, origins and instruction presets. |
+| POST | `/api/projects/current/instructions/proposal` | Prepare an AGENTS.md proposal without a provider or source write. |
+| GET | `/api/projects/current/features` | Read saved goals and advisory feature suggestions. |
+| POST | `/api/projects/current/features/goals` | Save goals and invalidate suggestions for changed goals. |
+| POST | `/api/projects/current/features/generate` | Explicitly generate bounded feature ideas with Analyze consent. |
+| PATCH | `/api/projects/current/features/{featureID}` | Save, dismiss or reopen an advisory feature suggestion. |
 
 Project analysis keeps the existing string fields: new `architecture` values contain
 Mermaid flowcharts and `flows` items contain flowcharts or sequence diagrams. These are
@@ -548,3 +564,55 @@ checklist across applicable stages. Config and saved selection exclusions do not
 contribute to coverage. `partial` retains incomplete, paused, interrupted and
 canceled files; `unavailable` retains unreadable or unavailable evidence. Captured
 run coverage and the project description retain their own historical status.
+
+## Shared AI proposals and project instructions
+
+All new GET routes require `project_id` and `project_revision` query guards.
+The instructions preview also requires a canonical relative `path` ending in
+`AGENTS.md`. It reads root-to-directory guides, respecting context exclusions
+and rejecting symlinks. More local guidance applies within its own directory.
+Instructions guide generation; they grant no provider, execution or Apply authority.
+
+A change creation body carries `project_id`, `project_revision`, `kind`
+(`fix`, `performance`, `feature`, `instructions`), `title`, `paths` and optional
+`acceptance_criteria`. Targets are immutable; Go/Markdown file creation is supported,
+but deletes and other languages are unavailable. A manual instruction proposal adds
+`content` to this body and requires exactly one AGENTS.md path. It makes no model call.
+
+Messages, checks, review, Apply and Undo carry `project_id`, `project_revision`,
+`revision` and `hash`; the session ID is in the route. Messages add `message`,
+`confirm_remote_provider` and optional `repair`. Repair requires current failed
+checks and consumes one of three durable attempts. Checks accept `run_tests` and
+`run_lint`; once requested those checks remain required. Go is formatted before
+proposal publication where parseable. Source parsing/formatting checks are always
+required; code tests/vet run only with current execution trust in a copied workspace
+using fixed argv. New test files are tested against the base and candidate, and a
+reviewed regression proof stays pinned through repair. Passing parser checks alone
+does not establish runtime correctness. Apply and Undo require `confirm: true`.
+
+Every proposal revision clears earlier checks/review. Apply uses current-session
+authority and rechecks source, policy, instruction and whole check-workspace hashes.
+Local `.mini-orca/changes/` history intentionally contains source, proposed contents
+and conversations in private files; it is excluded from prompt context and Git
+source indexing. Limits are eight paths, 256 KiB prompt/response content, forty
+messages, 2 MiB per conversation and two hundred conversations. History reads are
+passive. Resume clears check/review authority; stale history is readable but cannot
+be applied. Existing declaration sessions retain their in-memory behavior.
+
+Grouped writes are journaled before source replacement. A failed write rolls back
+when current hashes still match; an unrelated concurrent edit blocks recovery
+instead of being overwritten. `prepared`, `undoing` and `recovery_required` receipts
+expose interrupted/partial work and must be recovered before another grouped Apply.
+A mutation receipt reports the actual state, index (when available), warnings and
+Undo availability. Metadata failure after source changes does not erase the receipt.
+Undo verifies post-Apply hashes and removes files that the proposal created. The
+latest grouped change supersedes legacy declaration Undo.
+
+Features use the configured Analyze scope. Generation/goals bodies carry current
+project identity, `expected_hash`, `goals` (at most 4096 bytes), and generation's
+`confirm_remote_provider`. Triage adds `status` (`open`, `saved`, `dismissed`).
+Each of at most five ideas includes benefit, evidence, eligible affected paths,
+estimated effort and acceptance criteria. Ideas remain advisory and never enter
+Bugs/Performance/Security finding counts. Changed source/instructions/goals make
+ideas stale. Failed generation retains earlier ideas with an explicit failure; an
+empty successful array means no ideas were returned.

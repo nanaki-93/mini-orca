@@ -51,9 +51,9 @@ func NewClient(base string) (*Client, error) {
 }
 
 var routes = map[string]*regexp.Regexp{
-	"GET":    regexp.MustCompile(`^/(health|status|api/models/current|api/projects/current/(context|overview|findings|scan|execution-trust|index|files/(info|symbols|analysis)|impact|git|performance|performance/context|analysis/(selection|run|results)|drafts/[^/]+/benchmarks))$`),
-	"POST":   regexp.MustCompile(`^/api/projects/(import|restore|current/(reindex|scan|execution-trust|files/(analysis|security-scan|explanation)|security-review|analysis/(selection|preview|run|run/control)|chat/sessions(/[^/]+/messages)?|drafts/[^/]+/(validate|checks|benchmarks)|apply|undo))$`),
-	"PATCH":  regexp.MustCompile(`^/api/projects/current/(drafts|findings)/[^/]+$`),
+	"GET":    regexp.MustCompile(`^/(health|status|api/models/current|api/projects/current/(changes(/(recovery|[^/]+))?|instructions|features|context|overview|findings|scan|execution-trust|index|files/(info|symbols|analysis)|impact|git|performance|performance/context|analysis/(selection|run|results)|drafts/[^/]+/benchmarks))$`),
+	"POST":   regexp.MustCompile(`^/api/projects/(import|restore|current/(changes(/[^/]+/(resume|messages|checks|review|apply|undo))?|instructions/proposal|features/(goals|generate)|reindex|scan|execution-trust|files/(analysis|security-scan|explanation)|security-review|analysis/(selection|preview|run|run/control)|chat/sessions(/[^/]+/messages)?|drafts/[^/]+/(validate|checks|benchmarks)|apply|undo))$`),
+	"PATCH":  regexp.MustCompile(`^/api/projects/current/(drafts|findings|features)/[^/]+$`),
 	"DELETE": regexp.MustCompile(`^/api/projects/current/scan$`),
 }
 
