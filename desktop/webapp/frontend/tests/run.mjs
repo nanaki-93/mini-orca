@@ -181,6 +181,118 @@ async function test(name, body) {
 }
 
 try {
+  await test('Saved architecture and flow charts render in Summary and the diagrams view', async () => {
+    const { page, close } = await pageFor();
+    assert.equal(await page.locator('.diagram img').count(), 3);
+    for (const name of ['Architecture diagram', 'Flow 1 diagram', 'Flow 2 diagram'])
+      assert.equal(await page.getByRole('img', { name, exact: true }).count(), 1);
+    await page.getByRole('heading', { name: 'Project flows', exact: true }).waitFor();
+    for (const [name, file] of [
+      ['Architecture diagram', 'architecture'],
+      ['Flow 1 diagram', 'flowchart'],
+      ['Flow 2 diagram', 'sequence'],
+    ])
+      await page.getByRole('img', { name, exact: true }).screenshot({
+        path: `${output}/summary-${file}.png`,
+      });
+    const before = await page.evaluate(() =>
+      window.fixture.requests.filter((request) => request.method !== 'GET'),
+    );
+    await page.getByRole('button', { name: 'Explore', exact: true }).click();
+    await page.getByRole('heading', { name: 'Architecture & flows', exact: true }).waitFor();
+    assert.equal(await page.locator('.diagram img').count(), 3);
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll('.diagram img')].every(
+        (image) => image.complete && image.naturalWidth > 0,
+      ),
+    );
+    for (const source of await page.getByText('Diagram source', { exact: true }).all())
+      await source.click();
+    assert.match(await page.locator('.diagram pre').first().innerText(), /^flowchart TD/);
+    assert.match(await page.locator('.diagram pre').last().innerText(), /^sequenceDiagram/);
+    await layout(page, 'diagrams');
+    await page.setViewportSize({ width: 900, height: 640 });
+    await page.getByRole('button', { name: 'Larger text' }).click();
+    await layout(page, 'diagrams-900');
+    await page.getByRole('button', { name: 'Back to summary', exact: true }).click();
+    await layout(page, 'summary-charts-900');
+    for (const [name, file] of [
+      ['Architecture diagram', 'architecture'],
+      ['Flow 1 diagram', 'flowchart'],
+      ['Flow 2 diagram', 'sequence'],
+    ])
+      await page.getByRole('img', { name, exact: true }).screenshot({
+        path: `${output}/summary-${file}-900.png`,
+      });
+    assert.deepEqual(
+      await page.evaluate(() =>
+        window.fixture.requests.filter((request) => request.method !== 'GET'),
+      ),
+      before,
+    );
+    assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+    await close();
+  });
+  await test('Fenced charts and saved prose remain readable', async () => {
+    const { page, close } = await pageFor({
+      architecture:
+        'The API admits requests into a bounded queue.\n\n```mermaid\ngraph LR\n  API --> Queue\n```',
+      flows: ['``` Mermaid \r\nsequenceDiagram\r\n  API->>Worker: Process\r\n```'],
+    });
+    assert.equal(await page.locator('.diagram img').count(), 2);
+    await page
+      .getByText('The API admits requests into a bounded queue.', { exact: true })
+      .waitFor();
+    await page.getByRole('button', { name: 'Explore', exact: true }).click();
+    assert.equal(await page.locator('.diagram img').count(), 2);
+    await page
+      .getByText('The API admits requests into a bounded queue.', { exact: true })
+      .waitFor();
+    await close();
+
+    const legacy = await pageFor({
+      architecture: 'The API admits requests to the worker service.',
+      flows: ['Each request is validated before the worker processes it.'],
+    });
+    for (const explore of [false, true]) {
+      if (explore) await legacy.page.getByRole('button', { name: 'Explore', exact: true }).click();
+      assert.equal(await legacy.page.locator('.diagram img').count(), 0);
+      await legacy.page
+        .getByText('The API admits requests to the worker service.', { exact: true })
+        .waitFor();
+      await legacy.page
+        .getByText('Each request is validated before the worker processes it.', { exact: true })
+        .waitFor();
+    }
+    await legacy.close();
+  });
+  await test('Unavailable and invalid charts retain clear states and complete source', async () => {
+    const missing = await pageFor({ architecture: '', flows: [] });
+    await missing.page.getByText('No architecture overview saved.', { exact: true }).waitFor();
+    await missing.page.getByRole('button', { name: 'Explore', exact: true }).click();
+    await missing.page.getByText('No project flows saved.', { exact: true }).waitFor();
+    assert.equal(await missing.page.locator('.diagram img').count(), 0);
+    await missing.close();
+
+    for (const [source, error] of [
+      ['flowchart NOT_A_DIRECTION\n  API --> Worker', 'Diagram preview unavailable'],
+      ['flowchart TD\n' + '%% comment\n'.repeat(160), 'Diagram is too large to render.'],
+      ['flowchart TD\n  A["' + 'x'.repeat(16000) + '"]', 'Diagram is too large to render.'],
+    ]) {
+      const { page, close } = await pageFor({ architecture: source, flows: [] });
+      for (const explore of [false, true]) {
+        if (explore) await page.getByRole('button', { name: 'Explore', exact: true }).click();
+        await page.getByText(error, { exact: true }).waitFor();
+        assert.equal(await page.locator('.diagram img').count(), 0);
+        const saved = page.locator('.diagram pre');
+        assert.equal(await saved.isVisible(), true);
+        assert.equal(await saved.textContent(), source.trim());
+        await saved.focus();
+        assert.equal(await saved.evaluate((element) => element === document.activeElement), true);
+      }
+      await close();
+    }
+  });
   await test('Color hierarchy, readable themes and compact details preserve local navigation', async () => {
     const { page, close } = await pageFor({ unknown: true });
     assert.equal(await page.locator('[data-accent="performance"] .metric-number').innerText(), '—');

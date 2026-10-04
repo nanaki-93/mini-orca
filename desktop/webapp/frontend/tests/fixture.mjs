@@ -312,10 +312,14 @@ export function installFixture(options = {}) {
               analysis: {
                 purpose: project.summary,
                 architecture:
-                  'The API admits requests into a bounded queue. Workers process each item and report status.\n\n```mermaid\ngraph LR\n  API --> Queue\n  Queue --> Workers\n  Workers --> Store\n```',
+                  options.architecture ??
+                  'flowchart TD\n  API --> Queue\n  Queue --> Workers\n  Workers --> Store',
                 components: ['HTTP API', 'Bounded queue', 'Worker pool', 'Local result store'],
                 entry_points: ['cmd/server/main.go'],
-                flows: ['```mermaid\ngraph LR\n  Request --> Validate --> Process --> Result\n```'],
+                flows: options.flows ?? [
+                  'flowchart TD\n  Request --> Validate --> Process --> Result',
+                  'sequenceDiagram\n  Client->>API: Request\n  API->>Worker: Process\n  Worker-->>Client: Result',
+                ],
                 risks: [],
                 next_steps: ['Propagate cancellation through the worker loop.'],
                 engineering_insight: insight,
