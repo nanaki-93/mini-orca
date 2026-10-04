@@ -3,6 +3,8 @@
 Read [../AGENTS.md](../AGENTS.md) first. Before UI changes, read
 [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) and inspect the relevant existing
 components and state owners. [README.md](README.md) owns desktop setup and use.
+For `webapp/`, also read [webapp/AGENTS.md](webapp/AGENTS.md); its native bridge and
+React workflow owner replace the Compose-specific APIs described below.
 
 ## State and workflow ownership
 

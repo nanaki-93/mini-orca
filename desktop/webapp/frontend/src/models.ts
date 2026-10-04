@@ -1,0 +1,462 @@
+export interface ProjectIdentity {
+  project_id: string;
+  project_revision: string;
+}
+export interface Project extends ProjectIdentity {
+  name: string;
+  path: string;
+  type: string;
+  build_file: string;
+  file_count: number;
+  source_file_count: number;
+  total_lines: number;
+  languages: Record<string, number>;
+  files: string[];
+  summary: string;
+  ai_status: string;
+  analyzed_at: string;
+}
+export interface SymbolInfo {
+  name: string;
+  kind: string;
+  signature: string;
+  start_line: number;
+  end_line: number;
+  confidence: string;
+  atomic_target: boolean;
+}
+export interface IndexedFile {
+  path: string;
+  content_hash: string;
+  language: string;
+  binary: boolean;
+  size_bytes: number;
+  line_count: number;
+  imports: string[];
+  symbols: SymbolInfo[];
+  analysis_status: string;
+}
+export interface ProjectIndex extends ProjectIdentity {
+  files: IndexedFile[];
+}
+export interface FileInfo {
+  path: string;
+  content_hash: string;
+  name: string;
+  language: string;
+  size_bytes: number;
+  line_count: number;
+  binary: boolean;
+  content: string;
+}
+export interface Insight {
+  mechanism?: string;
+  why_it_matters_here?: string;
+  tradeoff_or_failure_mode?: string;
+  transferable_lesson?: string;
+}
+export interface Overview extends ProjectIdentity {
+  metrics: {
+    type: string;
+    file_count: number;
+    source_file_count: number;
+    total_lines: number;
+    languages: Record<string, number>;
+  };
+  analysis: {
+    purpose: string;
+    architecture: string;
+    components: string[];
+    entry_points: string[];
+    flows: string[];
+    risks: { severity: string; summary: string; engineering_insight?: Insight }[];
+    next_steps: string[];
+    engineering_insight?: Insight;
+    status: string;
+    failure?: string;
+  };
+  analysis_coverage: Record<string, number>;
+  finding_counts: { verified: number; ai_suggestions: number };
+  analysis_run?: AnalysisRun;
+}
+export interface Model {
+  scope: string;
+  profile: string;
+  model: string;
+  provider_origin: string;
+  remote_provider: boolean;
+  reasoning_effort: string;
+  timeout: string;
+}
+export interface ModelCatalog {
+  scopes: Record<string, Model>;
+}
+export interface TaskSpec {
+  schema_version: string;
+  target_path: string;
+  target_symbol: string;
+  target_signature: string;
+  acceptance_criteria: string[];
+  non_goals: string[];
+  go_test_candidate?: { name: string; content: string };
+}
+export interface Finding extends ProjectIdentity {
+  id: string;
+  source: string;
+  confidence: string;
+  severity: string;
+  title: string;
+  message: string;
+  rule: string;
+  file_hash: string;
+  location: { path: string; symbol: string; start_line: number; end_line: number };
+  evidence: string;
+  status: string;
+  freshness: string;
+  category: string;
+  task_spec?: TaskSpec;
+  engineering_insight?: Insight;
+}
+export interface FindingsResponse extends ProjectIdentity {
+  findings: Finding[];
+}
+export interface Limits {
+  batch_files: number;
+  budget_seconds: number;
+  max_attempts_per_stage: number;
+}
+export interface QueueIdentity extends ProjectIdentity {
+  policy_fingerprint: string;
+  provider_fingerprint: string;
+  queue_id: string;
+}
+export interface RunIdentity extends QueueIdentity {
+  id: string;
+  generation: string;
+}
+export interface PlannedFile {
+  path: string;
+  content_hash: string;
+  language: string;
+  size_bytes: number;
+  stages: {
+    stage: string;
+    eligible: boolean;
+    cached: boolean;
+    reason?: string;
+    max_model_requests: number;
+  }[];
+}
+export interface AnalysisPreview {
+  preview_id: string;
+  identity: QueueIdentity;
+  scope: string;
+  refresh: boolean;
+  limits: Limits;
+  files: PlannedFile[];
+  excluded: { path: string; reason: string }[];
+  providers: {
+    id: string;
+    stages: string[];
+    model: Model;
+    remote_confirmation_required: boolean;
+  }[];
+  expected_model_requests: number;
+  max_model_requests: number;
+  security_review_intent_required: boolean;
+  retry_stale_failed?: boolean;
+}
+export interface Coverage {
+  total: number;
+  pending: number;
+  running: number;
+  succeeded: number;
+  partial: number;
+  failed: number;
+  skipped: number;
+  unavailable: number;
+}
+export interface Section {
+  category: string;
+  status: string;
+  coverage: Coverage;
+  finding_count: number | null;
+}
+export interface RunFile {
+  path: string;
+  content_hash: string;
+  language: string;
+  stages: {
+    stage: string;
+    status: string;
+    attempts: number;
+    cached: boolean;
+    finding_count: number | null;
+    reason?: string;
+  }[];
+}
+export interface AnalysisRun {
+  identity: RunIdentity;
+  plan: AnalysisPreview;
+  status: string;
+  files: RunFile[];
+  sections: Section[];
+  elapsed_seconds: number;
+  window_files_completed: number;
+  reason?: string;
+}
+export interface Selection extends ProjectIdentity {
+  selection_id: string;
+  excluded_paths: string[];
+  editable: boolean;
+  files: {
+    path: string;
+    reason: string;
+    stages: { stage: string; status: string; reason?: string }[];
+  }[];
+}
+export interface PerformanceFinding {
+  id: string;
+  category: string;
+  potential_impact: string;
+  confidence: string;
+  title: string;
+  observed_pattern: string;
+  workload_conditions: string;
+  recommendation: string;
+  tradeoff: string;
+  verification_plan: string;
+  start_line: number;
+  end_line: number;
+  symbol: string;
+  engineering_insight?: Insight;
+}
+export interface PerformanceReport extends ProjectIdentity {
+  path: string;
+  content_hash: string;
+  status: string;
+  findings: PerformanceFinding[];
+  warning?: string;
+}
+export interface SecurityFinding {
+  id: string;
+  rule: string;
+  title: string;
+  source_anchor: { path: string; symbol: string; start_line: number; end_line: number };
+  severity: string;
+  confidence: string;
+  evidence_kind: string;
+  observed_condition: string;
+  preconditions_or_unknowns: string;
+  remediation: string;
+  verification_idea: string;
+  cwe?: string;
+  reference?: string;
+  triage: string;
+  verification_state: string;
+  engineering_insight?: Insight;
+}
+export interface SecurityReport extends ProjectIdentity {
+  path: string;
+  content_hash: string;
+  status: string;
+  source: string;
+  findings: SecurityFinding[];
+  reason?: string;
+  model?: string;
+  scope?: string;
+}
+export interface SectionResults {
+  identity: RunIdentity;
+  progress: Section;
+  saved_finding_count: number | null;
+  path?: string;
+  semantic: Finding[];
+  performance: PerformanceReport[];
+  security: SecurityReport[];
+  unclassified: Finding[];
+  retained_files?: { path: string; content_hash: string; language: string }[];
+}
+export interface ContextManifest {
+  included: {
+    path: string;
+    size_bytes: number;
+    hash: string;
+    estimated_tokens?: number;
+    truncated?: boolean;
+  }[];
+  excluded: { path: string; include: boolean; reason: string }[];
+  estimated_tokens?: number;
+  byte_limit?: number;
+  token_limit?: number;
+  truncated?: boolean;
+  scope?: string;
+  model?: string;
+  provider_origin?: string;
+  remote_provider?: boolean;
+}
+export interface FileAnalysis {
+  path: string;
+  status: string;
+  purpose: string;
+  responsibilities: string[];
+  dependencies: string[];
+  side_effects: string[];
+  risks: {
+    severity: string;
+    summary: string;
+    task_spec?: TaskSpec;
+    engineering_insight?: Insight;
+  }[];
+  suggestions: { title: string; summary: string; target_symbol: string; action: string }[];
+  symbol_explanations: Record<string, string>;
+  engineering_insight?: Insight;
+  failure?: string;
+}
+export interface Explanation extends ProjectIdentity {
+  base_file_hash: string;
+  anchor: { path: string; symbol: string };
+  summary: string;
+  behavior: string[];
+  inputs: string[];
+  outputs: string[];
+  side_effects: string[];
+  error_behavior: string[];
+  engineering_insight?: Insight;
+  context_manifest: ContextManifest;
+}
+export interface Validation {
+  applicable: boolean;
+  scope_mode: string;
+  diagnostics: { code: string; message: string }[];
+  diff: {
+    old_path: string;
+    new_path: string;
+    lines: { kind: string; old_line: number; new_line: number; text: string }[];
+  };
+}
+export interface Draft extends ProjectIdentity {
+  id: string;
+  base_file_hash: string;
+  target_path: string;
+  mode: string;
+  target_symbol: string;
+  declaration: string;
+  imports: string[];
+  revision: number;
+  hash: string;
+  candidate_hash: string;
+  parent_draft_id?: string;
+  state: string;
+  validation?: Validation;
+  task_spec?: TaskSpec;
+  engineering_insight?: Insight;
+}
+export interface ChatSession extends ProjectIdentity {
+  id: string;
+  base_file_hash: string;
+  open_path: string;
+  mode: string;
+  target_symbol: string;
+  state: string;
+  latest_draft_id: string;
+  task_spec?: TaskSpec;
+  repair_count?: number;
+}
+export interface Proposal {
+  session_id: string;
+  draft: Draft;
+  assistant_message: { role: string; content: string };
+  context_manifest: ContextManifest;
+}
+export interface CandidateIdentity extends ProjectIdentity {
+  draft_id: string;
+  draft_revision: number;
+  draft_hash: string;
+  base_file_hash: string;
+  target_path: string;
+}
+export interface Check {
+  name: string;
+  required: boolean;
+  state: string;
+  command: string[];
+  output: string;
+  exit_code: number;
+}
+export interface Checks extends CandidateIdentity {
+  candidate_hash: string;
+  applicable: boolean;
+  checks: Check[];
+}
+export interface ExecutionTrust extends ProjectIdentity {
+  trusted: boolean;
+  commands: string[][];
+}
+export interface BenchmarkChoice {
+  name: string;
+  command: string[];
+  scope: string;
+}
+export interface BenchmarkCatalog extends CandidateIdentity {
+  available: boolean;
+  trusted: boolean;
+  reason?: string;
+  benchmarks: BenchmarkChoice[];
+}
+export interface BenchmarkSample {
+  iterations: number;
+  ns_per_op: number;
+  bytes_per_op?: number;
+  allocs_per_op?: number;
+}
+export interface BenchmarkResult extends CandidateIdentity {
+  benchmark: string;
+  scope: string;
+  status: string;
+  reason?: string;
+  command: string[];
+  base?: { samples: BenchmarkSample[] };
+  candidate?: { samples: BenchmarkSample[] };
+}
+export interface Receipt {
+  project_revision: string;
+  post_apply_hash: string;
+  undo_available: boolean;
+  audit?: {
+    id: string;
+    action: string;
+    target_path: string;
+    outcome: string;
+    timestamp: string;
+    before_hash: string;
+    after_hash: string;
+    project_id: string;
+    project_revision: string;
+  };
+  index?: ProjectIndex;
+  warnings?: string[];
+}
+export interface Scan extends ProjectIdentity {
+  status: string;
+  phases: { name: string; state: string; command: string[]; output: string; exit_code: number }[];
+}
+export interface GitStatus {
+  available: boolean;
+  branch: string;
+  file_state: string;
+  diff_state: string;
+}
+export interface Impact {
+  target_path: string;
+  target_symbol: string;
+  references: { path: string; symbol: string; confidence: string; reason: string }[];
+}
+export interface TerminalUpdate {
+  id: string;
+  state: string;
+  data: string;
+  cursor: number;
+  reset: boolean;
+  error: string;
+}
