@@ -109,7 +109,7 @@ Implement a shared proposal workflow in the Wails/React client: selected finding
 **Verification command**
 `go test ./internal/api/handlers ./cmd/daemon && (cd desktop/webapp && go test ./internal/bridge)`
 
-## Task 6 — [ ] Deliver chat, automatic fix preparation and local history
+## Task 6 — [x] Deliver chat, automatic fix preparation and local history
 
 **Target files**
 - `desktop/webapp/frontend/src/change-workspace.tsx` — primary chat, selected file scope, proposal diff, checks, review/apply/undo and history.

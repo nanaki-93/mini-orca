@@ -460,3 +460,38 @@ export interface TerminalUpdate {
   reset: boolean;
   error: string;
 }
+
+export interface ChangeSession extends ProjectIdentity {
+  id: string;
+  kind: string;
+  title: string;
+  acceptance_criteria: string[];
+  revision: number;
+  hash: string;
+  state: string;
+  freshness: string;
+  targets: { path: string; hash: string; exists: boolean; content: string }[];
+  changes: { path: string; content: string; hash: string; diff: Validation['diff'] }[];
+  messages: { role: string; content: string }[];
+  checks: Check[];
+  check_options?: { run_tests?: boolean; run_lint?: boolean };
+  reviewed_hash?: string;
+  repair_attempts: number;
+  context_manifest: ContextManifest;
+  updated_at: string;
+}
+export interface ChangeMutation extends ProjectIdentity {
+  session_id: string;
+  state: string;
+  hash: string;
+  undo_available: boolean;
+  index?: ProjectIndex;
+  warnings: string[];
+}
+export interface ChangeSeed {
+  title: string;
+  message: string;
+  kind: string;
+  paths: string[];
+  acceptance_criteria: string[];
+}

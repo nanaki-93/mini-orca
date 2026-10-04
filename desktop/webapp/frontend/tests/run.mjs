@@ -42,7 +42,7 @@ async function nav(page, name) {
     .click();
 }
 async function openSource(page) {
-  await nav(page, 'Editor');
+  await nav(page, 'Source');
   await page.locator('.file-item[title="internal/worker/process.go"]').click();
   await page.getByLabel('Declaration', { exact: true }).selectOption('Process');
 }
@@ -392,7 +392,7 @@ try {
       'Bugs',
       'Performance',
       'Security',
-      'Editor',
+      'Source',
       'Models',
       'Project',
       'Terminal',
@@ -608,7 +608,7 @@ try {
   });
   await test('Late file responses cannot replace the current file', async () => {
     const { page, close } = await pageFor();
-    await nav(page, 'Editor');
+    await nav(page, 'Source');
     await page.evaluate(() => {
       window.fixture.hold = '/api/projects/current/files/info';
     });
@@ -662,7 +662,7 @@ try {
     await page.getByRole('dialog').getByRole('button', { name: 'Trust this project' }).click();
     await idle(page);
     await layout(page, 'benchmark');
-    await nav(page, 'Editor');
+    await nav(page, 'Source');
     await page.getByRole('tab', { name: 'Context' }).click();
     await page.getByRole('heading', { name: 'Included files' }).waitFor();
     await layout(page, 'context');
@@ -712,7 +712,7 @@ try {
     ]) {
       await page.setViewportSize({ width, height });
       if (width === 900) await page.getByRole('button', { name: 'Larger text' }).click();
-      for (const name of ['Summary', 'Analysis', 'Bugs', 'Editor', 'Models', 'Project']) {
+      for (const name of ['Summary', 'Analysis', 'Bugs', 'Source', 'Models', 'Project']) {
         await nav(page, name);
         await layout(page, `${name.toLowerCase()}-${width}`);
       }
@@ -736,6 +736,121 @@ try {
       await contrast(page, `Results-${options.runStatus || 'empty'}`);
       await close();
     }
+  });
+  await test('Chat revisions require fresh review before grouped Apply and Undo', async () => {
+    const { page, close } = await pageFor();
+    await nav(page, 'Chat');
+    await page.getByLabel('Add an existing file').selectOption('internal/worker/process.go');
+    await page.getByLabel('Change request', { exact: true }).fill('Handle cancellation.');
+    await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Trust this project' }).click();
+    await idle(page);
+    await page.getByLabel('Read-only diff for internal/worker/process.go').waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Approve and apply' }).isEnabled(), false);
+    await page.getByRole('button', { name: 'Review this diff' }).click();
+    await idle(page);
+    assert.equal(await page.getByRole('button', { name: 'Approve and apply' }).isEnabled(), true);
+    await page.getByLabel('Change request', { exact: true }).fill('Preserve the existing API too.');
+    await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+    await idle(page);
+    assert.equal(await page.getByRole('button', { name: 'Approve and apply' }).isEnabled(), false);
+    await page.getByRole('button', { name: 'Review this diff' }).click();
+    await idle(page);
+    await layout(page, 'chat-review');
+    await page.getByRole('button', { name: 'Approve and apply' }).click();
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Apply proposal', exact: true })
+      .click();
+    await idle(page);
+    await page.getByRole('heading', { name: 'Change applied', exact: true }).waitFor();
+    assert.equal(
+      await page.evaluate(
+        () =>
+          window.fixture.requests.filter((r) => r.path.endsWith('/changes/change-1/apply')).length,
+      ),
+      1,
+    );
+    await page.getByRole('button', { name: 'Undo proposal', exact: true }).click();
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Undo proposal', exact: true })
+      .click();
+    await idle(page);
+    await page.getByRole('heading', { name: 'Change undone', exact: true }).waitFor();
+    await close();
+  });
+  await test('Remote chat consent and passive history restore do not restore approval', async () => {
+    const { page, close } = await pageFor({ remote: true });
+    await nav(page, 'Chat');
+    await page.getByLabel('Add an existing file').selectOption('internal/worker/process.go');
+    await page.getByLabel('Change request', { exact: true }).fill('Add cancellation.');
+    await page.getByLabel('Run project tests after generation').uncheck();
+    await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
+    await idle(page);
+    await page.getByRole('button', { name: 'Review this diff' }).click();
+    await idle(page);
+    await page.getByRole('button', { name: 'New conversation' }).click();
+    await page.getByText('Local history', { exact: true }).click();
+    await page.getByRole('button', { name: 'Refresh history' }).click();
+    await page.getByRole('button', { name: 'Resume', exact: true }).click();
+    await idle(page);
+    assert.equal(await page.getByRole('button', { name: 'Approve and apply' }).isEnabled(), false);
+    assert.equal(
+      await page.evaluate(
+        () =>
+          window.fixture.requests.filter(
+            (r) => r.path.endsWith('/messages') && r.path.includes('/changes/'),
+          ).length,
+      ),
+      1,
+    );
+    await page.setViewportSize({ width: 800, height: 900 });
+    await layout(page, 'chat-compact');
+    await page.getByRole('button', { name: 'Larger text' }).click();
+    await layout(page, 'chat-large-text');
+    await close();
+  });
+  await test('Prepare fix stops after bounded repair and never applies automatically', async () => {
+    const { page, close } = await pageFor({ changeChecksFail: true });
+    await nav(page, 'Bugs');
+    await page.locator('.result-row').first().click();
+    await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Trust this project' }).click();
+    await idle(page);
+    const requests = await page.evaluate(() => window.fixture.requests);
+    assert.equal(requests.filter((r) => r.body?.repair === true).length, 3);
+    assert.equal(
+      requests.some((r) => r.path.endsWith('/apply')),
+      false,
+    );
+    assert.equal(await page.getByRole('button', { name: 'Review this diff' }).isDisabled(), true);
+    await close();
+  });
+  await test('Canceled chat responses do not publish a late proposal', async () => {
+    const { page, close } = await pageFor();
+    await nav(page, 'Chat');
+    await page.getByLabel('Add an existing file').selectOption('internal/worker/process.go');
+    await page.getByLabel('Change request', { exact: true }).fill('Handle cancellation.');
+    await page.getByLabel('Run project tests after generation').uncheck();
+    await page.evaluate(() => {
+      window.fixture.hold = '/api/projects/current/changes/change-1/messages';
+    });
+    await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+    await page.waitForFunction(() =>
+      window.fixture.requests.some(
+        (r) => r.path.endsWith('/messages') && r.path.includes('/changes/'),
+      ),
+    );
+    await page.locator('.busy-strip').getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.evaluate(() => {
+      window.fixture.hold = '';
+      window.fixture.release();
+    });
+    await idle(page);
+    assert.equal(await page.getByLabel('Read-only diff for internal/worker/process.go').count(), 0);
+    await close();
   });
   assert.deepEqual(errors, []);
   console.log(`PASS ${checks} workflow and layout checks; no browser errors or external requests`);

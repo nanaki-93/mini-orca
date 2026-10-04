@@ -2,6 +2,7 @@ import { API, ApiError, current, errorMessage, native } from './api';
 import type * as M from './models';
 
 export type Page =
+  | 'chat'
   | 'welcome'
   | 'summary'
   | 'project'
@@ -78,6 +79,10 @@ export interface State {
   confirmation?: Confirmation;
   terminals: M.TerminalUpdate[];
   chosenPath?: string;
+  change?: M.ChangeSession;
+  changeSeed?: M.ChangeSeed;
+  changeHistory?: M.ChangeSession[];
+  changeReceipt?: M.ChangeMutation | null;
 }
 const initial = (): State => ({
   page: 'welcome',
@@ -151,6 +156,25 @@ export function canCancelOperation(label: string) {
       'Start terminal',
       'Close terminal',
     ].includes(label)
+  );
+}
+
+export function changeChecksPassed(change: M.ChangeSession) {
+  return (
+    change.checks.length > 0 &&
+    change.checks.every((check) => !check.required || check.state === 'passed')
+  );
+}
+export function canApplyChange(s: State) {
+  const change = s.change;
+  return (
+    !!change &&
+    !s.uncertain &&
+    change.state === 'draft' &&
+    change.freshness === 'current' &&
+    projectKey(change) === projectKey(s.project) &&
+    changeChecksPassed(change) &&
+    change.reviewed_hash === change.hash
   );
 }
 
@@ -396,6 +420,9 @@ export class Workspace {
         reviewed: '',
         file: undefined,
         fileStale: true,
+        change: this.state.change
+          ? { ...this.state.change, freshness: 'stale', reviewed_hash: '' }
+          : undefined,
         results: {},
         preview: undefined,
         receipt: undefined,
@@ -418,6 +445,7 @@ export class Workspace {
     this.set({ page, error: '' });
     if (['editor', 'draft', 'checks', 'review', 'assistant', 'benchmark'].includes(page))
       await this.refreshFile();
+    if (page === 'chat') await this.loadChangeHistory();
     if (['bugs', 'performance', 'security'].includes(page)) await this.loadResults(page);
     if (page === 'context' || page === 'manifest') await this.inspectContext();
   }
@@ -699,6 +727,7 @@ export class Workspace {
     scope: string,
     title: string,
     explicit = false,
+    paths?: string[],
   ): Promise<boolean | null> {
     const models = await this.api.get<M.ModelCatalog>('/api/models/current');
     this.set({ models });
@@ -715,7 +744,7 @@ export class Workspace {
         model.model,
         model.provider_origin,
         `Scope: ${scope}`,
-        this.state.file?.path || 'Project context',
+        ...(paths || [this.state.file?.path || 'Project context']),
       ],
     });
     if (!accepted) return null;
@@ -969,10 +998,10 @@ export class Workspace {
       expected_hash: d.hash,
     };
   }
-  private async trust(): Promise<boolean> {
+  private async trust(forChange = false): Promise<boolean> {
     const params = {
       project_revision: this.identity().project_revision,
-      task_test_name: this.state.draft?.task_spec?.go_test_candidate?.name,
+      task_test_name: forChange ? undefined : this.state.draft?.task_spec?.go_test_candidate?.name,
     };
     const trust = await this.api.get<M.ExecutionTrust>(`${current}/execution-trust`, params);
     if (trust.trusted) return true;
@@ -1145,6 +1174,275 @@ export class Workspace {
         : await this.api.post<M.Scan>(`${current}/scan`, revision);
       this.set({ scan, page: 'scan' });
     });
+  }
+  seedChange(seed: M.ChangeSeed) {
+    if (this.state.busy) return;
+    this.set({
+      changeSeed: seed,
+      change: undefined,
+      changeReceipt: undefined,
+      page: 'chat',
+      error: '',
+    });
+    void this.loadChangeHistory();
+  }
+  newChange() {
+    if (this.state.busy) return;
+    this.set({ change: undefined, changeSeed: undefined, changeReceipt: undefined });
+  }
+  async loadChangeHistory() {
+    if (!this.state.project) return;
+    const identity = this.identity();
+    await Promise.all([
+      this.resource(
+        'change history',
+        () => this.api.get<M.ChangeSession[]>(`${current}/changes`, identity),
+        (changeHistory) => this.set({ changeHistory }),
+      ),
+      this.resource(
+        'change recovery',
+        () => this.api.get<M.ChangeMutation | null>(`${current}/changes/recovery`, identity),
+        (changeReceipt) => this.set({ changeReceipt }),
+      ),
+    ]);
+  }
+  private changeIdentity(change = this.state.change) {
+    if (!change) throw new Error('Choose a change conversation.');
+    return {
+      project_id: change.project_id,
+      project_revision: change.project_revision,
+      revision: change.revision,
+      hash: change.hash,
+    };
+  }
+  private async requestChangeMessage(message: string, repair = false) {
+    const change = this.state.change;
+    if (!change || change.freshness !== 'current' || change.state !== 'draft')
+      throw new Error('Start a fresh conversation for this source.');
+    const identity = this.changeIdentity(change);
+    const epoch = this.epoch;
+    const operation = this.operation;
+    const confirmed = await this.confirmModel(
+      'function',
+      repair ? 'Repair proposal' : 'Prepare proposal',
+      false,
+      change.targets.map((target) => target.path),
+    );
+    if (confirmed === null) return false;
+    const next = await this.api.post<M.ChangeSession>(
+      `${current}/changes/${encodeURIComponent(change.id)}/messages`,
+      { ...identity, message, repair, confirm_remote_provider: confirmed },
+    );
+    if (
+      epoch !== this.epoch ||
+      operation !== this.operation ||
+      this.state.change?.id !== change.id ||
+      this.state.change.hash !== change.hash
+    )
+      return false;
+    if (
+      projectKey(next) !== projectKey(change) ||
+      next.id !== change.id ||
+      next.revision <= change.revision
+    )
+      throw new Error('Proposal identity does not match this conversation.');
+    this.set({ change: next, changeReceipt: undefined });
+    return true;
+  }
+  private async requestChangeChecks(tests: boolean) {
+    const change = this.state.change;
+    if (!change) return false;
+    const identity = this.changeIdentity(change);
+    const epoch = this.epoch;
+    const operation = this.operation;
+    if (
+      (tests || change.check_options?.run_tests || change.check_options?.run_lint) &&
+      !(await this.trust(true))
+    )
+      return false;
+    this.set({ change: { ...change, checks: [], reviewed_hash: '' } });
+    const checked = await this.api.post<M.ChangeSession>(
+      `${current}/changes/${encodeURIComponent(change.id)}/checks`,
+      { ...identity, run_tests: tests },
+    );
+    if (
+      epoch !== this.epoch ||
+      operation !== this.operation ||
+      this.state.change?.id !== change.id ||
+      this.state.change.hash !== change.hash
+    )
+      return false;
+    if (checked.hash !== change.hash || checked.revision !== change.revision)
+      throw new Error('Check evidence does not match this proposal.');
+    this.set({ change: checked });
+    return true;
+  }
+  async prepareChange(seed: M.ChangeSeed, tests: boolean) {
+    await this.act('Prepare change', async () => {
+      if (!seed.message.trim()) throw new Error('Describe the change.');
+      if (!this.state.change) {
+        const identity = this.identity();
+        const epoch = this.epoch;
+        const operation = this.operation;
+        const change = await this.api.post<M.ChangeSession>(`${current}/changes`, {
+          ...identity,
+          kind: seed.kind,
+          title: seed.title,
+          paths: seed.paths,
+          acceptance_criteria: seed.acceptance_criteria,
+        });
+        if (epoch !== this.epoch || operation !== this.operation) return;
+        if (projectKey(change) !== projectKey(this.state.project))
+          throw new Error('Conversation belongs to another project revision.');
+        this.set({ change, page: 'chat' });
+      }
+      if (!(await this.requestChangeMessage(seed.message))) return;
+      if (!(await this.requestChangeChecks(tests))) return;
+      for (
+        let attempt = 0;
+        attempt < 3 &&
+        this.state.change &&
+        !changeChecksPassed(this.state.change) &&
+        this.state.change.repair_attempts < 3;
+        attempt++
+      ) {
+        if (
+          this.state.change.checks.some(
+            (check) => check.name === 'existing test baseline' && check.state !== 'passed',
+          )
+        )
+          break;
+        if (!(await this.requestChangeMessage('Repair failed checks.', true))) return;
+        if (!(await this.requestChangeChecks(tests))) return;
+      }
+      this.set({
+        notice:
+          'Proposal prepared. Inspect every file diff, then review and approve the current revision.',
+      });
+    });
+  }
+  async checkChange(tests: boolean) {
+    await this.act('Check proposal', async () => {
+      await this.requestChangeChecks(tests);
+    });
+  }
+  async repairChange() {
+    await this.act('Repair proposal', async () => {
+      if (await this.requestChangeMessage('Repair failed checks.', true))
+        await this.requestChangeChecks(!!this.state.change?.check_options?.run_tests);
+    });
+  }
+  async resumeChange(id: string) {
+    await this.act('Resume conversation', async () => {
+      const epoch = this.epoch;
+      const operation = this.operation;
+      const change = await this.api.post<M.ChangeSession>(
+        `${current}/changes/${encodeURIComponent(id)}/resume`,
+        { ...this.identity(), revision: 0, hash: '' },
+      );
+      if (epoch !== this.epoch || operation !== this.operation) return;
+      if (change.project_id !== this.state.project?.project_id)
+        throw new Error('History belongs to another project.');
+      this.set({ change, changeSeed: undefined, page: 'chat' });
+    });
+  }
+  async reviewChange() {
+    await this.act('Review proposal', async () => {
+      const change = this.state.change!;
+      const epoch = this.epoch;
+      const operation = this.operation;
+      const reviewed = await this.api.post<M.ChangeSession>(
+        `${current}/changes/${encodeURIComponent(change.id)}/review`,
+        this.changeIdentity(),
+      );
+      if (
+        epoch === this.epoch &&
+        operation === this.operation &&
+        this.state.change?.hash === reviewed.hash &&
+        reviewed.id === change.id
+      )
+        this.set({ change: reviewed });
+    });
+  }
+  async applyChange() {
+    await this.act('Apply change', async () => {
+      const change = this.state.change;
+      if (!change || !canApplyChange(this.state))
+        throw new Error('Check and review the current proposal.');
+      if (
+        !(await this.confirm({
+          title: 'Apply this proposal?',
+          message: `${change.title} · revision ${change.revision}`,
+          accept: 'Apply proposal',
+          details: change.changes.map((edit) => edit.path),
+        }))
+      )
+        return;
+      const receipt = await this.writeChangeSource(change.id, 'apply', this.changeIdentity());
+      await this.acceptChangeMutation(receipt);
+    });
+  }
+  async undoChange() {
+    await this.act('Undo change', async () => {
+      const receipt = this.state.changeReceipt;
+      if (!receipt?.undo_available || this.state.uncertain)
+        throw new Error('Refresh the project and recovery status before Undo.');
+      if (
+        !(await this.confirm({
+          title: 'Restore the previous files?',
+          message:
+            receipt.state === 'applied'
+              ? 'Undo the latest unchanged proposal.'
+              : 'Recover the interrupted grouped change.',
+          accept: 'Undo proposal',
+          destructive: true,
+        }))
+      )
+        return;
+      const result = await this.writeChangeSource(receipt.session_id, 'undo', {
+        ...this.identity(),
+        revision: this.state.change?.revision || 0,
+        hash: receipt.hash,
+      });
+      await this.acceptChangeMutation(result);
+    });
+  }
+  private async writeChangeSource(id: string, action: 'apply' | 'undo', identity: object) {
+    try {
+      return await this.api.post<M.ChangeMutation>(
+        `${current}/changes/${encodeURIComponent(id)}/${action}`,
+        { ...identity, confirm: true },
+      );
+    } catch (error) {
+      if (!(error instanceof ApiError))
+        this.set({
+          uncertain: true,
+          change: this.state.change ? { ...this.state.change, reviewed_hash: '' } : undefined,
+        });
+      throw error;
+    }
+  }
+  private async acceptChangeMutation(receipt: M.ChangeMutation) {
+    if (receipt.project_id !== this.state.project?.project_id)
+      throw new Error('Mutation belongs to another project.');
+    this.epoch++;
+    this.fileEpoch++;
+    this.set({
+      project: { ...this.state.project!, project_revision: receipt.project_revision },
+      index: receipt.index,
+      changeReceipt: receipt,
+      change: this.state.change
+        ? { ...this.state.change, state: receipt.state, reviewed_hash: '' }
+        : undefined,
+      fileStale: true,
+      reviewed: '',
+      checks: undefined,
+      results: {},
+      preview: undefined,
+      uncertain: !receipt.index,
+    });
+    await this.refreshProject();
+    await this.loadChangeHistory();
   }
   async openTerminal() {
     await this.act('Start terminal', async () => {
