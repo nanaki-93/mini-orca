@@ -48,7 +48,8 @@ func validateWritePath(relative string) error {
 		return fmt.Errorf("file path contains control characters")
 	}
 	for _, part := range strings.Split(relative, "/") {
-		if part == ".." || part == ".git" || part == ".mini-orca" || part == ".aws" || part == ".codex" || part == ".agents" {
+		switch part {
+		case "..", ".git", ".mini-orca", ".aws", ".codex", ".agents":
 			return fmt.Errorf("file path targets protected metadata")
 		}
 	}

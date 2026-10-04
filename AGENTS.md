@@ -14,9 +14,10 @@ guides add local detail; keep shared rules here instead of copying them.
 ## Project and ownership
 
 Mini-Orca is a local-first coding assistant: a Go 1.22 daemon, a Wails/React
-desktop client, a legacy Kotlin/Compose client and a loopback HTTP API. It supports project-wide analysis and
-one deliberate Go declaration edit at a time, with an editable draft, checks,
-Review, explicit Apply and guarded Undo.
+desktop client, a legacy Kotlin/Compose client and a loopback HTTP API. It supports
+project-wide analysis and checked chat proposals across up to eight captured
+Go/Markdown paths, plus the legacy one-declaration draft workflow. Both require
+diff review, explicit Apply and guarded Undo.
 
 - `cmd/` owns startup, configuration wiring and command entry points.
 - `internal/api/` owns HTTP decoding, local request policy and error responses.
@@ -62,8 +63,8 @@ Do not infer authorization from old task queues or generated
 
 - Keep the diff limited to the requested behavior and its necessary callers,
   tests and documentation. Fix the underlying cause in its owning layer. A
-  complete repository change may touch several files; Mini-Orca's one-file Apply
-  constraint governs the product's source-editing workflow.
+  complete repository change may touch several files. The legacy declaration
+  workflow applies one file; shared proposals apply only their captured paths.
 - Prefer straightforward control flow, precise domain names, cohesive functions
   and explicit inputs/results. Model distinct states explicitly instead of adding
   loosely related booleans or ambiguous null/empty values.
@@ -100,9 +101,10 @@ Do not infer authorization from old task queues or generated
 
 ## Product boundaries to preserve
 
-- Source and composed diffs are selectable/read-only; only the isolated
-  declaration/import draft is editable. Source mutation uses the existing
-  explicit Review/Apply and Undo paths, with current identity and hash checks.
+- Source and composed diffs are selectable/read-only. Editable source inputs
+  are limited to the isolated declaration/import draft and guided AGENTS.md
+  instruction text. Source mutation requires explicit diff Review/Apply and
+  guarded Undo, with current project, proposal and source identity/hash checks.
 - Navigation, disclosures, previews and local restore must not trigger provider
   requests, project-code execution or source writes. Keep remote-provider consent,
   Security review intent and execution trust tied to the relevant scope.

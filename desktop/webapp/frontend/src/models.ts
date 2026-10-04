@@ -295,7 +295,8 @@ export interface ContextManifest {
   provider_origin?: string;
   remote_provider?: boolean;
 }
-export interface FileAnalysis {
+export interface FileAnalysis extends ProjectIdentity {
+  content_hash: string;
   path: string;
   status: string;
   purpose: string;
@@ -480,6 +481,19 @@ export interface ChangeSession extends ProjectIdentity {
   context_manifest: ContextManifest;
   updated_at: string;
 }
+export type ChangeHistoryEntry = Pick<
+  ChangeSession,
+  | 'id'
+  | 'project_id'
+  | 'project_revision'
+  | 'kind'
+  | 'title'
+  | 'revision'
+  | 'hash'
+  | 'state'
+  | 'freshness'
+  | 'updated_at'
+>;
 export interface ChangeMutation extends ProjectIdentity {
   session_id: string;
   state: string;
@@ -487,6 +501,15 @@ export interface ChangeMutation extends ProjectIdentity {
   undo_available: boolean;
   index?: ProjectIndex;
   warnings: string[];
+  verification?: ChangeVerification;
+}
+export interface ChangeVerification extends ProjectIdentity {
+  session_id: string;
+  proposal_hash: string;
+  workspace_hash: string;
+  status: string;
+  reason?: string;
+  checks: Check[];
 }
 export interface ChangeSeed {
   title: string;

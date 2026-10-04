@@ -23,20 +23,10 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 	if index.ProjectID != request.ProjectID || index.ProjectRevision != request.ProjectRevision {
 		return nil, project.ErrRevisionConflict
 	}
-	if len(request.Paths) == 0 || len(request.Paths) > maxChangePaths || len(request.Title) > 200 || strings.TrimSpace(request.Title) == "" || !validChangeKind(request.Kind) {
-		return nil, fmt.Errorf("provide a task title, kind and one to eight paths")
-	}
-	if err := validateChangeCriteria(request.AcceptanceCriteria); err != nil {
+	if err := validateChangeRequest(request); err != nil {
 		return nil, err
 	}
 	root := s.manager.Root()
-	history, err := listChangeSessions(root)
-	if err != nil {
-		return nil, err
-	}
-	if len(history) >= 200 {
-		return nil, fmt.Errorf("change history has reached its 200-session limit")
-	}
 	policy, err := project.NewContextPolicy(root)
 	if err != nil {
 		return nil, err
@@ -47,20 +37,8 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 	}
 	now := time.Now().UTC()
 	session := &ChangeSession{SchemaVersion: 1, ID: "change-" + hex.EncodeToString(nonce[:]), ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Kind: request.Kind, Title: strings.TrimSpace(request.Title), AcceptanceCriteria: request.AcceptanceCriteria, Targets: []ChangeTarget{}, Changes: []ChangeEdit{}, Messages: []ChatSessionMessage{}, Instructions: map[string]string{}, Checks: []DraftCheck{}, State: "draft", Freshness: "current", PolicyFingerprint: policy.Version(), CreatedAt: now, UpdatedAt: now}
-	for _, path := range request.Paths {
-		if changeTarget(session, path) != nil {
-			return nil, fmt.Errorf("duplicate target path")
-		}
-		target, err := captureChangeTarget(root, path)
-		if err != nil {
-			return nil, err
-		}
-		instructions, err := project.ResolveInstructions(root, path)
-		if err != nil {
-			return nil, err
-		}
-		session.Targets = append(session.Targets, target)
-		session.Instructions[path] = instructions.Fingerprint
+	if err := captureChangeScope(root, session, request.Paths); err != nil {
+		return nil, err
 	}
 	_, manifest, err := changeContext(root, session)
 	if err != nil {
@@ -72,6 +50,15 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 		return nil, err
 	}
 	session.Hash = changeProposalHash(session.Changes)
+	s.changesMu.Lock()
+	defer s.changesMu.Unlock()
+	history, err := listChangeSessions(root)
+	if err != nil {
+		return nil, err
+	}
+	if len(history) >= 200 {
+		return nil, fmt.Errorf("change history has reached its 200-session limit")
+	}
 	if err := s.verifyChangeCurrent(ctx, root, session); err != nil {
 		return nil, err
 	}
@@ -79,6 +66,32 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 		return nil, err
 	}
 	return session, nil
+}
+
+func validateChangeRequest(request ChangeCreateRequest) error {
+	if len(request.Paths) == 0 || len(request.Paths) > maxChangePaths || len(request.Title) > 200 || strings.TrimSpace(request.Title) == "" || !validChangeKind(request.Kind) {
+		return fmt.Errorf("provide a task title, kind and one to eight paths")
+	}
+	return validateChangeCriteria(request.AcceptanceCriteria)
+}
+
+func captureChangeScope(root string, session *ChangeSession, paths []string) error {
+	for _, path := range paths {
+		if changeTarget(session, path) != nil {
+			return fmt.Errorf("duplicate target path")
+		}
+		target, err := captureChangeTarget(root, path)
+		if err != nil {
+			return err
+		}
+		instructions, err := project.ResolveInstructions(root, path)
+		if err != nil {
+			return err
+		}
+		session.Targets = append(session.Targets, target)
+		session.Instructions[path] = instructions.Fingerprint
+	}
+	return nil
 }
 
 func validChangeKind(kind string) bool {
@@ -134,6 +147,13 @@ func (s *Service) ChangeSession(ctx context.Context, id string) (*ChangeSession,
 	if err != nil {
 		return nil, err
 	}
+	index, err := s.manager.Index()
+	if err != nil {
+		return nil, err
+	}
+	if s.manager.Root() != root || session.ProjectID != index.ProjectID {
+		return nil, project.ErrRevisionConflict
+	}
 	if session.State == "draft" {
 		if err := s.verifyChangeCurrent(ctx, root, session); err != nil {
 			if !errors.Is(err, project.ErrRevisionConflict) && !errors.Is(err, project.ErrExcludedFile) {
@@ -150,19 +170,30 @@ func (s *Service) ChangeSession(ctx context.Context, id string) (*ChangeSession,
 func (s *Service) ResumeChange(ctx context.Context, id string) (*ChangeSession, error) {
 	s.changesMu.Lock()
 	defer s.changesMu.Unlock()
+	root := s.manager.Root()
 	session, err := s.ChangeSession(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+	index, err := s.manager.Index()
+	if err != nil {
+		return nil, err
+	}
+	if s.manager.Root() != root || session.ProjectID != index.ProjectID {
+		return nil, project.ErrRevisionConflict
+	}
 	session.Checks, session.ReviewedHash = []DraftCheck{}, ""
 	delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
-	if err := writeChangeSession(s.manager.Root(), session); err != nil {
+	if err := writeChangeSession(root, session); err != nil {
 		return nil, err
 	}
 	return session, nil
 }
 
-func (s *Service) ChangeHistory(ctx context.Context) ([]ChangeSession, error) {
+func (s *Service) ChangeHistory(ctx context.Context) ([]ChangeHistoryEntry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if _, err := s.manager.Index(); err != nil {
 		return nil, err
 	}
@@ -251,6 +282,7 @@ func (s *Service) ProposeInstructions(ctx context.Context, request InstructionPr
 	if request.Kind != "instructions" || len(request.Paths) != 1 || filepath.Base(request.Paths[0]) != "AGENTS.md" || len(request.Content) > project.MaxInstructionBytes || strings.TrimSpace(request.Content) == "" || !utf8.ValidString(request.Content) || strings.ContainsRune(request.Content, 0) {
 		return nil, fmt.Errorf("provide one AGENTS.md path and non-empty bounded instructions")
 	}
+	root := s.manager.Root()
 	session, err := s.OpenChangeSession(ctx, request.ChangeCreateRequest)
 	if err != nil {
 		return nil, err
@@ -262,7 +294,12 @@ func (s *Service) ProposeInstructions(ctx context.Context, request InstructionPr
 	session.Changes = []ChangeEdit{{Path: target.Path, Content: request.Content, Hash: contentHash([]byte(request.Content)), Diff: changeDiff(target.Path, target.Content, request.Content)}}
 	session.Hash, session.Revision = changeProposalHash(session.Changes), 1
 	session.Messages = []ChatSessionMessage{{Role: "assistant", Content: "Review the instruction changes before applying them.", CreatedAt: time.Now().UTC()}}
-	if err := writeChangeSession(s.manager.Root(), session); err != nil {
+	s.changesMu.Lock()
+	defer s.changesMu.Unlock()
+	if err := s.verifyChangeCurrent(ctx, root, session); err != nil {
+		return nil, err
+	}
+	if err := writeChangeSession(root, session); err != nil {
 		return nil, err
 	}
 	return session, nil

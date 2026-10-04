@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -55,6 +56,60 @@ func TestChangeGroupedApplyUndoAndRestart(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "docs/change.md")); !os.IsNotExist(err) {
 		t.Fatal("Undo retained new file")
+	}
+}
+
+func TestChangeApplySerializesApprovalChangesDuringWrites(t *testing.T) {
+	server := changeProvider(t, func() string { return groupedChangeResponse })
+	service, _ := newSemanticAnalysisService(t, server.URL, 0)
+	session := approveChangeFixture(t, service, prepareChangeFixture(t, service, "main.go", "docs/change.md"))
+	entered, release := make(chan struct{}), make(chan struct{})
+	applied := make(chan error, 1)
+	go func() {
+		_, err := service.applyChangeWithWriter(context.Background(), session.ID, ChangeApplyRequest{ChangeIdentity: changeIdentity(session), Confirm: true}, func(path string, data []byte) error {
+			if filepath.Base(path) == "main.go" {
+				close(entered)
+				<-release
+			}
+			return atomicWrite(path, data)
+		})
+		applied <- err
+	}()
+	<-entered
+	resumed := make(chan *ChangeSession, 1)
+	resumeErr := make(chan error, 1)
+	go func() {
+		result, err := service.ResumeChange(context.Background(), session.ID)
+		resumed <- result
+		resumeErr <- err
+	}()
+	select {
+	case <-resumed:
+		close(release)
+		t.Fatal("approval changed while reviewed files were being written")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	if err := <-applied; err != nil {
+		t.Fatal(err)
+	}
+	result := <-resumed
+	if err := <-resumeErr; err != nil || result.State != "applied" {
+		t.Fatalf("resume lost applied state: %+v, %v", result, err)
+	}
+}
+
+func TestChangeRecoveryRejectsOversizedMetadataBeforeWrites(t *testing.T) {
+	server := changeProvider(t, func() string { return groupedChangeResponse })
+	service, root := newSemanticAnalysisService(t, server.URL, 0)
+	session := prepareChangeFixture(t, service, "main.go", "docs/change.md")
+	session.Messages = []ChatSessionMessage{{Role: "user", Content: strings.Repeat("x", 2*1024*1024)}}
+	if err := writeChangeJournal(root, &changeJournal{Version: 1, Session: *session, State: "prepared"}); err == nil {
+		t.Fatal("oversized journal was accepted")
+	}
+	data, _ := os.ReadFile(filepath.Join(root, "main.go"))
+	if string(data) == session.Changes[0].Content {
+		t.Fatal("metadata validation wrote source")
 	}
 }
 

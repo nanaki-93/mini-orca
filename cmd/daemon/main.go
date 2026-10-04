@@ -146,6 +146,7 @@ func newHTTPMux(
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/review", changeHandler.Review)
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/apply", changeHandler.Apply)
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/undo", changeHandler.Undo)
+	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/verify", changeHandler.Verify)
 	mux.HandleFunc("GET /api/projects/current/instructions", changeHandler.Instructions)
 	mux.HandleFunc("POST /api/projects/current/instructions/proposal", changeHandler.ProposeInstructions)
 	featureHandler := handlers.NewFeatureHandler(application, projectManager)

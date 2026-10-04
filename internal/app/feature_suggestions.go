@@ -212,15 +212,7 @@ func (s *Service) GenerateFeatures(ctx context.Context, request FeatureRequest) 
 		}
 		return nil, generationErr
 	}
-	statusByID := map[string]string{}
-	for _, idea := range previous.Suggestions {
-		statusByID[idea.ID] = idea.Status
-	}
-	for i := range suggestions {
-		if status := statusByID[suggestions[i].ID]; status != "" {
-			suggestions[i].Status = status
-		}
-	}
+	preserveFeatureStatus(previous.Suggestions, suggestions)
 	previous.ProjectRevision, previous.WorkspaceHash = request.ProjectRevision, fingerprint
 	previous.Status, previous.Freshness, previous.Failure = "ready", "current", ""
 	previous.Suggestions, previous.ContextManifest = suggestions, s.contextManifestForRuntime(manifest, runtime)
@@ -228,6 +220,18 @@ func (s *Service) GenerateFeatures(ctx context.Context, request FeatureRequest) 
 		return nil, err
 	}
 	return previous, nil
+}
+
+func preserveFeatureStatus(previous, suggestions []FeatureSuggestion) {
+	statusByID := map[string]string{}
+	for _, idea := range previous {
+		statusByID[idea.ID] = idea.Status
+	}
+	for i := range suggestions {
+		if status := statusByID[suggestions[i].ID]; status != "" {
+			suggestions[i].Status = status
+		}
+	}
 }
 
 func (s *Service) verifyFeatureInput(ctx context.Context, root string, previous *FeatureReport, fingerprint string, request FeatureRequest) error {
@@ -289,21 +293,15 @@ func (s *Service) parseFeatures(output string) ([]FeatureSuggestion, error) {
 }
 
 func (s *Service) validateFeature(idea FeatureSuggestion) error {
-	for _, text := range []string{idea.Title, idea.Benefit, idea.Evidence} {
-		if strings.TrimSpace(text) == "" || len(text) > 1024 || sanitizeCheckOutput(text, false, "", "") != text {
-			return fmt.Errorf("feature prose must be non-empty bounded text without credentials")
-		}
-	}
-	if idea.Effort != "small" && idea.Effort != "medium" && idea.Effort != "large" {
-		return fmt.Errorf("invalid feature effort")
-	}
-	if len(idea.Paths) == 0 || len(idea.Paths) > maxChangePaths || len(idea.AcceptanceCriteria) == 0 {
-		return fmt.Errorf("feature paths and acceptance criteria are required")
-	}
-	if err := validateChangeCriteria(idea.AcceptanceCriteria); err != nil {
+	if err := validateFeatureDescription(idea); err != nil {
 		return err
 	}
+	seen := map[string]bool{}
 	for _, path := range idea.Paths {
+		if seen[path] {
+			return fmt.Errorf("feature contains repeated paths")
+		}
+		seen[path] = true
 		file, err := s.manager.IndexedFile(path)
 		if err != nil {
 			return err
@@ -316,6 +314,21 @@ func (s *Service) validateFeature(idea FeatureSuggestion) error {
 		}
 	}
 	return nil
+}
+
+func validateFeatureDescription(idea FeatureSuggestion) error {
+	for _, text := range []string{idea.Title, idea.Benefit, idea.Evidence} {
+		if strings.TrimSpace(text) == "" || len(text) > 1024 || sanitizeCheckOutput(text, false, "", "") != text {
+			return fmt.Errorf("feature prose must be non-empty bounded text without credentials")
+		}
+	}
+	if idea.Effort != "small" && idea.Effort != "medium" && idea.Effort != "large" {
+		return fmt.Errorf("invalid feature effort")
+	}
+	if len(idea.Paths) == 0 || len(idea.Paths) > maxChangePaths || len(idea.AcceptanceCriteria) == 0 {
+		return fmt.Errorf("feature paths and acceptance criteria are required")
+	}
+	return validateChangeCriteria(idea.AcceptanceCriteria)
 }
 
 func (s *Service) UpdateFeatureStatus(id string, request FeatureStatusRequest) (*FeatureReport, error) {

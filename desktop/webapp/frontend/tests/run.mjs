@@ -980,6 +980,66 @@ try {
       await close();
     }
   });
+  await test('Applied changes require explicit verification and separate reanalysis consent', async () => {
+    for (const verificationFail of [false, true]) {
+      const mutationWarning = 'Source changed; history could not be updated.';
+      const { page, close } = await pageFor({
+        remote: true,
+        verificationFail,
+        mutationWarning,
+        recoveryDropsWarnings: true,
+      });
+      await nav(page, 'Chat');
+      await page.getByLabel('Add an existing file').selectOption('internal/worker/process.go');
+      await page.getByLabel('Change request', { exact: true }).fill('Handle cancellation.');
+      await page.getByLabel('Run project tests after generation').uncheck();
+      await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+      await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
+      await idle(page);
+      await page.getByRole('button', { name: 'Review this diff' }).click();
+      await idle(page);
+      await page.getByRole('button', { name: 'Approve and apply' }).click();
+      await page
+        .getByRole('dialog')
+        .getByRole('button', { name: 'Apply proposal', exact: true })
+        .click();
+      await idle(page);
+      await page.getByText(mutationWarning, { exact: true }).waitFor();
+      assert.equal(
+        await page.evaluate(() =>
+          window.fixture.requests.some(
+            (r) =>
+              r.path.endsWith('/verify') ||
+              (r.path.endsWith('/files/analysis') && r.method === 'POST'),
+          ),
+        ),
+        false,
+      );
+      await page.getByRole('button', { name: 'Verify applied change' }).click();
+      await page.getByRole('dialog').getByRole('button', { name: 'Trust this project' }).click();
+      await idle(page);
+      await page
+        .getByLabel('Post-Apply verification')
+        .getByText(verificationFail ? 'failed' : 'verified', { exact: true })
+        .first()
+        .waitFor();
+      await layout(page, verificationFail ? 'chat-verification-failed' : 'chat-verified');
+      await page.getByRole('button', { name: 'Reanalyze changed files' }).click();
+      await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
+      await idle(page);
+      const requests = await page.evaluate(() => window.fixture.requests);
+      assert.equal(
+        requests.filter((r) => r.path.endsWith('/files/analysis') && r.method === 'POST').length,
+        1,
+      );
+      assert.equal(
+        requests.some((r) => r.method === 'PATCH' && r.path.includes('/findings/')),
+        false,
+      );
+      await page.getByText('Reanalyzed 1 changed files.', { exact: false }).waitFor();
+      await close();
+    }
+  });
   assert.deepEqual(errors, []);
   console.log(`PASS ${checks} workflow and layout checks; no browser errors or external requests`);
 } finally {

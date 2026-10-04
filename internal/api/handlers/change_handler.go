@@ -135,6 +135,14 @@ func (h *ChangeHandler) Recovery(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.ChangeRecovery()
 	respondWorkflow(w, value, err)
 }
+func (h *ChangeHandler) Verify(w http.ResponseWriter, r *http.Request) {
+	var request app.ChangeIdentity
+	if !decodeWorkflowBody(w, r, &request) {
+		return
+	}
+	value, err := h.service.VerifyChange(r.Context(), r.PathValue("sessionID"), request)
+	respondWorkflow(w, value, err)
+}
 
 type InstructionPreset struct {
 	ID      string `json:"id"`
@@ -160,14 +168,24 @@ func (h *ChangeHandler) Instructions(w http.ResponseWriter, r *http.Request) {
 		api.WriteError(w, http.StatusBadRequest, "choose a project-relative AGENTS.md path")
 		return
 	}
-	effective, err := project.ResolveInstructions(h.manager.Root(), path)
+	index, err := h.manager.Index()
 	if err != nil {
 		respondWorkflow(w, nil, err)
 		return
 	}
-	index, err := h.manager.Index()
+	root := h.manager.Root()
+	effective, err := project.ResolveInstructions(root, path)
 	if err != nil {
 		respondWorkflow(w, nil, err)
+		return
+	}
+	current, err := h.manager.Index()
+	if err != nil {
+		respondWorkflow(w, nil, err)
+		return
+	}
+	if h.manager.Root() != root || current.ProjectID != index.ProjectID || current.ProjectRevision != index.ProjectRevision {
+		respondWorkflow(w, nil, project.ErrRevisionConflict)
 		return
 	}
 	preview := InstructionPreview{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Path: path, Effective: effective, Presets: []InstructionPreset{

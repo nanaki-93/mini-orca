@@ -44,16 +44,20 @@ func (s *Service) CheckChange(ctx context.Context, id string, request ChangeChec
 	}
 	current.Checks, current.ReviewedHash, current.UpdatedAt = checks, "", time.Now().UTC()
 	current.CheckOptions = request.DraftCheckOptions
-	for _, check := range checks {
-		if check.Name == "regression baseline" && check.State == CheckPassed {
-			current.PinnedTests = changeTestEdits(current.Changes)
-		}
-	}
+	pinChangeRegression(current, checks)
 	if err := writeChangeSession(root, current); err != nil {
 		return nil, err
 	}
 	s.changeAuthority[current.ProjectID+"/"+id] = "checks:" + current.Hash
 	return current, nil
+}
+
+func pinChangeRegression(session *ChangeSession, checks []DraftCheck) {
+	for _, check := range checks {
+		if check.Name == "regression baseline" && check.State == CheckPassed {
+			session.PinnedTests = changeTestEdits(session.Changes)
+		}
+	}
 }
 
 func changeSourceChecks(edits []ChangeEdit) []DraftCheck {

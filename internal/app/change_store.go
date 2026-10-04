@@ -48,6 +48,9 @@ func readChangeSession(root, id string) (*ChangeSession, error) {
 		return nil, fmt.Errorf("read change session: %w", err)
 	}
 	defer input.Close()
+	if err := boundedChangeFile(input); err != nil {
+		return nil, err
+	}
 	var session ChangeSession
 	decoder := json.NewDecoder(io.LimitReader(input, 2*1024*1024))
 	decoder.DisallowUnknownFields()
@@ -74,10 +77,8 @@ func validateStoredChange(session ChangeSession) error {
 		}
 		seen[target.Path] = true
 	}
-	for _, edit := range session.Changes {
-		if !seen[edit.Path] || edit.Hash != contentHash([]byte(edit.Content)) {
-			return fmt.Errorf("corrupt stored proposal")
-		}
+	if err := validateStoredEdits(session.Changes, seen); err != nil {
+		return err
 	}
 	if session.Hash != changeProposalHash(session.Changes) {
 		return fmt.Errorf("corrupt proposal identity")
@@ -92,6 +93,28 @@ func validateStoredChange(session ChangeSession) error {
 		if !found {
 			return fmt.Errorf("proposal dropped or changed a pinned regression test")
 		}
+	}
+	return nil
+}
+
+func validateStoredEdits(edits []ChangeEdit, targets map[string]bool) error {
+	seen := map[string]bool{}
+	for _, edit := range edits {
+		if !targets[edit.Path] || seen[edit.Path] || len(edit.Content) > maxChangeBytes || edit.Hash != contentHash([]byte(edit.Content)) {
+			return fmt.Errorf("corrupt stored proposal")
+		}
+		seen[edit.Path] = true
+	}
+	return nil
+}
+
+func boundedChangeFile(file *os.File) error {
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	if info.Size() > 2*1024*1024 {
+		return fmt.Errorf("change metadata exceeds 2 MiB")
 	}
 	return nil
 }
@@ -114,22 +137,19 @@ func writeChangeSession(root string, session *ChangeSession) error {
 	return storage.WriteFile(path, data, 0600)
 }
 
-func listChangeSessions(root string) ([]ChangeSession, error) {
+func listChangeSessions(root string) ([]ChangeHistoryEntry, error) {
 	path, err := changeMetadataPath(root, "")
 	if err != nil {
 		return nil, err
 	}
 	entries, err := os.ReadDir(path)
 	if os.IsNotExist(err) {
-		return []ChangeSession{}, nil
+		return []ChangeHistoryEntry{}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if len(entries) > 200 {
-		return nil, fmt.Errorf("change history exceeds 200 entries")
-	}
-	result := []ChangeSession{}
+	result := []ChangeHistoryEntry{}
 	for _, entry := range entries {
 		id := strings.TrimSuffix(entry.Name(), ".json")
 		if !changeIDPattern.MatchString(id) {
@@ -139,7 +159,10 @@ func listChangeSessions(root string) ([]ChangeSession, error) {
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, *session)
+		result = append(result, ChangeHistoryEntry{ID: session.ID, ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, Kind: session.Kind, Title: session.Title, Revision: session.Revision, Hash: session.Hash, State: session.State, Freshness: session.Freshness, UpdatedAt: session.UpdatedAt})
+		if len(result) > 200 {
+			return nil, fmt.Errorf("change history exceeds 200 sessions")
+		}
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].UpdatedAt.After(result[j].UpdatedAt) })
 	return result, nil
