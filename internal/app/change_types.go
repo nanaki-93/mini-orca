@@ -47,8 +47,10 @@ type ChangeSession struct {
 	Freshness          string                  `json:"freshness"`
 	Messages           []ChatSessionMessage    `json:"messages"`
 	Changes            []ChangeEdit            `json:"changes"`
+	PinnedTests        []ChangeEdit            `json:"pinned_tests,omitempty"`
 	ContextManifest    project.ContextManifest `json:"context_manifest"`
 	Checks             []DraftCheck            `json:"checks"`
+	CheckOptions       DraftCheckOptions       `json:"check_options"`
 	ReviewedHash       string                  `json:"reviewed_hash,omitempty"`
 	RepairAttempts     int                     `json:"repair_attempts"`
 	CreatedAt          time.Time               `json:"created_at"`
@@ -81,4 +83,25 @@ type ChangeMessageRequest struct {
 type InstructionProposalRequest struct {
 	ChangeCreateRequest
 	Content string `json:"content"`
+}
+
+type ChangeCheckRequest struct {
+	ChangeIdentity
+	DraftCheckOptions
+}
+
+type ChangeApplyRequest struct {
+	ChangeIdentity
+	Confirm bool `json:"confirm"`
+}
+
+type ChangeMutationResult struct {
+	SessionID       string                `json:"session_id"`
+	ProjectID       string                `json:"project_id"`
+	ProjectRevision string                `json:"project_revision"`
+	State           string                `json:"state"`
+	Hash            string                `json:"hash"`
+	UndoAvailable   bool                  `json:"undo_available"`
+	Index           *project.ProjectIndex `json:"index,omitempty"`
+	Warnings        []string              `json:"warnings"`
 }
