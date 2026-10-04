@@ -45,7 +45,7 @@ Implement a shared proposal workflow in the Wails/React client: selected finding
 **Verification command**
 `go test ./internal/app -run 'TestChange'`
 
-## Task 3 — [ ] Check, review, apply and undo proposals across files
+## Task 3 — [x] Check, review, apply and undo proposals across files
 
 **Target files**
 - `internal/app/change_checks.go` — formatting/parsing, trusted copied-workspace checks, bounded repair evidence and review guards.

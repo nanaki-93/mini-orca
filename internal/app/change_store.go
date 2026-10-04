@@ -82,10 +82,24 @@ func validateStoredChange(session ChangeSession) error {
 	if session.Hash != changeProposalHash(session.Changes) {
 		return fmt.Errorf("corrupt proposal identity")
 	}
+	for _, pinned := range session.PinnedTests {
+		found := false
+		for _, edit := range session.Changes {
+			if edit.Path == pinned.Path && edit.Hash == pinned.Hash {
+				found = true
+			}
+		}
+		if !found {
+			return fmt.Errorf("proposal dropped or changed a pinned regression test")
+		}
+	}
 	return nil
 }
 
 func writeChangeSession(root string, session *ChangeSession) error {
+	if err := validateStoredChange(*session); err != nil {
+		return err
+	}
 	path, err := changeMetadataPath(root, session.ID+".json")
 	if err != nil {
 		return err
