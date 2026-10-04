@@ -48,7 +48,7 @@ export function Analysis({ s }: { s: State }) {
     <>
       <Heading
         title="Analysis"
-        eyebrow="Project-wide understanding"
+        eyebrow="Project scope"
         detail={`${s.selection?.files.filter((f) => !f.reason && !excluded.includes(f.path)).length ?? '—'} eligible files selected`}
       >
         <Button
@@ -221,8 +221,8 @@ export function Analysis({ s }: { s: State }) {
             </label>
           </Disclosure>
         </Panel>
-        <Panel title="Pick up where you left off">
-          <p className="small muted">Keep current results and retry outdated or failed work.</p>
+        <Panel title="Retry incomplete work">
+          <p className="small muted">Retry outdated or failed files.</p>
           <Button
             className="section-gap"
             disabled={!!s.busy || !s.selection || activeRun(s.run)}

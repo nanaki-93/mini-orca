@@ -25,9 +25,9 @@ export function ProjectPage({ s }: { s: State }) {
   return (
     <>
       <Heading
-        title={s.project ? 'Your project' : 'A little clarity for your code.'}
+        title={s.project ? 'Your project' : 'Open your workspace'}
         eyebrow="Mini-Orca"
-        detail={s.project ? s.project.path : 'Open a local project to get started.'}
+        detail={s.project ? s.project.path : 'Choose a local project.'}
       />
       <div className="grid two-columns">
         <Panel title="Open project">
@@ -61,9 +61,7 @@ export function ProjectPage({ s }: { s: State }) {
               Import & analyze
             </Button>
           </div>
-          <p className="small muted section-gap">
-            First visit? Import creates the project overview.
-          </p>
+          <p className="small muted section-gap">New project? Import to create its overview.</p>
           {!s.connected && (
             <div className="section-gap">
               <p className="small">
@@ -78,7 +76,7 @@ export function ProjectPage({ s }: { s: State }) {
             </div>
           )}
         </Panel>
-        <Panel title={s.project ? 'Project facts' : 'Your workspace, close at hand'}>
+        <Panel title={s.project ? 'Project facts' : 'Local by default'}>
           {s.project ? (
             <>
               <KeyValues
@@ -111,8 +109,8 @@ export function ProjectPage({ s }: { s: State }) {
           ) : (
             <div className="welcome-art">
               <Icon name="layers" />
-              <h2>Understand. Refine. Review.</h2>
-              <p>A focused workspace for deliberate changes.</p>
+              <h2>Inspect. Draft. Review.</h2>
+              <p>One change at a time.</p>
             </div>
           )}
         </Panel>
@@ -153,7 +151,7 @@ export function Summary({ s }: { s: State }) {
     <>
       <Heading
         title={s.project!.name}
-        eyebrow="Workspace overview"
+        eyebrow="Overview"
         detail={overview?.analysis.purpose ? undefined : s.project!.path}
       >
         <Button
@@ -190,9 +188,13 @@ export function Summary({ s }: { s: State }) {
                 : 'Not available yet'}
             </p>
             <div className="legend">
-              <span>Outdated {coverage?.stale ?? '—'}</span>
+              <span className={coverage && coverage.stale > 0 ? 'coverage-stale' : undefined}>
+                Outdated {coverage?.stale ?? '—'}
+              </span>
               <span>Missing {coverage?.missing ?? '—'}</span>
-              <span>Failed {coverage?.failed ?? '—'}</span>
+              <span className={coverage && coverage.failed > 0 ? 'coverage-failed' : undefined}>
+                Failed {coverage?.failed ?? '—'}
+              </span>
             </div>
           </div>
         </Panel>
@@ -207,11 +209,14 @@ export function Summary({ s }: { s: State }) {
               <button
                 key={category}
                 className="panel metric-card"
+                data-accent={category}
                 onClick={() => void w.navigate(category as Page)}
               >
                 <div className="metric-label">
                   <span>{title}</span>
-                  <Icon name={icon} />
+                  <span className="metric-icon">
+                    <Icon name={icon} />
+                  </span>
                 </div>
                 <div className="metric-number">{section?.finding_count ?? '—'}</div>
                 <Badge value={section?.status || 'not_run'} />
@@ -223,14 +228,18 @@ export function Summary({ s }: { s: State }) {
       <div className="grid two-columns section-gap">
         <div className="stack">
           <Panel
-            title="Project at a glance"
+            title="Project overview"
             actions={<Badge value={overview?.analysis.status || s.project!.ai_status} />}
           >
             <Prose text={overview?.analysis.purpose || s.project!.summary} />
             {overview?.analysis.failure && (
               <p className="error-text">{overview.analysis.failure}</p>
             )}
-            <BulletContent title="Components" items={overview?.analysis.components} />
+            {!!overview?.analysis.components?.length && (
+              <Disclosure title="Components">
+                <BulletContent title="" items={overview.analysis.components} />
+              </Disclosure>
+            )}
           </Panel>
           <Panel
             title="Findings"
@@ -247,14 +256,19 @@ export function Summary({ s }: { s: State }) {
                   key={f.id}
                   onClick={() => void w.openFile(f.location.path, f.location.symbol, f.task_spec)}
                 >
-                  <span className={`finding-mark ${f.severity === 'high' ? 'red' : ''}`}>
+                  <span
+                    className={`finding-mark ${['high', 'critical'].includes(f.severity) ? 'red' : f.severity === 'low' ? 'blue' : ''}`}
+                  >
                     <Icon name="bug" />
                   </span>
                   <span className="list-copy">
                     <strong>{f.title}</strong>
                     <small>{f.location.path}</small>
                   </span>
-                  <Badge value={f.confidence} />
+                  <span className="result-badges">
+                    <Badge value={f.severity} />
+                    <Badge value={f.confidence} tone="violet" />
+                  </span>
                 </button>
               ))
             ) : (
@@ -263,23 +277,6 @@ export function Summary({ s }: { s: State }) {
                 detail="Run an analysis or verified scan."
               />
             )}
-          </Panel>
-        </div>
-        <div className="stack">
-          <InsightCard insight={overview?.analysis.engineering_insight} />
-          <Panel
-            title="Architecture"
-            actions={
-              <Go page="diagrams" tone="ghost small">
-                Explore
-              </Go>
-            }
-          >
-            <Prose text={overview?.analysis.architecture} />
-            {!overview?.analysis.architecture && (
-              <p className="muted">No architecture overview saved.</p>
-            )}
-            <BulletContent title="Entry points" items={overview?.analysis.entry_points} />
           </Panel>
           <Panel title="Project facts">
             <div className="mini-metrics">
@@ -296,6 +293,27 @@ export function Summary({ s }: { s: State }) {
                 <small>Verified findings</small>
               </div>
             </div>
+          </Panel>
+        </div>
+        <div className="stack">
+          <InsightCard insight={overview?.analysis.engineering_insight} />
+          <Panel
+            title="Architecture"
+            actions={
+              <Go page="diagrams" tone="ghost small">
+                Explore
+              </Go>
+            }
+          >
+            <Prose text={overview?.analysis.architecture} />
+            {!overview?.analysis.architecture && (
+              <p className="muted">No architecture overview saved.</p>
+            )}
+            {!!overview?.analysis.entry_points?.length && (
+              <Disclosure title="Entry points">
+                <BulletContent title="" items={overview.analysis.entry_points} />
+              </Disclosure>
+            )}
           </Panel>
         </div>
       </div>

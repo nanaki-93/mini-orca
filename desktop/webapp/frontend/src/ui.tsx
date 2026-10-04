@@ -49,15 +49,38 @@ export const human = (text?: string) =>
 export function Badge({ value, tone }: { value?: string; tone?: string }) {
   const style =
     tone ??
-    (['fresh', 'passed', 'completed', 'completed_empty', 'verified', 'applied'].includes(
-      value || '',
-    )
+    ([
+      'fresh',
+      'passed',
+      'success',
+      'completed',
+      'completed_empty',
+      'verified',
+      'applied',
+      'validated',
+      'ready_to_apply',
+      'fixed',
+    ].includes(value || '')
       ? 'green'
       : ['failed', 'high', 'critical', 'error'].includes(value || '')
         ? 'red'
-        : ['stale', 'partial', 'paused', 'medium', 'interrupted'].includes(value || '')
+        : [
+              'stale',
+              'partial',
+              'paused',
+              'medium',
+              'interrupted',
+              'edited',
+              'needs_attention',
+              'checks_required',
+              'unverified',
+            ].includes(value || '')
           ? 'amber'
-          : '');
+          : ['running', 'queued', 'pausing', 'canceling'].includes(value || '')
+            ? 'blue'
+            : ['ai_suggestion', 'candidate', 'hypothesis', 'estimated'].includes(value || '')
+              ? 'violet'
+              : '');
   return <span className={`badge ${style}`}>{human(value)}</span>;
 }
 export function Heading({
@@ -168,8 +191,8 @@ export function InsightCard({ insight }: { insight?: Insight }) {
   return (
     <Panel title="Engineering insight" className="insight">
       <Prose text={insight.mechanism} />
-      {insight.why_it_matters_here && <Prose text={insight.why_it_matters_here} />}
-      <Disclosure title="Tradeoff & lesson">
+      <Disclosure title="Why & tradeoffs">
+        <Prose text={insight.why_it_matters_here} />
         <Prose text={insight.tradeoff_or_failure_mode} />
         <Prose text={insight.transferable_lesson} />
       </Disclosure>
@@ -183,9 +206,9 @@ function Diagram({ source }: { source: string }) {
       if (source.length > 16000 || source.split('\n').length > 160)
         throw new Error('Diagram is too large to render.');
       const svg = renderMermaidSVG(source, {
-        bg: '#1a1e22',
-        fg: '#e9eeee',
-        accent: '#b4e5cb',
+        bg: '#101b14',
+        fg: '#f1fff4',
+        accent: '#5cfa8b',
         font: 'sans-serif',
         padding: 24,
       });

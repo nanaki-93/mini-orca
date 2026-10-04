@@ -137,7 +137,7 @@ export function Results({ s }: { s: State }) {
           detail={
             <span className="row wrap">
               <Badge value={detail.severity} />
-              <Badge value={detail.confidence} />
+              <Badge value={detail.confidence} tone="violet" />
               <Badge value={detail.freshness} />
             </span>
           }
@@ -332,7 +332,7 @@ export function Results({ s }: { s: State }) {
           {filtered.slice(0, limit).map((row) => (
             <button className="result-row" key={row.key} onClick={() => setSelected(row.key)}>
               <span
-                className={`finding-mark ${['high', 'critical'].includes(row.severity) ? 'red' : ''}`}
+                className={`finding-mark ${['high', 'critical'].includes(row.severity) ? 'red' : row.severity === 'low' ? 'blue' : ''}`}
               >
                 <Icon
                   name={
@@ -353,7 +353,7 @@ export function Results({ s }: { s: State }) {
               </span>
               <span className="result-badges">
                 <Badge value={row.severity} />
-                <Badge value={row.confidence} />
+                <Badge value={row.confidence} tone="violet" />
                 <Badge value={row.freshness} />
               </span>
               <Icon name="chevron" />
