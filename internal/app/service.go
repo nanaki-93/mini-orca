@@ -58,6 +58,8 @@ type Service struct {
 	retryBase                       time.Duration
 	retryMax                        time.Duration
 	jobLifecycleMu                  sync.Mutex
+	changesMu                       sync.Mutex
+	changeAuthority                 map[string]string
 	analysisRun                     *analysisRunController
 	writeAnalysisRun                func(string, []byte, os.FileMode) error
 	goScan                          *goScanController
@@ -100,7 +102,8 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 
 	contextBuilder := project.NewContextBuilder()
 	service := &Service{
-		manager: manager,
+		manager:         manager,
+		changeAuthority: make(map[string]string),
 		runtimes: scopedRuntimes{
 			analyze:  newModelRuntime(profiles.Analyze, importTimeout, maxRetries),
 			bug:      newModelRuntime(profiles.Bug, analysisTimeout, maxRetries),

@@ -23,7 +23,7 @@ Implement a shared proposal workflow in the Wails/React client: selected finding
 **Verification command**
 `go test ./internal/project`
 
-## Task 2 — [ ] Persist shared change conversations and generate proposals
+## Task 2 — [x] Persist shared change conversations and generate proposals
 
 **Target files**
 - `internal/app/change_session.go` — immutable selected scope, revisioned conversations and provider generation.
