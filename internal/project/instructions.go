@@ -1,0 +1,111 @@
+package project
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"unicode/utf8"
+)
+
+const MaxInstructionBytes = 32 * 1024
+
+type InstructionFile struct {
+	Path    string `json:"path"`
+	Scope   string `json:"scope"`
+	Content string `json:"content"`
+	Hash    string `json:"hash"`
+}
+
+type EffectiveInstructions struct {
+	Files       []InstructionFile `json:"files"`
+	Excluded    []ContextDecision `json:"excluded"`
+	Text        string            `json:"text"`
+	Fingerprint string            `json:"fingerprint"`
+}
+
+// ResolveInstructions reads applicable guides from the root toward the target.
+// More local guidance applies within its directory; it cannot grant execution,
+// provider consent, retargeting or source-write authority.
+func ResolveInstructions(root, target string) (EffectiveInstructions, error) {
+	result := EffectiveInstructions{Files: []InstructionFile{}, Excluded: []ContextDecision{}}
+	canonical, err := CanonicalRoot(root)
+	if err != nil {
+		return result, err
+	}
+	if target != "" {
+		if _, err := ResolveWritePath(canonical, target); err != nil {
+			return result, err
+		}
+	}
+	policy, err := NewContextPolicy(canonical)
+	if err != nil {
+		return result, err
+	}
+	var text strings.Builder
+	for _, scope := range instructionScopes(target) {
+		path := filepath.ToSlash(filepath.Join(scope, "AGENTS.md"))
+		if _, err := ResolveWritePath(canonical, path); err != nil {
+			return result, err
+		}
+		decision := policy.Decide(path)
+		if !decision.Include {
+			result.Excluded = append(result.Excluded, decision)
+			continue
+		}
+		file, exists, err := readInstructionFile(canonical, path, scope)
+		if err != nil {
+			return result, err
+		}
+		if !exists {
+			continue
+		}
+		text.WriteString("\n## Instructions from " + file.Path + " (scope: " + file.Scope + ")\n" + file.Content + "\n")
+		if text.Len() > MaxInstructionBytes {
+			return result, fmt.Errorf("effective instructions exceed %d bytes", MaxInstructionBytes)
+		}
+		result.Files = append(result.Files, file)
+	}
+	result.Text = text.String()
+	result.Fingerprint = contentHash([]byte(policy.Version() + "\n" + result.Text))
+	return result, nil
+}
+
+func instructionScopes(target string) []string {
+	scopes := []string{"."}
+	if target == "" || filepath.Dir(target) == "." {
+		return scopes
+	}
+	current := ""
+	for _, part := range strings.Split(filepath.ToSlash(filepath.Dir(target)), "/") {
+		current = filepath.ToSlash(filepath.Join(current, part))
+		scopes = append(scopes, current)
+	}
+	return scopes
+}
+
+func readInstructionFile(root, path, scope string) (InstructionFile, bool, error) {
+	file := InstructionFile{Path: path, Scope: scope}
+	full, err := ResolveWritePath(root, path)
+	if err != nil {
+		return file, false, err
+	}
+	input, err := os.Open(full)
+	if os.IsNotExist(err) {
+		return file, false, nil
+	}
+	if err != nil {
+		return file, false, fmt.Errorf("read %s: %w", path, err)
+	}
+	defer input.Close()
+	data, err := io.ReadAll(io.LimitReader(input, MaxInstructionBytes+1))
+	if err != nil {
+		return file, false, fmt.Errorf("read %s: %w", path, err)
+	}
+	if len(data) > MaxInstructionBytes || !utf8.Valid(data) || isBinary(data) {
+		return file, false, fmt.Errorf("%s must be bounded UTF-8 text", path)
+	}
+	file.Content, file.Hash = string(data), contentHash(data)
+	return file, true, nil
+}

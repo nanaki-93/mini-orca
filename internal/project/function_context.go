@@ -61,6 +61,15 @@ func (b *ContextBuilder) BuildFunctionWithManifest(root string, options Function
 		return "", manifest, err
 	}
 	text := renderFunctionContext(path, *file, declaration, options)
+	instructions, err := ResolveInstructions(canonical, path)
+	if err != nil {
+		return "", manifest, err
+	}
+	text += instructions.Text
+	for _, instruction := range instructions.Files {
+		manifest.Included = append(manifest.Included, ContextFile{Path: instruction.Path, SizeBytes: int64(len(instruction.Content)), Hash: instruction.Hash, Tokens: estimateTokens(instruction.Content)})
+	}
+	manifest.Excluded = append(manifest.Excluded, instructions.Excluded...)
 	text, truncated := limitContextTokens(text, manifest.TokenLimit)
 	manifest.Truncated = truncated
 	manifest.EstimatedTokens = estimateTokens(text)

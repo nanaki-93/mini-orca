@@ -2,7 +2,7 @@
 
 Implement a shared proposal workflow in the Wails/React client: selected findings or feature requests become checked, versioned changes with read-only diffs, explicit Apply, guarded Undo, and local history. Add scoped AGENTS.md loading and a guided editor, plus separate, goal-aware feature suggestions. Preserve existing declaration APIs and the legacy client; broader changes initially support Go source and Markdown, including new files, with a maximum of eight explicitly selected paths.
 
-## Task 1 — [ ] Resolve scoped project instructions
+## Task 1 — [x] Resolve scoped project instructions
 
 **Target files**
 - `internal/project/instructions.go` — bounded, policy-filtered root-to-directory AGENTS.md resolution and instruction identity.

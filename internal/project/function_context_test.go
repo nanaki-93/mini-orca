@@ -67,3 +67,21 @@ func TestBuildFunctionWithManifestSupportsCreateAndReportsTruncation(t *testing.
 		t.Fatalf("tiny budget manifest = %+v, err = %v", manifest, err)
 	}
 }
+
+func TestBuildFunctionWithManifestIncludesScopedInstructions(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package sample\n\nfunc Run() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("Preserve cancellation and test error paths."), 0600); err != nil {
+		t.Fatal(err)
+	}
+	index, err := BuildIndex(root, "project", "revision")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text, manifest, err := NewContextBuilder().BuildFunctionWithManifest(root, FunctionContextOptions{TargetPath: "main.go", TargetSymbol: "Run", Mode: DeclarationEditReplaceSymbol, Index: index})
+	if err != nil || !strings.Contains(text, "Preserve cancellation") || len(manifest.Included) != 2 || manifest.Included[0].Path != "AGENTS.md" {
+		t.Fatalf("instructions absent from context: %q, %+v, %v", text, manifest, err)
+	}
+}
