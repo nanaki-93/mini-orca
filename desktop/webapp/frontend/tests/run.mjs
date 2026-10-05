@@ -959,15 +959,25 @@ try {
     );
     await close();
   });
-  await test('Summary retains unknown, empty, failed and stale suggestion states', async () => {
+  await test('Saved suggestion states stay available without unsolicited notices', async () => {
     for (const options of [
       {},
       { featuresReadFail: true },
+      { featuresStale: true },
       { featuresReady: true, featuresEmpty: true },
       { featuresReady: true, featuresFail: true },
       { featuresReady: true, featuresStale: true },
+      { featuresReady: true, featuresFail: true, featuresStale: true },
+      {
+        empty: true,
+        featuresReady: true,
+        featuresEmpty: true,
+        featuresFail: true,
+        featuresStale: true,
+      },
     ]) {
       const { page, close } = await pageFor(options);
+      await idle(page);
       await page.getByRole('heading', { name: 'New feature suggestions', exact: true }).waitFor();
       if (options.featuresReadFail)
         await page.getByRole('heading', { name: 'Suggestions unavailable', exact: true }).waitFor();
@@ -976,28 +986,86 @@ try {
           .getByRole('heading', { name: 'No suggestions generated', exact: true })
           .waitFor();
       else if (options.featuresEmpty)
-        await page.getByRole('heading', { name: 'No active suggestions', exact: true }).waitFor();
+        await page
+          .getByRole('heading', {
+            name: options.featuresFail ? 'No saved suggestions' : 'No active suggestions',
+            exact: true,
+          })
+          .waitFor();
       else {
         await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
-        if (options.featuresFail)
-          await page
-            .getByText(
-              'Feature suggestions could not be generated. Previous ideas remain available.',
-              { exact: true },
-            )
-            .waitFor();
         if (options.featuresStale)
           assert.equal(
             await page.getByRole('button', { name: 'Discuss in chat', exact: true }).isDisabled(),
             true,
           );
       }
+      assert.equal(await page.getByText(/Feature suggestions could not be generated/).count(), 0);
+      assert.equal(
+        await page.getByText(/These ideas use older project context or goals/).count(),
+        0,
+      );
       await page.setViewportSize({ width: 800, height: 900 });
       await page.getByRole('button', { name: 'Larger text' }).click();
       await layout(page, `summary-ideas-${JSON.stringify(options)}`);
       await contrast(page, 'Summary feature ideas');
+      await nav(page, 'Features');
+      await page.getByRole('heading', { name: 'Features', exact: true }).waitFor();
+      const reads = await page.evaluate(
+        () => window.fixture.requests.filter((r) => r.path.endsWith('/features')).length,
+      );
+      await page.getByRole('button', { name: 'Refresh suggestions', exact: true }).click();
+      await page.waitForFunction(
+        (reads) =>
+          window.fixture.requests.filter((r) => r.path.endsWith('/features')).length > reads,
+        reads,
+      );
+      assert.equal(await page.getByText(/Feature suggestions could not be generated/).count(), 0);
+      assert.equal(
+        await page.getByText(/These ideas use older project context or goals/).count(),
+        0,
+      );
+      assert.equal(
+        await page.getByText(/Suggestions are advisory\. Their effort and benefits/).count(),
+        0,
+      );
+      assert.equal(
+        await page.evaluate(() =>
+          window.fixture.requests.some(
+            (r) => r.method !== 'GET' && r.path !== '/api/projects/restore',
+          ),
+        ),
+        false,
+      );
       await close();
     }
+  });
+  await test('Saving goals and declining suggestion consent keep saved failures quiet', async () => {
+    const { page, close } = await pageFor({
+      remote: true,
+      featuresReady: true,
+      featuresFail: true,
+      featuresStale: true,
+    });
+    await nav(page, 'Features');
+    await page.getByLabel('Project goals', { exact: true }).fill('Help recover failed jobs.');
+    await page.getByRole('button', { name: 'Save goals', exact: true }).click();
+    await idle(page);
+    await page.getByRole('button', { name: 'Suggest features', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+    await idle(page);
+    assert.equal(await page.getByText(/Feature suggestions could not be generated/).count(), 0);
+    assert.equal(await page.getByText(/These ideas use older project context or goals/).count(), 0);
+    assert.equal(
+      await page.evaluate(() =>
+        window.fixture.requests.some((r) => r.path.endsWith('/features/generate')),
+      ),
+      false,
+    );
+    await nav(page, 'Summary');
+    assert.equal(await page.getByText(/Feature suggestions could not be generated/).count(), 0);
+    assert.equal(await page.getByText(/These ideas use older project context or goals/).count(), 0);
+    await close();
   });
   await test('Project analysis includes feature suggestions in preview, consent and Summary', async () => {
     const { page, close } = await pageFor({ remote: true, analysisCompletes: true });
@@ -1136,11 +1204,12 @@ try {
     );
     await close();
   });
-  await test('Feature empty, failed and stale results keep their meanings', async () => {
+  await test('Requested feature results show failures and warn only about existing stale ideas', async () => {
     for (const options of [
       { featuresEmpty: true },
-      { featuresFail: true },
+      { featuresFail: true, featuresStale: true },
       { featuresStale: true },
+      { featuresReady: true, featuresFail: true, featuresStale: true },
     ]) {
       const { page, close } = await pageFor(options);
       await nav(page, 'Features');
@@ -1152,14 +1221,76 @@ try {
         await page
           .getByText('Feature suggestions could not be generated.', { exact: true })
           .waitFor();
-      if (options.featuresStale)
+      const hasIdeas = !options.featuresEmpty && (!options.featuresFail || options.featuresReady);
+      if (options.featuresStale && hasIdeas)
         assert.equal(
           await page.getByRole('button', { name: 'Discuss in chat' }).isDisabled(),
           true,
         );
+      assert.equal(
+        await page.getByText(/These ideas use older project context or goals/).count(),
+        options.featuresStale && hasIdeas ? 1 : 0,
+      );
       await page.setViewportSize({ width: 800, height: 900 });
       await page.getByRole('button', { name: 'Larger text' }).click();
-      await layout(page, `features-${Object.keys(options)[0]}`);
+      await layout(page, `features-${JSON.stringify(options)}`);
+      await nav(page, 'Summary');
+      if (options.featuresFail)
+        await page
+          .getByText(
+            `Feature suggestions could not be generated.${hasIdeas ? ' Previous ideas remain available.' : ''}`,
+            { exact: true },
+          )
+          .waitFor();
+      assert.equal(
+        await page.getByText(/These ideas use older project context or goals/).count(),
+        options.featuresStale && hasIdeas ? 1 : 0,
+      );
+      await nav(page, 'Project');
+      await page.getByRole('button', { name: 'Open saved project', exact: true }).click();
+      await idle(page);
+      await page.getByRole('heading', { name: 'harbor', exact: true }).waitFor();
+      assert.equal(await page.getByText(/Feature suggestions could not be generated/).count(), 0);
+      assert.equal(
+        await page.getByText(/These ideas use older project context or goals/).count(),
+        0,
+      );
+      await close();
+    }
+  });
+  await test('Feature generation failures from a requested analysis remain visible', async () => {
+    for (const featuresReady of [false, true]) {
+      const { page, close } = await pageFor({
+        analysisCompletes: true,
+        featuresReady,
+        featuresFail: true,
+        featuresStale: true,
+      });
+      await nav(page, 'Analysis');
+      await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+      await idle(page);
+      await page.getByLabel('Include AI Security review').check();
+      await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
+      await idle(page);
+      await nav(page, 'Summary');
+      await page
+        .getByText(
+          `Feature suggestions could not be generated.${featuresReady ? ' Previous ideas remain available.' : ''}`,
+          { exact: true },
+        )
+        .waitFor();
+      assert.equal(
+        await page.getByText(/These ideas use older project context or goals/).count(),
+        featuresReady ? 1 : 0,
+      );
+      await nav(page, 'Features');
+      await page
+        .getByText('Feature suggestions could not be generated.', { exact: true })
+        .waitFor();
+      assert.equal(
+        await page.getByText(/These ideas use older project context or goals/).count(),
+        featuresReady ? 1 : 0,
+      );
       await close();
     }
   });

@@ -33,16 +33,18 @@ export function FeatureSummary({ s }: { s: State }) {
       <p className="small muted section-gap">
         Analysis checks for new capabilities using your project goals. Suggestions are advisory.
       </p>
-      {report?.failure && (
+      {s.featureGenerationRequested && report?.failure && (
         <Notice error>
           {report.failure} {report.suggestions.length > 0 && 'Previous ideas remain available.'}
         </Notice>
       )}
-      {report?.freshness === 'stale' && (
-        <Notice>
-          These ideas use older project context or goals. Run analysis again to update them.
-        </Notice>
-      )}
+      {s.featureGenerationRequested &&
+        report?.freshness === 'stale' &&
+        report.suggestions.length > 0 && (
+          <Notice>
+            These ideas use older project context or goals. Run analysis again to update them.
+          </Notice>
+        )}
       {!report ? (
         <Empty
           title="Suggestions unavailable"
@@ -103,10 +105,6 @@ export function Features({ s }: { s: State }) {
           Refresh suggestions
         </Button>
       </Heading>
-      <Notice>
-        Suggestions are advisory. Their effort and benefits are estimates; implement and verify each
-        idea through Chat.
-      </Notice>
       <Panel title="Project goals" className="section-gap">
         <label className="block">
           What should this project help users do?
@@ -136,13 +134,15 @@ export function Features({ s }: { s: State }) {
           </Button>
         </div>
       </Panel>
-      {report?.failure && <Notice error>{report.failure}</Notice>}
-      {report?.freshness === 'stale' && (
-        <Notice>
-          These ideas use older project context or goals. Generate again before preparing an
-          implementation.
-        </Notice>
-      )}
+      {s.featureGenerationRequested && report?.failure && <Notice error>{report.failure}</Notice>}
+      {s.featureGenerationRequested &&
+        report?.freshness === 'stale' &&
+        report.suggestions.length > 0 && (
+          <Notice>
+            These ideas use older project context or goals. Generate again before preparing an
+            implementation.
+          </Notice>
+        )}
       <div className="toolbar section-gap">
         <h2>Feature suggestions</h2>
         <label>
