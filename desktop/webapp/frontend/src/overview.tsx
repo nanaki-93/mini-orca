@@ -258,11 +258,16 @@ export function Summary({ s }: { s: State }) {
                   </span>
                   <span className="list-copy">
                     <strong>{f.title}</strong>
-                    <small>{f.location.path}</small>
+                    <small>
+                      {f.location.path}
+                      {f.confidence === 'ai_suggestion' && ' · AI analysis'}
+                    </small>
                   </span>
                   <span className="result-badges">
                     <Badge value={f.severity} />
-                    <Badge value={f.confidence} tone="violet" />
+                    {f.confidence !== 'ai_suggestion' && (
+                      <Badge value={f.confidence} tone="violet" />
+                    )}
                   </span>
                 </button>
               ))
