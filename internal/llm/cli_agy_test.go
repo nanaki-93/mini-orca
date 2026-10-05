@@ -23,6 +23,41 @@ func TestCLIAgyRequiresValidNativeStructuredOutput(t *testing.T) {
 	}
 }
 
+func TestCLIAgyAcceptsStructuredFinishEvents(t *testing.T) {
+	profile, _ := cliFixture(t, config.AgyProvider, "finish")
+	schema := JSONSchema{Name: "answer", Schema: json.RawMessage(`{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}`)}
+	response, err := NewClient(profile).ChatWithJSONSchema(context.Background(), []ChatMessage{{Role: "user", Content: "Explain the supplied source."}}, schema)
+	if err != nil || response.Choices[0].Message.Content != cliFixtureContent {
+		t.Fatalf("structured finish response = %+v, %v", response, err)
+	}
+}
+
+func TestCLIAgyRejectsUnauthorizedFinishEvents(t *testing.T) {
+	profile := config.ModelProfile{Provider: config.AgyProvider, Model: "fixture-model"}
+	valid := cliFixtureOutput(config.AgyProvider, "finish")
+	for name, output := range map[string]string{
+		"command":          strings.ReplaceAll(valid, `"tool_name":"finish"`, `"tool_name":"run_command"`),
+		"missing name":     strings.ReplaceAll(valid, `"tool_name":"finish"`, `"tool_name":""`),
+		"conflicting name": strings.ReplaceAll(valid, `"name":"finish"`, `"name":"view_file"`),
+		"subagent":         strings.ReplaceAll(valid, `"step_type":"tool"`, `"step_type":"subagent"`),
+		"before init":      agyFinishEvents + valid,
+		"after result":     valid + agyFinishEvents,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := decodeCLIResponse(profile, []byte(output), true); !errors.Is(err, ErrUnusableResponse) {
+				t.Fatalf("unauthorized finish = %v", err)
+			}
+		})
+	}
+	if _, err := decodeCLIResponse(profile, []byte(valid), false); !errors.Is(err, ErrUnusableResponse) {
+		t.Fatalf("finish without schema = %v", err)
+	}
+	missing := strings.Replace(cliFixtureOutput(config.AgyProvider, "missing-structured"), `{"event":"result"`, agyFinishEvents+`{"event":"result"`, 1)
+	if _, err := decodeCLIResponse(profile, []byte(missing), true); !errors.Is(err, ErrUnusableResponse) {
+		t.Fatalf("finish without native structured output = %v", err)
+	}
+}
+
 func TestCLIAgyRejectsIncorrectAgentsAndToolUse(t *testing.T) {
 	profile := config.ModelProfile{Provider: config.AgyProvider, Model: "fixture-model"}
 	valid := cliFixtureOutput(config.AgyProvider, "success")
