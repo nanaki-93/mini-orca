@@ -25,12 +25,8 @@ export function ProjectPage({ s }: { s: State }) {
   }, [s.chosenPath]);
   return (
     <>
-      <Heading
-        title={s.project ? 'Your project' : 'Open your workspace'}
-        eyebrow="Mini-Orca"
-        detail={s.project ? s.project.path : 'Choose a local project.'}
-      />
-      <div className="grid two-columns">
+      <Heading title={s.project ? 'Project' : 'Open project'} detail={s.project?.path} />
+      <div className={s.project ? 'grid two-columns' : 'stack'}>
         <Panel title="Open project">
           <label className="field-label" htmlFor="project-path">
             Project folder
@@ -62,7 +58,6 @@ export function ProjectPage({ s }: { s: State }) {
               Import & analyze
             </Button>
           </div>
-          <p className="small muted section-gap">New project? Import to create its overview.</p>
           {!s.connected && (
             <div className="section-gap">
               <p className="small">
@@ -77,44 +72,33 @@ export function ProjectPage({ s }: { s: State }) {
             </div>
           )}
         </Panel>
-        <Panel title={s.project ? 'Project facts' : 'Local by default'}>
-          {s.project ? (
-            <>
-              <KeyValues
-                values={[
-                  ['Project', s.project.name],
-                  ['Language', s.project.type],
-                  ['Files', s.project.file_count],
-                  ['Source files', s.project.source_file_count],
-                  ['Lines', s.project.total_lines?.toLocaleString()],
-                  [
-                    'Overview',
-                    <Badge value={s.overview?.analysis.status || s.project.ai_status} />,
-                  ],
-                ]}
-              />
-              <div className="actions section-gap">
-                <Button disabled={!!s.busy} onClick={() => void w.reindex()} icon="refresh">
-                  Refresh facts
-                </Button>
-                <Go page="summary">Summary</Go>
-              </div>
-              <Disclosure title="Project identity">
-                <code>
-                  {s.project.project_id}
-                  <br />
-                  {s.project.project_revision}
-                </code>
-              </Disclosure>
-            </>
-          ) : (
-            <div className="welcome-art">
-              <Icon name="layers" />
-              <h2>Inspect. Draft. Review.</h2>
-              <p>One change at a time.</p>
+        {s.project && (
+          <Panel title="Project facts">
+            <KeyValues
+              values={[
+                ['Project', s.project.name],
+                ['Language', s.project.type],
+                ['Files', s.project.file_count],
+                ['Source files', s.project.source_file_count],
+                ['Lines', s.project.total_lines?.toLocaleString()],
+                ['Overview', <Badge value={s.overview?.analysis.status || s.project.ai_status} />],
+              ]}
+            />
+            <div className="actions section-gap">
+              <Button disabled={!!s.busy} onClick={() => void w.reindex()} icon="refresh">
+                Refresh facts
+              </Button>
+              <Go page="summary">Summary</Go>
             </div>
-          )}
-        </Panel>
+            <Disclosure title="Project identity">
+              <code>
+                {s.project.project_id}
+                <br />
+                {s.project.project_revision}
+              </code>
+            </Disclosure>
+          </Panel>
+        )}
       </div>
       {s.project && (
         <div className="grid equal-columns section-gap">
@@ -152,7 +136,6 @@ export function Summary({ s }: { s: State }) {
     <>
       <Heading
         title={s.project!.name}
-        eyebrow="Overview"
         detail={overview?.analysis.purpose ? undefined : s.project!.path}
       >
         <Button
@@ -273,10 +256,7 @@ export function Summary({ s }: { s: State }) {
                 </button>
               ))
             ) : (
-              <Empty
-                title={s.findings ? 'No saved findings' : 'Findings unavailable'}
-                detail="Run an analysis or verified scan."
-              />
+              <Empty title={s.findings ? 'No saved findings' : 'Findings unavailable'} />
             )}
           </Panel>
           <Panel title="Project facts">
@@ -347,7 +327,7 @@ export function Summary({ s }: { s: State }) {
 export function Models({ s }: { s: State }) {
   return (
     <>
-      <Heading title="Models" detail="Configured destinations" eyebrow="Workspace">
+      <Heading title="Models">
         <Button
           icon="refresh"
           disabled={!!s.busy}
@@ -386,9 +366,9 @@ export function Models({ s }: { s: State }) {
           </Panel>
         ))}
       </div>
-      <p className="small muted section-gap">
-        Change model configuration in config.yaml, then restart the daemon.
-      </p>
+      <Disclosure title="Configuration">
+        <p className="small muted">Edit config.yaml, then restart the daemon.</p>
+      </Disclosure>
       {!s.models && <Empty title="Model configuration unavailable" />}
     </>
   );
@@ -396,7 +376,7 @@ export function Models({ s }: { s: State }) {
 export function Diagrams({ s }: { s: State }) {
   return (
     <>
-      <Heading title="Architecture & flows" eyebrow={s.project!.name}>
+      <Heading title="Architecture & flows">
         <Go page="summary">Back to summary</Go>
       </Heading>
       <div className="stack">

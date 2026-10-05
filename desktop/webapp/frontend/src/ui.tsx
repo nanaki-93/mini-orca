@@ -85,23 +85,20 @@ export function Badge({ value, tone }: { value?: string; tone?: string }) {
 }
 export function Heading({
   title,
-  eyebrow,
   children,
   detail,
 }: {
   title: string;
-  eyebrow?: string;
   children?: ReactNode;
   detail?: ReactNode;
 }) {
   return (
     <header className="page-heading">
       <div>
-        {eyebrow && <div className="eyebrow">{eyebrow}</div>}
         <h1>{title}</h1>
         {detail && <p>{detail}</p>}
       </div>
-      <div className="actions">{children}</div>
+      {children && <div className="actions">{children}</div>}
     </header>
   );
 }
@@ -146,7 +143,7 @@ export function Empty({
       </div>
       <h2>{title}</h2>
       {detail && <p>{detail}</p>}
-      <div className="actions">{children}</div>
+      {children && <div className="actions">{children}</div>}
     </div>
   );
 }

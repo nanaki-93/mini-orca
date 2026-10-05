@@ -45,11 +45,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
     !!s.busy || (!!change && (change.state !== 'draft' || change.freshness !== 'current'));
   return (
     <>
-      <Heading
-        title="Chat"
-        eyebrow="Implement a change"
-        detail="Describe a task, inspect the proposal, then approve its exact diff."
-      >
+      <Heading title="Chat">
         <Go page="editor" icon="code">
           Inspect source
         </Go>
@@ -59,7 +55,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
       </Heading>
       {s.uncertain && (
         <Notice error>
-          The write outcome needs reconciliation. Refresh project facts before continuing.{' '}
+          Write outcome unknown. Refresh project facts.{' '}
           <Button onClick={() => void w.reindex()} disabled={!!s.busy}>
             Refresh project
           </Button>
@@ -76,10 +72,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
         >
           {s.changeReceipt.state === 'applied' && (
             <>
-              <p>
-                Apply saved the files. Verification establishes the displayed checks; acceptance
-                criteria still need review.
-              </p>
+              <p className="small muted">Acceptance criteria still need review.</p>
               <div className="actions section-gap">
                 <Button
                   disabled={!!s.busy || s.uncertain || change?.id !== s.changeReceipt.session_id}
@@ -179,10 +172,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
                     ))}
                 </select>
               </label>
-              <p className="small muted">
-                Choose up to eight Go or Markdown files. You can name new files. The daemon checks
-                eligibility before generation.
-              </p>
+              <p className="small muted">Up to 8 Go/Markdown files, including new files.</p>
             </Panel>
           ) : (
             <Panel
@@ -200,10 +190,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
               />
               <BulletContent title="Acceptance criteria" items={change.acceptance_criteria} />
               {change.freshness === 'stale' && (
-                <Notice>
-                  This source or its instructions changed. The old proposal is available for
-                  reference; start a new conversation to prepare a fresh change.
-                </Notice>
+                <Notice>Source or guidance changed. Start a new conversation.</Notice>
               )}
             </Panel>
           )}
@@ -261,10 +248,6 @@ export function ChangeWorkspace({ s }: { s: State }) {
                 </div>
               ))
             )}
-            <p className="small muted">
-              History stays in this project. Resume checks freshness and requires new checks and
-              review.
-            </p>
             <Button disabled={!!s.busy} onClick={() => void w.loadChangeHistory()}>
               Refresh history
             </Button>
@@ -273,19 +256,13 @@ export function ChangeWorkspace({ s }: { s: State }) {
         <section className="stack" aria-label="Proposal review">
           {change?.changes.length ? (
             <>
-              <Panel
-                title="Proposal diff"
-                actions={<Badge value={`${change.changes.length} files`} />}
-              >
-                <p className="small muted">
-                  Read every file change before reviewing this revision.
-                </p>
-                {change.kind === 'performance' && (
-                  <Notice>
-                    Performance changes are unmeasured. Passing tests do not establish a speedup.
-                  </Notice>
-                )}
-              </Panel>
+              <div className="row between wrap">
+                <h2>Proposal diff</h2>
+                <Badge value={`${change.changes.length} files`} />
+              </div>
+              {change.kind === 'performance' && (
+                <Notice>Performance unmeasured; tests do not establish a speedup.</Notice>
+              )}
               {change.changes.map((edit) => (
                 <div
                   className="panel diff"
@@ -372,9 +349,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
                   Approve and apply
                 </Button>
               </div>
-              {change.reviewed_hash === change.hash && (
-                <p role="status">This revision is reviewed. Apply requires confirmation.</p>
-              )}
+              {change.reviewed_hash === change.hash && <p role="status">Revision reviewed.</p>}
               <Disclosure title="Provider context">
                 <p>
                   {change.context_manifest?.model} · {change.context_manifest?.provider_origin}
@@ -386,11 +361,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
               </Disclosure>
             </>
           ) : (
-            <Empty
-              title="No proposal yet"
-              detail="Prepare a change to see its read-only diff and check evidence."
-              icon="code"
-            />
+            <Empty title="No proposal yet" icon="code" />
           )}
         </section>
       </div>

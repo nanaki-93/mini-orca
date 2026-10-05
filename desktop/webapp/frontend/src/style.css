@@ -356,19 +356,6 @@ pre {
   margin-top: auto;
   padding-top: 35px;
 }
-.local-label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 0.67rem;
-  color: var(--muted);
-  border-top: 1px solid var(--line);
-  padding: 19px 6px 0;
-  margin-top: 17px;
-}
-.local-label svg {
-  width: 14px;
-}
 .status-dot {
   width: 7px;
   height: 7px;
@@ -481,14 +468,6 @@ pre {
   flex-shrink: 0;
   max-width: 52%;
   justify-content: flex-end;
-}
-.eyebrow {
-  font-size: 0.66rem;
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  color: var(--section-color);
-  margin-bottom: 9px;
-  font-weight: 650;
 }
 .actions {
   display: flex;
@@ -1176,19 +1155,6 @@ progress::-webkit-progress-value {
   border-radius: 8px;
   background: var(--accent);
 }
-.welcome-art {
-  padding: 38px 12px;
-  display: grid;
-  gap: 14px;
-  text-align: center;
-  place-items: center;
-}
-.welcome-art svg {
-  color: var(--accent);
-  width: 52px;
-  height: 52px;
-  margin-bottom: 17px;
-}
 .model-icon {
   color: var(--violet);
   margin-bottom: 20px;
@@ -1621,9 +1587,6 @@ dialog .actions {
   }
   .sidebar-bottom {
     padding-top: 12px;
-  }
-  .local-label {
-    display: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -49,7 +49,6 @@ export function Analysis({ s }: { s: State }) {
     <>
       <Heading
         title="Analysis"
-        eyebrow="Project scope"
         detail={`${s.selection?.files.filter((f) => !f.reason && !excluded.includes(f.path)).length ?? '—'} eligible files selected`}
       >
         <Button
@@ -80,16 +79,11 @@ export function Analysis({ s }: { s: State }) {
           </div>
         </Panel>
       )}
-      <Panel title="New feature suggestions" className="section-gap">
-        <p>
-          Each analysis run also checks for new capabilities using saved project goals and
-          policy-filtered project context. Excluded files stay out of suggestion context.
-          Suggestions stay separate from findings and check evidence.
-        </p>
+      <div className="actions section-gap">
         <Go page="features" icon="sparkles">
           Explore features
         </Go>
-      </Panel>
+      </div>
       <div className="toolbar section-gap">
         <div className="input-wrap">
           <Icon name="search" />
@@ -233,9 +227,7 @@ export function Analysis({ s }: { s: State }) {
           </Disclosure>
         </Panel>
         <Panel title="Retry incomplete work">
-          <p className="small muted">Retry outdated or failed files.</p>
           <Button
-            className="section-gap"
             disabled={!!s.busy || !s.selection || activeRun(s.run)}
             onClick={() => preview(true)}
           >
@@ -268,7 +260,7 @@ export function AnalysisPreview({ s }: { s: State }) {
     (!p.security_review_intent_required || security);
   return (
     <>
-      <Heading title={s.resume ? 'Continue analysis' : 'Ready to analyze'} eyebrow="Review scope">
+      <Heading title={s.resume ? 'Continue analysis' : 'Ready to analyze'}>
         <Go page="analysis">Back</Go>
         <Button
           tone="primary"
@@ -346,16 +338,12 @@ export function AnalysisPreview({ s }: { s: State }) {
           </Panel>
           {p.features && (
             <Panel title="New feature suggestions">
-              <p>
-                One project-wide step uses saved project goals, policy-filtered context and root
-                AGENTS.md. Your file exclusions also apply to this context.
+              <p className="small muted">
+                Project goals and allowed context, including root AGENTS.md. File exclusions apply.
               </p>
-              <p className="small muted section-gap">
-                {p.features.reason ||
-                  (p.features.max_model_requests > 0
-                    ? 'Ideas are generated during this run and saved to Summary and Features.'
-                    : 'No remaining requests for this step.')}
-              </p>
+              {(p.features.reason || p.features.max_model_requests === 0) && (
+                <Notice>{p.features.reason || 'No remaining requests for this step.'}</Notice>
+              )}
               <Go page="features">Review project goals</Go>
             </Panel>
           )}
@@ -433,11 +421,7 @@ export function AnalysisRun({ s }: { s: State }) {
             : 'Preparing analysis…';
   return (
     <>
-      <Heading
-        title="Project analysis"
-        eyebrow={s.project!.name}
-        detail={<Badge value={run.status} />}
-      >
+      <Heading title="Project analysis" detail={<Badge value={run.status} />}>
         <Go page="analysis">Files</Go>
         {['running', 'queued'].includes(run.status) && (
           <Button icon="pause" disabled={!!s.busy} onClick={() => void w.controlRun('pause')}>
@@ -474,7 +458,6 @@ export function AnalysisRun({ s }: { s: State }) {
               <span className="spinner" aria-hidden="true" />
               {currentStep}
             </p>
-            <p className="small muted">Open results to view findings saved so far.</p>
           </div>
         )}
         <progress value={done} max={Math.max(total, 1)} aria-label="Analysis progress" />
@@ -493,9 +476,6 @@ export function AnalysisRun({ s }: { s: State }) {
             Advisory ideas · {run.features.attempts} of {run.plan.limits.max_attempts_per_stage}{' '}
             attempts used
           </p>
-          {run.features.status === 'pending' && (
-            <p className="small muted">Starts after file results for this batch are saved.</p>
-          )}
           {run.features.reason && <Notice>{run.features.reason}</Notice>}
           <Go page="features">Open feature suggestions</Go>
         </Panel>

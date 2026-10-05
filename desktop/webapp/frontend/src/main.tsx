@@ -152,7 +152,7 @@ function App() {
             <span className="project-avatar">{s.project?.name?.[0]?.toUpperCase() || '+'}</span>
             <span className="project-label">
               <strong>{s.project?.name || 'Open a project'}</strong>
-              <small>{s.project ? s.project.type.toUpperCase() : 'Local workspace'}</small>
+              {s.project && <small>{s.project.type.toUpperCase()}</small>}
             </span>
             <Icon name="chevrons" />
           </button>
@@ -161,10 +161,6 @@ function App() {
           <div className="sidebar-bottom">
             <div className="nav-label">Tools</div>
             <nav aria-label="Tools">{nav(utilityNav)}</nav>
-            <div className="local-label">
-              <Icon name="laptop" />
-              Local workspace
-            </div>
           </div>
         </aside>
         <div className="app-body">
@@ -269,7 +265,7 @@ class Boundary extends Component<{ children: ReactNode }, { error: string }> {
       <div className="page">
         <h1>Unable to display this screen</h1>
         <Notice error>{this.state.error}</Notice>
-        <p>Close and reopen Mini-Orca to reconnect.</p>
+        <p>Reopen Mini-Orca to reconnect.</p>
       </div>
     ) : (
       this.props.children

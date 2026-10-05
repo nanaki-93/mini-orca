@@ -127,7 +127,6 @@ async function contrast(page, name) {
     const failures = [];
     const selectors = [
       '.muted',
-      '.eyebrow',
       '.prose p',
       '.panel-head h2',
       '.metric-label',
@@ -618,7 +617,9 @@ try {
     await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
     await idle(page);
     await page
-      .getByText('Starts after file results for this batch are saved.', { exact: true })
+      .getByRole('heading', { name: 'New feature suggestions', exact: true })
+      .locator('..')
+      .getByText('pending', { exact: true })
       .waitFor();
     await page.evaluate(() => {
       window.fixture.state.run.features.status = 'running';
@@ -1001,10 +1002,7 @@ try {
           );
       }
       assert.equal(await page.getByText(/Feature suggestions could not be generated/).count(), 0);
-      assert.equal(
-        await page.getByText(/These ideas use older project context or goals/).count(),
-        0,
-      );
+      assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
       await page.setViewportSize({ width: 800, height: 900 });
       await page.getByRole('button', { name: 'Larger text' }).click();
       await layout(page, `summary-ideas-${JSON.stringify(options)}`);
@@ -1021,14 +1019,7 @@ try {
         reads,
       );
       assert.equal(await page.getByText(/Feature suggestions could not be generated/).count(), 0);
-      assert.equal(
-        await page.getByText(/These ideas use older project context or goals/).count(),
-        0,
-      );
-      assert.equal(
-        await page.getByText(/Suggestions are advisory\. Their effort and benefits/).count(),
-        0,
-      );
+      assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
       assert.equal(
         await page.evaluate(() =>
           window.fixture.requests.some(
@@ -1055,7 +1046,7 @@ try {
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
     await idle(page);
     assert.equal(await page.getByText(/Feature suggestions could not be generated/).count(), 0);
-    assert.equal(await page.getByText(/These ideas use older project context or goals/).count(), 0);
+    assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
     assert.equal(
       await page.evaluate(() =>
         window.fixture.requests.some((r) => r.path.endsWith('/features/generate')),
@@ -1064,7 +1055,7 @@ try {
     );
     await nav(page, 'Summary');
     assert.equal(await page.getByText(/Feature suggestions could not be generated/).count(), 0);
-    assert.equal(await page.getByText(/These ideas use older project context or goals/).count(), 0);
+    assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
     await close();
   });
   await test('Project analysis includes feature suggestions in preview, consent and Summary', async () => {
@@ -1072,11 +1063,7 @@ try {
     await nav(page, 'Analysis');
     await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
     await idle(page);
-    await page
-      .getByText('Ideas are generated during this run and saved to Summary and Features.', {
-        exact: true,
-      })
-      .waitFor();
+    await page.getByRole('heading', { name: 'New feature suggestions', exact: true }).waitFor();
     assert.equal(
       await page.getByRole('button', { name: 'Start analysis', exact: true }).isDisabled(),
       true,
@@ -1228,7 +1215,7 @@ try {
           true,
         );
       assert.equal(
-        await page.getByText(/These ideas use older project context or goals/).count(),
+        await page.getByText(/Ideas are outdated/).count(),
         options.featuresStale && hasIdeas ? 1 : 0,
       );
       await page.setViewportSize({ width: 800, height: 900 });
@@ -1243,7 +1230,7 @@ try {
           )
           .waitFor();
       assert.equal(
-        await page.getByText(/These ideas use older project context or goals/).count(),
+        await page.getByText(/Ideas are outdated/).count(),
         options.featuresStale && hasIdeas ? 1 : 0,
       );
       await nav(page, 'Project');
@@ -1251,10 +1238,7 @@ try {
       await idle(page);
       await page.getByRole('heading', { name: 'harbor', exact: true }).waitFor();
       assert.equal(await page.getByText(/Feature suggestions could not be generated/).count(), 0);
-      assert.equal(
-        await page.getByText(/These ideas use older project context or goals/).count(),
-        0,
-      );
+      assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
       await close();
     }
   });
@@ -1279,18 +1263,12 @@ try {
           { exact: true },
         )
         .waitFor();
-      assert.equal(
-        await page.getByText(/These ideas use older project context or goals/).count(),
-        featuresReady ? 1 : 0,
-      );
+      assert.equal(await page.getByText(/Ideas are outdated/).count(), featuresReady ? 1 : 0);
       await nav(page, 'Features');
       await page
         .getByText('Feature suggestions could not be generated.', { exact: true })
         .waitFor();
-      assert.equal(
-        await page.getByText(/These ideas use older project context or goals/).count(),
-        featuresReady ? 1 : 0,
-      );
+      assert.equal(await page.getByText(/Ideas are outdated/).count(), featuresReady ? 1 : 0);
       await close();
     }
   });
