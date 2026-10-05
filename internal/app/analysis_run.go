@@ -134,6 +134,7 @@ func (identity AnalysisRunIdentity) Validate() error {
 }
 
 type AnalysisPreviewRequest struct {
+	Models              *AnalysisModels      `json:"models,omitempty"`
 	IncludeFeatures     bool                 `json:"include_features,omitempty"`
 	RetryStaleFailed    bool                 `json:"retry_stale_failed,omitempty"`
 	ProjectID           string               `json:"project_id"`
@@ -147,6 +148,9 @@ type AnalysisPreviewRequest struct {
 }
 
 func (request AnalysisPreviewRequest) Validate() error {
+	if err := request.Models.Validate(); err != nil {
+		return err
+	}
 	if request.RetryStaleFailed && request.Refresh {
 		return fmt.Errorf("stale/failed analysis cannot refresh fresh results")
 	}
@@ -200,6 +204,7 @@ type AnalysisExcludedFile struct {
 }
 
 type AnalysisRunPreview struct {
+	Models                       *AnalysisModels               `json:"models,omitempty"`
 	Features                     *AnalysisFeaturePlan          `json:"features,omitempty"`
 	RetryStaleFailed             bool                          `json:"retry_stale_failed,omitempty"`
 	CompatibilityStage           AnalysisStage                 `json:"compatibility_stage,omitempty"`
@@ -226,6 +231,7 @@ type AnalysisRunConfirmations struct {
 }
 
 type AnalysisRunStartRequest struct {
+	Models           *AnalysisModels          `json:"models,omitempty"`
 	IncludeFeatures  bool                     `json:"include_features,omitempty"`
 	RetryStaleFailed bool                     `json:"retry_stale_failed,omitempty"`
 	Identity         AnalysisQueueIdentity    `json:"identity"`
@@ -238,6 +244,9 @@ type AnalysisRunStartRequest struct {
 // Validate checks the request shape; admission must also recompute the preview
 // and verify confirmations against its effective provider requirements.
 func (request AnalysisRunStartRequest) Validate() error {
+	if err := request.Models.Validate(); err != nil {
+		return err
+	}
 	if request.RetryStaleFailed && request.Refresh {
 		return fmt.Errorf("stale/failed analysis cannot refresh fresh results")
 	}
@@ -456,7 +465,7 @@ func (s *Service) startAnalysisRunLocked(ctx context.Context, request AnalysisRu
 			return cloneAnalysisRun(c.run), errAnalysisRunBusy
 		}
 	}
-	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{IncludeFeatures: request.IncludeFeatures, ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: request.RetryStaleFailed, Refresh: request.Refresh, Limits: request.Limits, compatibilityStage: stage, compatibilityBudget: budget})
+	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{Models: request.Models, IncludeFeatures: request.IncludeFeatures, ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: request.RetryStaleFailed, Refresh: request.Refresh, Limits: request.Limits, compatibilityStage: stage, compatibilityBudget: budget})
 	if err != nil {
 		return nil, err
 	}
@@ -750,7 +759,7 @@ func (c *analysisRunController) stageRequest(fileIndex, stageIndex int) analysis
 	stage := file.Stages[stageIndex]
 	plan := c.admission.Files[fileIndex].Stages[stageIndex]
 	return analysisFileStageRequest{
-		Run: c.run.Identity, File: file.AnalysisFileIdentity, Stage: stage.Stage,
+		Run: c.run.Identity, File: file.AnalysisFileIdentity, Stage: stage.Stage, Models: cloneAnalysisModels(c.run.Plan.Models),
 		Refresh:               c.run.Plan.Refresh || (c.run.Plan.RetryStaleFailed && !plan.Cached),
 		RemainingAttempts:     min(plan.MaxModelRequests, c.run.Plan.Limits.MaxAttemptsPerStage-stage.Attempts),
 		ConfirmRemoteProvider: analysisProviderConfirmed(c.confirmations, plan.ProviderID),

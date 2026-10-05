@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
 type performanceReviewSnapshot struct {
 	runtime       modelRuntime
+	modelProfile  string
 	root          string
 	analysis      project.Analysis
 	file          project.IndexFile
@@ -59,7 +61,11 @@ func (s *Service) requestPerformanceReview(ctx context.Context, snapshot perform
 		return modelOutput{}, err
 	}
 	schema := performanceReviewResponseSchema(snapshot)
-	timed, cancel := context.WithTimeout(ctx, s.analysisTimeout)
+	timeout := s.analysisTimeout
+	if snapshot.modelProfile != "" {
+		timeout = duration(runtime.effective.Timeout)
+	}
+	timed, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	result, err := s.requestAnalysisModel(timed, runtime, []llm.ChatMessage{{Role: "user", Content: prompt}}, &schema, dispatch)
 	if timed.Err() != nil {
@@ -93,7 +99,7 @@ func (s *Service) publishPerformanceReview(ctx context.Context, snapshot perform
 }
 
 func (s *Service) validatePerformanceReviewSnapshot(ctx context.Context, snapshot performanceReviewSnapshot) error {
-	if s.runtimes.analyze.effective != snapshot.runtime.effective {
+	if s.runtimeForAnalysisScope(config.AnalyzeModelScope, snapshot.modelProfile).effective != snapshot.runtime.effective {
 		return project.ErrRevisionConflict
 	}
 	return s.validateSourceFileSnapshot(ctx, snapshot.root, snapshot.analysis, snapshot.file, snapshot.policyVersion, false)

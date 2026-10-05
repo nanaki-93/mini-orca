@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
@@ -18,6 +17,7 @@ var errAnalysisModelUnavailable = errors.New("analysis model is not configured")
 // A coordinator executes one stage at a time, retaining each result independently.
 // RemainingAttempts is the unspent cumulative allowance, including transport retries.
 type analysisFileStageRequest struct {
+	Models                *AnalysisModels
 	Run                   AnalysisRunIdentity
 	File                  AnalysisFileIdentity
 	Stage                 AnalysisStage
@@ -113,7 +113,7 @@ type analysisFileStageExecution struct {
 	analysis     project.Analysis
 	file         project.IndexFile
 	policy       *project.ContextPolicy
-	bug, analyze EffectiveModel
+	bug, analyze modelRuntime
 	attempts     int
 }
 
@@ -181,12 +181,12 @@ func (s *Service) prepareAnalysisFileStage(request analysisFileStageRequest, aut
 	if !policy.Decide(file.Path).Include {
 		return nil, project.ErrExcludedFile
 	}
-	return &analysisFileStageExecution{service: s, request: request, authority: authority, root: root, analysis: *analysis, file: *file, policy: policy, bug: s.runtimes.bug.effective, analyze: s.runtimes.analyze.effective}, nil
+	return &analysisFileStageExecution{service: s, request: request, authority: authority, root: root, analysis: *analysis, file: *file, policy: policy, bug: s.analysisModelRuntime(AnalysisStageSemantic, request.Models), analyze: s.analysisModelRuntime(AnalysisStagePerformance, request.Models)}, nil
 }
 
 func (execution *analysisFileStageExecution) validateSnapshot(ctx context.Context) error {
 	s := execution.service
-	if s.runtimes.bug.effective != execution.bug || s.runtimes.analyze.effective != execution.analyze {
+	if s.analysisModelRuntime(AnalysisStageSemantic, execution.request.Models).effective != execution.bug.effective || s.analysisModelRuntime(AnalysisStagePerformance, execution.request.Models).effective != execution.analyze.effective {
 		return project.ErrRevisionConflict
 	}
 	return s.validateSourceFileSnapshot(ctx, execution.root, execution.analysis, execution.file, execution.policy.Version(), true)
@@ -213,11 +213,11 @@ func (execution *analysisFileStageExecution) consent() error {
 	if execution.request.Stage == AnalysisStageSecurityAI && !execution.request.SecurityReview {
 		return fmt.Errorf("security review requires explicit intent")
 	}
-	scope := config.AnalyzeModelScope
+	runtime := execution.analyze
 	if execution.request.Stage == AnalysisStageSemantic {
-		scope = config.BugModelScope
+		runtime = execution.bug
 	}
-	return execution.service.RequireRemoteConfirmation(scope, execution.request.ConfirmRemoteProvider)
+	return requireModelRuntimeConfirmation(runtime, execution.request.ConfirmRemoteProvider)
 }
 
 func (execution *analysisFileStageExecution) dispatch() *analysisModelDispatch {
@@ -318,9 +318,8 @@ func (execution *analysisFileStageExecution) semantic(ctx context.Context, resul
 	if err := execution.validatePrepared(prepared.root, *prepared.analysis, *prepared.indexedFile, prepared.input.ContextPolicyVersion); err != nil {
 		return err
 	}
-	if prepared.runtime.effective != execution.bug {
-		return project.ErrRevisionConflict
-	}
+	prepared.runtime = execution.bug
+	prepared.input = semanticCacheInputForRuntime(prepared.analysis, prepared.indexedFile, prepared.input.ContentHash, prepared.input.ContextPolicyVersion, execution.bug)
 	if !execution.request.Refresh {
 		cached, err := prepared.cache.Load(prepared.input)
 		if err != nil {
@@ -362,9 +361,8 @@ func (execution *analysisFileStageExecution) performance(ctx context.Context, re
 	if err := execution.validatePrepared(snapshot.root, snapshot.analysis, snapshot.file, snapshot.policyVersion); err != nil {
 		return err
 	}
-	if snapshot.runtime.effective != execution.analyze {
-		return project.ErrRevisionConflict
-	}
+	snapshot.runtime = execution.analyze
+	snapshot.modelProfile = execution.request.Models.profile(AnalysisStagePerformance)
 	if !execution.request.Refresh {
 		cached, err := project.LoadPerformanceFileReport(execution.root, execution.file.Path, execution.file.ContentHash, execution.policy)
 		if err != nil {
@@ -435,9 +433,8 @@ func (execution *analysisFileStageExecution) securityAI(ctx context.Context, res
 	if err := execution.validatePrepared(snapshot.root, snapshot.analysis, snapshot.file, snapshot.policyVersion); err != nil {
 		return err
 	}
-	if snapshot.runtime.effective != execution.analyze {
-		return project.ErrRevisionConflict
-	}
+	snapshot.runtime = execution.analyze
+	snapshot.modelProfile = execution.request.Models.profile(AnalysisStagePerformance)
 	if !execution.request.Refresh {
 		input := analysisSecurityCacheInput(execution.analysis, execution.file, snapshot.runtime, execution.policy.Version())
 		cached, err := s.loadSecurityFileReport(execution.root, input)
@@ -497,6 +494,9 @@ func analysisSecurityCacheInput(analysis project.Analysis, file project.IndexFil
 }
 
 func validateAnalysisStageRequest(request analysisFileStageRequest, authority analysisFileStageAuthority) error {
+	if err := request.Models.Validate(); err != nil {
+		return err
+	}
 	if err := request.Run.Validate(); err != nil {
 		return err
 	}

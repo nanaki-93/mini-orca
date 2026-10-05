@@ -14,7 +14,7 @@ import {
   StatusDot,
   human,
 } from './ui';
-import type { Limits } from './models';
+import type { AnalysisModels, Limits } from './models';
 
 const stages = ['semantic', 'performance', 'security_rules', 'security_ai'];
 const stageNames: Record<string, string> = {
@@ -25,12 +25,60 @@ const stageNames: Record<string, string> = {
   feature_suggestions: 'New feature suggestions',
 };
 const defaults: Limits = { batch_files: 20, budget_seconds: 600, max_attempts_per_stage: 2 };
+const modelDefaults: AnalysisModels = { code: 'bug', review: 'analyze', features: 'analyze' };
+
+function ModelSelectors({
+  s,
+  value,
+  disabled,
+  onChange,
+}: {
+  s: State;
+  value: AnalysisModels;
+  disabled: boolean;
+  onChange: (models: AnalysisModels) => void;
+}) {
+  const choices = Object.entries(s.models?.scopes || {});
+  return (
+    <div className="form-grid">
+      {(
+        [
+          ['code', 'Code analysis model'],
+          ['review', 'Performance & Security model'],
+          ['features', 'Feature discovery model'],
+        ] as const
+      ).map(([key, label]) => (
+        <label key={key}>
+          {label}
+          <select
+            className="field"
+            aria-label={label}
+            value={value[key]}
+            disabled={disabled || !choices.length}
+            onChange={(event) =>
+              onChange({ ...value, [key]: event.target.value as AnalysisModels[typeof key] })
+            }
+          >
+            {!choices.length && <option value={value[key]}>Models unavailable</option>}
+            {choices.map(([profile, model]) => (
+              <option key={profile} value={profile}>
+                {model.model} · {profile} · {model.remote_provider ? 'Remote' : 'Local'}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 export function Analysis({ s }: { s: State }) {
   const [filter, setFilter] = useState('');
   const [limit, setLimit] = useState(100);
   const [excluded, setExcluded] = useState<string[]>(s.selection?.excluded_paths || []);
   const [limits, setLimits] = useState(defaults);
   const [refresh, setRefresh] = useState(false);
+  const [models, setModels] = useState(s.preview?.models || modelDefaults);
   useEffect(() => setExcluded(s.selection?.excluded_paths || []), [s.selection?.selection_id]);
   const files = (s.selection?.files || []).filter((file) =>
     file.path.toLowerCase().includes(filter.toLowerCase()),
@@ -44,7 +92,7 @@ export function Analysis({ s }: { s: State }) {
       w.fail('Save your file selection before preparing a run.');
       return;
     }
-    void w.previewAnalysis(limits, retry ? false : refresh, retry);
+    void w.previewAnalysis(limits, retry ? false : refresh, retry, false, models);
   };
   return (
     <>
@@ -62,7 +110,7 @@ export function Analysis({ s }: { s: State }) {
         <Button
           tone="primary"
           icon="play"
-          disabled={!!s.busy || !s.selection || activeRun(s.run)}
+          disabled={!!s.busy || !s.selection || !s.models || activeRun(s.run)}
           onClick={() => preview()}
         >
           Prepare analysis
@@ -197,6 +245,7 @@ export function Analysis({ s }: { s: State }) {
       </div>
       <div className="grid equal-columns section-gap">
         <Panel title="Run settings">
+          <ModelSelectors s={s} value={models} disabled={!!s.busy} onChange={setModels} />
           <Disclosure title="Batch & request limits">
             <div className="form-grid">
               {(
@@ -242,24 +291,13 @@ export function Analysis({ s }: { s: State }) {
 }
 export function AnalysisPreview({ s }: { s: State }) {
   const p = s.preview;
-  const [providers, setProviders] = useState<string[]>([]);
-  const [security, setSecurity] = useState(false);
-  useEffect(() => {
-    setProviders([]);
-    setSecurity(false);
-  }, [p?.preview_id]);
   if (!p)
     return (
       <Empty title="Prepare a new preview">
         <Go page="analysis">Back to analysis</Go>
       </Empty>
     );
-  const ready =
-    (p.files.length > 0 || !!p.features?.max_model_requests) &&
-    (p.providers || []).every(
-      (provider) => !provider.remote_confirmation_required || providers.includes(provider.id),
-    ) &&
-    (!p.security_review_intent_required || security);
+  const ready = p.files.length > 0 || !!p.features?.max_model_requests;
   return (
     <>
       <Heading title={s.resume ? 'Continue analysis' : 'Ready to analyze'}>
@@ -268,7 +306,7 @@ export function AnalysisPreview({ s }: { s: State }) {
           tone="primary"
           icon="play"
           disabled={!ready || !!s.busy}
-          onClick={() => void w.startAnalysis(providers, security)}
+          onClick={() => void w.startAnalysis()}
         >
           {s.resume ? 'Resume analysis' : 'Start analysis'}
         </Button>
@@ -298,7 +336,16 @@ export function AnalysisPreview({ s }: { s: State }) {
               ]}
             />
           </Panel>
-          <Panel title="Providers">
+          <Panel title="Models">
+            <ModelSelectors
+              s={s}
+              value={p.models || modelDefaults}
+              disabled={!!s.busy || !!s.resume}
+              onChange={(models) =>
+                void w.previewAnalysis(p.limits, p.refresh, !!p.retry_stale_failed, false, models)
+              }
+            />
+            {s.resume && <p className="small muted">Resuming keeps this run's model choices.</p>}
             {(p.providers || []).map((provider) => (
               <div className="provider-row" key={provider.id}>
                 <div className="row between">
@@ -309,34 +356,11 @@ export function AnalysisPreview({ s }: { s: State }) {
                 <p className="small section-gap">
                   {provider.stages.map((stage) => stageNames[stage]).join(' · ')}
                 </p>
-                {provider.remote_confirmation_required && (
-                  <label className="checkbox-line">
-                    <input
-                      type="checkbox"
-                      checked={providers.includes(provider.id)}
-                      onChange={(event) =>
-                        setProviders(
-                          event.target.checked
-                            ? [...providers, provider.id]
-                            : providers.filter((id) => id !== provider.id),
-                        )
-                      }
-                    />
-                    Allow selected context to this provider
-                  </label>
-                )}
               </div>
             ))}
-            {p.security_review_intent_required && (
-              <label className="checkbox-line">
-                <input
-                  type="checkbox"
-                  checked={security}
-                  onChange={(event) => setSecurity(event.target.checked)}
-                />
-                Include AI Security review
-              </label>
-            )}
+            <p className="small muted">
+              Start confirms any remote context sharing and AI Security review.
+            </p>
           </Panel>
           {p.features && (
             <Panel title="New feature suggestions">

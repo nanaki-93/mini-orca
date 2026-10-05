@@ -41,6 +41,13 @@ async function nav(page, name) {
     .getByRole('button', { name, exact: true })
     .click();
 }
+async function startAnalysis(page, resume = false) {
+  await page
+    .getByRole('button', { name: resume ? 'Resume analysis' : 'Start analysis', exact: true })
+    .click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Start', exact: true }).click();
+  await idle(page);
+}
 async function expandSummaryDiagrams(page) {
   await page.getByText('Show architecture', { exact: true }).click();
   const flows = page.getByText('Show project flows', { exact: true });
@@ -658,7 +665,7 @@ try {
     await idle(page);
     assert.equal(
       await page.getByRole('button', { name: 'Start analysis', exact: true }).isDisabled(),
-      true,
+      false,
     );
     assert.equal(
       await page.evaluate(() =>
@@ -669,28 +676,119 @@ try {
       false,
     );
     await layout(page, 'analysis-preview');
-    await page.getByLabel('Allow selected context to this provider').check();
-    await page.getByLabel('Include AI Security review').check();
+    assert.equal(await page.getByRole('checkbox').count(), 0);
     await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
+    await page
+      .getByRole('dialog')
+      .getByText(/https:\/\/provider.invalid/)
+      .first()
+      .waitFor();
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
     await idle(page);
+    assert.equal(
+      await page.evaluate(() =>
+        window.fixture.requests.some(
+          (r) => r.method === 'POST' && r.path.endsWith('/analysis/run'),
+        ),
+      ),
+      false,
+    );
+    await startAnalysis(page);
     await page.getByRole('button', { name: 'Pause', exact: true }).click();
     await idle(page);
     await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
     await idle(page);
-    assert.equal(
-      await page.getByLabel('Allow selected context to this provider').isChecked(),
-      false,
-    );
-    await page.getByLabel('Allow selected context to this provider').check();
-    await page.getByLabel('Include AI Security review').check();
-    await page.getByRole('button', { name: 'Resume analysis', exact: true }).click();
-    await idle(page);
+    assert.equal(await page.getByRole('checkbox').count(), 0);
+    assert.equal(await page.getByLabel('Code analysis model').isDisabled(), true);
+    await startAnalysis(page, true);
     const resumed = await page.evaluate(() =>
       window.fixture.requests.find((r) => r.body?.action === 'resume'),
     );
     assert.equal(resumed.body.identity.generation, 'generation-1');
-    assert.equal(resumed.body.preview_id, 'preview-1');
+    assert.equal(resumed.body.preview_id, 'preview-bug-analyze-analyze');
     await layout(page, 'analysis-run');
+    await close();
+  });
+  await test('Configured model selects refresh admission and remain captured on resume', async () => {
+    const { page, close } = await pageFor({
+      remote: true,
+      modelNames: { analyze: 'review-model', bug: 'code-model', function: 'draft-model' },
+    });
+    await nav(page, 'Analysis');
+    const before = await page.evaluate(() => window.fixture.requests.length);
+    assert.equal(await page.getByLabel('Code analysis model').inputValue(), 'bug');
+    assert.equal(await page.getByLabel('Performance & Security model').inputValue(), 'analyze');
+    assert.equal(await page.getByLabel('Feature discovery model').inputValue(), 'analyze');
+    assert.deepEqual(
+      await page.getByLabel('Code analysis model').locator('option').allTextContents(),
+      [
+        'review-model · analyze · Remote',
+        'code-model · bug · Remote',
+        'draft-model · function · Remote',
+      ],
+    );
+    await page.getByLabel('Code analysis model').selectOption('function');
+    await page.getByLabel('Performance & Security model').selectOption('bug');
+    await page.getByLabel('Feature discovery model').selectOption('function');
+    assert.equal(await page.evaluate(() => window.fixture.requests.length), before);
+    await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+    await idle(page);
+    await page.getByLabel('Feature discovery model').selectOption('analyze');
+    await idle(page);
+    const choices = { code: 'function', review: 'bug', features: 'analyze' };
+    const previews = await page.evaluate(() =>
+      window.fixture.requests.filter((r) => r.path.endsWith('/analysis/preview')),
+    );
+    assert.equal(previews.length, 2);
+    assert.deepEqual(previews.at(-1).body.models, choices);
+    assert.equal(await page.getByRole('checkbox').count(), 0);
+    await layout(page, 'analysis-model-selects');
+    await page.setViewportSize({ width: 800, height: 900 });
+    await page.getByRole('button', { name: 'Larger text' }).click();
+    await layout(page, 'analysis-model-selects-compact');
+    await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByText(/include AI Security review/).waitFor();
+    for (const name of ['code-model', 'draft-model', 'review-model'])
+      await dialog.getByText(new RegExp(name)).waitFor();
+    await dialog.getByRole('button', { name: 'Start', exact: true }).click();
+    await idle(page);
+    const start = await page.evaluate(() =>
+      window.fixture.requests.find((r) => r.method === 'POST' && r.path.endsWith('/analysis/run')),
+    );
+    assert.deepEqual(start.body.models, choices);
+    assert.equal(start.body.preview_id, 'preview-function-bug-analyze');
+    assert.deepEqual(start.body.confirmations.provider_ids, [
+      'code-function',
+      'review-bug',
+      'features-analyze',
+    ]);
+    assert.equal(start.body.confirmations.security_review, true);
+    await page.getByRole('button', { name: 'Pause', exact: true }).click();
+    await idle(page);
+    await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
+    await idle(page);
+    for (const [label, key] of [
+      ['Code analysis model', 'code'],
+      ['Performance & Security model', 'review'],
+      ['Feature discovery model', 'features'],
+    ]) {
+      assert.equal(await page.getByLabel(label).inputValue(), choices[key]);
+      assert.equal(await page.getByLabel(label).isDisabled(), true);
+    }
+    await page.getByRole('button', { name: 'Resume analysis', exact: true }).click();
+    assert.equal(
+      await page.evaluate(() => window.fixture.requests.some((r) => r.body?.action === 'resume')),
+      false,
+    );
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+    await idle(page);
+    await startAnalysis(page, true);
+    const resume = await page.evaluate(() =>
+      window.fixture.requests.find((r) => r.body?.action === 'resume'),
+    );
+    assert.equal(resume.body.preview_id, start.body.preview_id);
+    assert.deepEqual(resume.body.confirmations, start.body.confirmations);
     await close();
   });
   await test('Analysis exposes provider progress and keeps saved results available', async () => {
@@ -698,9 +796,7 @@ try {
     await nav(page, 'Analysis');
     await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
     await idle(page);
-    await page.getByLabel('Include AI Security review').check();
-    await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
-    await idle(page);
+    await startAnalysis(page);
     await page
       .getByRole('heading', { name: 'New feature suggestions', exact: true })
       .locator('..')
@@ -1151,12 +1247,9 @@ try {
     await page.getByRole('heading', { name: 'New feature suggestions', exact: true }).waitFor();
     assert.equal(
       await page.getByRole('button', { name: 'Start analysis', exact: true }).isDisabled(),
-      true,
+      false,
     );
-    await page.getByLabel('Allow selected context to this provider').check();
-    await page.getByLabel('Include AI Security review').check();
-    await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
-    await idle(page);
+    await startAnalysis(page);
     const requests = await page.evaluate(() => window.fixture.requests);
     assert.equal(
       requests.find((r) => r.path.endsWith('/analysis/preview')).body.include_features,
@@ -1164,7 +1257,7 @@ try {
     );
     const start = requests.find((r) => r.path.endsWith('/analysis/run') && r.method === 'POST');
     assert.equal(start.body.include_features, true);
-    assert.deepEqual(start.body.confirmations.provider_ids, ['provider-1']);
+    assert.deepEqual(start.body.confirmations.provider_ids, ['code-bug', 'review-analyze']);
     await page.getByRole('heading', { name: 'New feature suggestions', exact: true }).waitFor();
     await layout(page, 'analysis-with-features');
     await nav(page, 'Summary');
@@ -1340,9 +1433,7 @@ try {
       await nav(page, 'Analysis');
       await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
       await idle(page);
-      await page.getByLabel('Include AI Security review').check();
-      await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
-      await idle(page);
+      await startAnalysis(page);
       await nav(page, 'Summary');
       await page
         .getByText(

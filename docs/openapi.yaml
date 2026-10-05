@@ -1868,12 +1868,22 @@ components:
                     stage: {$ref: '#/components/schemas/AnalysisStage'}
                     status: {type: string, enum: [fresh, stale, missing, failed, partial, running, pending, paused, interrupted, canceled, skipped, unavailable]}
                     reason: {type: string, description: Explanation of the current cache or retained run state.}
+    AnalysisModels:
+      type: object
+      additionalProperties: false
+      required: [code, review, features]
+      description: Configured profile choices for one run. Omission uses Bug for Code and Analyze for reviews/features. Resume retains the captured choices; endpoints and credentials remain daemon-owned.
+      properties:
+        code: {type: string, enum: [analyze, bug, function], description: Profile for semantic Code analysis.}
+        review: {type: string, enum: [analyze, bug, function], description: Profile for Performance and Security AI reviews.}
+        features: {type: string, enum: [analyze, bug, function], description: Profile for feature discovery.}
     AnalysisPreviewRequest:
       type: object
       additionalProperties: false
       required: [project_id, project_revision, scope, refresh, limits]
       properties:
         include_features: {type: boolean, default: false, description: Add one project-wide advisory feature step using saved goals and honoring explicit file exclusions. Resume retains the original choice.}
+        models: {$ref: '#/components/schemas/AnalysisModels'}
         project_id: {type: string, minLength: 1}
         project_revision: {type: string, minLength: 1}
         scope: {type: string, enum: [project]}
@@ -1924,6 +1934,7 @@ components:
       type: object
       required: [schema_version, preview_id, identity, scope, refresh, limits, files, excluded, providers, expected_model_requests, max_model_requests, security_review_intent_required]
       properties:
+        models: {$ref: '#/components/schemas/AnalysisModels'}
         features: {$ref: '#/components/schemas/AnalysisFeaturePlan'}
         compatibility_stage: {type: string, enum: [semantic, performance], description: Present only for a bounded legacy adapter run.}
         compatibility_budget_nanoseconds: {type: integer, minimum: 1, maximum: 3600000000000, description: Total active-time budget retained by the legacy Performance adapter.}
@@ -1953,6 +1964,7 @@ components:
       required: [identity, preview_id, limits, refresh, confirmations]
       properties:
         include_features: {type: boolean, default: false, description: Must match the admitted preview.}
+        models: {$ref: '#/components/schemas/AnalysisModels'}
         identity: {$ref: '#/components/schemas/AnalysisQueueIdentity'}
         preview_id: {type: string, minLength: 1}
         limits: {$ref: '#/components/schemas/AnalysisRunLimits'}

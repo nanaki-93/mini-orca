@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
@@ -183,7 +182,7 @@ type featureGenerationAuthority struct {
 }
 
 func (s *Service) generateFeatures(ctx context.Context, request FeatureRequest, runtime modelRuntime, excluded []string, authority featureGenerationAuthority) (*FeatureReport, error) {
-	if err := s.RequireRemoteConfirmation(config.AnalyzeModelScope, request.ConfirmRemoteProvider); err != nil {
+	if err := requireModelRuntimeConfirmation(runtime, request.ConfirmRemoteProvider); err != nil {
 		return nil, err
 	}
 	previous, root, err := s.featuresForRequest(request)

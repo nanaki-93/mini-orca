@@ -30,8 +30,8 @@ export function installFixture(options = {}) {
   }));
   const model = (scope) => ({
     scope,
-    profile: 'default',
-    model: 'test-model',
+    profile: scope,
+    model: options.modelNames?.[scope] || 'test-model',
     provider_origin: options.remote ? 'https://provider.invalid' : 'http://127.0.0.1:11434',
     remote_provider: !!options.remote,
     reasoning_effort: 'medium',
@@ -647,9 +647,59 @@ export function installFixture(options = {}) {
             });
           }
           if (path.endsWith('/analysis/preview')) {
+            state.preview = structuredClone(body.resume_run ? state.run.plan : preview);
+            const choices = body.resume_run ? state.run.plan.models : body.models;
+            state.preview.models = choices;
+            if (choices) {
+              const code = `code-${choices.code}`;
+              const review = `review-${choices.review}`;
+              const features =
+                choices.features === choices.review ? review : `features-${choices.features}`;
+              state.preview.preview_id = `preview-${choices.code}-${choices.review}-${choices.features}`;
+              state.preview.providers = [
+                {
+                  id: code,
+                  stages: ['semantic'],
+                  model: { ...model(choices.code), scope: 'bug' },
+                  remote_confirmation_required: !!options.remote,
+                },
+                {
+                  id: review,
+                  stages: [
+                    'performance',
+                    'security_ai',
+                    ...(features === review ? ['feature_suggestions'] : []),
+                  ],
+                  model: { ...model(choices.review), scope: 'analyze' },
+                  remote_confirmation_required: !!options.remote,
+                },
+                ...(features === review
+                  ? []
+                  : [
+                      {
+                        id: features,
+                        stages: ['feature_suggestions'],
+                        model: { ...model(choices.features), scope: 'analyze' },
+                        remote_confirmation_required: !!options.remote,
+                      },
+                    ]),
+              ];
+              state.preview.files.forEach((file) =>
+                file.stages.forEach((stage) => {
+                  stage.provider_id =
+                    stage.stage === 'semantic'
+                      ? code
+                      : stage.stage === 'security_rules'
+                        ? undefined
+                        : review;
+                  if (stage.stage === 'security_rules') stage.max_model_requests = 0;
+                }),
+              );
+              state.preview.features.provider_id = features;
+            }
             state.preview.features = body.include_features
               ? {
-                  ...preview.features,
+                  ...state.preview.features,
                   expected_hash: state.features.hash,
                   excluded_paths: state.excluded,
                 }

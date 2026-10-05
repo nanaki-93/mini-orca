@@ -343,16 +343,29 @@ consumers do not classify its prose. Stage work counts once in request budgets,
 even when it feeds several result sections. The preview exposes expected model
 requests without retries and the inclusive maximum for the remaining work.
 
+Preview/start accept optional `models: {code, review, features}`. Each value names
+one configured profile: `analyze`, `bug` or `function`; all three are required when
+the object is present. Omission retains Bug for semantic Code analysis and Analyze
+for Performance, Security AI and feature discovery. The selected profile supplies
+the model, endpoint, reasoning, timeout, retries and provider transport, while the
+logical request scope remains Bug for Code and Analyze for reviews/features.
+Clients cannot supply endpoints or credentials. Choices affect dispatch, cache
+freshness, provenance and provider/request accounting without changing daemon
+configuration. Preview and start must use identical choices; invalid values return
+400 and changed admission returns 409 before dispatch. The captured plan retains
+choices on restart/resume; a resume preview uses the original plan's choices.
+Schema-1 runs without `models` remain readable with their original defaults.
+
 Preview/start accept `include_features` (default false for existing clients),
 which must match at admission. The web client includes it on every new analysis.
 It adds one project-wide `feature_suggestions` step using saved goals, bounded
 policy-filtered context and root AGENTS.md; explicit file exclusions also apply
 to this context and suggested paths. `preview.features` captures goals/workspace
-hashes, the current feature-store hash, exclusions and the Analyze provider/request
+hashes, the current feature-store hash, exclusions and the selected feature provider/request
 allowance. `run.features` exposes its status, cumulative attempts and nullable
 `suggestion_count`, separately from the three finding sections. The step runs once
 alongside file stages with its own deadline of at least ten minutes (or the
-configured Analyze timeout when longer). File batch/time limits do not consume
+selected feature model's timeout when longer). File batch/time limits do not consume
 its deadline. It retains the run's cumulative attempt allowance and fresh
 provider consent, and is not repeated after completion on resume. A batch that
 finishes or reaches its file allowance can still publish file results while
@@ -368,7 +381,7 @@ identity includes scope, model, origin, reasoning, context/timeout/retry setting
 and prompt/rule versions. Cache availability is excluded from this stable identity:
 the run's own cache writes cannot invalidate its remaining queue. `preview_id`
 additionally binds current cache dispositions, remaining attempts/work and request
-bounds. Start echoes limits/refresh, `retry_stale_failed`, `include_features` and both identities; the daemon recomputes
+bounds. Start echoes limits/refresh, `retry_stale_failed`, `include_features`, `models` and both identities; the daemon recomputes
 them before admission. A changed preflight yields 409 and requires a fresh preview.
 
 Preview and start accept optional `retry_stale_failed` (default false). When true,
@@ -568,7 +581,8 @@ results or change explicit single-file actions or the shared context policy.
 
 Each selectable file's `stages` contains `stage`, `status`, and an explanation in
 `reason`. Status reads inspect current source hashes, cache freshness and retained
-run progress without model calls. Fresh cache evidence is required for `fresh`;
+run progress without model calls, using that run's captured model choices when
+its revision still matches. Fresh cache evidence is required for `fresh`;
 historic completion alone is insufficient. Changed unindexed files are `stale`.
 Missing, failed, partial, unavailable, skipped, pending, paused, canceled and
 interrupted analysis remain distinct. Unreadable file/cache evidence is reported

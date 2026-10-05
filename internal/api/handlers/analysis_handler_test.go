@@ -101,6 +101,45 @@ func TestAnalysisHandlerFeatureStepRequiresMatchingAdmission(t *testing.T) {
 	}
 }
 
+func TestAnalysisHandlerModelsRequireMatchingAdmission(t *testing.T) {
+	h, _, analysis, calls := newAnalysisHandlerFixture(t)
+	models := &app.AnalysisModels{Code: "function", Review: "bug", Features: "analyze"}
+	request := app.AnalysisPreviewRequest{IncludeFeatures: true, Models: models,
+		ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision,
+		Scope: "project", Limits: app.AnalysisRunLimits{BatchFiles: 100, BudgetSeconds: 30, MaxAttemptsPerStage: 2}}
+	w := analysisHandlerRequest(t, h.Preview, "POST", "/analysis/preview", request)
+	if w.Code != http.StatusOK || calls.Load() != 0 {
+		t.Fatalf("model preview=%d %s calls=%d", w.Code, w.Body, calls.Load())
+	}
+	var preview app.AnalysisRunPreview
+	if err := json.Unmarshal(w.Body.Bytes(), &preview); err != nil || preview.Models == nil || *preview.Models != *models {
+		t.Fatalf("model plan=%+v %v", preview, err)
+	}
+	start := app.AnalysisRunStartRequest{Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits,
+		IncludeFeatures: true, Models: &app.AnalysisModels{Code: "bug", Review: "bug", Features: "analyze"},
+		Confirmations: app.AnalysisRunConfirmations{SecurityReview: true}}
+	w = analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", start)
+	if w.Code != http.StatusConflict || calls.Load() != 0 {
+		t.Fatalf("retargeted model=%d %s calls=%d", w.Code, w.Body, calls.Load())
+	}
+	assertStructuredError(t, w)
+	start.Models.Code = "unknown"
+	w = analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", start)
+	if w.Code != http.StatusBadRequest || calls.Load() != 0 {
+		t.Fatalf("invalid model=%d %s calls=%d", w.Code, w.Body, calls.Load())
+	}
+	assertStructuredError(t, w)
+	start.Models = models
+	w = analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", start)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("model admission=%d %s", w.Code, w.Body)
+	}
+	run := waitHandlerAnalysis(t, h, analysis, app.AnalysisRunCompletedEmpty)
+	if run.Plan.Models == nil || *run.Plan.Models != *models || calls.Load() != 4 {
+		t.Fatalf("model run=%+v calls=%d", run.Plan.Models, calls.Load())
+	}
+}
+
 func TestAnalysisHandlerRetrySelectionRequiresMatchingAdmission(t *testing.T) {
 	h, _, analysis, calls := newAnalysisHandlerFixture(t)
 	request := app.AnalysisPreviewRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Scope: "project", RetryStaleFailed: true, Limits: app.AnalysisRunLimits{BatchFiles: 100, BudgetSeconds: 30, MaxAttemptsPerStage: 2}}

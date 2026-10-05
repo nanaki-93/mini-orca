@@ -507,13 +507,20 @@ export class Workspace {
       this.set({ selection: updated, preview: undefined });
     });
   }
-  async previewAnalysis(limits: M.Limits, refresh = false, retry = false, resume = false) {
+  async previewAnalysis(
+    limits: M.Limits,
+    refresh = false,
+    retry = false,
+    resume = false,
+    models?: M.AnalysisModels,
+  ) {
     await this.act('Prepare analysis', async () => {
       const run = resume ? this.state.run : undefined;
       const preview = await this.api.post<M.AnalysisPreview>(`${current}/analysis/preview`, {
         ...this.identity(),
         scope: 'project',
         include_features: run ? !!run.plan.features : true,
+        models: run ? run.plan.models : models,
         limits: run?.plan.limits || limits,
         refresh: run?.plan.refresh || refresh,
         retry_stale_failed: run?.plan.retry_stale_failed || retry,
@@ -522,12 +529,54 @@ export class Workspace {
       this.set({ preview, resume: run?.identity, page: 'analysis-preview' });
     });
   }
-  async startAnalysis(providerIds: string[], securityReview: boolean) {
+  async startAnalysis() {
     await this.act('Start analysis', async () => {
       const p = this.state.preview;
       if (!p || projectKey(p.identity) !== projectKey(this.state.project))
         throw new Error('Prepare a fresh analysis preview.');
-      const confirmations = { provider_ids: providerIds, security_review: securityReview };
+      const epoch = this.epoch,
+        operation = this.operation;
+      const remote = p.providers.filter(
+        (provider) =>
+          provider.remote_confirmation_required &&
+          (p.files.some((file) =>
+            file.stages.some(
+              (stage) =>
+                stage.max_model_requests > 0 &&
+                (stage.provider_id === provider.id || provider.stages.includes(stage.stage)),
+            ),
+          ) ||
+            (p.features?.provider_id === provider.id && p.features.max_model_requests > 0)),
+      );
+      if (remote.length || p.security_review_intent_required) {
+        const accepted = await this.confirm({
+          title: this.state.resume ? 'Resume analysis' : 'Start analysis',
+          message: remote.length
+            ? `Send selected context to ${remote.length === 1 ? 'this remote provider' : 'these remote providers'}${p.security_review_intent_required ? ' and include AI Security review' : ''}?`
+            : 'Include AI Security review for the selected files?',
+          accept: 'Start',
+          details: [
+            `${p.files.length} selected files`,
+            ...remote.map(
+              (provider) => `${provider.model.model} · ${provider.model.provider_origin}`,
+            ),
+            ...(p.features?.max_model_requests
+              ? ['Feature discovery includes saved goals and allowed project context.']
+              : []),
+          ],
+        });
+        if (!accepted) return;
+      }
+      if (
+        epoch !== this.epoch ||
+        operation !== this.operation ||
+        this.state.preview?.preview_id !== p.preview_id
+      )
+        return;
+      const confirmations = {
+        provider_ids: remote.map((provider) => provider.id),
+        security_review: p.security_review_intent_required,
+      };
       const run = this.state.resume
         ? await this.api.post<M.AnalysisRun>(`${current}/analysis/run/control`, {
             identity: this.state.resume,
@@ -541,6 +590,7 @@ export class Workspace {
             limits: p.limits,
             refresh: p.refresh,
             include_features: !!p.features,
+            models: p.models,
             retry_stale_failed: p.retry_stale_failed || false,
             confirmations,
           });

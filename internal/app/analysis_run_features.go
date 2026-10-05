@@ -71,7 +71,7 @@ func (s *Service) planAnalysisFeatures(ctx context.Context, root string, preview
 		return err
 	}
 	plan := &AnalysisFeaturePlan{ExpectedHash: report.Hash, GoalsHash: contentHash([]byte(report.Goals)), WorkspaceHash: fingerprint, ExcludedPaths: excluded,
-		MaxModelRequests: min(preview.Limits.MaxAttemptsPerStage, s.runtimes.analyze.effective.MaxRetries+1)}
+		MaxModelRequests: min(preview.Limits.MaxAttemptsPerStage, s.analysisModelRuntime(AnalysisStageFeatures, preview.Models).effective.MaxRetries+1)}
 	for _, provider := range preview.Providers {
 		for _, stage := range provider.Stages {
 			if stage == AnalysisStageFeatures {
@@ -79,7 +79,7 @@ func (s *Service) planAnalysisFeatures(ctx context.Context, root string, preview
 			}
 		}
 	}
-	if s.runtimes.analyze.client == nil {
+	if s.analysisModelRuntime(AnalysisStageFeatures, preview.Models).client == nil {
 		plan.MaxModelRequests = 0
 		plan.Reason = "The model for this stage is not configured."
 	}
@@ -142,7 +142,7 @@ func (s *Service) runAnalysisFeaturesLocked(ctx context.Context, identity Analys
 	}
 	request := FeatureRequest{ProjectID: identity.ProjectID, ProjectRevision: identity.ProjectRevision, ExpectedHash: plan.ExpectedHash, Goals: report.Goals,
 		ConfirmRemoteProvider: analysisProviderConfirmed(c.confirmations, plan.ProviderID)}
-	runtime := s.runtimes.analyze
+	runtime := s.analysisModelRuntime(AnalysisStageFeatures, c.run.Plan.Models)
 	runtime.effective.MaxRetries = min(plan.MaxModelRequests, c.run.Plan.Limits.MaxAttemptsPerStage-progress.Attempts) - 1
 	authority := s.analysisFeatureAuthority(identity)
 	c.mu.Unlock()
