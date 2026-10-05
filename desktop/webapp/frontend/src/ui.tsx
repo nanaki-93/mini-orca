@@ -46,7 +46,15 @@ export function Go({
 }
 export const human = (text?: string) =>
   (text || 'Unavailable').replaceAll('_', ' ').replaceAll('-', ' ');
-export function StatusDot({ value, label }: { value?: string; label?: string }) {
+export function StatusDot({
+  value,
+  label,
+  hideSuccess = false,
+}: {
+  value?: string;
+  label?: string;
+  hideSuccess?: boolean;
+}) {
   const status = label ? `${label}: ${human(value)}` : human(value);
   const tone = [
     'fresh',
@@ -61,6 +69,7 @@ export function StatusDot({ value, label }: { value?: string; label?: string }) 
     : ['failed', 'error'].includes(value || '')
       ? 'red'
       : 'yellow';
+  if (hideSuccess && tone === 'green') return null;
   return <span className={`status-dot ${tone}`} role="img" aria-label={status} title={status} />;
 }
 export function Badge({ value, tone }: { value?: string; tone?: string }) {
