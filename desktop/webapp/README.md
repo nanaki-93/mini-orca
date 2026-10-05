@@ -77,11 +77,12 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   Validate, run checks, inspect Review, then explicitly Apply. The receipt offers
   guarded Undo. Local edits invalidate prior checks. Returning to the editor or
   application rechecks the source; changed files need **Refresh facts**.
-- **Summary** previews active feature suggestions alongside saved architecture
-  and project-flow charts. Ideas retain estimated effort and stale/failure states;
-  **View all ideas** opens Features and **Discuss in chat** only seeds a request.
-  **Explore**
-  opens the complete architecture and flows view. Plain Mermaid reports and
+- **Summary** links Bugs, Performance, Security and active Features counts to
+  their workspaces. Feature details, estimated effort and triage stay in Features;
+  unavailable or ungenerated counts remain unknown, and status indicators retain
+  stale/failure states. **Architecture and Flow** groups saved architecture,
+  entry points and project-flow charts under one disclosure. **Explore** opens
+  the complete view. Plain Mermaid reports and
   Markdown-fenced charts render locally, with selectable source and a readable
   fallback for older prose or render failures.
 - **Context** shows included/excluded files, hashes and the provider destination.

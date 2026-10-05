@@ -49,9 +49,7 @@ async function startAnalysis(page, resume = false) {
   await idle(page);
 }
 async function expandSummaryDiagrams(page) {
-  await page.getByText('Show architecture', { exact: true }).click();
-  const flows = page.getByText('Show project flows', { exact: true });
-  if (await flows.count()) await flows.click();
+  await page.getByText('Show architecture and flow', { exact: true }).click();
 }
 async function openSource(page) {
   await nav(page, 'Source');
@@ -209,8 +207,6 @@ try {
         .count(),
       0,
     );
-    await page.getByText('Retry failed work', { exact: true }).waitFor();
-    await page.getByText('internal/worker/process.go · AI analysis', { exact: true }).waitFor();
     await nav(page, 'Bugs');
     assert.equal(
       await page
@@ -221,6 +217,7 @@ try {
     );
     await page.getByText(/AI analysis/).waitFor();
     await nav(page, 'Features');
+    await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
     assert.equal(
       await page
         .locator('.badge')
@@ -264,14 +261,27 @@ try {
     const requests = await page.evaluate(() => window.fixture.requests.length);
     for (const name of ['Architecture diagram', 'Flow 1 diagram', 'Flow 2 diagram'])
       assert.equal(await page.getByRole('img', { name, exact: true }).count(), 0);
-    await page.getByText('Show architecture', { exact: true }).focus();
+    const section = page
+      .locator('section.panel')
+      .filter({ has: page.getByRole('heading', { name: 'Architecture and Flow', exact: true }) });
+    assert.equal(await section.count(), 1);
+    const bounds = await section.boundingBox();
+    const overview = await page.locator('.overview-row').boundingBox();
+    assert.equal(bounds.x, overview.x);
+    assert.equal(bounds.width, overview.width);
+    assert.equal(await page.getByRole('heading', { name: 'Architecture', exact: true }).count(), 0);
+    assert.equal(
+      await page.getByRole('heading', { name: 'Project flows', exact: true }).count(),
+      0,
+    );
+    await page.getByText('Show architecture and flow', { exact: true }).focus();
     await page.keyboard.press('Enter');
-    await page.getByText('Show project flows', { exact: true }).click();
     assert.equal(await page.evaluate(() => window.fixture.requests.length), requests);
     assert.equal(await page.locator('.diagram img').count(), 3);
     for (const name of ['Architecture diagram', 'Flow 1 diagram', 'Flow 2 diagram'])
       assert.equal(await page.getByRole('img', { name, exact: true }).count(), 1);
-    await page.getByRole('heading', { name: 'Project flows', exact: true }).waitFor();
+    assert.equal(await section.getByRole('img').count(), 3);
+    await section.getByText('cmd/server/main.go', { exact: true }).waitFor();
     for (const [name, file] of [
       ['Architecture diagram', 'architecture'],
       ['Flow 1 diagram', 'flowchart'],
@@ -280,11 +290,16 @@ try {
       await page.getByRole('img', { name, exact: true }).screenshot({
         path: `${output}/summary-${file}.png`,
       });
+    await page.getByRole('main').evaluate((element) => element.scrollTo(0, 0));
+    await layout(page, 'summary-unified-diagrams');
+    await page.getByText('Show architecture and flow', { exact: true }).click();
+    assert.equal(await section.getByRole('img').count(), 0);
+    assert.equal(await page.evaluate(() => window.fixture.requests.length), requests);
     const before = await page.evaluate(() =>
       window.fixture.requests.filter((request) => request.method !== 'GET'),
     );
     await page.getByRole('button', { name: 'Explore', exact: true }).click();
-    await page.getByRole('heading', { name: 'Architecture & flows', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'Architecture and Flow', exact: true }).waitFor();
     assert.equal(await page.locator('.diagram img').count(), 3);
     await page.waitForFunction(() =>
       [...document.querySelectorAll('.diagram img')].every(
@@ -359,6 +374,7 @@ try {
     const missing = await pageFor({ architecture: '', flows: [] });
     await expandSummaryDiagrams(missing.page);
     await missing.page.getByText('No architecture overview saved.', { exact: true }).waitFor();
+    await missing.page.getByText('No project flows saved.', { exact: true }).waitFor();
     await missing.page.getByRole('button', { name: 'Explore', exact: true }).click();
     await missing.page.getByText('No project flows saved.', { exact: true }).waitFor();
     assert.equal(await missing.page.locator('.diagram img').count(), 0);
@@ -390,7 +406,7 @@ try {
     const categories = await page
       .locator('.metric-card .metric-number')
       .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).color));
-    assert.equal(new Set(categories).size, 3);
+    assert.equal(new Set(categories).size, 4);
     const before = await page.evaluate(() =>
       window.fixture.requests.filter((request) => request.method !== 'GET'),
     );
@@ -1110,11 +1126,24 @@ try {
     assert.equal(await page.getByLabel('Read-only diff for internal/worker/process.go').count(), 0);
     await close();
   });
-  await test('Summary reads advisory ideas and Discuss only seeds Chat', async () => {
+  await test('Summary links feature counts to ideas and leaves findings in their workspaces', async () => {
     const { page, close } = await pageFor({ featuresReady: true });
-    await page.getByRole('heading', { name: 'New feature suggestions', exact: true }).waitFor();
-    await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
-    await page.getByText('Estimated effort: medium', { exact: true }).waitFor();
+    await idle(page);
+    const card = page.locator('.metric-card[data-accent="features"]');
+    assert.equal(await card.locator('.metric-number').innerText(), '1');
+    assert.equal(await page.locator('.metric-card').count(), 4);
+    assert.equal(await page.getByRole('heading', { name: 'Findings', exact: true }).count(), 0);
+    assert.equal(await page.locator('.list-row').count(), 0);
+    assert.equal(
+      await page.getByRole('heading', { name: 'New feature suggestions', exact: true }).count(),
+      0,
+    );
+    assert.equal(await page.getByText('Retry failed work', { exact: true }).count(), 0);
+    assert.equal(await page.getByText('Estimated effort: medium', { exact: true }).count(), 0);
+    assert.equal(
+      await page.getByRole('button', { name: 'Discuss in chat', exact: true }).count(),
+      0,
+    );
     const requests = await page.evaluate(() => window.fixture.requests);
     assert.equal(
       requests.some((r) => r.path.endsWith('/features') && r.method === 'GET'),
@@ -1124,9 +1153,11 @@ try {
       requests.some((r) => r.method !== 'GET' && r.path !== '/api/projects/restore'),
       false,
     );
-    await page.getByRole('button', { name: 'View all ideas', exact: true }).click();
+    await card.focus();
+    await page.keyboard.press('Enter');
     await page.getByRole('heading', { name: 'Features', exact: true }).waitFor();
-    await nav(page, 'Summary');
+    await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
+    await page.getByText('Estimated effort: medium', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Discuss in chat', exact: true }).click();
     await page.getByLabel('Change request', { exact: true }).waitFor();
     assert.match(
@@ -1143,26 +1174,46 @@ try {
     );
     await close();
   });
-  await test('Saved suggestion states stay available without unsolicited notices', async () => {
-    for (const options of [
-      {},
-      { featuresReadFail: true },
-      { featuresStale: true },
-      { featuresReady: true, featuresEmpty: true },
-      { featuresReady: true, featuresFail: true },
-      { featuresReady: true, featuresStale: true },
-      { featuresReady: true, featuresFail: true, featuresStale: true },
-      {
-        empty: true,
-        featuresReady: true,
-        featuresEmpty: true,
-        featuresFail: true,
-        featuresStale: true,
-      },
+  await test('Summary feature counts preserve unknown, empty, stale and failed states', async () => {
+    for (const [options, count, status] of [
+      [{}, '—', 'not generated'],
+      [{ featuresReadFail: true }, '—', 'Unavailable'],
+      [{ featuresStale: true }, '—', 'stale'],
+      [{ featuresReady: true, featuresEmpty: true }, '0', 'ready'],
+      [{ featuresReady: true }, '1', 'ready'],
+      [{ featuresReady: true, featuresFail: true }, '1', 'failed'],
+      [{ featuresReady: true, featuresStale: true }, '1', 'stale'],
+      [{ featuresReady: true, featuresFail: true, featuresStale: true }, '1', 'failed'],
+      [{ featuresReady: true, featuresEmpty: true, featuresFail: true }, '—', 'failed'],
+      [
+        {
+          empty: true,
+          featuresReady: true,
+          featuresEmpty: true,
+          featuresFail: true,
+          featuresStale: true,
+        },
+        '—',
+        'failed',
+      ],
     ]) {
       const { page, close } = await pageFor(options);
       await idle(page);
-      await page.getByRole('heading', { name: 'New feature suggestions', exact: true }).waitFor();
+      const card = page.locator('.metric-card[data-accent="features"]');
+      assert.equal(await card.locator('.metric-number').innerText(), count);
+      assert.equal(await card.getByRole('img').getAttribute('aria-label'), `Features: ${status}`);
+      assert.equal(await page.getByText('Retry failed work', { exact: true }).count(), 0);
+      assert.equal(await page.getByText(/Feature search failed/).count(), 0);
+      assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
+      await page.setViewportSize({ width: 800, height: 900 });
+      await page.getByRole('button', { name: 'Larger text' }).click();
+      await layout(page, `summary-feature-count-${JSON.stringify(options)}`);
+      await card.focus();
+      await contrast(page, 'Summary feature counts');
+      await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+      await contrast(page, 'Summary feature counts light');
+      await card.click();
+      await page.getByRole('heading', { name: 'Features', exact: true }).waitFor();
       if (options.featuresReadFail)
         await page.getByRole('heading', { name: 'Features unavailable', exact: true }).waitFor();
       else if (!options.featuresReady)
@@ -1184,12 +1235,7 @@ try {
       }
       assert.equal(await page.getByText(/Feature search failed/).count(), 0);
       assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
-      await page.setViewportSize({ width: 800, height: 900 });
-      await page.getByRole('button', { name: 'Larger text' }).click();
-      await layout(page, `summary-ideas-${JSON.stringify(options)}`);
-      await contrast(page, 'Summary feature ideas');
-      await nav(page, 'Features');
-      await page.getByRole('heading', { name: 'Features', exact: true }).waitFor();
+      await layout(page, `features-saved-state-${JSON.stringify(options)}`);
       const reads = await page.evaluate(
         () => window.fixture.requests.filter((r) => r.path.endsWith('/features')).length,
       );
@@ -1261,7 +1307,10 @@ try {
     await page.getByRole('heading', { name: 'New feature suggestions', exact: true }).waitFor();
     await layout(page, 'analysis-with-features');
     await nav(page, 'Summary');
-    await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
+    assert.equal(
+      await page.locator('.metric-card[data-accent="features"] .metric-number').innerText(),
+      '1',
+    );
     assert.equal(
       await page.evaluate(() =>
         window.fixture.requests.some((r) => r.path.endsWith('/features/generate')),
@@ -1293,12 +1342,24 @@ try {
     await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Save idea', exact: true }).click();
     await idle(page);
+    await nav(page, 'Summary');
+    assert.equal(
+      await page.locator('.metric-card[data-accent="features"] .metric-number').innerText(),
+      '1',
+    );
+    await nav(page, 'Features');
     await page.getByLabel('Filter feature suggestions').selectOption('saved');
     await layout(page, 'features-saved');
     await contrast(page, 'Feature suggestions');
     await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
     await idle(page);
     await page.getByRole('heading', { name: 'No matching features' }).waitFor();
+    await nav(page, 'Summary');
+    assert.equal(
+      await page.locator('.metric-card[data-accent="features"] .metric-number').innerText(),
+      '0',
+    );
+    await nav(page, 'Features');
     await page.getByLabel('Filter feature suggestions').selectOption('dismissed');
     await page.getByRole('button', { name: 'Reopen', exact: true }).click();
     await idle(page);
@@ -1402,6 +1463,18 @@ try {
       await page.getByRole('button', { name: 'Larger text' }).click();
       await layout(page, `features-${JSON.stringify(options)}`);
       await nav(page, 'Summary');
+      assert.equal(await page.getByText(/Feature search failed/).count(), 0);
+      assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
+      const card = page.locator('.metric-card[data-accent="features"]');
+      assert.equal(
+        await card.locator('.metric-number').innerText(),
+        hasIdeas ? '1' : options.featuresFail ? '—' : '0',
+      );
+      assert.equal(
+        await card.getByRole('img').getAttribute('aria-label'),
+        `Features: ${options.featuresFail ? 'failed' : options.featuresStale ? 'stale' : 'ready'}`,
+      );
+      await card.click();
       if (options.featuresFail)
         await page
           .getByText(
@@ -1435,15 +1508,14 @@ try {
       await idle(page);
       await startAnalysis(page);
       await nav(page, 'Summary');
-      await page
-        .getByText(
-          `Feature search failed. Try again.${featuresReady ? ' Previous ideas kept.' : ''}`,
-          { exact: true },
-        )
-        .waitFor();
+      assert.equal(await page.getByText(/Feature search failed/).count(), 0);
       const failure = page.getByRole('img', { name: 'Features: failed', exact: true });
       assert.equal(await failure.evaluate((dot) => dot.classList.contains('red')), true);
-      assert.equal(await page.getByText(/Ideas are outdated/).count(), featuresReady ? 1 : 0);
+      assert.equal(
+        await page.locator('.metric-card[data-accent="features"] .metric-number').innerText(),
+        featuresReady ? '1' : '—',
+      );
+      assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
       await nav(page, 'Features');
       await page.getByText(/^Feature search failed\. Try again\./).waitFor();
       assert.equal(await page.getByText(/Ideas are outdated/).count(), featuresReady ? 1 : 0);

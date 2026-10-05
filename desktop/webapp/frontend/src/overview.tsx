@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { workspace as w, type State, type Page } from './workspace';
-import { FeatureSummary } from './features';
 import {
   Badge,
   Button,
@@ -136,6 +135,40 @@ export function Summary({ s }: { s: State }) {
   const overview = s.overview;
   const coverage = overview?.analysis_coverage;
   const percent = coverage?.total ? Math.round((100 * coverage.fresh) / coverage.total) : null;
+  const features = s.features;
+  const metrics = [
+    ...(
+      [
+        ['bugs', 'Bugs', 'bug'],
+        ['performance', 'Performance', 'gauge'],
+        ['security', 'Security', 'shield'],
+      ] as const
+    ).map(([page, title, icon]) => {
+      const section = s.run?.sections.find((value) => value.category === page);
+      return {
+        page,
+        title,
+        icon,
+        count: section?.finding_count,
+        status: section?.status || 'not_run',
+      };
+    }),
+    {
+      page: 'features' as const,
+      title: 'Features',
+      icon: 'sparkles',
+      count:
+        features && (features.status === 'ready' || features.suggestions.length > 0)
+          ? features.suggestions.filter((idea) => idea.status !== 'dismissed').length
+          : undefined,
+      status:
+        features?.status === 'failed'
+          ? 'failed'
+          : features?.freshness === 'stale'
+            ? 'stale'
+            : features?.status,
+    },
+  ];
   return (
     <>
       <Heading
@@ -187,32 +220,25 @@ export function Summary({ s }: { s: State }) {
           </div>
         </Panel>
         <div className="metric-grid">
-          {[
-            ['bugs', 'Bugs', 'bug'],
-            ['performance', 'Performance', 'gauge'],
-            ['security', 'Security', 'shield'],
-          ].map(([category, title, icon]) => {
-            const section = s.run?.sections.find((value) => value.category === category);
-            return (
-              <button
-                key={category}
-                className="panel metric-card"
-                data-accent={category}
-                onClick={() => void w.navigate(category as Page)}
-              >
-                <div className="metric-label">
-                  <span className="row">
-                    <span className="metric-icon">
-                      <Icon name={icon} />
-                    </span>
-                    <span>{title}</span>
+          {metrics.map(({ page, title, icon, count, status }) => (
+            <button
+              key={page}
+              className="panel metric-card"
+              data-accent={page}
+              onClick={() => void w.navigate(page)}
+            >
+              <div className="metric-label">
+                <span className="row">
+                  <span className="metric-icon">
+                    <Icon name={icon} />
                   </span>
-                  <StatusDot value={section?.status || 'not_run'} label={title} />
-                </div>
-                <div className="metric-number">{section?.finding_count ?? '—'}</div>
-              </button>
-            );
-          })}
+                  <span>{title}</span>
+                </span>
+                <StatusDot value={status} label={title} />
+              </div>
+              <div className="metric-number">{count ?? '—'}</div>
+            </button>
+          ))}
         </div>
       </div>
       <div className="grid two-columns section-gap">
@@ -236,45 +262,6 @@ export function Summary({ s }: { s: State }) {
               </Disclosure>
             )}
           </Panel>
-          <Panel
-            title="Findings"
-            actions={
-              <Go page="bugs" tone="ghost small">
-                View all
-              </Go>
-            }
-          >
-            {s.findings?.length ? (
-              s.findings.slice(0, 5).map((f) => (
-                <button
-                  className="list-row"
-                  key={f.id}
-                  onClick={() => void w.openFile(f.location.path, f.location.symbol, f.task_spec)}
-                >
-                  <span
-                    className={`finding-mark ${['high', 'critical'].includes(f.severity) ? 'red' : f.severity === 'low' ? 'blue' : ''}`}
-                  >
-                    <Icon name="bug" />
-                  </span>
-                  <span className="list-copy">
-                    <strong>{f.title}</strong>
-                    <small>
-                      {f.location.path}
-                      {f.confidence === 'ai_suggestion' && ' · AI analysis'}
-                    </small>
-                  </span>
-                  <span className="result-badges">
-                    <Badge value={f.severity} />
-                    {f.confidence !== 'ai_suggestion' && (
-                      <Badge value={f.confidence} tone="violet" />
-                    )}
-                  </span>
-                </button>
-              ))
-            ) : (
-              <Empty title={s.findings ? 'No saved findings' : 'Findings unavailable'} />
-            )}
-          </Panel>
           <Panel title="Project facts">
             <div className="mini-metrics">
               <div>
@@ -292,41 +279,37 @@ export function Summary({ s }: { s: State }) {
             </div>
           </Panel>
         </div>
-        <div className="stack">
-          <InsightCard insight={overview?.analysis.engineering_insight} />
-          <FeatureSummary s={s} />
-          <Panel
-            title="Architecture"
-            actions={
-              <Go page="diagrams" tone="ghost small">
-                Explore
-              </Go>
-            }
-          >
-            <Disclosure title="Show architecture">
-              <Prose text={overview?.analysis.architecture} diagramLabel="Architecture diagram" />
-              {!overview?.analysis.architecture && (
-                <p className="muted">No architecture overview saved.</p>
-              )}
-              {!!overview?.analysis.entry_points?.length && (
-                <BulletContent title="Entry points" items={overview.analysis.entry_points} />
-              )}
-            </Disclosure>
-          </Panel>
-          {!!overview?.analysis.flows?.length && (
-            <Panel title="Project flows">
-              <Disclosure title="Show project flows">
-                {overview.analysis.flows.map((flow, i) => (
-                  <div className="content-section" key={i}>
-                    <h3>Flow {i + 1}</h3>
-                    <Prose text={flow} diagramLabel={`Flow ${i + 1} diagram`} />
-                  </div>
-                ))}
-              </Disclosure>
-            </Panel>
-          )}
-        </div>
+        <InsightCard insight={overview?.analysis.engineering_insight} />
       </div>
+      <Panel
+        title="Architecture and Flow"
+        className="section-gap"
+        actions={
+          <Go page="diagrams" tone="ghost small">
+            Explore
+          </Go>
+        }
+      >
+        <Disclosure title="Show architecture and flow">
+          <Prose text={overview?.analysis.architecture} diagramLabel="Architecture diagram" />
+          {!overview?.analysis.architecture && (
+            <p className="muted">No architecture overview saved.</p>
+          )}
+          {!!overview?.analysis.entry_points?.length && (
+            <BulletContent title="Entry points" items={overview.analysis.entry_points} />
+          )}
+          {overview?.analysis.flows?.length ? (
+            overview.analysis.flows.map((flow, i) => (
+              <div className="content-section" key={i}>
+                <h3>Flow {i + 1}</h3>
+                <Prose text={flow} diagramLabel={`Flow ${i + 1} diagram`} />
+              </div>
+            ))
+          ) : (
+            <p className="muted">No project flows saved.</p>
+          )}
+        </Disclosure>
+      </Panel>
       {s.run && (
         <Panel className="section-gap">
           <div className="row between wrap">
@@ -394,7 +377,7 @@ export function Models({ s }: { s: State }) {
 export function Diagrams({ s }: { s: State }) {
   return (
     <>
-      <Heading title="Architecture & flows">
+      <Heading title="Architecture and Flow">
         <Go page="summary">Back to summary</Go>
       </Heading>
       <div className="stack">

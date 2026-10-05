@@ -10,7 +10,7 @@ The Wails/React desktop client talks to a Go daemon through a native bridge.
 2. Select **Prepare analysis** in Analysis. Review the whole-project inventory,
    request bounds and model destinations, then confirm the displayed run.
    Analysis also checks for new feature suggestions using saved project goals.
-   Summary previews the ideas; Bugs, Performance and Security show separate results.
+   Summary links category counts to Bugs, Performance, Security and Features.
 3. Use **Prepare fix** on a finding, or describe a feature in **Chat** with up to
    eight explicit Go/Markdown paths, including new files. Preparation generates
    a proposal, checks it and attempts at most three repairs of failed checks.
