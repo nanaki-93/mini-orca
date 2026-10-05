@@ -6,7 +6,6 @@ import {
   BulletContent,
   Disclosure,
   Empty,
-  Go,
   Heading,
   Notice,
   Panel,
@@ -62,61 +61,6 @@ function FeatureEmpty({ s, filtered = false }: { s: State; filtered?: boolean })
         </Disclosure>
       )}
     </>
-  );
-}
-
-export function FeatureSummary({ s }: { s: State }) {
-  const report = s.features;
-  const suggestions = report?.suggestions.filter((idea) => idea.status !== 'dismissed') || [];
-  return (
-    <Panel
-      title="New feature suggestions"
-      actions={
-        <div className="row">
-          <StatusDot
-            value={
-              report?.status === 'failed'
-                ? 'failed'
-                : report?.freshness === 'stale'
-                  ? 'stale'
-                  : report?.status
-            }
-            label="Features"
-          />
-          <Go page="features" tone="ghost small">
-            View all ideas
-          </Go>
-        </div>
-      }
-    >
-      <div className="row wrap">{report?.freshness === 'stale' && <Badge value="stale" />}</div>
-      <FeatureFailure s={s} />
-      {s.featureGenerationRequested &&
-        report?.freshness === 'stale' &&
-        report.suggestions.length > 0 && (
-          <Notice>Ideas are outdated. Generate again to update them.</Notice>
-        )}
-      {!report || report.status === 'not_generated' || suggestions.length === 0 ? (
-        <FeatureEmpty s={s} />
-      ) : (
-        suggestions.slice(0, 3).map((idea) => (
-          <div className="content-section" key={idea.id}>
-            <div className="row between wrap">
-              <h3>{idea.title}</h3>
-              <Badge value={idea.status} />
-            </div>
-            <Prose text={idea.benefit} />
-            <p className="small muted">Estimated effort: {idea.effort}</p>
-            <Button
-              disabled={!!s.busy || report.freshness !== 'current'}
-              onClick={() => w.discussFeature(idea)}
-            >
-              Discuss in chat
-            </Button>
-          </div>
-        ))
-      )}
-    </Panel>
   );
 }
 

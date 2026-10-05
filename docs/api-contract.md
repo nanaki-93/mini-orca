@@ -669,6 +669,9 @@ Bugs/Performance/Security finding counts. Changed source/instructions/goals make
 ideas stale. Failed generation retains earlier ideas with an explicit failure; an
 empty successful array means no ideas were returned.
 
-Summary reads saved feature suggestions without generating them. It displays up
-to three active ideas, their advisory/estimated status and any stale/failure state,
-with navigation to all ideas and a passive handoff to Chat.
+The web Summary reads saved feature suggestions without generating them. Its
+Features count includes open and saved ideas and links to the Features workspace.
+Unavailable or ungenerated counts remain unknown; a successful empty report
+shows zero. Stale and failed reports retain their status indicators and any
+available saved counts. Features keeps the full ideas, estimated effort, error
+details and passive handoff to Chat.
