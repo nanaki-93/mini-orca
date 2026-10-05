@@ -358,6 +358,9 @@ func TestCLIHelperProcess(t *testing.T) {
 	os.Exit(0)
 }
 
+const agyFinishEvents = `{"event":"step_update","step_update":{"step_type":"tool","state":"ACTIVE","tool_name":"finish","tool_info":{"name":"finish"}}}` + "\n" +
+	`{"event":"step_update","step_update":{"step_type":"tool","state":"DONE","tool_name":"finish","tool_info":{"name":"finish"}}}` + "\n"
+
 func cliFixtureOutput(provider config.ModelProvider, mode string) string {
 	content := cliFixtureContent
 	if mode == "empty" {
@@ -389,6 +392,9 @@ func cliFixtureOutput(provider config.ModelProvider, mode string) string {
 			}
 		}
 		result, _ := json.Marshal(map[string]any{"event": "result", "result": payload})
+		if mode == "finish" {
+			return init + agyFinishEvents + string(result) + "\n"
+		}
 		return init + string(result) + "\n"
 	}
 	start := "{\"type\":\"agent_start\"}\n"

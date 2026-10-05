@@ -90,6 +90,63 @@ func TestCLIProvidersAnalyzeAndProposeDraftsWithScopeConsent(t *testing.T) {
 	}
 }
 
+func TestAgyGeneratesFeaturesWithStructuredFinishEvents(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("CLI providers require process-group cleanup")
+	}
+	for _, analysis := range []bool{false, true} {
+		name, content := "direct suggestions", validFeatureResponse
+		if analysis {
+			name, content = "analysis stage", `{"suggestions":[]}`
+		}
+		t.Run(name, func(t *testing.T) {
+			fixture, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+			original, err := os.ReadFile(filepath.Join(root, "main.go"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg := config.Default()
+			cfg.Retry = config.RetryConfig{MaxRetries: 1, BackoffBase: 1, BackoffMax: 1}
+			calls := filepath.Join(t.TempDir(), "calls")
+			cfg.ModelScopes.Analyze = cliAppProfile(t, config.AgyProvider, "analyze-model", content, calls)
+			service, err := New(cfg, fixture.manager)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if analysis {
+				excludeFeatureAnalysisFiles(t, service, []string{"main.go"})
+				preview := featureAnalysisPreviewFor(t, service, AnalysisRunLimits{1, 30, 2}, nil)
+				if _, err := service.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+					t.Fatal(err)
+				}
+				run := completedAnalysisRun(t, service)
+				if run.Status != AnalysisRunCompletedEmpty || run.Features.Status != AnalysisStageCompletedEmpty || run.Features.Attempts != 1 {
+					t.Fatalf("feature stage did not complete: status=%s features=%+v", run.Status, run.Features)
+				}
+			} else {
+				request := featureRequestFor(t, service, "Improve cancellation.")
+				request.ConfirmRemoteProvider = true
+				report, err := service.GenerateFeatures(context.Background(), request)
+				if err != nil || report.Status != "ready" || len(report.Suggestions) != 1 {
+					t.Fatalf("feature suggestions = %+v, %v", report, err)
+				}
+			}
+			report, err := service.Features(context.Background())
+			if err != nil || report.Status != "ready" || report.Failure != "" {
+				t.Fatalf("saved feature report = %+v, %v", report, err)
+			}
+			current, err := os.ReadFile(filepath.Join(root, "main.go"))
+			if err != nil || string(current) != string(original) {
+				t.Fatal("feature generation changed project source")
+			}
+			count, err := os.ReadFile(calls)
+			if err != nil || string(count) != "x" {
+				t.Fatalf("CLI dispatches = %q, %v", count, err)
+			}
+		})
+	}
+}
+
 func cliAppProfile(t *testing.T, provider config.ModelProvider, model, content, calls string) config.ModelProfileConfig {
 	t.Helper()
 	var output, structuredOutput string
@@ -102,7 +159,9 @@ func cliAppProfile(t *testing.T, provider config.ModelProvider, model, content, 
 	} else {
 		init, _ := json.Marshal(map[string]any{"event": "init", "init": map[string]any{"agent": "mini-orca", "model": model, "tools": []string{"view_file", "run_command", "finish"}}})
 		result, _ := json.Marshal(map[string]any{"event": "result", "result": map[string]any{"status": "SUCCESS", "response": "Task completed.", "structured_output": json.RawMessage(content)}})
-		structuredOutput = string(init) + "\n" + string(result) + "\n"
+		finish := `{"event":"step_update","step_update":{"step_type":"tool","state":"ACTIVE","tool_name":"finish","tool_info":{"name":"finish"}}}` + "\n" +
+			`{"event":"step_update","step_update":{"step_type":"tool","state":"DONE","tool_name":"finish","tool_info":{"name":"finish"}}}` + "\n"
+		structuredOutput = string(init) + "\n" + finish + string(result) + "\n"
 		result, _ = json.Marshal(map[string]any{"event": "result", "result": map[string]string{"status": "SUCCESS", "response": content}})
 		output = string(init) + "\n" + string(result) + "\n"
 	}

@@ -18,6 +18,14 @@ type cliResponseDecoder struct {
 	finished   bool
 }
 
+type agyStepEvent struct {
+	Type     string `json:"step_type"`
+	ToolName string `json:"tool_name"`
+	ToolInfo *struct {
+		Name string `json:"name"`
+	} `json:"tool_info"`
+}
+
 func decodeCLIResponse(profile config.ModelProfile, output []byte, structured bool) (*ChatResponse, error) {
 	decoder := cliResponseDecoder{profile: profile, structured: structured}
 	scanner := bufio.NewScanner(bytes.NewReader(output))
@@ -50,9 +58,7 @@ func (d *cliResponseDecoder) agyEvent(data []byte) error {
 			Agent string    `json:"agent"`
 			Model string    `json:"model"`
 		} `json:"init"`
-		Step struct {
-			Type string `json:"step_type"`
-		} `json:"step_update"`
+		Step   agyStepEvent `json:"step_update"`
 		Result struct {
 			Status           string          `json:"status"`
 			Response         string          `json:"response"`
@@ -75,9 +81,7 @@ func (d *cliResponseDecoder) agyEvent(data []byte) error {
 		}
 		d.started = true
 	case "step_update":
-		if event.Step.Type == "tool" || event.Step.Type == "subagent" {
-			return unusableCLIResponse("agy attempted tool use")
-		}
+		return d.agyStep(event.Step)
 	case "result":
 		if !d.started || d.finished || event.Result.Status != "SUCCESS" {
 			return unusableCLIResponse("agy did not complete successfully")
@@ -92,6 +96,26 @@ func (d *cliResponseDecoder) agyEvent(data []byte) error {
 		})
 	default:
 		return unusableCLIResponse("unrecognized agy event")
+	}
+	return nil
+}
+
+func (d *cliResponseDecoder) agyStep(step agyStepEvent) error {
+	if !d.started || d.finished {
+		return unusableCLIResponse("agy progress is outside its model turn")
+	}
+	if step.Type == "subagent" {
+		return unusableCLIResponse("agy attempted tool use")
+	}
+	if step.Type != "tool" {
+		return nil
+	}
+	// Schema requests enable finish solely to format the native result.
+	if !d.structured || step.ToolName != "finish" {
+		return unusableCLIResponse("agy attempted tool use")
+	}
+	if step.ToolInfo != nil && step.ToolInfo.Name != "" && step.ToolInfo.Name != "finish" {
+		return unusableCLIResponse("agy reported conflicting tool names")
 	}
 	return nil
 }
