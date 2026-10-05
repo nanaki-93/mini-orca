@@ -76,7 +76,7 @@ func TestFeatureMalformedOutputPreservesPreviousSuggestions(t *testing.T) {
 			t.Fatalf("accepted output %s", invalid)
 		}
 		retained, err := service.Features(context.Background())
-		if err != nil || retained.Status != "failed" || retained.Failure == "" || retained.Suggestions[0].ID != good.Suggestions[0].ID {
+		if err != nil || retained.Status != "failed" || retained.Failure != "Feature search failed. Try again." || retained.Suggestions[0].ID != good.Suggestions[0].ID {
 			t.Fatalf("failure lost previous ideas: %+v, %v", retained, err)
 		}
 	}

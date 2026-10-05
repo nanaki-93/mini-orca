@@ -1066,15 +1066,13 @@ try {
       await idle(page);
       await page.getByRole('heading', { name: 'New feature suggestions', exact: true }).waitFor();
       if (options.featuresReadFail)
-        await page.getByRole('heading', { name: 'Suggestions unavailable', exact: true }).waitFor();
+        await page.getByRole('heading', { name: 'Features unavailable', exact: true }).waitFor();
       else if (!options.featuresReady)
-        await page
-          .getByRole('heading', { name: 'No suggestions generated', exact: true })
-          .waitFor();
+        await page.getByRole('heading', { name: 'No features yet', exact: true }).waitFor();
       else if (options.featuresEmpty)
         await page
           .getByRole('heading', {
-            name: options.featuresFail ? 'No saved suggestions' : 'No active suggestions',
+            name: options.featuresFail ? 'No saved features' : 'No new features found',
             exact: true,
           })
           .waitFor();
@@ -1086,7 +1084,7 @@ try {
             true,
           );
       }
-      assert.equal(await page.getByText(/Feature suggestions could not be generated/).count(), 0);
+      assert.equal(await page.getByText(/Feature search failed/).count(), 0);
       assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
       await page.setViewportSize({ width: 800, height: 900 });
       await page.getByRole('button', { name: 'Larger text' }).click();
@@ -1103,7 +1101,7 @@ try {
           window.fixture.requests.filter((r) => r.path.endsWith('/features')).length > reads,
         reads,
       );
-      assert.equal(await page.getByText(/Feature suggestions could not be generated/).count(), 0);
+      assert.equal(await page.getByText(/Feature search failed/).count(), 0);
       assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
       assert.equal(
         await page.evaluate(() =>
@@ -1130,7 +1128,7 @@ try {
     await page.getByRole('button', { name: 'Suggest features', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
     await idle(page);
-    assert.equal(await page.getByText(/Feature suggestions could not be generated/).count(), 0);
+    assert.equal(await page.getByText(/Feature search failed/).count(), 0);
     assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
     assert.equal(
       await page.evaluate(() =>
@@ -1139,7 +1137,7 @@ try {
       false,
     );
     await nav(page, 'Summary');
-    assert.equal(await page.getByText(/Feature suggestions could not be generated/).count(), 0);
+    assert.equal(await page.getByText(/Feature search failed/).count(), 0);
     assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
     await close();
   });
@@ -1182,7 +1180,7 @@ try {
     const { page, close } = await pageFor({ remote: true });
     await nav(page, 'Analysis');
     await page.getByRole('button', { name: 'Explore features' }).click();
-    await page.getByRole('heading', { name: 'No suggestions generated' }).waitFor();
+    await page.getByRole('heading', { name: 'No features yet' }).waitFor();
     await page
       .getByLabel('Project goals', { exact: true })
       .fill('Help operators recover failed jobs.');
@@ -1205,7 +1203,7 @@ try {
     await contrast(page, 'Feature suggestions');
     await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
     await idle(page);
-    await page.getByRole('heading', { name: 'No matching suggestions' }).waitFor();
+    await page.getByRole('heading', { name: 'No matching features' }).waitFor();
     await page.getByLabel('Filter feature suggestions').selectOption('dismissed');
     await page.getByRole('button', { name: 'Reopen', exact: true }).click();
     await idle(page);
@@ -1288,11 +1286,13 @@ try {
       await page.getByRole('button', { name: 'Suggest features' }).click();
       await idle(page);
       if (options.featuresEmpty)
-        await page.getByRole('heading', { name: 'No matching suggestions' }).waitFor();
-      if (options.featuresFail)
         await page
-          .getByText('Feature suggestions could not be generated.', { exact: true })
+          .getByRole('heading', {
+            name: options.featuresFail ? 'No saved features' : 'No new features found',
+          })
           .waitFor();
+      if (options.featuresFail)
+        await page.getByText(/^Feature search failed\. Try again\./).waitFor();
       const hasIdeas = !options.featuresEmpty && (!options.featuresFail || options.featuresReady);
       if (options.featuresStale && hasIdeas)
         assert.equal(
@@ -1310,7 +1310,7 @@ try {
       if (options.featuresFail)
         await page
           .getByText(
-            `Feature suggestions could not be generated.${hasIdeas ? ' Previous ideas remain available.' : ''}`,
+            `Feature search failed. Try again.${hasIdeas ? ' Previous ideas kept.' : ''}`,
             { exact: true },
           )
           .waitFor();
@@ -1322,7 +1322,7 @@ try {
       await page.getByRole('button', { name: 'Open saved project', exact: true }).click();
       await idle(page);
       await page.getByRole('heading', { name: 'harbor', exact: true }).waitFor();
-      assert.equal(await page.getByText(/Feature suggestions could not be generated/).count(), 0);
+      assert.equal(await page.getByText(/Feature search failed/).count(), 0);
       assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
       await close();
     }
@@ -1344,15 +1344,13 @@ try {
       await nav(page, 'Summary');
       await page
         .getByText(
-          `Feature suggestions could not be generated.${featuresReady ? ' Previous ideas remain available.' : ''}`,
+          `Feature search failed. Try again.${featuresReady ? ' Previous ideas kept.' : ''}`,
           { exact: true },
         )
         .waitFor();
       assert.equal(await page.getByText(/Ideas are outdated/).count(), featuresReady ? 1 : 0);
       await nav(page, 'Features');
-      await page
-        .getByText('Feature suggestions could not be generated.', { exact: true })
-        .waitFor();
+      await page.getByText(/^Feature search failed\. Try again\./).waitFor();
       assert.equal(await page.getByText(/Ideas are outdated/).count(), featuresReady ? 1 : 0);
       await close();
     }

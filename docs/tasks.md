@@ -57,7 +57,7 @@ Improve the Wails/React summary, feature discovery and analysis model selection.
 **Verification command**
 `make web-test && git diff --check`
 
-## Task 4 — [ ] Make feature empty and failure messages concise
+## Task 4 — [x] Make feature empty and failure messages concise
 
 **Target files**
 - `desktop/webapp/frontend/src/features.tsx` — concise unavailable/not-generated/empty/filtered/failed copy and recovery.
