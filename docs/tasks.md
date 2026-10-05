@@ -17,7 +17,7 @@ Improve the Wails/React summary, feature discovery and analysis model selection.
 **Verification command**
 `make web-test && git diff --check`
 
-## Task 2 — [ ] Replace analysis status badges with accessible dots
+## Task 2 — [x] Replace analysis status badges with accessible dots
 
 **Target files**
 - `desktop/webapp/frontend/src/ui.tsx` — shared status dot.

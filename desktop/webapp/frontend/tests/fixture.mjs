@@ -158,7 +158,12 @@ export function installFixture(options = {}) {
         skipped: 0,
         unavailable: 0,
       },
-      finding_count: category === 'performance' && options.unknown ? null : 1,
+      finding_count:
+        category === 'performance' && options.unknown
+          ? null
+          : options.runStatus === 'completed_empty'
+            ? 0
+            : 1,
     })),
     elapsed_seconds: 24,
     window_files_completed: 4,

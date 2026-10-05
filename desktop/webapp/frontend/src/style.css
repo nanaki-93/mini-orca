@@ -637,6 +637,22 @@ pre {
   background: var(--violet-soft);
   color: var(--violet);
 }
+.status-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 50%;
+}
+.status-dot.green {
+  background: var(--accent);
+}
+.status-dot.yellow {
+  background: var(--amber);
+}
+.status-dot.red {
+  background: var(--red);
+}
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
