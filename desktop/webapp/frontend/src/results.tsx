@@ -45,7 +45,7 @@ function semantic(f: M.Finding): ResultRow {
     confidence: f.confidence,
     freshness: f.freshness,
     status: f.status,
-    kind: f.source,
+    kind: ['suggested', 'ai_suggestion'].includes(f.confidence) ? 'AI analysis' : f.source,
     insight: f.engineering_insight,
     text: [
       ['Finding', f.message],

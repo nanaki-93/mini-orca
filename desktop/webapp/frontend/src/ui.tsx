@@ -64,6 +64,7 @@ export function StatusDot({ value, label }: { value?: string; label?: string }) 
   return <span className={`status-dot ${tone}`} role="img" aria-label={status} title={status} />;
 }
 export function Badge({ value, tone }: { value?: string; tone?: string }) {
+  if (['suggested', 'ai_suggestion'].includes(value || '')) return null;
   if (['completed', 'completed_empty'].includes(value || '')) return <StatusDot value={value} />;
   const style =
     tone ??

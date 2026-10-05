@@ -39,7 +39,7 @@ Improve the Wails/React summary, feature discovery and analysis model selection.
 **Verification command**
 `make web-test && git diff --check`
 
-## Task 3 — [ ] Remove redundant suggestion badges
+## Task 3 — [x] Remove redundant suggestion badges
 
 **Target files**
 - `desktop/webapp/frontend/src/ui.tsx` — suppress suggested/ai_suggestion badges for all shared callers.

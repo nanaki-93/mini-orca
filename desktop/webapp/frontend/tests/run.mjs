@@ -193,6 +193,37 @@ async function test(name, body) {
 }
 
 try {
+  await test('Redundant suggestion labels are removed while advisory content remains', async () => {
+    const { page, close } = await pageFor({ featuresReady: true });
+    assert.equal(
+      await page
+        .locator('.badge')
+        .getByText(/^(ai suggestion|suggested)$/i)
+        .count(),
+      0,
+    );
+    await page.getByText('Retry failed work', { exact: true }).waitFor();
+    await page.getByText('internal/worker/process.go · AI analysis', { exact: true }).waitFor();
+    await nav(page, 'Bugs');
+    assert.equal(
+      await page
+        .locator('.badge')
+        .getByText(/^(ai suggestion|suggested)$/i)
+        .count(),
+      0,
+    );
+    await page.getByText(/AI analysis/).waitFor();
+    await nav(page, 'Features');
+    assert.equal(
+      await page
+        .locator('.badge')
+        .getByText(/^(ai suggestion|suggested)$/i)
+        .count(),
+      0,
+    );
+    await page.getByRole('button', { name: 'Discuss in chat', exact: true }).waitFor();
+    await close();
+  });
   await test('Summary status dots distinguish empty success, incomplete and failed analysis', async () => {
     for (const [status, tone] of [
       ['completed', 'green'],

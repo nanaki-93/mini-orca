@@ -32,10 +32,7 @@ export function FeatureSummary({ s }: { s: State }) {
         </div>
       }
     >
-      <div className="row wrap">
-        {report?.freshness === 'stale' && <Badge value="stale" />}
-        <Badge value="ai_suggestion" />
-      </div>
+      <div className="row wrap">{report?.freshness === 'stale' && <Badge value="stale" />}</div>
       {s.featureGenerationRequested && report?.failure && (
         <Notice error>
           {report.failure} {report.suggestions.length > 0 && 'Previous ideas remain available.'}
@@ -146,7 +143,6 @@ export function Features({ s }: { s: State }) {
         </label>
         {report && <StatusDot value={report.status} label="Features" />}
         {report?.freshness === 'stale' && <Badge value="stale" />}
-        <Badge value="ai_suggestion" />
       </div>
       {!report ? (
         <Empty title="Suggestions unavailable" />
