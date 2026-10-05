@@ -370,7 +370,7 @@ export function Results({ s }: { s: State }) {
               <span className="result-badges">
                 <Badge value={row.severity} />
                 <Badge value={row.confidence} tone="violet" />
-                <StatusDot value={row.freshness} label="Freshness" />
+                <StatusDot value={row.freshness} label="Freshness" hideSuccess />
               </span>
               <Icon name="chevron" />
             </button>
