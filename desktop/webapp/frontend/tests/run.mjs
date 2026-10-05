@@ -155,6 +155,14 @@ async function contrast(page, name) {
       if (value < 4.5)
         failures.push(`${element.textContent.trim().slice(0, 60)}: ${value.toFixed(2)}:1 text`);
     }
+    for (const element of document.querySelectorAll('.status-dot')) {
+      if (!element.getClientRects().length) continue;
+      const value = ratio(
+        rgba(getComputedStyle(element).backgroundColor),
+        background(element.parentElement),
+      );
+      if (value < 3) failures.push(`${element.title}: ${value.toFixed(2)}:1 indicator`);
+    }
     for (const element of document.querySelectorAll(
       'input:not([type="checkbox"]):not(:disabled), textarea:not(:disabled), select.field:not(:disabled), .search-trigger',
     )) {
@@ -185,6 +193,34 @@ async function test(name, body) {
 }
 
 try {
+  await test('Summary status dots distinguish empty success, incomplete and failed analysis', async () => {
+    for (const [status, tone] of [
+      ['completed', 'green'],
+      ['completed_empty', 'green'],
+      ['running', 'yellow'],
+      ['partial', 'yellow'],
+      ['stale', 'yellow'],
+      ['unavailable', 'yellow'],
+      ['failed', 'red'],
+    ]) {
+      const { page, close } = await pageFor({ runStatus: status });
+      const dot = page.locator('[data-accent="bugs"] .status-dot');
+      assert.equal(await dot.getAttribute('class'), `status-dot ${tone}`);
+      assert.equal(await dot.getAttribute('aria-label'), `Bugs: ${status.replaceAll('_', ' ')}`);
+      assert.equal(await page.locator('.metric-card .badge').count(), 0);
+      if (status === 'completed_empty')
+        assert.equal(await page.locator('[data-accent="bugs"] .metric-number').innerText(), '0');
+      const bounds = await page.locator('.metric-card[data-accent="bugs"]').boundingBox();
+      const position = await dot.boundingBox();
+      assert.ok(position.x > bounds.x + bounds.width * 0.8);
+      assert.ok(position.y < bounds.y + 40);
+      await contrast(page, `Summary ${status}`);
+      await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+      await contrast(page, `Summary ${status} light`);
+      if (status === 'completed_empty') await layout(page, 'summary-empty-success');
+      await close();
+    }
+  });
   await test('Saved architecture and flow charts render in Summary and the diagrams view', async () => {
     const { page, close } = await pageFor();
     const requests = await page.evaluate(() => window.fixture.requests.length);
@@ -637,7 +673,7 @@ try {
     await page
       .getByRole('heading', { name: 'New feature suggestions', exact: true })
       .locator('..')
-      .getByText('pending', { exact: true })
+      .getByRole('img', { name: 'Features: pending', exact: true })
       .waitFor();
     await page.evaluate(() => {
       window.fixture.state.run.features.status = 'running';

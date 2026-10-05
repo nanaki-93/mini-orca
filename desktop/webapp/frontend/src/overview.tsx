@@ -14,6 +14,7 @@ import {
   KeyValues,
   Panel,
   Prose,
+  StatusDot,
 } from './ui';
 
 export function ProjectPage({ s }: { s: State }) {
@@ -81,7 +82,10 @@ export function ProjectPage({ s }: { s: State }) {
                 ['Files', s.project.file_count],
                 ['Source files', s.project.source_file_count],
                 ['Lines', s.project.total_lines?.toLocaleString()],
-                ['Overview', <Badge value={s.overview?.analysis.status || s.project.ai_status} />],
+                [
+                  'Overview',
+                  <StatusDot value={s.overview?.analysis.status || s.project.ai_status} />,
+                ],
               ]}
             />
             <div className="actions section-gap">
@@ -197,13 +201,15 @@ export function Summary({ s }: { s: State }) {
                 onClick={() => void w.navigate(category as Page)}
               >
                 <div className="metric-label">
-                  <span>{title}</span>
-                  <span className="metric-icon">
-                    <Icon name={icon} />
+                  <span className="row">
+                    <span className="metric-icon">
+                      <Icon name={icon} />
+                    </span>
+                    <span>{title}</span>
                   </span>
+                  <StatusDot value={section?.status || 'not_run'} label={title} />
                 </div>
                 <div className="metric-number">{section?.finding_count ?? '—'}</div>
-                <Badge value={section?.status || 'not_run'} />
               </button>
             );
           })}
@@ -213,7 +219,12 @@ export function Summary({ s }: { s: State }) {
         <div className="stack">
           <Panel
             title="Project overview"
-            actions={<Badge value={overview?.analysis.status || s.project!.ai_status} />}
+            actions={
+              <StatusDot
+                value={overview?.analysis.status || s.project!.ai_status}
+                label="Overview"
+              />
+            }
           >
             <Prose text={overview?.analysis.purpose || s.project!.summary} />
             {overview?.analysis.failure && (
@@ -317,7 +328,7 @@ export function Summary({ s }: { s: State }) {
             <div className="row">
               <Icon name="activity" />
               <strong>Project analysis</strong>
-              <Badge value={s.run.status} />
+              <StatusDot value={s.run.status} label="Analysis" />
             </div>
             <Go page="analysis-run">View run</Go>
           </div>

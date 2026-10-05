@@ -11,6 +11,7 @@ import {
   KeyValues,
   Notice,
   Panel,
+  StatusDot,
   human,
 } from './ui';
 import type { Limits } from './models';
@@ -73,7 +74,7 @@ export function Analysis({ s }: { s: State }) {
             <div className="row">
               <Icon name="activity" />
               <strong>Last run</strong>
-              <Badge value={s.run.status} />
+              <StatusDot value={s.run.status} label="Analysis" />
             </div>
             <Go page="analysis-run">View run</Go>
           </div>
@@ -167,7 +168,8 @@ export function Analysis({ s }: { s: State }) {
                   return (
                     <td key={stage}>
                       <span title={status?.reason || file.reason}>
-                        <Badge
+                        <StatusDot
+                          label={stageNames[stage]}
                           value={
                             excluded.includes(file.path) || file.reason
                               ? 'excluded'
@@ -421,7 +423,7 @@ export function AnalysisRun({ s }: { s: State }) {
             : 'Preparing analysis…';
   return (
     <>
-      <Heading title="Project analysis" detail={<Badge value={run.status} />}>
+      <Heading title="Project analysis" detail={<StatusDot value={run.status} label="Analysis" />}>
         <Go page="analysis">Files</Go>
         {['running', 'queued'].includes(run.status) && (
           <Button icon="pause" disabled={!!s.busy} onClick={() => void w.controlRun('pause')}>
@@ -469,7 +471,7 @@ export function AnalysisRun({ s }: { s: State }) {
         <Panel
           title="New feature suggestions"
           className="section-gap"
-          actions={<Badge value={run.features.status} />}
+          actions={<StatusDot value={run.features.status} label="Features" />}
         >
           <div className="metric-number">{run.features.suggestion_count ?? '—'}</div>
           <p className="small muted">
@@ -485,7 +487,7 @@ export function AnalysisRun({ s }: { s: State }) {
           <Panel
             key={section.category}
             title={human(section.category)}
-            actions={<Badge value={section.status} />}
+            actions={<StatusDot value={section.status} label={human(section.category)} />}
           >
             <div className="metric-number">{section.finding_count ?? '—'}</div>
             <p className="small muted">
@@ -513,7 +515,7 @@ export function AnalysisRun({ s }: { s: State }) {
                   <span className="row wrap">
                     {file.stages.map((stage) => (
                       <span key={stage.stage} title={stageNames[stage.stage]}>
-                        <Badge value={stage.status} />
+                        <StatusDot value={stage.status} label={stageNames[stage.stage]} />
                       </span>
                     ))}
                   </span>
@@ -530,7 +532,7 @@ export function AnalysisRun({ s }: { s: State }) {
                         `${stage.attempts} attempts${stage.cached ? ' · cached' : ''}`}
                     </small>
                   </span>
-                  <Badge value={stage.status} />
+                  <StatusDot value={stage.status} label={stageNames[stage.stage]} />
                 </div>
               ))}
             </Disclosure>

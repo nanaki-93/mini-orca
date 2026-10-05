@@ -14,6 +14,7 @@ import {
   Notice,
   Panel,
   Prose,
+  StatusDot,
   human,
 } from './ui';
 
@@ -137,7 +138,7 @@ export function Results({ s }: { s: State }) {
             <span className="row wrap">
               <Badge value={detail.severity} />
               <Badge value={detail.confidence} tone="violet" />
-              <Badge value={detail.freshness} />
+              <StatusDot value={detail.freshness} label="Freshness" />
             </span>
           }
         >
@@ -250,7 +251,7 @@ export function Results({ s }: { s: State }) {
         detail={
           results ? (
             <span className="row">
-              <Badge value={results.progress.status} />
+              <StatusDot value={results.progress.status} label="Analysis" />
               <span>
                 {results.saved_finding_count === null
                   ? 'Count unavailable'
@@ -307,7 +308,7 @@ export function Results({ s }: { s: State }) {
           </div>
           {s.securityReport && (
             <div className="section-gap">
-              <Badge value={s.securityReport.status} />
+              <StatusDot value={s.securityReport.status} label="Security" />
               {s.securityReport.reason && (
                 <p className="small section-gap">{s.securityReport.reason}</p>
               )}
@@ -369,7 +370,7 @@ export function Results({ s }: { s: State }) {
               <span className="result-badges">
                 <Badge value={row.severity} />
                 <Badge value={row.confidence} tone="violet" />
-                <Badge value={row.freshness} />
+                <StatusDot value={row.freshness} label="Freshness" />
               </span>
               <Icon name="chevron" />
             </button>
@@ -415,7 +416,11 @@ export function Results({ s }: { s: State }) {
                 reason: r.reason,
               })),
           ].map((report) => (
-            <Panel key={report.key} title={report.path} actions={<Badge value={report.status} />}>
+            <Panel
+              key={report.key}
+              title={report.path}
+              actions={<StatusDot value={report.status} />}
+            >
               {report.reason && <Prose text={report.reason} />}
             </Panel>
           ))}

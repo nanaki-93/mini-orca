@@ -11,6 +11,7 @@ import {
   Notice,
   Panel,
   Prose,
+  StatusDot,
 } from './ui';
 
 export function FeatureSummary({ s }: { s: State }) {
@@ -20,13 +21,18 @@ export function FeatureSummary({ s }: { s: State }) {
     <Panel
       title="New feature suggestions"
       actions={
-        <Go page="features" tone="ghost small">
-          View all ideas
-        </Go>
+        <div className="row">
+          <StatusDot
+            value={report?.freshness === 'stale' ? 'stale' : report?.status}
+            label="Features"
+          />
+          <Go page="features" tone="ghost small">
+            View all ideas
+          </Go>
+        </div>
       }
     >
       <div className="row wrap">
-        <Badge value={report?.status || 'unavailable'} />
         {report?.freshness === 'stale' && <Badge value="stale" />}
         <Badge value="ai_suggestion" />
       </div>
@@ -138,7 +144,7 @@ export function Features({ s }: { s: State }) {
             <option value="all">All</option>
           </select>
         </label>
-        {report && <Badge value={report.status} />}
+        {report && <StatusDot value={report.status} label="Features" />}
         {report?.freshness === 'stale' && <Badge value="stale" />}
         <Badge value="ai_suggestion" />
       </div>
