@@ -1,204 +1,160 @@
-# AI changes, feature suggestions, and project instructions
+# Analysis and summary improvements
 
-Implement a shared proposal workflow in the Wails/React client: selected findings or feature requests become checked, versioned changes with read-only diffs, explicit Apply, guarded Undo, and local history. Add scoped AGENTS.md loading and a guided editor, plus separate, goal-aware feature suggestions. Preserve existing declaration APIs and the legacy client; broader changes initially support Go source and Markdown, including new files, with a maximum of eight explicitly selected paths.
+Improve the Wails/React summary, feature discovery and analysis model selection. Implement the tasks in order and commit every verified step separately; preserve explicit consent, immutable identities and legacy defaults.
 
-## Task 1 — [x] Resolve scoped project instructions
-
-**Target files**
-- `internal/project/instructions.go` — bounded, policy-filtered root-to-directory AGENTS.md resolution and instruction identity.
-- `internal/project/instructions_test.go` — inheritance, exclusion, missing files, unsafe paths and size limits.
-- `internal/project/write_path.go` — contained, symlink-free paths for existing and new files.
-- `internal/project/write_path_test.go` — traversal, aliases, symlinks and missing parent behavior.
-- `internal/project/function_context.go` — include effective instructions in declaration context and manifest.
-- `internal/project/function_context_test.go` — prove applicable instructions reach prompts.
-
-**Inputs / dependencies**
-- Existing context policy, path containment, context manifests and source hash conventions.
-
-**Implementation rules**
-- AGENTS.md remains the source of truth. Resolve root instructions followed by applicable directory instructions; show origin and scope. Missing files are valid; unreadable, oversized or unsafe files fail explicitly.
-- Instructions guide generation and never grant remote-provider consent, execution trust or Apply authority. Do not automatically run command text found in instructions.
-- Resolve write paths within the canonical project and reject symlinks, protected metadata, traversal and ambiguous spellings. No source writes occur during resolution.
-
-**Verification command**
-`go test ./internal/project`
-
-## Task 2 — [x] Persist shared change conversations and generate proposals
+## Task 1 — [ ] Collapse summary architecture and flows
 
 **Target files**
-- `internal/app/change_session.go` — immutable selected scope, revisioned conversations and provider generation.
-- `internal/app/change_store.go` — private, bounded local history with strict persisted schema and conflict detection.
-- `internal/app/change_context.go` — bounded selected source, effective instructions and strict structured response validation.
-- `internal/app/change_types.go` — change/session/evidence wire types and identities.
-- `internal/app/change_session_test.go` — history/resume, revisions, cancellation, malformed responses, stale scope and consent.
-- `internal/app/service.go` — workflow concurrency ownership.
+- `desktop/webapp/frontend/src/overview.tsx` — default-closed Architecture and Project flows disclosures.
+- `desktop/webapp/frontend/tests/run.mjs` — collapsed/expanded Summary, diagram fallbacks and local-only navigation.
 
 **Inputs / dependencies**
-- Task 1; configured Function scope, retry transport and atomic storage primitives.
+- Existing Disclosure control and inert diagram renderer.
 
 **Implementation rules**
-- Fixes, optimizations, new features and instruction edits use one stored proposal representation. A model may change only explicitly captured paths; no deletes, shell commands or retargeting.
-- Local history contains source/drafts and conversation text only in excluded project-local metadata with private permissions. Read/restore must never dispatch a provider or grant previous approval/check authority.
-- Bound files, source, messages, history and model responses. Preserve cancellation and recheck project, policy, instruction and source identities after asynchronous work.
-- New revisions clear check/review evidence. A manual instruction proposal uses the same diff/review lifecycle without a provider call.
+- Default to closed on Summary mount, while keeping all saved content and Explore accessible by keyboard. The dedicated diagrams page remains expanded.
 
 **Verification command**
-`go test ./internal/app -run 'TestChange'`
+`make web-test && git diff --check`
 
-## Task 3 — [x] Check, review, apply and undo proposals across files
+## Task 2 — [ ] Replace analysis status badges with accessible dots
 
 **Target files**
-- `internal/app/change_checks.go` — formatting/parsing, trusted copied-workspace checks, bounded repair evidence and review guards.
-- `internal/app/change_apply.go` — durable recovery journal, guarded grouped writes, rollback and Undo.
-- `internal/app/change_checks_test.go` — checks, trust, changed candidates and baseline regressions.
-- `internal/app/change_apply_test.go` — approval, fresh hashes, new files, partial writes and restart recovery.
-- `internal/app/change_types.go` — evidence and mutation receipts.
-- `internal/app/change_store.go` — store current evidence and recovery state.
+- `desktop/webapp/frontend/src/ui.tsx` — shared status dot.
+- `desktop/webapp/frontend/src/overview.tsx` — top-right summary status dots.
+- `desktop/webapp/frontend/src/analysis.tsx` — compact run/file states.
+- `desktop/webapp/frontend/src/results.tsx` — compact analysis states.
+- `desktop/webapp/frontend/src/features.tsx` — compact report state.
+- `desktop/webapp/frontend/src/style.css` — indicator colors and placement.
+- `desktop/webapp/frontend/tests/run.mjs` — state, accessibility, layout and contrast checks.
+- `desktop/webapp/frontend/tests/fixture.mjs` — status fixtures.
 
 **Inputs / dependencies**
-- Tasks 1 and 2; existing controlled Go argv, copied workspace, process cancellation and source write primitives.
+- Task 1; existing wire status semantics.
 
 **Implementation rules**
-- Parse and format Go candidates; display Markdown changes as text. Tests/vet run only with project execution trust, in a copied workspace, using fixed argv. Requested failed checks block Apply.
-- Repair is explicit, limited to three attempts and tied to the current failed revision. Review records the exact proposal hash; Apply requires current review, checks and explicit confirmation.
-- Revalidate every captured target and policy before writing. Journal original content before the first grouped write; recover failed or interrupted writes without overwriting unrelated edits. Never describe partial source mutation as no mutation.
-- Undo checks every post-Apply hash and restores/deletes only the files changed by the proposal. Persist recovery across restart and preserve permissions.
+- Completed and completed_empty are both green. Successful reports are green, incomplete/pending/stale/unavailable states yellow, failures red. Remove visible completion pills from affected surfaces.
+- Status remains available as accessible text and a tooltip. Keep error details and unknown counts distinct from zero.
 
 **Verification command**
-`go test ./internal/app -run 'TestChange'`
+`make web-test && git diff --check`
 
-## Task 4 — [x] Generate and save goal-aware feature suggestions
+## Task 3 — [ ] Remove redundant suggestion badges
 
 **Target files**
-- `internal/app/feature_suggestions.go` — separate source-free advisory suggestions, project goals, status and freshness.
-- `internal/app/feature_suggestions_test.go` — structured output, selected context, dismissal/save, stale input and failures.
-- `internal/app/change_context.go` — reuse policy-filtered context and instruction rules.
+- `desktop/webapp/frontend/src/ui.tsx` — suppress suggested/ai_suggestion badges for all shared callers.
+- `desktop/webapp/frontend/src/features.tsx` — remove redundant AI pill.
+- `desktop/webapp/frontend/src/overview.tsx` — remove summary suggestion pill.
+- `desktop/webapp/frontend/src/results.tsx` — retain meaningful confidence/provenance.
+- `desktop/webapp/frontend/tests/run.mjs` — badge removal with content and verified provenance retained.
 
 **Inputs / dependencies**
-- Tasks 1 and 2; configured Analyze scope and deterministic project facts.
+- Task 2.
 
 **Implementation rules**
-- Each idea has benefit, local evidence, affected paths, estimated effort, acceptance criteria and a stable identity. Do not count ideas as Bugs/Performance/Security findings or verified evidence.
-- Generate only after explicit user intent and required provider consent. Save project goals, ideas and saved/dismissed status locally; history reads are passive.
-- Validate all suggested paths against the eligible inventory. Preserve generation failure and stale states; reject invalid structured output and retain previous readable results.
+- Remove redundant labels, not suggestion content or actions. Preserve distinctions between advisory ideas, verified findings and performance hypotheses through existing headings/source metadata.
 
 **Verification command**
-`go test ./internal/app -run 'TestFeature'`
+`make web-test && git diff --check`
 
-## Task 5 — [x] Expose guarded workflow and instruction APIs
+## Task 4 — [ ] Make feature empty and failure messages concise
 
 **Target files**
-- `internal/api/handlers/change_handler.go` — thin shared-change, history and instruction-preview handlers.
-- `internal/api/handlers/change_handler_test.go` — successful and rejected HTTP requests.
-- `internal/api/handlers/feature_handler.go` — suggestion generation, goals and triage handlers.
-- `internal/api/handlers/feature_handler_test.go` — suggestion request contracts.
-- `cmd/daemon/main.go` — route registrations.
-- `desktop/webapp/internal/bridge/client.go` — native allowlist additions.
-- `desktop/webapp/internal/bridge/client_test.go` — allowlist and rejection coverage.
-- `docs/api-contract.md` — new contracts, local history and consent/recovery semantics.
-- `docs/openapi.yaml` — corresponding paths and request/response schemas.
+- `desktop/webapp/frontend/src/features.tsx` — concise unavailable/not-generated/empty/filtered/failed copy and recovery.
+- `desktop/webapp/frontend/tests/run.mjs` — saved versus requested failure and empty/filter cases.
+- `desktop/webapp/frontend/tests/fixture.mjs` — failure fixtures.
+- `internal/app/feature_suggestions.go` — concise persisted failure message.
+- `internal/app/feature_suggestions_test.go` — retain previous ideas on failure.
 
 **Inputs / dependencies**
-- Tasks 1–4; existing strict HTTP decoding and loopback/browser policy.
+- Task 3; saved failures raise an alert only after requested generation in this project session.
 
 **Implementation rules**
-- New endpoints use typed requests, bounded decoding and existing structured error responses. Keep all existing declaration contracts compatible.
-- Preview/list reads perform no provider dispatch, code execution or source writes. Instruction preview exposes resolved files, effective text and preset choices.
-- Mutation requests carry project/session/revision/hash guards. Provider generation and trusted execution keep independent consent.
+- Empty successful discovery is an empty result. Preserve unavailable/failed/not-generated distinctions and useful diagnostics in optional details. Keep previous ideas and retry actions accessible.
 
 **Verification command**
-`go test ./internal/api/handlers ./cmd/daemon && (cd desktop/webapp && go test ./internal/bridge)`
+`go test ./internal/app -run 'TestFeature' && make web-test && git diff --check`
 
-## Task 6 — [x] Deliver chat, automatic fix preparation and local history
+## Task 5 — [ ] Run feature discovery independently with more time
 
 **Target files**
-- `desktop/webapp/frontend/src/change-workspace.tsx` — primary chat, selected file scope, proposal diff, checks, review/apply/undo and history.
-- `desktop/webapp/frontend/src/workspace.ts` — shared-change state, guarded asynchronous actions and bounded automatic preparation.
-- `desktop/webapp/frontend/src/models.ts` — typed new contracts.
-- `desktop/webapp/frontend/src/main.tsx` — primary Chat workspace routing.
-- `desktop/webapp/frontend/src/results.tsx` — finding-to-chat handoff and Prepare fix action.
-- `desktop/webapp/frontend/src/editor.tsx` — simplify declaration controls and reachability from source inspection.
-- `desktop/webapp/frontend/src/style.css` — responsive chat/diff layouts.
-- `desktop/webapp/frontend/tests/fixture.mjs` — deterministic new API fixture behavior.
-- `desktop/webapp/frontend/tests/run.mjs` — chat revisions, approval invalidation, history, fixes and compact/large-text checks.
+- `internal/app/analysis_run.go` — owned concurrent file/feature workers with separate deadlines and coordinated settlement.
+- `internal/app/analysis_run_features.go` — feature publication/cancellation with cumulative attempt guards.
+- `internal/app/analysis_run_progress.go` — aggregate worker states if required.
+- `internal/app/analysis_run_features_test.go` — deterministic concurrency, file-budget expiry, pause/cancel, retries and stale-result cases.
+- `internal/app/analysis_run_test.go` — lifecycle fixtures if required.
+- `internal/app/feature_suggestions.go` — longer bounded feature deadline and grounded discovery prompt.
+- `internal/app/feature_suggestions_test.go` — deadline/prompt behavior and valid empty results.
+- `desktop/webapp/frontend/src/analysis.tsx` — simultaneous file and feature progress.
+- `desktop/webapp/frontend/tests/run.mjs` — independent progress and available saved findings.
+- `desktop/webapp/frontend/tests/fixture.mjs` — concurrent progress fixtures.
+- `desktop/webapp/README.md` — independent discovery behavior.
+- `docs/api-contract.md` — lifecycle/deadline contract.
+- `docs/openapi.yaml` — align descriptions.
 
 **Inputs / dependencies**
-- Task 5; existing immutable workspace ownership and UI/accessibility guidelines.
+- Task 4; both workers remain owned by one admitted run.
 
 **Implementation rules**
-- Chat is the main implementation surface. Source inspection and existing declaration draft editing remain reachable through secondary controls; read-only source/diffs never become unrestricted editors.
-- Generate, validate and prepare checks from explicitly selected fixes; stop at diff review. Seek execution trust before code checks and fresh provider consent for repair. Preserve failure, cancellation and unavailable evidence.
-- History restore is passive; stale proposals remain readable but cannot be applied. Guard late responses across navigation and project/session/revision changes.
-- A proposal can include up to eight selected Go/Markdown paths, including user-named new files. Show scope before provider dispatch and all file diffs before approval.
+- Feature discovery starts independently of file batches and receives at least ten minutes, honoring longer configured Analyze timeouts. File dispatch remains bounded by its own batch/time budget.
+- Pause/cancel/project changes and persistence faults stop both workers. Keep source/goal/selection identities, consent, exclusions, durable cumulative retries and late-publication guards.
+- Improve discovery instructions around current capabilities, goals and useful gaps without forcing fabricated suggestions or concealing provider failure.
 
 **Verification command**
-`make web-test`
+`go test -race ./internal/app && go test ./internal/api/handlers ./cmd/daemon && make web-test && git diff --check`
 
-## Task 7 — [x] Deliver Features and the AGENTS.md wizard
+## Task 6 — [ ] Select configured models before analysis
 
 **Target files**
-- `desktop/webapp/frontend/src/features.tsx` — goals, advisory suggestion cards, save/dismiss and chat handoff.
-- `desktop/webapp/frontend/src/instructions.tsx` — guided scope/preset/custom-text editor, existing content and diff preview.
-- `desktop/webapp/frontend/src/workspace.ts` — instruction and suggestion lifecycles.
-- `desktop/webapp/frontend/src/models.ts` — typed instruction/suggestion contracts.
-- `desktop/webapp/frontend/src/main.tsx` — Features and Instructions navigation.
-- `desktop/webapp/frontend/src/analysis.tsx` — Features section entry.
-- `desktop/webapp/frontend/src/style.css` — responsive wizard/suggestion layout.
-- `desktop/webapp/frontend/tests/fixture.mjs` — instruction and feature fixture behavior.
-- `desktop/webapp/frontend/tests/run.mjs` — wizard, inherited rules, saved suggestions, empty/failed/stale states and layout checks.
+- `internal/app/analysis_models.go` — immutable configured-profile choices for code/review/features.
+- `internal/app/analysis_models_test.go` — actual dispatch, defaults, invalid profiles, cache isolation, consent, admission and resume.
+- `internal/app/analysis_run.go` — optional model choices on preview/start/plan and stage requests.
+- `internal/app/analysis_run_preview.go` — chosen-provider identity, cache, availability and admission.
+- `internal/app/analysis_run_retry.go` — chosen-model retry allowances/freshness.
+- `internal/app/analysis_run_features.go` — selected feature runtime.
+- `internal/app/analysis_run_store.go` — optional choice validation and schema-1 compatibility.
+- `internal/app/analysis_run_results.go` — chosen-model evidence reads.
+- `internal/app/analysis_file.go` — selected runtime dispatch/snapshots without global mutation.
+- `internal/app/file_analysis.go` — explicit semantic runtime and cache identity.
+- `internal/app/performance_review.go` — selected runtime snapshot validation.
+- `internal/app/security_review.go` — selected runtime validation and actual-provider consent.
+- `internal/app/analysis_selection_status.go` — model-aware status helpers if required.
+- `internal/app/analysis_compatibility.go` — retain fixed-scope compatibility defaults.
+- `internal/app/analysis_run_test.go` — admission fixture helpers.
+- `internal/app/analysis_run_features_test.go` — feature provider/prompt fixtures if required.
+- `internal/app/feature_suggestions.go` — selected-provider confirmation.
+- `internal/api/handlers/analysis_handler_test.go` — model preview/start and rejection contract.
+- `desktop/src/main/kotlin/io/miniorca/desktop/Models.kt` — compatible optional model fields.
+- `desktop/webapp/frontend/src/models.ts` — typed model choices.
+- `desktop/webapp/frontend/src/workspace.ts` — pass selections and confirm start intent explicitly.
+- `desktop/webapp/frontend/src/analysis.tsx` — configured-model selects and checkbox removal.
+- `desktop/webapp/frontend/tests/run.mjs` — choices, refreshed previews, consent, no-dispatch and resume.
+- `desktop/webapp/frontend/tests/fixture.mjs` — selected models and preview fixtures.
+- `desktop/webapp/README.md` — selection and confirmation behavior.
+- `docs/api-contract.md` — optional inputs, defaults and identity behavior.
+- `docs/openapi.yaml` — optional model schemas.
 
 **Inputs / dependencies**
-- Tasks 5 and 6.
+- Task 5. Use configured models unless the user requests provider discovery before this step begins.
 
 **Implementation rules**
-- Presets and custom text remain user-editable; existing AGENTS.md content is preserved until explicitly edited. Register existing files by reading them rather than duplicating instruction storage.
-- Wizard save produces a manual shared proposal and diff; it never bypasses Review/Apply. Show effective inherited instructions and their origins.
-- Feature suggestions are labeled advisory, use project goals and offer Discuss, Save and Dismiss. Discuss prepopulates scope and acceptance criteria without starting generation.
+- Offer configured models for code, review and feature discovery. Defaults use Bug for code and Analyze for review/features. Choices affect dispatch, provenance, caches, accounting and preview identity, apply only to this run and survive resume.
+- Reject invalid or changed choices before dispatch. Preserve old clients/runs omitting selections; client input never supplies credentials or endpoints.
+- Replace preview consent checkboxes with explicit start confirmation naming remote destinations and Security review. Model selection and preview remain free of provider requests.
 
 **Verification command**
-`make web-test`
+`go test -race ./internal/app ./internal/api/handlers && make web-test && ./scripts/desktop-gradle.sh test spotlessCheck detekt && git diff --check`
 
-## Task 8 — [x] Verify applied changes and complete documentation/validation
+## Task 7 — [ ] Review and validate all improvements
 
 **Target files**
-- `internal/app/change_verify.go` — explicitly requested focused checks after Apply, with persisted verified/failed/unavailable states.
-- `internal/app/change_verify_test.go` — fresh post-Apply identity, trust, cancellation and failed verification.
-- `internal/app/change_types.go` — verification evidence in mutation receipts.
-- `internal/app/change_apply.go` — serialize proposal approval with grouped writes; bound recovery metadata and retain warnings.
-- `internal/app/change_apply_test.go` — concurrent approval invalidation and oversized recovery metadata.
-- `internal/app/change_checks.go` — focused check-admission helpers within existing complexity limits.
-- `internal/app/change_session.go` — focused capture/admission helpers within existing complexity limits.
-- `internal/app/change_context.go` — focused structured edit-validation helpers within existing complexity limits.
-- `internal/app/change_store.go` — count conversations independently of verification and feature metadata.
-- `internal/app/change_session_test.go` — bounded history and corrupted persisted identities.
-- `internal/app/feature_suggestions.go` — focused generation/validation helpers within existing complexity limits.
-- `internal/project/write_path.go` — separate canonical path validation rules within existing complexity limits.
-- `internal/api/handlers/change_handler.go` — verification endpoint.
-- `internal/api/handlers/change_handler_test.go` — verification request guards.
-- `cmd/daemon/main.go` — verification route.
-- `desktop/webapp/internal/bridge/client.go` — verification allowlist.
-- `desktop/webapp/internal/bridge/client_test.go` — verification allowlist contract.
-- `desktop/webapp/frontend/src/workspace.ts` — post-Apply verification action and evidence.
-- `desktop/webapp/frontend/src/change-workspace.tsx` — distinguish Applied from Verified; expose focused reanalysis.
-- `desktop/webapp/frontend/src/models.ts` — verification contract.
-- `desktop/webapp/frontend/tests/fixture.mjs` — verification fixture.
-- `desktop/webapp/frontend/tests/run.mjs` — verification/reanalysis behavior.
-- `README.md` — current product workflow and limits.
-- `AGENTS.md` — align product-boundary guidance with shared proposals and the retained declaration workflow.
-- `desktop/webapp/README.md` — chat, features, instructions, history and recovery use.
-- `docs/api-contract.md` — verification and final compatibility/limits.
-- `docs/openapi.yaml` — verification path/schema.
+- `docs/tasks.md` — verified final completion state.
 
 **Inputs / dependencies**
-- Tasks 1–7.
+- Tasks 1–6.
 
 **Implementation rules**
-- Applied is not Verified. Verification uses fresh source hashes and separately authorized project checks; optional source reanalysis requires its own provider consent and cannot certify a model hypothesis as resolved.
-- Persist bounded verification evidence for the latest grouped mutation and expose it through passive recovery reads. Serialize Apply with approval changes, retain partial-write warnings, and keep history limits independent of other workflow metadata.
-- Meet existing complexity limits by extracting cohesive helpers in the new workflow only; preserve external contracts and quality thresholds.
-- Keep legacy benchmark comparison accessible and label unmeasured optimization claims. Do not automatically mark original findings fixed solely because a write succeeded.
-- Document implemented behavior and supported languages honestly. Run all applicable gates and report unavailable gates with exact reasons; do not change thresholds or unrelated tooling to pass.
-- Review the full diff and commit each completed implementation task separately as explicitly requested.
+- Review the full diff for scope, accessibility, failure visibility, identities, cancellation, accounting and compatibility. Run full gates/native packaging and accurately report unrelated or blocked checks. Commit completion and leave a clean working tree.
 
 **Verification command**
-`./scripts/validate.sh && make web-build && git diff --check`
+`go fmt ./... && ./scripts/validate.sh && make web-build && git diff --check`
