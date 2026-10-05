@@ -96,7 +96,28 @@ func analysisBlockingFeatureServer(t *testing.T) (*httptest.Server, *atomic.Int3
 	return server, calls, started, unblock
 }
 
-func TestAnalysisRunPublishesBatchResultsBeforeFeatureRequest(t *testing.T) {
+func waitForAnalysisFileCount(t *testing.T, s *Service, count int) *AnalysisRun {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		run, err := s.CurrentAnalysisRun(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if run.WindowFilesCompleted == count {
+			return run
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("file results did not reach %d: %+v", count, run)
+		case <-ticker.C:
+		}
+	}
+}
+
+func TestAnalysisRunPublishesBatchResultsWhileFeatureRequestRuns(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		batch  int
@@ -121,12 +142,9 @@ func TestAnalysisRunPublishesBatchResultsBeforeFeatureRequest(t *testing.T) {
 			if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
 				t.Fatal(err)
 			}
-			waitForTestSignal(t, started, "feature request after file results")
-			run, err := s.CurrentAnalysisRun(context.Background())
-			if err != nil {
-				t.Fatal(err)
-			}
+			waitForTestSignal(t, started, "independent feature request")
 			completed := min(test.batch, len(preview.Files))
+			run := waitForAnalysisFileCount(t, s, completed)
 			if run.Status != AnalysisRunRunning || run.Features.Status != AnalysisStageRunning || run.WindowFilesCompleted != completed {
 				t.Fatalf("file results delayed by feature request: files=%d status=%s features=%+v", run.WindowFilesCompleted, run.Status, run.Features)
 			}
@@ -342,6 +360,7 @@ func TestAnalysisRunFeaturesCancelAndSourceChangesRejectLatePublication(t *testi
 				t.Fatal(err)
 			}
 			waitForTestSignal(t, started, "feature request")
+			waitForAnalysisFileCount(t, s, len(preview.Files))
 			want := AnalysisRunCanceled
 			if change == "cancel" {
 				if _, err := s.ControlAnalysisRun(context.Background(), AnalysisRunControlRequest{Identity: run.Identity, Action: AnalysisRunCancel}); err != nil {
@@ -366,6 +385,73 @@ func TestAnalysisRunFeaturesCancelAndSourceChangesRejectLatePublication(t *testi
 				t.Fatalf("late ideas saved=%+v %v", report, err)
 			}
 		})
+	}
+}
+
+func TestAnalysisRunFeatureDiscoveryOutlivesFileBudget(t *testing.T) {
+	featureStarted, fileCanceled := make(chan struct{}, 1), make(chan struct{}, 1)
+	releaseFeature := make(chan struct{})
+	var once sync.Once
+	release := func() { once.Do(func() { close(releaseFeature) }) }
+	defer release()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request llm.ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Error(err)
+			return
+		}
+		if request.ResponseFormat.JSONSchema.Name != "feature_suggestions" {
+			<-r.Context().Done()
+			fileCanceled <- struct{}{}
+			return
+		}
+		featureStarted <- struct{}{}
+		<-releaseFeature
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validFeatureResponse}}}})
+	}))
+	t.Cleanup(server.Close)
+	s, root := newSemanticAnalysisService(t, server.URL, 0)
+	preview := featureAnalysisPreviewFor(t, s, AnalysisRunLimits{100, 1, 2}, nil)
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	waitForTestSignal(t, featureStarted, "feature discovery during file work")
+	waitForTestSignal(t, fileCanceled, "file budget expiry")
+	run, err := s.CurrentAnalysisRun(context.Background())
+	if err != nil || run.Status != AnalysisRunRunning || run.Features.Status != AnalysisStageRunning {
+		t.Fatalf("file deadline interrupted features: %+v, %v", run, err)
+	}
+	release()
+	run = completedAnalysisRun(t, s)
+	if run.Status != AnalysisRunPaused || run.Features.Status != AnalysisStageCompleted || run.Files[0].Stages[0].Status != AnalysisStageInterrupted {
+		t.Fatalf("independent workers settled incorrectly: %+v", run)
+	}
+	if restored, err := loadAnalysisRun(root); err != nil || restored.Features.ReportHash != run.Features.ReportHash {
+		t.Fatalf("independent progress was not durable: %+v, %v", restored, err)
+	}
+}
+
+func TestAnalysisRunPauseStopsFeatureDiscoveryWithoutWaitingForResponse(t *testing.T) {
+	server, _, started, release := analysisBlockingFeatureServer(t)
+	defer release()
+	s, _ := newSemanticAnalysisService(t, server.URL, 0)
+	preview := featureAnalysisPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+	run, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview))
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForTestSignal(t, started, "feature request")
+	waitForAnalysisFileCount(t, s, len(preview.Files))
+	if _, err := s.ControlAnalysisRun(context.Background(), AnalysisRunControlRequest{Identity: run.Identity, Action: AnalysisRunPause}); err != nil {
+		t.Fatal(err)
+	}
+	settled := completedAnalysisRun(t, s)
+	if settled.Status != AnalysisRunPaused || settled.Features.Status != AnalysisStageInterrupted || settled.Features.SuggestionCount != nil {
+		t.Fatalf("paused feature request retained authority: %+v", settled)
+	}
+	release()
+	if report, err := s.Features(context.Background()); err != nil || report.Status != "not_generated" {
+		t.Fatalf("paused request published late features: %+v, %v", report, err)
 	}
 }
 

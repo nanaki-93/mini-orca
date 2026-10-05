@@ -2029,7 +2029,7 @@ components:
     AnalysisFeaturePlan:
       type: object
       required: [expected_hash, goals_hash, workspace_hash, excluded_paths, provider_id, max_model_requests]
-      description: One project-wide step; goals and report prose remain in the feature store. Its requests count toward the preview budget and need Analyze consent.
+      description: One independent project-wide step alongside file analysis; goals and report prose remain in the feature store. Discovery has at least ten minutes, honoring longer configured Analyze timeouts. Its requests count toward preview totals and need Analyze consent; file batch deadlines do not consume its deadline.
       properties:
         expected_hash: {type: string, description: Captured feature-store hash used for compare-and-swap publication.}
         goals_hash: {type: string}

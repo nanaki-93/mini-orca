@@ -36,7 +36,7 @@ func (s *Service) analysisProviders(includeFeatures bool) ([]AnalysisProviderReq
 	} {
 		if includeFeatures && entry.runtime.effective.Scope == "analyze" {
 			entry.stages = append(entry.stages, AnalysisStageFeatures)
-			entry.prompts = append(entry.prompts, "feature-suggestions-v1")
+			entry.prompts = append(entry.prompts, featureSuggestionsPromptVersion)
 		}
 		id, err := analysisFingerprint(struct {
 			Model      EffectiveModel

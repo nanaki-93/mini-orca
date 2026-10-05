@@ -416,10 +416,10 @@ export function AnalysisRun({ s }: { s: State }) {
       ? 'Canceling analysis…'
       : run.status === 'pausing'
         ? 'Finishing the current step before pausing…'
-        : run.features?.status === 'running'
-          ? 'Generating feature suggestions…'
-          : runningStage
-            ? `${stageNames[runningStage.stage]} · ${runningFile!.path}`
+        : runningStage
+          ? `${stageNames[runningStage.stage]} · ${runningFile!.path}`
+          : run.features?.status === 'running'
+            ? 'Generating feature suggestions…'
             : 'Preparing analysis…';
   return (
     <>
@@ -460,6 +460,9 @@ export function AnalysisRun({ s }: { s: State }) {
               <span className="spinner" aria-hidden="true" />
               {currentStep}
             </p>
+            {runningStage && run.features?.status === 'running' && run.status === 'running' && (
+              <p className="small muted">Generating feature suggestions…</p>
+            )}
           </div>
         )}
         <progress value={done} max={Math.max(total, 1)} aria-label="Analysis progress" />

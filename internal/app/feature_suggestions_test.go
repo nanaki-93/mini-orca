@@ -7,9 +7,34 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const validFeatureResponse = `{"suggestions":[{"title":"Add cancellation-aware work","benefit":"Let callers stop work early.","evidence":"The project exposes a Run entry point.","paths":["main.go"],"effort":"small","acceptance_criteria":["Canceled work returns promptly."]}]}`
+
+func TestFeatureGenerationGetsIndependentExtendedDeadline(t *testing.T) {
+	server := changeProvider(t, func() string { return validFeatureResponse })
+	s, _ := newSemanticAnalysisService(t, server.URL, 0)
+	for _, timeout := range []time.Duration{time.Millisecond, 20 * time.Minute} {
+		runtime := s.runtimes.analyze
+		runtime.effective.Timeout = timeout.String()
+		var remaining time.Duration
+		report, err := s.generateFeatures(context.Background(), featureRequestFor(t, s, "Improve cancellation."), runtime, nil, featureGenerationAuthority{
+			BeforeAttempt: func(ctx context.Context) error {
+				deadline, ok := ctx.Deadline()
+				if !ok {
+					t.Fatal("feature request has no bounded deadline")
+				}
+				remaining = time.Until(deadline)
+				return nil
+			},
+			Publish: func(write func() error) error { return write() },
+		})
+		if err != nil || len(report.Suggestions) != 1 || remaining < max(10*time.Minute, timeout)-time.Second {
+			t.Fatalf("feature request deadline=%s report=%+v err=%v", remaining, report, err)
+		}
+	}
+}
 
 func featureRequestFor(t *testing.T, service *Service, goals string) FeatureRequest {
 	t.Helper()

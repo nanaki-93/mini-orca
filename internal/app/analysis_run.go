@@ -415,12 +415,15 @@ type analysisRunController struct {
 	fault                    error
 	done                     chan struct{}
 	cancel                   context.CancelFunc
+	featureCancel            context.CancelFunc
 	admission                *AnalysisRunPreview
 	confirmations            AnalysisRunConfirmations
 	windowStart              time.Time
 	elapsedBase              int64
 	compatibilityElapsedBase time.Duration
 	windowBudget             time.Duration
+	fileStopReason           string
+	featureStopReason        string
 }
 
 func (s *Service) StartAnalysisRun(ctx context.Context, request AnalysisRunStartRequest) (*AnalysisRun, error) {
@@ -575,6 +578,9 @@ func (s *Service) pauseAnalysisRunLocked() (*AnalysisRun, error) {
 	if c.done != nil && c.fault == nil {
 		c.run.Status = AnalysisRunPausing
 	}
+	if c.featureCancel != nil {
+		c.featureCancel()
+	}
 	c.run.Reason = "Analysis paused by the user."
 	if err := s.saveAnalysisRunLocked(true); err != nil {
 		return cloneAnalysisRun(c.run), err
@@ -625,7 +631,7 @@ func (s *Service) launchAnalysisRunLocked(preview *AnalysisRunPreview, confirmat
 	if c.run.Plan.CompatibilityBudget > 0 {
 		c.windowBudget = min(c.windowBudget, c.run.Plan.CompatibilityBudget-c.run.CompatibilityElapsed)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), c.windowBudget)
+	ctx, cancel := context.WithCancel(context.Background())
 	c.cancel = cancel
 	c.done = make(chan struct{})
 	c.admission = preview
@@ -633,35 +639,74 @@ func (s *Service) launchAnalysisRunLocked(preview *AnalysisRunPreview, confirmat
 	c.windowStart = time.Now()
 	c.elapsedBase = c.run.ElapsedSeconds
 	c.compatibilityElapsedBase = c.run.CompatibilityElapsed
+	c.fileStopReason, c.featureStopReason = "", ""
 	go s.runAnalysisWindow(ctx, c.run.Identity, c.done)
 }
 
 func (s *Service) runAnalysisWindow(ctx context.Context, identity AnalysisRunIdentity, done chan struct{}) {
 	c := s.analysisRun
 	defer s.closeAnalysisWindow(done)
+	c.mu.Lock()
+	if c.run == nil || c.run.Identity != identity || c.fault != nil {
+		c.mu.Unlock()
+		return
+	}
+	if c.run.Status != AnalysisRunQueued {
+		s.finishAnalysisWindowLocked(ctx)
+		c.mu.Unlock()
+		return
+	}
+	c.run.Status = AnalysisRunRunning
+	featureDone := make(chan struct{})
+	if c.run.Features != nil && analysisStageNeedsWork(c.run.Features.Status) {
+		featureContext, cancelFeature := context.WithCancel(ctx)
+		c.featureCancel = cancelFeature
+		go s.runAnalysisFeatureWindow(featureContext, identity, featureDone)
+	} else {
+		close(featureDone)
+	}
+	budget := c.windowBudget
+	c.mu.Unlock()
+	fileContext, cancelFiles := context.WithTimeout(ctx, budget)
+	s.runAnalysisFiles(fileContext, identity)
+	cancelFiles()
+	<-featureDone
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.run == nil || c.run.Identity != identity || c.fault != nil {
+		return
+	}
+	if c.run.Status != AnalysisRunRunning {
+		s.finishAnalysisWindowLocked(ctx)
+		return
+	}
+	if c.fileStopReason != "" || c.featureStopReason != "" {
+		c.run.Status, c.run.Reason = AnalysisRunPaused, c.fileStopReason
+		if c.run.Reason == "" {
+			c.run.Reason = c.featureStopReason
+		}
+		_ = s.saveAnalysisRunLocked(false)
+		return
+	}
+	s.finishCompletedAnalysisRunLocked(ctx)
+}
 
+func (s *Service) runAnalysisFiles(ctx context.Context, identity AnalysisRunIdentity) {
+	c := s.analysisRun
 	for {
 		c.mu.Lock()
 		if c.run == nil || c.run.Identity != identity || c.fault != nil {
 			c.mu.Unlock()
 			return
 		}
-		if c.run.Status == AnalysisRunQueued {
-			c.run.Status = AnalysisRunRunning
-		}
-		if s.finishAnalysisWindowLocked(ctx) {
+		if c.run.Status != AnalysisRunRunning || ctx.Err() != nil {
+			if c.run.Status == AnalysisRunRunning {
+				c.fileStopReason = "The file dispatch allowance ended; preview and resume the remaining work."
+				c.run.Reason = "File analysis reached its time budget. Feature discovery continues independently."
+				_ = s.saveAnalysisRunLocked(false)
+			}
 			c.mu.Unlock()
 			return
-		}
-		// Publish this batch's file results before waiting on project-wide ideas.
-		_, _, filesPending := nextAnalysisStage(c.run)
-		if c.run.Features != nil && analysisStageNeedsWork(c.run.Features.Status) && (!filesPending || c.run.WindowFilesCompleted >= c.run.Plan.Limits.BatchFiles) {
-			keepRunning := s.runAnalysisFeaturesLocked(ctx, identity)
-			c.mu.Unlock()
-			if !keepRunning {
-				return
-			}
-			continue
 		}
 		keepRunning := s.runAnalysisFileStageLocked(ctx, identity)
 		c.mu.Unlock()
@@ -675,12 +720,11 @@ func (s *Service) runAnalysisFileStageLocked(ctx context.Context, identity Analy
 	c := s.analysisRun
 	fileIndex, stageIndex, found := nextAnalysisStage(c.run)
 	if !found {
-		s.finishCompletedAnalysisRunLocked(ctx)
 		return false
 	}
 	if c.run.WindowFilesCompleted >= c.run.Plan.Limits.BatchFiles {
-		c.run.Status = AnalysisRunPaused
-		c.run.Reason = "The batch limit was reached; resume to continue pending files."
+		c.fileStopReason = "The batch limit was reached; resume to continue pending files."
+		c.run.Reason = c.fileStopReason
 		_ = s.saveAnalysisRunLocked(false)
 		return false
 	}
@@ -786,7 +830,10 @@ func (s *Service) updateAnalysisElapsedLocked() {
 	if c.run == nil || c.windowStart.IsZero() {
 		return
 	}
-	active := min(time.Since(c.windowStart), c.windowBudget)
+	active := time.Since(c.windowStart)
+	if c.run.Plan.Features == nil {
+		active = min(active, c.windowBudget)
+	}
 	if c.run.Plan.CompatibilityBudget > 0 {
 		c.run.CompatibilityElapsed = min(c.run.Plan.CompatibilityBudget, c.compatibilityElapsedBase+active)
 	}
@@ -870,6 +917,7 @@ func (s *Service) closeAnalysisWindow(done chan struct{}) {
 			c.cancel()
 		}
 		c.cancel = nil
+		c.featureCancel = nil
 		c.done = nil
 		c.admission = nil
 		c.confirmations = AnalysisRunConfirmations{}
@@ -909,12 +957,17 @@ func (s *Service) interruptAnalysisStageLocked(ctx context.Context, fileIndex, s
 	current.Reason = "Analysis stage could not complete."
 	if errors.Is(err, project.ErrRevisionConflict) {
 		s.staleAnalysisRunLocked()
-	} else if ctx.Err() != nil || errors.Is(err, errAnalysisAttemptBudget) {
-		c.run.Status = AnalysisRunPaused
-		c.run.Reason = "The dispatch allowance ended; preview and resume the remaining work."
+	} else if c.run.Status == AnalysisRunPausing || ctx.Err() != nil || errors.Is(err, errAnalysisAttemptBudget) {
+		c.fileStopReason = "The file dispatch allowance ended; preview and resume the remaining work."
+		if c.run.Status == AnalysisRunRunning {
+			c.run.Reason = "File analysis reached its allowance. Feature discovery continues independently."
+		}
 	} else {
 		c.run.Status = AnalysisRunInterrupted
 		c.run.Reason = "Analysis stopped before the stage completed; review and resume."
+		if c.cancel != nil {
+			c.cancel()
+		}
 	}
 	_ = s.saveAnalysisRunLocked(false)
 }

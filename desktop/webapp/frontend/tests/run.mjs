@@ -710,9 +710,11 @@ try {
       window.fixture.state.run.features.status = 'running';
       window.fixture.state.run.features.attempts = 1;
       window.fixture.state.run.elapsed_seconds = 75;
+      window.fixture.state.run.files[0].stages[1].status = 'running';
     });
     const activity = page.getByRole('status', { name: 'Current analysis step' });
     await activity.getByText('Generating feature suggestions…', { exact: true }).waitFor();
+    await activity.getByText('Performance · internal/worker/process.go', { exact: true }).waitFor();
     await page.getByText('75s elapsed', { exact: true }).waitFor();
     await page.getByText('Advisory ideas · 1 of 2 attempts used', { exact: true }).waitFor();
     await layout(page, 'analysis-feature-progress');
