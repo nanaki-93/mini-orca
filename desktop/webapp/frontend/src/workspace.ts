@@ -86,6 +86,8 @@ export interface State {
   changeHistory?: M.ChangeHistoryEntry[];
   changeReceipt?: M.ChangeMutation | null;
   features?: M.FeatureReport;
+  // Saved history does not authorize generation notices in a new project session.
+  featureGenerationRequested: boolean;
   instructionPreview?: M.InstructionPreview;
 }
 const initial = (): State => ({
@@ -107,6 +109,7 @@ const initial = (): State => ({
   reviewed: '',
   uncertain: false,
   terminals: [],
+  featureGenerationRequested: false,
 });
 const projectKey = (p?: M.ProjectIdentity) => (p ? `${p.project_id}:${p.project_revision}` : '');
 const fileKey = (s: State) => `${projectKey(s.project)}:${s.file?.path}:${s.file?.content_hash}`;
@@ -541,7 +544,14 @@ export class Workspace {
             retry_stale_failed: p.retry_stale_failed || false,
             confirmations,
           });
-      this.set({ run, preview: undefined, resume: undefined, results: {}, page: 'analysis-run' });
+      this.set({
+        run,
+        preview: undefined,
+        resume: undefined,
+        results: {},
+        page: 'analysis-run',
+        featureGenerationRequested: this.state.featureGenerationRequested || !!p.features,
+      });
       await this.loadFeatures();
     });
   }
@@ -1222,6 +1232,7 @@ export class Workspace {
           ])
         : false;
       if (confirmed === null || epoch !== this.epoch || operation !== this.operation) return;
+      if (generate) this.set({ featureGenerationRequested: true });
       try {
         const features = await this.api.post<M.FeatureReport>(
           `${current}/features/${generate ? 'generate' : 'goals'}`,

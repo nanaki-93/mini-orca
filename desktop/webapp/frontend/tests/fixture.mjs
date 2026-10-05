@@ -363,12 +363,18 @@ export function installFixture(options = {}) {
                 ? 'Feature suggestions could not be generated.'
                 : '';
               state.features.freshness = options.featuresStale ? 'stale' : 'current';
-              state.features.suggestions = options.featuresEmpty ? [] : [{ ...idea }];
+              if (!options.featuresFail)
+                state.features.suggestions = options.featuresEmpty ? [] : [{ ...idea }];
             } else {
               state.features.suggestions.find((idea) => idea.id === path.split('/').at(-1)).status =
                 body.status;
             }
             state.features.hash += '-next';
+            if (path.endsWith('/generate') && options.featuresFail)
+              return {
+                status: 500,
+                body: JSON.stringify({ user_message: 'Feature generation request failed.' }),
+              };
             return response(state.features);
           }
           if (path === '/api/projects/current/instructions') {
@@ -662,17 +668,24 @@ export function installFixture(options = {}) {
               };
               if (body.include_features) {
                 state.run.features = {
-                  status: options.analysisCompletes ? 'completed' : 'pending',
+                  status: options.analysisCompletes
+                    ? options.featuresFail
+                      ? 'failed'
+                      : 'completed'
+                    : 'pending',
                   attempts: options.analysisCompletes ? 1 : 0,
-                  suggestion_count: options.analysisCompletes ? 1 : null,
+                  suggestion_count: options.analysisCompletes && !options.featuresFail ? 1 : null,
                 };
                 if (options.analysisCompletes)
                   state.features = {
                     ...state.features,
                     hash: 'features-analysis',
-                    status: 'ready',
-                    freshness: 'current',
-                    suggestions: [{ ...idea }],
+                    status: options.featuresFail ? 'failed' : 'ready',
+                    failure: options.featuresFail
+                      ? 'Feature suggestions could not be generated.'
+                      : '',
+                    freshness: options.featuresFail ? state.features.freshness : 'current',
+                    suggestions: options.featuresFail ? state.features.suggestions : [{ ...idea }],
                   };
               }
             }
