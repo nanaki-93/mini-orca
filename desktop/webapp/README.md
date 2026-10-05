@@ -80,9 +80,10 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
 - **Summary** links Bugs, Performance, Security and active Features counts to
   their workspaces. Feature details, estimated effort and triage stay in Features;
   unavailable or ungenerated counts remain unknown, and status indicators retain
-  stale/failure states. **Architecture and Flow** groups saved architecture,
-  entry points and project-flow charts under one disclosure. **Explore** opens
-  the complete view. Plain Mermaid reports and
+  stale/failure states. Matching **Architecture and Flow** and **Project Analysis**
+  cards open saved diagrams and the current analysis run; without a run, the
+  analysis card opens setup. The diagrams page keeps architecture, entry points
+  and project-flow charts together. Plain Mermaid reports and
   Markdown-fenced charts render locally, with selectable source and a readable
   fallback for older prose or render failures.
 - **Context** shows included/excluded files, hashes and the provider destination.

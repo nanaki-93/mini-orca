@@ -75,7 +75,8 @@
 }
 [data-accent='security'],
 [data-accent='scan'],
-[data-accent='context'] {
+[data-accent='context'],
+[data-accent='diagrams'] {
   --section-color: var(--blue);
   --section-soft: var(--blue-soft);
 }
@@ -691,6 +692,16 @@ pre {
   margin: 10px 0;
   color: var(--section-color);
   font-variant-numeric: tabular-nums;
+}
+.metric-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 3rem;
+  margin: 10px 0;
+  color: var(--section-color);
+  font-weight: 600;
 }
 .metric-icon {
   display: grid;

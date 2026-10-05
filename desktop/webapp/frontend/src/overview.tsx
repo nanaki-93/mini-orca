@@ -136,7 +136,14 @@ export function Summary({ s }: { s: State }) {
   const coverage = overview?.analysis_coverage;
   const percent = coverage?.total ? Math.round((100 * coverage.fresh) / coverage.total) : null;
   const features = s.features;
-  const metrics = [
+  const metrics: {
+    page: Page;
+    title: string;
+    icon: string;
+    count?: number | null;
+    status?: string;
+    action?: string;
+  }[] = [
     ...(
       [
         ['bugs', 'Bugs', 'bug'],
@@ -167,6 +174,20 @@ export function Summary({ s }: { s: State }) {
           : features?.freshness === 'stale'
             ? 'stale'
             : features?.status,
+    },
+    {
+      page: 'diagrams',
+      title: 'Architecture and Flow',
+      icon: 'branch',
+      status: overview?.analysis.status || s.project!.ai_status,
+      action: 'Explore',
+    },
+    {
+      page: s.run ? 'analysis-run' : 'analysis',
+      title: 'Project Analysis',
+      icon: 'activity',
+      status: s.run?.status || (s.run === null ? 'not_run' : 'unavailable'),
+      action: s.run ? 'View run' : 'Prepare analysis',
     },
   ];
   return (
@@ -220,7 +241,7 @@ export function Summary({ s }: { s: State }) {
           </div>
         </Panel>
         <div className="metric-grid">
-          {metrics.map(({ page, title, icon, count, status }) => (
+          {metrics.map(({ page, title, icon, count, status, action }) => (
             <button
               key={page}
               className="panel metric-card"
@@ -236,7 +257,14 @@ export function Summary({ s }: { s: State }) {
                 </span>
                 <StatusDot value={status} label={title} />
               </div>
-              <div className="metric-number">{count ?? '—'}</div>
+              {action ? (
+                <div className="metric-action">
+                  <span>{action}</span>
+                  <Icon name="arrow" />
+                </div>
+              ) : (
+                <div className="metric-number">{count ?? '—'}</div>
+              )}
             </button>
           ))}
         </div>
@@ -281,47 +309,6 @@ export function Summary({ s }: { s: State }) {
         </div>
         <InsightCard insight={overview?.analysis.engineering_insight} />
       </div>
-      <Panel
-        title="Architecture and Flow"
-        className="section-gap"
-        actions={
-          <Go page="diagrams" tone="ghost small">
-            Explore
-          </Go>
-        }
-      >
-        <Disclosure title="Show architecture and flow">
-          <Prose text={overview?.analysis.architecture} diagramLabel="Architecture diagram" />
-          {!overview?.analysis.architecture && (
-            <p className="muted">No architecture overview saved.</p>
-          )}
-          {!!overview?.analysis.entry_points?.length && (
-            <BulletContent title="Entry points" items={overview.analysis.entry_points} />
-          )}
-          {overview?.analysis.flows?.length ? (
-            overview.analysis.flows.map((flow, i) => (
-              <div className="content-section" key={i}>
-                <h3>Flow {i + 1}</h3>
-                <Prose text={flow} diagramLabel={`Flow ${i + 1} diagram`} />
-              </div>
-            ))
-          ) : (
-            <p className="muted">No project flows saved.</p>
-          )}
-        </Disclosure>
-      </Panel>
-      {s.run && (
-        <Panel className="section-gap">
-          <div className="row between wrap">
-            <div className="row">
-              <Icon name="activity" />
-              <strong>Project analysis</strong>
-              <StatusDot value={s.run.status} label="Analysis" />
-            </div>
-            <Go page="analysis-run">View run</Go>
-          </div>
-        </Panel>
-      )}
     </>
   );
 }
@@ -385,6 +372,9 @@ export function Diagrams({ s }: { s: State }) {
           <Prose text={s.overview?.analysis.architecture} diagramLabel="Architecture diagram" />
           {!s.overview?.analysis.architecture && (
             <p className="muted">No architecture overview saved.</p>
+          )}
+          {!!s.overview?.analysis.entry_points?.length && (
+            <BulletContent title="Entry points" items={s.overview.analysis.entry_points} />
           )}
         </Panel>
         {(s.overview?.analysis.flows || []).map((flow, i) => (

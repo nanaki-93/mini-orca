@@ -48,8 +48,9 @@ async function startAnalysis(page, resume = false) {
   await page.getByRole('dialog').getByRole('button', { name: 'Start', exact: true }).click();
   await idle(page);
 }
-async function expandSummaryDiagrams(page) {
-  await page.getByText('Show architecture and flow', { exact: true }).click();
+async function openSummaryDiagrams(page) {
+  await page.locator('.metric-card[data-accent="diagrams"]').click();
+  await page.getByRole('heading', { name: 'Architecture and Flow', exact: true }).waitFor();
 }
 async function openSource(page) {
   await nav(page, 'Source');
@@ -141,6 +142,7 @@ async function contrast(page, name) {
       '.panel-head h2',
       '.metric-label',
       '.metric-number',
+      '.metric-action',
       '.coverage-ring strong',
       '.legend span',
       '.badge',
@@ -242,6 +244,14 @@ try {
       const dot = page.locator('[data-accent="bugs"] .status-dot');
       assert.equal(await dot.getAttribute('class'), `status-dot ${tone}`);
       assert.equal(await dot.getAttribute('aria-label'), `Bugs: ${status.replaceAll('_', ' ')}`);
+      const analysis = page.locator('.metric-card[data-accent="analysis-run"]');
+      const analysisDot = analysis.getByRole('img');
+      assert.equal(await analysisDot.getAttribute('class'), `status-dot ${tone}`);
+      assert.equal(
+        await analysisDot.getAttribute('aria-label'),
+        `Project Analysis: ${status.replaceAll('_', ' ')}`,
+      );
+      assert.equal(await analysis.locator('.metric-action').innerText(), 'View run');
       assert.equal(await page.locator('.metric-card .badge').count(), 0);
       if (status === 'completed_empty')
         assert.equal(await page.locator('[data-accent="bugs"] .metric-number').innerText(), '0');
@@ -256,51 +266,45 @@ try {
       await close();
     }
   });
-  await test('Saved architecture and flow charts render in Summary and the diagrams view', async () => {
+  await test('Summary diagram card opens all saved charts and entry points locally', async () => {
     const { page, close } = await pageFor();
+    await idle(page);
     const requests = await page.evaluate(() => window.fixture.requests.length);
     for (const name of ['Architecture diagram', 'Flow 1 diagram', 'Flow 2 diagram'])
       assert.equal(await page.getByRole('img', { name, exact: true }).count(), 0);
-    const section = page
-      .locator('section.panel')
-      .filter({ has: page.getByRole('heading', { name: 'Architecture and Flow', exact: true }) });
-    assert.equal(await section.count(), 1);
-    const bounds = await section.boundingBox();
-    const overview = await page.locator('.overview-row').boundingBox();
-    assert.equal(bounds.x, overview.x);
-    assert.equal(bounds.width, overview.width);
+    const card = page.locator('.metric-card[data-accent="diagrams"]');
+    assert.equal(await card.locator('.metric-label').innerText(), 'Architecture and Flow');
+    assert.equal(await card.locator('.metric-action').innerText(), 'Explore');
+    assert.equal(
+      await card.getByRole('img').getAttribute('aria-label'),
+      'Architecture and Flow: success',
+    );
+    assert.equal(await page.locator('.metric-card').count(), 6);
+    assert.equal(await page.getByText('Show architecture and flow', { exact: true }).count(), 0);
     assert.equal(await page.getByRole('heading', { name: 'Architecture', exact: true }).count(), 0);
     assert.equal(
       await page.getByRole('heading', { name: 'Project flows', exact: true }).count(),
       0,
     );
-    await page.getByText('Show architecture and flow', { exact: true }).focus();
+    await card.focus();
     await page.keyboard.press('Enter');
+    await page.getByRole('heading', { name: 'Architecture and Flow', exact: true }).waitFor();
     assert.equal(await page.evaluate(() => window.fixture.requests.length), requests);
     assert.equal(await page.locator('.diagram img').count(), 3);
     for (const name of ['Architecture diagram', 'Flow 1 diagram', 'Flow 2 diagram'])
       assert.equal(await page.getByRole('img', { name, exact: true }).count(), 1);
-    assert.equal(await section.getByRole('img').count(), 3);
-    await section.getByText('cmd/server/main.go', { exact: true }).waitFor();
+    await page.getByText('cmd/server/main.go', { exact: true }).waitFor();
     for (const [name, file] of [
       ['Architecture diagram', 'architecture'],
       ['Flow 1 diagram', 'flowchart'],
       ['Flow 2 diagram', 'sequence'],
     ])
       await page.getByRole('img', { name, exact: true }).screenshot({
-        path: `${output}/summary-${file}.png`,
+        path: `${output}/diagrams-${file}.png`,
       });
-    await page.getByRole('main').evaluate((element) => element.scrollTo(0, 0));
-    await layout(page, 'summary-unified-diagrams');
-    await page.getByText('Show architecture and flow', { exact: true }).click();
-    assert.equal(await section.getByRole('img').count(), 0);
-    assert.equal(await page.evaluate(() => window.fixture.requests.length), requests);
     const before = await page.evaluate(() =>
       window.fixture.requests.filter((request) => request.method !== 'GET'),
     );
-    await page.getByRole('button', { name: 'Explore', exact: true }).click();
-    await page.getByRole('heading', { name: 'Architecture and Flow', exact: true }).waitFor();
-    assert.equal(await page.locator('.diagram img').count(), 3);
     await page.waitForFunction(() =>
       [...document.querySelectorAll('.diagram img')].every(
         (image) => image.complete && image.naturalWidth > 0,
@@ -316,15 +320,16 @@ try {
     await layout(page, 'diagrams-900');
     await page.getByRole('button', { name: 'Back to summary', exact: true }).click();
     assert.equal(await page.getByRole('img', { name: 'Architecture diagram' }).count(), 0);
-    await layout(page, 'summary-charts-900');
-    await expandSummaryDiagrams(page);
+    await layout(page, 'summary-navigation-cards-900');
+    await contrast(page, 'Summary navigation cards large text');
+    await openSummaryDiagrams(page);
     for (const [name, file] of [
       ['Architecture diagram', 'architecture'],
       ['Flow 1 diagram', 'flowchart'],
       ['Flow 2 diagram', 'sequence'],
     ])
       await page.getByRole('img', { name, exact: true }).screenshot({
-        path: `${output}/summary-${file}-900.png`,
+        path: `${output}/diagrams-${file}-900.png`,
       });
     assert.deepEqual(
       await page.evaluate(() =>
@@ -335,18 +340,63 @@ try {
     assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
     await close();
   });
+  await test('Summary analysis card opens the saved run or setup without starting work', async () => {
+    for (const options of [{}, { empty: true }]) {
+      const { page, close } = await pageFor(options);
+      await idle(page);
+      const card = page.locator('.metric-card').filter({ hasText: 'Project Analysis' });
+      assert.equal(
+        await card.locator('.metric-action').innerText(),
+        options.empty ? 'Prepare analysis' : 'View run',
+      );
+      assert.equal(
+        await card.getByRole('img').getAttribute('aria-label'),
+        `Project Analysis: ${options.empty ? 'not run' : 'completed'}`,
+      );
+      const bounds = await page.locator('.metric-card').evaluateAll((cards) =>
+        cards.map((card) => {
+          const { width, height } = card.getBoundingClientRect();
+          return { width, height };
+        }),
+      );
+      assert.equal(bounds.length, 6);
+      for (const box of bounds) {
+        assert.ok(Math.abs(box.width - bounds[0].width) < 1);
+        assert.equal(box.height, bounds[0].height);
+      }
+      const calls = await page.evaluate(() =>
+        window.fixture.requests.filter((request) => request.method !== 'GET'),
+      );
+      await page.setViewportSize({ width: 800, height: 900 });
+      await page.getByRole('button', { name: 'Larger text' }).click();
+      await layout(page, `summary-cards-${options.empty ? 'no-run' : 'saved-run'}`);
+      await card.focus();
+      await contrast(page, 'Summary analysis card keyboard focus');
+      await page.keyboard.press('Enter');
+      await page
+        .getByRole('heading', {
+          name: options.empty ? 'Analysis' : 'Project analysis',
+          exact: true,
+        })
+        .waitFor();
+      assert.equal(await page.getByRole('dialog').count(), 0);
+      assert.deepEqual(
+        await page.evaluate(() =>
+          window.fixture.requests.filter((request) => request.method !== 'GET'),
+        ),
+        calls,
+      );
+      assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+      await close();
+    }
+  });
   await test('Fenced charts and saved prose remain readable', async () => {
     const { page, close } = await pageFor({
       architecture:
         'The API admits requests into a bounded queue.\n\n```mermaid\ngraph LR\n  API --> Queue\n```',
       flows: ['``` Mermaid \r\nsequenceDiagram\r\n  API->>Worker: Process\r\n```'],
     });
-    await expandSummaryDiagrams(page);
-    assert.equal(await page.locator('.diagram img').count(), 2);
-    await page
-      .getByText('The API admits requests into a bounded queue.', { exact: true })
-      .waitFor();
-    await page.getByRole('button', { name: 'Explore', exact: true }).click();
+    await openSummaryDiagrams(page);
     assert.equal(await page.locator('.diagram img').count(), 2);
     await page
       .getByText('The API admits requests into a bounded queue.', { exact: true })
@@ -357,25 +407,20 @@ try {
       architecture: 'The API admits requests to the worker service.',
       flows: ['Each request is validated before the worker processes it.'],
     });
-    await expandSummaryDiagrams(legacy.page);
-    for (const explore of [false, true]) {
-      if (explore) await legacy.page.getByRole('button', { name: 'Explore', exact: true }).click();
-      assert.equal(await legacy.page.locator('.diagram img').count(), 0);
-      await legacy.page
-        .getByText('The API admits requests to the worker service.', { exact: true })
-        .waitFor();
-      await legacy.page
-        .getByText('Each request is validated before the worker processes it.', { exact: true })
-        .waitFor();
-    }
+    await openSummaryDiagrams(legacy.page);
+    assert.equal(await legacy.page.locator('.diagram img').count(), 0);
+    await legacy.page
+      .getByText('The API admits requests to the worker service.', { exact: true })
+      .waitFor();
+    await legacy.page
+      .getByText('Each request is validated before the worker processes it.', { exact: true })
+      .waitFor();
     await legacy.close();
   });
   await test('Unavailable and invalid charts retain clear states and complete source', async () => {
     const missing = await pageFor({ architecture: '', flows: [] });
-    await expandSummaryDiagrams(missing.page);
+    await openSummaryDiagrams(missing.page);
     await missing.page.getByText('No architecture overview saved.', { exact: true }).waitFor();
-    await missing.page.getByText('No project flows saved.', { exact: true }).waitFor();
-    await missing.page.getByRole('button', { name: 'Explore', exact: true }).click();
     await missing.page.getByText('No project flows saved.', { exact: true }).waitFor();
     assert.equal(await missing.page.locator('.diagram img').count(), 0);
     await missing.close();
@@ -386,17 +431,14 @@ try {
       ['flowchart TD\n  A["' + 'x'.repeat(16000) + '"]', 'Diagram is too large to render.'],
     ]) {
       const { page, close } = await pageFor({ architecture: source, flows: [] });
-      await expandSummaryDiagrams(page);
-      for (const explore of [false, true]) {
-        if (explore) await page.getByRole('button', { name: 'Explore', exact: true }).click();
-        await page.getByText(error, { exact: true }).waitFor();
-        assert.equal(await page.locator('.diagram img').count(), 0);
-        const saved = page.locator('.diagram pre');
-        assert.equal(await saved.isVisible(), true);
-        assert.equal(await saved.textContent(), source.trim());
-        await saved.focus();
-        assert.equal(await saved.evaluate((element) => element === document.activeElement), true);
-      }
+      await openSummaryDiagrams(page);
+      await page.getByText(error, { exact: true }).waitFor();
+      assert.equal(await page.locator('.diagram img').count(), 0);
+      const saved = page.locator('.diagram pre');
+      assert.equal(await saved.isVisible(), true);
+      assert.equal(await saved.textContent(), source.trim());
+      await saved.focus();
+      assert.equal(await saved.evaluate((element) => element === document.activeElement), true);
       await close();
     }
   });
@@ -975,7 +1017,7 @@ try {
     await page.waitForFunction(() => window.fixture.terminals.some((t) => t.action === 'input'));
     await layout(page, 'terminal-running');
     await nav(page, 'Summary');
-    await page.getByRole('button', { name: 'Explore', exact: true }).click();
+    await openSummaryDiagrams(page);
     await layout(page, 'diagrams');
     await page.keyboard.press('Meta+k');
     await page.getByLabel('Search files and commands', { exact: true }).last().fill('process');
@@ -1131,7 +1173,7 @@ try {
     await idle(page);
     const card = page.locator('.metric-card[data-accent="features"]');
     assert.equal(await card.locator('.metric-number').innerText(), '1');
-    assert.equal(await page.locator('.metric-card').count(), 4);
+    assert.equal(await page.locator('.metric-card').count(), 6);
     assert.equal(await page.getByRole('heading', { name: 'Findings', exact: true }).count(), 0);
     assert.equal(await page.locator('.list-row').count(), 0);
     assert.equal(
