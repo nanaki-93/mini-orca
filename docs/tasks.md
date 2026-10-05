@@ -75,10 +75,12 @@ Improve the Wails/React summary, feature discovery and analysis model selection.
 **Verification command**
 `go test ./internal/app -run 'TestFeature' && make web-test && git diff --check`
 
-## Task 5 — [ ] Run feature discovery independently with more time
+## Task 5 — [x] Run feature discovery independently with more time
 
 **Target files**
 - `internal/app/analysis_run.go` — owned concurrent file/feature workers with separate deadlines and coordinated settlement.
+- `internal/app/analysis_run_preview.go` — bind the updated feature discovery prompt into provider identity.
+- `internal/app/analysis_run_store.go` — allow honest window elapsed time beyond the separate file deadline when features are included.
 - `internal/app/analysis_run_features.go` — feature publication/cancellation with cumulative attempt guards.
 - `internal/app/analysis_run_progress.go` — aggregate worker states if required.
 - `internal/app/analysis_run_features_test.go` — deterministic concurrency, file-budget expiry, pause/cancel, retries and stale-result cases.
@@ -108,6 +110,7 @@ Improve the Wails/React summary, feature discovery and analysis model selection.
 **Target files**
 - `internal/app/analysis_models.go` — immutable configured-profile choices for code/review/features.
 - `internal/app/analysis_models_test.go` — actual dispatch, defaults, invalid profiles, cache isolation, consent, admission and resume.
+- `internal/app/service.go` — shared confirmation rule for the actual selected runtime.
 - `internal/app/analysis_run.go` — optional model choices on preview/start/plan and stage requests.
 - `internal/app/analysis_run_preview.go` — chosen-provider identity, cache, availability and admission.
 - `internal/app/analysis_run_retry.go` — chosen-model retry allowances/freshness.

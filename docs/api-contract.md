@@ -351,8 +351,13 @@ to this context and suggested paths. `preview.features` captures goals/workspace
 hashes, the current feature-store hash, exclusions and the Analyze provider/request
 allowance. `run.features` exposes its status, cumulative attempts and nullable
 `suggestion_count`, separately from the three finding sections. The step runs once
-before file stages, shares the run's time/attempt allowance and fresh provider
-consent, and is not repeated after completion on resume. Failed generation keeps
+alongside file stages with its own deadline of at least ten minutes (or the
+configured Analyze timeout when longer). File batch/time limits do not consume
+its deadline. It retains the run's cumulative attempt allowance and fresh
+provider consent, and is not repeated after completion on resume. A batch that
+finishes or reaches its file allowance can still publish file results while
+feature discovery runs. The window settles after both workers finish; user
+pause/cancel stops both workers. Failed generation keeps
 previous ideas and permits other stages to continue; overall progress reflects
 partial results. Cancellation and source/goal changes reject late publication.
 Saved schema-1 runs without feature fields retain their original behavior.

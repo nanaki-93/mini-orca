@@ -235,6 +235,10 @@ func analysisMetadataReason(value string) bool {
 		"The report contains incomplete evidence; review its details.", "The model request or response failed. Other analysis results remain available.",
 		"Analysis canceled by the user.", "Analysis paused by the user.", "The batch limit was reached; resume to continue pending files.",
 		"The stage exhausted its total attempt allowance.", "The dispatch allowance ended; preview and resume the remaining work.",
+		"The file dispatch allowance ended; preview and resume the remaining work.",
+		"File analysis reached its time budget. Feature discovery continues independently.",
+		"File analysis reached its allowance. Feature discovery continues independently.",
+		"Feature discovery reached its allowance; preview and resume to try again.",
 		"Analysis stopped before the stage completed; review and resume.", "Project source, policy or provider identity changed; start a new analysis.",
 		"Analysis progress could not be saved; resume or cancel to recover.", "Analysis was interrupted; preview and resume explicitly.":
 		return true
@@ -283,7 +287,7 @@ func validStoredAnalysisIdentity(run *AnalysisRun) bool {
 
 func validStoredAnalysisWindow(run *AnalysisRun) bool {
 	return !run.CreatedAt.IsZero() && !run.UpdatedAt.Before(run.CreatedAt) && run.ElapsedSeconds >= 0 && run.WindowElapsedSeconds >= 0 &&
-		run.WindowElapsedSeconds <= int64(run.Plan.Limits.BudgetSeconds) && run.ElapsedSeconds >= run.WindowElapsedSeconds &&
+		(run.Plan.Features != nil || run.WindowElapsedSeconds <= int64(run.Plan.Limits.BudgetSeconds)) && run.ElapsedSeconds >= run.WindowElapsedSeconds &&
 		run.WindowFilesCompleted >= 0 && run.WindowFilesCompleted <= run.Plan.Limits.BatchFiles && len(run.Files) == len(run.Plan.Files) && len(run.Sections) == 3
 }
 

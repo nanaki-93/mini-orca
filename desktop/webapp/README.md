@@ -40,9 +40,10 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   It also generates one project-wide set of feature suggestions using saved
   goals and policy-filtered context, honoring file exclusions. Its progress and
   request allowance stay separate from finding counts; completed ideas are reused
-  on resume. File results for the current batch are saved before feature suggestions
-  start, and can be opened while generation continues. The run shows its current
-  step, elapsed time and feature attempt allowance. A failed feature step leaves
+  on resume. Feature discovery and file analysis run independently, so a slow
+  search cannot delay file results. Discovery gets at least ten minutes, or the
+  configured Analyze timeout when longer; file batches keep their own time limit.
+  The run shows both active steps, elapsed time and feature attempt allowance. A failed feature step leaves
   other analysis results available.
 - **Bugs**, **Performance** and **Security** show searchable results and their
   evidence. Details retain complete model prose, provenance and verification

@@ -108,6 +108,17 @@ func (s *Service) validateAnalysisFeatureInputs(ctx context.Context, root string
 	return nil
 }
 
+func (s *Service) runAnalysisFeatureWindow(ctx context.Context, identity AnalysisRunIdentity, done chan struct{}) {
+	defer close(done)
+	c := s.analysisRun
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.run == nil || c.run.Identity != identity || c.run.Status != AnalysisRunRunning || c.fault != nil {
+		return
+	}
+	s.runAnalysisFeaturesLocked(ctx, identity)
+}
+
 // The caller owns c.mu; provider I/O runs outside it and publication reacquires authority.
 func (s *Service) runAnalysisFeaturesLocked(ctx context.Context, identity AnalysisRunIdentity) bool {
 	c := s.analysisRun
@@ -199,8 +210,7 @@ func (s *Service) recordAnalysisFeaturesLocked(ctx context.Context, identity Ana
 	if c.run == nil || c.run.Identity != identity || c.fault != nil {
 		return false
 	}
-	if c.run.Status == AnalysisRunStale || c.run.Status == AnalysisRunCanceled || c.run.Status == AnalysisRunCanceling || c.run.Status == AnalysisRunInterrupted {
-		s.finishAnalysisWindowLocked(ctx)
+	if c.run.Status != AnalysisRunRunning && c.run.Status != AnalysisRunPausing {
 		return false
 	}
 	progress := c.run.Features
@@ -209,7 +219,7 @@ func (s *Service) recordAnalysisFeaturesLocked(ctx context.Context, identity Ana
 		if errors.Is(err, project.ErrRevisionConflict) {
 			s.staleAnalysisRunLocked()
 		} else {
-			c.run.Status, c.run.Reason = AnalysisRunPaused, "The dispatch allowance ended; preview and resume the remaining work."
+			c.featureStopReason = "Feature discovery reached its allowance; preview and resume to try again."
 		}
 		_ = s.saveAnalysisRunLocked(false)
 		return false
