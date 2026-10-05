@@ -1441,6 +1441,8 @@ try {
           { exact: true },
         )
         .waitFor();
+      const failure = page.getByRole('img', { name: 'Features: failed', exact: true });
+      assert.equal(await failure.evaluate((dot) => dot.classList.contains('red')), true);
       assert.equal(await page.getByText(/Ideas are outdated/).count(), featuresReady ? 1 : 0);
       await nav(page, 'Features');
       await page.getByText(/^Feature search failed\. Try again\./).waitFor();

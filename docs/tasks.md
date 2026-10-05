@@ -152,9 +152,11 @@ Improve the Wails/React summary, feature discovery and analysis model selection.
 **Verification command**
 `go test -race ./internal/app ./internal/api/handlers ./internal/llm && make web-test && ./scripts/desktop-gradle.sh test spotlessCheck detekt && git diff --check`
 
-## Task 7 — [ ] Review and validate all improvements
+## Task 7 — [x] Review and validate all improvements
 
 **Target files**
+- `desktop/webapp/frontend/src/features.tsx` — preserve red failure indicators when retained ideas are also stale.
+- `desktop/webapp/frontend/tests/run.mjs` — Summary failure/stale precedence regression.
 - `docs/tasks.md` — verified final completion state.
 
 **Inputs / dependencies**

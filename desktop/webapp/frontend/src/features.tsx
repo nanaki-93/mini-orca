@@ -74,7 +74,13 @@ export function FeatureSummary({ s }: { s: State }) {
       actions={
         <div className="row">
           <StatusDot
-            value={report?.freshness === 'stale' ? 'stale' : report?.status}
+            value={
+              report?.status === 'failed'
+                ? 'failed'
+                : report?.freshness === 'stale'
+                  ? 'stale'
+                  : report?.status
+            }
             label="Features"
           />
           <Go page="features" tone="ghost small">
