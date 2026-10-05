@@ -41,6 +41,11 @@ async function nav(page, name) {
     .getByRole('button', { name, exact: true })
     .click();
 }
+async function expandSummaryDiagrams(page) {
+  await page.getByText('Show architecture', { exact: true }).click();
+  const flows = page.getByText('Show project flows', { exact: true });
+  if (await flows.count()) await flows.click();
+}
 async function openSource(page) {
   await nav(page, 'Source');
   await page.locator('.file-item[title="internal/worker/process.go"]').click();
@@ -182,6 +187,13 @@ async function test(name, body) {
 try {
   await test('Saved architecture and flow charts render in Summary and the diagrams view', async () => {
     const { page, close } = await pageFor();
+    const requests = await page.evaluate(() => window.fixture.requests.length);
+    for (const name of ['Architecture diagram', 'Flow 1 diagram', 'Flow 2 diagram'])
+      assert.equal(await page.getByRole('img', { name, exact: true }).count(), 0);
+    await page.getByText('Show architecture', { exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await page.getByText('Show project flows', { exact: true }).click();
+    assert.equal(await page.evaluate(() => window.fixture.requests.length), requests);
     assert.equal(await page.locator('.diagram img').count(), 3);
     for (const name of ['Architecture diagram', 'Flow 1 diagram', 'Flow 2 diagram'])
       assert.equal(await page.getByRole('img', { name, exact: true }).count(), 1);
@@ -214,7 +226,9 @@ try {
     await page.getByRole('button', { name: 'Larger text' }).click();
     await layout(page, 'diagrams-900');
     await page.getByRole('button', { name: 'Back to summary', exact: true }).click();
+    assert.equal(await page.getByRole('img', { name: 'Architecture diagram' }).count(), 0);
     await layout(page, 'summary-charts-900');
+    await expandSummaryDiagrams(page);
     for (const [name, file] of [
       ['Architecture diagram', 'architecture'],
       ['Flow 1 diagram', 'flowchart'],
@@ -238,6 +252,7 @@ try {
         'The API admits requests into a bounded queue.\n\n```mermaid\ngraph LR\n  API --> Queue\n```',
       flows: ['``` Mermaid \r\nsequenceDiagram\r\n  API->>Worker: Process\r\n```'],
     });
+    await expandSummaryDiagrams(page);
     assert.equal(await page.locator('.diagram img').count(), 2);
     await page
       .getByText('The API admits requests into a bounded queue.', { exact: true })
@@ -253,6 +268,7 @@ try {
       architecture: 'The API admits requests to the worker service.',
       flows: ['Each request is validated before the worker processes it.'],
     });
+    await expandSummaryDiagrams(legacy.page);
     for (const explore of [false, true]) {
       if (explore) await legacy.page.getByRole('button', { name: 'Explore', exact: true }).click();
       assert.equal(await legacy.page.locator('.diagram img').count(), 0);
@@ -267,6 +283,7 @@ try {
   });
   await test('Unavailable and invalid charts retain clear states and complete source', async () => {
     const missing = await pageFor({ architecture: '', flows: [] });
+    await expandSummaryDiagrams(missing.page);
     await missing.page.getByText('No architecture overview saved.', { exact: true }).waitFor();
     await missing.page.getByRole('button', { name: 'Explore', exact: true }).click();
     await missing.page.getByText('No project flows saved.', { exact: true }).waitFor();
@@ -279,6 +296,7 @@ try {
       ['flowchart TD\n  A["' + 'x'.repeat(16000) + '"]', 'Diagram is too large to render.'],
     ]) {
       const { page, close } = await pageFor({ architecture: source, flows: [] });
+      await expandSummaryDiagrams(page);
       for (const explore of [false, true]) {
         if (explore) await page.getByRole('button', { name: 'Explore', exact: true }).click();
         await page.getByText(error, { exact: true }).waitFor();

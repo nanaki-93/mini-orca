@@ -287,24 +287,26 @@ export function Summary({ s }: { s: State }) {
               </Go>
             }
           >
-            <Prose text={overview?.analysis.architecture} diagramLabel="Architecture diagram" />
-            {!overview?.analysis.architecture && (
-              <p className="muted">No architecture overview saved.</p>
-            )}
-            {!!overview?.analysis.entry_points?.length && (
-              <Disclosure title="Entry points">
-                <BulletContent title="" items={overview.analysis.entry_points} />
-              </Disclosure>
-            )}
+            <Disclosure title="Show architecture">
+              <Prose text={overview?.analysis.architecture} diagramLabel="Architecture diagram" />
+              {!overview?.analysis.architecture && (
+                <p className="muted">No architecture overview saved.</p>
+              )}
+              {!!overview?.analysis.entry_points?.length && (
+                <BulletContent title="Entry points" items={overview.analysis.entry_points} />
+              )}
+            </Disclosure>
           </Panel>
           {!!overview?.analysis.flows?.length && (
             <Panel title="Project flows">
-              {overview.analysis.flows.map((flow, i) => (
-                <div className="content-section" key={i}>
-                  <h3>Flow {i + 1}</h3>
-                  <Prose text={flow} diagramLabel={`Flow ${i + 1} diagram`} />
-                </div>
-              ))}
+              <Disclosure title="Show project flows">
+                {overview.analysis.flows.map((flow, i) => (
+                  <div className="content-section" key={i}>
+                    <h3>Flow {i + 1}</h3>
+                    <Prose text={flow} diagramLabel={`Flow ${i + 1} diagram`} />
+                  </div>
+                ))}
+              </Disclosure>
             </Panel>
           )}
         </div>

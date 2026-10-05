@@ -2,7 +2,7 @@
 
 Improve the Wails/React summary, feature discovery and analysis model selection. Implement the tasks in order and commit every verified step separately; preserve explicit consent, immutable identities and legacy defaults.
 
-## Task 1 — [ ] Collapse summary architecture and flows
+## Task 1 — [x] Collapse summary architecture and flows
 
 **Target files**
 - `desktop/webapp/frontend/src/overview.tsx` — default-closed Architecture and Project flows disclosures.
