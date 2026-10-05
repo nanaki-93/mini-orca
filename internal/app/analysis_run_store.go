@@ -24,6 +24,7 @@ var errAnalysisRunCorrupt = errors.New("saved analysis progress is invalid; pres
 
 func cloneAnalysisPreview(plan AnalysisRunPreview) AnalysisRunPreview {
 	copy := plan
+	copy.Models = cloneAnalysisModels(plan.Models)
 	if plan.Features != nil {
 		features := *plan.Features
 		features.ExcludedPaths = append([]string{}, plan.Features.ExcludedPaths...)
@@ -282,7 +283,7 @@ func validStoredAnalysisIdentity(run *AnalysisRun) bool {
 	return run != nil && run.SchemaVersion == AnalysisRunSchemaVersion && run.Identity.Validate() == nil && run.Status.Valid() &&
 		run.Plan.SchemaVersion == AnalysisRunSchemaVersion && run.Plan.Scope == AnalysisRunScopeProject && run.Plan.Identity == run.Identity.AnalysisQueueIdentity &&
 		(!run.Plan.RetryStaleFailed || !run.Plan.Refresh && run.Plan.CompatibilityStage == "") &&
-		run.Plan.Limits.Validate() == nil && run.Plan.PreviewID != "" && analysisMetadataReason(run.Reason)
+		run.Plan.Models.Validate() == nil && run.Plan.Limits.Validate() == nil && run.Plan.PreviewID != "" && analysisMetadataReason(run.Reason)
 }
 
 func validStoredAnalysisWindow(run *AnalysisRun) bool {

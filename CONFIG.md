@@ -111,9 +111,10 @@ the prose response; Pi receives the schema in its system prompt. Mini-Orca
 validates both outputs against the schema locally, with no unconstrained
 fallback. Failed, truncated, tool-bearing or incomplete responses fail the request.
 CLI stderr and raw protocol errors are not returned or logged. Output is bounded
-to 4 MiB, stderr to 64 KiB, and the process uses the shorter of the operation
-deadline and five minutes. Owned process groups are stopped on completion or
-cancellation, and temporary prompt files are removed. CLI providers currently
+to 4 MiB and stderr to 64 KiB. HTTP and CLI transports honor the workflow's
+bounded deadline, including the longer feature discovery allowance. Direct
+transport callers without a deadline receive a five-minute fallback. Owned process
+groups are stopped on completion or cancellation, and temporary prompt files are removed. CLI providers currently
 require Unix process-group support; HTTP providers retain their existing platforms.
 
 Both CLI providers always require remote-provider confirmation, even if Pi is

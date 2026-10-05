@@ -208,8 +208,12 @@ func (s *Service) RequireRemoteConfirmation(scope config.ModelScope, confirmed b
 	if !ok {
 		return fmt.Errorf("unknown model scope %q", scope)
 	}
+	return requireModelRuntimeConfirmation(runtime, confirmed)
+}
+
+func requireModelRuntimeConfirmation(runtime modelRuntime, confirmed bool) error {
 	if runtime.effective.RemoteProvider && !confirmed {
-		return fmt.Errorf("remote %s provider requires explicit confirmation", scope)
+		return fmt.Errorf("remote %s provider requires explicit confirmation", runtime.effective.Scope)
 	}
 	return nil
 }

@@ -179,7 +179,7 @@ func (reader *analysisSectionReader) readSemantic(indexed project.IndexFile, fil
 	if err != nil {
 		return err
 	}
-	semantic, err := cache.Load(reader.service.semanticCacheInput(reader.analysis, &indexed, file.ContentHash, reader.policy.Version()))
+	semantic, err := cache.Load(semanticCacheInputForRuntime(reader.analysis, &indexed, file.ContentHash, reader.policy.Version(), reader.service.analysisModelRuntime(AnalysisStageSemantic, reader.run.Plan.Models)))
 	if err != nil {
 		return err
 	}
@@ -237,7 +237,7 @@ func (reader *analysisSectionReader) readPerformance(file AnalysisRunFile) error
 	}
 	if report.ProjectID == reader.run.Identity.ProjectID {
 		hasEvidence := report.Status == "completed" || report.Status == "completed_empty" || report.Status == "partial" || len(report.Findings) > 0
-		if hasEvidence && (reader.run.Status == AnalysisRunStale || !analysisPerformanceCacheUsable(report, *reader.analysis, reader.service.runtimes.analyze)) {
+		if hasEvidence && (reader.run.Status == AnalysisRunStale || !analysisPerformanceCacheUsable(report, *reader.analysis, reader.service.analysisModelRuntime(AnalysisStagePerformance, reader.run.Plan.Models))) {
 			report.Status = "stale"
 		}
 		reader.result.Performance = append(reader.result.Performance, *report)
@@ -248,7 +248,7 @@ func (reader *analysisSectionReader) readPerformance(file AnalysisRunFile) error
 
 func (reader *analysisSectionReader) readSecurity(indexed project.IndexFile, file AnalysisRunFile) error {
 	for j := 2; j <= 3; j++ {
-		input := analysisSecurityCacheInput(*reader.analysis, indexed, reader.service.runtimes.analyze, reader.policy.Version())
+		input := analysisSecurityCacheInput(*reader.analysis, indexed, reader.service.analysisModelRuntime(AnalysisStagePerformance, reader.run.Plan.Models), reader.policy.Version())
 		if j == 2 {
 			input = securityRulesInput(securityRulesSnapshot{analysis: *reader.analysis, file: indexed, policyVersion: reader.policy.Version()})
 		}

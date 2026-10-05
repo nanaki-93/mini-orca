@@ -769,6 +769,8 @@ data class AnalysisRunIdentity(
           projectId, projectRevision, policyFingerprint, providerFingerprint, queueId)
 }
 
+@Serializable data class AnalysisModels(val code: String, val review: String, val features: String)
+
 @Serializable
 data class AnalysisPreviewRequest(
     @SerialName("project_id") val projectId: String,
@@ -778,6 +780,7 @@ data class AnalysisPreviewRequest(
     val limits: AnalysisRunLimits,
     @SerialName("resume_run") val resumeRun: AnalysisRunIdentity? = null,
     @SerialName("retry_stale_failed") val retryStaleFailed: Boolean = false,
+    val models: AnalysisModels? = null,
 )
 
 @Serializable
@@ -836,6 +839,7 @@ data class AnalysisRunPreview(
     @SerialName("security_review_intent_required") val securityReviewIntentRequired: Boolean,
     @SerialName("compatibility_stage") val compatibilityStage: String = "",
     @SerialName("retry_stale_failed") val retryStaleFailed: Boolean = false,
+    val models: AnalysisModels? = null,
 )
 
 @Serializable
@@ -852,6 +856,7 @@ data class AnalysisRunStartRequest(
     val refresh: Boolean,
     val confirmations: AnalysisRunConfirmations,
     @SerialName("retry_stale_failed") val retryStaleFailed: Boolean = false,
+    val models: AnalysisModels? = null,
 )
 
 @Serializable

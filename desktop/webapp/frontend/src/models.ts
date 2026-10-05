@@ -91,6 +91,11 @@ export interface Model {
 export interface ModelCatalog {
   scopes: Record<string, Model>;
 }
+export interface AnalysisModels {
+  code: 'analyze' | 'bug' | 'function';
+  review: 'analyze' | 'bug' | 'function';
+  features: 'analyze' | 'bug' | 'function';
+}
 export interface TaskSpec {
   schema_version: string;
   target_path: string;
@@ -145,9 +150,11 @@ export interface PlannedFile {
     cached: boolean;
     reason?: string;
     max_model_requests: number;
+    provider_id?: string;
   }[];
 }
 export interface AnalysisPreview {
+  models?: AnalysisModels;
   features?: {
     expected_hash: string;
     goals_hash: string;

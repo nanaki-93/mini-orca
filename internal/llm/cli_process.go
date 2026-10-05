@@ -39,7 +39,7 @@ func runCLI(ctx context.Context, profile config.ModelProfile, invocation cliInvo
 	if err != nil {
 		return nil, fmt.Errorf("llm client: %w: %s CLI executable is unavailable; install it on the daemon's PATH or set cli_path", ErrRequestRejected, profile.Provider)
 	}
-	timed, cancel := context.WithTimeout(ctx, providerRequestTimeout)
+	timed, cancel := providerRequestContext(ctx)
 	defer cancel()
 	process := exec.CommandContext(timed, executable, invocation.args...)
 	process.Dir = invocation.directory

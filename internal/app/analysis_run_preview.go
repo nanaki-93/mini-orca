@@ -24,20 +24,30 @@ func analysisFingerprint(value any) (string, error) {
 	return fmt.Sprintf("%x", sha256.Sum256(data)), nil
 }
 
-func (s *Service) analysisProviders(includeFeatures bool) ([]AnalysisProviderRequirement, error) {
-	providers := make([]AnalysisProviderRequirement, 0, 2)
-	for _, entry := range []struct {
+func (s *Service) analysisProviders(includeFeatures bool, models *AnalysisModels) ([]AnalysisProviderRequirement, error) {
+	providers := make([]AnalysisProviderRequirement, 0, 3)
+	entries := []struct {
 		runtime modelRuntime
 		stages  []AnalysisStage
 		prompts []string
 	}{
-		{s.runtimes.bug, []AnalysisStage{AnalysisStageSemantic}, []string{semanticAnalysisPromptVersion}},
-		{s.runtimes.analyze, []AnalysisStage{AnalysisStagePerformance, AnalysisStageSecurityAI}, []string{project.PerformancePromptVersion, project.SecurityPromptVersion}},
-	} {
-		if includeFeatures && entry.runtime.effective.Scope == "analyze" {
-			entry.stages = append(entry.stages, AnalysisStageFeatures)
-			entry.prompts = append(entry.prompts, featureSuggestionsPromptVersion)
+		{s.analysisModelRuntime(AnalysisStageSemantic, models), []AnalysisStage{AnalysisStageSemantic}, []string{semanticAnalysisPromptVersion}},
+		{s.analysisModelRuntime(AnalysisStagePerformance, models), []AnalysisStage{AnalysisStagePerformance, AnalysisStageSecurityAI}, []string{project.PerformancePromptVersion, project.SecurityPromptVersion}},
+	}
+	if includeFeatures {
+		runtime := s.analysisModelRuntime(AnalysisStageFeatures, models)
+		if runtime.effective == entries[1].runtime.effective {
+			entries[1].stages = append(entries[1].stages, AnalysisStageFeatures)
+			entries[1].prompts = append(entries[1].prompts, featureSuggestionsPromptVersion)
+		} else {
+			entries = append(entries, struct {
+				runtime modelRuntime
+				stages  []AnalysisStage
+				prompts []string
+			}{runtime, []AnalysisStage{AnalysisStageFeatures}, []string{featureSuggestionsPromptVersion}})
 		}
+	}
+	for _, entry := range entries {
 		id, err := analysisFingerprint(struct {
 			Model      EffectiveModel
 			Endpoint   string
@@ -79,6 +89,7 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 		request.compatibilityStage = run.Plan.CompatibilityStage
 		request.compatibilityBudget = run.Plan.CompatibilityBudget
 		request.IncludeFeatures = run.Plan.Features != nil
+		request.Models = cloneAnalysisModels(run.Plan.Models)
 	}
 	analysis, index, policy, err := s.performanceInputs()
 	if err != nil {
@@ -87,7 +98,7 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 	if analysis.ProjectID != request.ProjectID || analysis.ProjectRevision != request.ProjectRevision {
 		return nil, project.ErrRevisionConflict
 	}
-	providers, err := s.analysisProviders(request.IncludeFeatures)
+	providers, err := s.analysisProviders(request.IncludeFeatures, request.Models)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +106,7 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 	if err != nil {
 		return nil, err
 	}
-	preview := &AnalysisRunPreview{CompatibilityStage: request.compatibilityStage, CompatibilityBudget: request.compatibilityBudget, RetryStaleFailed: request.RetryStaleFailed, SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
+	preview := &AnalysisRunPreview{Models: cloneAnalysisModels(request.Models), CompatibilityStage: request.compatibilityStage, CompatibilityBudget: request.compatibilityBudget, RetryStaleFailed: request.RetryStaleFailed, SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
 		Identity: AnalysisQueueIdentity{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, PolicyFingerprint: policy.Version(), ProviderFingerprint: fingerprint},
 		Files:    []AnalysisPlannedFile{}, Excluded: []AnalysisExcludedFile{}, Providers: providers}
 	root := s.manager.Root()
@@ -146,14 +157,14 @@ func (s *Service) completeAnalysisPreviewLocked(ctx context.Context, root string
 	return preview, nil
 }
 
-func (s *Service) analysisStageCacheState(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, stage AnalysisStage) (bool, string, time.Time, error) {
+func (s *Service) analysisStageCacheState(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, stage AnalysisStage, models *AnalysisModels) (bool, string, time.Time, error) {
 	switch stage {
 	case AnalysisStageSemantic:
 		cache, err := project.NewFileAnalysisCache(s.manager.Root())
 		if err != nil {
 			return false, "", time.Time{}, err
 		}
-		report, err := cache.Load(s.semanticCacheInput(&analysis, &file, file.ContentHash, policy.Version()))
+		report, err := cache.Load(semanticCacheInputForRuntime(&analysis, &file, file.ContentHash, policy.Version(), s.analysisModelRuntime(stage, models)))
 		if err != nil {
 			return false, "", time.Time{}, err
 		}
@@ -163,9 +174,9 @@ func (s *Service) analysisStageCacheState(analysis project.Analysis, file projec
 		}
 		return analysisSemanticCacheUsable(report, analysis.ProjectRevision), status, report.GeneratedAt, nil
 	case AnalysisStagePerformance:
-		return s.analysisPerformanceCacheState(analysis, file, policy)
+		return s.analysisPerformanceCacheState(analysis, file, policy, models)
 	default:
-		input := analysisSecurityCacheInput(analysis, file, s.runtimes.analyze, policy.Version())
+		input := analysisSecurityCacheInput(analysis, file, s.analysisModelRuntime(stage, models), policy.Version())
 		if stage == AnalysisStageSecurityRules {
 			input = securityRulesInput(securityRulesSnapshot{analysis: analysis, file: file, policyVersion: policy.Version()})
 		}
@@ -177,12 +188,12 @@ func (s *Service) analysisStageCacheState(analysis project.Analysis, file projec
 	}
 }
 
-func (s *Service) analysisPerformanceCacheState(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy) (bool, string, time.Time, error) {
+func (s *Service) analysisPerformanceCacheState(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, models *AnalysisModels) (bool, string, time.Time, error) {
 	report, err := project.LoadPerformanceFileReport(s.manager.Root(), file.Path, file.ContentHash, policy)
 	if err != nil || report == nil {
 		return false, "", time.Time{}, err
 	}
-	cached := analysisPerformanceCacheUsable(report, analysis, s.runtimes.analyze)
+	cached := analysisPerformanceCacheUsable(report, analysis, s.analysisModelRuntime(AnalysisStagePerformance, models))
 	status := report.Status
 	if status == "completed" && !cached {
 		status = "stale"
@@ -201,7 +212,7 @@ func (s *Service) validateAnalysisQueue(ctx context.Context, root string, plan *
 	if err != nil {
 		return err
 	}
-	providers, err := s.analysisProviders(plan.Features != nil)
+	providers, err := s.analysisProviders(plan.Features != nil, plan.Models)
 	if err != nil {
 		return err
 	}
@@ -414,19 +425,18 @@ func (s *Service) planAnalysisStage(analysis project.Analysis, file project.Inde
 	plan := AnalysisStagePlan{Stage: stage, Eligible: reason == "", Reason: reason}
 	if stage != AnalysisStageSecurityRules {
 		provider := providers[1]
-		runtime := s.runtimes.analyze
+		runtime := s.analysisModelRuntime(stage, request.Models)
 		if stage == AnalysisStageSemantic {
 			provider = providers[0]
-			runtime = s.runtimes.bug
 		}
 		plan.ProviderID = provider.ID
-		if plan.Eligible && !s.analysisStageModelAvailable(stage) {
+		if plan.Eligible && runtime.client == nil {
 			plan.Reason = "The model for this stage is not configured."
 		}
 		plan.MaxModelRequests = min(request.Limits.MaxAttemptsPerStage, runtime.effective.MaxRetries+1)
 	}
 	if plan.Eligible {
-		plan.Cached, _, _, err = s.analysisStageCacheState(analysis, file, policy, stage)
+		plan.Cached, _, _, err = s.analysisStageCacheState(analysis, file, policy, stage, request.Models)
 		if err != nil {
 			return AnalysisStagePlan{}, err
 		}

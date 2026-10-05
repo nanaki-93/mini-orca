@@ -58,13 +58,25 @@ func (s *Service) analysisSelectionStages(ctx context.Context, analysis project.
 }
 
 func (s *Service) analysisSelectionStage(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, stage AnalysisStage, evidence analysisSelectionEvidence) AnalysisFileStageStatus {
+	var models *AnalysisModels
+	if evidence.run != nil {
+		models = evidence.run.Plan.Models
+	}
+	return s.analysisSelectionStageForModels(analysis, file, policy, stage, evidence, models)
+}
+
+func (s *Service) analysisSelectionStageForModels(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, stage AnalysisStage, evidence analysisSelectionEvidence, models *AnalysisModels) AnalysisFileStageStatus {
 	result := AnalysisFileStageStatus{Stage: stage}
 	if reason := analysisStageExclusion(file, stage); reason != "" {
 		result.Status, result.Reason = "skipped", reason
 		return result
 	}
-	cached, status, generatedAt, err := s.analysisStageCacheState(analysis, file, policy, stage)
-	if item, ok := evidence.stage(file, stage); ok {
+	cached, status, generatedAt, err := s.analysisStageCacheState(analysis, file, policy, stage, models)
+	var evidenceModels *AnalysisModels
+	if evidence.run != nil {
+		evidenceModels = evidence.run.Plan.Models
+	}
+	if item, ok := evidence.stage(file, stage); ok && s.analysisModelRuntime(stage, models).effective == s.analysisModelRuntime(stage, evidenceModels).effective {
 		if status, reason := selectionRunStage(item, evidence.run); status != "" && selectionRunOverridesCache(item, evidence.run, cached, generatedAt) {
 			result.Status, result.Reason = status, reason
 			return result
@@ -78,7 +90,7 @@ func (s *Service) analysisSelectionStage(analysis project.Analysis, file project
 		result.Status, result.Reason = "fresh", "Saved analysis is up to date."
 	default:
 		result.Status, result.Reason = selectionCacheStatus(status)
-		if result.Status == "missing" && !s.analysisStageModelAvailable(stage) {
+		if result.Status == "missing" && s.analysisModelRuntime(stage, models).client == nil && stage != AnalysisStageSecurityRules {
 			result.Status, result.Reason = "unavailable", "The model for this stage is not configured."
 		}
 		if result.Status == "missing" && evidence.excluded[file.Path] != "" {
@@ -164,17 +176,6 @@ func selectionWaitingReason(run *AnalysisRun) (string, string) {
 		return "stale", "The run became outdated before this stage completed. Start a new analysis."
 	default:
 		return "pending", "This stage is waiting in the analysis queue."
-	}
-}
-
-func (s *Service) analysisStageModelAvailable(stage AnalysisStage) bool {
-	switch stage {
-	case AnalysisStageSecurityRules:
-		return true
-	case AnalysisStageSemantic:
-		return s.runtimes.bug.client != nil
-	default:
-		return s.runtimes.analyze.client != nil
 	}
 }
 

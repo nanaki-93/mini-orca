@@ -262,7 +262,7 @@ func (s *Service) requestFileAnalysis(ctx context.Context, prepared preparedFile
 	if err != nil {
 		return nil, err
 	}
-	timed, cancel := context.WithTimeout(ctx, s.analysisTimeout)
+	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
 	defer cancel()
 	schema := FileAnalysisResponseSchema()
 	result, err := s.requestAnalysisModel(timed, runtime, []llm.ChatMessage{{Role: "user", Content: prompt}}, &schema, dispatch)
@@ -339,7 +339,10 @@ func (s *Service) fileAnalysisCacheInput(analysis *project.Analysis, file *proje
 }
 
 func (s *Service) semanticCacheInput(analysis *project.Analysis, file *project.IndexFile, contentHash, policyVersion string) project.FileAnalysisInput {
-	runtime := s.runtimes.bug
+	return semanticCacheInputForRuntime(analysis, file, contentHash, policyVersion, s.runtimes.bug)
+}
+
+func semanticCacheInputForRuntime(analysis *project.Analysis, file *project.IndexFile, contentHash, policyVersion string, runtime modelRuntime) project.FileAnalysisInput {
 	return project.FileAnalysisInput{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Path: file.Path, ContentHash: contentHash, Language: file.Language, Model: runtime.profile.Model, Profile: runtime.effective.Profile, Scope: runtime.effective.Scope, ProviderOrigin: runtime.effective.ProviderOrigin, ReasoningEffort: runtime.effective.ReasoningEffort, PromptVersion: semanticAnalysisPromptVersion, ContextPolicyVersion: policyVersion}
 }
 

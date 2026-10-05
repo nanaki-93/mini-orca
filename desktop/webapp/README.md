@@ -34,15 +34,19 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
 
 - **Project** opens a saved project locally. **Import & analyze** creates a new
   overview, with explicit confirmation for a remote Analyze provider.
-- **Analysis** selects files, previews request limits and provider destinations,
+- **Analysis** selects files and configured models for Code, Performance/Security
+  and feature discovery, previews request limits and provider destinations,
   and runs, pauses, resumes or cancels the captured queue. Each new admission
-  requires its own remote-provider and Security intent confirmations.
+  requires its own start confirmation for remote-provider sharing and Security
+  review. Model dropdowns use the daemon's configured Analyze, Bug and Function
+  profiles; defaults are Bug for Code and Analyze for reviews/features. Choices
+  belong to the captured run and remain fixed when resuming.
   It also generates one project-wide set of feature suggestions using saved
   goals and policy-filtered context, honoring file exclusions. Its progress and
   request allowance stay separate from finding counts; completed ideas are reused
   on resume. Feature discovery and file analysis run independently, so a slow
   search cannot delay file results. Discovery gets at least ten minutes, or the
-  configured Analyze timeout when longer; file batches keep their own time limit.
+  selected feature model's timeout when longer; file batches keep their own time limit.
   The run shows both active steps, elapsed time and feature attempt allowance. A failed feature step leaves
   other analysis results available.
 - **Bugs**, **Performance** and **Security** show searchable results and their

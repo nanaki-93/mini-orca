@@ -30,6 +30,7 @@ type securityReviewSnapshot struct {
 	source        string
 	policyVersion string
 	runtime       modelRuntime
+	modelProfile  string
 	symbol        *project.SymbolInfo
 }
 
@@ -66,7 +67,11 @@ func (s *Service) executeSecurityReview(ctx context.Context, snapshot securityRe
 	if err != nil {
 		return modelOutput{}, nil, err
 	}
-	timed, cancel := context.WithTimeout(ctx, s.analysisTimeout)
+	timeout := s.analysisTimeout
+	if snapshot.modelProfile != "" {
+		timeout = duration(snapshot.runtime.effective.Timeout)
+	}
+	timed, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if err := s.validateSecurityReviewSnapshot(timed, snapshot); err != nil {
 		return modelOutput{}, nil, err
@@ -237,7 +242,7 @@ func (s *Service) validateSecurityReviewSnapshot(ctx context.Context, snapshot s
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if s.runtimes.analyze.effective != snapshot.runtime.effective {
+	if s.runtimeForAnalysisScope(config.AnalyzeModelScope, snapshot.modelProfile).effective != snapshot.runtime.effective {
 		return project.ErrRevisionConflict
 	}
 	current, err := s.prepareSecurityReview(snapshot.request)
@@ -277,10 +282,7 @@ const securityReviewOutputGuidance = "Return {\"findings\":[]} when no concrete 
 	"Copy the path exactly from FILE_FACTS. Line numbers are inclusive and must satisfy 1 <= start_line <= end_line <= line_count. Omit symbol unless it exactly names a FILE_FACTS.symbols declaration containing the entire anchor range; never use an expression, import, dependency or invented label as a symbol. If symbols is empty, omit symbol."
 
 func requireSecurityRuntimeConfirmation(runtime modelRuntime, confirmed bool) error {
-	if runtime.effective.RemoteProvider && !confirmed {
-		return fmt.Errorf("remote analyze provider requires explicit confirmation")
-	}
-	return nil
+	return requireModelRuntimeConfirmation(runtime, confirmed)
 }
 
 func focusInstruction(symbol *project.SymbolInfo) string {

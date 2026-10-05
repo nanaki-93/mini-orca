@@ -276,12 +276,20 @@ func (c *Client) newRequest(ctx context.Context, method, path string, body io.Re
 	return request, nil
 }
 
+func providerRequestContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	// Workflow owners supply their own bounds; keep a fallback for direct callers.
+	if _, bounded := ctx.Deadline(); bounded {
+		return context.WithCancel(ctx)
+	}
+	return context.WithTimeout(ctx, providerRequestTimeout)
+}
+
 func (c *Client) do(request *http.Request) ([]byte, error) {
 	// RoundTrip performs exactly one exchange. http.Client.Do parses Location
 	// before CheckRedirect, which can expose an invalid redirect target in its
 	// error. A one-hop transport path makes every 3xx response safe to classify
 	// by status without inspecting or following its Location header.
-	timed, cancel := context.WithTimeout(request.Context(), providerRequestTimeout)
+	timed, cancel := providerRequestContext(request.Context())
 	defer cancel()
 	transport := c.transport
 	if transport == nil {

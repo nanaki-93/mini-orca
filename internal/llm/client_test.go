@@ -18,6 +18,52 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/logging"
 )
 
+func TestChatHonorsWorkflowDeadlinesAndBoundsDirectRequests(t *testing.T) {
+	for _, allowance := range []time.Duration{0, time.Minute, 10 * time.Minute, 20 * time.Minute} {
+		t.Run(allowance.String(), func(t *testing.T) {
+			ctx := context.Background()
+			if allowance > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, allowance)
+				defer cancel()
+			}
+			before := time.Now()
+			client := NewClient(testProfile("http://provider.invalid", ""))
+			client.transport = roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+				deadline, bounded := request.Context().Deadline()
+				if !bounded {
+					t.Fatal("provider request has no deadline")
+				}
+				if want, supplied := ctx.Deadline(); supplied {
+					if !deadline.Equal(want) {
+						t.Fatalf("provider deadline=%s, workflow deadline=%s", deadline, want)
+					}
+				} else if deadline.Before(before.Add(5*time.Minute)) || deadline.After(time.Now().Add(5*time.Minute)) {
+					t.Fatalf("direct request fallback deadline=%s", deadline)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"choices":[{"message":{"content":"done"}}]}`))}, nil
+			})
+			if _, err := client.Chat(ctx, []ChatMessage{{Role: "user", Content: "hello"}}); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestChatLongWorkflowDeadlineStillAllowsCancellation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	client := NewClient(testProfile("http://provider.invalid", ""))
+	client.transport = roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		cancel()
+		<-request.Context().Done()
+		return nil, request.Context().Err()
+	})
+	if _, err := client.Chat(ctx, []ChatMessage{{Role: "user", Content: "hello"}}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("provider cancellation=%v", err)
+	}
+}
+
 func TestChatRejectsMalformedNonSuccessAndOversizedProviderResponses(t *testing.T) {
 	for _, test := range []struct {
 		name   string

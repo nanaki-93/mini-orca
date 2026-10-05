@@ -105,12 +105,15 @@ Improve the Wails/React summary, feature discovery and analysis model selection.
 **Verification command**
 `go test -race ./internal/app && go test ./internal/api/handlers ./cmd/daemon && make web-test && git diff --check`
 
-## Task 6 — [ ] Select configured models before analysis
+## Task 6 — [x] Select configured models before analysis
 
 **Target files**
 - `internal/app/analysis_models.go` — immutable configured-profile choices for code/review/features.
 - `internal/app/analysis_models_test.go` — actual dispatch, defaults, invalid profiles, cache isolation, consent, admission and resume.
 - `internal/app/service.go` — shared confirmation rule for the actual selected runtime.
+- `internal/llm/client.go` — honor the selected worker's bounded deadline instead of clamping it to five minutes.
+- `internal/llm/cli_process.go` — same deadline behavior for CLI transports.
+- `internal/llm/client_test.go` — actual request deadlines, fallback bound and cancellation.
 - `internal/app/analysis_run.go` — optional model choices on preview/start/plan and stage requests.
 - `internal/app/analysis_run_preview.go` — chosen-provider identity, cache, availability and admission.
 - `internal/app/analysis_run_retry.go` — chosen-model retry allowances/freshness.
@@ -134,6 +137,7 @@ Improve the Wails/React summary, feature discovery and analysis model selection.
 - `desktop/webapp/frontend/tests/run.mjs` — choices, refreshed previews, consent, no-dispatch and resume.
 - `desktop/webapp/frontend/tests/fixture.mjs` — selected models and preview fixtures.
 - `desktop/webapp/README.md` — selection and confirmation behavior.
+- `CONFIG.md` — configured workflow deadlines and direct transport fallback.
 - `docs/api-contract.md` — optional inputs, defaults and identity behavior.
 - `docs/openapi.yaml` — optional model schemas.
 
@@ -146,7 +150,7 @@ Improve the Wails/React summary, feature discovery and analysis model selection.
 - Replace preview consent checkboxes with explicit start confirmation naming remote destinations and Security review. Model selection and preview remain free of provider requests.
 
 **Verification command**
-`go test -race ./internal/app ./internal/api/handlers && make web-test && ./scripts/desktop-gradle.sh test spotlessCheck detekt && git diff --check`
+`go test -race ./internal/app ./internal/api/handlers ./internal/llm && make web-test && ./scripts/desktop-gradle.sh test spotlessCheck detekt && git diff --check`
 
 ## Task 7 — [ ] Review and validate all improvements
 
