@@ -30,9 +30,6 @@ export function FeatureSummary({ s }: { s: State }) {
         {report?.freshness === 'stale' && <Badge value="stale" />}
         <Badge value="ai_suggestion" />
       </div>
-      <p className="small muted section-gap">
-        Analysis checks for new capabilities using your project goals. Suggestions are advisory.
-      </p>
       {s.featureGenerationRequested && report?.failure && (
         <Notice error>
           {report.failure} {report.suggestions.length > 0 && 'Previous ideas remain available.'}
@@ -41,26 +38,15 @@ export function FeatureSummary({ s }: { s: State }) {
       {s.featureGenerationRequested &&
         report?.freshness === 'stale' &&
         report.suggestions.length > 0 && (
-          <Notice>
-            These ideas use older project context or goals. Run analysis again to update them.
-          </Notice>
+          <Notice>Ideas are outdated. Generate again to update them.</Notice>
         )}
       {!report ? (
-        <Empty
-          title="Suggestions unavailable"
-          detail={
-            s.resourceErrors['feature suggestions'] || 'Refresh the summary to load saved ideas.'
-          }
-        />
+        <Empty title="Suggestions unavailable" detail={s.resourceErrors['feature suggestions']} />
       ) : report.status === 'not_generated' ? (
-        <Empty
-          title="No suggestions generated"
-          detail="Run project analysis or request ideas from Features."
-        />
+        <Empty title="No suggestions generated" />
       ) : suggestions.length === 0 ? (
         <Empty
           title={report.status === 'failed' ? 'No saved suggestions' : 'No active suggestions'}
-          detail="Open Features to review dismissed ideas, edit goals, or request another set."
         />
       ) : (
         suggestions.slice(0, 3).map((idea) => (
@@ -96,18 +82,14 @@ export function Features({ s }: { s: State }) {
   );
   return (
     <>
-      <Heading
-        title="Features"
-        eyebrow="Project analysis"
-        detail="AI suggestions for new capabilities, grounded in your project goals."
-      >
+      <Heading title="Features">
         <Button disabled={!!s.busy} onClick={() => void w.loadFeatures()}>
           Refresh suggestions
         </Button>
       </Heading>
       <Panel title="Project goals" className="section-gap">
         <label className="block">
-          What should this project help users do?
+          Goals
           <textarea
             className="composer"
             aria-label="Project goals"
@@ -115,7 +97,7 @@ export function Features({ s }: { s: State }) {
             maxLength={4096}
             disabled={!!s.busy}
             onChange={(e) => setGoals(e.target.value)}
-            placeholder="Audience, important workflows, and constraints…"
+            placeholder="Audience, workflows, constraints…"
           />
         </label>
         <div className="actions section-gap">
@@ -138,10 +120,7 @@ export function Features({ s }: { s: State }) {
       {s.featureGenerationRequested &&
         report?.freshness === 'stale' &&
         report.suggestions.length > 0 && (
-          <Notice>
-            These ideas use older project context or goals. Generate again before preparing an
-            implementation.
-          </Notice>
+          <Notice>Ideas are outdated. Generate again to update them.</Notice>
         )}
       <div className="toolbar section-gap">
         <h2>Feature suggestions</h2>
@@ -160,19 +139,15 @@ export function Features({ s }: { s: State }) {
           </select>
         </label>
         {report && <Badge value={report.status} />}
+        {report?.freshness === 'stale' && <Badge value="stale" />}
+        <Badge value="ai_suggestion" />
       </div>
       {!report ? (
         <Empty title="Suggestions unavailable" />
       ) : report.status === 'not_generated' ? (
-        <Empty
-          title="No suggestions generated"
-          detail="Add goals, then request ideas for this project."
-        />
+        <Empty title="No suggestions generated" />
       ) : suggestions?.length === 0 ? (
-        <Empty
-          title="No matching suggestions"
-          detail="Change the filter or generate a new set of ideas."
-        />
+        <Empty title="No matching suggestions" />
       ) : (
         <div className="feature-grid">
           {suggestions?.map((idea) => (

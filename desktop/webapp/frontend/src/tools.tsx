@@ -26,7 +26,6 @@ export function Receipt({ s }: { s: State }) {
     <>
       <Heading
         title={r.audit?.action === 'undo' ? 'Change undone' : 'Change applied'}
-        eyebrow="Source updated"
         detail={r.audit?.target_path}
       >
         <Go page="editor">Open source</Go>
@@ -102,11 +101,7 @@ export function Benchmark({ s }: { s: State }) {
   const r = s.benchmark;
   return (
     <>
-      <Heading
-        title="Benchmark comparison"
-        eyebrow="Measured evidence"
-        detail={s.draft?.target_symbol}
-      >
+      <Heading title="Benchmark comparison" detail={s.draft?.target_symbol}>
         <Go page="checks">Back to checks</Go>
         <Button
           disabled={!!s.busy || !currentDraft(s)}
@@ -133,7 +128,9 @@ export function Benchmark({ s }: { s: State }) {
             </Button>
           </div>
         ))}
-        {!c && <Empty title="Validate a draft to find compatible benchmarks" />}
+        {!c && (
+          <Empty title={currentDraft(s) ? 'No benchmark catalog' : 'Draft validation required'} />
+        )}
       </Panel>
       {r && (
         <>
@@ -169,11 +166,7 @@ export function Benchmark({ s }: { s: State }) {
 export function Scan({ s }: { s: State }) {
   return (
     <>
-      <Heading
-        title="Verified scan"
-        eyebrow="Local tools"
-        detail={s.scan && <Badge value={s.scan.status} />}
-      >
+      <Heading title="Verified scan" detail={s.scan && <Badge value={s.scan.status} />}>
         <Go page="bugs">Findings</Go>
         {s.scan?.status === 'running' ? (
           <Button disabled={!!s.busy} onClick={() => void w.scanProject(true)}>
@@ -207,11 +200,7 @@ export function Scan({ s }: { s: State }) {
           ))}
         </div>
       ) : (
-        <Empty
-          title="No verified scan yet"
-          detail="Run the local checks for this project."
-          icon="shield"
-        />
+        <Empty title="No verified scan yet" icon="shield" />
       )}
     </>
   );
@@ -315,7 +304,6 @@ function TerminalSession({ session, visible }: { session: TerminalUpdate; visibl
       {error && <Notice error>{error}</Notice>}
       <div className="terminal-meta">
         <Badge value={status} />
-        <span className="small muted">User-operated shell</span>
       </div>
       <div
         className="terminal-surface"
@@ -330,7 +318,7 @@ export function TerminalWorkspace({ s, visible }: { s: State; visible: boolean }
   const active = s.terminals.find((t) => t.id === selected)?.id || s.terminals.at(-1)?.id;
   return (
     <div className="terminal-workspace">
-      <Heading title="Terminal" eyebrow={s.project?.name || 'Workspace'} detail={s.project?.path}>
+      <Heading title="Terminal" detail={s.project?.path}>
         <Button
           icon="plus"
           disabled={!!s.busy || !s.project}
@@ -368,11 +356,7 @@ export function TerminalWorkspace({ s, visible }: { s: State; visible: boolean }
           ))}
         </>
       ) : (
-        <Empty
-          title="Your shell, in this project"
-          detail="Start a terminal when you need it."
-          icon="terminal"
-        >
+        <Empty title="No terminal sessions" icon="terminal">
           <Button disabled={!!s.busy || !s.project} onClick={() => void w.openTerminal()}>
             Start terminal
           </Button>

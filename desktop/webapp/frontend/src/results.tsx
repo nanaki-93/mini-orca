@@ -133,7 +133,6 @@ export function Results({ s }: { s: State }) {
       <>
         <Heading
           title={detail.title}
-          eyebrow={human(category)}
           detail={
             <span className="row wrap">
               <Badge value={detail.severity} />
@@ -248,7 +247,6 @@ export function Results({ s }: { s: State }) {
     <>
       <Heading
         title={human(category)[0].toUpperCase() + human(category).slice(1)}
-        eyebrow="Analysis results"
         detail={
           results ? (
             <span className="row">
@@ -259,9 +257,7 @@ export function Results({ s }: { s: State }) {
                   : `${results.saved_finding_count} saved findings`}
               </span>
             </span>
-          ) : (
-            'Saved project evidence'
-          )
+          ) : undefined
         }
       >
         <Button

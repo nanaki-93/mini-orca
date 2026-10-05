@@ -32,7 +32,7 @@ export function Editor({ s }: { s: State }) {
   ];
   return (
     <>
-      <Heading title={s.file?.name || 'Source'} eyebrow={s.project!.name} detail={s.file?.path}>
+      <Heading title={s.file?.name || 'Source'} detail={s.file?.path}>
         <Go page="chat" icon="sparkles">
           Implement in chat
         </Go>
@@ -129,11 +129,7 @@ export function Editor({ s }: { s: State }) {
               {s.page === 'review' && <Review s={s} />}
             </>
           ) : (
-            <Empty
-              title="Choose a file"
-              detail="Select a file to inspect or edit a declaration."
-              icon="code"
-            />
+            <Empty title="Choose a file" icon="code" />
           )}
         </div>
       </div>
@@ -592,7 +588,7 @@ function Checks({ s }: { s: State }) {
             />
             Tests
           </label>
-          <span className="small muted">Parse & format are required.</span>
+          <span className="small muted">Parse & format (required)</span>
         </div>
         <div className="actions section-gap">
           <Button
@@ -633,10 +629,7 @@ function Checks({ s }: { s: State }) {
           </Panel>
         ))
       ) : (
-        <Empty
-          title="Checks haven’t run yet"
-          detail={currentDraft(s) ? 'Run the checks for this draft.' : 'Validate the draft first.'}
-        />
+        <Empty title={currentDraft(s) ? 'No checks yet' : 'Draft validation required'} />
       )}
       {s.checks && !s.checks.applicable && (
         <Button
@@ -699,7 +692,7 @@ function Review({ s }: { s: State }) {
           </pre>
         </div>
       ) : (
-        <Empty title="Validate this draft to see its diff" />
+        <Empty title="Diff requires draft validation" />
       )}
       <Panel title="Check evidence">
         {s.checks ? (

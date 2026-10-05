@@ -1478,10 +1478,7 @@ export class Workspace {
         if (!(await this.requestChangeMessage('Repair failed checks.', true))) return;
         if (!(await this.requestChangeChecks(tests))) return;
       }
-      this.set({
-        notice:
-          'Proposal prepared. Inspect every file diff, then review and approve the current revision.',
-      });
+      this.set({ notice: 'Proposal ready for review.' });
     });
   }
   async checkChange(tests: boolean) {
@@ -1653,7 +1650,7 @@ export class Workspace {
       await this.refreshProject();
       if (epoch === this.epoch && operation === this.operation)
         this.set({
-          notice: `Reanalyzed ${completed} changed files. Updated source suggestions are available with file details; original findings are not automatically marked fixed.`,
+          notice: `Reanalyzed ${completed} changed files. Original findings retain their status.`,
         });
     });
   }

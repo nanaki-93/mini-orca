@@ -25,11 +25,7 @@ export function Instructions({ s }: { s: State }) {
   const excluded = preview?.effective.excluded.some((file) => file.path === preview.path);
   return (
     <>
-      <Heading
-        title="Project instructions"
-        eyebrow="AGENTS.md wizard"
-        detail="Register existing guidance or prepare an instruction change for review."
-      />
+      <Heading title="Project instructions" />
       <ol className="wizard-steps" aria-label="Instruction wizard steps">
         {['Choose scope', 'Edit guidance', 'Preview'].map((label, i) => (
           <li key={label} aria-current={step === i + 1 ? 'step' : undefined}>
@@ -55,10 +51,6 @@ export function Instructions({ s }: { s: State }) {
                   placeholder="AGENTS.md or internal/AGENTS.md"
                 />
               </label>
-              <p className="small muted">
-                Root guidance applies throughout the project. A directory guide adds instructions
-                for files beneath that directory.
-              </p>
               <Button
                 tone="primary"
                 disabled={!!s.busy || !path.trim()}
@@ -80,7 +72,7 @@ export function Instructions({ s }: { s: State }) {
               ) : (
                 <>
                   <label className="block">
-                    Existing guidance and custom instructions
+                    Guidance
                     <textarea
                       className="instruction-text"
                       aria-label="Custom instructions"
@@ -141,10 +133,6 @@ export function Instructions({ s }: { s: State }) {
             <Panel title="Instruction preview">
               <strong className="path">{path}</strong>
               <Prose text={proposed} />
-              <Notice>
-                This creates a proposal. The file changes only after you review its diff and
-                explicitly apply it in Chat.
-              </Notice>
               <div className="actions section-gap">
                 <Button disabled={!!s.busy} onClick={() => setStep(2)}>
                   Edit guidance
@@ -164,10 +152,6 @@ export function Instructions({ s }: { s: State }) {
         </section>
         <section className="stack" aria-label="Effective project guidance">
           <Panel title="Registered instructions">
-            <p>
-              AGENTS.md files are loaded automatically from the project. Instructions guide
-              proposals; execution trust, provider consent and approval remain separate actions.
-            </p>
             {preview?.effective.files.length === 0 && <p>No applicable instruction files yet.</p>}
             {preview?.effective.files.map((file) => (
               <Disclosure key={file.path} title={`${file.path} · scope ${file.scope}`}>
@@ -180,10 +164,7 @@ export function Instructions({ s }: { s: State }) {
               </Notice>
             ))}
             {excluded && (
-              <Notice error>
-                This instruction file is excluded by project context policy. Review that policy
-                before creating a proposal.
-              </Notice>
+              <Notice error>This AGENTS.md is excluded by project context policy.</Notice>
             )}
           </Panel>
         </section>
