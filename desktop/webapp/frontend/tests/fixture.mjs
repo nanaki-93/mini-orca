@@ -256,9 +256,7 @@ export function installFixture(options = {}) {
       freshness: options.featuresStale ? 'stale' : 'current',
       suggestions: options.featuresReady && !options.featuresEmpty ? [{ ...idea }] : [],
       failure:
-        options.featuresReady && options.featuresFail
-          ? 'Feature suggestions could not be generated.'
-          : '',
+        options.featuresReady && options.featuresFail ? 'Feature search failed. Try again.' : '',
       context_manifest: context,
     },
     instructions: {
@@ -365,7 +363,7 @@ export function installFixture(options = {}) {
               state.features.goals = body.goals;
               state.features.status = options.featuresFail ? 'failed' : 'ready';
               state.features.failure = options.featuresFail
-                ? 'Feature suggestions could not be generated.'
+                ? 'Feature search failed. Try again.'
                 : '';
               state.features.freshness = options.featuresStale ? 'stale' : 'current';
               if (!options.featuresFail)
@@ -686,9 +684,7 @@ export function installFixture(options = {}) {
                     ...state.features,
                     hash: 'features-analysis',
                     status: options.featuresFail ? 'failed' : 'ready',
-                    failure: options.featuresFail
-                      ? 'Feature suggestions could not be generated.'
-                      : '',
+                    failure: options.featuresFail ? 'Feature search failed. Try again.' : '',
                     freshness: options.featuresFail ? state.features.freshness : 'current',
                     suggestions: options.featuresFail ? state.features.suggestions : [{ ...idea }],
                   };

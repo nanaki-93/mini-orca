@@ -14,6 +14,57 @@ import {
   StatusDot,
 } from './ui';
 
+function FeatureFailure({ s }: { s: State }) {
+  const report = s.features;
+  if (!s.featureGenerationRequested || !report?.failure) return null;
+  const message = 'Feature search failed. Try again.';
+  return (
+    <Notice error>
+      <p>
+        {message}
+        {report.suggestions.length > 0 && ' Previous ideas kept.'}
+      </p>
+      {report.failure !== message && (
+        <Disclosure title="Error details">
+          <Prose text={report.failure} />
+        </Disclosure>
+      )}
+    </Notice>
+  );
+}
+
+function FeatureEmpty({ s, filtered = false }: { s: State; filtered?: boolean }) {
+  const report = s.features;
+  const title = !report
+    ? 'Features unavailable'
+    : report.status === 'not_generated'
+      ? 'No features yet'
+      : report.status === 'failed'
+        ? 'No saved features'
+        : report.suggestions.length === 0
+          ? 'No new features found'
+          : filtered
+            ? 'No matching features'
+            : 'No active features';
+  return (
+    <>
+      <Empty
+        title={title}
+        detail={
+          report?.status === 'ready' && !report.suggestions.length
+            ? 'Add goals and try again.'
+            : undefined
+        }
+      />
+      {!report && s.resourceErrors['feature suggestions'] && (
+        <Disclosure title="Error details">
+          <Prose text={s.resourceErrors['feature suggestions']} />
+        </Disclosure>
+      )}
+    </>
+  );
+}
+
 export function FeatureSummary({ s }: { s: State }) {
   const report = s.features;
   const suggestions = report?.suggestions.filter((idea) => idea.status !== 'dismissed') || [];
@@ -33,24 +84,14 @@ export function FeatureSummary({ s }: { s: State }) {
       }
     >
       <div className="row wrap">{report?.freshness === 'stale' && <Badge value="stale" />}</div>
-      {s.featureGenerationRequested && report?.failure && (
-        <Notice error>
-          {report.failure} {report.suggestions.length > 0 && 'Previous ideas remain available.'}
-        </Notice>
-      )}
+      <FeatureFailure s={s} />
       {s.featureGenerationRequested &&
         report?.freshness === 'stale' &&
         report.suggestions.length > 0 && (
           <Notice>Ideas are outdated. Generate again to update them.</Notice>
         )}
-      {!report ? (
-        <Empty title="Suggestions unavailable" detail={s.resourceErrors['feature suggestions']} />
-      ) : report.status === 'not_generated' ? (
-        <Empty title="No suggestions generated" />
-      ) : suggestions.length === 0 ? (
-        <Empty
-          title={report.status === 'failed' ? 'No saved suggestions' : 'No active suggestions'}
-        />
+      {!report || report.status === 'not_generated' || suggestions.length === 0 ? (
+        <FeatureEmpty s={s} />
       ) : (
         suggestions.slice(0, 3).map((idea) => (
           <div className="content-section" key={idea.id}>
@@ -119,7 +160,7 @@ export function Features({ s }: { s: State }) {
           </Button>
         </div>
       </Panel>
-      {s.featureGenerationRequested && report?.failure && <Notice error>{report.failure}</Notice>}
+      <FeatureFailure s={s} />
       {s.featureGenerationRequested &&
         report?.freshness === 'stale' &&
         report.suggestions.length > 0 && (
@@ -144,12 +185,8 @@ export function Features({ s }: { s: State }) {
         {report && <StatusDot value={report.status} label="Features" />}
         {report?.freshness === 'stale' && <Badge value="stale" />}
       </div>
-      {!report ? (
-        <Empty title="Suggestions unavailable" />
-      ) : report.status === 'not_generated' ? (
-        <Empty title="No suggestions generated" />
-      ) : suggestions?.length === 0 ? (
-        <Empty title="No matching suggestions" />
+      {!report || report.status === 'not_generated' || suggestions?.length === 0 ? (
+        <FeatureEmpty s={s} filtered />
       ) : (
         <div className="feature-grid">
           {suggestions?.map((idea) => (

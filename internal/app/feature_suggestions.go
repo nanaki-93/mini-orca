@@ -213,7 +213,7 @@ func (s *Service) generateFeatures(ctx context.Context, request FeatureRequest, 
 		}
 		previous.Goals = request.Goals
 		if generationErr != nil {
-			previous.Status, previous.Failure = "failed", "Feature suggestions could not be generated. Review provider configuration or retry."
+			previous.Status, previous.Failure = "failed", "Feature search failed. Try again."
 		} else {
 			preserveFeatureStatus(previous.Suggestions, suggestions)
 			previous.ProjectRevision, previous.WorkspaceHash = request.ProjectRevision, fingerprint
