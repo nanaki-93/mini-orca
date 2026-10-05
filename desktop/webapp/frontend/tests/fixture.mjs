@@ -46,8 +46,8 @@ export function installFixture(options = {}) {
   };
   const project = {
     ...identity,
-    name: 'harbor',
-    path: '/fixture/harbor',
+    name: options.projectName || 'harbor',
+    path: options.projectPath || '/fixture/harbor',
     type: 'go',
     build_file: 'go.mod',
     file_count: 24,
@@ -55,7 +55,7 @@ export function installFixture(options = {}) {
     total_lines: 2450,
     languages: { Go: 18, Markdown: 4, YAML: 2 },
     files: files.map((f) => f.path),
-    summary: 'A bounded worker service with a local queue.',
+    summary: options.projectSummary || 'A bounded worker service with a local queue.',
     ai_status: 'success',
     analyzed_at: '2026-10-04T00:00:00Z',
   };
@@ -597,6 +597,14 @@ export function installFixture(options = {}) {
             });
           if (path === '/api/projects/restore' || path === '/api/projects/import')
             return response(state.project);
+          if (path.endsWith('/overview') && options.overviewReadFail)
+            return {
+              status: 503,
+              body: JSON.stringify({
+                type: 'unavailable',
+                user_message: 'Saved overview could not be read.',
+              }),
+            };
           if (path.endsWith('/overview'))
             return response({
               ...rev,
@@ -617,7 +625,13 @@ export function installFixture(options = {}) {
                 engineering_insight: insight,
                 status: 'success',
               },
-              analysis_coverage: { total: 18, fresh: 14, stale: 2, missing: 2, failed: 0 },
+              analysis_coverage: options.coverage || {
+                total: 18,
+                fresh: 14,
+                stale: 2,
+                missing: 2,
+                failed: 0,
+              },
               finding_counts: { verified: 0, ai_suggestions: 3 },
               analysis_run: state.run,
             });

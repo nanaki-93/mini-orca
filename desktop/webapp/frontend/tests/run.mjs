@@ -26,7 +26,7 @@ async function pageFor(options = {}) {
   });
   await page.addInitScript(installFixture, options);
   await page.goto(url);
-  await page.getByRole('heading', { name: 'harbor', exact: true }).waitFor();
+  await page.getByRole('heading', { name: options.projectName || 'harbor', exact: true }).waitFor();
   await page.waitForFunction(() =>
     window.fixture.requests.some((request) => request.path?.endsWith('/analysis/selection')),
   );
@@ -109,7 +109,11 @@ async function contrast(page, name) {
   const failures = await page.evaluate(() => {
     const rgba = (color) => {
       const channels = color.match(/[\d.]+/g).map(Number);
-      return [...channels.slice(0, 3), channels[3] ?? 1];
+      const rgb = channels.slice(0, 3);
+      return [
+        ...(color.startsWith('color(srgb ') ? rgb.map((channel) => channel * 255) : rgb),
+        channels[3] ?? 1,
+      ];
     };
     const background = (element) => {
       const parents = [];
@@ -143,7 +147,12 @@ async function contrast(page, name) {
       '.metric-label',
       '.metric-number',
       '.metric-action',
+      '.summary-eyebrow',
+      '.summary-hero .page-heading p',
+      '.summary-facts dt',
+      '.summary-facts dd',
       '.coverage-ring strong',
+      '.coverage-copy p',
       '.legend span',
       '.badge',
       '.list-copy strong',
@@ -387,6 +396,126 @@ try {
         calls,
       );
       assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+      await close();
+    }
+  });
+  await test('Summary keeps cards, facts and actions readable across window and text sizes', async () => {
+    for (const long of [false, true]) {
+      const projectName = long
+        ? 'Harbor distributed background workers and durable local results'
+        : 'harbor';
+      const projectPath = long
+        ? `/fixture/workspaces/${'long-project-directory'.repeat(6)}/harbor`
+        : '/fixture/harbor';
+      const projectSummary = long
+        ? 'The service accepts requests through a local HTTP API and schedules bounded background work.\n\nEach worker records durable results while preserving cancellation and queue limits. Longer operations share the same context so shutdown remains predictable.'
+        : 'A bounded worker service with a local queue.';
+      const { page, close } = await pageFor({
+        projectName,
+        projectPath,
+        projectSummary,
+        featuresReady: true,
+      });
+      await idle(page);
+      assert.equal(await page.locator('.summary-hero .page-heading p').innerText(), projectPath);
+      assert.deepEqual(await page.locator('.summary-facts dd').allTextContents(), [
+        'go',
+        '18',
+        '2,450',
+        '0',
+      ]);
+      const requests = await page.evaluate(() => window.fixture.requests.length);
+      for (const [width, columns] of [
+        [1440, 3],
+        [1000, 2],
+        [700, 1],
+      ]) {
+        await page.setViewportSize({ width, height: 900 });
+        if (width === 1000) await page.getByRole('button', { name: 'Larger text' }).click();
+        for (const theme of ['dark', 'light']) {
+          if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+            await page.getByRole('button', { name: `Switch to ${theme} appearance` }).click();
+          const boxes = await page.locator('.metric-card').evaluateAll((cards) =>
+            cards.map((card) => {
+              const { x, y, width, height } = card.getBoundingClientRect();
+              return { x, y, width, height };
+            }),
+          );
+          assert.equal(boxes.filter((box) => Math.abs(box.y - boxes[0].y) < 1).length, columns);
+          for (const box of boxes) assert.ok(Math.abs(box.width - boxes[0].width) < 1);
+          const clipped = await page
+            .locator('.summary-page')
+            .evaluate((summary) =>
+              [
+                ...summary.querySelectorAll(
+                  'button, h1, .page-heading p, dt, dd, .metric-label, .metric-value, .metric-action',
+                ),
+              ]
+                .filter((element) => element.scrollWidth > element.clientWidth + 1)
+                .map((element) => element.textContent.trim()),
+            );
+          assert.deepEqual(clipped, [], 'Summary content must wrap without clipping');
+          assert.equal(
+            await page.getByRole('button', { name: 'Refresh', exact: true }).isVisible(),
+            true,
+          );
+          assert.equal(
+            await page.getByRole('button', { name: 'Analyze project', exact: true }).isVisible(),
+            true,
+          );
+          await layout(page, `summary-refined-${long ? 'long' : 'normal'}-${width}-${theme}`);
+          await contrast(page, `Summary refined ${width} ${theme}`);
+          if (width === 1440 && !long) {
+            for (const card of await page.locator('.metric-card').all()) {
+              await card.hover();
+              await contrast(page, `Summary card hover ${theme}`);
+            }
+            await page.locator('.summary-hero h1').hover();
+          }
+        }
+      }
+      await page.getByText('Components', { exact: true }).click();
+      await page.getByText('Worker pool', { exact: true }).waitFor();
+      await page.getByText('Why & tradeoffs', { exact: true }).click();
+      await page
+        .getByText('Make cancellation part of the work boundary.', { exact: true })
+        .waitFor();
+      assert.equal(await page.evaluate(() => window.fixture.requests.length), requests);
+      await close();
+    }
+  });
+  await test('Summary coverage and facts preserve empty and unavailable values', async () => {
+    for (const unavailable of [false, true]) {
+      const { page, close } = await pageFor({
+        overviewReadFail: unavailable,
+        coverage: { total: 0, fresh: 0, stale: 0, missing: 0, failed: 0 },
+      });
+      await idle(page);
+      assert.equal(await page.locator('.coverage-ring strong').innerText(), '—');
+      assert.equal(
+        await page.locator('.coverage-copy p').innerText(),
+        unavailable ? 'Not available yet' : '0 of 0 files current',
+      );
+      assert.deepEqual(
+        await page.locator('.legend strong').allTextContents(),
+        Array(3).fill(unavailable ? '—' : '0'),
+      );
+      if (unavailable) {
+        await page
+          .getByRole('alert')
+          .filter({ hasText: 'Saved overview could not be read.' })
+          .waitFor();
+        assert.deepEqual(await page.locator('.summary-facts dd').allTextContents(), [
+          'go',
+          '—',
+          '—',
+          '—',
+        ]);
+        const details = await page.locator('.summary-details').boundingBox();
+        const overview = await page.locator('.summary-details > .panel').boundingBox();
+        assert.equal(overview.width, details.width);
+      }
+      await layout(page, `summary-coverage-${unavailable ? 'unavailable' : 'empty'}`);
       await close();
     }
   });

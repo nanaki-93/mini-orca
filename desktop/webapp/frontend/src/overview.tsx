@@ -191,26 +191,44 @@ export function Summary({ s }: { s: State }) {
     },
   ];
   return (
-    <>
-      <Heading
-        title={s.project!.name}
-        detail={overview?.analysis.purpose ? undefined : s.project!.path}
-      >
-        <Button
-          icon="refresh"
-          disabled={!!s.busy}
-          onClick={() => void w.act('Refresh overview', () => w.refreshProject())}
-        >
-          Refresh
-        </Button>
-        <Go page="analysis" icon="activity" tone="primary">
-          Analyze project
-        </Go>
-      </Heading>
-      <div className="overview-row">
+    <div className="summary-page">
+      <div className="summary-hero">
+        <p className="summary-eyebrow">Project workspace</p>
+        <Heading title={s.project!.name} detail={s.project!.path}>
+          <Button
+            icon="refresh"
+            disabled={!!s.busy}
+            onClick={() => void w.act('Refresh overview', () => w.refreshProject())}
+          >
+            Refresh
+          </Button>
+          <Go page="analysis" icon="activity" tone="primary">
+            Analyze project
+          </Go>
+        </Heading>
+        <dl className="summary-facts" aria-label="Project facts">
+          <div>
+            <dt>Project type</dt>
+            <dd className="summary-project-type">{s.project!.type}</dd>
+          </div>
+          <div>
+            <dt>Source files</dt>
+            <dd>{overview?.metrics.source_file_count ?? '—'}</dd>
+          </div>
+          <div>
+            <dt>Lines</dt>
+            <dd>{overview?.metrics.total_lines?.toLocaleString() ?? '—'}</dd>
+          </div>
+          <div>
+            <dt>Verified findings</dt>
+            <dd>{overview?.finding_counts.verified ?? '—'}</dd>
+          </div>
+        </dl>
+      </div>
+      <div className="summary-dashboard">
         <Panel className="coverage-panel">
           <div className="coverage-ring">
-            <svg viewBox="0 0 100 100">
+            <svg viewBox="0 0 100 100" aria-hidden="true">
               <circle className="ring-track" cx="50" cy="50" r="42" />
               <circle
                 className="ring-mark"
@@ -222,22 +240,24 @@ export function Summary({ s }: { s: State }) {
             </svg>
             <strong>{percent === null ? '—' : `${percent}%`}</strong>
           </div>
-          <div>
+          <div className="coverage-copy">
             <h2>Analysis coverage</h2>
             <p>
               {coverage
                 ? `${coverage.fresh} of ${coverage.total} files current`
                 : 'Not available yet'}
             </p>
-            <div className="legend">
-              <span className={coverage && coverage.stale > 0 ? 'coverage-stale' : undefined}>
-                Outdated {coverage?.stale ?? '—'}
-              </span>
-              <span>Missing {coverage?.missing ?? '—'}</span>
-              <span className={coverage && coverage.failed > 0 ? 'coverage-failed' : undefined}>
-                Failed {coverage?.failed ?? '—'}
-              </span>
-            </div>
+          </div>
+          <div className="legend">
+            <span className={coverage && coverage.stale > 0 ? 'coverage-stale' : undefined}>
+              Outdated <strong>{coverage?.stale ?? '—'}</strong>
+            </span>
+            <span>
+              Missing <strong>{coverage?.missing ?? '—'}</strong>
+            </span>
+            <span className={coverage && coverage.failed > 0 ? 'coverage-failed' : undefined}>
+              Failed <strong>{coverage?.failed ?? '—'}</strong>
+            </span>
           </div>
         </Panel>
         <div className="metric-grid">
@@ -263,53 +283,33 @@ export function Summary({ s }: { s: State }) {
                   <Icon name="arrow" />
                 </div>
               ) : (
-                <div className="metric-number">{count ?? '—'}</div>
+                <div className="metric-value">
+                  <span className="metric-number">{count ?? '—'}</span>
+                  <Icon name="arrow" />
+                </div>
               )}
             </button>
           ))}
         </div>
       </div>
-      <div className="grid two-columns section-gap">
-        <div className="stack">
-          <Panel
-            title="Project overview"
-            actions={
-              <StatusDot
-                value={overview?.analysis.status || s.project!.ai_status}
-                label="Overview"
-              />
-            }
-          >
-            <Prose text={overview?.analysis.purpose || s.project!.summary} />
-            {overview?.analysis.failure && (
-              <p className="error-text">{overview.analysis.failure}</p>
-            )}
-            {!!overview?.analysis.components?.length && (
-              <Disclosure title="Components">
-                <BulletContent title="" items={overview.analysis.components} />
-              </Disclosure>
-            )}
-          </Panel>
-          <Panel title="Project facts">
-            <div className="mini-metrics">
-              <div>
-                <strong>{overview?.metrics.source_file_count ?? '—'}</strong>
-                <small>Source files</small>
-              </div>
-              <div>
-                <strong>{overview?.metrics.total_lines?.toLocaleString() ?? '—'}</strong>
-                <small>Lines</small>
-              </div>
-              <div>
-                <strong>{overview?.finding_counts.verified ?? '—'}</strong>
-                <small>Verified findings</small>
-              </div>
-            </div>
-          </Panel>
-        </div>
+      <div className="summary-details">
+        <Panel
+          title="Project overview"
+          actions={
+            <StatusDot value={overview?.analysis.status || s.project!.ai_status} label="Overview" />
+          }
+        >
+          <Prose text={overview?.analysis.purpose || s.project!.summary} />
+          {overview?.analysis.failure && <p className="error-text">{overview.analysis.failure}</p>}
+          {!!overview?.analysis.components?.length && (
+            <Disclosure title="Components">
+              <BulletContent title="" items={overview.analysis.components} />
+            </Disclosure>
+          )}
+        </Panel>
         <InsightCard insight={overview?.analysis.engineering_insight} />
       </div>
-    </>
+    </div>
   );
 }
 export function Models({ s }: { s: State }) {
