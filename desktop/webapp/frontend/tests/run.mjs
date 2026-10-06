@@ -24,7 +24,19 @@ const surfaceInventory = {
   },
   analysis: {
     analysis: ['setup', 'no run', 'saved run', 'busy', 'unavailable models', 'dirty selection'],
-    'analysis-preview': ['new', 'repair', 'continuation', 'absent', 'consent', 'mismatch'],
+    'analysis-preview': [
+      'new',
+      'repair',
+      'continuation',
+      'absent',
+      'consent',
+      'mismatch',
+      'long paths and destinations',
+      'empty scope',
+      'feature-only scope',
+      'unavailable captured models',
+      'unavailable captured provider',
+    ],
     'analysis-run': [
       'absent',
       'queued',
@@ -233,7 +245,7 @@ async function headingContainment(heading) {
   assert.ok(bounds, 'Heading is rendered');
   const parts = [
     heading.locator('h1'),
-    heading.locator('p'),
+    ...(await heading.locator('p').all()),
     ...(await heading.getByRole('button').all()),
   ];
   const boxes = [];
@@ -308,6 +320,44 @@ async function panelTreatment(panel) {
       bodyPadding: getComputedStyle(element.querySelector('.panel-body')).padding,
     };
   });
+}
+async function analysisPreviewLayout(page) {
+  await headingContainment(page.locator('.page-heading--intro'));
+  const intro = await page.locator('.page-heading--intro').boundingBox();
+  const composition = page.locator('.analysis-preview-layout');
+  const body = await composition.boundingBox();
+  assert.ok(Math.abs(body.y - (intro.y + intro.height) - 20) <= 1);
+  for (const region of [composition, composition.locator(':scope > .stack')])
+    assert.equal(await region.evaluate((element) => getComputedStyle(element).gap), '20px');
+  const overflowing = await page
+    .locator(
+      '#main, .page, .workspace-page, .analysis-preview-layout, .analysis-preview .stack, .analysis-preview .panel, .analysis-preview .panel-head, .analysis-preview .panel-body, .analysis-preview .three-columns > div, .analysis-preview .list-copy, .analysis-preview .notice',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.scrollWidth > element.clientWidth + 1)
+        .map((element) => element.id || element.className),
+    );
+  assert.deepEqual(overflowing, [], 'Preview content wraps without internal horizontal clipping');
+  for (const panel of await page.locator('.analysis-preview section.panel').all()) {
+    const bounds = await panel.boundingBox();
+    assert.ok(bounds.x >= body.x - 1 && bounds.x + bounds.width <= body.x + body.width + 1);
+    for (const action of await panel.getByRole('button').all()) {
+      const box = await action.boundingBox();
+      assert.ok(box && box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+    }
+  }
+  const stack = await composition.locator(':scope > .stack').boundingBox();
+  const files = await composition.locator(':scope > .panel').boundingBox();
+  if (page.viewportSize().width > 1000) {
+    assert.ok(Math.abs(files.y - stack.y) <= 1, 'Selected files align with scope');
+    assert.ok(Math.abs(files.x - (stack.x + stack.width) - 20) <= 1);
+  } else {
+    assert.ok(Math.abs(files.y - (stack.y + stack.height) - 20) <= 1);
+    assert.ok(Math.abs(files.width - stack.width) <= 1, 'Compact preview stacks full-width panels');
+  }
+  checks++;
 }
 async function analysisSections(page, hasRun) {
   const settings = page.locator('section.panel').filter({
@@ -1793,7 +1843,7 @@ try {
   });
   await test('Captured metadata and fallbacks preserve Analysis, run and preview caller semantics', async () => {
     const saved = savedModelsFixture();
-    // Shared preview keeps its existing half-width panel; long-content reflow is Analysis-only.
+    // Run retains its existing viewport reflow; preview uses the captured panel's own width.
     const origins = ['http://c.test', 'https://r.test', 'https://f.test'];
     saved.details.forEach((detail, index) => {
       detail.origin = origins[index];
@@ -1867,7 +1917,8 @@ try {
         });
         for (const width of [1440, 1001, 800]) {
           await page.setViewportSize({ width, height: width === 1440 ? 1000 : 900 });
-          await capturedDetails(previewPanel, expected, width > 1000 ? 3 : 1);
+          await capturedDetails(previewPanel, expected, 1);
+          await analysisPreviewLayout(page);
           await layout(page, `analysis-shared-preview-${scenario}-${width}`);
         }
         assert.equal(await page.getByRole('dialog').count(), 0);
@@ -1876,6 +1927,339 @@ try {
         );
         assert.equal(writes.length, before.length + 1);
         assert.equal(writes.at(-1).path, '/api/projects/current/analysis/preview');
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Analysis previews share Summary hierarchy and keep captured scope and consent visible', async () => {
+    const saved = savedModelsFixture(true);
+    const path = `internal/${'longpathsegment'.repeat(20)}/worker.go`;
+    const excludedPath = `private/${'excludedsegment'.repeat(20)}/notes.md`;
+    const reason = `Excluded by context policy: ${'policyreason'.repeat(25)}`;
+    const features = {
+      expected_hash: 'features-empty',
+      goals_hash: 'goals-hash',
+      workspace_hash: 'workspace-hash',
+      excluded_paths: [excludedPath],
+      provider_id: 'saved-provider-2',
+      max_model_requests: 2,
+    };
+    for (const mode of ['new', 'repair', 'continuation']) {
+      const { page, close } = await pageFor({
+        ...saved.options,
+        hasRecovery: mode === 'repair',
+        runStatus: mode === 'continuation' ? 'paused' : 'completed',
+        previewOverride: {
+          models: saved.options.capturedModels,
+          providers: saved.options.capturedProviders,
+          files: [
+            {
+              path,
+              content_hash: 'long-file-hash',
+              language: 'go',
+              size_bytes: 2048,
+              stages: [
+                { stage: 'semantic', eligible: true, cached: false, max_model_requests: 3 },
+                { stage: 'performance', eligible: true, cached: true, max_model_requests: 3 },
+                { stage: 'security_ai', eligible: false, cached: false, max_model_requests: 0 },
+              ],
+            },
+          ],
+          excluded: [{ path: excludedPath, reason }],
+          limits: { batch_files: 7, budget_seconds: 1234, max_attempts_per_stage: 3 },
+          refresh: mode === 'repair',
+          expected_model_requests: 3,
+          max_model_requests: 8,
+          features: mode === 'repair' ? null : features,
+        },
+      });
+      try {
+        const introReference = await introductionTreatment(page.locator('.summary-hero'));
+        const panelReference = await panelTreatment(
+          page.locator('.summary-details > .panel').first(),
+        );
+        await nav(page, 'Analysis');
+        await idle(page);
+        if (mode === 'continuation') {
+          // Today's editable setup deliberately differs from the saved feature profile.
+          assert.equal(await page.getByLabel('Feature discovery model').inputValue(), 'function');
+          await page.getByLabel('Feature discovery model').selectOption('analyze');
+          await page.getByRole('button', { name: 'View run', exact: true }).click();
+          await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
+        } else {
+          await page.getByLabel('Feature discovery model').selectOption('function');
+          await page
+            .getByRole('button', {
+              name: mode === 'repair' ? 'Repair analysis' : 'Prepare analysis',
+              exact: true,
+            })
+            .click();
+        }
+        await idle(page);
+        await page
+          .getByRole('heading', {
+            name:
+              mode === 'repair'
+                ? 'Repair analysis'
+                : mode === 'continuation'
+                  ? 'Continue analysis'
+                  : 'Ready to analyze',
+            exact: true,
+          })
+          .waitFor();
+        assert.deepEqual(
+          await introductionTreatment(page.locator('.page-heading--intro')),
+          introReference,
+        );
+        for (const panel of await page.locator('.analysis-preview section.panel').all())
+          assert.deepEqual(await panelTreatment(panel), panelReference);
+        const scope = page.locator('section.panel').filter({
+          has: page.getByRole('heading', {
+            name: mode === 'repair' ? 'Repair scope' : 'Scope',
+            exact: true,
+          }),
+        });
+        assert.deepEqual(await scope.locator('.mini-metrics strong').allTextContents(), [
+          '1',
+          '3',
+          '8',
+        ]);
+        assert.deepEqual(await scope.locator('.key-values dd').allTextContents(), [
+          '7 files',
+          '1234 seconds',
+          '3',
+          mode === 'repair' ? 'Refresh' : 'Reuse when current',
+        ]);
+        await page
+          .getByText('Start confirms any remote context sharing and AI Security review.', {
+            exact: true,
+          })
+          .waitFor();
+        if (mode === 'repair')
+          await page
+            .getByText(
+              'Repair re-attempts unfinished analysis work. It does not modify your source code.',
+              { exact: true },
+            )
+            .waitFor();
+        if (mode === 'continuation') {
+          await page
+            .getByText("Resuming keeps this run's model choices.", { exact: true })
+            .waitFor();
+          await page
+            .getByText(/Your current setup choices differ from this run's captured choices/)
+            .waitFor();
+        }
+        const selected = page.locator('section.panel').filter({
+          has: page.getByRole('heading', { name: 'Selected files', exact: true }),
+        });
+        assert.equal(await selected.getByText(path, { exact: true }).count(), 1);
+        assert.equal(
+          await selected.getByText('Code / Performance · cached', { exact: true }).count(),
+          1,
+        );
+        const calls = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method !== 'GET'),
+        );
+        const disclosure = selected.locator('details');
+        assert.equal(await disclosure.getAttribute('open'), null);
+        await disclosure.locator('summary').click();
+        assert.equal(await selected.getByText(excludedPath, { exact: true }).isVisible(), true);
+        assert.equal(await selected.getByText(reason, { exact: true }).isVisible(), true);
+        assert.equal(calls.at(-1).path, '/api/projects/current/analysis/preview');
+        assert.equal(calls.at(-1).body.recover_incomplete, mode === 'repair');
+        assert.equal(calls.at(-1).body.include_features, mode !== 'repair');
+        if (mode === 'continuation') assert.equal(calls.at(-1).body.resume_run.id, 'run-1');
+        for (const width of [1440, 1280, 1001, 800]) {
+          await page.setViewportSize({ width, height: 1000 });
+          for (const theme of ['dark', 'light']) {
+            if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+              await page.getByRole('button', { name: `Switch to ${theme} appearance` }).click();
+            for (const large of [false, true]) {
+              const text = page.getByRole('button', { name: 'Larger text', exact: true });
+              if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
+              await capturedDetails(page.locator('.analysis-preview-models'), saved.details, 1);
+              await analysisPreviewLayout(page);
+              await layout(
+                page,
+                `analysis-preview-${mode}-long-${width}-${theme}-${large ? 'large' : 'standard'}`,
+              );
+            }
+          }
+        }
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          calls,
+          'Preview inspection, disclosures and appearance do not admit work or write source',
+        );
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+        const action = page.getByRole('button', {
+          name:
+            mode === 'repair'
+              ? 'Start repair'
+              : mode === 'continuation'
+                ? 'Resume analysis'
+                : 'Start analysis',
+          exact: true,
+        });
+        assert.equal(await action.isDisabled(), false);
+        await action.click();
+        const dialog = page.getByRole('dialog');
+        await dialog.getByText(/AI Security review/).waitFor();
+        assert.equal(
+          await page.locator('.page-heading--intro .button.primary').isDisabled(),
+          true,
+          'Admission remains disabled while confirmation is pending',
+        );
+        const destinations = mode === 'repair' ? [saved.details[1]] : saved.details.slice(1);
+        for (const destination of destinations)
+          await dialog
+            .getByText(`${destination.model} · ${destination.origin}`, { exact: true })
+            .waitFor();
+        assert.equal(
+          await dialog
+            .getByText(`${saved.details[0].model} · ${saved.details[0].origin}`, { exact: true })
+            .count(),
+          0,
+          'Local Code destination does not require remote confirmation',
+        );
+        if (mode === 'repair')
+          assert.equal(
+            await dialog
+              .getByText(`${saved.details[2].model} · ${saved.details[2].origin}`, { exact: true })
+              .count(),
+            0,
+            'Repair does not request feature discovery confirmation',
+          );
+        await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+        await idle(page);
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          calls,
+          'Canceling fresh consent leaves admission untouched',
+        );
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Analysis preview handles empty scope, feature-only admission and missing captured evidence', async () => {
+    const saved = savedModelsFixture();
+    for (const scenario of [
+      'empty',
+      'feature-only',
+      'missing-models',
+      'missing-provider',
+      'absent',
+    ]) {
+      const { page, close } = await pageFor({
+        ...saved.options,
+        runStatus: 'paused',
+        previewOverride:
+          scenario === 'absent'
+            ? null
+            : scenario === 'empty' || scenario === 'feature-only'
+              ? {
+                  files: [],
+                  features:
+                    scenario === 'empty'
+                      ? null
+                      : {
+                          expected_hash: 'features-empty',
+                          goals_hash: 'goals-hash',
+                          workspace_hash: 'workspace-hash',
+                          excluded_paths: [],
+                          provider_id: 'saved-provider-2',
+                          max_model_requests: 2,
+                        },
+                  expected_model_requests: scenario === 'empty' ? 0 : 1,
+                  max_model_requests: scenario === 'empty' ? 0 : 2,
+                }
+              : scenario === 'missing-models'
+                ? { models: null }
+                : { providers: saved.options.capturedProviders.slice(0, 2) },
+      });
+      try {
+        await nav(page, 'Analysis');
+        await idle(page);
+        await page.getByRole('button', { name: 'View run', exact: true }).click();
+        await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
+        await idle(page);
+        const calls = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method !== 'GET'),
+        );
+        if (scenario === 'absent') {
+          await page.getByRole('heading', { name: 'Prepare a new preview', exact: true }).waitFor();
+          assert.equal(
+            await page.getByRole('button', { name: 'Resume analysis', exact: true }).count(),
+            0,
+          );
+        } else {
+          const start = page.getByRole('button', { name: 'Resume analysis', exact: true });
+          assert.equal(await start.isDisabled(), scenario === 'empty');
+          if (scenario === 'empty' || scenario === 'feature-only')
+            await page.getByRole('heading', { name: 'No selected files', exact: true }).waitFor();
+          if (scenario === 'missing-models' || scenario === 'missing-provider')
+            await capturedDetails(
+              page.locator('.analysis-preview-models'),
+              scenario === 'missing-models'
+                ? null
+                : saved.details.map((detail, i) =>
+                    i === 2 ? { label: detail.label, profile: detail.profile } : detail,
+                  ),
+              1,
+            );
+        }
+        for (const width of [1440, 800]) {
+          await page.setViewportSize({ width, height: 1000 });
+          for (const theme of ['dark', 'light']) {
+            if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+              await page.getByRole('button', { name: `Switch to ${theme} appearance` }).click();
+            for (const large of [false, true]) {
+              const text = page.getByRole('button', { name: 'Larger text', exact: true });
+              if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
+              if (scenario === 'absent')
+                await headingContainment(page.locator('.page-heading--intro'));
+              else await analysisPreviewLayout(page);
+              await layout(
+                page,
+                `analysis-preview-${scenario}-${width}-${theme}-${large ? 'large' : 'standard'}`,
+              );
+            }
+          }
+        }
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          calls,
+        );
+        assert.equal(await page.getByRole('dialog').count(), 0);
+        if (scenario === 'feature-only') {
+          await page.getByRole('button', { name: 'Resume analysis', exact: true }).click();
+          const dialog = page.getByRole('dialog');
+          await dialog.getByText('0 selected files', { exact: true }).waitFor();
+          await dialog
+            .getByText(`${saved.details[2].model} · ${saved.details[2].origin}`, { exact: true })
+            .waitFor();
+          await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+          await idle(page);
+          assert.deepEqual(
+            await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+            calls,
+          );
+        }
+        await page
+          .getByRole('button', {
+            name: scenario === 'absent' ? 'Back to analysis' : 'Back',
+            exact: true,
+          })
+          .click();
+        await page.getByRole('heading', { name: 'Analysis', exact: true }).waitFor();
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          calls,
+        );
         assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
       } finally {
         await close();

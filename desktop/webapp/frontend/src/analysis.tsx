@@ -368,9 +368,12 @@ export function AnalysisPreview({ s }: { s: State }) {
   const p = s.preview;
   if (!p)
     return (
-      <Empty title="Prepare a new preview">
-        <Go page="analysis">Back to analysis</Go>
-      </Empty>
+      <div className="workspace-page">
+        <Heading variant="intro" title="Analysis preview">
+          <Go page="analysis">Back to analysis</Go>
+        </Heading>
+        <Empty title="Prepare a new preview" />
+      </div>
     );
   const ready = p.files.length > 0 || !!p.features?.max_model_requests;
   const isRepair = !!p.recover_incomplete;
@@ -386,9 +389,11 @@ export function AnalysisPreview({ s }: { s: State }) {
       currentSetup.features !== p.models.features);
 
   return (
-    <>
+    <div className="workspace-page analysis-preview">
       <Heading
+        variant="intro"
         title={isRepair ? 'Repair analysis' : isResume ? 'Continue analysis' : 'Ready to analyze'}
+        detail="Review captured scope, request bounds and model destinations before starting."
       >
         <Go page="analysis">Back</Go>
         <Button
@@ -400,7 +405,7 @@ export function AnalysisPreview({ s }: { s: State }) {
           {isRepair ? 'Start repair' : isResume ? 'Resume analysis' : 'Start analysis'}
         </Button>
       </Heading>
-      <div className="grid two-columns">
+      <div className="grid two-columns analysis-preview-layout">
         <div className="stack">
           <Panel title={isRepair ? 'Repair scope' : 'Scope'}>
             <div className="mini-metrics">
@@ -421,6 +426,7 @@ export function AnalysisPreview({ s }: { s: State }) {
               values={[
                 ['Batch', `${p.limits.batch_files} files`],
                 ['Time budget', `${p.limits.budget_seconds} seconds`],
+                ['Attempts per stage', p.limits.max_attempts_per_stage],
                 ['Existing results', p.refresh ? 'Refresh' : 'Reuse when current'],
               ]}
             />
@@ -430,7 +436,7 @@ export function AnalysisPreview({ s }: { s: State }) {
               </p>
             )}
           </Panel>
-          <Panel title="Models">
+          <Panel title="Models" className="analysis-preview-models">
             <CapturedModels plan={p} />
             {isResume && (
               <p className="small muted section-gap">Resuming keeps this run's model choices.</p>
@@ -458,6 +464,7 @@ export function AnalysisPreview({ s }: { s: State }) {
           )}
         </div>
         <Panel title="Selected files">
+          {p.files.length === 0 && <Empty title="No selected files" />}
           <div className="scroll-list">
             {p.files.map((file) => (
               <div className="list-row" key={file.path}>
@@ -490,7 +497,7 @@ export function AnalysisPreview({ s }: { s: State }) {
           </Disclosure>
         </Panel>
       </div>
-    </>
+    </div>
   );
 }
 export function AnalysisRun({ s }: { s: State }) {
