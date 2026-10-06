@@ -86,6 +86,8 @@ export function installFixture(options = {}) {
   const stages = ['semantic', 'performance', 'security_rules', 'security_ai'];
   const idea = {
     id: 'idea-1',
+    generation_id: 'gen-1',
+    freshness: options.featuresStale ? 'stale' : 'current',
     title: 'Retry failed work',
     benefit: 'Let users recover failed jobs without submitting them again.',
     evidence: 'The worker queue already records failed jobs.',
@@ -254,7 +256,39 @@ export function installFixture(options = {}) {
       goals: '',
       status: options.featuresReady ? (options.featuresFail ? 'failed' : 'ready') : 'not_generated',
       freshness: options.featuresStale ? 'stale' : 'current',
-      suggestions: options.featuresReady && !options.featuresEmpty ? [{ ...idea }] : [],
+      suggestions:
+        options.featuresReady && !options.featuresEmpty
+          ? [
+              {
+                ...idea,
+                generation_id: options.legacyShape ? undefined : 'gen-1',
+                freshness: options.legacyShape
+                  ? undefined
+                  : options.featuresStale
+                    ? 'stale'
+                    : 'current',
+              },
+            ]
+          : [],
+      generations: options.legacyShape
+        ? undefined
+        : options.featuresReady
+          ? [
+              {
+                id: 'gen-1',
+                timestamp: '2026-10-04T01:00:00Z',
+                goals: '',
+                provider_id: 'provider-1',
+                model_summary: {
+                  profile: 'analyze',
+                  model: model('analyze').model,
+                  provider_origin: model('analyze').provider_origin,
+                  remote_provider: model('analyze').remote_provider,
+                },
+              },
+            ]
+          : [],
+      last_generation: options.legacyShape ? undefined : options.featuresReady ? 'gen-1' : '',
       failure:
         options.featuresReady && options.featuresFail ? 'Feature search failed. Try again.' : '',
       context_manifest: context,
@@ -275,7 +309,15 @@ export function installFixture(options = {}) {
     terminals = [],
     failures = {};
   let held = null;
-  window.fixture = { state, requests, terminals, failures, release: () => held?.(), hold: '' };
+  window.fixture = {
+    state,
+    options,
+    requests,
+    terminals,
+    failures,
+    release: () => held?.(),
+    hold: '',
+  };
   localStorage.setItem('mini-orca:last-project', project.path);
   const sameDraft = (d) => ({
     ...identity,
@@ -366,8 +408,40 @@ export function installFixture(options = {}) {
                 ? 'Feature search failed. Try again.'
                 : '';
               state.features.freshness = options.featuresStale ? 'stale' : 'current';
-              if (!options.featuresFail)
-                state.features.suggestions = options.featuresEmpty ? [] : [{ ...idea }];
+              if (!options.featuresFail) {
+                const newGenId = 'gen-' + ((state.features.generations || []).length + 1);
+                state.features.generations = [
+                  ...(state.features.generations || []),
+                  {
+                    id: newGenId,
+                    timestamp: '2026-10-04T01:05:00Z',
+                    goals: body.goals,
+                    provider_id: 'provider-1',
+                    model_summary: {
+                      profile: body.profile || 'analyze',
+                      model: model(body.profile || 'analyze').model,
+                      provider_origin: model(body.profile || 'analyze').provider_origin,
+                      remote_provider: model(body.profile || 'analyze').remote_provider,
+                    },
+                  },
+                ];
+                state.features.last_generation = newGenId;
+                if (options.featuresEmpty) {
+                  // do not add ideas
+                } else if (options.duplicateOnly) {
+                  // do not add new ideas
+                } else {
+                  state.features.suggestions = [
+                    ...(state.features.suggestions || []),
+                    {
+                      ...idea,
+                      id: 'idea-' + ((state.features.suggestions || []).length + 1),
+                      generation_id: newGenId,
+                      freshness: 'current',
+                    },
+                  ];
+                }
+              }
             } else {
               state.features.suggestions.find((idea) => idea.id === path.split('/').at(-1)).status =
                 body.status;

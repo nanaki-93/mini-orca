@@ -52,8 +52,11 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
 - **Bugs**, **Performance** and **Security** show searchable results and their
   evidence. Details retain complete model prose, provenance and verification
   guidance. Findings and performance hypotheses keep their reported confidence.
-- **Features** uses project goals to suggest advisory new capabilities. Save,
-  dismiss or discuss an idea in Chat. Opening an idea does not generate code.
+- **Features** uses project goals to suggest advisory new capabilities. Searching
+  for features is additive: new ideas accumulate alongside existing ones, retaining
+  prior triage decisions, and duplicates are skipped. Ideas generated from previous
+  source become stale when the project changes and must be updated by a new search
+  before they can be discussed in Chat. Opening an idea does not generate code.
 - **Chat** captures up to eight explicit Go/Markdown paths, including new files.
   Describe a task or use **Prepare fix** on a finding. Preparation generates and
   checks a proposal, with at most three repairs of failed checks. Read every diff,

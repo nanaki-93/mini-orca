@@ -181,6 +181,7 @@ export interface AnalysisPreview {
   max_model_requests: number;
   security_review_intent_required: boolean;
   retry_stale_failed?: boolean;
+  recover_incomplete?: boolean;
 }
 export interface Coverage {
   total: number;
@@ -237,6 +238,12 @@ export interface Selection extends ProjectIdentity {
     reason: string;
     stages: { stage: string; status: string; reason?: string }[];
   }[];
+  recovery?: {
+    state: string;
+    file_count: number;
+    stage_count: number;
+    reason?: string;
+  };
 }
 export interface PerformanceFinding {
   id: string;
@@ -542,8 +549,23 @@ export interface ChangeSeed {
   acceptance_criteria: string[];
 }
 
+export interface FeatureGeneration {
+  id: string;
+  timestamp: string;
+  goals: string;
+  provider_id?: string;
+  model_summary?: {
+    profile: string;
+    model: string;
+    provider_origin: string;
+    remote_provider: boolean;
+  };
+}
+
 export interface FeatureSuggestion {
   id: string;
+  generation_id?: string;
+  freshness?: string;
   title: string;
   benefit: string;
   evidence: string;
@@ -559,6 +581,8 @@ export interface FeatureReport extends ProjectIdentity {
   freshness: string;
   failure?: string;
   suggestions: FeatureSuggestion[];
+  generations?: FeatureGeneration[];
+  last_generation?: string;
   context_manifest: ContextManifest;
 }
 export interface InstructionPreview extends ProjectIdentity {
