@@ -2,7 +2,7 @@
 
 set -u
 
-staticcheck_version=v0.7.0
+staticcheck_version=v0.8.1
 tools_version=v0.40.0
 gocyclo_version=v0.6.0
 jscpd_version=4.0.5
@@ -50,6 +50,7 @@ run_go_quality() {
   run_stage "Go static analysis" go run honnef.co/go/tools/cmd/staticcheck@"$staticcheck_version" ./...
   run_stage "Go reachability" run_go_reachability
   run_stage "Go complexity" find cmd internal -name '*.go' -type f ! -name '*_test.go' -exec go run github.com/fzipp/gocyclo/cmd/gocyclo@"$gocyclo_version" -over 15 '{}' +
+  export npm_config_cache=".npm_local"
   run_stage "Go clone detection" npx --yes jscpd@"$jscpd_version" \
     --min-tokens 70 \
     --min-lines 8 \

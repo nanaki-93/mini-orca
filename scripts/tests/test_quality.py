@@ -11,7 +11,7 @@ QUALITY_SCRIPT = Path(__file__).resolve().parents[1] / "quality.sh"
 GO_STUB = """#!/bin/sh
 printf '%s\\n' "go $*" >> "$QUALITY_CALLS"
 case "$2" in
-  honnef.co/go/tools/cmd/staticcheck@v0.7.0|github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0)
+  honnef.co/go/tools/cmd/staticcheck@v0.8.1|github.com/fzipp/gocyclo/cmd/gocyclo@v0.6.0)
     exit 0 ;;
   golang.org/x/tools/cmd/deadcode@v0.40.0)
     printf '%s' "$DEADCODE_STDOUT"
