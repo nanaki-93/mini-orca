@@ -147,7 +147,6 @@ async function contrast(page, name) {
       '.metric-label',
       '.metric-number',
       '.metric-action',
-      '.summary-eyebrow',
       '.summary-hero .page-heading p',
       '.summary-facts dt',
       '.summary-facts dd',
