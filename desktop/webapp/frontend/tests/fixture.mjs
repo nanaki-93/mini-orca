@@ -251,6 +251,62 @@ export function installFixture(options = {}) {
       },
     ],
   };
+  // Complete detail evidence is opt-in so ordinary workflow fixtures stay small.
+  if (options.findingDetail) {
+    const category = options.findingDetail.split('-')[0];
+    const path = `internal/${'long-source-anchor-'.repeat(14)}/process.go`;
+    const prose = (label) =>
+      `${label}: complete first paragraph.\n\n${'Full explanation with workload, uncertainty and recovery. '.repeat(12)}${'unbroken-evidence-'.repeat(16)}\n\n${label}: final paragraph. <script>window.detailExecuted = true</script> ![remote](https://evidence.invalid/image.png)`;
+    files[0].path = path;
+    project.files[0] = path;
+    finding.category = category;
+    finding.title = `Complete ${category} evidence ${'long-finding-title-'.repeat(12)}`;
+    finding.location = { path, symbol: 'LongDeclaration'.repeat(16), start_line: 5, end_line: 7 };
+    finding.message = prose('Finding');
+    finding.evidence = prose('Evidence');
+    finding.task_spec = {
+      schema_version: '1',
+      target_path: path,
+      target_symbol: finding.location.symbol,
+      target_signature: symbol.signature,
+      acceptance_criteria: [prose('Acceptance criterion')],
+      non_goals: [prose('Non-goal')],
+      go_test_candidate: {
+        name: 'TestProcessCancellation',
+        content: `func TestProcessCancellation(t *testing.T) {\n\t// ${'long-test-guidance-'.repeat(30)}\n}`,
+      },
+    };
+    Object.keys(insight).forEach((key) => {
+      insight[key] = prose(key);
+    });
+    performance.path = path;
+    const perf = performance.findings[0];
+    perf.title = finding.title;
+    perf.symbol = finding.location.symbol;
+    for (const key of [
+      'observed_pattern',
+      'workload_conditions',
+      'recommendation',
+      'tradeoff',
+      'verification_plan',
+    ])
+      perf[key] = prose(key);
+    security.path = path;
+    const sec = security.findings[0];
+    sec.title = finding.title;
+    sec.source_anchor = { ...finding.location };
+    sec.engineering_insight = insight;
+    for (const key of [
+      'observed_condition',
+      'preconditions_or_unknowns',
+      'remediation',
+      'verification_idea',
+      'rule',
+      'cwe',
+      'reference',
+    ])
+      sec[key] = prose(key);
+  }
   const state = {
     project,
     files,
@@ -260,7 +316,15 @@ export function installFixture(options = {}) {
     context,
     performance,
     security,
-    results: {},
+    results: options.findingDetail?.endsWith('-semantic')
+      ? {
+          [options.findingDetail.split('-')[0]]: {
+            semantic: [finding],
+            performance: [],
+            security: [],
+          },
+        }
+      : {},
     trusted: false,
     changes: {},
     changeReceipt: null,

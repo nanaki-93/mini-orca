@@ -1165,6 +1165,27 @@ button.list-row:hover,
 .results-reports {
   gap: 20px;
 }
+.results-detail {
+  container-type: inline-size;
+}
+.results-detail-layout,
+.results-detail-layout > .stack {
+  gap: 20px;
+}
+.results-detail-source .key-values {
+  margin-top: 0;
+}
+.results-detail li {
+  overflow-wrap: anywhere;
+}
+.results-detail .insight {
+  border-left: 1px solid var(--line);
+}
+@container (max-width: 48em) {
+  .results-detail-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 @container (max-width: 40em) {
   .results-findings .result-row {
     grid-template-columns: 30px minmax(0, 1fr) 18px;

@@ -131,14 +131,18 @@ export function Results({ s }: { s: State }) {
   };
   if (detail)
     return (
-      <>
+      <div className="workspace-page results-page results-detail">
         <Heading
+          variant="intro"
           title={detail.title}
           detail={
             <span className="row wrap">
               <Badge value={detail.severity} />
               <Badge value={detail.confidence} tone="violet" />
-              <StatusDot value={detail.freshness} label="Freshness" />
+              <span className="results-state">
+                <StatusDot value={detail.freshness} label="Freshness" />
+                <span>{human(detail.freshness)}</span>
+              </span>
             </span>
           }
         >
@@ -177,7 +181,7 @@ export function Results({ s }: { s: State }) {
             </Button>
           )}
         </Heading>
-        <div className="grid two-columns">
+        <div className="grid two-columns results-detail-layout">
           <div className="stack">
             {detail.text
               .filter(([, content]) => content)
@@ -200,14 +204,14 @@ export function Results({ s }: { s: State }) {
                     ))}
                   </ul>
                   {detail.task.go_test_candidate && (
-                    <pre>{detail.task.go_test_candidate.content}</pre>
+                    <pre tabIndex={0}>{detail.task.go_test_candidate.content}</pre>
                   )}
                 </Disclosure>
               </Panel>
             )}
           </div>
           <div className="stack">
-            <Panel title="Source">
+            <Panel title="Source" className="results-detail-source">
               <KeyValues
                 values={[
                   ['File', detail.path],
@@ -242,7 +246,7 @@ export function Results({ s }: { s: State }) {
             <InsightCard insight={detail.insight} />
           </div>
         </div>
-      </>
+      </div>
     );
   const reports = [
     ...(results?.performance || [])
