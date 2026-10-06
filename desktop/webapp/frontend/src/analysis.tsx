@@ -504,11 +504,14 @@ export function AnalysisRun({ s }: { s: State }) {
   const run = s.run;
   if (!run)
     return (
-      <Empty title="No analysis run yet">
-        <Go page="analysis" tone="primary">
-          Prepare analysis
-        </Go>
-      </Empty>
+      <div className="workspace-page analysis-run">
+        <Heading variant="intro" title="Project analysis" />
+        <Empty title="No analysis run yet">
+          <Go page="analysis" tone="primary">
+            Prepare analysis
+          </Go>
+        </Empty>
+      </div>
     );
   const total = run.sections.reduce((sum, section) => sum + section.coverage.total, 0);
   const done = run.sections.reduce(
@@ -536,8 +539,17 @@ export function AnalysisRun({ s }: { s: State }) {
             ? 'Generating feature suggestions…'
             : 'Preparing analysis…';
   return (
-    <>
-      <Heading title="Project analysis" detail={<StatusDot value={run.status} label="Analysis" />}>
+    <div className="workspace-page analysis-run">
+      <Heading
+        variant="intro"
+        title="Project analysis"
+        detail={
+          <span className="analysis-run-status">
+            <StatusDot value={run.status} label="Analysis" />
+            <span>{human(run.status)}</span>
+          </span>
+        }
+      >
         <Go page="analysis">Files</Go>
         {['running', 'queued'].includes(run.status) && (
           <Button icon="pause" disabled={!!s.busy} onClick={() => void w.controlRun('pause')}>
@@ -563,16 +575,15 @@ export function AnalysisRun({ s }: { s: State }) {
         )}
       </Heading>
       {run.reason && <Notice>{run.reason}</Notice>}
-      <Panel title="Captured models" className="section-gap">
+      <Panel title="Captured models" className="analysis-run-models">
         <CapturedModels plan={run.plan} />
       </Panel>
-      <Panel>
-        <div className="row between wrap">
-          <h2>{run.window_files_completed} files completed this batch</h2>
-          <span className="muted small">{run.elapsed_seconds}s elapsed</span>
-        </div>
+      <Panel
+        title={`${run.window_files_completed} files completed this batch`}
+        actions={<span className="muted small">{run.elapsed_seconds}s elapsed</span>}
+      >
         {activeRun(run) && (
-          <div role="status" aria-label="Current analysis step" className="section-gap">
+          <div role="status" aria-label="Current analysis step">
             <p className="row wrap">
               <span className="spinner" aria-hidden="true" />
               {currentStep}
@@ -590,8 +601,12 @@ export function AnalysisRun({ s }: { s: State }) {
       {run.features && (
         <Panel
           title="New feature suggestions"
-          className="section-gap"
-          actions={<StatusDot value={run.features.status} label="Features" />}
+          actions={
+            <span className="analysis-run-status small">
+              <StatusDot value={run.features.status} label="Features" />
+              <span>{human(run.features.status)}</span>
+            </span>
+          }
         >
           <div className="metric-number">{run.features.suggestion_count ?? '—'}</div>
           <p className="small muted">
@@ -602,12 +617,17 @@ export function AnalysisRun({ s }: { s: State }) {
           <Go page="features">Open feature suggestions</Go>
         </Panel>
       )}
-      <div className="grid three-columns section-gap">
+      <div className="grid three-columns analysis-run-categories">
         {run.sections.map((section) => (
           <Panel
             key={section.category}
             title={human(section.category)}
-            actions={<StatusDot value={section.status} label={human(section.category)} />}
+            actions={
+              <span className="analysis-run-status small">
+                <StatusDot value={section.status} label={human(section.category)} />
+                <span>{human(section.status)}</span>
+              </span>
+            }
           >
             <div className="metric-number">{section.finding_count ?? '—'}</div>
             <p className="small muted">
@@ -625,14 +645,14 @@ export function AnalysisRun({ s }: { s: State }) {
           </Panel>
         ))}
       </div>
-      <Panel title="File progress" className="section-gap">
+      <Panel title="File progress">
         <div className="scroll-list">
           {run.files.map((file) => (
             <Disclosure
               title={
                 <span className="row between wrap">
-                  <span className="mono small">{file.path}</span>
-                  <span className="row wrap">
+                  <span className="mono small analysis-file-path">{file.path}</span>
+                  <span className="row wrap analysis-file-statuses">
                     {file.stages.map((stage) => (
                       <span key={stage.stage} title={stageNames[stage.stage]}>
                         <StatusDot value={stage.status} label={stageNames[stage.stage]} />
@@ -652,13 +672,16 @@ export function AnalysisRun({ s }: { s: State }) {
                         `${stage.attempts} attempts${stage.cached ? ' · cached' : ''}`}
                     </small>
                   </span>
-                  <StatusDot value={stage.status} label={stageNames[stage.stage]} />
+                  <span className="analysis-run-status small">
+                    <StatusDot value={stage.status} label={stageNames[stage.stage]} />
+                    <span>{human(stage.status)}</span>
+                  </span>
                 </div>
               ))}
             </Disclosure>
           ))}
         </div>
       </Panel>
-    </>
+    </div>
   );
 }
