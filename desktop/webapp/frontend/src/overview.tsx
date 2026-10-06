@@ -193,7 +193,6 @@ export function Summary({ s }: { s: State }) {
   return (
     <div className="summary-page">
       <div className="summary-hero">
-        <p className="summary-eyebrow">Project workspace</p>
         <Heading title={s.project!.name} detail={s.project!.path}>
           <Button
             icon="refresh"
