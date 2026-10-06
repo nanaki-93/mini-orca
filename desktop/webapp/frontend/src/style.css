@@ -587,6 +587,9 @@ pre {
   align-content: start;
   min-width: 0;
 }
+.page:has(> .analysis-sections) > .page-heading > .actions {
+  flex-shrink: 1;
+}
 .analysis-sections {
   grid-template-columns: minmax(0, 1fr);
 }
