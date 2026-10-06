@@ -365,6 +365,61 @@ async function panelTreatment(panel) {
     };
   });
 }
+async function chatConversationLayout(page) {
+  const workspace = page.locator('.chat-page');
+  const conversation = page.getByRole('region', { name: 'Change conversation', exact: true });
+  const review = page.getByRole('region', { name: 'Proposal review', exact: true });
+  await headingContainment(workspace.locator('.page-heading--intro'));
+  for (const region of [workspace, workspace.locator('.change-workspace'), conversation])
+    assert.equal(await region.evaluate((element) => getComputedStyle(element).gap), '20px');
+  const heading = await workspace.locator('.page-heading').boundingBox();
+  const body = await workspace.locator('.change-workspace').boundingBox();
+  assert.ok(Math.abs(body.y - heading.y - heading.height - 20) <= 1);
+  const left = await conversation.boundingBox();
+  const right = await review.boundingBox();
+  if (page.viewportSize().width > 1100) {
+    assert.ok(Math.abs(right.y - left.y) <= 1, 'Conversation and review columns align');
+    assert.ok(Math.abs(right.x - left.x - left.width - 20) <= 1);
+  } else {
+    assert.ok(Math.abs(right.y - left.y - left.height - 20) <= 1);
+    assert.ok(Math.abs(right.x - left.x) <= 1);
+    assert.ok(Math.abs(right.width - left.width) <= 1, 'Compact Chat stacks at full width');
+  }
+  const overflow = await page
+    .locator(
+      '#main, .page, .chat-page, .chat-conversation, .chat-conversation .panel, .chat-conversation .panel-head, .chat-conversation .panel-body, .chat-conversation .prose, .chat-conversation li, .chat-conversation .notice, .chat-conversation .disclosure-body, .chat-conversation .list-row',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.scrollWidth > element.clientWidth + 1)
+        .map((element) => element.className || element.id),
+    );
+  assert.deepEqual(overflow, [], 'Chat scope, messages and history wrap within their panels');
+  for (const panel of await conversation.locator('.panel').all()) {
+    const bounds = await panel.boundingBox();
+    for (const control of await panel.locator('button, textarea, input, select, summary').all()) {
+      if (!(await control.isVisible())) continue;
+      const box = await control.boundingBox();
+      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+    }
+    const boxes = [];
+    for (const part of await panel.locator('.panel-head > *').all()) {
+      const box = await part.boundingBox();
+      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      for (const other of boxes)
+        assert.ok(
+          box.x + box.width <= other.x + 1 ||
+            other.x + other.width <= box.x + 1 ||
+            box.y + box.height <= other.y + 1 ||
+            other.y + other.height <= box.y + 1,
+          'Conversation titles and status labels do not collide',
+        );
+      boxes.push(box);
+    }
+  }
+  checks++;
+}
 async function featuresLayout(page) {
   const workspace = page.locator('.features-page');
   await headingContainment(workspace.locator('.page-heading--intro'));
@@ -4167,6 +4222,264 @@ try {
       await close();
     }
   });
+  await test('Chat scope, complete conversation and history reuse Summary without resetting inputs', async () => {
+    const title = `Improve recovery ${'LongTaskTitle'.repeat(10)}`;
+    const paths = Array.from(
+      { length: 8 },
+      (_, i) => `internal/${'long_directory_'.repeat(12)}/worker_${i}.go`,
+    );
+    const message = `Preserve all requested behavior. ${'CompleteRequest'.repeat(40)}\n\nKeep the public API unchanged.`;
+    const assistant = `Captured scope remains deliberate. ${'CompleteAssistantResponse'.repeat(35)}\n\n\`\`\`go\n// ${'long_code_'.repeat(70)}\n\`\`\`\n\nFinal explanation stays available.`;
+    const { page, close } = await pageFor({ changeAssistantMessage: assistant });
+    try {
+      await idle(page);
+      const referenceIntro = await introductionTreatment(page.locator('.summary-hero'));
+      const referencePanel = await panelTreatment(page.locator('.summary-details .panel').first());
+      await nav(page, 'Chat');
+      await idle(page);
+      const conversation = page.getByRole('region', { name: 'Change conversation', exact: true });
+      assert.deepEqual(
+        await introductionTreatment(page.locator('.chat-page .page-heading')),
+        referenceIntro,
+      );
+      assert.deepEqual(
+        await panelTreatment(conversation.locator('.panel').first()),
+        referencePanel,
+      );
+      await page.getByText('Local history', { exact: true }).click();
+      await page.getByText('No saved conversations.', { exact: true }).waitFor();
+      const prepare = conversation.getByRole('button', { name: 'Prepare change', exact: true });
+      assert.equal(await prepare.isDisabled(), true);
+      await page.getByLabel('Task title', { exact: true }).fill(title);
+      await page.getByLabel('Files to change', { exact: true }).fill(paths.join('\n'));
+      await page.getByLabel('Change request', { exact: true }).fill(message);
+      await page.getByLabel('Run project tests after generation', { exact: true }).uncheck();
+      const before = await page.evaluate(() =>
+        window.fixture.requests.filter((r) => r.method !== 'GET'),
+      );
+      const render = async (state, widths) => {
+        for (const theme of ['dark', 'light']) {
+          if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+            await page
+              .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
+              .click();
+          for (const larger of [false, true]) {
+            const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
+            if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
+              await textSize.click();
+            for (const width of widths) {
+              await page.setViewportSize({ width, height: 1000 });
+              await chatConversationLayout(page);
+              assert.equal(
+                await page.getByLabel('Change request', { exact: true }).inputValue(),
+                state === 'new' ? message : 'Keep this local follow-up while resizing.',
+              );
+              assert.equal(
+                await page
+                  .getByLabel('Run project tests after generation', { exact: true })
+                  .isChecked(),
+                false,
+              );
+              if (state === 'new') {
+                assert.equal(
+                  await page.getByLabel('Task title', { exact: true }).inputValue(),
+                  title,
+                );
+                assert.equal(
+                  await page.getByLabel('Files to change', { exact: true }).inputValue(),
+                  paths.join('\n'),
+                );
+              } else {
+                for (const path of paths)
+                  assert.ok((await conversation.textContent()).includes(path));
+                const messages = conversation.locator('.chat-message');
+                assert.deepEqual(
+                  await messages.nth(0).locator('.prose p').allTextContents(),
+                  message.split('\n\n'),
+                );
+                assert.deepEqual(await messages.nth(1).locator('.prose p').allTextContents(), [
+                  assistant.split('\n\n')[0],
+                  'Final explanation stays available.',
+                ]);
+                assert.equal(
+                  await messages.nth(1).locator('.prose pre').textContent(),
+                  `// ${'long_code_'.repeat(70)}\n`,
+                );
+                assert.ok(
+                  (await conversation.locator('.chat-history').textContent()).includes(title),
+                );
+              }
+              assert.equal(await prepare.isEnabled(), true);
+              await layout(
+                page,
+                `chat-conversation-${state}-${width}-${theme}-${larger ? 'larger' : 'standard'}`,
+              );
+            }
+          }
+        }
+      };
+      await render('new', [1440, 800]);
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+        before,
+      );
+      await prepare.click();
+      await idle(page);
+      const creation = await page.evaluate(() =>
+        window.fixture.requests.find(
+          (r) => r.path === '/api/projects/current/changes' && r.method === 'POST',
+        ),
+      );
+      assert.equal(creation.body.title, title);
+      assert.deepEqual(creation.body.paths, paths);
+      assert.equal(
+        await page.getByLabel('Change request', { exact: true }).inputValue(),
+        '',
+        'Existing identity effect clears the first submitted request',
+      );
+      await page.getByRole('button', { name: 'Review this diff', exact: true }).click();
+      await idle(page);
+      await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+      await page.getByRole('button', { name: 'Refresh history', exact: true }).click();
+      await conversation
+        .locator('.list-row')
+        .getByRole('button', { name: 'Resume', exact: true })
+        .waitFor();
+      const generated = await page.evaluate(
+        () => window.fixture.requests.filter((r) => r.path.endsWith('/messages')).length,
+      );
+      await conversation.getByRole('button', { name: 'Resume', exact: true }).click();
+      await idle(page);
+      assert.equal(
+        await page.getByRole('button', { name: 'Approve and apply', exact: true }).isDisabled(),
+        true,
+      );
+      assert.equal(
+        await page.getByRole('button', { name: 'Review this diff', exact: true }).isDisabled(),
+        true,
+      );
+      assert.equal(
+        await page.getByLabel('Run project tests after generation', { exact: true }).isChecked(),
+        true,
+        'Restore retains the existing tests default',
+      );
+      await page.getByLabel('Run project tests after generation', { exact: true }).uncheck();
+      await page
+        .getByLabel('Change request', { exact: true })
+        .fill('Keep this local follow-up while resizing.');
+      const restored = await page.evaluate(() =>
+        window.fixture.requests.filter((r) => r.method !== 'GET'),
+      );
+      await render('restored', [1440, 1280, 1001, 800]);
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+        restored,
+        'Restored conversation reflow and disclosures remain passive',
+      );
+      assert.equal(
+        await page.evaluate(
+          () => window.fixture.requests.filter((r) => r.path.endsWith('/messages')).length,
+        ),
+        generated,
+      );
+      assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+    } finally {
+      await close();
+    }
+  });
+  await test('Chat unavailable history, failed requests and stale conversations retain recovery and restrictions', async () => {
+    for (const state of ['history-unavailable', 'failed', 'stale']) {
+      const { page, close } = await pageFor({
+        changeHistoryReadFail: state === 'history-unavailable',
+      });
+      try {
+        await nav(page, 'Chat');
+        await idle(page);
+        await page.getByText('Local history', { exact: true }).click();
+        if (state === 'history-unavailable') {
+          await page.getByRole('heading', { name: 'History unavailable', exact: true }).waitFor();
+          assert.equal(
+            await page.getByRole('button', { name: 'Refresh history', exact: true }).isEnabled(),
+            true,
+          );
+        } else {
+          await page
+            .getByLabel('Add an existing file', { exact: true })
+            .selectOption('internal/worker/process.go');
+          await page
+            .getByLabel('Change request', { exact: true })
+            .fill('Preserve the captured scope.');
+          await page.getByLabel('Run project tests after generation', { exact: true }).uncheck();
+          if (state === 'failed')
+            await page.evaluate(() => {
+              window.fixture.failures['/api/projects/current/changes/change-1/messages'] = 503;
+            });
+          await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+          await idle(page);
+          if (state === 'failed') {
+            await page.getByText('Fixture rejection', { exact: true }).waitFor();
+            assert.equal(await page.locator('.chat-message').count(), 0);
+          } else {
+            await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+            await page.evaluate(() => {
+              window.fixture.state.changed = true;
+            });
+            await page.getByRole('button', { name: 'Refresh history', exact: true }).click();
+            await page.getByRole('button', { name: 'Resume', exact: true }).click();
+            await idle(page);
+            await page
+              .getByText('Source or guidance changed. Start a new conversation.', { exact: true })
+              .waitFor();
+          }
+          assert.equal(
+            await page.getByLabel('Change request', { exact: true }).isDisabled(),
+            state === 'stale',
+          );
+          assert.equal(
+            await page
+              .getByLabel('Run project tests after generation', { exact: true })
+              .isDisabled(),
+            state === 'stale',
+          );
+          if (state === 'failed')
+            await page.getByLabel('Change request', { exact: true }).fill('Retry explicitly.');
+          assert.equal(
+            await page.getByRole('button', { name: 'Prepare change', exact: true }).isDisabled(),
+            state === 'stale',
+          );
+        }
+        const before = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method !== 'GET'),
+        );
+        for (const theme of ['dark', 'light']) {
+          if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+            await page
+              .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
+              .click();
+          for (const larger of [false, true]) {
+            const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
+            if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
+              await textSize.click();
+            for (const width of [1440, 800]) {
+              await page.setViewportSize({ width, height: 1000 });
+              await chatConversationLayout(page);
+              await layout(
+                page,
+                `chat-conversation-${state}-${width}-${theme}-${larger ? 'larger' : 'standard'}`,
+              );
+            }
+          }
+        }
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          before,
+          'Inspecting conversation failures/history never dispatches work',
+        );
+      } finally {
+        await close();
+      }
+    }
+  });
   await test('Chat revisions require fresh review before grouped Apply and Undo', async () => {
     const { page, close } = await pageFor();
     await nav(page, 'Chat');
@@ -4258,29 +4571,91 @@ try {
     assert.equal(await page.getByRole('button', { name: 'Review this diff' }).isDisabled(), true);
     await close();
   });
-  await test('Canceled chat responses do not publish a late proposal', async () => {
+  await test('Canceled chat responses do not publish a late proposal or reset local follow-up', async () => {
     const { page, close } = await pageFor();
-    await nav(page, 'Chat');
-    await page.getByLabel('Add an existing file').selectOption('internal/worker/process.go');
-    await page.getByLabel('Change request', { exact: true }).fill('Handle cancellation.');
-    await page.getByLabel('Run project tests after generation').uncheck();
-    await page.evaluate(() => {
-      window.fixture.hold = '/api/projects/current/changes/change-1/messages';
-    });
-    await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
-    await page.waitForFunction(() =>
-      window.fixture.requests.some(
-        (r) => r.path.endsWith('/messages') && r.path.includes('/changes/'),
-      ),
-    );
-    await page.locator('.busy-strip').getByRole('button', { name: 'Cancel', exact: true }).click();
-    await page.evaluate(() => {
-      window.fixture.hold = '';
-      window.fixture.release();
-    });
-    await idle(page);
-    assert.equal(await page.getByLabel('Read-only diff for internal/worker/process.go').count(), 0);
-    await close();
+    try {
+      await nav(page, 'Chat');
+      await page.getByLabel('Add an existing file').selectOption('internal/worker/process.go');
+      await page.getByLabel('Change request', { exact: true }).fill('Handle cancellation.');
+      await page.getByLabel('Run project tests after generation').uncheck();
+      await page.evaluate(() => {
+        window.fixture.hold = '/api/projects/current/changes/change-1/messages';
+      });
+      await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+      await page.waitForFunction(() =>
+        window.fixture.requests.some(
+          (r) => r.path.endsWith('/messages') && r.path.includes('/changes/'),
+        ),
+      );
+      for (const control of [
+        page.getByLabel('Change request', { exact: true }),
+        page.getByLabel('Run project tests after generation'),
+        page.getByRole('button', { name: 'Prepare change', exact: true }),
+        page.getByRole('button', { name: 'New conversation', exact: true }),
+        page.getByRole('button', { name: 'Refresh history', exact: true }),
+      ]) {
+        if (await control.isVisible()) assert.equal(await control.isDisabled(), true);
+      }
+      await page.getByText('Local history', { exact: true }).click();
+      assert.equal(
+        await page.getByRole('button', { name: 'Refresh history', exact: true }).isDisabled(),
+        true,
+      );
+      for (const width of [1440, 800]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await chatConversationLayout(page);
+        await layout(page, `chat-conversation-busy-${width}`);
+      }
+      await page
+        .locator('.busy-strip')
+        .getByRole('button', { name: 'Cancel', exact: true })
+        .click();
+      await page.evaluate(() => {
+        window.fixture.hold = '';
+        window.fixture.release();
+      });
+      await idle(page);
+      await page.getByText('Canceled. Refresh status before retrying.', { exact: true }).waitFor();
+      assert.equal(
+        await page.getByLabel('Read-only diff for internal/worker/process.go').count(),
+        0,
+      );
+      assert.equal(await page.locator('.chat-message').count(), 0);
+      await page
+        .getByLabel('Change request', { exact: true })
+        .fill('Retry only when explicitly requested.');
+      for (const width of [1440, 800]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await chatConversationLayout(page);
+        assert.equal(
+          await page.getByLabel('Change request', { exact: true }).inputValue(),
+          'Retry only when explicitly requested.',
+        );
+        assert.equal(
+          await page.getByRole('button', { name: 'Prepare change', exact: true }).isEnabled(),
+          true,
+        );
+        await layout(page, `chat-conversation-canceled-${width}`);
+      }
+      assert.equal(
+        await page.evaluate(
+          () =>
+            window.fixture.requests.filter(
+              (r) => r.path.endsWith('/messages') && r.path.includes('/changes/'),
+            ).length,
+        ),
+        1,
+      );
+    } finally {
+      try {
+        await page.evaluate(() => {
+          window.fixture.hold = '';
+          window.fixture.release();
+        });
+      } finally {
+        await close();
+      }
+    }
   });
   await test('Summary links feature counts to ideas and leaves findings in their workspaces', async () => {
     const { page, close } = await pageFor({ featuresReady: true });
@@ -4523,6 +4898,30 @@ try {
             criterion,
           ),
         );
+      const seededRequest = await page.getByLabel('Change request', { exact: true }).inputValue();
+      const seededTitle = await page.getByLabel('Task title', { exact: true }).inputValue();
+      const seededPaths = await page.getByLabel('Files to change', { exact: true }).inputValue();
+      for (const width of [1440, 800]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await chatConversationLayout(page);
+        assert.equal(
+          await page.getByLabel('Change request', { exact: true }).inputValue(),
+          seededRequest,
+        );
+        assert.equal(
+          await page.getByLabel('Task title', { exact: true }).inputValue(),
+          seededTitle,
+        );
+        assert.equal(
+          await page.getByLabel('Files to change', { exact: true }).inputValue(),
+          seededPaths,
+        );
+        assert.equal(
+          await page.getByLabel('Run project tests after generation', { exact: true }).isChecked(),
+          true,
+        );
+        await layout(page, `chat-conversation-seeded-${width}-light-larger`);
+      }
       assert.equal(
         await page.evaluate(() =>
           window.fixture.requests.some(

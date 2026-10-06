@@ -725,6 +725,7 @@ pre {
   background: var(--red);
 }
 .summary-page,
+.chat-page,
 .workspace-page,
 .workspace-page > .stack {
   display: grid;
@@ -734,6 +735,7 @@ pre {
   min-width: 0;
   align-content: start;
 }
+.chat-page > .page-heading,
 .workspace-page > .page-heading,
 .workspace-page > .toolbar {
   margin-bottom: 0;
@@ -1997,8 +1999,50 @@ dialog .actions {
 .change-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
-  gap: 24px;
+  gap: 20px;
   align-items: start;
+}
+.chat-page {
+  min-width: 0;
+}
+.chat-conversation .panel-head h2 {
+  flex: 1 1 14rem;
+  overflow-wrap: anywhere;
+}
+.chat-conversation .panel-body,
+.chat-conversation .disclosure-body,
+.chat-conversation .button,
+.chat-conversation summary {
+  overflow-wrap: anywhere;
+}
+.chat-conversation .composer {
+  display: block;
+}
+.chat-path-input,
+.chat-file-scope li {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+.chat-history .panel-pad {
+  padding: 0 20px;
+}
+.chat-history details {
+  margin-top: 0;
+  border-top: 0;
+}
+.chat-history summary {
+  padding: 14px 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+.chat-history .disclosure-body {
+  padding: 4px 0 18px;
+}
+.chat-history .list-row {
+  flex-wrap: wrap;
+}
+.chat-history .list-copy {
+  flex: 1 1 12rem;
 }
 .feature-grid,
 .instruction-grid {
