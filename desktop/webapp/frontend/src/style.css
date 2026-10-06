@@ -587,6 +587,15 @@ pre {
   align-content: start;
   min-width: 0;
 }
+.analysis-sections {
+  grid-template-columns: minmax(0, 1fr);
+}
+.analysis-last-run .panel-head {
+  flex-wrap: wrap;
+}
+.analysis-last-run .panel-head > * {
+  min-width: 0;
+}
 .section-gap {
   margin-top: 22px;
 }

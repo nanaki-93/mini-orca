@@ -184,7 +184,7 @@ export function Analysis({ s }: { s: State }) {
         </Button>
       </Heading>
 
-      <div className="grid equal-columns section-gap">
+      <div className="stack analysis-sections section-gap">
         <Panel title="Run settings">
           <ModelSelectors
             s={s}
@@ -224,17 +224,21 @@ export function Analysis({ s }: { s: State }) {
           </Disclosure>
         </Panel>
         {s.run && (
-          <Panel title="Last run">
-            <div className="row between wrap">
-              <div className="row">
-                <Icon name="activity" />
-                <StatusDot value={s.run.status} label="Analysis" />
+          <Panel
+            title="Last run"
+            className="analysis-last-run"
+            actions={
+              <div className="row wrap">
+                <span className="row">
+                  <Icon name="activity" />
+                  <StatusDot value={s.run.status} label="Analysis" />
+                  <span>{human(s.run.status)}</span>
+                </span>
+                <Go page="analysis-run">View run</Go>
               </div>
-              <Go page="analysis-run">View run</Go>
-            </div>
-            <div className="section-gap">
-              <CapturedModels plan={s.run.plan} />
-            </div>
+            }
+          >
+            <CapturedModels plan={s.run.plan} />
           </Panel>
         )}
       </div>
