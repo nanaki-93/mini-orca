@@ -378,3 +378,62 @@ func TestAnalysisRunSkipsIneligibleStagesAndRestoresLegacyCoverage(t *testing.T)
 		t.Fatal("restore dispatched model requests")
 	}
 }
+
+func TestAnalysisRecoverStoredPlanConstraintsAndLegacyEncoding(t *testing.T) {
+	server, _ := analysisResponseServer(t, emptyAnalysisReply)
+	s, root := newSemanticAnalysisService(t, server.URL, 0)
+	limits := AnalysisRunLimits{100, 30, 2}
+	name := filepath.Join(root, analysisRunRelativePath)
+	write := func(run *AnalysisRun) {
+		t.Helper()
+		data, err := json.Marshal(run)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := storage.WriteFile(name, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	legacyPreview := analysisRunPreviewFor(t, s, limits, nil)
+	valid := newAnalysisRun(*recoveryPreviewFor(t, s, limits, nil))
+	write(valid)
+	if restored, err := loadAnalysisRun(root); err != nil || !restored.Plan.RecoverIncomplete {
+		t.Fatalf("valid recovery run=%+v %v", restored, err)
+	}
+	for label, mutate := range map[string]func(*AnalysisRunPreview){
+		"refresh":       func(plan *AnalysisRunPreview) { plan.Refresh = true },
+		"retry":         func(plan *AnalysisRunPreview) { plan.RetryStaleFailed = true },
+		"compatibility": func(plan *AnalysisRunPreview) { plan.CompatibilityStage = AnalysisStagePerformance },
+		"features":      func(plan *AnalysisRunPreview) { plan.Features = &AnalysisFeaturePlan{} },
+	} {
+		run := cloneAnalysisRun(valid)
+		mutate(&run.Plan)
+		// Rebind the queue so only the recovery identity rule can reject the run.
+		queue, err := analysisQueueFingerprint(&run.Plan)
+		if err != nil {
+			t.Fatal(err)
+		}
+		run.Plan.Identity.QueueID = queue
+		run.Identity.AnalysisQueueIdentity = run.Plan.Identity
+		if validStoredAnalysisIdentity(run) {
+			t.Fatalf("%s recovery plan accepted", label)
+		}
+		write(run)
+		if _, err := loadAnalysisRun(root); !errors.Is(err, errAnalysisRunCorrupt) {
+			t.Fatalf("%s recovery plan restored: %v", label, err)
+		}
+	}
+	// Plans without recovery encode exactly as before, keeping stored queue fingerprints.
+	legacy := newAnalysisRun(*legacyPreview)
+	data, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "recover_incomplete") {
+		t.Fatal("non-recovery plan encodes the recovery option")
+	}
+	write(legacy)
+	if restored, err := loadAnalysisRun(root); err != nil || restored.Identity.QueueID != legacy.Identity.QueueID {
+		t.Fatalf("legacy run=%+v %v", restored, err)
+	}
+}

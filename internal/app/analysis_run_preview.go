@@ -86,6 +86,12 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 		if run == nil || run.Identity != *request.ResumeRun || run.Plan.RetryStaleFailed != request.RetryStaleFailed {
 			return nil, project.ErrRevisionConflict
 		}
+		// Existing clients omit the option on resume, so the captured plan decides it;
+		// a request cannot turn a different run into a recovery run.
+		if request.RecoverIncomplete && !run.Plan.RecoverIncomplete {
+			return nil, project.ErrRevisionConflict
+		}
+		request.RecoverIncomplete = run.Plan.RecoverIncomplete
 		request.compatibilityStage = run.Plan.CompatibilityStage
 		request.compatibilityBudget = run.Plan.CompatibilityBudget
 		request.IncludeFeatures = run.Plan.Features != nil
@@ -106,7 +112,7 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 	if err != nil {
 		return nil, err
 	}
-	preview := &AnalysisRunPreview{Models: cloneAnalysisModels(request.Models), CompatibilityStage: request.compatibilityStage, CompatibilityBudget: request.compatibilityBudget, RetryStaleFailed: request.RetryStaleFailed, SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
+	preview := &AnalysisRunPreview{Models: cloneAnalysisModels(request.Models), CompatibilityStage: request.compatibilityStage, CompatibilityBudget: request.compatibilityBudget, RetryStaleFailed: request.RetryStaleFailed, RecoverIncomplete: request.RecoverIncomplete, SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
 		Identity: AnalysisQueueIdentity{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, PolicyFingerprint: policy.Version(), ProviderFingerprint: fingerprint},
 		Files:    []AnalysisPlannedFile{}, Excluded: []AnalysisExcludedFile{}, Providers: providers}
 	root := s.manager.Root()
@@ -128,8 +134,8 @@ func (s *Service) completeAnalysisPreviewLocked(ctx context.Context, root string
 			return nil, err
 		}
 	}
-	if request.RetryStaleFailed {
-		if err := s.scopeAnalysisRetryPreview(ctx, preview, request.ResumeRun); err != nil {
+	if mode := analysisSelectionMode(request.RetryStaleFailed, request.RecoverIncomplete); mode != analysisSelectAll {
+		if err := s.scopeAnalysisRetryPreview(ctx, mode, preview, request.ResumeRun); err != nil {
 			return nil, err
 		}
 	}

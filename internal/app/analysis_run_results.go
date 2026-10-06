@@ -93,12 +93,12 @@ func (s *Service) analysisSectionReader(run *AnalysisRun, category project.Findi
 			return nil, project.ErrRevisionConflict
 		}
 	}
-	// A selective retry changes dispatch scope, not the saved findings inventory.
-	// User/policy exclusions remain excluded; only retry-omitted files are retained.
-	if path == "" && run.Plan.RetryStaleFailed {
+	// A scoped retry or recovery changes dispatch scope, not the saved findings
+	// inventory. User/policy exclusions remain excluded; only scope-omitted files are retained.
+	if omitted := analysisSelectionMode(run.Plan.RetryStaleFailed, run.Plan.RecoverIncomplete).exclusion(); path == "" && omitted != "" {
 		retained := make(map[string]bool)
 		for _, file := range run.Plan.Excluded {
-			retained[file.Path] = file.Reason == analysisRetryExclusion
+			retained[file.Path] = file.Reason == omitted
 		}
 		for _, file := range index.Files {
 			if !retained[file.Path] {

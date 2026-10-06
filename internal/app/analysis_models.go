@@ -40,11 +40,22 @@ func (models *AnalysisModels) profile(stage AnalysisStage) string {
 }
 
 func (s *Service) analysisModelRuntime(stage AnalysisStage, models *AnalysisModels) modelRuntime {
-	scope := config.AnalyzeModelScope
+	return s.runtimeForAnalysisScope(analysisStageScope(stage), models.profile(stage))
+}
+
+func analysisStageScope(stage AnalysisStage) config.ModelScope {
 	if stage == AnalysisStageSemantic {
-		scope = config.BugModelScope
+		return config.BugModelScope
 	}
-	return s.runtimeForAnalysisScope(scope, models.profile(stage))
+	return config.AnalyzeModelScope
+}
+
+// analysisStageProfile names the configured profile a stage uses, including defaults.
+func analysisStageProfile(stage AnalysisStage, models *AnalysisModels) string {
+	if profile := models.profile(stage); profile != "" {
+		return profile
+	}
+	return string(analysisStageScope(stage))
 }
 
 func (s *Service) runtimeForAnalysisScope(scope config.ModelScope, profile string) modelRuntime {

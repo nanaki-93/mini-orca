@@ -188,3 +188,84 @@ func TestAnalysisSelectionLimitedRunSkipsDoNotClaimCompleteCoverage(t *testing.T
 		t.Fatalf("current cache hidden by old skipped stage: %+v", stage)
 	}
 }
+
+func TestAnalysisSelectionRecoveryFollowsRunLifecycleAndSourceChanges(t *testing.T) {
+	server, calls, started, release := analysisBlockingServer(t)
+	s, root := newSemanticAnalysisService(t, server.URL, 0)
+	ctx := context.Background()
+	limits := AnalysisRunLimits{100, 30, 2}
+	assertRecovery(t, readSelectionFor(t, s).Recovery, AnalysisRecoveryNotStarted, 1, 4, "")
+	run, err := s.StartAnalysisRun(ctx, analysisStartFor(analysisRunPreviewFor(t, s, limits, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForTestSignal(t, started, "first analysis request")
+	if summary := readSelectionFor(t, s).Recovery; summary.State != AnalysisRecoveryRunning || summary.Reason == "" {
+		t.Fatalf("active run recovery=%+v", summary)
+	}
+	if _, err := s.ControlAnalysisRun(ctx, AnalysisRunControlRequest{Identity: run.Identity, Action: AnalysisRunPause}); err != nil {
+		t.Fatal(err)
+	}
+	release()
+	paused := completedAnalysisRun(t, s)
+	if paused.Status != AnalysisRunPaused {
+		t.Fatalf("paused=%s", paused.Status)
+	}
+	assertRecovery(t, readSelectionFor(t, s).Recovery, AnalysisRecoveryContinuation, 0, 0, "run page")
+	if _, err := s.ControlAnalysisRun(ctx, AnalysisRunControlRequest{Identity: paused.Identity, Action: AnalysisRunCancel}); err != nil {
+		t.Fatal(err)
+	}
+	assertRecovery(t, readSelectionFor(t, s).Recovery, AnalysisRecoveryAvailable, 1, 3, "")
+	repair := recoveryPreviewFor(t, s, limits, nil)
+	if repair.ExpectedModelRequests != 2 || !repair.Files[0].Stages[0].Cached {
+		t.Fatalf("repair after cancel=%+v", repair)
+	}
+	if completed := startAndCompleteAnalysis(t, s, repair); completed.Status != AnalysisRunCompletedEmpty || calls.Load() != 3 {
+		t.Fatalf("repaired=%s calls=%d", completed.Status, calls.Load())
+	}
+	assertRecovery(t, readSelectionFor(t, s).Recovery, AnalysisRecoveryComplete, 0, 0, "")
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Changed() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	assertRecovery(t, readSelectionFor(t, s).Recovery, AnalysisRecoveryBlocked, 0, 0, "Refresh project files")
+	if calls.Load() != 3 {
+		t.Fatalf("selection reads dispatched: %d", calls.Load())
+	}
+}
+
+func TestAnalysisSelectionRecoveryStateOrderAndCounts(t *testing.T) {
+	s := &Service{analysisRun: &analysisRunController{}}
+	files := map[string]analysisFileRecovery{
+		"recoverable.go": {recoverable: 2},
+		"model.go":       {codeModelMissing: true},
+		"changed.go":     {sourceBlocked: true},
+		"ignored.go":     {recoverable: 5, sourceBlocked: true, reviewModelMissing: true},
+	}
+	evidence := func(paths ...string) analysisRecoveryEvidence {
+		selected := map[string]analysisFileRecovery{}
+		for _, path := range paths {
+			selected[path] = files[path]
+		}
+		return analysisRecoveryEvidence{projectID: "project", files: selected}
+	}
+	ignored := []string{"ignored.go"}
+	all := evidence("recoverable.go", "model.go", "changed.go", "ignored.go")
+	assertRecovery(t, s.analysisRecoverySummaryLocked(all, ignored), AnalysisRecoveryNotStarted, 1, 2, "")
+	s.analysisRun.run = &AnalysisRun{Identity: AnalysisRunIdentity{AnalysisQueueIdentity: AnalysisQueueIdentity{ProjectID: "other"}}, Status: AnalysisRunPaused}
+	assertRecovery(t, s.analysisRecoverySummaryLocked(all, ignored), AnalysisRecoveryNotStarted, 1, 2, "")
+	s.analysisRun.run.Identity.ProjectID = "project"
+	s.analysisRun.run.Status = AnalysisRunCompleted
+	assertRecovery(t, s.analysisRecoverySummaryLocked(all, ignored), AnalysisRecoveryBlocked, 1, 2, "Refresh project files")
+	assertRecovery(t, s.analysisRecoverySummaryLocked(evidence("recoverable.go", "model.go"), nil), AnalysisRecoveryAvailable, 1, 2, "")
+	assertRecovery(t, s.analysisRecoverySummaryLocked(evidence("model.go"), nil), AnalysisRecoveryBlocked, 0, 0, "the bug model profile used for Code analysis")
+	review := evidence("ignored.go")
+	review.files["ignored.go"] = analysisFileRecovery{reviewModelMissing: true}
+	review.models = &AnalysisModels{Code: "bug", Review: "function", Features: "analyze"}
+	assertRecovery(t, s.analysisRecoverySummaryLocked(review, nil), AnalysisRecoveryBlocked, 0, 0, "the function model profile used for Performance & Security")
+	assertRecovery(t, s.analysisRecoverySummaryLocked(evidence(), nil), AnalysisRecoveryComplete, 0, 0, "")
+	// Persistence faults and active workers supersede saved-selection work, as at admission.
+	s.analysisRun.fault = errAnalysisRunPersistence
+	assertRecovery(t, s.analysisRecoverySummaryLocked(all, ignored), AnalysisRecoveryContinuation, 1, 2, "Continue or cancel")
+	s.analysisRun.done = make(chan struct{})
+	assertRecovery(t, s.analysisRecoverySummaryLocked(all, ignored), AnalysisRecoveryRunning, 1, 2, "in progress")
+}
