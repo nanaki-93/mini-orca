@@ -885,7 +885,10 @@ try {
     await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
     await idle(page);
     assert.equal(await page.getByRole('checkbox').count(), 0);
-    assert.equal(await page.getByLabel('Code analysis model').isDisabled(), true);
+    assert.equal(
+      await page.getByText("Resuming keeps this run's model choices.").isVisible(),
+      true,
+    );
     await startAnalysis(page, true);
     const resumed = await page.evaluate(() =>
       window.fixture.requests.find((r) => r.body?.action === 'resume'),
@@ -915,17 +918,15 @@ try {
     );
     await page.getByLabel('Code analysis model').selectOption('function');
     await page.getByLabel('Performance & Security model').selectOption('bug');
-    await page.getByLabel('Feature discovery model').selectOption('function');
+    await page.getByLabel('Feature discovery model').selectOption('analyze');
     assert.equal(await page.evaluate(() => window.fixture.requests.length), before);
     await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
-    await idle(page);
-    await page.getByLabel('Feature discovery model').selectOption('analyze');
     await idle(page);
     const choices = { code: 'function', review: 'bug', features: 'analyze' };
     const previews = await page.evaluate(() =>
       window.fixture.requests.filter((r) => r.path.endsWith('/analysis/preview')),
     );
-    assert.equal(previews.length, 2);
+    assert.equal(previews.length, 1);
     assert.deepEqual(previews.at(-1).body.models, choices);
     assert.equal(await page.getByRole('checkbox').count(), 0);
     await layout(page, 'analysis-model-selects');
@@ -955,12 +956,12 @@ try {
     await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
     await idle(page);
     for (const [label, key] of [
-      ['Code analysis model', 'code'],
-      ['Performance & Security model', 'review'],
-      ['Feature discovery model', 'features'],
+      ['Code', 'draft-model'],
+      ['Performance & Security', 'code-model'],
+      ['Feature discovery', 'review-model'],
     ]) {
-      assert.equal(await page.getByLabel(label).inputValue(), choices[key]);
-      assert.equal(await page.getByLabel(label).isDisabled(), true);
+      // CapturedModels doesn't have a label/input, it just renders text
+      await page.getByText(key, { exact: false }).first().waitFor();
     }
     await page.getByRole('button', { name: 'Resume analysis', exact: true }).click();
     assert.equal(
@@ -1528,7 +1529,7 @@ try {
     await page
       .getByRole('button', { name: 'Search more feature suggestions', exact: true })
       .click();
-    await page.getByText('Existing ideas: 1').waitFor();
+    await page.getByText('Existing idea titles: 1').waitFor();
     await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
     await idle(page);
 
@@ -1816,6 +1817,89 @@ try {
       await page.getByText('Reanalyzed 1 changed files.', { exact: false }).waitFor();
       await close();
     }
+  });
+  await test('Analysis screen repair and feature actions', async () => {
+    // 1. Without recovery
+    let result = await pageFor({ runStatus: 'completed' });
+    await nav(result.page, 'Analysis');
+    assert.equal(await result.page.getByRole('button', { name: 'Repair analysis' }).count(), 0);
+    await result.close();
+
+    // 2. With recovery
+    result = await pageFor({
+      runStatus: 'completed',
+      hasRecovery: true,
+      featuresReady: true,
+      featuresEmpty: true,
+      remote: true,
+    });
+    await nav(result.page, 'Analysis');
+    await result.page.getByRole('button', { name: 'Repair analysis' }).waitFor();
+    await result.page.getByRole('button', { name: 'Search more feature suggestions' }).waitFor();
+
+    // Check tooltip is not there when not busy
+    assert.equal(
+      await result.page
+        .getByRole('button', { name: 'Search more feature suggestions' })
+        .getAttribute('title'),
+      null,
+    );
+
+    // Make it busy by preparing a run and holding the request
+    await result.page.evaluate(() => {
+      window.fixture.hold = '/api/projects/current/analysis/preview';
+    });
+    await result.page.getByRole('button', { name: 'Prepare analysis' }).click();
+
+    // Check that Search button gets disabled and has tooltip
+    assert.equal(
+      await result.page
+        .getByRole('button', { name: 'Search more feature suggestions' })
+        .isDisabled(),
+      true,
+    );
+    assert.equal(
+      await result.page
+        .getByRole('button', { name: 'Search more feature suggestions' })
+        .getAttribute('title'),
+      'Cannot search while another operation is running.',
+    );
+
+    await result.page.evaluate(() => {
+      window.fixture.hold = undefined;
+      window.fixture.release();
+    });
+    await idle(result.page);
+    await result.page.getByRole('button', { name: 'Back' }).click();
+
+    // Test clicking Repair analysis
+    await result.page.getByRole('button', { name: 'Repair analysis' }).click();
+    await idle(result.page);
+    await result.page.getByRole('heading', { name: 'Repair analysis' }).waitFor();
+    let requests = await result.page.evaluate(() => window.fixture.requests);
+    let previewReq = requests.reverse().find((r) => r.path.endsWith('/analysis/preview'));
+    assert.equal(previewReq.body.recover_incomplete, true);
+
+    await result.page.getByRole('button', { name: 'Back' }).click();
+    await idle(result.page);
+
+    // Test clicking Search more feature suggestions
+    await result.page.getByRole('button', { name: 'Search more feature suggestions' }).click();
+    await result.page.getByText('Origin: Analysis').waitFor();
+    await result.page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Continue', exact: true })
+      .click();
+    await idle(result.page);
+
+    requests = await result.page.evaluate(() => window.fixture.requests);
+    const generateReq = requests.reverse().find((r) => r.path.endsWith('/features/generate'));
+    assert.equal(generateReq.body.profile, 'analyze');
+    assert.equal(typeof generateReq.body.analysis_selection_id, 'string');
+    assert.equal(generateReq.body.analysis_selection_id.startsWith('selection-'), true);
+    assert.equal(generateReq.body.confirm_remote_provider, true);
+
+    await result.close();
   });
   assert.deepEqual(errors, []);
   console.log(`PASS ${checks} workflow and layout checks; no browser errors or external requests`);
