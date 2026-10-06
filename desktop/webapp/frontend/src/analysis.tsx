@@ -143,7 +143,7 @@ export function Analysis({ s }: { s: State }) {
     void w.previewAnalysis(mode, limits, refresh, models);
   };
   return (
-    <>
+    <div className="workspace-page">
       <Heading
         variant="intro"
         title="Analysis"
@@ -191,7 +191,7 @@ export function Analysis({ s }: { s: State }) {
         </div>
       </Heading>
 
-      <div className="stack analysis-sections section-gap">
+      <div className="stack analysis-sections">
         <Panel title="Run settings" className="analysis-run-settings">
           <ModelSelectors
             className="analysis-settings-fields"
@@ -251,7 +251,7 @@ export function Analysis({ s }: { s: State }) {
         )}
       </div>
 
-      <div className="toolbar section-gap">
+      <div className="toolbar">
         <div className="input-wrap">
           <Icon name="search" />
           <input
@@ -361,7 +361,7 @@ export function Analysis({ s }: { s: State }) {
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }
 export function AnalysisPreview({ s }: { s: State }) {
