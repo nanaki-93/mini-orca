@@ -275,7 +275,7 @@ function Context({ s }: { s: State }) {
       </Empty>
     );
   return (
-    <div className="stack">
+    <div className="stack context-inspection">
       <Panel
         title="Context"
         actions={
@@ -308,7 +308,7 @@ function Context({ s }: { s: State }) {
         />
       </Panel>
       <Panel title="Included files">
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} aria-label="Included context files">
           <table>
             <thead>
               <tr>
@@ -355,7 +355,7 @@ function Context({ s }: { s: State }) {
         </div>
       </Panel>
       {s.impact && (
-        <Panel title="Related declarations">
+        <Panel title="Related declarations" className="context-references">
           {s.impact.references.length ? (
             s.impact.references.map((item, i) => (
               <div className="list-row" key={i}>

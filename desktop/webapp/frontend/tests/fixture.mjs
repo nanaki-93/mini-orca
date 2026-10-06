@@ -1051,7 +1051,10 @@ export function installFixture(options = {}) {
               symbol_explanations: {},
               engineering_insight: insight,
             });
-          if (path.endsWith('/context')) return response(context);
+          if (path.endsWith('/context'))
+            return response(options.context === undefined ? context : options.context);
+          if (path.endsWith('/impact') && options.impact !== undefined)
+            return response(options.impact);
           if (path.endsWith('/impact'))
             return response({
               target_path: pathFile.path,
