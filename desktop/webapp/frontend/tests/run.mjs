@@ -296,6 +296,19 @@ async function introductionTreatment(surface) {
     };
   });
 }
+async function panelTreatment(panel) {
+  return panel.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      background: style.backgroundColor,
+      border: style.border,
+      radius: style.borderRadius,
+      headerPadding: getComputedStyle(element.querySelector('.panel-head')).padding,
+      titleSize: getComputedStyle(element.querySelector('.panel-head h2')).fontSize,
+      bodyPadding: getComputedStyle(element.querySelector('.panel-body')).padding,
+    };
+  });
+}
 async function analysisSections(page, hasRun) {
   const settings = page.locator('section.panel').filter({
     has: page.getByRole('heading', { name: 'Run settings', exact: true }),
@@ -306,13 +319,16 @@ async function analysisSections(page, hasRun) {
   const heading = page
     .locator('.page-heading')
     .filter({ has: page.getByRole('heading', { name: 'Analysis', exact: true }) });
-  const content = await heading.boundingBox();
-  for (const action of await heading.getByRole('button').all()) {
-    const box = await action.boundingBox();
-    assert.ok(box.x >= content.x && box.x + box.width <= content.x + content.width + 1);
-    assert.ok(box.y >= content.y && box.y + box.height <= content.y + content.height + 1);
-  }
+  const content = await page.locator('.workspace-page').boundingBox();
+  await headingContainment(heading);
+  const headingBox = await heading.boundingBox();
   const settingsBox = await settings.boundingBox();
+  const sectionGap = (before, after) =>
+    assert.ok(
+      Math.abs(after.y - (before.y + before.height) - 20) <= 1,
+      'Workspace sections retain Summary’s 20px rhythm',
+    );
+  sectionGap(headingBox, settingsBox);
   // Allow one CSS pixel for fractional layout rounding.
   assert.ok(Math.abs(settingsBox.x - content.x) <= 1, 'Settings starts at the content edge');
   assert.ok(Math.abs(settingsBox.width - content.width) <= 1, 'Settings spans the content');
@@ -324,7 +340,7 @@ async function analysisSections(page, hasRun) {
     const box = await lastRun.boundingBox();
     assert.ok(Math.abs(box.x - content.x) <= 1, 'Last run starts at the content edge');
     assert.ok(Math.abs(box.width - content.width) <= 1, 'Last run spans the content');
-    assert.ok(box.y >= settingsBox.y + settingsBox.height, 'Last run follows settings');
+    sectionGap(settingsBox, box);
     const header = lastRun.locator('.panel-head');
     const headerBox = await header.boundingBox();
     const parts = [
@@ -352,8 +368,18 @@ async function analysisSections(page, hasRun) {
     }
     previous = box;
   }
-  assert.ok(toolbar.y >= previous.y + previous.height, 'File toolbar follows the panels');
-  assert.ok(table.y >= toolbar.y + toolbar.height, 'File table follows its toolbar');
+  sectionGap(previous, toolbar);
+  sectionGap(toolbar, table);
+  for (const box of [toolbar, table]) {
+    assert.ok(Math.abs(box.x - content.x) <= 1, 'File controls start at the workspace edge');
+    assert.ok(Math.abs(box.width - content.width) <= 1, 'File controls span the workspace');
+  }
+  for (const control of await page.locator('.toolbar').locator('input, button').all()) {
+    assert.equal(await control.isVisible(), true, 'File controls remain reachable');
+    const box = await control.boundingBox();
+    assert.ok(box.x >= toolbar.x - 1 && box.x + box.width <= toolbar.x + toolbar.width + 1);
+    assert.ok(box.y >= toolbar.y - 1 && box.y + box.height <= toolbar.y + toolbar.height + 1);
+  }
   checks++;
 }
 async function analysisSettingsFields(page, columns, expanded) {
@@ -510,7 +536,7 @@ async function capturedDetails(panel, expected, columns) {
 async function analysisOverflow(page) {
   const overflowing = await page
     .locator(
-      '#main, .page, .analysis-sections, .analysis-sections .panel, .analysis-sections .panel-head, .analysis-sections .panel-body, .analysis-last-run .three-columns, .analysis-last-run .three-columns > div',
+      '#main, .page, .workspace-page, .analysis-sections, .analysis-sections .panel, .analysis-sections .panel-head, .analysis-sections .panel-body, .workspace-page > .toolbar, .analysis-last-run .three-columns, .analysis-last-run .three-columns > div',
     )
     .evaluateAll((elements) =>
       elements
@@ -520,10 +546,7 @@ async function analysisOverflow(page) {
   assert.deepEqual(overflowing, [], 'No internal main/page/panel/group horizontal overflow');
   const table = page.locator('.table-wrap');
   const tableBox = await table.boundingBox();
-  const pageBox = await page
-    .locator('.page')
-    .filter({ has: page.locator('.analysis-sections') })
-    .boundingBox();
+  const pageBox = await page.locator('.workspace-page').boundingBox();
   assert.ok(
     tableBox.x >= pageBox.x && tableBox.x + tableBox.width <= pageBox.x + pageBox.width + 1,
   );
@@ -1375,12 +1398,35 @@ try {
       await close();
     }
   });
-  await test('Analysis settings and saved run use full-width stacked sections', async () => {
+  await test('Analysis setup shares Summary panel treatment and full-width section rhythm', async () => {
     for (const empty of [false, true]) {
       const { page, close } = await pageFor({ empty });
       try {
+        const reference = await panelTreatment(page.locator('.summary-details > .panel').first());
+        const rhythm = await page.locator('.summary-page').evaluate((element) => {
+          return getComputedStyle(element).rowGap;
+        });
         await nav(page, 'Analysis');
         await idle(page);
+        for (const panel of await page.locator('.analysis-sections > .panel').all())
+          assert.deepEqual(
+            await panelTreatment(panel),
+            reference,
+            'Analysis panels reuse Summary’s detail treatment without a dashboard minimum height',
+          );
+        for (const composition of await page.locator('.workspace-page, .analysis-sections').all())
+          assert.equal(
+            await composition.evaluate((element) => getComputedStyle(element).rowGap),
+            rhythm,
+            'Page and stacked sections share Summary’s rhythm',
+          );
+        assert.equal(
+          await page
+            .locator('.table-wrap')
+            .evaluate((element) => getComputedStyle(element).borderRadius),
+          reference.radius,
+          'The scrolling file table retains the shared panel boundary',
+        );
         const disclosure = page.locator('.analysis-sections details');
         const summary = disclosure.locator('summary');
         assert.equal(await disclosure.getAttribute('open'), null, 'Limits start collapsed');
@@ -1397,23 +1443,27 @@ try {
         assert.equal(await page.getByLabel('Refresh previously analyzed files').isChecked(), false);
         for (const width of [1440, 1280, 1001, 800]) {
           await page.setViewportSize({ width, height: width === 1440 ? 1000 : 900 });
-          for (const large of [false, true]) {
-            const text = page.getByRole('button', { name: 'Larger text', exact: true });
-            if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
-            for (const expanded of [false, true]) {
-              if ((await disclosure.getAttribute('open')) !== (expanded ? '' : null))
-                await summary.click();
-              await analysisSections(page, !empty);
-              await analysisSettingsFields(
-                page,
-                width === 1440 || (width === 1280 && !large) ? 3 : 1,
-                expanded,
-              );
-              await analysisOverflow(page);
-              await layout(
-                page,
-                `analysis-sections-${empty ? 'no-run' : 'saved-run'}-${width}-${large ? 'large' : 'default'}-${expanded ? 'expanded' : 'collapsed'}`,
-              );
+          for (const theme of ['dark', 'light']) {
+            if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+              await page.getByRole('button', { name: `Switch to ${theme} appearance` }).click();
+            for (const large of [false, true]) {
+              const text = page.getByRole('button', { name: 'Larger text', exact: true });
+              if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
+              for (const expanded of [false, true]) {
+                if ((await disclosure.getAttribute('open')) !== (expanded ? '' : null))
+                  await summary.click();
+                await analysisSections(page, !empty);
+                await analysisSettingsFields(
+                  page,
+                  width === 1440 || (width === 1280 && !large) ? 3 : 1,
+                  expanded,
+                );
+                await analysisOverflow(page);
+                await layout(
+                  page,
+                  `analysis-sections-${empty ? 'no-run' : 'saved-run'}-${width}-${theme}-${large ? 'large' : 'default'}-${expanded ? 'expanded' : 'collapsed'}`,
+                );
+              }
             }
           }
         }
@@ -1431,6 +1481,60 @@ try {
       } finally {
         await close();
       }
+    }
+  });
+  await test('Analysis file filtering and bulk edits retain explicit Save selection before preparation', async () => {
+    const { page, close } = await pageFor({ hasRecovery: true });
+    try {
+      await nav(page, 'Analysis');
+      await idle(page);
+      await page.setViewportSize({ width: 800, height: 900 });
+      await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+      await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+      const writes = () =>
+        page.evaluate(() => window.fixture.requests.filter((request) => request.method !== 'GET'));
+      const before = await writes();
+      const filter = page.getByLabel('Filter analysis files', { exact: true });
+      await filter.fill('internal/worker/');
+      await page.getByRole('button', { name: 'Exclude shown', exact: true }).click();
+      for (const path of ['internal/worker/process.go', 'internal/worker/config.go'])
+        assert.equal(await page.getByLabel(`Include ${path}`, { exact: true }).isChecked(), false);
+      await filter.fill('cmd/');
+      assert.equal(await page.getByLabel('Include cmd/server/main.go').isChecked(), true);
+      await filter.fill('internal/worker/config.go');
+      await page.getByRole('button', { name: 'Include shown', exact: true }).click();
+      assert.equal(await page.getByLabel('Include internal/worker/config.go').isChecked(), true);
+      await filter.fill('');
+      assert.equal(await page.getByLabel('Include internal/worker/process.go').isChecked(), false);
+      for (const action of ['Prepare analysis', 'Repair analysis']) {
+        await page.getByRole('button', { name: action, exact: true }).click();
+        await page
+          .getByRole('alert')
+          .getByText('Save your file selection before preparing a run.')
+          .waitFor();
+      }
+      assert.deepEqual(
+        await writes(),
+        before,
+        'Filtering and dirty preparation do not save or preview',
+      );
+      await analysisSections(page, true);
+      await analysisOverflow(page);
+      await layout(page, 'analysis-dirty-selection-800-light-large');
+      await page.getByRole('button', { name: 'Save selection', exact: true }).click();
+      await idle(page);
+      assert.equal(
+        await page.getByRole('button', { name: 'Save selection', exact: true }).count(),
+        0,
+      );
+      const saved = await writes();
+      assert.equal(saved.length, before.length + 1, 'Explicit Save is the only write');
+      assert.equal(saved.at(-1).path, '/api/projects/current/analysis/selection');
+      assert.deepEqual(saved.at(-1).body.excluded_paths, ['internal/worker/process.go']);
+      assert.equal(await page.getByLabel('Include internal/worker/process.go').isChecked(), false);
+      assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+    } finally {
+      await close();
     }
   });
   await test('Analysis settings are keyboard accessible and edits stay local until preparation', async () => {
