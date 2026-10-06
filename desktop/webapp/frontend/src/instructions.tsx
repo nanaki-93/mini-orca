@@ -24,8 +24,12 @@ export function Instructions({ s }: { s: State }) {
   const proposed = content;
   const excluded = preview?.effective.excluded.some((file) => file.path === preview.path);
   return (
-    <>
-      <Heading title="Project instructions" />
+    <div className="workspace-page instructions-page">
+      <Heading
+        variant="intro"
+        title="Project instructions"
+        detail="Load root or directory guidance, then preview changes for explicit review in Chat."
+      />
       <ol className="wizard-steps" aria-label="Instruction wizard steps">
         {['Choose scope', 'Edit guidance', 'Preview'].map((label, i) => (
           <li key={label} aria-current={step === i + 1 ? 'step' : undefined}>
@@ -34,7 +38,7 @@ export function Instructions({ s }: { s: State }) {
         ))}
       </ol>
       <div className="instruction-grid">
-        <section className="stack">
+        <section className="stack" aria-label="Instruction wizard">
           {step === 1 && (
             <Panel title="Choose instruction scope">
               <label className="block">
@@ -67,6 +71,7 @@ export function Instructions({ s }: { s: State }) {
               title="Edit guidance"
               actions={<Badge value={preview?.exists ? 'existing file' : 'new file'} />}
             >
+              {preview && <p className="path instruction-scope">{path}</p>}
               {!ready ? (
                 <Notice error>Load this scope again before editing.</Notice>
               ) : (
@@ -133,7 +138,8 @@ export function Instructions({ s }: { s: State }) {
             <Panel title="Instruction preview">
               <strong className="path">{path}</strong>
               <Prose text={proposed} />
-              <div className="actions section-gap">
+              {!ready && <Notice error>Load this scope again before editing.</Notice>}
+              <div className="actions">
                 <Button disabled={!!s.busy} onClick={() => setStep(2)}>
                   Edit guidance
                 </Button>
@@ -152,6 +158,7 @@ export function Instructions({ s }: { s: State }) {
         </section>
         <section className="stack" aria-label="Effective project guidance">
           <Panel title="Registered instructions">
+            {!preview && <p>Load a scope to inspect its effective project guidance.</p>}
             {preview?.effective.files.length === 0 && <p>No applicable instruction files yet.</p>}
             {preview?.effective.files.map((file) => (
               <Disclosure key={file.path} title={`${file.path} · scope ${file.scope}`}>
@@ -169,6 +176,6 @@ export function Instructions({ s }: { s: State }) {
           </Panel>
         </section>
       </div>
-    </>
+    </div>
   );
 }
