@@ -280,11 +280,23 @@ func validateStoredAnalysisRun(run *AnalysisRun) error {
 }
 
 func validStoredAnalysisIdentity(run *AnalysisRun) bool {
-	return run != nil && run.SchemaVersion == AnalysisRunSchemaVersion && run.Identity.Validate() == nil && run.Status.Valid() &&
-		run.Plan.SchemaVersion == AnalysisRunSchemaVersion && run.Plan.Scope == AnalysisRunScopeProject && run.Plan.Identity == run.Identity.AnalysisQueueIdentity &&
-		(!run.Plan.RetryStaleFailed || !run.Plan.Refresh && run.Plan.CompatibilityStage == "") &&
-		(!run.Plan.RecoverIncomplete || !run.Plan.Refresh && !run.Plan.RetryStaleFailed && run.Plan.CompatibilityStage == "" && run.Plan.Features == nil) &&
-		run.Plan.Models.Validate() == nil && run.Plan.Limits.Validate() == nil && run.Plan.PreviewID != "" && analysisMetadataReason(run.Reason)
+	if run == nil || run.SchemaVersion != AnalysisRunSchemaVersion || run.Identity.Validate() != nil || !run.Status.Valid() {
+		return false
+	}
+	if run.Plan.SchemaVersion != AnalysisRunSchemaVersion || run.Plan.Scope != AnalysisRunScopeProject || run.Plan.Identity != run.Identity.AnalysisQueueIdentity {
+		return false
+	}
+	return validStoredAnalysisIdentityPlan(&run.Plan) && analysisMetadataReason(run.Reason)
+}
+
+func validStoredAnalysisIdentityPlan(plan *AnalysisRunPreview) bool {
+	if plan.RetryStaleFailed && (plan.Refresh || plan.CompatibilityStage != "") {
+		return false
+	}
+	if plan.RecoverIncomplete && (plan.Refresh || plan.RetryStaleFailed || plan.CompatibilityStage != "" || plan.Features != nil) {
+		return false
+	}
+	return plan.Models.Validate() == nil && plan.Limits.Validate() == nil && plan.PreviewID != ""
 }
 
 func validStoredAnalysisWindow(run *AnalysisRun) bool {

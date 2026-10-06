@@ -65,33 +65,16 @@ func (s *Service) classifyAnalysisFileRecovery(stages []AnalysisFileStageStatus,
 // Active and continuable runs take precedence, matching start admission. Saved
 // selection exclusions are not eligible work.
 func (s *Service) analysisRecoverySummaryLocked(evidence analysisRecoveryEvidence, excluded []string) AnalysisRecoverySummary {
-	ignored := make(map[string]bool, len(excluded))
-	for _, path := range excluded {
-		ignored[path] = true
-	}
-	var summary AnalysisRecoverySummary
-	var total analysisFileRecovery
-	for path, file := range evidence.files {
-		if ignored[path] {
-			continue
-		}
-		if file.recoverable > 0 {
-			summary.FileCount++
-			summary.StageCount += file.recoverable
-		}
-		total.sourceBlocked = total.sourceBlocked || file.sourceBlocked
-		total.codeModelMissing = total.codeModelMissing || file.codeModelMissing
-		total.reviewModelMissing = total.reviewModelMissing || file.reviewModelMissing
-	}
+	summary, total := summarizeAnalysisRecoveryFiles(evidence.files, excluded)
 	c := s.analysisRun
 	var status AnalysisRunStatus
 	if c.run != nil && c.run.Identity.ProjectID == evidence.projectID {
 		status = c.run.Status
 	}
 	switch {
-	case c.done != nil || status == AnalysisRunRunning || status == AnalysisRunQueued || status == AnalysisRunPausing || status == AnalysisRunCanceling:
+	case isAnalysisRunRunning(c.done, status):
 		summary.State, summary.Reason = AnalysisRecoveryRunning, "An analysis run is in progress. Wait for it, or pause or cancel it, before repairing analysis."
-	case c.fault != nil || status == AnalysisRunPaused || status == AnalysisRunInterrupted:
+	case isAnalysisRunPaused(c.fault, status):
 		summary.State, summary.Reason = AnalysisRecoveryContinuation, "The last run is paused or interrupted. Continue or cancel it from its run page."
 	case status == "":
 		summary.State = AnalysisRecoveryNotStarted
@@ -105,6 +88,36 @@ func (s *Service) analysisRecoverySummaryLocked(evidence analysisRecoveryEvidenc
 		summary.State = AnalysisRecoveryComplete
 	}
 	return summary
+}
+
+func isAnalysisRunRunning(done chan struct{}, status AnalysisRunStatus) bool {
+	return done != nil || status == AnalysisRunRunning || status == AnalysisRunQueued || status == AnalysisRunPausing || status == AnalysisRunCanceling
+}
+
+func isAnalysisRunPaused(fault error, status AnalysisRunStatus) bool {
+	return fault != nil || status == AnalysisRunPaused || status == AnalysisRunInterrupted
+}
+
+func summarizeAnalysisRecoveryFiles(files map[string]analysisFileRecovery, excluded []string) (AnalysisRecoverySummary, analysisFileRecovery) {
+	ignored := make(map[string]bool, len(excluded))
+	for _, path := range excluded {
+		ignored[path] = true
+	}
+	var summary AnalysisRecoverySummary
+	var total analysisFileRecovery
+	for path, file := range files {
+		if ignored[path] {
+			continue
+		}
+		if file.recoverable > 0 {
+			summary.FileCount++
+			summary.StageCount += file.recoverable
+		}
+		total.sourceBlocked = total.sourceBlocked || file.sourceBlocked
+		total.codeModelMissing = total.codeModelMissing || file.codeModelMissing
+		total.reviewModelMissing = total.reviewModelMissing || file.reviewModelMissing
+	}
+	return summary, total
 }
 
 func analysisRecoveryModelReason(missing analysisFileRecovery, models *AnalysisModels) string {

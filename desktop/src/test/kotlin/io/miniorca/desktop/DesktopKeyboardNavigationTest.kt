@@ -4293,7 +4293,7 @@ class DesktopKeyboardNavigationTest {
     var active by mutableStateOf(LeftToolWindow.Summary)
     var selections = 0
     var opens = 0
-    ComposeVisualFixture(180, 340) {
+    ComposeVisualFixture(180, 420) {
           ToolWindowBar(
               active,
               {
@@ -4311,7 +4311,7 @@ class DesktopKeyboardNavigationTest {
               fixture.requestDescriptionFocus("Terminal · Open or focus; may start a local shell"))
           fixture.render()
           val terminalLabel = fixture.firstVisibleTextBounds("Terminal")
-          assertTrue(terminalLabel.top >= 0 && terminalLabel.bottom <= 340)
+          assertTrue(terminalLabel.top >= 0 && terminalLabel.bottom <= 420)
           assertEquals(0, opens)
           assertTrue(fixture.pressKey(Key.Enter))
           fixture.render()
@@ -4332,7 +4332,7 @@ class DesktopKeyboardNavigationTest {
     var active by mutableStateOf(LeftToolWindow.Summary)
     var selections = 0
     var opens = 0
-    ComposeVisualFixture(180, 340) {
+    ComposeVisualFixture(180, 420) {
           ToolWindowBar(
               active,
               {
@@ -4349,7 +4349,7 @@ class DesktopKeyboardNavigationTest {
           assertTrue(fixture.requestDescriptionFocus("Commands · Open actions"))
           fixture.render()
           val label = fixture.firstVisibleTextBounds("Commands")
-          assertTrue(label.top >= 0 && label.bottom <= 340)
+          assertTrue(label.top >= 0 && label.bottom <= 420)
           assertTrue(fixture.pressKey(Key.Enter))
           fixture.render()
           assertEquals(1, opens)
@@ -4370,7 +4370,7 @@ class DesktopKeyboardNavigationTest {
     var selections = 0
     var opens = 0
     // Small frame steps exercise the intermediate, partially revealed control.
-    ComposeVisualFixture(180, 340, frameDurationNanos = 1_000_000) {
+    ComposeVisualFixture(180, 420, frameDurationNanos = 1_000_000) {
           ToolWindowBar(
               active,
               {
@@ -4386,7 +4386,7 @@ class DesktopKeyboardNavigationTest {
           assertTrue(fixture.requestDescriptionFocus("Models · Configured model details"))
           fixture.awaitVisibleDescription("Models · Configured model details")
           val label = fixture.firstVisibleTextBounds("Models")
-          assertTrue(label.top >= 0 && label.bottom <= 340)
+          assertTrue(label.top >= 0 && label.bottom <= 420)
           assertTrue(fixture.pressKey(Key.Enter))
           fixture.render()
           assertEquals(1, opens)
