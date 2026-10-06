@@ -420,6 +420,64 @@ async function chatConversationLayout(page) {
   }
   checks++;
 }
+async function chatReviewLayout(page) {
+  const review = page.getByRole('region', { name: 'Proposal review', exact: true });
+  assert.equal(await review.evaluate((element) => getComputedStyle(element).gap), '20px');
+  const overflow = await page
+    .locator(
+      '#main, .page, .chat-review, .chat-review .panel, .chat-review .panel-head, .chat-review .panel-body, .chat-review .code-header, .chat-review .disclosure-body, .chat-review .notice',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.scrollWidth > element.clientWidth + 1)
+        .map((element) => element.className || element.id),
+    );
+  assert.deepEqual(
+    overflow,
+    [],
+    'Proposal evidence stays within its panels; diff panes scroll locally',
+  );
+  for (const panel of await review.locator('.panel').all()) {
+    const bounds = await panel.boundingBox();
+    for (const control of await panel.locator('button, summary').all()) {
+      if (!(await control.isVisible())) continue;
+      const box = await control.boundingBox();
+      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+    }
+    const parts = await panel.locator('.panel-head > *, .code-header > *').all();
+    const boxes = [];
+    for (const part of parts) {
+      const box = await part.boundingBox();
+      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      for (const other of boxes)
+        assert.ok(
+          box.x + box.width <= other.x + 1 ||
+            other.x + other.width <= box.x + 1 ||
+            box.y + box.height <= other.y + 1 ||
+            other.y + other.height <= box.y + 1,
+          'Proposal metadata and status do not collide',
+        );
+      boxes.push(box);
+    }
+  }
+  for (const diff of await review.locator('.diff').all()) {
+    assert.equal(await diff.getAttribute('tabindex'), '0');
+    assert.equal(await diff.locator('textarea, input, [contenteditable="true"]').count(), 0);
+    assert.equal(
+      await diff.locator('pre').evaluate((element) => getComputedStyle(element).overflowX),
+      'auto',
+    );
+    assert.notEqual(
+      await diff
+        .locator('code')
+        .first()
+        .evaluate((element) => getComputedStyle(element).userSelect),
+      'none',
+    );
+  }
+  checks++;
+}
 async function featuresLayout(page) {
   const workspace = page.locator('.features-page');
   await headingContainment(workspace.locator('.page-heading--intro'));
@@ -4463,6 +4521,15 @@ try {
             for (const width of [1440, 800]) {
               await page.setViewportSize({ width, height: 1000 });
               await chatConversationLayout(page);
+              await chatReviewLayout(page);
+              if (state === 'stale') {
+                const review = page.getByRole('region', { name: 'Proposal review', exact: true });
+                for (const name of ['Check proposal', 'Review this diff', 'Approve and apply'])
+                  assert.equal(
+                    await review.getByRole('button', { name, exact: true }).isDisabled(),
+                    true,
+                  );
+              }
               await layout(
                 page,
                 `chat-conversation-${state}-${width}-${theme}-${larger ? 'larger' : 'standard'}`,
@@ -4477,6 +4544,184 @@ try {
         );
       } finally {
         await close();
+      }
+    }
+  });
+  await test('Chat multi-file review keeps complete diffs, checks and explicit decisions across layouts', async () => {
+    const paths = [
+      `internal/${'long_directory_'.repeat(12)}/process.go`,
+      `docs/${'long_directory_'.repeat(12)}/recovery.md`,
+    ];
+    const code = `// ${'complete_code_'.repeat(100)} end of diff`;
+    const diagnostic = `Failure details ${'complete_diagnostic_'.repeat(100)} end of diagnostics`;
+    for (const state of ['unreviewed', 'exhausted', 'missing']) {
+      const { page, close } = await pageFor({
+        changeProposalKind: 'performance',
+        changeDiff: { lines: [{ kind: 'add', new_line: 1, text: code }] },
+        changeCheckOutput: diagnostic,
+        changeChecksFail: state === 'exhausted',
+        changeMissingDiffs: state === 'missing',
+      });
+      try {
+        await idle(page);
+        const reference = await panelTreatment(page.locator('.summary-details .panel').first());
+        await nav(page, 'Chat');
+        await page.getByLabel('Files to change', { exact: true }).fill(paths.join('\n'));
+        await page
+          .getByLabel('Change request', { exact: true })
+          .fill('Preserve complete proposal evidence.');
+        await page.getByLabel('Run project tests after generation', { exact: true }).uncheck();
+        await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+        await idle(page);
+        const review = page.getByRole('region', { name: 'Proposal review', exact: true });
+        if (state === 'missing') {
+          await review.getByRole('heading', { name: 'No proposal yet', exact: true }).waitFor();
+          assert.equal(await review.getByRole('button').count(), 0);
+        } else {
+          assert.deepEqual(await panelTreatment(review.locator('.panel').first()), reference);
+          assert.equal(await review.locator('.diff').count(), paths.length);
+          for (const path of paths) {
+            const diff = review.getByLabel(`Read-only diff for ${path}`, { exact: true });
+            assert.equal(await diff.locator('code').textContent(), code);
+            assert.equal(await diff.locator('.code-header strong').textContent(), path);
+          }
+          await review
+            .getByText('Performance unmeasured; tests do not establish a speedup.', { exact: true })
+            .waitFor();
+          const beforeDisclosures = await page.evaluate(() =>
+            window.fixture.requests.filter((r) => r.method !== 'GET'),
+          );
+          await review.getByText('Diagnostics', { exact: true }).click();
+          assert.equal(await review.locator('.chat-check pre').textContent(), diagnostic);
+          await review.getByText('Provider context', { exact: true }).click();
+          assert.deepEqual(
+            await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+            beforeDisclosures,
+            'Opening diagnostics and provider context is passive',
+          );
+          assert.equal(
+            await review.getByRole('button', { name: 'Check proposal', exact: true }).isEnabled(),
+            true,
+          );
+          assert.equal(
+            await review
+              .getByRole('button', { name: 'Review this diff', exact: true })
+              .isDisabled(),
+            state === 'exhausted',
+          );
+          assert.equal(
+            await review
+              .getByRole('button', { name: 'Approve and apply', exact: true })
+              .isDisabled(),
+            true,
+          );
+          if (state === 'exhausted') {
+            assert.equal(
+              await review
+                .getByRole('button', { name: 'Repair failed checks', exact: true })
+                .isDisabled(),
+              true,
+            );
+            assert.equal(
+              await page.evaluate(
+                () => window.fixture.requests.filter((r) => r.body?.repair === true).length,
+              ),
+              3,
+            );
+          }
+        }
+        const render = async (label) => {
+          const before = await page.evaluate(() =>
+            window.fixture.requests.filter((r) => r.method !== 'GET'),
+          );
+          for (const theme of ['dark', 'light']) {
+            if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+              await page
+                .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
+                .click();
+            for (const larger of [false, true]) {
+              const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
+              if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
+                await textSize.click();
+              for (const width of [1440, 1280, 1001, 800]) {
+                await page.setViewportSize({ width, height: 1000 });
+                await chatReviewLayout(page);
+                await layout(
+                  page,
+                  `chat-proposal-${label}-${width}-${theme}-${larger ? 'larger' : 'standard'}`,
+                );
+              }
+            }
+          }
+          assert.deepEqual(
+            await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+            before,
+            'Reflow and evidence inspection never checks, reviews or applies',
+          );
+          assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+        };
+        await render(state);
+        if (state === 'unreviewed') {
+          await review.getByRole('button', { name: 'Review this diff', exact: true }).click();
+          await idle(page);
+          await review.getByText('Revision reviewed.', { exact: true }).waitFor();
+          assert.equal(
+            await review
+              .getByRole('button', { name: 'Review this diff', exact: true })
+              .isDisabled(),
+            true,
+          );
+          assert.equal(
+            await review
+              .getByRole('button', { name: 'Approve and apply', exact: true })
+              .isEnabled(),
+            true,
+          );
+          await render('reviewed');
+          await page.evaluate(() => {
+            window.fixture.hold = '/api/projects/current/changes/change-1/checks';
+          });
+          const checksBefore = await page.evaluate(
+            () =>
+              window.fixture.requests.filter((r) => r.path.endsWith('/changes/change-1/checks'))
+                .length,
+          );
+          await review.getByRole('button', { name: 'Check proposal', exact: true }).click();
+          await page.waitForFunction(
+            (count) =>
+              window.fixture.requests.filter((r) => r.path.endsWith('/changes/change-1/checks'))
+                .length > count,
+            checksBefore,
+          );
+          await page.locator('.busy-strip').waitFor();
+          for (const name of ['Check proposal', 'Review this diff', 'Approve and apply'])
+            assert.equal(
+              await review.getByRole('button', { name, exact: true }).isDisabled(),
+              true,
+            );
+          await render('busy');
+          await page.evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          });
+          await idle(page);
+          assert.equal(
+            await review
+              .getByRole('button', { name: 'Approve and apply', exact: true })
+              .isDisabled(),
+            true,
+            'Rechecking clears earlier review',
+          );
+        }
+      } finally {
+        try {
+          await page.evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          });
+        } finally {
+          await close();
+        }
       }
     }
   });

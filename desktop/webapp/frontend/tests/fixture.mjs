@@ -695,12 +695,15 @@ export function installFixture(options = {}) {
                     'The proposal handles cancellation and preserves its scope.',
                 },
               );
-              change.changes = change.targets.map((target) => ({
-                path: target.path,
-                content: source.replace('return nil', 'return ctx.Err()'),
-                hash: `candidate-${change.revision}`,
-                diff: validation().diff,
-              }));
+              if (options.changeProposalKind) change.kind = options.changeProposalKind;
+              change.changes = options.changeMissingDiffs
+                ? []
+                : change.targets.map((target) => ({
+                    path: target.path,
+                    content: source.replace('return nil', 'return ctx.Err()'),
+                    hash: `candidate-${change.revision}`,
+                    diff: options.changeDiff || validation().diff,
+                  }));
               change.checks = [];
               change.reviewed_hash = '';
               return response(change);
@@ -712,7 +715,9 @@ export function installFixture(options = {}) {
                   name: 'tests',
                   required: true,
                   state: options.changeChecksFail ? 'failed' : 'passed',
-                  output: options.changeChecksFail ? 'Fixture test failure' : '',
+                  output:
+                    options.changeCheckOutput ||
+                    (options.changeChecksFail ? 'Fixture test failure' : ''),
                 },
               ];
               change.check_options = { run_tests: body.run_tests };

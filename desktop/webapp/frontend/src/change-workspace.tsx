@@ -270,16 +270,20 @@ export function ChangeWorkspace({ s }: { s: State }) {
             </Disclosure>
           </Panel>
         </section>
-        <section className="stack" aria-label="Proposal review">
+        <section className="workspace-page chat-review" aria-label="Proposal review">
           {change?.changes.length ? (
             <>
-              <div className="row between wrap">
-                <h2>Proposal diff</h2>
-                <Badge value={`${change.changes.length} files`} />
-              </div>
-              {change.kind === 'performance' && (
-                <Notice>Performance unmeasured; tests do not establish a speedup.</Notice>
-              )}
+              <Panel
+                title="Proposal diff"
+                actions={<Badge value={`${change.changes.length} files`} />}
+              >
+                <p className="small muted">
+                  Revision {change.revision} · Read every file diff before reviewing this proposal.
+                </p>
+                {change.kind === 'performance' && (
+                  <Notice>Performance unmeasured; tests do not establish a speedup.</Notice>
+                )}
+              </Panel>
               {change.changes.map((edit) => (
                 <div
                   className="panel diff"
@@ -322,7 +326,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
                   <p>No current checks.</p>
                 ) : (
                   change.checks.map((check, i) => (
-                    <div key={i} className="section-gap">
+                    <div key={i} className="chat-check">
                       <div className="row between wrap">
                         <strong>{check.name}</strong>
                         <Badge value={check.state} />
@@ -349,36 +353,42 @@ export function ChangeWorkspace({ s }: { s: State }) {
                   )}
                 </div>
               </Panel>
-              <div className="actions end">
-                <Button
-                  disabled={
-                    blocked || !changeChecksPassed(change) || change.reviewed_hash === change.hash
-                  }
-                  onClick={() => void w.reviewChange()}
-                >
-                  Review this diff
-                </Button>
-                <Button
-                  tone="primary"
-                  disabled={!!s.busy || !canApplyChange(s)}
-                  onClick={() => void w.applyChange()}
-                >
-                  Approve and apply
-                </Button>
-              </div>
-              {change.reviewed_hash === change.hash && <p role="status">Revision reviewed.</p>}
-              <Disclosure title="Provider context">
-                <p>
-                  {change.context_manifest?.model} · {change.context_manifest?.provider_origin}
-                </p>
-                <BulletContent
-                  title="Included files and guides"
-                  items={change.context_manifest?.included?.map((file) => file.path)}
-                />
-              </Disclosure>
+              <Panel title="Review and apply">
+                <div className="actions">
+                  <Button
+                    disabled={
+                      blocked || !changeChecksPassed(change) || change.reviewed_hash === change.hash
+                    }
+                    onClick={() => void w.reviewChange()}
+                  >
+                    Review this diff
+                  </Button>
+                  <Button
+                    tone="primary"
+                    disabled={!!s.busy || !canApplyChange(s)}
+                    onClick={() => void w.applyChange()}
+                  >
+                    Approve and apply
+                  </Button>
+                </div>
+                {change.reviewed_hash === change.hash && <p role="status">Revision reviewed.</p>}
+              </Panel>
+              <Panel className="chat-provider-context">
+                <Disclosure title="Provider context">
+                  <p>
+                    {change.context_manifest?.model} · {change.context_manifest?.provider_origin}
+                  </p>
+                  <BulletContent
+                    title="Included files and guides"
+                    items={change.context_manifest?.included?.map((file) => file.path)}
+                  />
+                </Disclosure>
+              </Panel>
             </>
           ) : (
-            <Empty title="No proposal yet" icon="code" />
+            <Panel>
+              <Empty title="No proposal yet" icon="code" />
+            </Panel>
           )}
         </section>
       </div>
