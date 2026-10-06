@@ -135,7 +135,20 @@ export function installFixture(options = {}) {
   };
   const run = {
     identity: { ...queue, id: 'run-1', generation: 'generation-1' },
-    plan: preview,
+    plan: options.capturedModels
+      ? {
+          ...preview,
+          models: options.capturedModels,
+          providers: options.capturedProviders ?? preview.providers,
+          features: {
+            ...preview.features,
+            provider_id:
+              options.capturedProviders?.find((provider) =>
+                provider.stages.includes('feature_suggestions'),
+              )?.id ?? preview.features.provider_id,
+          },
+        }
+      : preview,
     status: options.runStatus || 'completed',
     files: files.map((f) => ({
       ...f,
@@ -750,7 +763,8 @@ export function installFixture(options = {}) {
             if (body.recover_incomplete) {
               state.preview.recover_incomplete = true;
             }
-            if (choices) {
+            // A continuation keeps the saved destinations, not today's configured providers.
+            if (choices && !body.resume_run) {
               const code = `code-${choices.code}`;
               const review = `review-${choices.review}`;
               const features =

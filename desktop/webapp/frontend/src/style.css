@@ -590,7 +590,8 @@ pre {
 .analysis-sections {
   grid-template-columns: minmax(0, 1fr);
 }
-.analysis-run-settings {
+.analysis-run-settings,
+.analysis-last-run {
   container-type: inline-size;
 }
 .analysis-run-settings .analysis-settings-fields {
@@ -602,9 +603,20 @@ pre {
   grid-template-rows: 1fr auto;
   overflow-wrap: anywhere;
 }
-/* Use panel width and its text size, not viewport width, to allow three readable fields. */
+.analysis-last-run .three-columns {
+  grid-template-columns: minmax(0, 1fr);
+}
+.analysis-last-run .three-columns > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.analysis-last-run .three-columns .row > span:not(.badge) {
+  min-width: 0;
+}
+/* Use panel width and its text size, not viewport width, to allow three readable groups. */
 @container (min-width: 60em) {
-  .analysis-run-settings .analysis-settings-fields {
+  .analysis-run-settings .analysis-settings-fields,
+  .analysis-last-run .three-columns {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
