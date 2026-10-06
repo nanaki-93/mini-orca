@@ -430,6 +430,56 @@ async function resultsListLayout(page) {
   );
   checks++;
 }
+async function resultsDetailLayout(page) {
+  const workspace = page.locator('.results-detail');
+  await headingContainment(workspace.locator('.page-heading--intro'));
+  for (const region of [
+    workspace,
+    workspace.locator('.results-detail-layout'),
+    ...(await workspace.locator('.results-detail-layout > .stack').all()),
+  ])
+    assert.equal(await region.evaluate((element) => getComputedStyle(element).gap), '20px');
+  const overflowing = await page
+    .locator(
+      '#main, .page, .results-detail, .results-detail .panel, .results-detail .panel-head, .results-detail .panel-body, .results-detail .stack, .results-detail .key-values, .results-detail .key-values dd, .results-detail .prose, .results-detail .disclosure-body, .results-detail li',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.scrollWidth > element.clientWidth + 1)
+        .map((element) => element.className || element.tagName),
+    );
+  assert.deepEqual(
+    overflowing,
+    [],
+    'Complete detail evidence and anchors wrap inside their panels',
+  );
+  const [evidence, source] = await Promise.all(
+    (await workspace.locator('.results-detail-layout > .stack').all()).map((stack) =>
+      stack.boundingBox(),
+    ),
+  );
+  if (source.x > evidence.x + 1) {
+    assert.ok(Math.abs(source.y - evidence.y) <= 1, 'Evidence and source columns align');
+    assert.ok(Math.abs(source.x - evidence.x - evidence.width - 20) <= 1);
+  } else {
+    assert.ok(Math.abs(source.y - evidence.y - evidence.height - 20) <= 1);
+    assert.ok(
+      Math.abs(source.width - evidence.width) <= 1,
+      'Compact evidence stacks at full width',
+    );
+  }
+  if (page.viewportSize().width === 800) assert.ok(Math.abs(source.x - evidence.x) <= 1);
+  if (page.viewportSize().width === 1440) assert.ok(source.x > evidence.x + 1);
+  for (const panel of await workspace.locator('.panel').all()) {
+    const bounds = await panel.boundingBox();
+    for (const action of await panel.getByRole('button').all()) {
+      const box = await action.boundingBox();
+      assert.ok(box && box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+    }
+  }
+  checks++;
+}
 async function analysisPreviewLayout(page) {
   await headingContainment(page.locator('.page-heading--intro'));
   const intro = await page.locator('.page-heading--intro').boundingBox();
@@ -3328,6 +3378,380 @@ try {
         );
         assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
         assert.equal(await page.getByRole('dialog').count(), 0);
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Selected findings retain complete evidence, Summary treatment and passive detail controls', async () => {
+    for (const variant of [
+      'bugs-semantic',
+      'performance-typed',
+      'security-typed',
+      'performance-semantic',
+      'security-semantic',
+    ]) {
+      const category = variant.split('-')[0];
+      const name = category[0].toUpperCase() + category.slice(1);
+      const semantic = variant.endsWith('-semantic');
+      const { page, close } = await pageFor({ findingDetail: variant });
+      try {
+        await idle(page);
+        const referenceIntro = await introductionTreatment(page.locator('.summary-hero'));
+        const referencePanel = await panelTreatment(
+          page.locator('.summary-details > .panel').first(),
+        );
+        const expected = await page.evaluate(
+          ({ category, semantic }) => {
+            const state = window.fixture.state;
+            const row = semantic ? state.finding : state[category].findings[0];
+            const text = semantic
+              ? [
+                  ['Finding', row.message],
+                  ['Evidence', row.evidence],
+                ]
+              : category === 'performance'
+                ? [
+                    ['Observed pattern', row.observed_pattern],
+                    ['Workload', row.workload_conditions],
+                    ['Recommendation', row.recommendation],
+                    ['Tradeoff', row.tradeoff],
+                    ['Verification', row.verification_plan],
+                  ]
+                : [
+                    ['Observed condition', row.observed_condition],
+                    ['Evidence', row.evidence_kind],
+                    ['Preconditions & unknowns', row.preconditions_or_unknowns],
+                    ['Remediation', row.remediation],
+                    ['Verification', row.verification_idea],
+                    ['Rule', row.rule],
+                    ['CWE', row.cwe],
+                    ['Reference', row.reference],
+                  ];
+            return {
+              title: row.title,
+              confidence: row.confidence,
+              source: semantic
+                ? 'AI analysis'
+                : category === 'performance'
+                  ? 'Performance hypothesis'
+                  : state.security.source,
+              path: state.files[0].path,
+              symbol: semantic
+                ? row.location.symbol
+                : category === 'performance'
+                  ? row.symbol
+                  : row.source_anchor.symbol,
+              text,
+              insight: row.engineering_insight,
+              task: row.task_spec,
+            };
+          },
+          { category, semantic },
+        );
+        await nav(page, name);
+        const filter = page.getByRole('textbox', { name: 'Filter findings', exact: true });
+        await filter.fill('process.go');
+        await page
+          .getByLabel('Finding severity', { exact: true })
+          .selectOption(semantic ? 'high' : 'medium');
+        const before = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method !== 'GET'),
+        );
+        await page.locator('.result-row').press('Enter');
+        const workspace = page.locator('.results-detail');
+        const panel = (title) =>
+          workspace
+            .locator('.panel')
+            .filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+        assert.deepEqual(
+          await introductionTreatment(workspace.locator('.page-heading--intro')),
+          referenceIntro,
+        );
+        assert.deepEqual(await panelTreatment(panel('Source')), referencePanel);
+        assert.equal(await workspace.locator('h1').innerText(), expected.title);
+        if (!['suggested', 'ai_suggestion'].includes(expected.confidence))
+          assert.equal(
+            await workspace.locator('.page-heading .badge').last().innerText(),
+            expected.confidence.replaceAll('_', ' '),
+          );
+        for (const [title, content] of expected.text)
+          assert.equal(
+            await panel(title)
+              .locator('.prose')
+              .evaluate((element) => element.textContent),
+            content.replace(/\n\s*\n/g, ''),
+          );
+        const metadata = panel('Source').locator('.key-values dd');
+        assert.equal(await metadata.nth(0).innerText(), expected.path);
+        assert.equal(await metadata.nth(1).innerText(), expected.symbol);
+        assert.equal(await metadata.nth(2).innerText(), '5');
+        assert.equal(await metadata.nth(3).innerText(), expected.source);
+        assert.equal(
+          await panel('Engineering insight')
+            .locator('.prose')
+            .first()
+            .evaluate((element) => element.textContent),
+          expected.insight.mechanism.replace(/\n\s*\n/g, ''),
+        );
+        await workspace.locator('summary').filter({ hasText: 'Why & tradeoffs' }).click();
+        const insightText = await panel('Engineering insight').textContent();
+        for (const value of Object.values(expected.insight))
+          for (const paragraph of value.split(/\n\s*\n/))
+            assert.ok(insightText.includes(paragraph));
+        if (semantic) {
+          assert.equal(
+            await panel('Acceptance criteria')
+              .locator(':scope > .panel-body > ul > li')
+              .textContent(),
+            expected.task.acceptance_criteria[0],
+          );
+          await workspace.locator('summary').filter({ hasText: 'Scope' }).click();
+          assert.equal(
+            await panel('Acceptance criteria').locator('.disclosure-body li').textContent(),
+            expected.task.non_goals[0],
+          );
+          const guidance = panel('Acceptance criteria').locator('pre');
+          assert.equal(await guidance.textContent(), expected.task.go_test_candidate.content);
+          await guidance.focus();
+          assert.equal(
+            await guidance.evaluate((element) => element === document.activeElement),
+            true,
+          );
+        }
+        const complete = await workspace.textContent();
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page
+              .getByRole('button', { name: 'Switch to light appearance', exact: true })
+              .click();
+          for (const larger of [false, true]) {
+            const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
+            if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
+              await textSize.click();
+            for (const width of [1440, 1280, 1001, 800]) {
+              await page.setViewportSize({ width, height: 1000 });
+              await resultsDetailLayout(page);
+              assert.equal(
+                await workspace.textContent(),
+                complete,
+                'Reflow retains every evidence field',
+              );
+              for (const label of [
+                'All findings',
+                'Open source',
+                'Prepare fix',
+                'Prepare change',
+                ...(semantic ? ['Dismiss', 'Mark fixed'] : []),
+              ])
+                assert.equal(
+                  await workspace.getByRole('button', { name: label, exact: true }).isEnabled(),
+                  true,
+                );
+              await layout(
+                page,
+                `${variant}-detail-long-${width}-${theme}-${larger ? 'larger' : 'standard'}`,
+              );
+            }
+            await contrast(page, `${variant} detail ${theme} ${larger ? 'larger' : 'standard'}`);
+          }
+        }
+        assert.equal(await page.evaluate(() => window.detailExecuted), undefined);
+        assert.equal(
+          await workspace.locator('script, a, img').count(),
+          0,
+          'Model HTML and remote assets remain inert',
+        );
+        await workspace.getByRole('button', { name: 'All findings', exact: true }).click();
+        assert.equal(await filter.inputValue(), 'process.go');
+        assert.equal(
+          await page.getByLabel('Finding severity', { exact: true }).inputValue(),
+          semantic ? 'high' : 'medium',
+        );
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          before,
+          'Selection, disclosures, appearance and back-to-list are passive',
+        );
+        // Reload retained evidence through the existing local read; preparation stays blocked.
+        await page.evaluate(() => {
+          window.fixture.state.finding.freshness = 'stale';
+          window.fixture.state.performance.status = 'stale';
+          window.fixture.state.security.status = 'stale';
+        });
+        await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await idle(page);
+        await page.locator('.result-row').click();
+        await workspace.locator('.results-state').getByText('stale', { exact: true }).waitFor();
+        for (const label of ['Prepare fix', 'Prepare change'])
+          assert.equal(
+            await workspace.getByRole('button', { name: label, exact: true }).isDisabled(),
+            true,
+          );
+        assert.equal(
+          await workspace.getByRole('button', { name: 'Open source', exact: true }).isEnabled(),
+          true,
+        );
+        await resultsDetailLayout(page);
+        await layout(page, `${variant}-detail-stale-800-light-larger`);
+        // Preserve optional-field fallbacks, including file-level findings without declaration actions.
+        await workspace.getByRole('button', { name: 'All findings', exact: true }).click();
+        await page.evaluate(() => {
+          const state = window.fixture.state;
+          state.finding.freshness = 'fresh';
+          state.finding.location.symbol = '';
+          delete state.finding.task_spec;
+          delete state.finding.engineering_insight;
+          state.performance.status = 'success';
+          state.performance.findings[0].symbol = '';
+          delete state.performance.findings[0].engineering_insight;
+          state.security.status = 'success';
+          state.security.findings[0].source_anchor.symbol = '';
+          delete state.security.findings[0].engineering_insight;
+          delete state.security.findings[0].cwe;
+          delete state.security.findings[0].reference;
+        });
+        await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await idle(page);
+        await page.locator('.result-row').click();
+        assert.equal(
+          await workspace
+            .getByRole('heading', { name: 'Engineering insight', exact: true })
+            .count(),
+          0,
+        );
+        assert.equal(
+          await workspace
+            .getByRole('heading', { name: 'Acceptance criteria', exact: true })
+            .count(),
+          0,
+        );
+        assert.equal(
+          await workspace.getByRole('button', { name: 'Prepare change', exact: true }).count(),
+          0,
+        );
+        await workspace.getByText('File-level finding', { exact: true }).waitFor();
+        if (!semantic && category === 'security')
+          for (const title of ['CWE', 'Reference']) assert.equal(await panel(title).count(), 0);
+        await resultsDetailLayout(page);
+        await layout(page, `${variant}-detail-optional-800-light-larger`);
+        await workspace.getByRole('button', { name: 'All findings', exact: true }).click();
+        await page.evaluate((symbol) => {
+          const state = window.fixture.state;
+          state.finding.location.symbol = symbol;
+          state.performance.findings[0].symbol = symbol;
+          state.security.findings[0].source_anchor.symbol = symbol;
+        }, expected.symbol);
+        await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await idle(page);
+        const previousReads = await page.evaluate(
+          () => window.fixture.requests.filter((r) => r.path.endsWith('/analysis/results')).length,
+        );
+        await page.evaluate(() => {
+          window.fixture.hold = '/api/projects/current/analysis/results';
+        });
+        await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await page.waitForFunction(
+          (count) =>
+            window.fixture.requests.filter((r) => r.path.endsWith('/analysis/results')).length >
+            count,
+          previousReads,
+        );
+        await page.locator('.busy-strip').waitFor();
+        await page.locator('.result-row').click();
+        for (const label of [
+          'Open source',
+          'Prepare fix',
+          'Prepare change',
+          ...(semantic ? ['Dismiss', 'Mark fixed'] : []),
+        ])
+          assert.equal(
+            await workspace.getByRole('button', { name: label, exact: true }).isDisabled(),
+            true,
+          );
+        assert.equal(
+          await workspace.getByRole('button', { name: 'All findings', exact: true }).isEnabled(),
+          true,
+        );
+        await resultsDetailLayout(page);
+        await layout(page, `${variant}-detail-busy-800-light-larger`);
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          before,
+          'Reloading and inspecting stale, optional or busy evidence does not generate or mutate',
+        );
+      } finally {
+        try {
+          await page.evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          });
+        } finally {
+          await close();
+        }
+      }
+    }
+  });
+  await test('Semantic finding triage remains explicit with retained detail and fixed-state restrictions', async () => {
+    const { page, close } = await pageFor();
+    try {
+      await nav(page, 'Bugs');
+      await page.locator('.result-row').click();
+      const initialWrites = await page.evaluate(
+        () => window.fixture.requests.filter((r) => r.method !== 'GET').length,
+      );
+      for (const [label, status] of [
+        ['Dismiss', 'dismissed'],
+        ['Reopen', 'open'],
+        ['Mark fixed', 'fixed'],
+      ]) {
+        await page.getByRole('button', { name: label, exact: true }).click();
+        await idle(page);
+        assert.equal(
+          await page.locator('.results-detail-source .key-values dd').last().innerText(),
+          status,
+        );
+      }
+      assert.equal(
+        await page.getByRole('button', { name: 'Mark fixed', exact: true }).isDisabled(),
+        true,
+      );
+      const writes = await page.evaluate(() =>
+        window.fixture.requests.filter((r) => r.method !== 'GET'),
+      );
+      assert.deepEqual(
+        writes.slice(initialWrites).map((r) => [r.method, r.path, r.body.status]),
+        [
+          ['PATCH', '/api/projects/current/findings/finding-1', 'dismissed'],
+          ['PATCH', '/api/projects/current/findings/finding-1', 'open'],
+          ['PATCH', '/api/projects/current/findings/finding-1', 'fixed'],
+        ],
+      );
+    } finally {
+      await close();
+    }
+  });
+  await test('Finding source inspection and declaration handoff remain distinct from generation', async () => {
+    for (const action of ['Open source', 'Prepare change']) {
+      const { page, close } = await pageFor();
+      try {
+        await nav(page, 'Bugs');
+        await page.locator('.result-row').click();
+        const before = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method !== 'GET'),
+        );
+        await page.getByRole('button', { name: action, exact: true }).click();
+        if (action === 'Open source')
+          await page.getByLabel('Read-only source', { exact: true }).waitFor();
+        else await page.getByLabel('Change request', { exact: true }).waitFor();
+        await idle(page);
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          before,
+        );
+        assert.equal(await page.getByRole('dialog').count(), 0);
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
       } finally {
         await close();
       }
