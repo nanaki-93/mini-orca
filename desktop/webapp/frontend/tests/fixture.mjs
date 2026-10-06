@@ -667,7 +667,9 @@ export function installFixture(options = {}) {
             });
           if (path === '/api/models/current')
             return response({
-              scopes: { analyze: model('analyze'), bug: model('bug'), function: model('function') },
+              scopes: options.emptyModelCatalog
+                ? {}
+                : { analyze: model('analyze'), bug: model('bug'), function: model('function') },
             });
           if (path === '/api/projects/restore' || path === '/api/projects/import')
             return response(state.project);

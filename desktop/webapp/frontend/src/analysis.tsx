@@ -74,15 +74,17 @@ function ModelSelectors({
   value,
   disabled,
   onChange,
+  className = '',
 }: {
   s: State;
   value: AnalysisModels;
   disabled: boolean;
   onChange: (models: AnalysisModels) => void;
+  className?: string;
 }) {
   const choices = Object.entries(s.models?.scopes || {});
   return (
-    <div className="form-grid">
+    <div className={`form-grid ${className}`}>
       {(
         [
           ['code', 'Code analysis model'],
@@ -91,7 +93,7 @@ function ModelSelectors({
         ] as const
       ).map(([key, label]) => (
         <label key={key}>
-          {label}
+          <span>{label}</span>
           <select
             className="field"
             aria-label={label}
@@ -185,15 +187,16 @@ export function Analysis({ s }: { s: State }) {
       </Heading>
 
       <div className="stack analysis-sections section-gap">
-        <Panel title="Run settings">
+        <Panel title="Run settings" className="analysis-run-settings">
           <ModelSelectors
+            className="analysis-settings-fields"
             s={s}
             value={models}
             disabled={!!s.busy}
             onChange={(m) => w.setAnalysisSetup(m)}
           />
           <Disclosure title="Batch & request limits">
-            <div className="form-grid">
+            <div className="form-grid analysis-settings-fields">
               {(
                 [
                   ['batch_files', 'Files per batch', 1, 500],
@@ -202,7 +205,7 @@ export function Analysis({ s }: { s: State }) {
                 ] as const
               ).map(([key, label, min, max]) => (
                 <label key={key}>
-                  {label}
+                  <span>{label}</span>
                   <input
                     type="number"
                     min={min}
