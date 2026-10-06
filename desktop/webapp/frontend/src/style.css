@@ -1542,6 +1542,57 @@ progress::-webkit-progress-value {
 .editor-content {
   min-width: 0;
 }
+.source-workspace .editor-workspace {
+  gap: 20px;
+}
+.source-workspace .editor-content,
+.source-inspection {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  min-width: 0;
+  align-content: start;
+}
+.source-workspace .tabs {
+  flex-wrap: wrap;
+  margin-bottom: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.source-workspace .browser-search {
+  padding-inline: 20px;
+}
+.source-workspace .file-browser {
+  min-width: 0;
+}
+.source-workspace .code-header {
+  flex-wrap: wrap;
+  padding: 14px 20px;
+}
+.source-workspace .code-header > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.declaration-picker .symbol-picker {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 100%;
+}
+.source-analysis .panel-body {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 900px) {
+  .source-workspace .editor-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .source-workspace .file-browser {
+    position: static;
+  }
+  .source-workspace .file-list {
+    min-height: 0;
+    max-height: 200px;
+  }
+}
 .file-browser {
   position: sticky;
   top: 10px;
