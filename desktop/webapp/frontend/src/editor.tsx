@@ -387,7 +387,7 @@ function Assistant({ s }: { s: State }) {
     void w.generate(content, create ? 'create_symbol' : 'replace_symbol', create ? name : s.symbol);
   };
   return (
-    <div className="stack">
+    <div className="stack assistant-composition">
       {!create && <DeclarationPicker s={s} />}
       {create && (
         <Panel title="New declaration">
@@ -431,11 +431,12 @@ function Assistant({ s }: { s: State }) {
         </Panel>
       ))}
       <Panel
+        className="assistant-request"
         title={
           create ? 'What should it do?' : s.symbol ? `Change ${s.symbol}` : 'Describe your change'
         }
       >
-        <div className="actions section-bottom">
+        <div className="actions">
           {['Fix', 'Refactor', 'Document'].map((preset) => (
             <Button
               key={preset}
@@ -471,7 +472,7 @@ function Assistant({ s }: { s: State }) {
             placeholder="Optional boundaries"
           />
         </Disclosure>
-        <div className="row between wrap section-gap">
+        <div className="row between wrap assistant-request-actions">
           <Go page="context" icon="layers" tone="ghost">
             Inspect context
           </Go>

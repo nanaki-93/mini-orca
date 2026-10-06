@@ -1547,7 +1547,8 @@ progress::-webkit-progress-value {
 }
 .source-workspace .editor-content,
 .source-inspection,
-.context-inspection {
+.context-inspection,
+.assistant-composition {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 20px;
@@ -1580,7 +1581,8 @@ progress::-webkit-progress-value {
   max-width: 100%;
 }
 .source-analysis .panel-body,
-.context-inspection .panel-body {
+.context-inspection .panel-body,
+.assistant-composition .panel-body {
   overflow-wrap: anywhere;
 }
 .context-inspection .key-values > div {
@@ -1595,6 +1597,26 @@ progress::-webkit-progress-value {
 }
 .context-references .list-copy {
   flex: 1 1 12rem;
+}
+.assistant-composition {
+  container: assistant / inline-size;
+}
+.assistant-request > .panel-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+.assistant-request details {
+  margin: 0;
+}
+.assistant-request-actions .button {
+  min-width: 0;
+  max-width: 100%;
+}
+@container assistant (max-width: 32rem) {
+  .assistant-composition .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 @media (max-width: 900px) {
   .source-workspace .editor-workspace {

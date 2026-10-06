@@ -145,8 +145,23 @@ const surfaceInventory = {
     // main.tsx dispatches both to Editor; Editor renders Context and selects its tab
     // for both; Workspace.navigate calls inspectContext for either. No alias control.
     manifest: ['Context alias: same rendering, loading and selected tab; no separate control'],
-    assistant: ['request', 'explanation', 'conversation', 'stale', 'busy', 'canceled'],
-    'new-declaration': ['function', 'type', 'constraints', 'stale', 'busy', 'canceled'],
+    assistant: [
+      'request and presets',
+      'long explanation and conversation',
+      'optional constraints',
+      'target changes',
+      'stale',
+      'busy',
+      'canceled',
+    ],
+    'new-declaration': [
+      'function/type/var/const',
+      'long explanation and conversation',
+      'optional constraints',
+      'stale',
+      'busy',
+      'canceled',
+    ],
     draft: ['absent', 'generated', 'edited', 'validated', 'invalid', 'stale', 'busy'],
     checks: ['absent', 'passed', 'failed', 'skipped', 'canceled', 'busy', 'stale'],
     review: ['ready', 'dirty', 'missing validation', 'failed checks', 'stale', 'busy', 'uncertain'],
@@ -371,6 +386,46 @@ async function panelTreatment(panel) {
       bodyPadding: getComputedStyle(element.querySelector('.panel-body')).padding,
     };
   });
+}
+async function assistantLayout(page) {
+  const composition = page.locator('.assistant-composition');
+  await headingContainment(page.locator('.source-workspace .page-heading--intro'));
+  assert.equal(await composition.evaluate((element) => getComputedStyle(element).gap), '20px');
+  const overflow = await page
+    .locator(
+      '#main, .page, .assistant-composition, .assistant-composition .panel, .assistant-composition .panel-head, .assistant-composition .panel-body, .assistant-composition .prose, .assistant-composition li, .assistant-composition .disclosure-body',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.scrollWidth > element.clientWidth + 1)
+        .map((element) => element.className || element.id),
+    );
+  assert.deepEqual(overflow, [], 'Assistant requests and complete explanations stay contained');
+  for (const panel of await composition.locator('.panel').all()) {
+    const bounds = await panel.boundingBox();
+    for (const control of await panel.locator('button, input, textarea, select, summary').all()) {
+      if (!(await control.isVisible())) continue;
+      const box = await control.boundingBox();
+      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+    }
+  }
+  const boxes = [];
+  for (const part of await composition
+    .locator('.assistant-request-actions .button, .form-grid label')
+    .all()) {
+    const box = await part.boundingBox();
+    for (const other of boxes)
+      assert.ok(
+        box.x + box.width <= other.x + 1 ||
+          other.x + other.width <= box.x + 1 ||
+          box.y + box.height <= other.y + 1 ||
+          other.y + other.height <= box.y + 1,
+        'Request actions and creation fields do not collide',
+      );
+    boxes.push(box);
+  }
+  checks++;
 }
 async function chatConversationLayout(page) {
   const workspace = page.locator('.chat-page');
@@ -1903,6 +1958,319 @@ try {
           0,
         );
       } finally {
+        await close();
+      }
+    }
+  });
+  await test('Assistant and new-declaration retain Summary rhythm, complete history and local inputs', async () => {
+    const symbol = `Process${'LongTarget'.repeat(25)}`;
+    const summary = `Complete explanation. ${'LongExplanation'.repeat(40)}\n\nFinal summary. <script>window.assistantExecuted = true</script> ![remote](https://assistant.invalid/image.png)`;
+    const detail = `Complete inputs and side effects: ${'LongDetail'.repeat(50)} final detail.`;
+    const response = `Complete assistant response. ${'LongResponse'.repeat(45)}\n\nFinal response.`;
+    const request = `Preserve behavior: ${'LongRequest'.repeat(30)}`;
+    const constraints = `Keep the interface: ${'LongConstraint'.repeat(25)}`;
+    for (const route of ['assistant', 'new-declaration']) {
+      const create = route === 'new-declaration';
+      const { page, close } = await pageFor({
+        remote: true,
+        explanation: {
+          anchor: { path: 'internal/worker/process.go', symbol },
+          summary,
+          behavior: [detail],
+          inputs: [detail],
+          outputs: [detail],
+          side_effects: [detail],
+          error_behavior: [detail],
+        },
+        declarationAssistantMessage: response,
+      });
+      try {
+        const references = {};
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+          references[theme] = await panelTreatment(
+            page.locator('.summary-details > .panel').first(),
+          );
+        }
+        await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+        await openSource(page);
+        await page.getByRole('button', { name: 'Explain declaration', exact: true }).click();
+        await page.getByRole('dialog').getByRole('button', { name: 'Continue' }).click();
+        await idle(page);
+        await page.getByRole('heading', { name: `About ${symbol}`, exact: true }).waitFor();
+        if (create)
+          await page.getByRole('button', { name: 'New declaration', exact: true }).click();
+        const before = await page.evaluate(() =>
+          window.fixture.requests.filter((entry) => entry.method !== 'GET'),
+        );
+        const composition = page.locator('.assistant-composition');
+        if (create) {
+          assert.deepEqual(await page.getByLabel('Kind').locator('option').allTextContents(), [
+            'function',
+            'type',
+            'var',
+            'const',
+          ]);
+          for (const kind of ['function', 'type', 'var', 'const'])
+            await page.getByLabel('Kind').selectOption(kind);
+          await page.getByLabel('Kind').selectOption('type');
+          await page.getByLabel('Name', { exact: true }).fill(`New${symbol}`);
+        }
+        for (const preset of ['Fix', 'Refactor', 'Document']) {
+          await composition.getByRole('button', { name: preset, exact: true }).click();
+          assert.equal(
+            await page.getByLabel('Change request', { exact: true }).inputValue(),
+            `${preset}${preset === 'Fix' ? ' a bug' : ' without changing behavior'}: `,
+          );
+        }
+        await page.getByLabel('Change request', { exact: true }).fill(request);
+        await composition.getByText('Constraints', { exact: true }).click();
+        await page.getByLabel('Change constraints', { exact: true }).fill(constraints);
+        await composition.getByText('Constraints', { exact: true }).click();
+        assert.equal(
+          await page.getByLabel('Change constraints', { exact: true }).isVisible(),
+          false,
+        );
+        assert.deepEqual(
+          await page.evaluate(() =>
+            window.fixture.requests.filter((entry) => entry.method !== 'GET'),
+          ),
+          before,
+          'Presets, fields and disclosures never generate',
+        );
+        await page.getByRole('button', { name: 'Prepare draft', exact: true }).click();
+        const dialog = page.getByRole('dialog');
+        await dialog.getByText('Scope: function', { exact: true }).waitFor();
+        await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+        await idle(page);
+        assert.deepEqual(
+          await page.evaluate(() =>
+            window.fixture.requests.filter((entry) => entry.method !== 'GET'),
+          ),
+          before,
+          'Canceling Function consent never prepares',
+        );
+        assert.equal(
+          await page.getByLabel('Change request', { exact: true }).inputValue(),
+          request,
+        );
+        await page.getByRole('button', { name: 'Prepare draft', exact: true }).click();
+        await dialog.getByRole('button', { name: 'Continue' }).click();
+        await page.getByLabel('Declaration draft', { exact: true }).waitFor();
+        await idle(page);
+        const sent = await page.evaluate(() =>
+          window.fixture.requests.find((entry) => entry.path.endsWith('/messages')),
+        );
+        assert.equal(
+          sent.body.message,
+          `${create ? `Create one type named New${symbol}.\n\n` : ''}${request}\n\nConstraints:\n${constraints}`,
+        );
+        assert.equal(sent.body.confirm_remote_provider, true);
+        const session = await page.evaluate(() =>
+          window.fixture.requests.find((entry) => entry.path.endsWith('/chat/sessions')),
+        );
+        assert.equal(session.body.mode, create ? 'create_symbol' : 'replace_symbol');
+        assert.equal(session.body.target_symbol, create ? `New${symbol}` : 'Process');
+        await page.getByRole('tab', { name: 'Assistant', exact: true }).click();
+        if (create)
+          await page.getByRole('button', { name: 'New declaration', exact: true }).click();
+        await composition.getByText('Inputs, outputs & side effects', { exact: true }).click();
+        await composition.getByText('Why & tradeoffs', { exact: true }).click();
+        await composition.getByText('Constraints', { exact: true }).click();
+        await page.getByLabel('Change request', { exact: true }).fill('Local follow-up');
+        await page.getByLabel('Change constraints', { exact: true }).fill('Local boundary');
+        if (create) await page.getByLabel('Name', { exact: true }).fill(`New${symbol}`);
+        const passive = await page.evaluate(() =>
+          window.fixture.requests.filter((entry) => entry.method !== 'GET'),
+        );
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+          assert.deepEqual(
+            await panelTreatment(composition.locator('.panel').first()),
+            references[theme],
+          );
+          for (const larger of [false, true]) {
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+            for (const width of [1440, 1280, 1001, 800]) {
+              await page.setViewportSize({ width, height: 1000 });
+              await assistantLayout(page);
+              assert.equal(
+                await page.getByLabel('Change request', { exact: true }).inputValue(),
+                'Local follow-up',
+              );
+              assert.equal(
+                await page.getByLabel('Change constraints', { exact: true }).inputValue(),
+                'Local boundary',
+              );
+              if (create)
+                assert.equal(
+                  await page.getByLabel('Name', { exact: true }).inputValue(),
+                  `New${symbol}`,
+                );
+              await composition.getByText('Final response.', { exact: true }).waitFor();
+              assert.ok((await composition.innerText()).includes('Final summary.'));
+              assert.ok((await composition.innerText()).includes('final detail.'));
+              assert.ok((await composition.innerText()).includes(request));
+              assert.equal(
+                await composition.locator('a[href^="https://assistant"], img, script').count(),
+                0,
+              );
+              assert.equal(await page.evaluate(() => window.assistantExecuted), undefined);
+              await layout(
+                page,
+                `${route}-long-explanation-history-${theme}-${larger ? 'larger' : 'standard'}-${width}`,
+              );
+              await contrast(page, `${route}-${theme}-${larger ? 'larger' : 'standard'}-${width}`);
+            }
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          }
+        }
+        assert.deepEqual(
+          await page.evaluate(() =>
+            window.fixture.requests.filter((entry) => entry.method !== 'GET'),
+          ),
+          passive,
+          'Reflow and explanation/history inspection never admit work',
+        );
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Both Assistant routes preserve busy, canceled and stale requests and target input lifetimes', async () => {
+    for (const route of ['assistant', 'new-declaration']) {
+      const create = route === 'new-declaration';
+      const { page, close } = await pageFor();
+      try {
+        await openSource(page);
+        await page.getByRole('tab', { name: 'Assistant', exact: true }).click();
+        if (create)
+          await page.getByRole('button', { name: 'New declaration', exact: true }).click();
+        assert.equal(
+          await page.getByRole('button', { name: 'Prepare draft', exact: true }).isDisabled(),
+          true,
+        );
+        await page.getByLabel('Change request', { exact: true }).fill('Return the context error.');
+        if (create) {
+          assert.equal(
+            await page.getByRole('button', { name: 'Prepare draft', exact: true }).isDisabled(),
+            true,
+          );
+          await page.getByLabel('Name', { exact: true }).fill('NewWorker');
+        }
+        await page
+          .locator('.assistant-composition')
+          .getByText('Constraints', { exact: true })
+          .click();
+        await page
+          .getByLabel('Change constraints', { exact: true })
+          .fill('Preserve the interface.');
+        await page.evaluate(() => {
+          window.fixture.hold = '/api/projects/current/chat/sessions/session-1/messages';
+        });
+        await page.getByRole('button', { name: 'Prepare draft', exact: true }).click();
+        await page.waitForFunction(() =>
+          window.fixture.requests.some((entry) => entry.path.endsWith('/messages')),
+        );
+        for (const control of [
+          page.getByLabel('Change request', { exact: true }),
+          page.getByLabel('Change constraints', { exact: true }),
+          ...(await page.locator('.assistant-request .actions button').all()),
+          page.getByRole('button', { name: 'Prepare draft', exact: true }),
+        ])
+          assert.equal(await control.isDisabled(), true);
+        assert.equal(
+          await page.getByRole('button', { name: 'Inspect context', exact: true }).isDisabled(),
+          false,
+        );
+        if (!create)
+          assert.equal(await page.getByLabel('Declaration', { exact: true }).isDisabled(), true);
+        await page.setViewportSize({ width: 800, height: 1000 });
+        await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        await assistantLayout(page);
+        await layout(page, `${route}-busy-dark-larger-800`);
+        await page
+          .locator('.busy-strip')
+          .getByRole('button', { name: 'Cancel', exact: true })
+          .click();
+        await idle(page);
+        await page.evaluate(() => {
+          window.fixture.hold = '';
+          window.fixture.release();
+        });
+        await page.waitForTimeout(100);
+        assert.equal(await page.getByLabel('Declaration draft', { exact: true }).count(), 0);
+        assert.equal(
+          await page.getByLabel('Change request', { exact: true }).inputValue(),
+          'Return the context error.',
+        );
+        assert.equal(
+          await page.getByLabel('Change constraints', { exact: true }).inputValue(),
+          'Preserve the interface.',
+        );
+        assert.equal(
+          await page.getByRole('button', { name: 'Prepare draft', exact: true }).isDisabled(),
+          false,
+        );
+        await layout(page, `${route}-canceled-dark-larger-800`);
+        if (!create) {
+          await page.getByLabel('Declaration', { exact: true }).selectOption('');
+          assert.equal(
+            await page.getByRole('button', { name: 'Prepare draft', exact: true }).isDisabled(),
+            true,
+          );
+          assert.equal(
+            await page.getByLabel('Change request', { exact: true }).inputValue(),
+            'Return the context error.',
+          );
+          await page.getByLabel('Declaration', { exact: true }).selectOption('Process');
+        }
+        const before = await page.evaluate(() =>
+          window.fixture.requests.filter((entry) => entry.method !== 'GET'),
+        );
+        await page.evaluate(() => {
+          window.fixture.state.changed = true;
+        });
+        // Assistant navigation uses the existing source-freshness read; new-declaration
+        // shares its owner but has no separate freshness trigger.
+        await page.getByRole('tab', { name: 'Assistant', exact: true }).click();
+        await page.getByText('File evidence is outdated.', { exact: false }).waitFor();
+        if (create)
+          await page.getByRole('button', { name: 'New declaration', exact: true }).click();
+        await page.getByLabel('Change request', { exact: true }).fill('Retry only after refresh.');
+        if (create) await page.getByLabel('Name', { exact: true }).fill('NewWorker');
+        assert.equal(
+          await page.getByRole('button', { name: 'Prepare draft', exact: true }).isDisabled(),
+          true,
+        );
+        await assistantLayout(page);
+        await layout(page, `${route}-stale-dark-larger-800`);
+        assert.deepEqual(
+          await page.evaluate(() =>
+            window.fixture.requests.filter((entry) => entry.method !== 'GET'),
+          ),
+          before,
+          'Target changes and stale navigation do not generate',
+        );
+        await page.locator('.file-item[title="internal/worker/config.go"]').click();
+        await page.getByRole('tab', { name: 'Assistant', exact: true }).click();
+        assert.equal(
+          await page.getByLabel('Change request', { exact: true }).inputValue(),
+          '',
+          'A different file keeps the existing Assistant key reset',
+        );
+      } finally {
+        await page
+          .evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          })
+          .catch(() => {});
         await close();
       }
     }
