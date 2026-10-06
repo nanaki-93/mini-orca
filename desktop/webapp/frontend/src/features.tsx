@@ -84,13 +84,17 @@ export function Features({ s }: { s: State }) {
     : 0;
 
   return (
-    <>
-      <Heading title="Features">
+    <div className="workspace-page features-page">
+      <Heading
+        title="Features"
+        detail="Goal-aware advisory ideas. Discuss an idea in Chat before preparing a change."
+        variant="intro"
+      >
         <Button disabled={!!s.busy} onClick={() => void w.loadFeatures()}>
           Refresh suggestions
         </Button>
       </Heading>
-      <Panel title="Project goals" className="section-gap">
+      <Panel title="Project goals">
         <label className="block">
           Goals
           <textarea
@@ -131,7 +135,7 @@ export function Features({ s }: { s: State }) {
           Search again to update {staleActiveCount === 1 ? 'it' : 'them'}.
         </Notice>
       )}
-      <div className="toolbar section-gap">
+      <div className="toolbar features-toolbar">
         <h2>Feature suggestions</h2>
         <label>
           Show{' '}
@@ -159,10 +163,10 @@ export function Features({ s }: { s: State }) {
               key={idea.id}
               title={idea.title}
               actions={
-                <>
+                <div className="actions">
                   {idea.freshness === 'stale' && <Badge value="stale" />}
                   <Badge value={idea.status} />
-                </>
+                </div>
               }
             >
               <Prose text={idea.benefit} />
@@ -218,6 +222,6 @@ export function Features({ s }: { s: State }) {
           />
         </Disclosure>
       )}
-    </>
+    </div>
   );
 }

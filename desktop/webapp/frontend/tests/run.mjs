@@ -91,7 +91,18 @@ const surfaceInventory = {
     ],
   },
   features: {
-    features: ['goals', 'suggestions', 'triage filters', 'empty', 'unavailable', 'failed', 'stale'],
+    features: [
+      'goals',
+      'suggestions',
+      'triage filters',
+      'context and generation metadata',
+      'long content',
+      'empty',
+      'unavailable',
+      'requested failure with retained ideas',
+      'stale',
+      'busy',
+    ],
   },
   'change-workspace': {
     chat: [
@@ -353,6 +364,49 @@ async function panelTreatment(panel) {
       bodyPadding: getComputedStyle(element.querySelector('.panel-body')).padding,
     };
   });
+}
+async function featuresLayout(page) {
+  const workspace = page.locator('.features-page');
+  await headingContainment(workspace.locator('.page-heading--intro'));
+  assert.equal(await workspace.evaluate((element) => getComputedStyle(element).gap), '20px');
+  const overflow = await page
+    .locator(
+      '#main, .page, .features-page, .features-page .panel, .features-page .panel-head, .features-page .panel-body, .features-page .toolbar, .features-page .prose, .features-page .disclosure-body, .features-page li, .features-page .notice',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.scrollWidth > element.clientWidth + 1)
+        .map((element) => element.className || element.id),
+    );
+  assert.deepEqual(overflow, [], 'Feature content wraps within its own region');
+  for (const region of await workspace.locator('.panel-head, .toolbar, .actions').all()) {
+    const bounds = await region.boundingBox();
+    const boxes = [];
+    for (const child of await region.locator(':scope > *').all()) {
+      const box = await child.boundingBox();
+      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+      for (const other of boxes)
+        assert.ok(
+          box.x + box.width <= other.x + 1 ||
+            other.x + other.width <= box.x + 1 ||
+            box.y + box.height <= other.y + 1 ||
+            other.y + other.height <= box.y + 1,
+          'Feature headers, filters and actions do not collide',
+        );
+      boxes.push(box);
+    }
+  }
+  for (const panel of await workspace.locator('.panel').all()) {
+    const bounds = await panel.boundingBox();
+    for (const control of await panel.locator('button, textarea').all()) {
+      assert.equal(await control.isVisible(), true);
+      const box = await control.boundingBox();
+      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+    }
+  }
+  checks++;
 }
 async function resultsListLayout(page) {
   const workspace = page.locator('.results-page');
@@ -4364,6 +4418,261 @@ try {
         false,
       );
       await close();
+    }
+  });
+  await test('Features reuse Summary treatment with complete ideas, metadata and passive filters', async () => {
+    const { page, close } = await pageFor({
+      featuresReady: true,
+      featuresLongContent: true,
+      featuresMixedTriage: true,
+      modelNames: { analyze: 'feature-model-'.repeat(24) },
+    });
+    try {
+      await idle(page);
+      const referenceIntro = await introductionTreatment(page.locator('.summary-hero'));
+      const referencePanel = await panelTreatment(
+        page.locator('.summary-details > .panel').first(),
+      );
+      const report = await page.evaluate(() => window.fixture.state.features);
+      await nav(page, 'Features');
+      await idle(page);
+      const workspace = page.locator('.features-page');
+      assert.deepEqual(
+        await introductionTreatment(workspace.locator('.page-heading')),
+        referenceIntro,
+      );
+      assert.deepEqual(await panelTreatment(workspace.locator('.panel').first()), referencePanel);
+      assert.equal(
+        await page.getByLabel('Project goals', { exact: true }).inputValue(),
+        report.goals,
+      );
+      const before = await page.evaluate(() =>
+        window.fixture.requests.filter((r) => r.method !== 'GET'),
+      );
+      const filter = page.getByLabel('Filter feature suggestions', { exact: true });
+      for (const [value, titles] of [
+        ['active', [report.suggestions[0].title, 'Saved recovery idea']],
+        ['saved', ['Saved recovery idea']],
+        ['dismissed', ['Dismissed recovery idea']],
+        ['all', report.suggestions.map((idea) => idea.title)],
+      ]) {
+        await filter.selectOption(value);
+        assert.deepEqual(
+          await workspace.locator('.feature-grid .panel-head h2').allTextContents(),
+          titles,
+        );
+      }
+      await filter.selectOption('active');
+      for (const disclosure of await workspace.locator('summary').all()) await disclosure.click();
+      const ideaPanel = workspace.locator('.feature-grid .panel').first();
+      for (const text of [
+        report.suggestions[0].title,
+        report.suggestions[0].benefit,
+        report.suggestions[0].evidence,
+        ...report.suggestions[0].paths,
+        ...report.suggestions[0].acceptance_criteria,
+        report.generations[0].model_summary.model,
+        report.generations[0].model_summary.provider_origin,
+      ])
+        assert.ok(
+          (await workspace.textContent()).includes(text),
+          `Complete feature content: ${text}`,
+        );
+      assert.equal(
+        await ideaPanel.getByRole('button', { name: 'Save idea', exact: true }).isEnabled(),
+        true,
+      );
+      const complete = await workspace.textContent();
+      for (const theme of ['dark', 'light']) {
+        if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+          await page
+            .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
+            .click();
+        for (const larger of [false, true]) {
+          const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
+          if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
+            await textSize.click();
+          for (const width of [1440, 1280, 1001, 800]) {
+            await page.setViewportSize({ width, height: 1000 });
+            await featuresLayout(page);
+            assert.equal(
+              await workspace.textContent(),
+              complete,
+              'Reflow preserves feature content',
+            );
+            const columns = await workspace
+              .locator('.feature-grid')
+              .evaluate(
+                (element) => getComputedStyle(element).gridTemplateColumns.split(' ').length,
+              );
+            assert.equal(columns, width > 1100 ? 2 : 1, 'Keep the task-specific suggestion layout');
+            await layout(page, `features-long-${width}-${theme}-${larger ? 'larger' : 'standard'}`);
+          }
+        }
+      }
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+        before,
+        'Filters, disclosures and appearance perform no writes or generation',
+      );
+      await ideaPanel.getByRole('button', { name: 'Discuss in chat', exact: true }).click();
+      await page.getByLabel('Change request', { exact: true }).waitFor();
+      for (const criterion of report.suggestions[0].acceptance_criteria)
+        assert.ok(
+          (await page.getByLabel('Change request', { exact: true }).inputValue()).includes(
+            criterion,
+          ),
+        );
+      assert.equal(
+        await page.evaluate(() =>
+          window.fixture.requests.some(
+            (r) => r.path.endsWith('/messages') || r.path.endsWith('/features/generate'),
+          ),
+        ),
+        false,
+        'Discuss only seeds Chat',
+      );
+    } finally {
+      await close();
+    }
+  });
+  await test('Features boundary states keep unavailable, empty, stale and failure meanings', async () => {
+    for (const [state, options, title] of [
+      ['not-generated', {}, 'No features yet'],
+      ['empty', { featuresReady: true, featuresEmpty: true }, 'No new features found'],
+      ['unavailable', { featuresReadFail: true }, 'Features unavailable'],
+      [
+        'failed-empty',
+        { featuresReady: true, featuresEmpty: true, featuresFail: true },
+        'No saved features',
+      ],
+      ['stale', { featuresReady: true, featuresStale: true, featuresLongContent: true }, null],
+    ]) {
+      const { page, close } = await pageFor(options);
+      try {
+        await idle(page);
+        await nav(page, 'Features');
+        await idle(page);
+        if (title) await page.getByRole('heading', { name: title, exact: true }).waitFor();
+        if (state === 'unavailable') {
+          assert.equal(
+            await page.getByRole('button', { name: 'Suggest features', exact: true }).isDisabled(),
+            true,
+          );
+          await page.locator('.features-page').getByText('Error details', { exact: true }).click();
+          await page.getByText('Saved suggestions could not be read.', { exact: true }).waitFor();
+        }
+        if (state === 'stale') {
+          await page.getByText(/active idea is outdated/).waitFor();
+          assert.equal(
+            await page.getByRole('button', { name: 'Discuss in chat', exact: true }).isDisabled(),
+            true,
+          );
+          assert.equal(
+            await page.getByRole('button', { name: 'Save idea', exact: true }).isEnabled(),
+            true,
+          );
+        }
+        assert.equal(
+          await page.getByText(/Added \d+ new suggestions\.|No new suggestions found\./).count(),
+          0,
+        );
+        for (const theme of ['dark', 'light']) {
+          if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+            await page
+              .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
+              .click();
+          for (const larger of [false, true]) {
+            const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
+            if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
+              await textSize.click();
+            for (const width of [1440, 800]) {
+              await page.setViewportSize({ width, height: 1000 });
+              await featuresLayout(page);
+              await layout(
+                page,
+                `features-${state}-${width}-${theme}-${larger ? 'larger' : 'standard'}`,
+              );
+            }
+          }
+        }
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Requested feature failure keeps ideas and triage; busy controls stay explicit', async () => {
+    const { page, close } = await pageFor({
+      featuresReady: true,
+      featuresLongContent: true,
+      featuresFail: true,
+    });
+    try {
+      await nav(page, 'Features');
+      await idle(page);
+      await page.getByRole('button', { name: 'Save idea', exact: true }).click();
+      await idle(page);
+      const retained = await page.evaluate(() => window.fixture.state.features.suggestions);
+      await page.evaluate(() => {
+        window.fixture.hold = '/api/projects/current/features/generate';
+      });
+      await page
+        .getByRole('button', { name: 'Search more feature suggestions', exact: true })
+        .click();
+      await page.waitForFunction(() =>
+        window.fixture.requests.some((r) => r.path.endsWith('/features/generate')),
+      );
+      for (const button of await page.locator('.features-page button').all())
+        assert.equal(await button.isDisabled(), true);
+      assert.equal(await page.getByLabel('Project goals', { exact: true }).isDisabled(), true);
+      await page.getByLabel('Filter feature suggestions', { exact: true }).selectOption('saved');
+      for (const disclosure of await page.locator('.features-page summary').all())
+        await disclosure.click();
+      await page.setViewportSize({ width: 800, height: 1000 });
+      await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+      await featuresLayout(page);
+      await layout(page, 'features-busy-800-dark-larger');
+      await page.evaluate(() => {
+        window.fixture.hold = '';
+        window.fixture.release();
+      });
+      await idle(page);
+      await page
+        .getByText('Feature search failed. Try again. Previous ideas kept.', { exact: true })
+        .waitFor();
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.state.features.suggestions),
+        retained,
+      );
+      assert.equal(
+        await page.getByLabel('Filter feature suggestions', { exact: true }).inputValue(),
+        'saved',
+      );
+      assert.equal(
+        await page.getByText(/Added \d+ new suggestions\.|No new suggestions found\./).count(),
+        0,
+      );
+      assert.equal(
+        await page.getByRole('button', { name: 'Discuss in chat', exact: true }).isEnabled(),
+        true,
+      );
+      await featuresLayout(page);
+      await layout(page, 'features-requested-failure-retained-800-dark-larger');
+      assert.equal(
+        await page.evaluate(
+          () => window.fixture.requests.filter((r) => r.path.endsWith('/features/generate')).length,
+        ),
+        1,
+      );
+    } finally {
+      try {
+        await page.evaluate(() => {
+          window.fixture.hold = '';
+          window.fixture.release();
+        });
+      } finally {
+        await close();
+      }
     }
   });
   await test('Saving goals and declining suggestion consent keep saved failures quiet', async () => {

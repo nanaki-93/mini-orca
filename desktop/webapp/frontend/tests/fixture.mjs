@@ -88,12 +88,23 @@ export function installFixture(options = {}) {
     id: 'idea-1',
     generation_id: 'gen-1',
     freshness: options.featuresStale ? 'stale' : 'current',
-    title: 'Retry failed work',
+    title: options.featuresLongContent
+      ? `Recover failed jobs ${'LongFeatureTitle'.repeat(16)}`
+      : 'Retry failed work',
     benefit: 'Let users recover failed jobs without submitting them again.',
-    evidence: 'The worker queue already records failed jobs.',
-    paths: [files[0].path],
+    evidence: options.featuresLongContent
+      ? `The worker queue already records failed jobs. ${'CompleteEvidence'.repeat(20)}`
+      : 'The worker queue already records failed jobs.',
+    paths: options.featuresLongContent
+      ? [`internal/${'long-directory-'.repeat(16)}/worker.go`]
+      : [files[0].path],
     effort: 'medium',
-    acceptance_criteria: ['Retry only eligible failed jobs.', 'Show the new job status.'],
+    acceptance_criteria: [
+      'Retry only eligible failed jobs.',
+      options.featuresLongContent
+        ? `Show the new job status. ${'CompleteAcceptanceCriteria'.repeat(20)}`
+        : 'Show the new job status.',
+    ],
     status: 'open',
   };
   const preview = {
@@ -331,7 +342,7 @@ export function installFixture(options = {}) {
     features: {
       ...identity,
       hash: 'features-empty',
-      goals: '',
+      goals: options.featuresLongContent ? `Recovery goals ${'LongGoal'.repeat(40)}` : '',
       status: options.featuresReady ? (options.featuresFail ? 'failed' : 'ready') : 'not_generated',
       freshness: options.featuresStale ? 'stale' : 'current',
       suggestions:
@@ -346,6 +357,17 @@ export function installFixture(options = {}) {
                     ? 'stale'
                     : 'current',
               },
+              ...(options.featuresMixedTriage
+                ? [
+                    { ...idea, id: 'idea-saved', title: 'Saved recovery idea', status: 'saved' },
+                    {
+                      ...idea,
+                      id: 'idea-dismissed',
+                      title: 'Dismissed recovery idea',
+                      status: 'dismissed',
+                    },
+                  ]
+                : []),
             ]
           : [],
       generations: options.legacyShape
@@ -369,7 +391,9 @@ export function installFixture(options = {}) {
       last_generation: options.legacyShape ? undefined : options.featuresReady ? 'gen-1' : '',
       failure:
         options.featuresReady && options.featuresFail ? 'Feature search failed. Try again.' : '',
-      context_manifest: context,
+      context_manifest: options.featuresLongContent
+        ? { ...context, included: idea.paths.map((path) => ({ ...context.included[0], path })) }
+        : context,
     },
     instructions: {
       'AGENTS.md': '# Project rules\n\nPreserve public APIs.\n',
