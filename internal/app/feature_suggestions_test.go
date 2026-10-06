@@ -69,7 +69,7 @@ func TestFeatureGenerationGoalsAndSavedStatus(t *testing.T) {
 		t.Fatalf("passive goals: %+v, %v", goals, err)
 	}
 	request.ExpectedHash = goals.Hash
-	report, err := service.GenerateFeatures(context.Background(), request)
+	report, err := service.GenerateFeatures(context.Background(), FeatureGenerateRequest{FeatureRequest: request})
 	if err != nil || report.Status != "ready" || len(report.Suggestions) != 1 {
 		t.Fatalf("generated features: %+v, %v", report, err)
 	}
@@ -79,7 +79,7 @@ func TestFeatureGenerationGoalsAndSavedStatus(t *testing.T) {
 		t.Fatalf("save feature: %+v, %v", saved, err)
 	}
 	request.ExpectedHash = saved.Hash
-	refreshed, err := service.GenerateFeatures(context.Background(), request)
+	refreshed, err := service.GenerateFeatures(context.Background(), FeatureGenerateRequest{FeatureRequest: request})
 	if err != nil || refreshed.Suggestions[0].Status != "saved" {
 		t.Fatalf("regeneration lost triage: %+v, %v", refreshed, err)
 	}
@@ -100,7 +100,7 @@ func TestFeatureMalformedOutputPreservesPreviousSuggestions(t *testing.T) {
 	output.Store(validFeatureResponse)
 	server := changeProvider(t, func() string { return output.Load().(string) })
 	service, _ := newSemanticAnalysisService(t, server.URL, 0)
-	good, err := service.GenerateFeatures(context.Background(), featureRequestFor(t, service, "Improve the project."))
+	good, err := service.GenerateFeatures(context.Background(), FeatureGenerateRequest{FeatureRequest: featureRequestFor(t, service, "Improve the project.")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestFeatureMalformedOutputPreservesPreviousSuggestions(t *testing.T) {
 	for _, invalid := range []string{`{}`, strings.Replace(validFeatureResponse, "main.go", "invented.go", 1), strings.Replace(validFeatureResponse, "small", "instant", 1), strings.Replace(validFeatureResponse, `"benefit":`, `"status":"verified","benefit":`, 1), duplicate} {
 		output.Store(invalid)
 		request := featureRequestFor(t, service, "Improve the project.")
-		if _, err := service.GenerateFeatures(context.Background(), request); err == nil {
+		if _, err := service.GenerateFeatures(context.Background(), FeatureGenerateRequest{FeatureRequest: request}); err == nil {
 			t.Fatalf("accepted output %s", invalid)
 		}
 		retained, err := service.Features(context.Background())
@@ -121,7 +121,7 @@ func TestFeatureMalformedOutputPreservesPreviousSuggestions(t *testing.T) {
 func TestFeatureFreshnessEmptyAndRemoteConsent(t *testing.T) {
 	server := changeProvider(t, func() string { return `{"suggestions":[]}` })
 	service, root := newSemanticAnalysisService(t, server.URL, 0)
-	report, err := service.GenerateFeatures(context.Background(), featureRequestFor(t, service, "Keep the project small."))
+	report, err := service.GenerateFeatures(context.Background(), FeatureGenerateRequest{FeatureRequest: featureRequestFor(t, service, "Keep the project small.")})
 	if err != nil || report.Status != "ready" || len(report.Suggestions) != 0 {
 		t.Fatalf("empty success: %+v, %v", report, err)
 	}
@@ -133,7 +133,7 @@ func TestFeatureFreshnessEmptyAndRemoteConsent(t *testing.T) {
 		t.Fatalf("instruction change not stale: %+v, %v", stale, err)
 	}
 	remote, _ := newSemanticAnalysisService(t, "https://provider.invalid", 0)
-	if _, err := remote.GenerateFeatures(context.Background(), featureRequestFor(t, remote, "Improve.")); err == nil || !strings.Contains(err.Error(), "confirmation") {
+	if _, err := remote.GenerateFeatures(context.Background(), FeatureGenerateRequest{FeatureRequest: featureRequestFor(t, remote, "Improve.")}); err == nil || !strings.Contains(err.Error(), "confirmation") {
 		t.Fatalf("remote consent: %v", err)
 	}
 }
@@ -198,7 +198,7 @@ func featureOutput(titles ...string) string {
 
 func generateFeaturesFor(t *testing.T, s *Service, goals string) (*FeatureReport, error) {
 	t.Helper()
-	return s.GenerateFeatures(context.Background(), featureRequestFor(t, s, goals))
+	return s.GenerateFeatures(context.Background(), FeatureGenerateRequest{FeatureRequest: featureRequestFor(t, s, goals)})
 }
 
 func featureIdeasJSON(t *testing.T, report *FeatureReport) string {
@@ -474,7 +474,7 @@ func TestFeatureHistoryRejectsCorruptReferencesWithoutDispatch(t *testing.T) {
 			}
 			index, _ := s.manager.Index()
 			request := FeatureRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, ExpectedHash: report["hash"].(string), Goals: "Improve."}
-			if _, err := s.GenerateFeatures(context.Background(), request); !errors.Is(err, errUnsupportedFeatureHistory) || provider.calls.Load() != 1 {
+			if _, err := s.GenerateFeatures(context.Background(), FeatureGenerateRequest{FeatureRequest: request}); !errors.Is(err, errUnsupportedFeatureHistory) || provider.calls.Load() != 1 {
 				t.Fatalf("corrupt history generation=%v calls=%d", err, provider.calls.Load())
 			}
 			if string(featureHistoryBytes(t, root)) != string(corrupt) {
@@ -603,7 +603,7 @@ func TestFeatureGenerationCancellationAndTimeoutKeepTheFile(t *testing.T) {
 			done := make(chan error, 1)
 			request := featureRequestFor(t, s, "Improve.")
 			go func() {
-				_, err := s.GenerateFeatures(ctx, request)
+				_, err := s.GenerateFeatures(ctx, FeatureGenerateRequest{FeatureRequest: request})
 				done <- err
 			}()
 			waitForTestSignal(t, provider.started, "blocked feature request")
@@ -632,7 +632,7 @@ func TestFeatureGenerationRejectsConcurrentReportChange(t *testing.T) {
 	done := make(chan error, 1)
 	request := featureRequestFor(t, s, "Improve.")
 	go func() {
-		_, err := s.GenerateFeatures(context.Background(), request)
+		_, err := s.GenerateFeatures(context.Background(), FeatureGenerateRequest{FeatureRequest: request})
 		done <- err
 	}()
 	waitForTestSignal(t, provider.started, "blocked feature request")
@@ -741,5 +741,104 @@ func TestExistingFeatureIdeasBlockIsBoundedNewestFirst(t *testing.T) {
 	listed := len(lines) - 2
 	if want := fmt.Sprintf("%d older ideas omitted.", len(ideas)-listed); lines[len(lines)-1] != want {
 		t.Fatalf("omission line=%q want %q", lines[len(lines)-1], want)
+	}
+}
+
+func TestFeatureGenerationWithProfileAndSelection(t *testing.T) {
+	server := changeProvider(t, func() string {
+		return `{"suggestions":[{"title":"T1","benefit":"B","evidence":"E","paths":["main.go"],"effort":"small","acceptance_criteria":["A"]}]}`
+	})
+	s, _ := newSemanticAnalysisService(t, server.URL, 0)
+
+	index, _ := s.manager.Index()
+	request := FeatureGenerateRequest{
+		FeatureRequest: FeatureRequest{
+			ProjectID:             index.ProjectID,
+			ProjectRevision:       index.ProjectRevision,
+			ExpectedHash:          "empty",
+			Goals:                 "Goals",
+			ConfirmRemoteProvider: true,
+		},
+		Profile: "analyze",
+	}
+
+	// 1. Profile routing to chosen provider
+	report, err := s.GenerateFeatures(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Suggestions) != 1 {
+		t.Fatalf("expected 1 suggestion, got %d", len(report.Suggestions))
+	}
+	if report.LastGeneration.GenerationID == "" {
+		t.Fatal("missing generation ID")
+	}
+
+	// Check that the provider origin and model are captured
+	var gen *FeatureGeneration
+	for _, g := range report.Generations {
+		if g.ID == report.LastGeneration.GenerationID {
+			gen = &g
+			break
+		}
+	}
+	if gen == nil || gen.Model == nil || gen.Model.Profile != "analyze" {
+		t.Fatal("expected profile model to be captured")
+	}
+
+	// 2. Unconfigured profile
+	request2 := request
+	request2.Profile = "invalid_profile"
+	_, err = s.GenerateFeatures(context.Background(), request2)
+	if err == nil || !strings.Contains(err.Error(), "invalid feature profile") {
+		t.Fatalf("expected invalid profile error, got %v", err)
+	}
+
+	// 3. Selection exclusions applied to suggested paths
+	server2 := changeProvider(t, func() string {
+		return `{"suggestions":[{"title":"T1","benefit":"B","evidence":"E","paths":["excluded.go"],"effort":"small","acceptance_criteria":["A"]}]}`
+	})
+	s2, _ := newSemanticAnalysisService(t, server2.URL, 0)
+
+	os.WriteFile(filepath.Join(s2.manager.Root(), "excluded.go"), []byte("package main\n"), 0644)
+	s2.manager.Reindex()
+	index2, _ := s2.manager.Index()
+
+	emptySelection, _ := s2.ReadAnalysisSelection(context.Background(), index2.ProjectID, index2.ProjectRevision)
+	selReq := AnalysisSelectionRequest{
+		ProjectID:       index2.ProjectID,
+		ProjectRevision: index2.ProjectRevision,
+		SelectionID:     emptySelection.SelectionID,
+		ExcludedPaths:   []string{"excluded.go"},
+	}
+	sel, err := s2.SaveAnalysisSelection(context.Background(), selReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	request3 := FeatureGenerateRequest{
+		FeatureRequest: FeatureRequest{
+			ProjectID:             index2.ProjectID,
+			ProjectRevision:       index2.ProjectRevision,
+			ExpectedHash:          "empty",
+			Goals:                 "Goals",
+			ConfirmRemoteProvider: true,
+		},
+		Profile:             "analyze",
+		AnalysisSelectionID: sel.SelectionID,
+	}
+
+	_, err = s2.GenerateFeatures(context.Background(), request3)
+	// The provider returns a path "excluded.go", which should be rejected
+	if err == nil || !strings.Contains(err.Error(), "feature suggestion targets an excluded analysis file") {
+		t.Fatalf("expected excluded path error, got %v", err)
+	}
+
+	// 4. Stale selection id gives 409
+	request4 := request3
+	request4.AnalysisSelectionID = "stale_id"
+	_, err = s2.GenerateFeatures(context.Background(), request4)
+	if err == nil || !errors.Is(err, project.ErrRevisionConflict) {
+		t.Fatalf("expected ErrRevisionConflict for stale selection ID, got %v", err)
 	}
 }

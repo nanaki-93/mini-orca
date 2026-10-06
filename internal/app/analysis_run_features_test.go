@@ -326,7 +326,7 @@ func TestAnalysisRunFeatureFailureRetainsIdeasAndOtherAnalysis(t *testing.T) {
 		return emptyAnalysisReply(stage)
 	})
 	s, _ := newSemanticAnalysisService(t, server.URL, 0)
-	previous, err := s.GenerateFeatures(context.Background(), featureRequestFor(t, s, ""))
+	previous, err := s.GenerateFeatures(context.Background(), FeatureGenerateRequest{FeatureRequest: featureRequestFor(t, s, "")})
 	if err != nil {
 		t.Fatal(err)
 	}

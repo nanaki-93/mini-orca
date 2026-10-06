@@ -30,7 +30,7 @@ func (h *FeatureHandler) Goals(w http.ResponseWriter, r *http.Request) {
 	respondWorkflow(w, value, err)
 }
 func (h *FeatureHandler) Generate(w http.ResponseWriter, r *http.Request) {
-	var request app.FeatureRequest
+	var request app.FeatureGenerateRequest
 	if !decodeWorkflowBody(w, r, &request) {
 		return
 	}
