@@ -115,13 +115,15 @@ export function Heading({
   title,
   children,
   detail,
+  variant,
 }: {
   title: string;
   children?: ReactNode;
   detail?: ReactNode;
+  variant?: 'intro';
 }) {
   return (
-    <header className="page-heading">
+    <header className={`page-heading${variant === 'intro' ? ' page-heading--intro' : ''}`}>
       <div>
         <h1>{title}</h1>
         {detail && <p>{detail}</p>}
