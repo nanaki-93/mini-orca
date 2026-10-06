@@ -745,11 +745,16 @@ export function installFixture(options = {}) {
                   },
                 ],
               };
+              Object.assign(
+                state.changeReceipt.verification,
+                structuredClone(options.changeVerification || {}),
+              );
               return response(state.changeReceipt.verification);
             }
             if (action === 'apply' || action === 'undo') {
               state.trusted = false;
-              change.state = action === 'apply' ? 'applied' : 'undone';
+              change.state =
+                action === 'apply' ? options.changeMutationState || 'applied' : 'undone';
               state.project.project_revision = action === 'apply' ? 'revision-2' : 'revision-3';
               state.source = action === 'apply' ? change.changes[0].content : source;
               if (change.kind === 'instructions')
@@ -765,14 +770,19 @@ export function installFixture(options = {}) {
                 state: change.state,
                 hash: change.hash,
                 undo_available: action === 'apply',
-                index: {
-                  ...identity,
-                  project_revision: state.project.project_revision,
-                  files: state.files,
-                },
+                index:
+                  action === 'apply' && options.changeMutationMissingIndex
+                    ? undefined
+                    : {
+                        ...identity,
+                        project_revision: state.project.project_revision,
+                        files: state.files,
+                      },
                 warnings:
                   action === 'apply' && options.mutationWarning ? [options.mutationWarning] : [],
               };
+              if (action === 'apply' && options.changeMutationResponseLost)
+                throw new Error('Apply response lost after source mutation');
               return response(state.changeReceipt);
             }
           }

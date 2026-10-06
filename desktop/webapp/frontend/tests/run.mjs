@@ -117,9 +117,11 @@ const surfaceInventory = {
       'checks failed',
       'reviewed',
       'stale',
-      'receipt',
-      'verification',
-      'uncertain write',
+      'receipt applied/undone/prepared/recovery required',
+      'verification absent/verified/failed/unavailable',
+      'long warnings and diagnostics',
+      'busy receipt actions',
+      'uncertain write and refreshed recovery',
     ],
   },
   instructions: {
@@ -476,6 +478,67 @@ async function chatReviewLayout(page) {
       'none',
     );
   }
+  checks++;
+}
+async function chatOutcomeLayout(page) {
+  const outcome = page.getByRole('region', { name: 'Change outcome', exact: true });
+  await headingContainment(page.locator('.chat-page .page-heading--intro'));
+  for (const region of [outcome, outcome.locator('.chat-receipt .panel-body')])
+    if (await region.count())
+      assert.equal(await region.evaluate((element) => getComputedStyle(element).gap), '20px');
+  const sections = await page.locator('.chat-page > *').all();
+  for (let i = 1; i < sections.length; i++) {
+    const before = await sections[i - 1].boundingBox();
+    const after = await sections[i].boundingBox();
+    assert.ok(Math.abs(after.y - before.y - before.height - 20) <= 1);
+    assert.ok(Math.abs(after.x - before.x) <= 1);
+    assert.ok(Math.abs(after.width - before.width) <= 1);
+  }
+  const overflow = await page
+    .locator(
+      '#main, .page, .chat-page, .chat-outcome, .chat-outcome .panel, .chat-outcome .panel-head, .chat-outcome .panel-body, .chat-outcome .notice, .chat-verification, .chat-outcome .disclosure-body',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.scrollWidth > element.clientWidth + 1)
+        .map((element) => element.className || element.id),
+    );
+  assert.deepEqual(overflow, [], 'Receipt warnings and verification stay within their containers');
+  const bounds = await outcome.boundingBox();
+  for (const control of await outcome.locator('button, summary').all()) {
+    if (!(await control.isVisible())) continue;
+    const box = await control.boundingBox();
+    assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+    assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+  }
+  for (const group of await outcome.locator('.panel-head, .actions, summary .row').all()) {
+    const container = await group.boundingBox();
+    const boxes = [];
+    for (const child of await group.locator(':scope > *').all()) {
+      const box = await child.boundingBox();
+      assert.ok(box.x >= container.x - 1 && box.x + box.width <= container.x + container.width + 1);
+      assert.ok(
+        box.y >= container.y - 1 && box.y + box.height <= container.y + container.height + 1,
+      );
+      for (const other of boxes)
+        assert.ok(
+          box.x + box.width <= other.x + 1 ||
+            other.x + other.width <= box.x + 1 ||
+            box.y + box.height <= other.y + 1 ||
+            other.y + other.height <= box.y + 1,
+          'Receipt actions, check names and status labels never collide',
+        );
+      boxes.push(box);
+    }
+  }
+  for (const output of await outcome.locator('pre').all()) {
+    assert.equal(await output.evaluate((element) => getComputedStyle(element).overflowY), 'auto');
+    assert.notEqual(
+      await output.evaluate((element) => getComputedStyle(element).userSelect),
+      'none',
+    );
+  }
+  assert.equal(await outcome.locator('input, textarea, [contenteditable="true"]').count(), 0);
   checks++;
 }
 async function featuresLayout(page) {
@@ -5640,6 +5703,281 @@ try {
         featuresReady ? 1 : 0,
       );
       await close();
+    }
+  });
+  await test('Chat outcomes keep receipt, verification and recovery evidence distinct across layouts', async () => {
+    const warning = `Source changed; history warning ${'long_warning_'.repeat(65)} final warning.`;
+    const reason = `Verification reason ${'long_reason_'.repeat(50)} final reason.`;
+    const diagnostic = `Complete output\n${'diagnostic_'.repeat(100)}\nFinal diagnostic line.`;
+    const checkName = `Post-Apply tests ${'LongCheckName'.repeat(30)}`;
+    for (const state of [
+      'applied',
+      'verified',
+      'failed',
+      'unavailable',
+      'undone',
+      'prepared',
+      'recovery_required',
+      'index-unavailable',
+      'response-lost',
+    ]) {
+      const verification = ['verified', 'failed', 'unavailable'].includes(state);
+      const uncertain = ['index-unavailable', 'response-lost'].includes(state);
+      const { page, close } = await pageFor({
+        mutationWarning: warning,
+        recoveryDropsWarnings: state !== 'response-lost',
+        changeMutationState: ['prepared', 'recovery_required'].includes(state) ? state : undefined,
+        changeMutationMissingIndex: state === 'index-unavailable',
+        changeMutationResponseLost: state === 'response-lost',
+        changeVerification: verification
+          ? {
+              status: state,
+              reason,
+              checks:
+                state === 'unavailable'
+                  ? []
+                  : [
+                      {
+                        name: checkName,
+                        state: state === 'failed' ? 'failed' : 'passed',
+                        output: diagnostic,
+                        required: true,
+                      },
+                    ],
+            }
+          : undefined,
+      });
+      try {
+        await idle(page);
+        const reference = await panelTreatment(page.locator('.summary-details .panel').first());
+        await nav(page, 'Chat');
+        await page.getByLabel('Add an existing file').selectOption('internal/worker/process.go');
+        await page.getByLabel('Change request', { exact: true }).fill('Handle cancellation.');
+        await page.getByLabel('Run project tests after generation').uncheck();
+        await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+        await idle(page);
+        await page.getByRole('button', { name: 'Review this diff', exact: true }).click();
+        await idle(page);
+        await page.getByRole('button', { name: 'Approve and apply', exact: true }).click();
+        await page
+          .getByRole('dialog')
+          .getByRole('button', { name: 'Apply proposal', exact: true })
+          .click();
+        await idle(page);
+        const outcome = page.getByRole('region', { name: 'Change outcome', exact: true });
+        if (state === 'response-lost') {
+          await outcome.getByText('Write outcome unknown.', { exact: true }).waitFor();
+          assert.equal(await outcome.locator('.chat-receipt').count(), 0);
+          await chatOutcomeLayout(page);
+          await layout(page, 'chat-outcome-response-lost-before-recovery-1440-dark-standard');
+          await nav(page, 'Summary');
+          await nav(page, 'Chat');
+          await outcome.getByRole('heading', { name: 'Change applied', exact: true }).waitFor();
+        }
+        await outcome.getByText(warning, { exact: true }).waitFor();
+        const render = async (label) => {
+          const before = await page.evaluate(() =>
+            window.fixture.requests.filter((r) => r.method !== 'GET'),
+          );
+          for (const theme of ['dark', 'light']) {
+            if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+              await page
+                .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
+                .click();
+            for (const larger of [false, true]) {
+              const size = page.getByRole('button', { name: 'Larger text', exact: true });
+              if (((await size.getAttribute('aria-pressed')) === 'true') !== larger)
+                await size.click();
+              for (const width of ['applied', 'failed', 'response-lost'].includes(state)
+                ? [1440, 1280, 1001, 800]
+                : [1440, 800]) {
+                await page.setViewportSize({ width, height: 1000 });
+                await chatOutcomeLayout(page);
+                await layout(
+                  page,
+                  `chat-outcome-${label}-${width}-${theme}-${larger ? 'larger' : 'standard'}`,
+                );
+              }
+              await contrast(
+                page,
+                `Chat outcome ${label} ${theme} ${larger ? 'larger' : 'standard'}`,
+              );
+            }
+          }
+          assert.deepEqual(
+            await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+            before,
+            'Outcome inspection and reflow never verify, analyze or write',
+          );
+          assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+        };
+        if (verification) {
+          await outcome.getByRole('button', { name: 'Verify applied change', exact: true }).click();
+          await page
+            .getByRole('dialog')
+            .getByRole('button', { name: 'Trust this project', exact: true })
+            .click();
+          await idle(page);
+          const evidence = outcome.getByLabel('Post-Apply verification', { exact: true });
+          await evidence.getByText(state, { exact: true }).first().waitFor();
+          await evidence.getByText(reason, { exact: true }).waitFor();
+          const before = await page.evaluate(() =>
+            window.fixture.requests.filter((r) => r.method !== 'GET'),
+          );
+          if (state !== 'unavailable') {
+            await evidence.locator('summary').click();
+            assert.equal(await evidence.locator('pre').textContent(), diagnostic);
+          } else assert.equal(await evidence.locator('details').count(), 0);
+          assert.deepEqual(
+            await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+            before,
+            'Verification output disclosure is passive',
+          );
+        }
+        if (state === 'undone') {
+          await outcome.getByRole('button', { name: 'Undo proposal', exact: true }).click();
+          await page
+            .getByRole('dialog')
+            .getByRole('button', { name: 'Undo proposal', exact: true })
+            .click();
+          await idle(page);
+        }
+        await outcome
+          .getByRole('heading', {
+            name: `Change ${['prepared', 'recovery_required', 'undone'].includes(state) ? state.replaceAll('_', ' ') : 'applied'}`,
+            exact: true,
+          })
+          .waitFor();
+        assert.deepEqual(await panelTreatment(outcome.locator('.panel')), reference);
+        const applied = !['prepared', 'recovery_required', 'undone'].includes(state);
+        assert.equal(
+          await outcome
+            .getByText('Acceptance criteria still need review.', { exact: true })
+            .count(),
+          applied ? 1 : 0,
+        );
+        assert.equal(
+          await outcome.getByText('No post-Apply verification available.', { exact: true }).count(),
+          applied && !verification ? 1 : 0,
+        );
+        assert.equal(
+          await outcome.getByRole('button', { name: 'Undo proposal', exact: true }).count(),
+          state === 'undone' ? 0 : 1,
+        );
+        for (const control of await outcome.getByRole('button').all())
+          assert.equal(
+            await control.isDisabled(),
+            uncertain && (await control.textContent()).trim() !== 'Refresh project',
+          );
+        assert.equal(
+          await page.getByRole('button', { name: 'Approve and apply', exact: true }).isDisabled(),
+          true,
+        );
+        await render(state);
+        if (['prepared', 'recovery_required'].includes(state)) {
+          const undoPath = '/api/projects/current/changes/change-1/undo';
+          await page.evaluate((path) => {
+            window.fixture.hold = path;
+          }, undoPath);
+          await outcome.getByRole('button', { name: 'Undo proposal', exact: true }).click();
+          await page
+            .getByRole('dialog')
+            .getByText('Recover the interrupted grouped change.', { exact: true })
+            .waitFor();
+          await page
+            .getByRole('dialog')
+            .getByRole('button', { name: 'Undo proposal', exact: true })
+            .click();
+          await page.waitForFunction(
+            (path) => window.fixture.requests.some((r) => r.path === path),
+            undoPath,
+          );
+          assert.equal(
+            await outcome.getByRole('button', { name: 'Undo proposal', exact: true }).isDisabled(),
+            true,
+          );
+          await render(`${state}-undo-busy`);
+          await page.evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          });
+          await idle(page);
+          await outcome.getByRole('heading', { name: 'Change undone', exact: true }).waitFor();
+          assert.equal(await outcome.getByRole('button').count(), 0);
+          await render(`${state}-restored`);
+        }
+        if (state === 'applied' || uncertain) {
+          const heldPath = uncertain
+            ? '/api/projects/current/reindex'
+            : '/api/projects/current/changes/change-1/verify';
+          await page.evaluate((path) => {
+            window.fixture.hold = path;
+          }, heldPath);
+          await outcome
+            .getByRole('button', {
+              name: uncertain ? 'Refresh project' : 'Verify applied change',
+              exact: true,
+            })
+            .click();
+          if (!uncertain)
+            await page
+              .getByRole('dialog')
+              .getByRole('button', { name: 'Trust this project', exact: true })
+              .click();
+          await page.waitForFunction(
+            (path) => window.fixture.requests.some((r) => r.path === path),
+            heldPath,
+          );
+          for (const control of await outcome.getByRole('button').all())
+            assert.equal(await control.isDisabled(), true);
+          await render(`${state}-busy`);
+          await page.evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          });
+          await idle(page);
+          if (uncertain) {
+            assert.equal(
+              await outcome.getByText('Write outcome unknown.', { exact: true }).count(),
+              0,
+            );
+            assert.equal(
+              await page
+                .getByRole('button', { name: 'Approve and apply', exact: true })
+                .isDisabled(),
+              true,
+            );
+            assert.equal(
+              await outcome.getByRole('button', { name: 'Undo proposal', exact: true }).isEnabled(),
+              true,
+            );
+            await outcome.getByRole('button', { name: 'Undo proposal', exact: true }).click();
+            await page
+              .getByRole('dialog')
+              .getByRole('button', { name: 'Undo proposal', exact: true })
+              .click();
+            await idle(page);
+            await outcome.getByRole('heading', { name: 'Change undone', exact: true }).waitFor();
+            await render(`${state}-recovered-undone`);
+          }
+        }
+        assert.equal(
+          await page.evaluate(
+            () => window.fixture.requests.filter((r) => r.path.endsWith('/apply')).length,
+          ),
+          1,
+          'No repeat Apply occurs',
+        );
+      } finally {
+        try {
+          await page.evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          });
+        } finally {
+          await close();
+        }
+      }
     }
   });
   await test('Applied changes require explicit verification and separate reanalysis consent', async () => {

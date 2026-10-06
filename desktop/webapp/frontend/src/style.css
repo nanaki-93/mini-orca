@@ -2006,7 +2006,8 @@ dialog .actions {
   min-width: 0;
 }
 .chat-conversation .panel-head h2,
-.chat-review .panel-head h2 {
+.chat-review .panel-head h2,
+.chat-outcome .panel-head h2 {
   flex: 1 1 14rem;
   overflow-wrap: anywhere;
 }
@@ -2018,8 +2019,31 @@ dialog .actions {
 .chat-review .disclosure-body,
 .chat-review .button,
 .chat-review summary,
-.chat-review .notice {
+.chat-review .notice,
+.chat-outcome .panel-body,
+.chat-outcome .disclosure-body,
+.chat-outcome .button,
+.chat-outcome summary {
   overflow-wrap: anywhere;
+}
+.chat-receipt .panel-body,
+.chat-verification {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.chat-recovery {
+  display: grid;
+  gap: 12px;
+}
+.chat-outcome .notice,
+.chat-outcome pre,
+.chat-verification details {
+  margin: 0;
+}
+.chat-verification summary .row > span:first-child {
+  min-width: 0;
+  flex: 1 1 14rem;
 }
 .chat-review .code-header {
   flex-wrap: wrap;
@@ -2154,7 +2178,8 @@ dialog .actions {
   min-width: 0;
 }
 .change-workspace .diff pre,
-.change-workspace pre {
+.change-workspace pre,
+.chat-outcome pre {
   overflow: auto;
   max-height: 520px;
 }

@@ -57,81 +57,99 @@ export function ChangeWorkspace({ s }: { s: State }) {
           New conversation
         </Button>
       </Heading>
-      {s.uncertain && (
-        <Notice error>
-          Write outcome unknown. Refresh project facts.{' '}
-          <Button onClick={() => void w.reindex()} disabled={!!s.busy}>
-            Refresh project
-          </Button>
-        </Notice>
-      )}
-      {s.changeReceipt && (
-        <Panel
-          title={
-            s.changeReceipt.state === 'applied'
-              ? 'Change applied'
-              : `Change ${s.changeReceipt.state.replaceAll('_', ' ')}`
-          }
-          actions={<Badge value={s.changeReceipt.state} />}
-        >
-          {s.changeReceipt.state === 'applied' && (
-            <>
-              <p className="small muted">Acceptance criteria still need review.</p>
-              <div className="actions section-gap">
-                <Button
-                  disabled={!!s.busy || s.uncertain || change?.id !== s.changeReceipt.session_id}
-                  onClick={() => void w.verifyChange()}
-                >
-                  Verify applied change
-                </Button>
-                {change?.changes.some((edit) => edit.path.endsWith('.go')) && (
-                  <Button
-                    disabled={!!s.busy || s.uncertain || change.id !== s.changeReceipt.session_id}
-                    onClick={() => void w.reanalyzeChange()}
-                  >
-                    Reanalyze changed files
+      {(s.uncertain || s.changeReceipt) && (
+        <section className="workspace-page chat-outcome" aria-label="Change outcome">
+          {s.uncertain && (
+            <Notice error>
+              <div className="chat-recovery">
+                <strong>Write outcome unknown.</strong>
+                <p>Refresh project facts.</p>
+                <div className="actions">
+                  <Button onClick={() => void w.reindex()} disabled={!!s.busy}>
+                    Refresh project
                   </Button>
-                )}
+                </div>
               </div>
-              {s.changeReceipt.verification && (
-                <div className="section-gap" aria-label="Post-Apply verification">
-                  <div className="row wrap">
-                    <strong>Verification</strong>
-                    <Badge value={s.changeReceipt.verification.status} />
-                  </div>
-                  {s.changeReceipt.verification.reason && (
-                    <Notice error={s.changeReceipt.verification.status === 'failed'}>
-                      {s.changeReceipt.verification.reason}
-                    </Notice>
-                  )}
-                  {s.changeReceipt.verification.checks.map((check, i) => (
-                    <Disclosure
-                      key={i}
-                      title={
-                        <span className="row wrap">
-                          {check.name}
-                          <Badge value={check.state} />
-                        </span>
+            </Notice>
+          )}
+          {s.changeReceipt && (
+            <Panel
+              className="chat-receipt"
+              title={
+                s.changeReceipt.state === 'applied'
+                  ? 'Change applied'
+                  : `Change ${s.changeReceipt.state.replaceAll('_', ' ')}`
+              }
+              actions={<Badge value={s.changeReceipt.state} />}
+            >
+              {s.changeReceipt.state === 'applied' && (
+                <>
+                  <p className="small muted">Acceptance criteria still need review.</p>
+                  <div className="actions">
+                    <Button
+                      disabled={
+                        !!s.busy || s.uncertain || change?.id !== s.changeReceipt.session_id
                       }
+                      onClick={() => void w.verifyChange()}
                     >
-                      <pre>{check.output || 'No diagnostics.'}</pre>
-                    </Disclosure>
-                  ))}
+                      Verify applied change
+                    </Button>
+                    {change?.changes.some((edit) => edit.path.endsWith('.go')) && (
+                      <Button
+                        disabled={
+                          !!s.busy || s.uncertain || change.id !== s.changeReceipt.session_id
+                        }
+                        onClick={() => void w.reanalyzeChange()}
+                      >
+                        Reanalyze changed files
+                      </Button>
+                    )}
+                  </div>
+                  {s.changeReceipt.verification ? (
+                    <div className="chat-verification" aria-label="Post-Apply verification">
+                      <div className="row wrap">
+                        <strong>Verification</strong>
+                        <Badge value={s.changeReceipt.verification.status} />
+                      </div>
+                      {s.changeReceipt.verification.reason && (
+                        <Notice error={s.changeReceipt.verification.status === 'failed'}>
+                          {s.changeReceipt.verification.reason}
+                        </Notice>
+                      )}
+                      {s.changeReceipt.verification.checks.map((check, i) => (
+                        <Disclosure
+                          key={i}
+                          title={
+                            <span className="row wrap">
+                              <span>{check.name}</span>
+                              <Badge value={check.state} />
+                            </span>
+                          }
+                        >
+                          <pre>{check.output || 'No diagnostics.'}</pre>
+                        </Disclosure>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="small muted">No post-Apply verification available.</p>
+                  )}
+                </>
+              )}
+              {(s.changeReceipt.warnings || []).map((warning, i) => (
+                <Notice error key={i}>
+                  {warning}
+                </Notice>
+              ))}
+              {s.changeReceipt.undo_available && (
+                <div className="actions">
+                  <Button disabled={!!s.busy || s.uncertain} onClick={() => void w.undoChange()}>
+                    Undo proposal
+                  </Button>
                 </div>
               )}
-            </>
+            </Panel>
           )}
-          {(s.changeReceipt.warnings || []).map((warning, i) => (
-            <Notice error key={i}>
-              {warning}
-            </Notice>
-          ))}
-          {s.changeReceipt.undo_available && (
-            <Button disabled={!!s.busy || s.uncertain} onClick={() => void w.undoChange()}>
-              Undo proposal
-            </Button>
-          )}
-        </Panel>
+        </section>
       )}
       <div className="change-workspace">
         <section className="workspace-page chat-conversation" aria-label="Change conversation">
