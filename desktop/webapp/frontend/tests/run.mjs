@@ -1374,7 +1374,7 @@ try {
       assert.equal(await card.getByRole('img').getAttribute('aria-label'), `Features: ${status}`);
       assert.equal(await page.getByText('Retry failed work', { exact: true }).count(), 0);
       assert.equal(await page.getByText(/Feature search failed/).count(), 0);
-      assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
+      assert.equal(await page.getByText(/active idea(?:s)? (?:is|are) outdated/).count(), 0);
       await page.setViewportSize({ width: 800, height: 900 });
       await page.getByRole('button', { name: 'Larger text' }).click();
       await layout(page, `summary-feature-count-${JSON.stringify(options)}`);
@@ -1404,7 +1404,10 @@ try {
           );
       }
       assert.equal(await page.getByText(/Feature search failed/).count(), 0);
-      assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
+      assert.equal(
+        await page.getByText(/active idea(?:s)? (?:is|are) outdated/).count(),
+        options.featuresStale && options.featuresReady && !options.featuresEmpty ? 1 : 0,
+      );
       await layout(page, `features-saved-state-${JSON.stringify(options)}`);
       const reads = await page.evaluate(
         () => window.fixture.requests.filter((r) => r.path.endsWith('/features')).length,
@@ -1416,7 +1419,10 @@ try {
         reads,
       );
       assert.equal(await page.getByText(/Feature search failed/).count(), 0);
-      assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
+      assert.equal(
+        await page.getByText(/active idea(?:s)? (?:is|are) outdated/).count(),
+        options.featuresStale && options.featuresReady && !options.featuresEmpty ? 1 : 0,
+      );
       assert.equal(
         await page.evaluate(() =>
           window.fixture.requests.some(
@@ -1439,11 +1445,13 @@ try {
     await page.getByLabel('Project goals', { exact: true }).fill('Help recover failed jobs.');
     await page.getByRole('button', { name: 'Save goals', exact: true }).click();
     await idle(page);
-    await page.getByRole('button', { name: 'Suggest features', exact: true }).click();
+    await page
+      .getByRole('button', { name: 'Search more feature suggestions', exact: true })
+      .click();
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
     await idle(page);
     assert.equal(await page.getByText(/Feature search failed/).count(), 0);
-    assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
+    assert.equal(await page.getByText(/active idea(?:s)? (?:is|are) outdated/).count(), 1);
     assert.equal(
       await page.evaluate(() =>
         window.fixture.requests.some((r) => r.path.endsWith('/features/generate')),
@@ -1452,7 +1460,7 @@ try {
     );
     await nav(page, 'Summary');
     assert.equal(await page.getByText(/Feature search failed/).count(), 0);
-    assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
+    assert.equal(await page.getByText(/active idea(?:s)? (?:is|are) outdated/).count(), 0);
     await close();
   });
   await test('Project analysis includes feature suggestions in preview, consent and Summary', async () => {
@@ -1490,6 +1498,53 @@ try {
     await layout(page, 'summary-analysis-features');
     await close();
   });
+  await test('Feature generation accumulates ideas and identifies duplicates', async () => {
+    const { page, close } = await pageFor({ remote: true });
+    await nav(page, 'Features');
+    await page
+      .getByLabel('Project goals', { exact: true })
+      .fill('Help operators recover failed jobs.');
+    await page.getByRole('button', { name: 'Save goals', exact: true }).click();
+    await idle(page);
+    await page.getByRole('button', { name: 'Suggest features', exact: true }).click();
+
+    // Check consent shape
+    await page
+      .getByRole('heading', { name: 'Search more feature suggestions', exact: true })
+      .waitFor();
+    await page.getByText('Origin: Features').waitFor();
+    await page.getByText('Profile: analyze').waitFor();
+    await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
+    await idle(page);
+
+    await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
+    await page.getByText('Added 1 new suggestions.').waitFor();
+
+    // Now request again with duplicateOnly
+    await page.evaluate(() => {
+      window.fixture.options.duplicateOnly = true;
+    });
+
+    await page
+      .getByRole('button', { name: 'Search more feature suggestions', exact: true })
+      .click();
+    await page.getByText('Existing ideas: 1').waitFor();
+    await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
+    await idle(page);
+
+    await page.getByText('No new suggestions found.').waitFor();
+
+    // Check profile/consent request-shape cases
+    const requests = await page.evaluate(() =>
+      window.fixture.requests.filter((r) => r.path.endsWith('/features/generate')),
+    );
+    assert.equal(requests.length, 2);
+    assert.equal(requests[0].body.profile, 'analyze');
+    assert.equal(requests[0].body.confirm_remote_provider, true);
+
+    await close();
+  });
+
   await test('Feature goals and idea triage are local; Discuss only seeds Chat', async () => {
     const { page, close } = await pageFor({ remote: true });
     await nav(page, 'Analysis');
@@ -1609,7 +1664,14 @@ try {
     ]) {
       const { page, close } = await pageFor(options);
       await nav(page, 'Features');
-      await page.getByRole('button', { name: 'Suggest features' }).click();
+
+      const hasIdeasStart = options.featuresReady && !options.featuresEmpty;
+      await page
+        .getByRole('button', {
+          name: hasIdeasStart ? 'Search more feature suggestions' : 'Suggest features',
+        })
+        .click();
+
       await idle(page);
       if (options.featuresEmpty)
         await page
@@ -1620,21 +1682,21 @@ try {
       if (options.featuresFail)
         await page.getByText(/^Feature search failed\. Try again\./).waitFor();
       const hasIdeas = !options.featuresEmpty && (!options.featuresFail || options.featuresReady);
-      if (options.featuresStale && hasIdeas)
+      if (options.featuresStale && hasIdeasStart)
         assert.equal(
           await page.getByRole('button', { name: 'Discuss in chat' }).isDisabled(),
           true,
         );
       assert.equal(
-        await page.getByText(/Ideas are outdated/).count(),
-        options.featuresStale && hasIdeas ? 1 : 0,
+        await page.getByText(/active idea(?:s)? (?:is|are) outdated/).count(),
+        options.featuresStale && hasIdeasStart ? 1 : 0,
       );
       await page.setViewportSize({ width: 800, height: 900 });
       await page.getByRole('button', { name: 'Larger text' }).click();
       await layout(page, `features-${JSON.stringify(options)}`);
       await nav(page, 'Summary');
       assert.equal(await page.getByText(/Feature search failed/).count(), 0);
-      assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
+      assert.equal(await page.getByText(/active idea(?:s)? (?:is|are) outdated/).count(), 0);
       const card = page.locator('.metric-card[data-accent="features"]');
       assert.equal(
         await card.locator('.metric-number').innerText(),
@@ -1653,15 +1715,15 @@ try {
           )
           .waitFor();
       assert.equal(
-        await page.getByText(/Ideas are outdated/).count(),
-        options.featuresStale && hasIdeas ? 1 : 0,
+        await page.getByText(/active idea(?:s)? (?:is|are) outdated/).count(),
+        options.featuresStale && hasIdeasStart ? 1 : 0,
       );
       await nav(page, 'Project');
       await page.getByRole('button', { name: 'Open saved project', exact: true }).click();
       await idle(page);
       await page.getByRole('heading', { name: 'harbor', exact: true }).waitFor();
       assert.equal(await page.getByText(/Feature search failed/).count(), 0);
-      assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
+      assert.equal(await page.getByText(/active idea(?:s)? (?:is|are) outdated/).count(), 0);
       await close();
     }
   });
@@ -1685,10 +1747,13 @@ try {
         await page.locator('.metric-card[data-accent="features"] .metric-number').innerText(),
         featuresReady ? '1' : '—',
       );
-      assert.equal(await page.getByText(/Ideas are outdated/).count(), 0);
+      assert.equal(await page.getByText(/active idea(?:s)? (?:is|are) outdated/).count(), 0);
       await nav(page, 'Features');
       await page.getByText(/^Feature search failed\. Try again\./).waitFor();
-      assert.equal(await page.getByText(/Ideas are outdated/).count(), featuresReady ? 1 : 0);
+      assert.equal(
+        await page.getByText(/active idea(?:s)? (?:is|are) outdated/).count(),
+        featuresReady ? 1 : 0,
+      );
       await close();
     }
   });

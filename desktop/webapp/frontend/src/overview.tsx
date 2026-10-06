@@ -171,7 +171,10 @@ export function Summary({ s }: { s: State }) {
       status:
         features?.status === 'failed'
           ? 'failed'
-          : features?.freshness === 'stale'
+          : features?.freshness === 'stale' ||
+              features?.suggestions.some(
+                (idea) => idea.status !== 'dismissed' && idea.freshness === 'stale',
+              )
             ? 'stale'
             : features?.status,
     },

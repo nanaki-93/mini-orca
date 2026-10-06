@@ -89,6 +89,12 @@ export interface State {
   // Saved history does not authorize generation notices in a new project session.
   featureGenerationRequested: boolean;
   instructionPreview?: M.InstructionPreview;
+  analysisSetup?: M.AnalysisModels;
+}
+export function analysisSetupModels(s: State): M.AnalysisModels {
+  if (s.analysisSetup) return s.analysisSetup;
+  if (s.run?.plan?.models) return s.run.plan.models;
+  return { code: 'analyze', review: 'analyze', features: 'analyze' };
 }
 const initial = (): State => ({
   page: 'welcome',
@@ -507,6 +513,9 @@ export class Workspace {
       this.set({ selection: updated, preview: undefined });
     });
   }
+  setAnalysisSetup(setup: M.AnalysisModels) {
+    this.set({ analysisSetup: setup, preview: undefined, resume: undefined });
+  }
   async previewAnalysis(
     limits: M.Limits,
     refresh = false,
@@ -592,6 +601,7 @@ export class Workspace {
             include_features: !!p.features,
             models: p.models,
             retry_stale_failed: p.retry_stale_failed || false,
+            recover_incomplete: p.recover_incomplete || false,
             confirmations,
           });
       this.set({
@@ -1269,29 +1279,65 @@ export class Workspace {
       () => request === this.featureRequest,
     );
   }
-  async updateFeatures(goals: string, generate = false) {
-    await this.act(generate ? 'Generate feature suggestions' : 'Save project goals', async () => {
+  async updateFeatures(goals: string) {
+    await this.act('Save project goals', async () => {
       const report = this.state.features;
       if (!report) throw new Error('Load feature suggestions first.');
       const epoch = this.epoch,
         operation = this.operation;
       const request = ++this.featureRequest;
-      const confirmed = generate
-        ? await this.confirmModel('analyze', 'Generate feature suggestions', false, [
-            'Policy-filtered project context and root AGENTS.md',
-          ])
-        : false;
-      if (confirmed === null || epoch !== this.epoch || operation !== this.operation) return;
-      if (generate) this.set({ featureGenerationRequested: true });
       try {
+        const features = await this.api.post<M.FeatureReport>(`${current}/features/goals`, {
+          ...this.identity(),
+          expected_hash: report.hash,
+          goals,
+        });
+        if (epoch === this.epoch && operation === this.operation && request === this.featureRequest)
+          this.set({ features });
+      } catch (error) {
+        if (epoch === this.epoch && operation === this.operation) await this.loadFeatures();
+        throw error;
+      }
+    });
+  }
+  async searchFeatures(origin: 'Features' | 'Analysis', goals: string) {
+    await this.act('Search more feature suggestions', async () => {
+      const report = this.state.features;
+      if (!report) throw new Error('Load feature suggestions first.');
+      const epoch = this.epoch,
+        operation = this.operation;
+      const request = ++this.featureRequest;
+      const setup = analysisSetupModels(this.state);
+      const profile = setup.features;
+      const titles = report.suggestions.map((s) => s.title);
+      const details = [`Origin: ${origin}`, `Profile: ${profile}`];
+      if (titles.length) {
+        details.push(`Existing idea titles: ${titles.length}`);
+        details.push(...titles.map((t) => `- ${t}`));
+      }
+
+      const confirmed = await this.confirmModel(
+        profile,
+        'Search more feature suggestions',
+        false,
+        details,
+      );
+      if (confirmed === null || epoch !== this.epoch || operation !== this.operation) return;
+      this.set({ featureGenerationRequested: true });
+      try {
+        const payload: any = {
+          ...this.identity(),
+          expected_hash: report.hash,
+          goals,
+          confirm_remote_provider: confirmed,
+          profile,
+        };
+        if (origin === 'Analysis') {
+          payload.analysis_selection_id = this.state.selection?.selection_id;
+        }
         const features = await this.api.post<M.FeatureReport>(
-          `${current}/features/${generate ? 'generate' : 'goals'}`,
-          {
-            ...this.identity(),
-            expected_hash: report.hash,
-            goals,
-            confirm_remote_provider: confirmed,
-          },
+          `${current}/features/generate`,
+          payload,
         );
         if (epoch === this.epoch && operation === this.operation && request === this.featureRequest)
           this.set({ features });
