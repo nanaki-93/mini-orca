@@ -4,33 +4,35 @@ import { mkdir } from 'node:fs/promises';
 import { serve } from '../preview.mjs';
 import { installFixture } from './fixture.mjs';
 
-const server = await serve(0);
-const url = `http://127.0.0.1:${server.address().port}`;
-const browser = await chromium.launch({
-  headless: true,
-  ...(process.env.MINI_ORCA_TEST_BROWSER || process.platform === 'darwin'
-    ? { channel: process.env.MINI_ORCA_TEST_BROWSER || 'chrome' }
-    : {}),
-});
+let server;
+let url;
+let browser;
 const output = new URL('../test-results/', import.meta.url).pathname;
 await mkdir(output, { recursive: true });
 let checks = 0;
 const errors = [];
 async function pageFor(options = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-  const page = await context.newPage();
-  page.on('pageerror', (error) => errors.push(error.message));
-  page.on('request', (request) => {
-    if (!request.url().startsWith(url) && !request.url().startsWith('data:'))
-      errors.push(`Unexpected outbound request: ${request.url()}`);
-  });
-  await page.addInitScript(installFixture, options);
-  await page.goto(url);
-  await page.getByRole('heading', { name: options.projectName || 'harbor', exact: true }).waitFor();
-  await page.waitForFunction(() =>
-    window.fixture.requests.some((request) => request.path?.endsWith('/analysis/selection')),
-  );
-  return { page, close: () => context.close() };
+  try {
+    const page = await context.newPage();
+    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('request', (request) => {
+      if (!request.url().startsWith(url) && !request.url().startsWith('data:'))
+        errors.push(`Unexpected outbound request: ${request.url()}`);
+    });
+    await page.addInitScript(installFixture, options);
+    await page.goto(url);
+    await page
+      .getByRole('heading', { name: options.projectName || 'harbor', exact: true })
+      .waitFor();
+    await page.waitForFunction(() =>
+      window.fixture.requests.some((request) => request.path?.endsWith('/analysis/selection')),
+    );
+    return { page, close: () => context.close() };
+  } catch (error) {
+    await context.close();
+    throw error;
+  }
 }
 async function idle(page) {
   await page.locator('.busy-strip').waitFor({ state: 'hidden' });
@@ -112,7 +114,15 @@ async function analysisSections(page, hasRun) {
   const lastRun = page.locator('section.panel').filter({
     has: page.getByRole('heading', { name: 'Last run', exact: true }),
   });
-  const content = await page.locator('.page-heading').boundingBox();
+  const heading = page
+    .locator('.page-heading')
+    .filter({ has: page.getByRole('heading', { name: 'Analysis', exact: true }) });
+  const content = await heading.boundingBox();
+  for (const action of await heading.getByRole('button').all()) {
+    const box = await action.boundingBox();
+    assert.ok(box.x >= content.x && box.x + box.width <= content.x + content.width + 1);
+    assert.ok(box.y >= content.y && box.y + box.height <= content.y + content.height + 1);
+  }
   const settingsBox = await settings.boundingBox();
   // Allow one CSS pixel for fractional layout rounding.
   assert.ok(Math.abs(settingsBox.x - content.x) <= 1, 'Settings starts at the content edge');
@@ -321,7 +331,10 @@ async function analysisOverflow(page) {
   assert.deepEqual(overflowing, [], 'No internal main/page/panel/group horizontal overflow');
   const table = page.locator('.table-wrap');
   const tableBox = await table.boundingBox();
-  const pageBox = await page.locator('.page').boundingBox();
+  const pageBox = await page
+    .locator('.page')
+    .filter({ has: page.locator('.analysis-sections') })
+    .boundingBox();
   assert.ok(
     tableBox.x >= pageBox.x && tableBox.x + tableBox.width <= pageBox.x + pageBox.width + 1,
   );
@@ -367,7 +380,7 @@ async function contrast(page, name) {
       '.muted',
       '.prose p',
       '.panel-head h2',
-      '.analysis-last-run .panel-head span',
+      '.analysis-last-run .panel-head span:not(.status-dot)',
       '.analysis-last-run .three-columns strong',
       '.analysis-last-run .three-columns .row > span',
       '.metric-label',
@@ -434,6 +447,14 @@ async function test(name, body) {
 }
 
 try {
+  server = await serve(0);
+  url = `http://127.0.0.1:${server.address().port}`;
+  browser = await chromium.launch({
+    headless: true,
+    ...(process.env.MINI_ORCA_TEST_BROWSER || process.platform === 'darwin'
+      ? { channel: process.env.MINI_ORCA_TEST_BROWSER || 'chrome' }
+      : {}),
+  });
   await test('Redundant suggestion labels are removed while advisory content remains', async () => {
     const { page, close } = await pageFor({ featuresReady: true });
     assert.equal(
@@ -1090,7 +1111,7 @@ try {
           assert.equal(await field.getAttribute('max'), max);
         }
         assert.equal(await page.getByLabel('Refresh previously analyzed files').isChecked(), false);
-        for (const width of [1440, 1001, 800]) {
+        for (const width of [1440, 1280, 1001, 800]) {
           await page.setViewportSize({ width, height: width === 1440 ? 1000 : 900 });
           for (const large of [false, true]) {
             const text = page.getByRole('button', { name: 'Larger text', exact: true });
@@ -1099,7 +1120,11 @@ try {
               if ((await disclosure.getAttribute('open')) !== (expanded ? '' : null))
                 await summary.click();
               await analysisSections(page, !empty);
-              await analysisSettingsFields(page, width === 1440 ? 3 : 1, expanded);
+              await analysisSettingsFields(
+                page,
+                width === 1440 || (width === 1280 && !large) ? 3 : 1,
+                expanded,
+              );
               await analysisOverflow(page);
               await layout(
                 page,
@@ -1148,8 +1173,12 @@ try {
         'Native options retain complete model identifiers',
       );
       await code.focus();
-      await page.keyboard.press('ArrowDown');
-      assert.equal(await code.inputValue(), 'function', 'Native select supports keyboard changes');
+      await page.keyboard.press('d');
+      assert.equal(
+        await code.inputValue(),
+        'function',
+        'Native select supports keyboard type-ahead',
+      );
       await contrast(page, 'Analysis code selector keyboard focus');
       await page.keyboard.press('Tab');
       assert.equal(await review.evaluate((control) => control === document.activeElement), true);
@@ -1326,7 +1355,7 @@ try {
       await page.getByLabel('Performance & Security model', { exact: true }).selectOption('bug');
       await page.getByLabel('Feature discovery model', { exact: true }).selectOption('analyze');
       const disclosure = page.locator('.analysis-run-settings details');
-      for (const width of [1440, 1001, 800]) {
+      for (const width of [1440, 1280, 1001, 800]) {
         await page.setViewportSize({ width, height: width === 1440 ? 1000 : 900 });
         for (const large of [false, true]) {
           const text = page.getByRole('button', { name: 'Larger text', exact: true });
@@ -1335,8 +1364,9 @@ try {
             if ((await disclosure.getAttribute('open')) !== (expanded ? '' : null))
               await disclosure.locator('summary').click();
             await analysisSections(page, true);
-            await analysisSettingsFields(page, width === 1440 ? 3 : 1, expanded);
-            await capturedDetails(lastRun, saved.details, width === 1440 ? 3 : 1);
+            const columns = width === 1440 || (width === 1280 && !large) ? 3 : 1;
+            await analysisSettingsFields(page, columns, expanded);
+            await capturedDetails(lastRun, saved.details, columns);
             await analysisOverflow(page);
             for (const theme of ['dark', 'light']) {
               if ((await page.locator('html').getAttribute('data-theme')) !== theme)
@@ -1375,6 +1405,12 @@ try {
   });
   await test('Captured metadata and fallbacks preserve Analysis, run and preview caller semantics', async () => {
     const saved = savedModelsFixture();
+    // Shared preview keeps its existing half-width panel; long-content reflow is Analysis-only.
+    const origins = ['http://c.test', 'https://r.test', 'https://f.test'];
+    saved.details.forEach((detail, index) => {
+      detail.origin = origins[index];
+      saved.options.capturedProviders[index].model.provider_origin = origins[index];
+    });
     for (const scenario of ['populated', 'missing-provider', 'legacy']) {
       const options =
         scenario === 'legacy'
@@ -2565,6 +2601,12 @@ try {
   assert.deepEqual(errors, []);
   console.log(`PASS ${checks} workflow and layout checks; no browser errors or external requests`);
 } finally {
-  await browser.close();
-  await new Promise((resolve) => server.close(resolve));
+  try {
+    await browser?.close();
+  } finally {
+    if (server)
+      await new Promise((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+  }
 }
