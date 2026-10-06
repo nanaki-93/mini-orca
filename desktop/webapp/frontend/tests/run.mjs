@@ -105,6 +105,58 @@ async function layout(page, name) {
   );
   checks++;
 }
+async function analysisSections(page, hasRun) {
+  const settings = page.locator('section.panel').filter({
+    has: page.getByRole('heading', { name: 'Run settings', exact: true }),
+  });
+  const lastRun = page.locator('section.panel').filter({
+    has: page.getByRole('heading', { name: 'Last run', exact: true }),
+  });
+  const content = await page.locator('.page-heading').boundingBox();
+  const settingsBox = await settings.boundingBox();
+  // Allow one CSS pixel for fractional layout rounding.
+  assert.ok(Math.abs(settingsBox.x - content.x) <= 1, 'Settings starts at the content edge');
+  assert.ok(Math.abs(settingsBox.width - content.width) <= 1, 'Settings spans the content');
+  assert.equal(await lastRun.count(), hasRun ? 1 : 0);
+  const toolbar = await page.locator('.toolbar').boundingBox();
+  const table = await page.locator('.table-wrap').boundingBox();
+  let previous = settingsBox;
+  if (hasRun) {
+    const box = await lastRun.boundingBox();
+    assert.ok(Math.abs(box.x - content.x) <= 1, 'Last run starts at the content edge');
+    assert.ok(Math.abs(box.width - content.width) <= 1, 'Last run spans the content');
+    assert.ok(box.y >= settingsBox.y + settingsBox.height, 'Last run follows settings');
+    const header = lastRun.locator('.panel-head');
+    const headerBox = await header.boundingBox();
+    const parts = [
+      lastRun.getByRole('heading', { name: 'Last run', exact: true }),
+      header.getByRole('img'),
+      header.getByText(/^(running|paused|failed|completed)$/, { exact: true }),
+      header.getByRole('button', { name: 'View run', exact: true }),
+    ];
+    const boxes = [];
+    for (const part of parts) {
+      assert.equal(await part.isVisible(), true, 'Last run header content remains visible');
+      const bounds = await part.boundingBox();
+      assert.ok(bounds.x >= headerBox.x && bounds.y >= headerBox.y);
+      assert.ok(bounds.x + bounds.width <= headerBox.x + headerBox.width + 1);
+      assert.ok(bounds.y + bounds.height <= headerBox.y + headerBox.height + 1);
+      for (const other of boxes)
+        assert.ok(
+          bounds.x + bounds.width <= other.x + 1 ||
+            other.x + other.width <= bounds.x + 1 ||
+            bounds.y + bounds.height <= other.y + 1 ||
+            other.y + other.height <= bounds.y + 1,
+          'Last run header content does not collide',
+        );
+      boxes.push(bounds);
+    }
+    previous = box;
+  }
+  assert.ok(toolbar.y >= previous.y + previous.height, 'File toolbar follows the panels');
+  assert.ok(table.y >= toolbar.y + toolbar.height, 'File table follows its toolbar');
+  checks++;
+}
 async function contrast(page, name) {
   const failures = await page.evaluate(() => {
     const rgba = (color) => {
@@ -843,6 +895,87 @@ try {
       true,
     );
     await close();
+  });
+  await test('Analysis settings and saved run use full-width stacked sections', async () => {
+    for (const empty of [false, true]) {
+      const { page, close } = await pageFor({ empty });
+      try {
+        await nav(page, 'Analysis');
+        await idle(page);
+        for (const width of [1440, 1001, 800]) {
+          await page.setViewportSize({ width, height: width === 1440 ? 1000 : 900 });
+          for (const large of [false, true]) {
+            const text = page.getByRole('button', { name: 'Larger text', exact: true });
+            if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
+            await analysisSections(page, !empty);
+            await layout(
+              page,
+              `analysis-sections-${empty ? 'no-run' : 'saved-run'}-${width}-${large ? 'large' : 'default'}`,
+            );
+          }
+        }
+        assert.equal(await page.getByRole('table').count(), 1);
+        assert.equal(await page.getByLabel('Filter analysis files').count(), 1);
+        for (const action of [
+          'Prepare analysis',
+          'Search more feature suggestions',
+          'Explore features',
+          'Refresh',
+          'Include shown',
+          'Exclude shown',
+        ])
+          assert.equal(await page.getByRole('button', { name: action, exact: true }).count(), 1);
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Analysis last-run status preserves eligibility and passive View run navigation', async () => {
+    for (const status of ['running', 'paused', 'failed', 'completed']) {
+      for (const hasRecovery of [false, true]) {
+        const { page, close } = await pageFor({ runStatus: status, hasRecovery });
+        try {
+          await nav(page, 'Analysis');
+          await idle(page);
+          const lastRun = page.locator('section.panel').filter({
+            has: page.getByRole('heading', { name: 'Last run', exact: true }),
+          });
+          await lastRun.getByText(status, { exact: true }).waitFor();
+          assert.equal(
+            await lastRun.getByRole('img').getAttribute('aria-label'),
+            `Analysis: ${status}`,
+          );
+          assert.equal(
+            await page.getByRole('button', { name: 'Prepare analysis', exact: true }).isDisabled(),
+            status === 'running',
+          );
+          const repair = page.getByRole('button', { name: 'Repair analysis', exact: true });
+          const canRepair = hasRecovery && ['failed', 'completed'].includes(status);
+          assert.equal(await repair.count(), canRepair ? 1 : 0);
+          if (canRepair) assert.equal(await repair.isDisabled(), false);
+          assert.equal(
+            await page.getByRole('button', { name: 'Include shown', exact: true }).isDisabled(),
+            ['running', 'paused'].includes(status),
+          );
+          const before = await page.evaluate(() =>
+            window.fixture.requests.filter((request) => request.method !== 'GET'),
+          );
+          await lastRun.getByRole('button', { name: 'View run', exact: true }).click();
+          await page.getByRole('heading', { name: 'Project analysis', exact: true }).waitFor();
+          assert.equal(await page.getByRole('dialog').count(), 0);
+          assert.deepEqual(
+            await page.evaluate(() =>
+              window.fixture.requests.filter((request) => request.method !== 'GET'),
+            ),
+            before,
+            'Viewing a saved run permits polling reads but no admission, control or writes',
+          );
+          assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+        } finally {
+          await close();
+        }
+      }
+    }
   });
   await test('Analysis preview requires consent; pause and resume use captured identities', async () => {
     const { page, close } = await pageFor({ remote: true });
