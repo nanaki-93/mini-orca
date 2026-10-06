@@ -2,6 +2,7 @@
 export function installFixture(options = {}) {
   const identity = { project_id: 'project-1', project_revision: 'revision-1' };
   const source =
+    options.sourceContent ??
     'package worker\n\nimport "context"\n\nfunc Process(ctx context.Context) error {\n\treturn nil\n}\n';
   const symbol = {
     name: 'Process',
@@ -12,12 +13,14 @@ export function installFixture(options = {}) {
     confidence: 'exact',
     atomic_target: true,
   };
-  const files = [
-    'internal/worker/process.go',
-    'internal/worker/config.go',
-    'cmd/server/main.go',
-    'internal/queue/queue.go',
-  ].map((path) => ({
+  const files = (
+    options.sourcePaths || [
+      'internal/worker/process.go',
+      'internal/worker/config.go',
+      'cmd/server/main.go',
+      'internal/queue/queue.go',
+    ]
+  ).map((path) => ({
     path,
     content_hash: `hash:${path}`,
     language: 'go',
@@ -28,6 +31,7 @@ export function installFixture(options = {}) {
     symbols: [symbol],
     analysis_status: 'fresh',
   }));
+  if (options.sourceFile) Object.assign(files[0], options.sourceFile);
   const model = (scope) => ({
     scope,
     profile: scope,
@@ -1015,7 +1019,7 @@ export function installFixture(options = {}) {
               content: state.source,
             });
           if (path.endsWith('/files/symbols'))
-            return response({ ...rev, path: pathFile.path, symbols: [symbol] });
+            return response({ ...rev, path: pathFile.path, symbols: pathFile.symbols });
           if (path.endsWith('/git'))
             return response({
               available: true,
@@ -1023,6 +1027,10 @@ export function installFixture(options = {}) {
               file_state: 'clean',
               diff_state: 'clean',
             });
+          if (path.endsWith('/files/analysis') && options.fileAnalysis !== undefined)
+            return response(
+              options.fileAnalysis === null ? null : { ...rev, ...options.fileAnalysis },
+            );
           if (path.endsWith('/files/analysis'))
             return response({
               ...rev,

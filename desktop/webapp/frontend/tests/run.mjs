@@ -1575,6 +1575,258 @@ try {
       await close();
     }
   });
+  await test('Source uses Summary framing without clipping read-only content or workflow controls', async () => {
+    const path = `internal/${'long-directory-'.repeat(18)}/${'long-file-'.repeat(16)}.go`;
+    const source = [
+      'package worker',
+      '',
+      'import "context"',
+      '',
+      'func Process(ctx context.Context) error {',
+      `\t// ${'long-source-line-'.repeat(160)}`,
+      '\treturn nil',
+      '}',
+      ...Array.from({ length: 180 }, (_, i) => `// Complete source line ${i}`),
+    ].join('\n');
+    const { page, close } = await pageFor({
+      sourcePaths: [path],
+      sourceContent: source,
+      sourceFile: { line_count: 188 },
+    });
+    try {
+      for (const theme of ['dark', 'light']) {
+        if (theme === 'light')
+          await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+        await nav(page, 'Summary');
+        const referenceIntro = await introductionTreatment(page.locator('.summary-hero'));
+        const referencePanel = await panelTreatment(
+          page.locator('.summary-details > .panel').first(),
+        );
+        await nav(page, 'Source');
+        await page.locator('.file-item').click();
+        await page.getByLabel('Declaration', { exact: true }).selectOption('Process');
+        const workspace = page.locator('.source-workspace');
+        const code = page.getByLabel('Read-only source', { exact: true });
+        assert.deepEqual(
+          await introductionTreatment(workspace.locator('.page-heading--intro')),
+          referenceIntro,
+        );
+        assert.deepEqual(
+          await panelTreatment(workspace.locator('.source-analysis')),
+          referencePanel,
+        );
+        assert.equal(
+          await code
+            .locator('code')
+            .allTextContents()
+            .then((lines) => lines.join('\n')),
+          source
+            .split('\n')
+            .map((line) => line || ' ')
+            .join('\n'),
+        );
+        assert.equal(await code.evaluate((element) => element.isContentEditable), false);
+        assert.equal(await workspace.locator('textarea').count(), 0);
+        assert.equal(await code.locator('.selected-line').count(), 3);
+        await page.getByLabel('Declaration', { exact: true }).selectOption('');
+        await code.evaluate((element) => {
+          element.scrollTop = element.scrollHeight;
+        });
+        await page.getByLabel('Declaration', { exact: true }).selectOption('Process');
+        await page.waitForFunction(() => {
+          const code = document.querySelector('.source-code');
+          const selected = code.querySelector('.selected-line');
+          if (!selected) return false;
+          const bounds = code.getBoundingClientRect();
+          const line = selected.getBoundingClientRect();
+          return line.top >= bounds.top && line.bottom <= bounds.bottom;
+        });
+        assert.equal(
+          await code.evaluate((element) => {
+            const range = document.createRange();
+            range.selectNodeContents(element.querySelector('.selected-line code'));
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            return selection.toString();
+          }),
+          'func Process(ctx context.Context) error {',
+        );
+        const before = await page.evaluate(() =>
+          window.fixture.requests.filter((request) => request.method !== 'GET'),
+        );
+        for (const larger of [false, true]) {
+          if (larger) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          for (const width of [1440, 1280, 1001, 800]) {
+            await page.setViewportSize({ width, height: 1000 });
+            await headingContainment(workspace.locator('.page-heading--intro'));
+            const bounds = await workspace.locator('.editor-content').boundingBox();
+            for (const control of await workspace
+              .locator('.tabs .tab, .declaration-picker > *, .source-inspection > .actions .button')
+              .all()) {
+              if (!(await control.isVisible())) continue;
+              const box = await control.boundingBox();
+              assert.ok(
+                box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1,
+                'Source actions and tabs stay within the inspection column',
+              );
+            }
+            assert.equal(
+              await code.evaluate((element) => element.scrollWidth > element.clientWidth),
+              true,
+              'Long code scrolls locally',
+            );
+            await code.focus();
+            assert.equal(
+              await code.evaluate((element) => element === document.activeElement),
+              true,
+            );
+            await layout(page, `source-long-${theme}-${larger ? 'larger' : 'standard'}-${width}`);
+            await contrast(page, `source-${theme}-${larger ? 'larger' : 'standard'}-${width}`);
+          }
+          if (larger) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        }
+        await page.getByText('Dependencies & side effects', { exact: true }).click();
+        assert.deepEqual(
+          await page.evaluate(() =>
+            window.fixture.requests.filter((request) => request.method !== 'GET'),
+          ),
+          before,
+          'Source selection, disclosures and appearance do not admit work',
+        );
+      }
+    } finally {
+      await close();
+    }
+  });
+  await test('Source empty, binary, unavailable and failed evidence retain content and recovery', async () => {
+    for (const stateCase of [
+      'no-file',
+      'binary',
+      'unavailable',
+      'analysis-failed',
+      'analysis-read-failed',
+      'file-read-failed',
+    ]) {
+      const { page, close } = await pageFor({
+        ...(stateCase === 'binary'
+          ? { sourceFile: { binary: true, symbols: [], language: 'binary' } }
+          : {}),
+        ...(stateCase === 'unavailable' ? { fileAnalysis: null } : {}),
+        ...(stateCase === 'analysis-failed'
+          ? {
+              fileAnalysis: {
+                status: 'failed',
+                failure: `Analysis failed: ${'diagnostic_'.repeat(90)} final reason.`,
+              },
+            }
+          : {}),
+      });
+      try {
+        await page.setViewportSize({ width: 800, height: 1000 });
+        await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        await nav(page, 'Source');
+        await page.getByRole('heading', { name: 'Choose a file', exact: true }).waitFor();
+        if (stateCase !== 'no-file') {
+          if (stateCase.endsWith('read-failed'))
+            await page.evaluate((kind) => {
+              window.fixture.failures[
+                `/api/projects/current/files/${kind === 'file-read-failed' ? 'info' : 'analysis'}`
+              ] = 503;
+            }, stateCase);
+          await page.locator('.file-item').first().click();
+          if (stateCase === 'binary') {
+            await page.getByRole('heading', { name: 'Binary file', exact: true }).waitFor();
+            assert.equal(await page.getByLabel('Read-only source', { exact: true }).count(), 0);
+          } else if (stateCase === 'file-read-failed') {
+            await page.getByText('Fixture rejection', { exact: false }).waitFor();
+            await page.getByRole('heading', { name: 'Choose a file', exact: true }).waitFor();
+            await page.locator('.file-item').first().click();
+            await page.getByLabel('Read-only source', { exact: true }).waitFor();
+          } else {
+            await page.getByLabel('Read-only source', { exact: true }).waitFor();
+            if (stateCase === 'analysis-failed')
+              await page.getByText(/Analysis failed:.*final reason\./).waitFor();
+            if (stateCase === 'unavailable' || stateCase === 'analysis-read-failed')
+              assert.equal(
+                await page.getByRole('heading', { name: 'File analysis', exact: true }).count(),
+                0,
+              );
+            if (stateCase === 'analysis-read-failed')
+              await page.getByText('Fixture rejection', { exact: false }).waitFor();
+          }
+        }
+        await headingContainment(page.locator('.source-workspace .page-heading--intro'));
+        await layout(page, `source-${stateCase}-800-dark-larger`);
+        assert.equal(
+          await page.evaluate(
+            () => window.fixture.requests.filter((request) => request.method !== 'GET').length,
+          ),
+          0,
+        );
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Source filtering, pagination, busy selection and stale restrictions remain explicit', async () => {
+    const paths = [
+      'internal/worker/process.go',
+      ...Array.from({ length: 105 }, (_, i) => `internal/file-${i}.go`),
+    ];
+    const { page, close } = await pageFor({ sourcePaths: paths });
+    try {
+      await nav(page, 'Source');
+      assert.equal(await page.locator('.file-item').count(), 100);
+      await page.getByRole('button', { name: 'Show more', exact: true }).click();
+      assert.equal(await page.locator('.file-item').count(), 106);
+      await page.getByLabel('Filter source files').fill('process');
+      assert.equal(await page.locator('.file-item').count(), 1);
+      await page.getByLabel('Filter source files').fill('');
+      assert.equal(await page.locator('.file-item').count(), 100);
+      await page.locator('.file-item').first().click();
+      await page.getByLabel('Declaration', { exact: true }).selectOption('Process');
+      await page.evaluate(() => {
+        window.fixture.hold = '/api/projects/current/files/analysis';
+      });
+      await page.getByRole('button', { name: 'Analyze file', exact: true }).click();
+      await page.locator('.busy-strip').waitFor({ state: 'visible' });
+      await page.waitForFunction(() =>
+        window.fixture.requests.some(
+          (request) => request.method === 'POST' && request.path.endsWith('/files/analysis'),
+        ),
+      );
+      assert.equal(await page.getByLabel('Declaration', { exact: true }).isDisabled(), true);
+      assert.equal(await page.locator('.file-item:enabled').count(), 0);
+      for (const name of ['Analyze file', 'Explain declaration'])
+        assert.equal(await page.getByRole('button', { name, exact: true }).isDisabled(), true);
+      await page.setViewportSize({ width: 800, height: 1000 });
+      await layout(page, 'source-busy-800-dark');
+      await page.evaluate(() => {
+        window.fixture.hold = '';
+        window.fixture.release();
+      });
+      await idle(page);
+      await nav(page, 'Summary');
+      await page.evaluate(() => {
+        window.fixture.state.changed = true;
+      });
+      await nav(page, 'Source');
+      await page.getByText('File evidence is outdated.', { exact: false }).waitFor();
+      assert.equal(await page.getByLabel('Declaration', { exact: true }).isDisabled(), true);
+      for (const name of ['Analyze file', 'Explain declaration'])
+        assert.equal(await page.getByRole('button', { name, exact: true }).isDisabled(), true);
+      await layout(page, 'source-stale-800-dark');
+    } finally {
+      await page
+        .evaluate(() => {
+          window.fixture.hold = '';
+          window.fixture.release();
+        })
+        .catch(() => {});
+      await close();
+    }
+  });
   await test('Color hierarchy, readable themes and compact details preserve local navigation', async () => {
     const { page, close } = await pageFor({ unknown: true });
     assert.equal(await page.locator('[data-accent="performance"] .metric-number').innerText(), '—');

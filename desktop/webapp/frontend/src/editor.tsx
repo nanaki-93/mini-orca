@@ -31,8 +31,8 @@ export function Editor({ s }: { s: State }) {
     ['review', 'Review'],
   ];
   return (
-    <>
-      <Heading title={s.file?.name || 'Source'} detail={s.file?.path}>
+    <div className="workspace-page source-workspace">
+      <Heading variant="intro" title={s.file?.name || 'Source'} detail={s.file?.path}>
         <Go page="chat" icon="sparkles">
           Implement in chat
         </Go>
@@ -133,12 +133,12 @@ export function Editor({ s }: { s: State }) {
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }
 function DeclarationPicker({ s }: { s: State }) {
   return (
-    <div className="row wrap">
+    <div className="row wrap declaration-picker">
       <label className="sr-only" htmlFor="symbol-picker">
         Declaration
       </label>
@@ -174,7 +174,7 @@ function Source({ s }: { s: State }) {
     code.current?.querySelector('.selected-line')?.scrollIntoView({ block: 'nearest' });
   }, [s.symbol]);
   return (
-    <div className="stack">
+    <div className="stack source-inspection">
       <DeclarationPicker s={s} />
       <div className="source-panel panel">
         <div className="code-header">
@@ -219,7 +219,11 @@ function Source({ s }: { s: State }) {
         </Go>
       </div>
       {s.fileAnalysis && (
-        <Panel title="File analysis" actions={<Badge value={s.fileAnalysis.status} />}>
+        <Panel
+          className="source-analysis"
+          title="File analysis"
+          actions={<Badge value={s.fileAnalysis.status} />}
+        >
           <Prose text={s.fileAnalysis.purpose || s.fileAnalysis.failure} />
           <BulletContent title="Responsibilities" items={s.fileAnalysis.responsibilities} />
           <Disclosure title="Dependencies & side effects">
