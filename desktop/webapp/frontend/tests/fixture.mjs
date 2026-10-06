@@ -260,6 +260,7 @@ export function installFixture(options = {}) {
     context,
     performance,
     security,
+    results: {},
     trusted: false,
     changes: {},
     changeReceipt: null,
@@ -871,6 +872,7 @@ export function installFixture(options = {}) {
               performance: category === 'performance' ? [state.performance] : [],
               security: category === 'security' ? [state.security] : [],
               unclassified: [],
+              ...state.results[category],
             });
           }
           if (path.endsWith('/files/info'))
