@@ -44,8 +44,12 @@ export function ChangeWorkspace({ s }: { s: State }) {
   const blocked =
     !!s.busy || (!!change && (change.state !== 'draft' || change.freshness !== 'current'));
   return (
-    <>
-      <Heading title="Chat">
+    <div className="chat-page">
+      <Heading
+        title="Chat"
+        detail="Capture file scope, describe a change, then review the checked proposal before applying."
+        variant="intro"
+      >
         <Go page="editor" icon="code">
           Inspect source
         </Go>
@@ -130,7 +134,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
         </Panel>
       )}
       <div className="change-workspace">
-        <section className="stack" aria-label="Change conversation">
+        <section className="workspace-page chat-conversation" aria-label="Change conversation">
           {!change ? (
             <Panel title="Task and file scope">
               <label className="block">
@@ -146,6 +150,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
                 Files to change (one path per line)
                 <textarea
                   aria-label="Files to change"
+                  className="chat-path-input"
                   value={paths}
                   onChange={(e) => setPaths(e.target.value)}
                   disabled={!!s.busy}
@@ -182,12 +187,14 @@ export function ChangeWorkspace({ s }: { s: State }) {
               <p className="small muted">
                 Revision {change.revision} · {change.targets.length} captured paths
               </p>
-              <BulletContent
-                title="File scope"
-                items={change.targets.map(
-                  (target) => `${target.path}${target.exists ? '' : ' · new file'}`,
-                )}
-              />
+              <div className="chat-file-scope">
+                <BulletContent
+                  title="File scope"
+                  items={change.targets.map(
+                    (target) => `${target.path}${target.exists ? '' : ' · new file'}`,
+                  )}
+                />
+              </div>
               <BulletContent title="Acceptance criteria" items={change.acceptance_criteria} />
               {change.freshness === 'stale' && (
                 <Notice>Source or guidance changed. Start a new conversation.</Notice>
@@ -195,7 +202,11 @@ export function ChangeWorkspace({ s }: { s: State }) {
             </Panel>
           )}
           {change?.messages.map((entry, i) => (
-            <Panel key={i} title={entry.role === 'user' ? 'You' : 'Assistant'}>
+            <Panel
+              key={i}
+              title={entry.role === 'user' ? 'You' : 'Assistant'}
+              className="chat-message"
+            >
               <Prose text={entry.content} />
             </Panel>
           ))}
@@ -220,38 +231,44 @@ export function ChangeWorkspace({ s }: { s: State }) {
               />
               Run project tests after generation
             </label>
-            <Button
-              tone="primary"
-              disabled={blocked || !message.trim() || !paths.trim() || !title.trim()}
-              onClick={submit}
-            >
-              Prepare change
-            </Button>
+            <div className="actions">
+              <Button
+                tone="primary"
+                disabled={blocked || !message.trim() || !paths.trim() || !title.trim()}
+                onClick={submit}
+              >
+                Prepare change
+              </Button>
+            </div>
           </Panel>
-          <Disclosure title="Local history">
-            {!s.changeHistory ? (
-              <Empty title="History unavailable" />
-            ) : s.changeHistory.length === 0 ? (
-              <p>No saved conversations.</p>
-            ) : (
-              s.changeHistory.map((entry) => (
-                <div className="list-row" key={entry.id}>
-                  <span className="list-copy">
-                    <strong>{entry.title}</strong>
-                    <small>
-                      {entry.state} · revision {entry.revision}
-                    </small>
-                  </span>
-                  <Button disabled={!!s.busy} onClick={() => void w.resumeChange(entry.id)}>
-                    Resume
-                  </Button>
-                </div>
-              ))
-            )}
-            <Button disabled={!!s.busy} onClick={() => void w.loadChangeHistory()}>
-              Refresh history
-            </Button>
-          </Disclosure>
+          <Panel className="chat-history">
+            <Disclosure title="Local history">
+              {!s.changeHistory ? (
+                <Empty title="History unavailable" />
+              ) : s.changeHistory.length === 0 ? (
+                <p>No saved conversations.</p>
+              ) : (
+                s.changeHistory.map((entry) => (
+                  <div className="list-row" key={entry.id}>
+                    <span className="list-copy">
+                      <strong>{entry.title}</strong>
+                      <small>
+                        {entry.state} · revision {entry.revision}
+                      </small>
+                    </span>
+                    <Button disabled={!!s.busy} onClick={() => void w.resumeChange(entry.id)}>
+                      Resume
+                    </Button>
+                  </div>
+                ))
+              )}
+              <div className="actions section-gap">
+                <Button disabled={!!s.busy} onClick={() => void w.loadChangeHistory()}>
+                  Refresh history
+                </Button>
+              </div>
+            </Disclosure>
+          </Panel>
         </section>
         <section className="stack" aria-label="Proposal review">
           {change?.changes.length ? (
@@ -365,6 +382,6 @@ export function ChangeWorkspace({ s }: { s: State }) {
           )}
         </section>
       </div>
-    </>
+    </div>
   );
 }

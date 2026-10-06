@@ -630,7 +630,15 @@ export function installFixture(options = {}) {
             return response(change);
           }
           if (path === '/api/projects/current/changes') {
-            if (method === 'GET') return response(Object.values(state.changes));
+            if (method === 'GET')
+              return options.changeHistoryReadFail
+                ? {
+                    status: 503,
+                    body: JSON.stringify({
+                      user_message: 'Saved conversations could not be read.',
+                    }),
+                  }
+                : response(Object.values(state.changes));
             const change = {
               ...rev,
               id: `change-${Object.keys(state.changes).length + 1}`,
@@ -682,7 +690,9 @@ export function installFixture(options = {}) {
                 { role: 'user', content: body.message },
                 {
                   role: 'assistant',
-                  content: 'The proposal handles cancellation and preserves its scope.',
+                  content:
+                    options.changeAssistantMessage ||
+                    'The proposal handles cancellation and preserves its scope.',
                 },
               );
               change.changes = change.targets.map((target) => ({
