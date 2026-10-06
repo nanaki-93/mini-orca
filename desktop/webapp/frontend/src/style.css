@@ -2005,14 +2005,38 @@ dialog .actions {
 .chat-page {
   min-width: 0;
 }
-.chat-conversation .panel-head h2 {
+.chat-conversation .panel-head h2,
+.chat-review .panel-head h2 {
   flex: 1 1 14rem;
   overflow-wrap: anywhere;
 }
 .chat-conversation .panel-body,
 .chat-conversation .disclosure-body,
 .chat-conversation .button,
-.chat-conversation summary {
+.chat-conversation summary,
+.chat-review .panel-body,
+.chat-review .disclosure-body,
+.chat-review .button,
+.chat-review summary,
+.chat-review .notice {
+  overflow-wrap: anywhere;
+}
+.chat-review .code-header {
+  flex-wrap: wrap;
+  padding: 14px 20px;
+}
+.chat-review .code-header strong {
+  min-width: 0;
+  flex: 1 1 14rem;
+  overflow-wrap: anywhere;
+}
+.chat-check + .chat-check {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.chat-check strong {
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 .chat-conversation .composer {
@@ -2023,19 +2047,23 @@ dialog .actions {
   font-family: var(--mono);
   font-size: 0.78rem;
 }
-.chat-history .panel-pad {
+.chat-history .panel-pad,
+.chat-provider-context .panel-pad {
   padding: 0 20px;
 }
-.chat-history details {
+.chat-history details,
+.chat-provider-context details {
   margin-top: 0;
   border-top: 0;
 }
-.chat-history summary {
+.chat-history summary,
+.chat-provider-context summary {
   padding: 14px 0;
   font-size: 0.98rem;
   font-weight: 600;
 }
-.chat-history .disclosure-body {
+.chat-history .disclosure-body,
+.chat-provider-context .disclosure-body {
   padding: 4px 0 18px;
 }
 .chat-history .list-row {
