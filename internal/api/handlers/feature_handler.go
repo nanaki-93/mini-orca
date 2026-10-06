@@ -26,7 +26,7 @@ func (h *FeatureHandler) Goals(w http.ResponseWriter, r *http.Request) {
 	if !decodeWorkflowBody(w, r, &request) {
 		return
 	}
-	value, err := h.service.SaveFeatureGoals(request)
+	value, err := h.service.SaveFeatureGoals(r.Context(), request)
 	respondWorkflow(w, value, err)
 }
 func (h *FeatureHandler) Generate(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +42,6 @@ func (h *FeatureHandler) Status(w http.ResponseWriter, r *http.Request) {
 	if !decodeWorkflowBody(w, r, &request) {
 		return
 	}
-	value, err := h.service.UpdateFeatureStatus(r.PathValue("featureID"), request)
+	value, err := h.service.UpdateFeatureStatus(r.Context(), r.PathValue("featureID"), request)
 	respondWorkflow(w, value, err)
 }

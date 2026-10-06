@@ -194,7 +194,8 @@ func (s *Service) analysisFeatureAuthority(identity AnalysisRunIdentity) feature
 				return err
 			}
 			if err := write(); err != nil {
-				if errors.Is(err, project.ErrRevisionConflict) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				// A full history leaves the store unchanged and is recorded as a failed step.
+				if errors.Is(err, project.ErrRevisionConflict) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errFeatureHistoryFull) {
 					return err
 				}
 				s.failAnalysisPersistenceLocked()
@@ -204,6 +205,8 @@ func (s *Service) analysisFeatureAuthority(identity AnalysisRunIdentity) feature
 		},
 	}
 }
+
+const analysisFeatureHistoryFullReason = "Feature history is full; existing ideas were kept."
 
 func (s *Service) recordAnalysisFeaturesLocked(ctx context.Context, identity AnalysisRunIdentity, report *FeatureReport, err error) bool {
 	c := s.analysisRun
@@ -224,10 +227,14 @@ func (s *Service) recordAnalysisFeaturesLocked(ctx context.Context, identity Ana
 		_ = s.saveAnalysisRunLocked(false)
 		return false
 	}
-	if err != nil {
+	switch {
+	case errors.Is(err, errFeatureHistoryFull):
+		progress.Status, progress.Reason = AnalysisStageFailed, analysisFeatureHistoryFullReason
+	case err != nil:
 		progress.Status, progress.Reason = AnalysisStageFailed, "The model request or response failed. Other analysis results remain available."
-	} else {
-		count := len(report.Suggestions)
+	default:
+		// The library accumulates across generations; the run counts only ideas it added.
+		count := report.LastGeneration.AddedCount
 		progress.Status, progress.SuggestionCount, progress.ReportHash = AnalysisStageCompleted, &count, report.Hash
 		if count == 0 {
 			progress.Status = AnalysisStageCompletedEmpty

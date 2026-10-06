@@ -16,6 +16,7 @@ import (
 
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
 func featureAnalysisPreviewFor(t *testing.T, s *Service, limits AnalysisRunLimits, resume *AnalysisRunIdentity) *AnalysisRunPreview {
@@ -44,7 +45,7 @@ func TestAnalysisRunFeaturesPreviewAndAdmissionCaptureGoals(t *testing.T) {
 	if _, err := s.StartAnalysisRun(context.Background(), start); !errors.Is(err, project.ErrRevisionConflict) || calls.Load() != 0 {
 		t.Fatalf("changed feature scope=%v calls=%d", err, calls.Load())
 	}
-	if _, err := s.SaveFeatureGoals(featureRequestFor(t, s, "Changed goals after preview.")); err != nil {
+	if _, err := s.SaveFeatureGoals(context.Background(), featureRequestFor(t, s, "Changed goals after preview.")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); !errors.Is(err, project.ErrRevisionConflict) || calls.Load() != 0 {
@@ -265,7 +266,7 @@ func TestAnalysisRunFeaturesPersistOnceAcrossBatches(t *testing.T) {
 		return emptyAnalysisReply(stage)
 	})
 	s, root := newSemanticAnalysisServiceWithHelper(t, server.URL, 0)
-	if _, err := s.SaveFeatureGoals(featureRequestFor(t, s, "Keep cancellation responsive.")); err != nil {
+	if _, err := s.SaveFeatureGoals(context.Background(), featureRequestFor(t, s, "Keep cancellation responsive.")); err != nil {
 		t.Fatal(err)
 	}
 	preview := featureAnalysisPreviewFor(t, s, AnalysisRunLimits{1, 30, 2}, nil)
@@ -511,5 +512,161 @@ func TestAnalysisRunFeaturesAndReviewedApplyCompleteWithoutLockConflict(t *testi
 	}
 	if content, err := os.ReadFile(filepath.Join(root, "AGENTS.md")); err != nil || string(content) != "Preserve cancellation behavior.\n" {
 		t.Fatalf("reviewed instructions=%s %v", content, err)
+	}
+}
+
+func TestAnalysisRunFeaturesKeepPriorIdeasAndCountOnlyNewOnes(t *testing.T) {
+	var featureReply atomic.Value
+	featureReply.Store(featureOutput("Idea one", "Idea two", "Idea three", "Idea four", "Idea five"))
+	server, _ := analysisResponseServer(t, func(stage AnalysisStage) string {
+		if stage == AnalysisStageFeatures {
+			return featureReply.Load().(string)
+		}
+		return emptyAnalysisReply(stage)
+	})
+	s, root := newSemanticAnalysisService(t, server.URL, 0)
+	library, err := generateFeaturesFor(t, s, "Improve.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := s.UpdateFeatureStatus(context.Background(), library.Suggestions[0].ID, FeatureStatusRequest{FeatureRequest: featureRequestFor(t, s, "Improve."), Status: "saved"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	featureReply.Store(featureOutput("idea ONE", "Idea six", "Idea seven"))
+	preview := featureAnalysisPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	run := completedAnalysisRun(t, s)
+	if run.Features.Status != AnalysisStageCompleted || run.Features.SuggestionCount == nil || *run.Features.SuggestionCount != 2 {
+		t.Fatalf("run feature count=%+v", run.Features)
+	}
+	report, err := s.Features(context.Background())
+	if err != nil || len(report.Suggestions) != 7 || report.Hash != run.Features.ReportHash || report.LastGeneration.AddedCount != 2 || report.LastGeneration.DuplicateCount != 1 {
+		t.Fatalf("run replaced the library=%+v %v", report, err)
+	}
+	if featureIdeasJSON(t, &FeatureReport{Suggestions: report.Suggestions[:5]}) != featureIdeasJSON(t, saved) {
+		t.Fatalf("run changed existing ideas: %+v", report.Suggestions[:5])
+	}
+	// The cumulative library exceeds five ideas; the stored run still validates and restores.
+	if restored, err := loadAnalysisRun(root); err != nil || *restored.Features.SuggestionCount != 2 {
+		t.Fatalf("restored run=%+v %v", restored, err)
+	}
+	restarted, err := New(scopedTestConfig(server.URL), s.manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restarted.runtimes = s.runtimes
+	if current, err := restarted.CurrentAnalysisRun(context.Background()); err != nil || current.Status != run.Status || *current.Features.SuggestionCount != 2 {
+		t.Fatalf("restarted run=%+v %v", current, err)
+	}
+	featureReply.Store(featureOutput("Idea six"))
+	again := featureAnalysisPreviewFor(t, restarted, AnalysisRunLimits{100, 30, 2}, nil)
+	if _, err := restarted.StartAnalysisRun(context.Background(), analysisStartFor(again)); err != nil {
+		t.Fatal(err)
+	}
+	repeated := completedAnalysisRun(t, restarted)
+	if repeated.Features.Status != AnalysisStageCompletedEmpty || *repeated.Features.SuggestionCount != 0 {
+		t.Fatalf("duplicate-only run=%+v", repeated.Features)
+	}
+	if kept, err := restarted.Features(context.Background()); err != nil || len(kept.Suggestions) != 7 {
+		t.Fatalf("duplicate-only run changed the library=%+v %v", kept, err)
+	}
+}
+
+func TestAnalysisRunFeatureHistoryFullFailsOnlyTheFeatureStep(t *testing.T) {
+	server, _ := analysisResponseServer(t, func(stage AnalysisStage) string {
+		if stage == AnalysisStageFeatures {
+			return featureOutput("A genuinely new capability")
+		}
+		return emptyAnalysisReply(stage)
+	})
+	s, root := newSemanticAnalysisService(t, server.URL, 0)
+	fillFeatureHistory(t, s, root, 16)
+	before := featureHistoryBytes(t, root)
+	preview := featureAnalysisPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	run := completedAnalysisRun(t, s)
+	if run.Status != AnalysisRunPartial || run.Features.Status != AnalysisStageFailed || run.Features.Reason != analysisFeatureHistoryFullReason || run.Features.SuggestionCount != nil {
+		t.Fatalf("history-full run=%+v features=%+v", run.Status, run.Features)
+	}
+	s.analysisRun.mu.Lock()
+	fault := s.analysisRun.fault
+	s.analysisRun.mu.Unlock()
+	if fault != nil {
+		t.Fatal("history-full result became a run persistence fault")
+	}
+	if string(featureHistoryBytes(t, root)) != string(before) {
+		t.Fatal("history-full run changed the saved report")
+	}
+	if restored, err := loadAnalysisRun(root); err != nil || restored.Features.Reason != analysisFeatureHistoryFullReason {
+		t.Fatalf("restored history-full run=%+v %v", restored, err)
+	}
+}
+
+func TestAnalysisRunWithEarlierFeaturePromptIdentityReadsStale(t *testing.T) {
+	server, _ := analysisResponseServer(t, func(stage AnalysisStage) string {
+		if stage == AnalysisStageFeatures {
+			return validFeatureResponse
+		}
+		return emptyAnalysisReply(stage)
+	})
+	s, root := newSemanticAnalysisService(t, server.URL, 0)
+	preview := featureAnalysisPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	completedAnalysisRun(t, s)
+	stored, err := loadAnalysisRun(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A run admitted under an earlier feature prompt has a provider fingerprint
+	// that the current prompt version no longer produces.
+	previous, earlier := stored.Plan.Features.ProviderID, strings.Repeat("0", 64)
+	for i := range stored.Plan.Providers {
+		if stored.Plan.Providers[i].ID == previous {
+			stored.Plan.Providers[i].ID = earlier
+		}
+	}
+	for i := range stored.Plan.Files {
+		for j := range stored.Plan.Files[i].Stages {
+			if stored.Plan.Files[i].Stages[j].ProviderID == previous {
+				stored.Plan.Files[i].Stages[j].ProviderID = earlier
+			}
+		}
+	}
+	stored.Plan.Features.ProviderID = earlier
+	providers, err := analysisFingerprint(stored.Plan.Providers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored.Identity.ProviderFingerprint, stored.Plan.Identity.ProviderFingerprint = providers, providers
+	queue, err := analysisQueueFingerprint(&stored.Plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored.Identity.QueueID, stored.Plan.Identity.QueueID = queue, queue
+	data, err := json.Marshal(stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.WriteFile(filepath.Join(root, analysisRunRelativePath), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadAnalysisRun(root); err != nil {
+		t.Fatalf("earlier prompt identity read as corrupt: %v", err)
+	}
+	restarted, err := New(scopedTestConfig(server.URL), s.manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restarted.runtimes = s.runtimes
+	current, err := restarted.CurrentAnalysisRun(context.Background())
+	if err != nil || current.Status != AnalysisRunStale || current.Features.Status != AnalysisStageCompleted || *current.Features.SuggestionCount != 1 {
+		t.Fatalf("earlier prompt run=%+v %v", current, err)
 	}
 }

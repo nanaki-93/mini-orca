@@ -115,8 +115,8 @@ untrusted networks.
 | GET | `/api/projects/current/instructions` | Preview applicable AGENTS.md content, origins and instruction presets. |
 | POST | `/api/projects/current/instructions/proposal` | Prepare an AGENTS.md proposal without a provider or source write. |
 | GET | `/api/projects/current/features` | Read saved goals and advisory feature suggestions. |
-| POST | `/api/projects/current/features/goals` | Save goals and invalidate suggestions for changed goals. |
-| POST | `/api/projects/current/features/generate` | Explicitly generate bounded feature ideas with Analyze consent. |
+| POST | `/api/projects/current/features/goals` | Save goals; ideas generated for other goals become stale. |
+| POST | `/api/projects/current/features/generate` | Explicitly add new bounded feature ideas, keeping existing ones, with Analyze consent. |
 | PATCH | `/api/projects/current/features/{featureID}` | Save, dismiss or reopen an advisory feature suggestion. |
 
 Project analysis keeps the existing string fields: new `architecture` values contain
@@ -363,7 +363,13 @@ policy-filtered context and root AGENTS.md; explicit file exclusions also apply
 to this context and suggested paths. `preview.features` captures goals/workspace
 hashes, the current feature-store hash, exclusions and the selected feature provider/request
 allowance. `run.features` exposes its status, cumulative attempts and nullable
-`suggestion_count`, separately from the three finding sections. The step runs once
+`suggestion_count`, separately from the three finding sections. The step uses the
+same additive feature generator as the Features routes: `suggestion_count` (0–5)
+counts ideas newly added by this run's generation, not the cumulative library,
+and `completed_empty` means no new ideas were added. A full feature history
+records the step as `failed` with `Feature history is full; existing ideas were
+kept.`; it leaves the saved ideas unchanged and is not a run persistence fault.
+The step runs once
 alongside file stages with its own deadline of at least ten minutes (or the
 selected feature model's timeout when longer). File batch/time limits do not consume
 its deadline. It retains the run's cumulative attempt allowance and fresh
@@ -374,6 +380,9 @@ pause/cancel stops both workers. Failed generation keeps
 previous ideas and permits other stages to continue; overall progress reflects
 partial results. Cancellation and source/goal changes reject late publication.
 Saved schema-1 runs without feature fields retain their original behavior.
+The feature prompt identity (`feature-suggestions-v3`) is part of the provider
+fingerprint, so finished runs that included features under an earlier prompt
+read as `stale`, not corrupt.
 
 `queue_id` binds project/revision, policy, provider fingerprints, ordered file/hash
 and stage identities, exclusions, refresh choice and limits. Effective provider
@@ -699,11 +708,46 @@ file-analysis endpoint and its own Bug-scope provider consent.
 Features use the configured Analyze scope. Generation/goals bodies carry current
 project identity, `expected_hash`, `goals` (at most 4096 bytes), and generation's
 `confirm_remote_provider`. Triage adds `status` (`open`, `saved`, `dismissed`).
-Each of at most five ideas includes benefit, evidence, eligible affected paths,
-estimated effort and acceptance criteria. Ideas remain advisory and never enter
-Bugs/Performance/Security finding counts. Changed source/instructions/goals make
-ideas stale. Failed generation retains earlier ideas with an explicit failure; an
-empty successful array means no ideas were returned.
+Each generation requests at most five ideas; each includes benefit, evidence,
+eligible affected paths, estimated effort and acceptance criteria. Ideas remain
+advisory and never enter Bugs/Performance/Security finding counts.
+
+Every generation, from the Features routes or an analysis run, is additive. The
+prompt receives a bounded list of existing idea titles and statuses, newest first
+(at most 8 KiB of whole lines, with a count of omitted older titles), and the
+token-budget check counts it with the context and goals. After the expected-hash,
+project and source checks, the daemon appends only new ideas with status `open`.
+A candidate is a duplicate when its `id` matches an existing idea, or its
+normalized title matches any existing idea (dismissed included) or an earlier
+candidate in the same response. Normalization lower-cases Unicode text, turns
+each run of non-letter, non-digit characters into one space and trims; empty
+keys never match. Existing ideas keep their order, IDs and statuses, so a
+duplicate never reopens a dismissed idea. An empty or duplicate-only response is
+a successful generation with no new ideas.
+
+Feature history is `schema_version: 2`. `generations[]` records each successful
+generation's `id`, `generated_at`, `project_revision`, `workspace_hash`,
+`goals_hash` and `model` (`profile`, `model`, `provider_origin`,
+`remote_provider`, or null when unknown); each idea has `generation_id`.
+`last_generation` reports `generation_id`, `added_count` and `duplicate_count`
+for the most recent successful generation. Records no longer referenced are
+pruned on write, and unresolved or duplicate references are rejected as
+unsupported history. Each idea's `freshness` is derived on read: it is `current`
+only when its own generation's revision, workspace fingerprint and goals hash
+match the current values. The report-level `freshness`, `project_revision`,
+`workspace_hash` and `context_manifest` describe only the most recent generation,
+so a later generation never revalidates older ideas. Version 1 history remains
+readable: its ideas share a `legacy` generation built from the v1 report context,
+with goals trusted only if v1 marked them current and a null model. The stored
+`hash` is kept until the next successful write saves version 2.
+
+The history stays bounded at 64 KiB. A generation that would exceed it adds no
+ideas, leaves the file unchanged and fails with `feature history is full;
+existing ideas were kept`; a v1 upgrade that would exceed it fails the same way
+with the v1 file intact. Failed generation retains earlier ideas with an
+explicit failure status; if that status cannot fit, the generation error is
+returned and the file is unchanged. Cancellation, project/source/goal changes,
+a concurrent report change and persistence errors write nothing new.
 
 The web Summary reads saved feature suggestions without generating them. Its
 Features count includes open and saved ideas and links to the Features workspace.

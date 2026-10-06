@@ -239,7 +239,7 @@ func analysisMetadataReason(value string) bool {
 		"The file dispatch allowance ended; preview and resume the remaining work.",
 		"File analysis reached its time budget. Feature discovery continues independently.",
 		"File analysis reached its allowance. Feature discovery continues independently.",
-		"Feature discovery reached its allowance; preview and resume to try again.",
+		"Feature discovery reached its allowance; preview and resume to try again.", analysisFeatureHistoryFullReason,
 		"Analysis stopped before the stage completed; review and resume.", "Project source, policy or provider identity changed; start a new analysis.",
 		"Analysis progress could not be saved; resume or cancel to recover.", "Analysis was interrupted; preview and resume explicitly.":
 		return true

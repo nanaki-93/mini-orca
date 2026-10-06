@@ -176,7 +176,7 @@ paths:
   /api/projects/current/features/goals:
     post:
       tags: [Chat]
-      description: Save goals and invalidate suggestions for changed goals.
+      description: Save goals; ideas generated for other goals become stale and are kept.
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/FeatureRequest'}}}}
       responses:
         '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/FeatureReport'}}}}
@@ -185,7 +185,7 @@ paths:
   /api/projects/current/features/generate:
     post:
       tags: [Chat]
-      description: Explicitly generate bounded feature ideas with Analyze consent.
+      description: Explicitly add new bounded feature ideas with Analyze consent, keeping existing ideas and their statuses.
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/FeatureRequest'}}}}
       responses:
         '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/FeatureReport'}}}}
@@ -2069,7 +2069,7 @@ components:
       properties:
         status: {$ref: '#/components/schemas/AnalysisStageStatus'}
         attempts: {type: integer, minimum: 0, maximum: 4}
-        suggestion_count: {type: integer, nullable: true, minimum: 0, maximum: 5, description: Unknown until a successful report. Separate from finding counts.}
+        suggestion_count: {type: integer, nullable: true, minimum: 0, maximum: 5, description: Ideas newly added by this run's generation, not the cumulative library; zero (completed_empty) means no new ideas. Unknown until a successful report. Separate from finding counts.}
         report_hash: {type: string}
         reason: {type: string}
     AnalysisSectionResults:
@@ -2294,24 +2294,30 @@ components:
             status: {type: string, enum: [open, saved, dismissed]}
     FeatureReport:
       type: object
+      description: Additive advisory feature history. Report-level revision, workspace, manifest and freshness describe only the most recent generation; each idea carries its own derived freshness. Saved history is bounded at 64 KiB; version 1 history is returned with a legacy generation until its next successful write.
       properties:
-        schema_version: {type: integer, enum: [1]}
+        schema_version: {type: integer, enum: [1, 2], description: Version of the stored history; 1 is unconverted legacy history still on disk.}
         project_id: {type: string}
         project_revision: {type: string}
         hash: {type: string}
         goals: {type: string}
         status: {type: string, enum: [not_generated, ready, failed]}
-        freshness: {type: string, enum: [current, stale]}
+        freshness: {type: string, enum: [current, stale], description: Freshness of the most recent generation context only; it never revalidates older ideas.}
         failure: {type: string}
         workspace_hash: {type: string}
         context_manifest: {$ref: '#/components/schemas/ContextManifest'}
         updated_at: {type: string, format: date-time}
+        generations:
+          type: array
+          description: Provenance of successful generations still referenced by an idea or by last_generation.
+          items: {$ref: '#/components/schemas/FeatureGeneration'}
+        last_generation: {$ref: '#/components/schemas/FeatureGenerationOutcome'}
         suggestions:
           type: array
-          maxItems: 5
+          description: Accumulated ideas in admission order, bounded by the 64 KiB history rather than an item count.
           items:
             type: object
-            required: [id, title, benefit, evidence, paths, effort, acceptance_criteria, status]
+            required: [id, title, benefit, evidence, paths, effort, acceptance_criteria, status, generation_id, freshness]
             properties:
               id: {type: string}
               title: {type: string}
@@ -2321,3 +2327,32 @@ components:
               effort: {type: string, enum: [small, medium, large]}
               acceptance_criteria: {type: array, items: {type: string}}
               status: {type: string, enum: [open, saved, dismissed]}
+              generation_id: {type: string, description: Generation that admitted this idea; legacy for version 1 ideas.}
+              freshness: {type: string, enum: [current, stale], description: Derived on read; current only when this idea's generation matches the current revision, workspace fingerprint and goals.}
+    FeatureGeneration:
+      type: object
+      required: [id, generated_at, project_revision, workspace_hash, goals_hash, model]
+      properties:
+        id: {type: string}
+        generated_at: {type: string, format: date-time}
+        project_revision: {type: string}
+        workspace_hash: {type: string}
+        goals_hash: {type: string, description: Empty when the goals behind legacy ideas are unknown; such ideas are stale.}
+        model:
+          type: object
+          nullable: true
+          description: Model that produced the generation, without endpoints or credentials; null when unknown.
+          required: [profile, model, provider_origin, remote_provider]
+          properties:
+            profile: {type: string}
+            model: {type: string}
+            provider_origin: {type: string}
+            remote_provider: {type: boolean}
+    FeatureGenerationOutcome:
+      type: object
+      required: [generation_id, added_count, duplicate_count]
+      description: Result of the most recent successful generation. added_count zero means no new suggestions were found.
+      properties:
+        generation_id: {type: string}
+        added_count: {type: integer, minimum: 0, maximum: 5}
+        duplicate_count: {type: integer, minimum: 0, maximum: 5}
