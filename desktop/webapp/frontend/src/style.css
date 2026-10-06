@@ -590,6 +590,24 @@ pre {
 .analysis-sections {
   grid-template-columns: minmax(0, 1fr);
 }
+.analysis-run-settings {
+  container-type: inline-size;
+}
+.analysis-run-settings .analysis-settings-fields {
+  grid-template-columns: minmax(0, 1fr);
+}
+.analysis-run-settings .analysis-settings-fields > label {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  overflow-wrap: anywhere;
+}
+/* Use panel width and its text size, not viewport width, to allow three readable fields. */
+@container (min-width: 60em) {
+  .analysis-run-settings .analysis-settings-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
 .analysis-last-run .panel-head {
   flex-wrap: wrap;
 }

@@ -157,6 +157,41 @@ async function analysisSections(page, hasRun) {
   assert.ok(table.y >= toolbar.y + toolbar.height, 'File table follows its toolbar');
   checks++;
 }
+async function analysisSettingsFields(page, columns, expanded) {
+  const settings = page.locator('section.panel').filter({
+    has: page.getByRole('heading', { name: 'Run settings', exact: true }),
+  });
+  const panelBox = await settings.boundingBox();
+  for (const selector of ['select', ...(expanded ? ['input[type="number"]'] : [])]) {
+    const controls = settings.locator(selector);
+    assert.equal(await controls.count(), 3);
+    const boxes = [];
+    for (const control of await controls.all()) {
+      assert.equal(await control.isVisible(), true);
+      const box = await control.boundingBox();
+      const label = await control.locator('..').boundingBox();
+      assert.ok(box.x >= panelBox.x && box.x + box.width <= panelBox.x + panelBox.width + 1);
+      assert.ok(box.y >= label.y && box.y + box.height <= label.y + label.height + 1);
+      boxes.push(box);
+    }
+    for (let i = 1; i < boxes.length; i++) {
+      assert.ok(Math.abs(boxes[i].width - boxes[0].width) <= 1, 'Equal control widths');
+      if (columns === 3) {
+        assert.ok(Math.abs(boxes[i].y - boxes[0].y) <= 1, 'Aligned control tops');
+        assert.ok(boxes[i].x >= boxes[i - 1].x + boxes[i - 1].width, 'Separate columns');
+      } else {
+        assert.ok(Math.abs(boxes[i].x - boxes[0].x) <= 1, 'Aligned stacked controls');
+        assert.ok(boxes[i].y >= boxes[i - 1].y + boxes[i - 1].height, 'Single-column reflow');
+      }
+    }
+  }
+  assert.equal(
+    await settings.evaluate((panel) => panel.scrollWidth > panel.clientWidth + 1),
+    false,
+    'Settings has no internal horizontal overflow',
+  );
+  checks++;
+}
 async function contrast(page, name) {
   const failures = await page.evaluate(() => {
     const rgba = (color) => {
@@ -902,16 +937,35 @@ try {
       try {
         await nav(page, 'Analysis');
         await idle(page);
+        const disclosure = page.locator('.analysis-sections details');
+        const summary = disclosure.locator('summary');
+        assert.equal(await disclosure.getAttribute('open'), null, 'Limits start collapsed');
+        for (const [label, value, min, max] of [
+          ['Files per batch', '20', '1', '500'],
+          ['Time budget · seconds', '600', '1', '3600'],
+          ['Attempts per stage', '2', '1', '4'],
+        ]) {
+          const field = page.getByLabel(label, { exact: true });
+          assert.equal(await field.inputValue(), value);
+          assert.equal(await field.getAttribute('min'), min);
+          assert.equal(await field.getAttribute('max'), max);
+        }
+        assert.equal(await page.getByLabel('Refresh previously analyzed files').isChecked(), false);
         for (const width of [1440, 1001, 800]) {
           await page.setViewportSize({ width, height: width === 1440 ? 1000 : 900 });
           for (const large of [false, true]) {
             const text = page.getByRole('button', { name: 'Larger text', exact: true });
             if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
-            await analysisSections(page, !empty);
-            await layout(
-              page,
-              `analysis-sections-${empty ? 'no-run' : 'saved-run'}-${width}-${large ? 'large' : 'default'}`,
-            );
+            for (const expanded of [false, true]) {
+              if ((await disclosure.getAttribute('open')) !== (expanded ? '' : null))
+                await summary.click();
+              await analysisSections(page, !empty);
+              await analysisSettingsFields(page, width === 1440 ? 3 : 1, expanded);
+              await layout(
+                page,
+                `analysis-sections-${empty ? 'no-run' : 'saved-run'}-${width}-${large ? 'large' : 'default'}-${expanded ? 'expanded' : 'collapsed'}`,
+              );
+            }
           }
         }
         assert.equal(await page.getByRole('table').count(), 1);
@@ -928,6 +982,188 @@ try {
       } finally {
         await close();
       }
+    }
+  });
+  await test('Analysis settings are keyboard accessible and edits stay local until preparation', async () => {
+    const { page, close } = await pageFor({
+      hasRecovery: true,
+      modelNames: {
+        analyze: `review-${'long-model-name-'.repeat(12)}`,
+        bug: 'code-model',
+        function: 'draft-model',
+      },
+    });
+    try {
+      await nav(page, 'Analysis');
+      await idle(page);
+      const before = await page.evaluate(() =>
+        window.fixture.requests.filter((request) => request.method !== 'GET'),
+      );
+      const code = page.getByLabel('Code analysis model', { exact: true });
+      const review = page.getByLabel('Performance & Security model', { exact: true });
+      const features = page.getByLabel('Feature discovery model', { exact: true });
+      assert.equal(
+        await code.locator('option[value="analyze"]').textContent(),
+        `review-${'long-model-name-'.repeat(12)} · analyze · Local`,
+        'Native options retain complete model identifiers',
+      );
+      await code.focus();
+      await page.keyboard.press('ArrowDown');
+      assert.equal(await code.inputValue(), 'function', 'Native select supports keyboard changes');
+      await contrast(page, 'Analysis code selector keyboard focus');
+      await page.keyboard.press('Tab');
+      assert.equal(await review.evaluate((control) => control === document.activeElement), true);
+      await contrast(page, 'Analysis model selector keyboard focus');
+      await page.keyboard.press('Tab');
+      assert.equal(await features.evaluate((control) => control === document.activeElement), true);
+      await contrast(page, 'Analysis feature selector keyboard focus');
+      await page.keyboard.press('Tab');
+      const disclosure = page.locator('.analysis-sections details');
+      const summary = disclosure.locator('summary');
+      assert.equal(await summary.evaluate((control) => control === document.activeElement), true);
+      await contrast(page, 'Analysis limits disclosure keyboard focus');
+      await page.keyboard.press('Enter');
+      assert.notEqual(await disclosure.getAttribute('open'), null);
+      await page.keyboard.press('Tab');
+      const batch = page.getByLabel('Files per batch', { exact: true });
+      const budget = page.getByLabel('Time budget · seconds', { exact: true });
+      const attempts = page.getByLabel('Attempts per stage', { exact: true });
+      const refresh = page.getByLabel('Refresh previously analyzed files', { exact: true });
+      assert.equal(await batch.evaluate((control) => control === document.activeElement), true);
+      await code.selectOption('function');
+      await review.selectOption('bug');
+      await features.selectOption('function');
+      await batch.fill('37');
+      await budget.fill('900');
+      await attempts.fill('3');
+      await refresh.check();
+      await summary.focus();
+      await page.keyboard.press('Space');
+      assert.equal(await disclosure.getAttribute('open'), null);
+      await page.keyboard.press('Enter');
+      assert.notEqual(await disclosure.getAttribute('open'), null);
+      assert.equal(await batch.inputValue(), '37');
+      assert.equal(await budget.inputValue(), '900');
+      assert.equal(await attempts.inputValue(), '3');
+      assert.equal(await refresh.isChecked(), true);
+      await analysisSettingsFields(page, 3, true);
+      // Exercise unequal label heights without replacing production labels or controls.
+      const magnifiedLabels = await page.addStyleTag({
+        content:
+          '.analysis-run-settings .analysis-settings-fields > label > span { font-size: 3em; }',
+      });
+      try {
+        const heights = await page
+          .locator('.analysis-settings-fields')
+          .first()
+          .locator('label > span')
+          .evaluateAll((labels) =>
+            labels.map((label) => {
+              const range = document.createRange();
+              range.selectNodeContents(label);
+              return range.getBoundingClientRect().height;
+            }),
+          );
+        assert.ok(heights[1] > heights[0], 'The longer label wraps to another line');
+        await analysisSettingsFields(page, 3, true);
+      } finally {
+        await magnifiedLabels.evaluate((style) => style.remove());
+      }
+      await layout(page, 'analysis-settings-long-options-expanded');
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+        before,
+        'Setup, limits and disclosure edits permit polling reads only',
+      );
+      assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+      await page.evaluate(() => {
+        window.fixture.hold = '/api/projects/current/analysis/preview';
+      });
+      await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+      await page.locator('.busy-strip').waitFor();
+      await page.waitForFunction(() =>
+        window.fixture.requests.some((r) => r.path.endsWith('/analysis/preview')),
+      );
+      for (const control of [code, review, features])
+        assert.equal(await control.isDisabled(), true);
+      for (const name of [
+        'Prepare analysis',
+        'Repair analysis',
+        'Search more feature suggestions',
+        'Refresh',
+        'Include shown',
+        'Exclude shown',
+      ])
+        assert.equal(await page.getByRole('button', { name, exact: true }).isDisabled(), true);
+      for (const control of [batch, budget, attempts, refresh])
+        assert.equal(await control.isDisabled(), false, 'Limits remain editable while busy');
+      await batch.fill('38');
+      await budget.fill('901');
+      await attempts.fill('4');
+      await refresh.uncheck();
+      const writes = await page.evaluate(() =>
+        window.fixture.requests.filter((r) => r.method !== 'GET'),
+      );
+      assert.equal(writes.length, before.length + 1, 'Only explicit preparation admits work');
+      const request = writes.at(-1);
+      assert.equal(request.path, '/api/projects/current/analysis/preview');
+      assert.deepEqual(request.body.models, {
+        code: 'function',
+        review: 'bug',
+        features: 'function',
+      });
+      assert.deepEqual(request.body.limits, {
+        batch_files: 37,
+        budget_seconds: 900,
+        max_attempts_per_stage: 3,
+      });
+      assert.equal(request.body.refresh, true);
+      assert.equal(request.body.include_features, true);
+      await page.evaluate(() => {
+        window.fixture.hold = '';
+        window.fixture.release();
+      });
+      await idle(page);
+      await page.getByRole('heading', { name: 'Ready to analyze', exact: true }).waitFor();
+      assert.equal(
+        await page.getByRole('dialog').count(),
+        0,
+        'Preparation still requires explicit Start',
+      );
+    } finally {
+      try {
+        await page.evaluate(() => {
+          window.fixture.hold = '';
+          window.fixture.release();
+        });
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Analysis empty model catalog keeps unavailable native selects disabled', async () => {
+    const { page, close } = await pageFor({ emptyModelCatalog: true });
+    try {
+      await nav(page, 'Analysis');
+      await idle(page);
+      for (const [label, value] of [
+        ['Code analysis model', 'bug'],
+        ['Performance & Security model', 'analyze'],
+        ['Feature discovery model', 'analyze'],
+      ]) {
+        const select = page.getByLabel(label, { exact: true });
+        assert.equal(await select.isDisabled(), true);
+        assert.equal(await select.inputValue(), value);
+        assert.deepEqual(await select.locator('option').allTextContents(), ['Models unavailable']);
+      }
+      // An empty catalog is present metadata; do not add a new preparation eligibility rule.
+      assert.equal(
+        await page.getByRole('button', { name: 'Prepare analysis', exact: true }).isDisabled(),
+        false,
+      );
+      await analysisSettingsFields(page, 3, false);
+    } finally {
+      await close();
     }
   });
   await test('Analysis last-run status preserves eligibility and passive View run navigation', async () => {
@@ -1062,10 +1298,10 @@ try {
     assert.equal(previews.length, 1);
     assert.deepEqual(previews.at(-1).body.models, choices);
     assert.equal(await page.getByRole('checkbox').count(), 0);
-    await layout(page, 'analysis-model-selects');
+    await layout(page, 'analysis-captured-preview');
     await page.setViewportSize({ width: 800, height: 900 });
     await page.getByRole('button', { name: 'Larger text' }).click();
-    await layout(page, 'analysis-model-selects-compact');
+    await layout(page, 'analysis-captured-preview-compact');
     await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByText(/include AI Security review/).waitFor();
