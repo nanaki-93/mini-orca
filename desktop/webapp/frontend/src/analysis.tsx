@@ -145,45 +145,50 @@ export function Analysis({ s }: { s: State }) {
   return (
     <>
       <Heading
+        variant="intro"
         title="Analysis"
         detail={`${s.selection?.files.filter((f) => !f.reason && !excluded.includes(f.path)).length ?? '—'} eligible files selected`}
       >
-        <Button
-          tone="primary"
-          icon="play"
-          disabled={!!s.busy || !s.selection || !s.models || activeRun(s.run)}
-          onClick={() => preview('new')}
-        >
-          Prepare analysis
-        </Button>
-        {hasRepair && (
+        <div className="actions heading-action-group">
           <Button
+            tone="primary"
             icon="play"
             disabled={!!s.busy || !s.selection || !s.models || activeRun(s.run)}
-            title="Repair does not change code. It re-attempts unfinished analysis work."
-            onClick={() => preview('repair')}
+            onClick={() => preview('new')}
           >
-            Repair analysis
+            Prepare analysis
           </Button>
-        )}
-        <Button
-          icon="sparkles"
-          disabled={!!s.busy}
-          title={s.busy ? 'Cannot search while another operation is running.' : undefined}
-          onClick={() => void w.searchFeatures('Analysis', s.features?.goals || '')}
-        >
-          Search more feature suggestions
-        </Button>
-        <Go page="features" icon="arrow-right">
-          Explore features
-        </Go>
-        <Button
-          disabled={!!s.busy}
-          icon="refresh"
-          onClick={() => void w.act('Refresh files', () => w.refreshProject())}
-        >
-          Refresh
-        </Button>
+          {hasRepair && (
+            <Button
+              icon="play"
+              disabled={!!s.busy || !s.selection || !s.models || activeRun(s.run)}
+              title="Repair does not change code. It re-attempts unfinished analysis work."
+              onClick={() => preview('repair')}
+            >
+              Repair analysis
+            </Button>
+          )}
+        </div>
+        <div className="actions heading-action-group">
+          <Button
+            icon="sparkles"
+            disabled={!!s.busy}
+            title={s.busy ? 'Cannot search while another operation is running.' : undefined}
+            onClick={() => void w.searchFeatures('Analysis', s.features?.goals || '')}
+          >
+            Search more feature suggestions
+          </Button>
+          <Go page="features" icon="arrow-right">
+            Explore features
+          </Go>
+          <Button
+            disabled={!!s.busy}
+            icon="refresh"
+            onClick={() => void w.act('Refresh files', () => w.refreshProject())}
+          >
+            Refresh
+          </Button>
+        </div>
       </Heading>
 
       <div className="stack analysis-sections section-gap">

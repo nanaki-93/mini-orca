@@ -1,6 +1,6 @@
 import { chromium } from '@playwright/test';
 import { strict as assert } from 'node:assert';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { serve } from '../preview.mjs';
 import { installFixture } from './fixture.mjs';
 
@@ -11,6 +11,109 @@ const output = new URL('../test-results/', import.meta.url).pathname;
 await mkdir(output, { recursive: true });
 let checks = 0;
 const errors = [];
+// Planned presentation states, not an attestation of coverage. Captures below record
+// what actually ran; each owner extends its cases as its surfaces are migrated.
+const surfaceInventory = {
+  overview: {
+    summary: ['reference', 'empty', 'unavailable', 'stale', 'failed', 'long identity'],
+    welcome: ['no project', 'offline', 'opening', 'open failed'],
+    project: ['no project', 'loaded', 'opening', 'open failed', 'long paths'],
+    models: ['configured', 'unavailable', 'empty', 'busy', 'long destinations'],
+    search: ['files and commands', 'filtered empty', 'large list', 'long paths'],
+    diagrams: ['rendered', 'empty', 'prose', 'invalid', 'oversized', 'source disclosure'],
+  },
+  analysis: {
+    analysis: ['setup', 'no run', 'saved run', 'busy', 'unavailable models', 'dirty selection'],
+    'analysis-preview': ['new', 'repair', 'continuation', 'absent', 'consent', 'mismatch'],
+    'analysis-run': [
+      'absent',
+      'queued',
+      'running',
+      'pausing',
+      'paused',
+      'interrupted',
+      'canceling',
+      'canceled',
+      'failed',
+      'partial',
+      'completed',
+      'unknown counts',
+    ],
+  },
+  results: {
+    bugs: ['list', 'detail', 'filtered empty', 'read failed', 'retained stale', 'partial'],
+    performance: ['list', 'typed detail', 'semantic detail', 'unavailable', 'stale', 'partial'],
+    security: ['list', 'typed detail', 'semantic detail', 'unavailable', 'stale', 'partial'],
+  },
+  features: {
+    features: ['goals', 'suggestions', 'triage filters', 'empty', 'unavailable', 'failed', 'stale'],
+  },
+  'change-workspace': {
+    chat: [
+      'new',
+      'seeded',
+      'restored',
+      'history unavailable',
+      'busy',
+      'failed',
+      'canceled',
+      'proposal',
+      'checks failed',
+      'reviewed',
+      'stale',
+      'receipt',
+      'verification',
+      'uncertain write',
+    ],
+  },
+  instructions: {
+    instructions: [
+      'scope',
+      'edit',
+      'preview',
+      'guidance',
+      'excluded',
+      'stale',
+      'read failed',
+      'busy',
+    ],
+  },
+  editor: {
+    editor: ['no file', 'source', 'binary', 'file analysis', 'unavailable', 'busy', 'stale'],
+    context: ['populated', 'empty', 'unavailable', 'read failed', 'truncated', 'long metadata'],
+    manifest: ['Context alias: same rendering, loading and selected tab; no separate control'],
+    assistant: ['request', 'explanation', 'conversation', 'stale', 'busy', 'canceled'],
+    'new-declaration': ['function', 'type', 'constraints', 'stale', 'busy', 'canceled'],
+    draft: ['absent', 'generated', 'edited', 'validated', 'invalid', 'stale', 'busy'],
+    checks: ['absent', 'passed', 'failed', 'skipped', 'canceled', 'busy', 'stale'],
+    review: ['ready', 'dirty', 'missing validation', 'failed checks', 'stale', 'busy', 'uncertain'],
+  },
+  tools: {
+    receipt: ['absent', 'applied', 'undone', 'optional audit unavailable', 'busy', 'uncertain'],
+    benchmark: [
+      'catalog',
+      'empty',
+      'unavailable',
+      'samples',
+      'failed',
+      'canceled',
+      'busy',
+      'stale',
+    ],
+    scan: ['absent', 'running', 'completed', 'failed', 'partial', 'canceled', 'unknown phases'],
+    terminal: [
+      'idle',
+      'active',
+      'multiple tabs',
+      'busy',
+      'launch failed',
+      'exited',
+      'cleanup failed',
+    ],
+  },
+};
+const aliases = { welcome: 'project', manifest: 'context' };
+const captures = [];
 async function pageFor(options = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   try {
@@ -84,7 +187,25 @@ async function validateAndCheck(page, tests = false) {
   await idle(page);
 }
 async function layout(page, name) {
-  await page.screenshot({ path: `${output}/${name}.png`, fullPage: true });
+  const route = await page.locator('.page[data-accent]').getAttribute('data-accent');
+  const owner = Object.keys(surfaceInventory).find((owner) => route in surfaceInventory[owner]);
+  assert.ok(owner, `${name}: route ${route} belongs to the presentation inventory`);
+  const screenshot = `${output}/${name}.png`;
+  await page.screenshot({ path: screenshot, fullPage: true });
+  captures.push({
+    route,
+    owner,
+    stateCase: name,
+    viewport: page.viewportSize(),
+    theme: await page.locator('html').getAttribute('data-theme'),
+    textSize:
+      (await page
+        .getByRole('button', { name: 'Larger text', exact: true })
+        .getAttribute('aria-pressed')) === 'true'
+        ? 'larger'
+        : 'standard',
+    screenshot,
+  });
   assert.equal(
     await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1),
     false,
@@ -106,6 +227,74 @@ async function layout(page, name) {
     `${name}: unnamed button`,
   );
   checks++;
+}
+async function headingContainment(heading) {
+  const bounds = await heading.boundingBox();
+  assert.ok(bounds, 'Heading is rendered');
+  const parts = [
+    heading.locator('h1'),
+    heading.locator('p'),
+    ...(await heading.getByRole('button').all()),
+  ];
+  const boxes = [];
+  for (const part of parts) {
+    assert.equal(await part.isVisible(), true, 'Heading content remains visible');
+    const box = await part.boundingBox();
+    assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+    assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+    for (const other of boxes)
+      assert.ok(
+        box.x + box.width <= other.x + 1 ||
+          other.x + other.width <= box.x + 1 ||
+          box.y + box.height <= other.y + 1 ||
+          other.y + other.height <= box.y + 1,
+        'Heading title, detail and actions do not collide',
+      );
+    assert.equal(
+      await part.evaluate((element) => element.scrollWidth > element.clientWidth + 1),
+      false,
+      'Heading text is not clipped',
+    );
+    boxes.push(box);
+  }
+  const clippedText = await heading.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const clipped = [];
+    while (walker.nextNode()) {
+      if (!walker.currentNode.textContent.trim()) continue;
+      const range = document.createRange();
+      range.selectNodeContents(walker.currentNode);
+      if (
+        [...range.getClientRects()].some(
+          (rect) =>
+            rect.left < bounds.left - 1 ||
+            rect.right > bounds.right + 1 ||
+            rect.top < bounds.top - 1 ||
+            rect.bottom > bounds.bottom + 1,
+        )
+      )
+        clipped.push(walker.currentNode.textContent);
+    }
+    return clipped;
+  });
+  assert.deepEqual(clippedText, [], 'Complete heading text stays within the introduction');
+  checks++;
+}
+async function introductionTreatment(surface) {
+  return surface.evaluate((element) => {
+    const style = getComputedStyle(element);
+    const button = getComputedStyle(element.querySelector('.button'));
+    return {
+      background: style.backgroundColor,
+      border: style.border,
+      radius: style.borderRadius,
+      padding: style.padding,
+      shadow: style.boxShadow,
+      buttonHeight: button.minHeight,
+      buttonRadius: button.borderRadius,
+    };
+  });
 }
 async function analysisSections(page, hasRun) {
   const settings = page.locator('section.panel').filter({
@@ -1090,6 +1279,101 @@ try {
       true,
     );
     await close();
+  });
+  await test('Analysis introduction reuses Summary treatment without changing either workflow', async () => {
+    const { page, close } = await pageFor({
+      projectName: `Harbor-${'long-project-title'.repeat(12)}`,
+      projectPath: `/fixture/${'long-project-path'.repeat(16)}`,
+      hasRecovery: true,
+      featuresReady: true,
+    });
+    try {
+      await idle(page);
+      const calls = await page.evaluate(() =>
+        window.fixture.requests.filter((request) => request.method !== 'GET'),
+      );
+      for (const width of [1440, 1280, 1001, 800]) {
+        await page.setViewportSize({ width, height: 1000 });
+        for (const large of [false, true]) {
+          const text = page.getByRole('button', { name: 'Larger text', exact: true });
+          if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
+          for (const theme of ['dark', 'light']) {
+            if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+              await page.getByRole('button', { name: `Switch to ${theme} appearance` }).click();
+            await nav(page, 'Summary');
+            await idle(page);
+            const hero = page.locator('.summary-hero');
+            assert.equal(await hero.count(), 1);
+            assert.equal(
+              await hero.locator('.summary-hero, .page-heading--intro').count(),
+              0,
+              'Summary has no nested introduction',
+            );
+            await headingContainment(hero.locator('.page-heading'));
+            const treatment = await introductionTreatment(hero);
+            const facts = await hero.locator('.summary-facts').boundingBox();
+            const heading = await hero.locator('.page-heading').boundingBox();
+            assert.ok(
+              facts.y >= heading.y + heading.height,
+              'Facts remain below the original inner heading',
+            );
+            assert.deepEqual(await hero.locator('.summary-facts dd').allTextContents(), [
+              'go',
+              '18',
+              '2,450',
+              '0',
+            ]);
+            assert.equal(await page.locator('.coverage-ring').count(), 1);
+            assert.equal(await page.locator('.metric-card').count(), 6);
+            const suffix = `${width}-${theme}-${large ? 'larger' : 'standard'}`;
+            await layout(page, `summary-introduction-reference-${suffix}`);
+            await nav(page, 'Analysis');
+            const intro = page.locator('.page-heading--intro');
+            await headingContainment(intro);
+            assert.deepEqual(
+              await introductionTreatment(intro),
+              treatment,
+              'Analysis shares the maintained Summary surface and button rules',
+            );
+            assert.equal(
+              await intro
+                .locator('p')
+                .evaluate(
+                  (detail) =>
+                    getComputedStyle(detail).fontFamily ===
+                    getComputedStyle(detail.parentElement.querySelector('h1')).fontFamily,
+                ),
+              true,
+              'Task detail retains ordinary heading typography',
+            );
+            assert.deepEqual(await intro.getByRole('button').allTextContents(), [
+              'Prepare analysis',
+              'Repair analysis',
+              'Search more feature suggestions',
+              'Explore features',
+              'Refresh',
+            ]);
+            assert.equal(await intro.locator('.button.primary').innerText(), 'Prepare analysis');
+            assert.equal(await intro.locator('.heading-action-group').count(), 2);
+            await layout(page, `analysis-introduction-repair-${suffix}`);
+          }
+        }
+      }
+      assert.deepEqual(
+        await page.evaluate(() =>
+          window.fixture.requests.filter((request) => request.method !== 'GET'),
+        ),
+        calls,
+        'Navigation and appearance do not admit work or mutate source',
+      );
+      assert.equal(
+        await page.evaluate(() => window.fixture.terminals.length),
+        0,
+        'No shell starts',
+      );
+    } finally {
+      await close();
+    }
   });
   await test('Analysis settings and saved run use full-width stacked sections', async () => {
     for (const empty of [false, true]) {
@@ -2599,6 +2883,10 @@ try {
     await result.close();
   });
   assert.deepEqual(errors, []);
+  await writeFile(
+    `${output}/presentation-evidence.json`,
+    JSON.stringify({ surfaceInventory, aliases, captures }, null, 2),
+  );
   console.log(`PASS ${checks} workflow and layout checks; no browser errors or external requests`);
 } finally {
   try {
