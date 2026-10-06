@@ -818,6 +818,11 @@ export function installFixture(options = {}) {
                   excluded_paths: state.excluded,
                 }
               : undefined;
+            // Preview-only boundary cases do not change request/admission behavior.
+            state.preview =
+              options.previewOverride === null
+                ? null
+                : { ...state.preview, ...structuredClone(options.previewOverride || {}) };
             return response(state.preview);
           }
           if (path.endsWith('/analysis/run/control')) {
