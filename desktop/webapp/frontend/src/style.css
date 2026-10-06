@@ -1546,7 +1546,8 @@ progress::-webkit-progress-value {
   gap: 20px;
 }
 .source-workspace .editor-content,
-.source-inspection {
+.source-inspection,
+.context-inspection {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 20px;
@@ -1578,8 +1579,22 @@ progress::-webkit-progress-value {
   min-width: 0;
   max-width: 100%;
 }
-.source-analysis .panel-body {
+.source-analysis .panel-body,
+.context-inspection .panel-body {
   overflow-wrap: anywhere;
+}
+.context-inspection .key-values > div {
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+.context-inspection .key-values dd {
+  flex: 1 1 12rem;
+}
+.context-references .list-row {
+  flex-wrap: wrap;
+}
+.context-references .list-copy {
+  flex: 1 1 12rem;
 }
 @media (max-width: 900px) {
   .source-workspace .editor-workspace {

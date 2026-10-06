@@ -142,6 +142,8 @@ const surfaceInventory = {
   editor: {
     editor: ['no file', 'source', 'binary', 'file analysis', 'unavailable', 'busy', 'stale'],
     context: ['populated', 'empty', 'unavailable', 'read failed', 'truncated', 'long metadata'],
+    // main.tsx dispatches both to Editor; Editor renders Context and selects its tab
+    // for both; Workspace.navigate calls inspectContext for either. No alias control.
     manifest: ['Context alias: same rendering, loading and selected tab; no separate control'],
     assistant: ['request', 'explanation', 'conversation', 'stale', 'busy', 'canceled'],
     'new-declaration': ['function', 'type', 'constraints', 'stale', 'busy', 'canceled'],
@@ -1697,6 +1699,212 @@ try {
       }
     } finally {
       await close();
+    }
+  });
+  await test('Context keeps Summary panel rhythm and complete long metadata without admitting work', async () => {
+    const path = `internal/${'context-directory-'.repeat(30)}/worker.go`;
+    const hash = 'abcdef0123456789'.repeat(24);
+    const origin = `https://${'provider-destination-'.repeat(24)}.example/v1`;
+    const reason = `Policy exclusion: ${'complete-reason-'.repeat(35)} final reason.`;
+    const related = `RelatedDeclaration${'LongName'.repeat(30)}`;
+    const { page, close } = await pageFor({
+      context: {
+        included: [{ path, size_bytes: 12345, estimated_tokens: 2345, hash, truncated: true }],
+        excluded: [{ path: `${path}.excluded`, reason }],
+        estimated_tokens: 2345,
+        truncated: true,
+        scope: 'function',
+        model: `captured-model-${'identifier-'.repeat(30)}`,
+        provider_origin: origin,
+      },
+      impact: {
+        references: [
+          { path, symbol: related, confidence: 'lexical', reason: 'Advisory reference' },
+        ],
+      },
+    });
+    try {
+      for (const theme of ['dark', 'light']) {
+        if (theme === 'light')
+          await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+        await nav(page, 'Summary');
+        const reference = await panelTreatment(page.locator('.summary-details > .panel').first());
+        await openSource(page);
+        const before = await page.evaluate(() =>
+          window.fixture.requests.filter((request) => request.method !== 'GET'),
+        );
+        await page.getByRole('tab', { name: 'Context', exact: true }).click();
+        const context = page.locator('.context-inspection');
+        await context.getByRole('heading', { name: 'Related declarations', exact: true }).waitFor();
+        assert.deepEqual(await panelTreatment(context.locator('.panel').first()), reference);
+        assert.equal(
+          await page
+            .getByRole('tab', { name: 'Context', exact: true })
+            .getAttribute('aria-selected'),
+          'true',
+        );
+        assert.deepEqual(await context.locator('.mini-metrics strong').allTextContents(), [
+          '1',
+          '2,345',
+          '1',
+        ]);
+        assert.equal(await context.locator('.key-values dd').last().innerText(), 'Yes');
+        await context.getByText(origin, { exact: true }).waitFor();
+        await context.getByText(reason, { exact: true }).waitFor();
+        await context.getByText('truncated', { exact: true }).waitFor();
+        await context.getByText('Content hashes', { exact: true }).click();
+        assert.equal(await context.locator('.mono').innerText(), hash);
+        await context.getByText(`${path} · ${related}`, { exact: true }).waitFor();
+        assert.equal(await context.locator('textarea, input, [contenteditable="true"]').count(), 0);
+        assert.equal(
+          await context.locator('.mono').evaluate((element) => {
+            const range = document.createRange();
+            range.selectNodeContents(element);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            return selection.toString();
+          }),
+          hash,
+        );
+        for (const larger of [false, true]) {
+          if (larger) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          for (const width of [1440, 1280, 1001, 800]) {
+            await page.setViewportSize({ width, height: 1000 });
+            assert.deepEqual(
+              await context.evaluate((element) => ({
+                gap: getComputedStyle(element).gap,
+                overflow: element.scrollWidth > element.clientWidth + 1,
+              })),
+              { gap: '20px', overflow: false },
+            );
+            const bounds = await context.boundingBox();
+            const refresh = await context
+              .getByRole('button', { name: 'Refresh', exact: true })
+              .boundingBox();
+            assert.ok(
+              refresh.x >= bounds.x && refresh.x + refresh.width <= bounds.x + bounds.width + 1,
+            );
+            const table = page.getByLabel('Included context files', { exact: true });
+            await table.focus();
+            assert.equal(
+              await table.evaluate((element) => element === document.activeElement),
+              true,
+            );
+            await layout(
+              page,
+              `context-long-truncated-${theme}-${larger ? 'larger' : 'standard'}-${width}`,
+            );
+            await contrast(page, `context-${theme}-${larger ? 'larger' : 'standard'}-${width}`);
+          }
+          if (larger) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        }
+        const reads = await page.evaluate(
+          () =>
+            window.fixture.requests.filter((request) => request.path?.endsWith('/context')).length,
+        );
+        await context.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await page.waitForFunction(
+          (count) =>
+            window.fixture.requests.filter((request) => request.path?.endsWith('/context'))
+              .length ===
+            count + 1,
+          reads,
+        );
+        assert.deepEqual(
+          await page.evaluate(() =>
+            window.fixture.requests.filter((request) => request.method !== 'GET'),
+          ),
+          before,
+          'Context navigation, hashes, appearance and explicit refresh remain local reads',
+        );
+        assert.equal(await page.getByRole('dialog').count(), 0);
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+      }
+    } finally {
+      await close();
+    }
+  });
+  await test('Context empty, unavailable metadata and read failures preserve their meanings', async () => {
+    for (const stateCase of [
+      'populated',
+      'empty',
+      'metadata-unavailable',
+      'unavailable',
+      'read-failed',
+    ]) {
+      const options = {
+        impact: { references: [] },
+        ...(stateCase === 'empty'
+          ? { context: { included: [], excluded: [], estimated_tokens: 0, truncated: false } }
+          : {}),
+        ...(stateCase === 'metadata-unavailable' ? { context: {} } : {}),
+        ...(stateCase === 'unavailable' ? { context: null } : {}),
+      };
+      const { page, close } = await pageFor(options);
+      try {
+        await openSource(page);
+        if (stateCase === 'read-failed')
+          await page.evaluate(() => {
+            window.fixture.failures['/api/projects/current/context'] = 503;
+          });
+        await page.getByRole('tab', { name: 'Context', exact: true }).click();
+        if (stateCase === 'unavailable' || stateCase === 'read-failed') {
+          await page.getByRole('heading', { name: 'Context unavailable', exact: true }).waitFor();
+          if (stateCase === 'read-failed') {
+            await page.getByText('Fixture rejection', { exact: false }).waitFor();
+          }
+        } else {
+          const context = page.locator('.context-inspection');
+          await context
+            .getByRole('heading', { name: 'Related declarations', exact: true })
+            .waitFor();
+          await context.getByText('No references found.', { exact: true }).waitFor();
+          if (stateCase === 'empty' || stateCase === 'metadata-unavailable') {
+            assert.deepEqual(
+              await context.locator('.mini-metrics strong').allTextContents(),
+              Array(3).fill(stateCase === 'empty' ? '0' : '—'),
+            );
+            assert.equal(await context.locator('tbody tr').count(), 0);
+            assert.deepEqual(await context.locator('.key-values dd').allTextContents(), [
+              '—',
+              '—',
+              '—',
+              stateCase === 'empty' ? 'No' : '—',
+            ]);
+          }
+        }
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+          for (const larger of [false, true]) {
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+            for (const width of [1440, 800]) {
+              await page.setViewportSize({ width, height: 1000 });
+              await layout(
+                page,
+                `context-${stateCase}-${theme}-${larger ? 'larger' : 'standard'}-${width}`,
+              );
+            }
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          }
+        }
+        if (stateCase === 'read-failed') {
+          await page.getByRole('button', { name: 'Refresh context', exact: true }).click();
+          await page.getByRole('heading', { name: 'Included files', exact: true }).waitFor();
+          await layout(page, 'context-read-failed-recovered-light-standard-800');
+        }
+        assert.equal(
+          await page.evaluate(
+            () => window.fixture.requests.filter((request) => request.method !== 'GET').length,
+          ),
+          0,
+        );
+      } finally {
+        await close();
+      }
     }
   });
   await test('Source empty, binary, unavailable and failed evidence retain content and recovery', async () => {
