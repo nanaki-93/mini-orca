@@ -126,7 +126,7 @@ func TestAgyGeneratesFeaturesWithStructuredFinishEvents(t *testing.T) {
 			} else {
 				request := featureRequestFor(t, service, "Improve cancellation.")
 				request.ConfirmRemoteProvider = true
-				report, err := service.GenerateFeatures(context.Background(), request)
+				report, err := service.GenerateFeatures(context.Background(), FeatureGenerateRequest{FeatureRequest: request})
 				if err != nil || report.Status != "ready" || len(report.Suggestions) != 1 {
 					t.Fatalf("feature suggestions = %+v, %v", report, err)
 				}

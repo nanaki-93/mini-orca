@@ -116,7 +116,7 @@ untrusted networks.
 | POST | `/api/projects/current/instructions/proposal` | Prepare an AGENTS.md proposal without a provider or source write. |
 | GET | `/api/projects/current/features` | Read saved goals and advisory feature suggestions. |
 | POST | `/api/projects/current/features/goals` | Save goals; ideas generated for other goals become stale. |
-| POST | `/api/projects/current/features/generate` | Explicitly add new bounded feature ideas, keeping existing ones, with Analyze consent. |
+| POST | `/api/projects/current/features/generate` | Explicitly add new bounded feature ideas, keeping existing ones, with optional profile consent. |
 | PATCH | `/api/projects/current/features/{featureID}` | Save, dismiss or reopen an advisory feature suggestion. |
 
 Project analysis keeps the existing string fields: new `architecture` values contain
@@ -710,7 +710,12 @@ project identity, `expected_hash`, `goals` (at most 4096 bytes), and generation'
 `confirm_remote_provider`. Triage adds `status` (`open`, `saved`, `dismissed`).
 Each generation requests at most five ideas; each includes benefit, evidence,
 eligible affected paths, estimated effort and acceptance criteria. Ideas remain
-advisory and never enter Bugs/Performance/Security finding counts.
+advisory and never enter Bugs/Performance/Security finding counts. Standalone
+generation via `POST /api/projects/current/features/generate` accepts an
+optional `profile` (`analyze`, `bug`, `function`; default `analyze`) to choose
+the model scope, and an optional `analysis_selection_id`. When the selection ID
+is present, its fingerprint is validated (409 on mismatch) and its exclusions
+are applied to the context and suggested paths.
 
 Every generation, from the Features routes or an analysis run, is additive. The
 prompt receives a bounded list of existing idea titles and statuses, newest first

@@ -186,7 +186,7 @@ paths:
     post:
       tags: [Chat]
       description: Explicitly add new bounded feature ideas with Analyze consent, keeping existing ideas and their statuses.
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/FeatureRequest'}}}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/FeatureGenerateRequest'}}}}
       responses:
         '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/FeatureReport'}}}}
         '400': {$ref: '#/components/responses/Error'}
@@ -2285,6 +2285,13 @@ components:
         goals: {type: string, maxLength: 4096}
         confirm_remote_provider: {type: boolean}
       required: [project_id, project_revision, expected_hash]
+    FeatureGenerateRequest:
+      allOf:
+        - {$ref: '#/components/schemas/FeatureRequest'}
+        - type: object
+          properties:
+            profile: {type: string, enum: [analyze, bug, function]}
+            analysis_selection_id: {type: string}
     FeatureStatusRequest:
       allOf:
         - {$ref: '#/components/schemas/FeatureRequest'}

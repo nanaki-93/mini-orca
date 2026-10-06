@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"io"
@@ -53,6 +54,12 @@ type FeatureReport struct {
 	WorkspaceHash   string                    `json:"workspace_hash"`
 	ContextManifest project.ContextManifest   `json:"context_manifest"`
 	UpdatedAt       time.Time                 `json:"updated_at"`
+}
+
+type FeatureGenerateRequest struct {
+	FeatureRequest
+	Profile             string `json:"profile,omitempty"`
+	AnalysisSelectionID string `json:"analysis_selection_id,omitempty"`
 }
 
 type FeatureRequest struct {
@@ -141,8 +148,33 @@ func (s *Service) SaveFeatureGoals(ctx context.Context, request FeatureRequest) 
 	})
 }
 
-func (s *Service) GenerateFeatures(ctx context.Context, request FeatureRequest) (*FeatureReport, error) {
-	return s.generateFeatures(ctx, request, s.runtimes.analyze, nil, featureGenerationAuthority{Publish: func(write func() error) error {
+func (s *Service) GenerateFeatures(ctx context.Context, request FeatureGenerateRequest) (*FeatureReport, error) {
+	profile := request.Profile
+	if profile == "" {
+		profile = "analyze"
+	}
+	if profile != "analyze" && profile != "bug" && profile != "function" {
+		return nil, fmt.Errorf("invalid feature profile")
+	}
+	runtime := s.runtimeForAnalysisScope(config.AnalyzeModelScope, profile)
+
+	var excluded []string
+	if request.AnalysisSelectionID != "" {
+		loaded, err := loadAnalysisSelection(s.manager.Root())
+		if err != nil {
+			return nil, err
+		}
+		fingerprint, err := analysisFingerprint(loaded)
+		if err != nil {
+			return nil, err
+		}
+		if fingerprint != request.AnalysisSelectionID {
+			return nil, project.ErrRevisionConflict
+		}
+		excluded = loaded
+	}
+
+	return s.generateFeatures(ctx, request.FeatureRequest, runtime, excluded, featureGenerationAuthority{Publish: func(write func() error) error {
 		s.changesMu.Lock()
 		defer s.changesMu.Unlock()
 		return write()
