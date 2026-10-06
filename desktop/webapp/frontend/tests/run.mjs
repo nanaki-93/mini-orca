@@ -359,6 +359,49 @@ async function analysisPreviewLayout(page) {
   }
   checks++;
 }
+async function analysisRunLayout(page) {
+  const workspace = page.locator('.analysis-run');
+  await headingContainment(workspace.locator('.page-heading--intro'));
+  const blocks = await workspace.locator(':scope > *').all();
+  for (let i = 1; i < blocks.length; i++) {
+    const before = await blocks[i - 1].boundingBox();
+    const after = await blocks[i].boundingBox();
+    assert.ok(
+      Math.abs(after.y - (before.y + before.height) - 20) <= 1,
+      'Run sections retain Summary’s 20px rhythm',
+    );
+  }
+  const overflow = await page
+    .locator(
+      '#main, .page, .analysis-run, .analysis-run .panel, .analysis-run .panel-head, .analysis-run .panel-body, .analysis-run .three-columns > div, .analysis-run .scroll-list, .analysis-run summary, .analysis-run .list-row, .analysis-run .notice',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.scrollWidth > element.clientWidth + 1)
+        .map((element) => element.id || element.className),
+    );
+  assert.deepEqual(overflow, [], 'Run content remains contained without horizontal clipping');
+  for (const panel of await workspace.locator('section.panel').all()) {
+    const bounds = await panel.boundingBox();
+    const headerParts = await panel.locator('.panel-head > *').all();
+    const boxes = [];
+    for (const part of [...headerParts, ...(await panel.getByRole('button').all())]) {
+      const box = await part.boundingBox();
+      assert.ok(box && box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+      for (const other of boxes)
+        assert.ok(
+          box.x + box.width <= other.x + 1 ||
+            other.x + other.width <= box.x + 1 ||
+            box.y + box.height <= other.y + 1 ||
+            other.y + other.height <= box.y + 1,
+          'Panel titles, statuses and actions do not collide',
+        );
+      boxes.push(box);
+    }
+  }
+  checks++;
+}
 async function analysisSections(page, hasRun) {
   const settings = page.locator('section.panel').filter({
     has: page.getByRole('heading', { name: 'Run settings', exact: true }),
@@ -1901,7 +1944,7 @@ try {
         });
         for (const width of [1440, 1001, 800]) {
           await page.setViewportSize({ width, height: width === 1440 ? 1000 : 900 });
-          await capturedDetails(runPanel, expected, width > 1000 ? 3 : 1);
+          await capturedDetails(runPanel, expected, width === 1440 ? 3 : 1);
           await layout(page, `analysis-shared-run-${scenario}-${width}`);
         }
         assert.deepEqual(
@@ -2505,6 +2548,428 @@ try {
     );
     await layout(page, 'analysis-feature-failure');
     await close();
+  });
+  await test('Analysis run lifecycle wording and controls stay truthful and passive', async () => {
+    const saved = savedModelsFixture();
+    for (const status of [
+      'queued',
+      'running',
+      'pausing',
+      'paused',
+      'interrupted',
+      'canceling',
+      'canceled',
+      'failed',
+      'partial',
+      'completed',
+    ]) {
+      const active = ['queued', 'running', 'pausing', 'canceling'].includes(status);
+      const resumable = ['paused', 'interrupted'].includes(status);
+      const featureStatus = status === 'queued' ? 'pending' : status;
+      const reason = ['paused', 'interrupted', 'canceled', 'failed', 'partial'].includes(status)
+        ? `Analysis ${status}: saved evidence remains available.`
+        : '';
+      const { page, close } = await pageFor({
+        ...saved.options,
+        runStatus: status,
+        runOverride: {
+          reason,
+          features: {
+            status: featureStatus,
+            attempts: 1,
+            suggestion_count: status === 'completed' ? 0 : null,
+          },
+        },
+      });
+      try {
+        await nav(page, 'Analysis');
+        await page.getByRole('button', { name: 'View run', exact: true }).click();
+        const workspace = page.locator('.analysis-run');
+        const heading = workspace.locator('.page-heading--intro');
+        await heading.getByText(status, { exact: true }).waitFor();
+        assert.equal(
+          await heading.getByRole('img').getAttribute('aria-label'),
+          `Analysis: ${status}`,
+        );
+        assert.equal(
+          await heading.getByRole('button', { name: 'Pause', exact: true }).count(),
+          ['queued', 'running'].includes(status) ? 1 : 0,
+        );
+        assert.equal(
+          await heading.getByRole('button', { name: 'Prepare continuation', exact: true }).count(),
+          resumable ? 1 : 0,
+        );
+        const cancel = heading.getByRole('button', { name: 'Cancel run', exact: true });
+        assert.equal(await cancel.count(), active || resumable ? 1 : 0);
+        if (active || resumable) assert.equal(await cancel.isDisabled(), status === 'canceling');
+        assert.equal(
+          await workspace.getByRole('status', { name: 'Current analysis step' }).count(),
+          active ? 1 : 0,
+        );
+        if (['queued', 'pausing', 'canceling'].includes(status))
+          await workspace
+            .getByText(
+              {
+                queued: 'Preparing analysis…',
+                pausing: 'Finishing the current step before pausing…',
+                canceling: 'Canceling analysis…',
+              }[status],
+              { exact: true },
+            )
+            .waitFor();
+        if (reason) {
+          const notice = workspace.locator(':scope > .notice');
+          assert.equal(await notice.innerText(), reason);
+          assert.equal(await notice.locator('details').count(), 0);
+        }
+        const features = workspace.locator('section.panel').filter({
+          has: page.getByRole('heading', { name: 'New feature suggestions', exact: true }),
+        });
+        await features.locator('.panel-head').getByText(featureStatus, { exact: true }).waitFor();
+        assert.equal(
+          await features.locator('.metric-number').innerText(),
+          status === 'completed' ? '0' : '—',
+        );
+        for (const category of ['bugs', 'performance', 'security']) {
+          const panel = workspace
+            .locator('section.panel')
+            .filter({ has: page.getByRole('heading', { name: category, exact: true }) });
+          assert.equal(await panel.locator('.panel-head .analysis-run-status').innerText(), status);
+        }
+        const before = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method !== 'GET'),
+        );
+        const disclosure = workspace.locator('details').first();
+        await disclosure.locator('summary').press('Enter');
+        assert.equal(await disclosure.getAttribute('open'), '');
+        await disclosure.getByText('completed', { exact: true }).first().waitFor();
+        await analysisRunLayout(page);
+        await layout(page, `analysis-run-${status}-1440-dark-standard`);
+        await page.setViewportSize({ width: 800, height: 900 });
+        await page.getByRole('button', { name: 'Switch to light appearance', exact: true }).click();
+        await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        await analysisRunLayout(page);
+        await layout(page, `analysis-run-${status}-800-light-larger`);
+        await workspace
+          .getByRole('button', { name: 'Open feature suggestions', exact: true })
+          .click();
+        await nav(page, 'Analysis');
+        await page.getByRole('button', { name: 'View run', exact: true }).click();
+        for (const index of [0, 1, 2]) {
+          await workspace
+            .getByRole('button', { name: 'Open results', exact: true })
+            .nth(index)
+            .click();
+          await idle(page);
+          await nav(page, 'Analysis');
+          await page.getByRole('button', { name: 'View run', exact: true }).click();
+        }
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          before,
+          'Run disclosures and result navigation allow local reads/polling, not admission, execution or writes',
+        );
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+        assert.equal(await page.getByRole('dialog').count(), 0);
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Analysis run long evidence retains independent progress and unknown versus zero counts', async () => {
+    const saved = savedModelsFixture(true);
+    const path = `internal/${'longpathsegment'.repeat(30)}/worker.go`;
+    const reason = `Feature request failed: ${'diagnostic'.repeat(35)}. File analysis remains available.`;
+    const stageReason = `Stage unavailable: ${'stage-diagnostic'.repeat(25)}`;
+    const { page, close } = await pageFor({
+      ...saved.options,
+      runStatus: 'running',
+      runOverride: {
+        elapsed_seconds: 0,
+        window_files_completed: 0,
+        features: { status: 'failed', attempts: 2, suggestion_count: null, reason },
+        files: [
+          {
+            path,
+            content_hash: 'long-file-hash',
+            language: 'go',
+            stages: [
+              {
+                stage: 'semantic',
+                status: 'completed',
+                attempts: 1,
+                cached: true,
+                finding_count: 0,
+              },
+              {
+                stage: 'performance',
+                status: 'running',
+                attempts: 2,
+                cached: false,
+                finding_count: null,
+              },
+              {
+                stage: 'security_rules',
+                status: 'unavailable',
+                attempts: 0,
+                cached: false,
+                finding_count: null,
+                reason: stageReason,
+              },
+              {
+                stage: 'security_ai',
+                status: 'failed',
+                attempts: 2,
+                cached: false,
+                finding_count: null,
+                reason: stageReason,
+              },
+            ],
+          },
+        ],
+        sections: [
+          {
+            category: 'bugs',
+            status: 'partial',
+            finding_count: null,
+            coverage: {
+              total: 4,
+              succeeded: 1,
+              partial: 1,
+              failed: 0,
+              pending: 1,
+              running: 1,
+              skipped: 0,
+              unavailable: 0,
+            },
+          },
+          {
+            category: 'performance',
+            status: 'failed',
+            finding_count: 0,
+            coverage: {
+              total: 4,
+              succeeded: 0,
+              partial: 0,
+              failed: 1,
+              pending: 2,
+              running: 0,
+              skipped: 1,
+              unavailable: 0,
+            },
+          },
+          {
+            category: 'security',
+            status: 'unavailable',
+            finding_count: 2,
+            coverage: {
+              total: 4,
+              succeeded: 1,
+              partial: 0,
+              failed: 0,
+              pending: 2,
+              running: 0,
+              skipped: 0,
+              unavailable: 1,
+            },
+          },
+        ],
+      },
+    });
+    try {
+      const referenceIntro = await introductionTreatment(page.locator('.summary-hero'));
+      const referencePanel = await panelTreatment(page.locator('.summary-details .panel').first());
+      await nav(page, 'Analysis');
+      await page.getByRole('button', { name: 'View run', exact: true }).click();
+      const workspace = page.locator('.analysis-run');
+      const models = workspace.locator('.analysis-run-models');
+      assert.deepEqual(
+        await introductionTreatment(workspace.locator('.page-heading--intro')),
+        referenceIntro,
+      );
+      assert.deepEqual(await panelTreatment(models), referencePanel);
+      await workspace
+        .getByRole('status', { name: 'Current analysis step' })
+        .getByText(`Performance · ${path}`, { exact: true })
+        .waitFor();
+      assert.equal(await workspace.getByText('0s elapsed', { exact: true }).count(), 1);
+      assert.equal(
+        await workspace
+          .getByRole('heading', { name: '0 files completed this batch', exact: true })
+          .count(),
+        1,
+      );
+      const progress = workspace.getByRole('progressbar', { name: 'Analysis progress' });
+      assert.equal(await progress.getAttribute('value'), '6');
+      assert.equal(await progress.getAttribute('max'), '12');
+      assert.equal(
+        await workspace.getByText('6 of 12 category work units finished', { exact: true }).count(),
+        1,
+      );
+      assert.deepEqual(
+        await workspace.locator('.analysis-run-categories .metric-number').allTextContents(),
+        ['—', '0', '2'],
+      );
+      assert.equal(
+        await workspace.getByText('No successful evidence yet', { exact: true }).count(),
+        1,
+      );
+      assert.equal(await workspace.getByText('Saved findings', { exact: true }).count(), 2);
+      const featurePanel = workspace.locator('section.panel').filter({
+        has: page.getByRole('heading', { name: 'New feature suggestions', exact: true }),
+      });
+      assert.equal(await featurePanel.locator('.metric-number').innerText(), '—');
+      assert.equal(await featurePanel.getByText(reason, { exact: true }).isVisible(), true);
+      assert.equal(await featurePanel.locator('details').count(), 0);
+      const disclosure = workspace.locator('details').first();
+      await disclosure.locator('summary').press('Enter');
+      await disclosure.getByText(stageReason, { exact: true }).first().waitFor();
+      await disclosure.getByText('1 attempts · cached', { exact: true }).waitFor();
+      await disclosure.getByText('2 attempts', { exact: true }).waitFor();
+      assert.deepEqual(await disclosure.locator('.analysis-run-status').allTextContents(), [
+        'completed',
+        'running',
+        'unavailable',
+        'failed',
+      ]);
+      const before = await page.evaluate(() =>
+        window.fixture.requests.filter((r) => r.method !== 'GET'),
+      );
+      for (const width of [1440, 1280, 1001, 800]) {
+        await page.setViewportSize({ width, height: 1000 });
+        for (const theme of ['dark', 'light']) {
+          if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+            await page
+              .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
+              .click();
+          for (const large of [false, true]) {
+            const text = page.getByRole('button', { name: 'Larger text', exact: true });
+            if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
+            await capturedDetails(
+              models,
+              saved.details,
+              width === 1440 || (width === 1280 && !large) ? 3 : 1,
+            );
+            await analysisRunLayout(page);
+            await contrast(page, `Analysis run-${width}-${theme}-${large ? 'larger' : 'standard'}`);
+            await layout(
+              page,
+              `analysis-run-long-evidence-${width}-${theme}-${large ? 'larger' : 'standard'}`,
+            );
+          }
+        }
+      }
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+        before,
+      );
+    } finally {
+      await close();
+    }
+  });
+  await test('Analysis run busy controls retain captured identity and explicit cancellation', async () => {
+    for (const [status, action, label] of [
+      ['running', 'pause', 'Pause'],
+      ['paused', 'cancel', 'Cancel run'],
+    ]) {
+      const { page, close } = await pageFor({ runStatus: status });
+      try {
+        await nav(page, 'Analysis');
+        await page.getByRole('button', { name: 'View run', exact: true }).click();
+        const identity = await page.evaluate(() => {
+          window.fixture.hold = '/api/projects/current/analysis/run/control';
+          return window.fixture.state.run.identity;
+        });
+        await page.getByRole('button', { name: label, exact: true }).click();
+        await page.waitForFunction(() => window.fixture.requests.some((r) => r.body?.action));
+        const heading = page.locator('.analysis-run .page-heading--intro');
+        for (const control of await heading.getByRole('button').all())
+          if ((await control.innerText()) !== 'Files')
+            assert.equal(await control.isDisabled(), true);
+        const request = await page.evaluate(() =>
+          window.fixture.requests.find((r) => r.body?.action),
+        );
+        assert.deepEqual(request.body, { identity, action });
+        await page.evaluate(() => {
+          window.fixture.hold = '';
+          window.fixture.release();
+        });
+        await idle(page);
+        await heading
+          .getByText(action === 'pause' ? 'paused' : 'canceled', { exact: true })
+          .waitFor();
+        assert.equal(await page.getByRole('dialog').count(), 0);
+        assert.equal(
+          await page.evaluate(() =>
+            window.fixture.requests.some(
+              (r) => r.method === 'POST' && r.path.endsWith('/analysis/run'),
+            ),
+          ),
+          false,
+        );
+      } finally {
+        try {
+          await page.evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          });
+        } finally {
+          await close();
+        }
+      }
+    }
+  });
+  await test('An absent Analysis run keeps recovery reachable after a local refresh', async () => {
+    const { page, close } = await pageFor({ runStatus: 'running' });
+    try {
+      await nav(page, 'Analysis');
+      await page.getByRole('button', { name: 'View run', exact: true }).click();
+      await page.evaluate(() => {
+        window.fixture.state.run = null;
+      });
+      await page.getByRole('heading', { name: 'No analysis run yet', exact: true }).waitFor();
+      const before = await page.evaluate(() =>
+        window.fixture.requests.filter((r) => r.method !== 'GET'),
+      );
+      assert.equal(await page.locator('.analysis-run').getByRole('progressbar').count(), 0);
+      for (const width of [1440, 800]) {
+        await page.setViewportSize({ width, height: 1000 });
+        for (const theme of ['dark', 'light']) {
+          if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+            await page
+              .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
+              .click();
+          for (const large of [false, true]) {
+            const text = page.getByRole('button', { name: 'Larger text', exact: true });
+            if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
+            await analysisRunLayout(page);
+            assert.equal(
+              await page
+                .locator('.analysis-run')
+                .getByRole('button', { name: 'Prepare analysis', exact: true })
+                .isVisible(),
+              true,
+            );
+            await layout(
+              page,
+              `analysis-run-absent-${width}-${theme}-${large ? 'larger' : 'standard'}`,
+            );
+          }
+        }
+      }
+      await page
+        .locator('.analysis-run')
+        .getByRole('button', { name: 'Prepare analysis', exact: true })
+        .click();
+      await page.getByRole('heading', { name: 'Analysis', exact: true }).waitFor();
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+        before,
+        'Recovery opens setup without preparing or admitting analysis',
+      );
+    } finally {
+      await close();
+    }
   });
   await test('Analysis progress identifies the active file and stage', async () => {
     const { page, close } = await pageFor({ runStatus: 'running' });

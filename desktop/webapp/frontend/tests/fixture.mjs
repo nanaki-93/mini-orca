@@ -255,7 +255,7 @@ export function installFixture(options = {}) {
     project,
     files,
     finding,
-    run: options.empty ? null : run,
+    run: options.empty ? null : { ...run, ...structuredClone(options.runOverride || {}) },
     preview,
     context,
     performance,
