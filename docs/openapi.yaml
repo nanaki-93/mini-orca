@@ -1843,13 +1843,14 @@ components:
         excluded_paths: {type: array, maxItems: 20000, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 4096}, description: Canonical project-relative paths. Empty selects all eligible files.}
     AnalysisFileSelection:
       type: object
-      required: [project_id, project_revision, selection_id, excluded_paths, files, editable]
+      required: [project_id, project_revision, selection_id, excluded_paths, files, editable, recovery]
       properties:
         project_id: {type: string}
         project_revision: {type: string}
         selection_id: {type: string}
         excluded_paths: {type: array, items: {type: string}}
         editable: {type: boolean}
+        recovery: {$ref: '#/components/schemas/AnalysisRecoverySummary'}
         files:
           type: array
           items:
@@ -1868,6 +1869,15 @@ components:
                     stage: {$ref: '#/components/schemas/AnalysisStage'}
                     status: {type: string, enum: [fresh, stale, missing, failed, partial, running, pending, paused, interrupted, canceled, skipped, unavailable]}
                     reason: {type: string, description: Explanation of the current cache or retained run state.}
+    AnalysisRecoverySummary:
+      type: object
+      required: [state, file_count, stage_count]
+      description: Read-only daemon eligibility for recover_incomplete over the saved selection. States are evaluated in order running, continuation, not_started, blocked (source), available, blocked (model configuration), complete. Never dispatches analysis.
+      properties:
+        state: {type: string, enum: [running, continuation, not_started, blocked, available, complete]}
+        file_count: {type: integer, minimum: 0, description: Selected eligible files with at least one recoverable stage, under the same model choices as the stage statuses.}
+        stage_count: {type: integer, minimum: 0, description: Recoverable stages in those files.}
+        reason: {type: string, description: Present for running, continuation and blocked; names the required action.}
     AnalysisModels:
       type: object
       additionalProperties: false
@@ -1889,6 +1899,7 @@ components:
         scope: {type: string, enum: [project]}
         refresh: {type: boolean}
         retry_stale_failed: {type: boolean, default: false, description: Select only files with stale or failed analysis; incompatible with refresh. Resume preserves the admitted selection.}
+        recover_incomplete: {type: boolean, default: false, description: 'Select only files with recoverable unfinished stages (stale, failed, partial, missing, canceled, interrupted or unavailable with a configured model); current stages stay cached and no source changes. Incompatible with refresh, retry_stale_failed and include_features. On resume the captured plan decides it; true for a non-recovery run returns 409.'}
         limits: {$ref: '#/components/schemas/AnalysisRunLimits'}
         resume_run: {$ref: '#/components/schemas/AnalysisRunIdentity'}
     AnalysisFileIdentity:
@@ -1944,6 +1955,7 @@ components:
         scope: {type: string, enum: [project]}
         refresh: {type: boolean}
         retry_stale_failed: {type: boolean, default: false, description: Select only files with stale or failed analysis; incompatible with refresh. Resume preserves the admitted selection.}
+        recover_incomplete: {type: boolean, default: false, description: 'Select only files with recoverable unfinished stages (stale, failed, partial, missing, canceled, interrupted or unavailable with a configured model); current stages stay cached and no source changes. Incompatible with refresh, retry_stale_failed and include_features. On resume the captured plan decides it; true for a non-recovery run returns 409.'}
         limits: {$ref: '#/components/schemas/AnalysisRunLimits'}
         files: {type: array, description: Selected files; remaining inventory is accounted for in excluded, items: {$ref: '#/components/schemas/AnalysisPlannedFile'}}
         excluded: {type: array, items: {$ref: '#/components/schemas/AnalysisExcludedFile'}}
@@ -1970,6 +1982,7 @@ components:
         limits: {$ref: '#/components/schemas/AnalysisRunLimits'}
         refresh: {type: boolean}
         retry_stale_failed: {type: boolean, default: false, description: Select only files with stale or failed analysis; incompatible with refresh. Resume preserves the admitted selection.}
+        recover_incomplete: {type: boolean, default: false, description: 'Select only files with recoverable unfinished stages (stale, failed, partial, missing, canceled, interrupted or unavailable with a configured model); current stages stay cached and no source changes. Incompatible with refresh, retry_stale_failed and include_features. On resume the captured plan decides it; true for a non-recovery run returns 409.'}
         confirmations: {$ref: '#/components/schemas/AnalysisRunConfirmations'}
     AnalysisRunControlRequest:
       type: object

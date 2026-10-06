@@ -21,6 +21,7 @@ type AnalysisFileSelection struct {
 	ExcludedPaths   []string                 `json:"excluded_paths"`
 	Files           []AnalysisSelectableFile `json:"files"`
 	Editable        bool                     `json:"editable"`
+	Recovery        AnalysisRecoverySummary  `json:"recovery"`
 }
 
 type AnalysisSelectionRequest struct {
@@ -50,31 +51,39 @@ func (s *Service) ReadAnalysisSelection(ctx context.Context, id, revision string
 
 // The caller holds lifecycle/run locks and has restored the current run.
 func (s *Service) analysisSelectionLocked(ctx context.Context, id, revision string) (*AnalysisFileSelection, error) {
+	selection, _, err := s.analysisSelectionWithRecoveryLocked(ctx, id, revision)
+	return selection, err
+}
+
+// The returned recovery evidence lets a selection save summarize its new exclusions
+// without observing every file again.
+func (s *Service) analysisSelectionWithRecoveryLocked(ctx context.Context, id, revision string) (*AnalysisFileSelection, analysisRecoveryEvidence, error) {
 	analysis, index, policy, err := s.performanceInputs()
 	if err != nil {
-		return nil, err
+		return nil, analysisRecoveryEvidence{}, err
 	}
 	if analysis.ProjectID != id || analysis.ProjectRevision != revision {
-		return nil, project.ErrRevisionConflict
+		return nil, analysisRecoveryEvidence{}, project.ErrRevisionConflict
 	}
 	excluded, err := loadAnalysisSelection(s.manager.Root())
 	if err != nil {
-		return nil, err
+		return nil, analysisRecoveryEvidence{}, err
 	}
 	selectionID, err := analysisFingerprint(excluded)
 	if err != nil {
-		return nil, err
+		return nil, analysisRecoveryEvidence{}, err
 	}
 	result := &AnalysisFileSelection{ProjectID: id, ProjectRevision: revision, SelectionID: selectionID, ExcludedPaths: excluded, Files: []AnalysisSelectableFile{}, Editable: s.analysisSelectionEditableLocked()}
 	paths, err := project.WalkProjectFiles(ctx, project.ProjectWalkOptions{Root: s.manager.Root(), IncludeSymlinkFiles: true, MaxFiles: maxAnalysisInventoryFiles})
 	if err != nil {
-		return nil, err
+		return nil, analysisRecoveryEvidence{}, err
 	}
 	indexed := make(map[string]project.IndexFile, len(index.Files))
 	for _, file := range index.Files {
 		indexed[file.Path] = file
 	}
 	evidence := selectionEvidence(s.analysisRun.run, *analysis)
+	recovery := analysisRecoveryEvidence{projectID: analysis.ProjectID, models: evidence.models(), files: map[string]analysisFileRecovery{}}
 	for _, path := range paths {
 		decision := policy.Decide(path)
 		reason := decision.Reason
@@ -88,14 +97,17 @@ func (s *Service) analysisSelectionLocked(ctx context.Context, id, revision stri
 		}
 		entry := AnalysisSelectableFile{Path: path, Reason: reason, Stages: []AnalysisFileStageStatus{}}
 		if reason == "" {
-			entry.Stages, err = s.analysisSelectionStages(ctx, *analysis, indexed[path], policy, evidence)
+			var sourceCurrent bool
+			entry.Stages, sourceCurrent, err = s.analysisSelectionStages(ctx, *analysis, indexed[path], policy, evidence)
 			if err != nil {
-				return nil, err
+				return nil, analysisRecoveryEvidence{}, err
 			}
+			recovery.files[path] = s.classifyAnalysisFileRecovery(entry.Stages, sourceCurrent, recovery.models)
 		}
 		result.Files = append(result.Files, entry)
 	}
-	return result, nil
+	result.Recovery = s.analysisRecoverySummaryLocked(recovery, excluded)
+	return result, recovery, nil
 }
 
 func (s *Service) analysisSelectionEditableLocked() bool {
@@ -123,7 +135,7 @@ func (s *Service) SaveAnalysisSelection(ctx context.Context, request AnalysisSel
 	if err := s.restoreAnalysisRunLocked(); err != nil {
 		return nil, err
 	}
-	current, err := s.analysisSelectionLocked(ctx, request.ProjectID, request.ProjectRevision)
+	current, recovery, err := s.analysisSelectionWithRecoveryLocked(ctx, request.ProjectID, request.ProjectRevision)
 	if err != nil {
 		return nil, err
 	}
@@ -155,6 +167,7 @@ func (s *Service) SaveAnalysisSelection(ctx context.Context, request AnalysisSel
 		return nil, err
 	}
 	current.ExcludedPaths = paths
+	current.Recovery = s.analysisRecoverySummaryLocked(recovery, paths)
 	current.SelectionID, err = analysisFingerprint(paths)
 	return current, err
 }

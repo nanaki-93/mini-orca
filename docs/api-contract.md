@@ -381,7 +381,7 @@ identity includes scope, model, origin, reasoning, context/timeout/retry setting
 and prompt/rule versions. Cache availability is excluded from this stable identity:
 the run's own cache writes cannot invalidate its remaining queue. `preview_id`
 additionally binds current cache dispositions, remaining attempts/work and request
-bounds. Start echoes limits/refresh, `retry_stale_failed`, `include_features`, `models` and both identities; the daemon recomputes
+bounds. Start echoes limits/refresh, `retry_stale_failed`, `recover_incomplete`, `include_features`, `models` and both identities; the daemon recomputes
 them before admission. A changed preflight yields 409 and requires a fresh preview.
 
 Preview and start accept optional `retry_stale_failed` (default false). When true,
@@ -396,10 +396,29 @@ resume echoes the option and retains the admitted file set even after reports
 become fresh. Excluded files remain accounted for in the inventory. An empty
 selection produces no model requests and is reported as unavailable, not clean.
 
+Preview and start also accept optional `recover_incomplete` (default false), which
+completes unfinished analysis without changing source code. Under the requested
+`models`, it selects files with at least one recoverable eligible stage: stale,
+failed, partial, missing, canceled, interrupted or unavailable evidence whose model
+is configured (passive Security rules need none). Other inventory files are
+excluded with `No incomplete analysis for this file.`; user, policy and
+unsupported-file exclusions keep their own reasons. Recoverable stages bypass
+caches within the attempt limits, current successful stages remain cached with
+no requests, and stages whose model is not configured keep that reason with no
+requests. Pending, running and paused work belongs to its run, so paused and
+interrupted runs still require continuation. The option returns 400 when combined
+with `refresh`, `retry_stale_failed` or `include_features`, so a recovery plan
+never contains a feature step. It is part of the stored plan and both admission
+fingerprints. On resume the captured plan decides it: clients may omit it, but
+sending `true` for a run admitted without it returns 409. Resume retains the
+admitted file set. An empty recovery selection produces no model requests.
+`retry_stale_failed` keeps the narrower semantics above for existing clients.
+
 Unfiltered result reads retain saved evidence from eligible files omitted only by
-the stale/failed selection. `retained_files` supplies those current indexed file
-identities; user and source-policy exclusions remain excluded. The dispatch plan,
-run coverage and file-filter guards still describe the admitted retry scope.
+the stale/failed or incomplete-work selection. `retained_files` supplies those
+current indexed file identities; user and source-policy exclusions remain
+excluded. The dispatch plan, run coverage and file-filter guards still describe
+the admitted scope.
 
 Resume first requests a new preview with `resume_run` identifying the existing
 run. It preserves that run's captured scope, limits and cumulative attempt counts,
@@ -576,8 +595,9 @@ version `1`, and restored across project/app/daemon restarts. Corrupt or unreada
 selection metadata fails explicitly; it never silently selects everything.
 New files default to selected. Selection changes invalidate pending admission
 through the existing preview/queue identity. The checklist scopes new unified
-project analysis runs, including stale/failed retries; it does not erase existing
-results or change explicit single-file actions or the shared context policy.
+project analysis runs, including stale/failed retries and incomplete-work recovery;
+it does not erase existing results or change explicit single-file actions or the
+shared context policy.
 
 Each selectable file's `stages` contains `stage`, `status`, and an explanation in
 `reason`. Status reads inspect current source hashes, cache freshness and retained
@@ -592,6 +612,22 @@ file-level exclusion reason. Selection for the next run does not erase saved
 analysis status. The desktop classifies paths in `excluded_paths` as excluded,
 just like files with a policy exclusion reason, and omits both from freshness
 counts. Retained stage evidence becomes visible again when a file is re-selected.
+
+Both selection responses also include `recovery: {state, file_count, stage_count,
+reason?}`, the daemon's read-only answer to whether `recover_incomplete` can finish
+saved-selection work now. Clients present it instead of re-deriving eligibility.
+`state` is the first match of: `running` (an analysis run is active), `continuation`
+(the last run is paused, interrupted or has a retained persistence fault; continue
+or cancel it), `not_started` (no saved run for this project), `blocked` (a selected
+eligible file changed since indexing or cannot be read; refresh project files),
+`available` (at least one recoverable stage), `blocked` (the only unfinished work
+needs an unconfigured model profile, which the reason names) and `complete`.
+Recoverable stages follow the `recover_incomplete` rule above, observed with the
+same model choices as the stage statuses. The counts cover selected eligible files
+and recoverable stages under those choices, whatever the state; saved exclusions,
+policy exclusions and unsupported files never count. A POST response reflects the
+newly saved exclusions. `reason` is present for `running`, `continuation` and
+`blocked`.
 
 Overview `analysis_coverage` counts the same selected, eligible files as the file
 checklist across applicable stages. Config and saved selection exclusions do not

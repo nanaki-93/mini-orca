@@ -137,6 +137,7 @@ type AnalysisPreviewRequest struct {
 	Models              *AnalysisModels      `json:"models,omitempty"`
 	IncludeFeatures     bool                 `json:"include_features,omitempty"`
 	RetryStaleFailed    bool                 `json:"retry_stale_failed,omitempty"`
+	RecoverIncomplete   bool                 `json:"recover_incomplete,omitempty"`
 	ProjectID           string               `json:"project_id"`
 	ProjectRevision     string               `json:"project_revision"`
 	Scope               string               `json:"scope"`
@@ -153,6 +154,9 @@ func (request AnalysisPreviewRequest) Validate() error {
 	}
 	if request.RetryStaleFailed && request.Refresh {
 		return fmt.Errorf("stale/failed analysis cannot refresh fresh results")
+	}
+	if err := validateAnalysisRecoveryOptions(request.RecoverIncomplete, request.Refresh, request.RetryStaleFailed, request.IncludeFeatures); err != nil {
+		return err
 	}
 	if request.ProjectID == "" || request.ProjectRevision == "" || request.Scope != AnalysisRunScopeProject {
 		return fmt.Errorf("analysis requires a project identity and whole-project scope")
@@ -207,6 +211,7 @@ type AnalysisRunPreview struct {
 	Models                       *AnalysisModels               `json:"models,omitempty"`
 	Features                     *AnalysisFeaturePlan          `json:"features,omitempty"`
 	RetryStaleFailed             bool                          `json:"retry_stale_failed,omitempty"`
+	RecoverIncomplete            bool                          `json:"recover_incomplete,omitempty"`
 	CompatibilityStage           AnalysisStage                 `json:"compatibility_stage,omitempty"`
 	CompatibilityBudget          time.Duration                 `json:"compatibility_budget_nanoseconds,omitempty"`
 	SchemaVersion                string                        `json:"schema_version"`
@@ -231,14 +236,15 @@ type AnalysisRunConfirmations struct {
 }
 
 type AnalysisRunStartRequest struct {
-	Models           *AnalysisModels          `json:"models,omitempty"`
-	IncludeFeatures  bool                     `json:"include_features,omitempty"`
-	RetryStaleFailed bool                     `json:"retry_stale_failed,omitempty"`
-	Identity         AnalysisQueueIdentity    `json:"identity"`
-	PreviewID        string                   `json:"preview_id"`
-	Limits           AnalysisRunLimits        `json:"limits"`
-	Refresh          bool                     `json:"refresh"`
-	Confirmations    AnalysisRunConfirmations `json:"confirmations"`
+	Models            *AnalysisModels          `json:"models,omitempty"`
+	IncludeFeatures   bool                     `json:"include_features,omitempty"`
+	RetryStaleFailed  bool                     `json:"retry_stale_failed,omitempty"`
+	RecoverIncomplete bool                     `json:"recover_incomplete,omitempty"`
+	Identity          AnalysisQueueIdentity    `json:"identity"`
+	PreviewID         string                   `json:"preview_id"`
+	Limits            AnalysisRunLimits        `json:"limits"`
+	Refresh           bool                     `json:"refresh"`
+	Confirmations     AnalysisRunConfirmations `json:"confirmations"`
 }
 
 // Validate checks the request shape; admission must also recompute the preview
@@ -250,6 +256,9 @@ func (request AnalysisRunStartRequest) Validate() error {
 	if request.RetryStaleFailed && request.Refresh {
 		return fmt.Errorf("stale/failed analysis cannot refresh fresh results")
 	}
+	if err := validateAnalysisRecoveryOptions(request.RecoverIncomplete, request.Refresh, request.RetryStaleFailed, request.IncludeFeatures); err != nil {
+		return err
+	}
 	if err := request.Identity.Validate(); err != nil {
 		return err
 	}
@@ -257,6 +266,15 @@ func (request AnalysisRunStartRequest) Validate() error {
 		return fmt.Errorf("analysis start requires an admission preview")
 	}
 	return request.Limits.Validate()
+}
+
+// Recovery completes unfinished file stages only. It never refreshes current
+// results, reinterprets the stale/failed retry contract or discovers features.
+func validateAnalysisRecoveryOptions(recoverIncomplete, refresh, retryStaleFailed, includeFeatures bool) error {
+	if recoverIncomplete && (refresh || retryStaleFailed || includeFeatures) {
+		return fmt.Errorf("incomplete-work recovery cannot be combined with refresh, retry_stale_failed or include_features")
+	}
+	return nil
 }
 
 type AnalysisRunAction string
@@ -465,7 +483,7 @@ func (s *Service) startAnalysisRunLocked(ctx context.Context, request AnalysisRu
 			return cloneAnalysisRun(c.run), errAnalysisRunBusy
 		}
 	}
-	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{Models: request.Models, IncludeFeatures: request.IncludeFeatures, ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: request.RetryStaleFailed, Refresh: request.Refresh, Limits: request.Limits, compatibilityStage: stage, compatibilityBudget: budget})
+	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{Models: request.Models, IncludeFeatures: request.IncludeFeatures, ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: request.RetryStaleFailed, RecoverIncomplete: request.RecoverIncomplete, Refresh: request.Refresh, Limits: request.Limits, compatibilityStage: stage, compatibilityBudget: budget})
 	if err != nil {
 		return nil, err
 	}
@@ -608,7 +626,7 @@ func (s *Service) resumeAnalysisRunLocked(ctx context.Context, request AnalysisR
 	if c.run.Plan.CompatibilityBudget > 0 && c.run.CompatibilityElapsed >= c.run.Plan.CompatibilityBudget {
 		return nil, fmt.Errorf("%w: performance job budget is exhausted; start a new job", project.ErrRevisionConflict)
 	}
-	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{ProjectID: c.run.Identity.ProjectID, ProjectRevision: c.run.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: c.run.Plan.RetryStaleFailed, Refresh: c.run.Plan.Refresh, Limits: c.run.Plan.Limits, ResumeRun: &request.Identity})
+	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{ProjectID: c.run.Identity.ProjectID, ProjectRevision: c.run.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: c.run.Plan.RetryStaleFailed, RecoverIncomplete: c.run.Plan.RecoverIncomplete, Refresh: c.run.Plan.Refresh, Limits: c.run.Plan.Limits, ResumeRun: &request.Identity})
 	if err != nil {
 		return nil, err
 	}
@@ -760,7 +778,7 @@ func (c *analysisRunController) stageRequest(fileIndex, stageIndex int) analysis
 	plan := c.admission.Files[fileIndex].Stages[stageIndex]
 	return analysisFileStageRequest{
 		Run: c.run.Identity, File: file.AnalysisFileIdentity, Stage: stage.Stage, Models: cloneAnalysisModels(c.run.Plan.Models),
-		Refresh:               c.run.Plan.Refresh || (c.run.Plan.RetryStaleFailed && !plan.Cached),
+		Refresh:               c.run.Plan.Refresh || ((c.run.Plan.RetryStaleFailed || c.run.Plan.RecoverIncomplete) && !plan.Cached),
 		RemainingAttempts:     min(plan.MaxModelRequests, c.run.Plan.Limits.MaxAttemptsPerStage-stage.Attempts),
 		ConfirmRemoteProvider: analysisProviderConfirmed(c.confirmations, plan.ProviderID),
 		SecurityReview:        c.confirmations.SecurityReview,

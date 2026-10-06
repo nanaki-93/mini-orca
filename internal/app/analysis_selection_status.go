@@ -38,12 +38,13 @@ func selectionEvidence(run *AnalysisRun, analysis project.Analysis) analysisSele
 	return evidence
 }
 
-func (s *Service) analysisSelectionStages(ctx context.Context, analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, evidence analysisSelectionEvidence) ([]AnalysisFileStageStatus, error) {
+// The boolean reports whether the file is readable and still matches its index entry.
+func (s *Service) analysisSelectionStages(ctx context.Context, analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, evidence analysisSelectionEvidence) ([]AnalysisFileStageStatus, bool, error) {
 	result := make([]AnalysisFileStageStatus, 0, len(analysisStages))
 	info, readErr := project.GetFileInfo(s.manager.Root(), file.Path)
 	for _, stage := range analysisStages {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		switch {
 		case readErr != nil:
@@ -54,15 +55,19 @@ func (s *Service) analysisSelectionStages(ctx context.Context, analysis project.
 			result = append(result, s.analysisSelectionStage(analysis, file, policy, stage, evidence))
 		}
 	}
-	return result, nil
+	return result, readErr == nil && info.ContentHash == file.ContentHash, nil
+}
+
+// models are the evidence run's captured choices, or nil (defaults) without a matching run.
+func (e analysisSelectionEvidence) models() *AnalysisModels {
+	if e.run == nil {
+		return nil
+	}
+	return e.run.Plan.Models
 }
 
 func (s *Service) analysisSelectionStage(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, stage AnalysisStage, evidence analysisSelectionEvidence) AnalysisFileStageStatus {
-	var models *AnalysisModels
-	if evidence.run != nil {
-		models = evidence.run.Plan.Models
-	}
-	return s.analysisSelectionStageForModels(analysis, file, policy, stage, evidence, models)
+	return s.analysisSelectionStageForModels(analysis, file, policy, stage, evidence, evidence.models())
 }
 
 func (s *Service) analysisSelectionStageForModels(analysis project.Analysis, file project.IndexFile, policy *project.ContextPolicy, stage AnalysisStage, evidence analysisSelectionEvidence, models *AnalysisModels) AnalysisFileStageStatus {
@@ -72,11 +77,7 @@ func (s *Service) analysisSelectionStageForModels(analysis project.Analysis, fil
 		return result
 	}
 	cached, status, generatedAt, err := s.analysisStageCacheState(analysis, file, policy, stage, models)
-	var evidenceModels *AnalysisModels
-	if evidence.run != nil {
-		evidenceModels = evidence.run.Plan.Models
-	}
-	if item, ok := evidence.stage(file, stage); ok && s.analysisModelRuntime(stage, models).effective == s.analysisModelRuntime(stage, evidenceModels).effective {
+	if item, ok := evidence.stage(file, stage); ok && s.analysisModelRuntime(stage, models).effective == s.analysisModelRuntime(stage, evidence.models()).effective {
 		if status, reason := selectionRunStage(item, evidence.run); status != "" && selectionRunOverridesCache(item, evidence.run, cached, generatedAt) {
 			result.Status, result.Reason = status, reason
 			return result

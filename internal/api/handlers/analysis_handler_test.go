@@ -183,6 +183,71 @@ func TestAnalysisHandlerRetrySelectionRequiresMatchingAdmission(t *testing.T) {
 	}
 }
 
+func TestAnalysisHandlerRecoveryRequiresExplicitCompatibleAdmission(t *testing.T) {
+	h, _, analysis, calls := newAnalysisHandlerFixture(t)
+	selectionTarget := "/analysis/selection?" + url.Values{"project_id": {analysis.ProjectID}, "project_revision": {analysis.ProjectRevision}}.Encode()
+	readRecovery := func() app.AnalysisRecoverySummary {
+		t.Helper()
+		w := analysisHandlerRequest(t, h.Selection, "GET", selectionTarget, nil)
+		var selection app.AnalysisFileSelection
+		if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &selection) != nil || !strings.Contains(w.Body.String(), `"recovery":{"state":`) {
+			t.Fatalf("selection=%d %s", w.Code, w.Body)
+		}
+		return selection.Recovery
+	}
+	if recovery := readRecovery(); recovery.State != app.AnalysisRecoveryNotStarted || recovery.FileCount != 1 || recovery.StageCount != 4 {
+		t.Fatalf("initial recovery=%+v", recovery)
+	}
+	limits := `"limits":{"batch_files":100,"budget_seconds":30,"max_attempts_per_stage":2}`
+	identity := `"project_id":"` + analysis.ProjectID + `","project_revision":"` + analysis.ProjectRevision + `","scope":"project"`
+	for _, option := range []string{`"refresh":true`, `"refresh":false,"retry_stale_failed":true`, `"refresh":false,"include_features":true`} {
+		w := analysisHandlerRequest(t, h.Preview, "POST", "/analysis/preview", `{`+identity+`,`+limits+`,"recover_incomplete":true,`+option+`}`)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("recovery with %s => %d %s", option, w.Code, w.Body)
+		}
+		assertStructuredError(t, w)
+	}
+	w := analysisHandlerRequest(t, h.Preview, "POST", "/analysis/preview", `{`+identity+`,`+limits+`,"refresh":false,"recover_incomplete":true}`)
+	if w.Code != http.StatusOK || calls.Load() != 0 {
+		t.Fatalf("recovery preview=%d %s calls=%d", w.Code, w.Body, calls.Load())
+	}
+	var preview app.AnalysisRunPreview
+	if err := json.Unmarshal(w.Body.Bytes(), &preview); err != nil || !preview.RecoverIncomplete || preview.Features != nil || len(preview.Files) != 1 || preview.ExpectedModelRequests != 3 {
+		t.Fatalf("recovery plan=%+v %v", preview, err)
+	}
+	start := app.AnalysisRunStartRequest{Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits, Confirmations: app.AnalysisRunConfirmations{SecurityReview: true}}
+	w = analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", start)
+	if w.Code != http.StatusConflict || calls.Load() != 0 {
+		t.Fatalf("start without recovery=%d %s", w.Code, w.Body)
+	}
+	assertStructuredError(t, w)
+	start.RecoverIncomplete = true
+	for _, combine := range []func(*app.AnalysisRunStartRequest){
+		func(r *app.AnalysisRunStartRequest) { r.Refresh = true },
+		func(r *app.AnalysisRunStartRequest) { r.RetryStaleFailed = true },
+		func(r *app.AnalysisRunStartRequest) { r.IncludeFeatures = true },
+	} {
+		combined := start
+		combine(&combined)
+		w = analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", combined)
+		if w.Code != http.StatusBadRequest || calls.Load() != 0 {
+			t.Fatalf("combined start=%d %s", w.Code, w.Body)
+		}
+		assertStructuredError(t, w)
+	}
+	w = analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", start)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("recovery start=%d %s", w.Code, w.Body)
+	}
+	run := waitHandlerAnalysis(t, h, analysis, app.AnalysisRunCompletedEmpty)
+	if !run.Plan.RecoverIncomplete || run.Features != nil || calls.Load() != 3 {
+		t.Fatalf("recovery run=%+v calls=%d", run, calls.Load())
+	}
+	if recovery := readRecovery(); recovery.State != app.AnalysisRecoveryComplete || recovery.FileCount != 0 || recovery.StageCount != 0 {
+		t.Fatalf("completed recovery=%+v", recovery)
+	}
+}
+
 func TestAnalysisHandlerPreflightStartControlsAndReadOnlySections(t *testing.T) {
 	h, _, analysis, calls := newAnalysisHandlerFixture(t)
 	request := app.AnalysisPreviewRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Scope: "project", Limits: app.AnalysisRunLimits{BatchFiles: 100, BudgetSeconds: 30, MaxAttemptsPerStage: 2}}
