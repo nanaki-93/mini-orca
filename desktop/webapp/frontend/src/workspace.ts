@@ -94,7 +94,7 @@ export interface State {
 export function analysisSetupModels(s: State): M.AnalysisModels {
   if (s.analysisSetup) return s.analysisSetup;
   if (s.run?.plan?.models) return s.run.plan.models;
-  return { code: 'analyze', review: 'analyze', features: 'analyze' };
+  return { code: 'bug', review: 'analyze', features: 'analyze' };
 }
 const initial = (): State => ({
   page: 'welcome',
@@ -517,24 +517,32 @@ export class Workspace {
     this.set({ analysisSetup: setup, preview: undefined, resume: undefined });
   }
   async previewAnalysis(
+    mode: 'new' | 'repair' | 'resume',
     limits: M.Limits,
     refresh = false,
-    retry = false,
-    resume = false,
     models?: M.AnalysisModels,
   ) {
     await this.act('Prepare analysis', async () => {
-      const run = resume ? this.state.run : undefined;
+      const epoch = this.epoch;
+      const setup = this.state.analysisSetup ? { ...this.state.analysisSetup } : undefined;
+      const selection_id = this.state.selection?.selection_id;
+      const run = mode === 'resume' ? this.state.run : undefined;
       const preview = await this.api.post<M.AnalysisPreview>(`${current}/analysis/preview`, {
         ...this.identity(),
         scope: 'project',
-        include_features: run ? !!run.plan.features : true,
+        include_features: run ? !!run.plan.features : mode === 'new',
         models: run ? run.plan.models : models,
         limits: run?.plan.limits || limits,
         refresh: run?.plan.refresh || refresh,
-        retry_stale_failed: run?.plan.retry_stale_failed || retry,
+        recover_incomplete: mode === 'repair',
         ...(run ? { resume_run: run.identity } : {}),
       });
+      if (
+        epoch !== this.epoch ||
+        selection_id !== this.state.selection?.selection_id ||
+        JSON.stringify(setup) !== JSON.stringify(this.state.analysisSetup)
+      )
+        return;
       this.set({ preview, resume: run?.identity, page: 'analysis-preview' });
     });
   }

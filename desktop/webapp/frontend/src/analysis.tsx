@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { activeRun, workspace as w, type State } from './workspace';
+import { activeRun, analysisSetupModels, workspace as w, type State } from './workspace';
 import {
   Badge,
   Button,
@@ -25,7 +25,49 @@ const stageNames: Record<string, string> = {
   feature_suggestions: 'New feature suggestions',
 };
 const defaults: Limits = { batch_files: 20, budget_seconds: 600, max_attempts_per_stage: 2 };
-const modelDefaults: AnalysisModels = { code: 'bug', review: 'analyze', features: 'analyze' };
+
+export function CapturedModels({ plan }: { plan?: import('./models').AnalysisPreview }) {
+  if (!plan?.models) return <p className="small muted">Models unavailable</p>;
+  return (
+    <div className="grid three-columns">
+      {(
+        [
+          ['code', 'Code', ['semantic']],
+          ['review', 'Performance & Security', ['performance', 'security_rules', 'security_ai']],
+          ['features', 'Feature discovery', ['feature_suggestions']],
+        ] as const
+      ).map(([key, label, stages]) => {
+        const profile = plan.models![key];
+        const provider = plan.providers?.find((p) =>
+          p.stages.some((s) => (stages as readonly string[]).includes(s)),
+        );
+        const spec = provider?.model;
+        return (
+          <div key={key}>
+            <strong className="block">{label}</strong>
+            {spec ? (
+              <>
+                <div className="row between wrap">
+                  <span>{spec.model}</span>
+                  <Badge value={spec.remote_provider ? 'Remote' : 'Local'} />
+                </div>
+                <div className="small muted">{spec.provider_origin}</div>
+                <div className="small muted">Profile: {profile}</div>
+              </>
+            ) : (
+              <div className="small muted">
+                <div className="row between wrap">
+                  <span>Unavailable</span>
+                </div>
+                <div className="small muted">Profile: {profile || 'legacy'}</div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function ModelSelectors({
   s,
@@ -78,7 +120,7 @@ export function Analysis({ s }: { s: State }) {
   const [excluded, setExcluded] = useState<string[]>(s.selection?.excluded_paths || []);
   const [limits, setLimits] = useState(defaults);
   const [refresh, setRefresh] = useState(false);
-  const [models, setModels] = useState(s.preview?.models || modelDefaults);
+  const models = analysisSetupModels(s);
   useEffect(() => setExcluded(s.selection?.excluded_paths || []), [s.selection?.selection_id]);
   const files = (s.selection?.files || []).filter((file) =>
     file.path.toLowerCase().includes(filter.toLowerCase()),
@@ -87,12 +129,16 @@ export function Analysis({ s }: { s: State }) {
     JSON.stringify([...excluded].sort()) !==
     JSON.stringify([...(s.selection?.excluded_paths || [])].sort());
   const edit = !!s.selection?.editable && !s.busy;
-  const preview = (retry = false) => {
+  const hasRepair =
+    !activeRun(s.run) &&
+    !['paused', 'interrupted'].includes(s.run?.status || '') &&
+    s.selection?.recovery?.state === 'available';
+  const preview = (mode: 'new' | 'repair') => {
     if (changed) {
       w.fail('Save your file selection before preparing a run.');
       return;
     }
-    void w.previewAnalysis(limits, retry ? false : refresh, retry, false, models);
+    void w.previewAnalysis(mode, limits, refresh, models);
   };
   return (
     <>
@@ -101,38 +147,98 @@ export function Analysis({ s }: { s: State }) {
         detail={`${s.selection?.files.filter((f) => !f.reason && !excluded.includes(f.path)).length ?? '—'} eligible files selected`}
       >
         <Button
+          tone="primary"
+          icon="play"
+          disabled={!!s.busy || !s.selection || !s.models || activeRun(s.run)}
+          onClick={() => preview('new')}
+        >
+          Prepare analysis
+        </Button>
+        {hasRepair && (
+          <Button
+            icon="play"
+            disabled={!!s.busy || !s.selection || !s.models || activeRun(s.run)}
+            title="Repair does not change code. It re-attempts unfinished analysis work."
+            onClick={() => preview('repair')}
+          >
+            Repair analysis
+          </Button>
+        )}
+        <Button
+          icon="sparkles"
+          disabled={!!s.busy}
+          title={s.busy ? 'Cannot search while another operation is running.' : undefined}
+          onClick={() => void w.searchFeatures('Analysis', s.features?.goals || '')}
+        >
+          Search more feature suggestions
+        </Button>
+        <Go page="features" icon="arrow-right">
+          Explore features
+        </Go>
+        <Button
           disabled={!!s.busy}
           icon="refresh"
           onClick={() => void w.act('Refresh files', () => w.refreshProject())}
         >
           Refresh
         </Button>
-        <Button
-          tone="primary"
-          icon="play"
-          disabled={!!s.busy || !s.selection || !s.models || activeRun(s.run)}
-          onClick={() => preview()}
-        >
-          Prepare analysis
-        </Button>
       </Heading>
-      {s.run && (
-        <Panel>
-          <div className="row between wrap">
-            <div className="row">
-              <Icon name="activity" />
-              <strong>Last run</strong>
-              <StatusDot value={s.run.status} label="Analysis" />
+
+      <div className="grid equal-columns section-gap">
+        <Panel title="Run settings">
+          <ModelSelectors
+            s={s}
+            value={models}
+            disabled={!!s.busy}
+            onChange={(m) => w.setAnalysisSetup(m)}
+          />
+          <Disclosure title="Batch & request limits">
+            <div className="form-grid">
+              {(
+                [
+                  ['batch_files', 'Files per batch', 1, 500],
+                  ['budget_seconds', 'Time budget · seconds', 1, 3600],
+                  ['max_attempts_per_stage', 'Attempts per stage', 1, 4],
+                ] as const
+              ).map(([key, label, min, max]) => (
+                <label key={key}>
+                  {label}
+                  <input
+                    type="number"
+                    min={min}
+                    max={max}
+                    value={limits[key]}
+                    onChange={(e) => setLimits({ ...limits, [key]: Number(e.target.value) })}
+                  />
+                </label>
+              ))}
             </div>
-            <Go page="analysis-run">View run</Go>
-          </div>
+            <label className="checkbox-line">
+              <input
+                type="checkbox"
+                checked={refresh}
+                onChange={(e) => setRefresh(e.target.checked)}
+              />
+              Refresh previously analyzed files
+            </label>
+          </Disclosure>
         </Panel>
-      )}
-      <div className="actions section-gap">
-        <Go page="features" icon="sparkles">
-          Explore features
-        </Go>
+        {s.run && (
+          <Panel title="Last run">
+            <div className="row between wrap">
+              <div className="row">
+                <Icon name="activity" />
+                <StatusDot value={s.run.status} label="Analysis" />
+              </div>
+              <Go page="analysis-run">View run</Go>
+            </div>
+            <div className="section-gap">
+              <CapturedModels plan={s.run.plan} />
+            </div>
+          </Panel>
+        )}
       </div>
+
       <div className="toolbar section-gap">
         <div className="input-wrap">
           <Icon name="search" />
@@ -243,49 +349,6 @@ export function Analysis({ s }: { s: State }) {
           </div>
         )}
       </div>
-      <div className="grid equal-columns section-gap">
-        <Panel title="Run settings">
-          <ModelSelectors s={s} value={models} disabled={!!s.busy} onChange={setModels} />
-          <Disclosure title="Batch & request limits">
-            <div className="form-grid">
-              {(
-                [
-                  ['batch_files', 'Files per batch', 1, 500],
-                  ['budget_seconds', 'Time budget · seconds', 1, 3600],
-                  ['max_attempts_per_stage', 'Attempts per stage', 1, 4],
-                ] as const
-              ).map(([key, label, min, max]) => (
-                <label key={key}>
-                  {label}
-                  <input
-                    type="number"
-                    min={min}
-                    max={max}
-                    value={limits[key]}
-                    onChange={(e) => setLimits({ ...limits, [key]: Number(e.target.value) })}
-                  />
-                </label>
-              ))}
-            </div>
-            <label className="checkbox-line">
-              <input
-                type="checkbox"
-                checked={refresh}
-                onChange={(e) => setRefresh(e.target.checked)}
-              />
-              Refresh previously analyzed files
-            </label>
-          </Disclosure>
-        </Panel>
-        <Panel title="Retry incomplete work">
-          <Button
-            disabled={!!s.busy || !s.selection || activeRun(s.run)}
-            onClick={() => preview(true)}
-          >
-            Prepare stale & failed
-          </Button>
-        </Panel>
-      </div>
     </>
   );
 }
@@ -298,9 +361,23 @@ export function AnalysisPreview({ s }: { s: State }) {
       </Empty>
     );
   const ready = p.files.length > 0 || !!p.features?.max_model_requests;
+  const isRepair = !!p.recover_incomplete;
+  const isResume = !!s.resume;
+
+  const currentSetup = w.snapshot().analysisSetup;
+  const mismatch =
+    isResume &&
+    currentSetup &&
+    p.models &&
+    (currentSetup.code !== p.models.code ||
+      currentSetup.review !== p.models.review ||
+      currentSetup.features !== p.models.features);
+
   return (
     <>
-      <Heading title={s.resume ? 'Continue analysis' : 'Ready to analyze'}>
+      <Heading
+        title={isRepair ? 'Repair analysis' : isResume ? 'Continue analysis' : 'Ready to analyze'}
+      >
         <Go page="analysis">Back</Go>
         <Button
           tone="primary"
@@ -308,16 +385,16 @@ export function AnalysisPreview({ s }: { s: State }) {
           disabled={!ready || !!s.busy}
           onClick={() => void w.startAnalysis()}
         >
-          {s.resume ? 'Resume analysis' : 'Start analysis'}
+          {isRepair ? 'Start repair' : isResume ? 'Resume analysis' : 'Start analysis'}
         </Button>
       </Heading>
       <div className="grid two-columns">
         <div className="stack">
-          <Panel title="Scope">
+          <Panel title={isRepair ? 'Repair scope' : 'Scope'}>
             <div className="mini-metrics">
               <div>
                 <strong>{p.files.length}</strong>
-                <small>Files</small>
+                <small>{isRepair ? 'Files to repair' : 'Files'}</small>
               </div>
               <div>
                 <strong>{p.expected_model_requests}</strong>
@@ -335,30 +412,24 @@ export function AnalysisPreview({ s }: { s: State }) {
                 ['Existing results', p.refresh ? 'Refresh' : 'Reuse when current'],
               ]}
             />
+            {isRepair && (
+              <p className="small muted section-gap">
+                Repair re-attempts unfinished analysis work. It does not modify your source code.
+              </p>
+            )}
           </Panel>
           <Panel title="Models">
-            <ModelSelectors
-              s={s}
-              value={p.models || modelDefaults}
-              disabled={!!s.busy || !!s.resume}
-              onChange={(models) =>
-                void w.previewAnalysis(p.limits, p.refresh, !!p.retry_stale_failed, false, models)
-              }
-            />
-            {s.resume && <p className="small muted">Resuming keeps this run's model choices.</p>}
-            {(p.providers || []).map((provider) => (
-              <div className="provider-row" key={provider.id}>
-                <div className="row between">
-                  <strong>{provider.model.model}</strong>
-                  <Badge value={provider.model.remote_provider ? 'Remote' : 'Local'} />
-                </div>
-                <p className="small muted">{provider.model.provider_origin}</p>
-                <p className="small section-gap">
-                  {provider.stages.map((stage) => stageNames[stage]).join(' · ')}
-                </p>
-              </div>
-            ))}
-            <p className="small muted">
+            <CapturedModels plan={p} />
+            {isResume && (
+              <p className="small muted section-gap">Resuming keeps this run's model choices.</p>
+            )}
+            {mismatch && (
+              <Notice>
+                Your current setup choices differ from this run's captured choices. Resuming uses
+                the captured choices above.
+              </Notice>
+            )}
+            <p className="small muted section-gap">
               Start confirms any remote context sharing and AI Security review.
             </p>
           </Panel>
@@ -458,7 +529,7 @@ export function AnalysisRun({ s }: { s: State }) {
           <Button
             tone="primary"
             disabled={!!s.busy}
-            onClick={() => void w.previewAnalysis(run.plan.limits, false, false, true)}
+            onClick={() => void w.previewAnalysis('resume', run.plan.limits)}
           >
             Prepare continuation
           </Button>
@@ -473,6 +544,9 @@ export function AnalysisRun({ s }: { s: State }) {
         )}
       </Heading>
       {run.reason && <Notice>{run.reason}</Notice>}
+      <Panel title="Captured models" className="section-gap">
+        <CapturedModels plan={run.plan} />
+      </Panel>
       <Panel>
         <div className="row between wrap">
           <h2>{run.window_files_completed} files completed this batch</h2>

@@ -732,12 +732,22 @@ export function installFixture(options = {}) {
                 reason: '',
                 stages: stages.map((stage) => ({ stage, status: 'fresh', reason: '' })),
               })),
+              recovery: options.hasRecovery
+                ? {
+                    state: 'available',
+                    file_count: 1,
+                    stage_count: 1,
+                  }
+                : undefined,
             });
           }
           if (path.endsWith('/analysis/preview')) {
             state.preview = structuredClone(body.resume_run ? state.run.plan : preview);
             const choices = body.resume_run ? state.run.plan.models : body.models;
             state.preview.models = choices;
+            if (body.recover_incomplete) {
+              state.preview.recover_incomplete = true;
+            }
             if (choices) {
               const code = `code-${choices.code}`;
               const review = `review-${choices.review}`;
