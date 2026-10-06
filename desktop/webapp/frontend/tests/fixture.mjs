@@ -1081,6 +1081,7 @@ export function installFixture(options = {}) {
               error_behavior: [],
               context_manifest: context,
               engineering_insight: insight,
+              ...options.explanation,
             });
           if (path.endsWith('/security-review') || path.endsWith('/files/security-scan'))
             return response(security);
@@ -1120,7 +1121,7 @@ export function installFixture(options = {}) {
                 role: 'assistant',
                 content: options.hostile
                   ? '<img src="https://evil.invalid/tracker" onerror="alert(1)"> [link](https://evil.invalid)'
-                  : 'The draft returns the context error.',
+                  : (options.declarationAssistantMessage ?? 'The draft returns the context error.'),
               },
               context_manifest: context,
             });
