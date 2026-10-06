@@ -396,8 +396,15 @@ export function installFixture(options = {}) {
         : context,
     },
     instructions: {
-      'AGENTS.md': '# Project rules\n\nPreserve public APIs.\n',
+      'AGENTS.md': options.instructionsLongContent
+        ? `# Project rules\n\nPreserve public APIs.\n\nInherited boundary: ${'RootGuidance'.repeat(40)}\n`
+        : '# Project rules\n\nPreserve public APIs.\n',
       'internal/AGENTS.md': '# Internal rules\n\nPropagate cancellation.\n',
+      ...(options.instructionPath
+        ? {
+            [options.instructionPath]: `# Directory rules\n\nPropagate cancellation.\n\n${'DirectoryGuidance'.repeat(40)}\n`,
+          }
+        : {}),
     },
     draft: undefined,
     session: undefined,
@@ -559,10 +566,15 @@ export function installFixture(options = {}) {
           if (path === '/api/projects/current/instructions') {
             const target = url.searchParams.get('path');
             const inherited = Object.entries(state.instructions).filter(
-              ([file]) => file === 'AGENTS.md' || file === target,
+              ([file]) =>
+                (file === 'AGENTS.md' ||
+                  file === target ||
+                  target.startsWith(file.slice(0, -'AGENTS.md'.length))) &&
+                !(options.instructionsExcluded && file === target),
             );
             return response({
               ...rev,
+              project_revision: options.instructionsStale ? 'older-revision' : rev.project_revision,
               path: target,
               exists: target in state.instructions,
               existing_content: state.instructions[target] || '',
@@ -571,9 +583,16 @@ export function installFixture(options = {}) {
                   path,
                   content,
                   hash: 'guide',
-                  scope: path === 'AGENTS.md' ? '.' : 'internal',
+                  scope: path === 'AGENTS.md' ? '.' : path.slice(0, -'/AGENTS.md'.length),
                 })),
-                excluded: [],
+                excluded: options.instructionsExcluded
+                  ? [
+                      {
+                        path: target,
+                        reason: `Excluded by context policy ${'PolicyReason'.repeat(30)}`,
+                      },
+                    ]
+                  : [],
                 fingerprint: 'guide-1',
               },
               presets: [

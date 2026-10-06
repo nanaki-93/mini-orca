@@ -133,7 +133,10 @@ const surfaceInventory = {
       'excluded',
       'stale',
       'read failed',
+      'loading',
       'busy',
+      'long root and directory scope',
+      'unchanged preview',
     ],
   },
   editor: {
@@ -539,6 +542,65 @@ async function chatOutcomeLayout(page) {
     );
   }
   assert.equal(await outcome.locator('input, textarea, [contenteditable="true"]').count(), 0);
+  checks++;
+}
+async function instructionsLayout(page) {
+  const workspace = page.locator('.instructions-page');
+  await headingContainment(workspace.locator('.page-heading--intro'));
+  for (const region of [
+    workspace,
+    workspace.locator('.instruction-grid'),
+    ...(await workspace.locator('.stack').all()),
+  ])
+    assert.equal(await region.evaluate((element) => getComputedStyle(element).gap), '20px');
+  const wizard = await page
+    .getByRole('region', { name: 'Instruction wizard', exact: true })
+    .boundingBox();
+  const guidance = await page
+    .getByRole('region', { name: 'Effective project guidance', exact: true })
+    .boundingBox();
+  if (page.viewportSize().width > 1100) {
+    assert.ok(Math.abs(guidance.y - wizard.y) <= 1);
+    assert.ok(Math.abs(guidance.x - wizard.x - wizard.width - 20) <= 1);
+  } else {
+    assert.ok(Math.abs(guidance.y - wizard.y - wizard.height - 20) <= 1);
+    assert.ok(Math.abs(guidance.x - wizard.x) <= 1);
+    assert.ok(Math.abs(guidance.width - wizard.width) <= 1);
+  }
+  const overflow = await page
+    .locator(
+      '#main, .page, .instructions-page, .instruction-grid, .instructions-page .stack, .instructions-page .panel, .instructions-page .panel-head, .instructions-page .panel-body, .instructions-page .prose, .instructions-page .disclosure-body, .instructions-page .notice, .instructions-page summary, .instruction-presets',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.scrollWidth > element.clientWidth + 1)
+        .map((element) => element.className || element.id),
+    );
+  assert.deepEqual(overflow, [], 'Guidance, paths and exclusions wrap without clipping');
+  for (const panel of await workspace.locator('.panel').all()) {
+    const bounds = await panel.boundingBox();
+    for (const control of await panel.locator('button, input, textarea, summary').all()) {
+      if (!(await control.isVisible())) continue;
+      const box = await control.boundingBox();
+      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+    }
+  }
+  for (const group of await workspace.locator('.panel-head, .actions, .wizard-steps').all()) {
+    const boxes = [];
+    for (const part of await group.locator(':scope > *').all()) {
+      const box = await part.boundingBox();
+      for (const other of boxes)
+        assert.ok(
+          box.x + box.width <= other.x + 1 ||
+            other.x + other.width <= box.x + 1 ||
+            box.y + box.height <= other.y + 1 ||
+            other.y + other.height <= box.y + 1,
+          'Wizard titles, steps and actions do not collide',
+        );
+      boxes.push(box);
+    }
+  }
   checks++;
 }
 async function featuresLayout(page) {
@@ -5549,6 +5611,308 @@ try {
     );
     await close();
   });
+  await test('Every instruction step retains Summary panels, long guidance and passive reflow', async () => {
+    const directory = `internal/${'LongDirectory'.repeat(24)}/AGENTS.md`;
+    for (const target of ['AGENTS.md', directory]) {
+      const { page, close } = await pageFor({
+        instructionPath: directory,
+        instructionsLongContent: true,
+        projectPath: `/fixture/${'LongProjectRoot'.repeat(24)}`,
+      });
+      try {
+        const reference = await panelTreatment(page.locator('.summary-details > .panel').first());
+        await nav(page, 'Instructions');
+        await page.getByText('AGENTS.md · scope .', { exact: true }).waitFor();
+        await page.getByLabel('Instruction path').fill('temporary/AGENTS.md');
+        await page.getByLabel('Instruction path').fill(target);
+        assert.equal(
+          await page.locator('.instructions-page summary').count(),
+          0,
+          'Path editing clears the previous scope',
+        );
+        assert.equal(await page.getByLabel('Instruction path').inputValue(), target);
+        const initialInstructions = await page.evaluate(() => window.fixture.state.instructions);
+        for (const step of [1, 2, 3]) {
+          if (step === 2) {
+            await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+            await page.getByLabel('Custom instructions').waitFor();
+            for (const summary of await page.locator('.instructions-page summary').all())
+              await summary.click();
+            const effective = page.getByRole('region', {
+              name: 'Effective project guidance',
+              exact: true,
+            });
+            for (const inherited of target === directory
+              ? ['AGENTS.md', 'internal/AGENTS.md', directory]
+              : ['AGENTS.md']) {
+              for (const paragraph of initialInstructions[inherited]
+                .split(/\n\s*\n/)
+                .filter(Boolean))
+                assert.ok(
+                  (await effective.textContent()).includes(paragraph),
+                  'Inherited guidance remains complete',
+                );
+            }
+          }
+          if (step === 3)
+            await page.getByRole('button', { name: 'Continue to preview', exact: true }).click();
+          assert.equal(
+            await page.locator('.wizard-steps [aria-current="step"]').innerText(),
+            `${step}. ${['Choose scope', 'Edit guidance', 'Preview'][step - 1]}`,
+          );
+          assert.deepEqual(
+            await panelTreatment(page.locator('.instructions-page .panel').first()),
+            reference,
+          );
+          for (const theme of ['dark', 'light']) {
+            if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+              await page
+                .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
+                .click();
+            for (const larger of [false, true]) {
+              const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
+              if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
+                await textSize.click();
+              for (const width of [1440, 1280, 1001, 800]) {
+                await page.setViewportSize({ width, height: 1000 });
+                await instructionsLayout(page);
+                if (step === 2)
+                  assert.equal(
+                    await page.getByLabel('Custom instructions').inputValue(),
+                    initialInstructions[target],
+                  );
+                if (step === 3) {
+                  assert.deepEqual(
+                    await page
+                      .locator('.instructions-page .prose')
+                      .first()
+                      .locator('p')
+                      .allTextContents(),
+                    initialInstructions[target].split(/\n\s*\n/).filter(Boolean),
+                    'The complete proposed guidance remains read-only and visible',
+                  );
+                  assert.equal(
+                    await page
+                      .getByRole('button', { name: 'Preview instruction diff', exact: true })
+                      .isDisabled(),
+                    true,
+                    'Unchanged guidance cannot create a proposal',
+                  );
+                }
+                await layout(
+                  page,
+                  `instructions-${target === directory ? 'directory' : 'root'}-step-${step}-${width}-${theme}-${larger ? 'larger' : 'standard'}`,
+                );
+              }
+              await contrast(
+                page,
+                `Instructions step ${step} ${theme} ${larger ? 'larger' : 'standard'}`,
+              );
+            }
+          }
+          // Reset appearance before comparing the next step to the dark/standard reference.
+          await page
+            .getByRole('button', { name: 'Switch to dark appearance', exact: true })
+            .click();
+          await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        }
+        await page.getByRole('button', { name: 'Edit guidance', exact: true }).click();
+        await page
+          .getByLabel('Custom instructions')
+          .fill(`${initialInstructions[target]}\nKeep boundary diagnostics complete.\n`);
+        const edited = await page.getByLabel('Custom instructions').inputValue();
+        await page.getByRole('button', { name: 'Continue to preview', exact: true }).click();
+        assert.equal(
+          await page
+            .getByRole('button', { name: 'Preview instruction diff', exact: true })
+            .isEnabled(),
+          true,
+        );
+        await page.getByRole('button', { name: 'Edit guidance', exact: true }).click();
+        assert.equal(await page.getByLabel('Custom instructions').inputValue(), edited);
+        await page.getByRole('button', { name: 'Back to scope', exact: true }).click();
+        assert.equal(await page.getByLabel('Instruction path').inputValue(), target);
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.state.instructions),
+          initialInstructions,
+        );
+        assert.deepEqual(
+          await page.evaluate(() =>
+            window.fixture.requests.filter(
+              (r) => r.method !== 'GET' && !r.path.endsWith('/restore'),
+            ),
+          ),
+          [],
+          'Wizard navigation, editing, disclosures and reflow never generate, execute or write',
+        );
+        assert.deepEqual(await page.evaluate(() => window.fixture.terminals), []);
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Instruction exclusions and stale scopes remain visible and block editing or proposals', async () => {
+    const target = `internal/${'PolicyScope'.repeat(30)}/AGENTS.md`;
+    for (const state of ['excluded', 'stale']) {
+      const { page, close } = await pageFor({
+        instructionPath: target,
+        instructionsLongContent: true,
+        instructionsExcluded: state === 'excluded',
+        instructionsStale: state === 'stale',
+      });
+      try {
+        await nav(page, 'Instructions');
+        await page.getByLabel('Instruction path').fill(target);
+        await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+        if (state === 'excluded') {
+          await page
+            .getByText('This AGENTS.md is excluded by project context policy.', { exact: true })
+            .waitFor();
+          for (const control of [
+            page.getByLabel('Custom instructions'),
+            page.getByLabel('Keep changes focused'),
+            page.getByRole('button', { name: 'Add selected guidance', exact: true }),
+            page.getByRole('button', { name: 'Continue to preview', exact: true }),
+          ])
+            assert.equal(await control.isDisabled(), true);
+          await page.getByRole('button', { name: 'Back to scope', exact: true }).click();
+          await page
+            .getByText('This AGENTS.md is excluded by project context policy.', { exact: true })
+            .waitFor();
+        } else {
+          await page.getByText('Load this scope again before editing.', { exact: true }).waitFor();
+          assert.equal(await page.getByLabel('Custom instructions').count(), 0);
+          assert.equal(
+            await page.getByRole('button', { name: 'Continue to preview', exact: true }).count(),
+            0,
+          );
+        }
+        await page.getByText('AGENTS.md · scope .', { exact: true }).click();
+        for (const theme of ['dark', 'light']) {
+          if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+            await page
+              .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
+              .click();
+          for (const larger of [false, true]) {
+            const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
+            if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
+              await textSize.click();
+            for (const width of [1440, 800]) {
+              await page.setViewportSize({ width, height: 1000 });
+              await instructionsLayout(page);
+              await layout(
+                page,
+                `instructions-${state}-${width}-${theme}-${larger ? 'larger' : 'standard'}`,
+              );
+            }
+          }
+        }
+        assert.equal(
+          await page.evaluate(() =>
+            window.fixture.requests.some((r) => r.path.endsWith('/instructions/proposal')),
+          ),
+          false,
+        );
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Instruction scope loading, read failure and busy proposal retain recovery and guards', async () => {
+    const { page, close } = await pageFor();
+    try {
+      await page.evaluate(() => {
+        window.fixture.hold = '/api/projects/current/instructions';
+      });
+      await nav(page, 'Instructions');
+      await page
+        .getByText('Load a scope to inspect its effective project guidance.', { exact: true })
+        .waitFor();
+      await page.waitForFunction(() =>
+        window.fixture.requests.some((r) => r.path.endsWith('/instructions')),
+      );
+      await instructionsLayout(page);
+      await layout(page, 'instructions-scope-loading-1440-dark-standard');
+      await page.evaluate(() => {
+        window.fixture.hold = '';
+        window.fixture.release();
+      });
+      await page.getByText('AGENTS.md · scope .', { exact: true }).waitFor();
+      await page.getByLabel('Instruction path').fill('internal/AGENTS.md');
+      await page.evaluate(() => {
+        window.fixture.failures['/api/projects/current/instructions'] = 503;
+      });
+      await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+      await page.getByText('project instructions: Fixture rejection', { exact: true }).waitFor();
+      assert.equal(await page.locator('.instructions-page summary').count(), 0);
+      assert.equal(await page.getByLabel('Instruction path').inputValue(), 'internal/AGENTS.md');
+      await page.setViewportSize({ width: 800, height: 1000 });
+      await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+      await instructionsLayout(page);
+      await layout(page, 'instructions-scope-read-failed-800-dark-larger');
+      await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+      await page.getByLabel('Custom instructions').waitFor();
+      assert.equal(
+        await page.getByText('project instructions: Fixture rejection', { exact: true }).count(),
+        0,
+      );
+      await page
+        .getByLabel('Custom instructions')
+        .fill('# Internal rules\n\nPreserve cancellation and error details.\n');
+      await page.getByRole('button', { name: 'Continue to preview', exact: true }).click();
+      const before = await page.evaluate(() => window.fixture.state.instructions);
+      await page.evaluate(() => {
+        window.fixture.hold = '/api/projects/current/instructions/proposal';
+        window.fixture.failures['/api/projects/current/instructions/proposal'] = 503;
+      });
+      await page.getByRole('button', { name: 'Preview instruction diff', exact: true }).click();
+      await page.waitForFunction(() =>
+        window.fixture.requests.some((r) => r.path.endsWith('/instructions/proposal')),
+      );
+      for (const button of await page.locator('.instructions-page button').all())
+        assert.equal(await button.isDisabled(), true);
+      await instructionsLayout(page);
+      await layout(page, 'instructions-preview-busy-800-dark-larger');
+      await page.evaluate(() => {
+        window.fixture.hold = '';
+        window.fixture.release();
+      });
+      await idle(page);
+      await page.getByRole('alert').filter({ hasText: 'Fixture rejection' }).waitFor();
+      assert.equal(
+        await page
+          .getByRole('button', { name: 'Preview instruction diff', exact: true })
+          .isEnabled(),
+        true,
+      );
+      await page.getByRole('button', { name: 'Edit guidance', exact: true }).click();
+      assert.equal(
+        await page.getByLabel('Custom instructions').inputValue(),
+        '# Internal rules\n\nPreserve cancellation and error details.\n',
+      );
+      assert.deepEqual(await page.evaluate(() => window.fixture.state.instructions), before);
+      assert.equal(
+        await page.evaluate(() =>
+          window.fixture.requests.some(
+            (r) =>
+              r.path.endsWith('/apply') ||
+              r.path.endsWith('/messages') ||
+              (r.path.endsWith('/execution-trust') && r.method === 'POST'),
+          ),
+        ),
+        false,
+      );
+    } finally {
+      try {
+        await page.evaluate(() => {
+          window.fixture.hold = '';
+          window.fixture.release();
+        });
+      } finally {
+        await close();
+      }
+    }
+  });
   await test('Instruction wizard preserves inherited rules and requires diff review and Apply', async () => {
     const { page, close } = await pageFor();
     await nav(page, 'Instructions');
@@ -5567,12 +5931,16 @@ try {
     await page
       .getByLabel('Custom instructions')
       .fill(`${content}\nUse table-driven tests for boundary cases.\n`);
+    await instructionsLayout(page);
     await layout(page, 'instructions-guidance');
     await contrast(page, 'Instruction wizard');
     await page.setViewportSize({ width: 900, height: 640 });
     await page.getByRole('button', { name: 'Larger text' }).click();
+    await instructionsLayout(page);
     await layout(page, 'instructions-large-text');
     await page.getByRole('button', { name: 'Continue to preview', exact: true }).click();
+    await instructionsLayout(page);
+    await layout(page, 'instructions-preview-900-dark-larger');
     await page.getByRole('button', { name: 'Preview instruction diff', exact: true }).click();
     await idle(page);
     await page.getByLabel('Read-only diff for internal/AGENTS.md').waitFor();

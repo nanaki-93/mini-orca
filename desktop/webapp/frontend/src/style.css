@@ -2134,16 +2134,52 @@ dialog .actions {
 .features-toolbar h2 {
   flex: 1 1 14rem;
 }
-.wizard-steps {
+.instructions-page .instruction-grid,
+.instructions-page .stack {
+  gap: 20px;
+}
+.instructions-page .panel-body {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.instructions-page .panel-head h2 {
+  flex: 1 1 14rem;
+  overflow-wrap: anywhere;
+}
+.instructions-page .panel-body,
+.instructions-page .button,
+.instructions-page summary,
+.instructions-page .disclosure-body {
+  overflow-wrap: anywhere;
+}
+.instructions-page .block {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.instructions-page .panel-body > p,
+.instructions-page .panel-body > details,
+.instructions-page .notice {
+  margin: 0;
+}
+.instructions-page .panel-body > .button {
+  justify-self: start;
+}
+.instructions-page .instruction-scope {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.instructions-page .wizard-steps {
   display: flex;
   flex-wrap: wrap;
   gap: 24px;
   padding: 0;
   list-style: none;
-  margin: 0 0 24px;
+  margin: 0;
   color: var(--muted);
 }
-.wizard-steps [aria-current] {
+.instructions-page .wizard-steps [aria-current] {
   color: var(--text);
   font-weight: 600;
 }
@@ -2153,9 +2189,13 @@ dialog .actions {
   resize: vertical;
 }
 .instruction-presets {
+  min-width: 0;
   border: 0;
-  padding: 16px 0;
+  padding: 0;
   margin: 0;
+}
+.instruction-presets legend {
+  margin-bottom: 8px;
 }
 @media (max-width: 1100px) {
   .feature-grid,
