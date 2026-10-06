@@ -244,14 +244,31 @@ export function Results({ s }: { s: State }) {
         </div>
       </>
     );
+  const reports = [
+    ...(results?.performance || [])
+      .filter((r) => r.warning || !(r.findings || []).length)
+      .map((r) => ({ key: `p:${r.path}`, path: r.path, status: r.status, reason: r.warning })),
+    ...(results?.security || [])
+      .filter((r) => r.reason || !(r.findings || []).length)
+      .map((r) => ({
+        key: `s:${r.source}:${r.path}`,
+        path: r.path,
+        status: r.status,
+        reason: r.reason,
+      })),
+  ];
   return (
-    <>
+    <div className="workspace-page results-page">
       <Heading
+        variant="intro"
         title={human(category)[0].toUpperCase() + human(category).slice(1)}
         detail={
           results ? (
-            <span className="row">
-              <StatusDot value={results.progress.status} label="Analysis" />
+            <span className="row wrap">
+              <span className="results-state">
+                <StatusDot value={results.progress.status} label="Analysis" />
+                <span>{human(results.progress.status)}</span>
+              </span>
               <span>
                 {results.saved_finding_count === null
                   ? 'Count unavailable'
@@ -288,9 +305,9 @@ export function Results({ s }: { s: State }) {
         </Notice>
       ) : null}
       {category === 'security' && s.file && (
-        <Panel className="section-bottom">
+        <Panel title="Selected source" className="results-source">
           <div className="row between wrap">
-            <span className="mono small">{s.file.path}</span>
+            <span className="path results-source-path">{s.file.path}</span>
             <div className="actions">
               <Button
                 disabled={!!s.busy || s.fileStale}
@@ -308,7 +325,10 @@ export function Results({ s }: { s: State }) {
           </div>
           {s.securityReport && (
             <div className="section-gap">
-              <StatusDot value={s.securityReport.status} label="Security" />
+              <span className="results-state">
+                <StatusDot value={s.securityReport.status} label="Security" />
+                <span>{human(s.securityReport.status)}</span>
+              </span>
               {s.securityReport.reason && (
                 <p className="small section-gap">{s.securityReport.reason}</p>
               )}
@@ -316,34 +336,34 @@ export function Results({ s }: { s: State }) {
           )}
         </Panel>
       )}
-      <div className="toolbar">
-        <div className="input-wrap">
-          <Icon name="search" />
-          <input
-            aria-label="Filter findings"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setLimit(100);
-            }}
-            placeholder="Filter findings…"
-          />
+      <Panel title="Findings" className="results-findings">
+        <div className="toolbar">
+          <div className="input-wrap">
+            <Icon name="search" />
+            <input
+              aria-label="Filter findings"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setLimit(100);
+              }}
+              placeholder="Filter findings…"
+            />
+          </div>
+          <select
+            className="field compact"
+            aria-label="Finding severity"
+            value={severity}
+            onChange={(e) => setSeverity(e.target.value)}
+          >
+            <option value="">All impact levels</option>
+            {[...new Set(unique.map((row) => row.severity))].filter(Boolean).map((value) => (
+              <option key={value} value={value}>
+                {human(value)}
+              </option>
+            ))}
+          </select>
         </div>
-        <select
-          className="field compact"
-          aria-label="Finding severity"
-          value={severity}
-          onChange={(e) => setSeverity(e.target.value)}
-        >
-          <option value="">All impact levels</option>
-          {[...new Set(unique.map((row) => row.severity))].filter(Boolean).map((value) => (
-            <option key={value} value={value}>
-              {human(value)}
-            </option>
-          ))}
-        </select>
-      </div>
-      <Panel>
         <div className="result-list">
           {filtered.slice(0, limit).map((row) => (
             <button className="result-row" key={row.key} onClick={() => setSelected(row.key)}>
@@ -363,14 +383,20 @@ export function Results({ s }: { s: State }) {
               <span className="list-copy">
                 <strong>{row.title}</strong>
                 <small>
-                  {row.path}
-                  {row.line ? `:${row.line}` : ''} · {human(row.kind)}
+                  <span className="path">
+                    {row.path}
+                    {row.line ? `:${row.line}` : ''}
+                  </span>{' '}
+                  · {human(row.kind)}
                 </small>
               </span>
               <span className="result-badges">
                 <Badge value={row.severity} />
                 <Badge value={row.confidence} tone="violet" />
-                <StatusDot value={row.freshness} label="Freshness" hideSuccess />
+                <span className="results-state">
+                  <StatusDot value={row.freshness} label="Freshness" hideSuccess />
+                  <span>{human(row.freshness)}</span>
+                </span>
               </span>
               <Icon name="chevron" />
             </button>
@@ -396,38 +422,26 @@ export function Results({ s }: { s: State }) {
           </Button>
         )}
       </Panel>
-      {results && (
-        <div className="grid equal-columns section-gap">
-          {[
-            ...(results.performance || [])
-              .filter((r) => r.warning || !(r.findings || []).length)
-              .map((r) => ({
-                key: `p:${r.path}`,
-                path: r.path,
-                status: r.status,
-                reason: r.warning,
-              })),
-            ...(results.security || [])
-              .filter((r) => r.reason || !(r.findings || []).length)
-              .map((r) => ({
-                key: `s:${r.source}:${r.path}`,
-                path: r.path,
-                status: r.status,
-                reason: r.reason,
-              })),
-          ].map((report) => (
+      {!!reports.length && (
+        <section aria-label="Report summaries" className="grid equal-columns results-reports">
+          {reports.map((report) => (
             <Panel
               key={report.key}
               title={report.path}
-              actions={<StatusDot value={report.status} />}
+              actions={
+                <span className="results-state">
+                  <StatusDot value={report.status} />
+                  <span>{human(report.status)}</span>
+                </span>
+              }
             >
               {report.reason && <Prose text={report.reason} />}
             </Panel>
           ))}
-        </div>
+        </section>
       )}
       {!!results?.unclassified?.length && (
-        <Panel title="Unclassified suggestions" className="section-gap">
+        <Panel title="Unclassified suggestions">
           {results.unclassified.map((f) => (
             <Disclosure key={f.id} title={f.title}>
               <Prose text={f.message} />
@@ -438,6 +452,6 @@ export function Results({ s }: { s: State }) {
           ))}
         </Panel>
       )}
-    </>
+    </div>
   );
 }

@@ -53,9 +53,42 @@ const surfaceInventory = {
     ],
   },
   results: {
-    bugs: ['list', 'detail', 'filtered empty', 'read failed', 'retained stale', 'partial'],
-    performance: ['list', 'typed detail', 'semantic detail', 'unavailable', 'stale', 'partial'],
-    security: ['list', 'typed detail', 'semantic detail', 'unavailable', 'stale', 'partial'],
+    bugs: [
+      'list',
+      'detail',
+      'filtered empty',
+      'unavailable',
+      'read failed',
+      'retained stale',
+      'partial',
+      'pagination',
+      'unclassified',
+    ],
+    performance: [
+      'list',
+      'typed detail',
+      'semantic detail',
+      'filtered empty',
+      'unavailable',
+      'read failed',
+      'retained stale',
+      'partial',
+      'pagination',
+      'unclassified',
+    ],
+    security: [
+      'list',
+      'typed detail',
+      'semantic detail',
+      'filtered empty',
+      'unavailable',
+      'read failed',
+      'retained stale',
+      'partial',
+      'pagination',
+      'unclassified',
+      'selected source',
+    ],
   },
   features: {
     features: ['goals', 'suggestions', 'triage filters', 'empty', 'unavailable', 'failed', 'stale'],
@@ -320,6 +353,82 @@ async function panelTreatment(panel) {
       bodyPadding: getComputedStyle(element.querySelector('.panel-body')).padding,
     };
   });
+}
+async function resultsListLayout(page) {
+  const workspace = page.locator('.results-page');
+  await headingContainment(workspace.locator('.page-heading--intro'));
+  assert.equal(await workspace.evaluate((element) => getComputedStyle(element).gap), '20px');
+  const overflowing = await page
+    .locator(
+      '#main, .page, .results-page, .results-page .panel, .results-page .panel-head, .results-page .panel-body, .results-page .toolbar, .results-page .result-row, .results-page .list-copy, .results-page .result-badges',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.scrollWidth > element.clientWidth + 1)
+        .map((element) => element.id || element.className),
+    );
+  assert.deepEqual(overflowing, [], 'Findings content wraps rather than clipping internally');
+  for (const panel of await workspace.locator('section.panel').all()) {
+    const bounds = await panel.boundingBox();
+    for (const action of await panel.getByRole('button').all()) {
+      if (!(await action.isVisible())) continue;
+      const box = await action.boundingBox();
+      assert.ok(box && box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+    }
+  }
+  const collisions = await workspace.locator('.result-row, .toolbar').evaluateAll((elements) =>
+    elements.flatMap((element) => {
+      const boxes = [...element.children].map((child) => child.getBoundingClientRect());
+      return boxes.flatMap((box, i) =>
+        boxes
+          .slice(i + 1)
+          .filter(
+            (other) =>
+              box.left < other.right - 1 &&
+              other.left < box.right - 1 &&
+              box.top < other.bottom - 1 &&
+              other.top < box.bottom - 1,
+          ),
+      );
+    }),
+  );
+  assert.deepEqual(
+    collisions,
+    [],
+    'Finding titles, metadata, badges and filter fields do not collide',
+  );
+  const clippedText = await workspace
+    .locator('.result-row, .panel-head, summary')
+    .evaluateAll((elements) =>
+      elements.flatMap((element) => {
+        const bounds = element.getBoundingClientRect();
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        const clipped = [];
+        while (walker.nextNode()) {
+          if (!walker.currentNode.textContent.trim()) continue;
+          const range = document.createRange();
+          range.selectNodeContents(walker.currentNode);
+          if (
+            [...range.getClientRects()].some(
+              (rect) =>
+                rect.left < bounds.left - 1 ||
+                rect.right > bounds.right + 1 ||
+                rect.top < bounds.top - 1 ||
+                rect.bottom > bounds.bottom + 1,
+            )
+          )
+            clipped.push(walker.currentNode.textContent);
+        }
+        return clipped;
+      }),
+    );
+  assert.deepEqual(
+    clippedText,
+    [],
+    'Complete findings and report titles remain inside their boundaries',
+  );
+  checks++;
 }
 async function analysisPreviewLayout(page) {
   await headingContainment(page.locator('.page-heading--intro'));
@@ -700,6 +809,8 @@ async function contrast(page, name) {
       '.badge',
       '.list-copy strong',
       '.list-copy small',
+      '.results-state',
+      '.results-page .page-heading p',
       '.connection',
       '.nav-link:not(:disabled)',
       '.button:not(:disabled)',
@@ -3101,6 +3212,468 @@ try {
     await nav(page, 'Summary');
     await layout(page, 'summary-light');
     await close();
+  });
+  await test('Findings lists share Summary hierarchy and retain filters and local selection', async () => {
+    for (const name of ['Bugs', 'Performance', 'Security']) {
+      const { page, close } = await pageFor();
+      try {
+        await idle(page);
+        const referenceIntro = await introductionTreatment(page.locator('.summary-hero'));
+        const referencePanel = await panelTreatment(
+          page.locator('.summary-details > .panel').first(),
+        );
+        await page.evaluate(() => {
+          const state = window.fixture.state;
+          const path = `internal/${'very-long-directory-'.repeat(12)}/worker.go`;
+          state.finding.title += ` ${'complete-long-finding-title-'.repeat(12)}`;
+          state.finding.location.path = path;
+          state.performance.path = path;
+          state.performance.findings[0].title += ` ${'complete-long-performance-title-'.repeat(12)}`;
+          state.security.path = path;
+          state.security.findings[0].source_anchor.path = path;
+          state.security.findings[0].title += ` ${'complete-long-security-title-'.repeat(12)}`;
+        });
+        if (name === 'Security') await openSource(page);
+        await nav(page, name);
+        await page.locator('.result-row').first().waitFor();
+        assert.deepEqual(
+          await introductionTreatment(page.locator('.page-heading--intro')),
+          referenceIntro,
+        );
+        assert.deepEqual(await panelTreatment(page.locator('.results-findings')), referencePanel);
+        assert.equal(await page.locator('.result-row').count(), 1);
+        await page.getByText('1 saved findings', { exact: true }).waitFor();
+        const title = await page.locator('.result-row strong').innerText();
+        const pathText = await page.locator('.result-row .path').innerText();
+        assert.ok(pathText.includes('very-long-directory-'.repeat(12)));
+        assert.ok(
+          (await page.locator('.result-row small').innerText()).includes(
+            { Bugs: 'AI analysis', Performance: 'Performance hypothesis', Security: 'rules' }[name],
+          ),
+          'Rows retain category-specific provenance and evidence kind',
+        );
+        const before = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method !== 'GET'),
+        );
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page
+              .getByRole('button', { name: 'Switch to light appearance', exact: true })
+              .click();
+          for (const larger of [false, true]) {
+            const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
+            if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
+              await textSize.click();
+            for (const width of [1440, 1280, 1001, 800]) {
+              await page.setViewportSize({ width, height: 1000 });
+              await resultsListLayout(page);
+              assert.equal(await page.locator('.result-row strong').innerText(), title);
+              assert.equal(await page.locator('.result-row .path').innerText(), pathText);
+              if (name === 'Security') {
+                for (const label of ['Scan source', 'AI Security review'])
+                  assert.equal(
+                    await page.getByRole('button', { name: label, exact: true }).isEnabled(),
+                    true,
+                  );
+              }
+              await layout(
+                page,
+                `${name.toLowerCase()}-list-long-${width}-${theme}-${larger ? 'larger' : 'standard'}`,
+              );
+            }
+            await contrast(page, `${name} findings ${theme} ${larger ? 'larger' : 'standard'}`);
+          }
+        }
+        const filter = page.getByRole('textbox', { name: 'Filter findings', exact: true });
+        await filter.fill('no-such-finding');
+        await page.getByRole('heading', { name: 'No matching findings', exact: true }).waitFor();
+        await resultsListLayout(page);
+        await layout(page, `${name.toLowerCase()}-list-filtered-empty-800-light-larger`);
+        await filter.fill('worker.go');
+        await page
+          .getByLabel('Finding severity', { exact: true })
+          .selectOption({ label: name === 'Bugs' ? 'high' : 'medium' });
+        await filter.press('Tab');
+        assert.equal(
+          await page
+            .getByLabel('Finding severity', { exact: true })
+            .evaluate((element) => element === document.activeElement),
+          true,
+        );
+        await page.getByLabel('Finding severity', { exact: true }).press('Tab');
+        assert.equal(
+          await page
+            .locator('.result-row')
+            .evaluate((element) => element === document.activeElement),
+          true,
+        );
+        await page.locator('.result-row').press('Enter');
+        await page.getByRole('button', { name: 'All findings', exact: true }).click();
+        assert.equal(await filter.inputValue(), 'worker.go');
+        assert.equal(
+          await page.getByLabel('Finding severity', { exact: true }).inputValue(),
+          name === 'Bugs' ? 'high' : 'medium',
+        );
+        if (name === 'Bugs') {
+          await page.getByRole('button', { name: 'Verified scan', exact: true }).click();
+          await page.getByRole('button', { name: 'Run scan', exact: true }).waitFor();
+          await nav(page, name);
+        }
+        await page.getByRole('button', { name: 'Analyze project', exact: true }).click();
+        await page.getByRole('heading', { name: 'Analysis', exact: true }).waitFor();
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          before,
+          'Filters, selection, back-to-list and tool navigation remain passive',
+        );
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+        assert.equal(await page.getByRole('dialog').count(), 0);
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Each findings category keeps unavailable, read-failed, retained and partial evidence truthful', async () => {
+    for (const name of ['Bugs', 'Performance', 'Security']) {
+      const category = name.toLowerCase();
+      for (const scenario of ['unavailable', 'read-failed', 'retained-stale', 'partial']) {
+        const { page, close } = await pageFor();
+        try {
+          await idle(page);
+          const before = await page.evaluate(() =>
+            window.fixture.requests.filter((r) => r.method !== 'GET'),
+          );
+          await page.evaluate(
+            ({ category, scenario }) => {
+              const state = window.fixture.state;
+              if (scenario === 'read-failed') {
+                window.fixture.failures['/api/projects/current/analysis/results'] = 503;
+                return;
+              }
+              const progress = {
+                ...state.run.sections.find((section) => section.category === category),
+                status: scenario === 'retained-stale' ? 'partial' : scenario,
+                finding_count: scenario === 'unavailable' ? null : 1,
+              };
+              const result = {
+                progress,
+                saved_finding_count: scenario === 'unavailable' ? null : 1,
+                semantic:
+                  category === 'bugs'
+                    ? [
+                        {
+                          ...state.finding,
+                          freshness: scenario === 'retained-stale' ? 'stale' : 'fresh',
+                        },
+                      ]
+                    : [],
+                performance:
+                  category === 'performance'
+                    ? [
+                        {
+                          ...state.performance,
+                          status:
+                            scenario === 'retained-stale'
+                              ? 'stale'
+                              : scenario === 'partial'
+                                ? 'partial'
+                                : 'success',
+                        },
+                      ]
+                    : [],
+                security:
+                  category === 'security'
+                    ? [
+                        {
+                          ...state.security,
+                          status:
+                            scenario === 'retained-stale'
+                              ? 'stale'
+                              : scenario === 'partial'
+                                ? 'partial'
+                                : 'success',
+                        },
+                      ]
+                    : [],
+                retained_files:
+                  scenario === 'retained-stale'
+                    ? [
+                        {
+                          path: state.files[0].path,
+                          content_hash: state.files[0].content_hash,
+                          language: 'go',
+                        },
+                      ]
+                    : [],
+                unclassified: [
+                  {
+                    ...state.finding,
+                    id: 'historical',
+                    category: '',
+                    title: `Historical unclassified ${'long-title-'.repeat(20)}`,
+                    message: 'Historical evidence remains separate from category counts.',
+                  },
+                ],
+              };
+              if (scenario === 'unavailable') {
+                result.semantic = [];
+                result.performance = [];
+                result.security = [];
+              }
+              // Typed report failures remain visible even when a category also has saved rows.
+              if (category !== 'bugs') {
+                const path = `internal/${'long-report-directory-'.repeat(16)}/failed.go`;
+                if (category === 'performance')
+                  result.performance.push({
+                    ...state.performance,
+                    path,
+                    status: 'failed',
+                    findings: [],
+                    warning: `Report unavailable: ${'complete diagnostic '.repeat(30)}`,
+                  });
+                else
+                  result.security.push({
+                    ...state.security,
+                    path,
+                    status: 'unavailable',
+                    findings: [],
+                    reason: `Report unavailable: ${'complete diagnostic '.repeat(30)}`,
+                  });
+              }
+              state.results[category] = result;
+            },
+            { category, scenario },
+          );
+          await nav(page, name);
+          await idle(page);
+          const workspace = page.locator('.results-page');
+          await workspace.getByRole('heading', { name, exact: true }).waitFor();
+          if (scenario === 'read-failed') {
+            await page
+              .getByRole('alert')
+              .filter({ hasText: `${category}:` })
+              .getByText('Fixture rejection', { exact: false })
+              .waitFor();
+            assert.equal(
+              await workspace.getByText(/saved findings|Count unavailable/).count(),
+              0,
+              'A failed read does not fabricate saved counts',
+            );
+            if (category !== 'bugs')
+              await workspace
+                .getByRole('heading', { name: 'Results not loaded', exact: true })
+                .waitFor();
+            else
+              assert.equal(
+                await workspace.locator('.result-row').count(),
+                1,
+                'Saved semantic fallback remains accessible',
+              );
+          } else {
+            await workspace
+              .getByText(scenario === 'unavailable' ? 'Count unavailable' : '1 saved findings', {
+                exact: true,
+              })
+              .waitFor();
+            if (scenario === 'unavailable')
+              await workspace
+                .getByRole('heading', { name: 'No saved findings', exact: true })
+                .waitFor();
+            else assert.equal(await workspace.locator('.result-row').count(), 1);
+            const status = scenario === 'retained-stale' ? 'partial' : scenario;
+            assert.equal(
+              await workspace.locator('.page-heading--intro .results-state').innerText(),
+              status,
+            );
+            if (scenario === 'retained-stale') {
+              await workspace
+                .getByRole('status')
+                .getByText('Includes retained results from 1 files outside this run.', {
+                  exact: true,
+                })
+                .waitFor();
+              await workspace
+                .locator('.result-row .results-state')
+                .getByText('stale', { exact: true })
+                .waitFor();
+            }
+            if (category !== 'bugs') {
+              const reports = workspace.getByRole('region', {
+                name: 'Report summaries',
+                exact: true,
+              });
+              await reports.getByText(/Report unavailable: complete diagnostic/).waitFor();
+              await reports
+                .locator('.results-state')
+                .getByText(category === 'performance' ? 'failed' : 'unavailable', { exact: true })
+                .waitFor();
+            }
+            const beforeDisclosure = await page.evaluate(() => window.fixture.requests.length);
+            await workspace.locator('summary').press('Enter');
+            await workspace
+              .getByText('Historical evidence remains separate from category counts.', {
+                exact: true,
+              })
+              .waitFor();
+            assert.equal(
+              await page.evaluate(() => window.fixture.requests.length),
+              beforeDisclosure,
+              'Opening unclassified evidence is local',
+            );
+          }
+          await resultsListLayout(page);
+          await layout(page, `${category}-list-${scenario}-1440-dark-standard`);
+          await page.setViewportSize({ width: 800, height: 1000 });
+          await page
+            .getByRole('button', { name: 'Switch to light appearance', exact: true })
+            .click();
+          await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          await resultsListLayout(page);
+          await layout(page, `${category}-list-${scenario}-800-light-larger`);
+          assert.deepEqual(
+            await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+            before,
+            'Reading results and disclosures does not admit scans, providers, preparation or triage',
+          );
+          assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+        } finally {
+          await close();
+        }
+      }
+    }
+  });
+  await test('Selected-source Security actions retain busy and stale restrictions', async () => {
+    const { page, close } = await pageFor();
+    try {
+      await idle(page);
+      const before = await page.evaluate(() =>
+        window.fixture.requests.filter((r) => r.method !== 'GET'),
+      );
+      await openSource(page);
+      await nav(page, 'Security');
+      const actions = ['Scan source', 'AI Security review'].map((name) =>
+        page.getByRole('button', { name, exact: true }),
+      );
+      for (const action of actions) assert.equal(await action.isEnabled(), true);
+      const previousReads = await page.evaluate(
+        () => window.fixture.requests.filter((r) => r.path.endsWith('/analysis/results')).length,
+      );
+      await page.evaluate(() => {
+        window.fixture.hold = '/api/projects/current/analysis/results';
+      });
+      await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+      await page.waitForFunction(
+        (count) =>
+          window.fixture.requests.filter((r) => r.path.endsWith('/analysis/results')).length >
+          count,
+        previousReads,
+      );
+      await page.locator('.busy-strip').waitFor();
+      for (const action of actions) assert.equal(await action.isDisabled(), true);
+      await page.evaluate(() => {
+        window.fixture.hold = '';
+        window.fixture.release();
+      });
+      await idle(page);
+      for (const action of actions) assert.equal(await action.isEnabled(), true);
+      await page.evaluate(() => {
+        window.fixture.state.changed = true;
+      });
+      await nav(page, 'Source');
+      await page.locator('.notice').filter({ hasText: 'File evidence is outdated.' }).waitFor();
+      await nav(page, 'Security');
+      for (const action of actions) assert.equal(await action.isDisabled(), true);
+      await page.setViewportSize({ width: 800, height: 1000 });
+      await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+      await resultsListLayout(page);
+      await layout(page, 'security-list-selected-source-stale-800-dark-larger');
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+        before,
+        'Selected-source presentation does not start a scan or AI review',
+      );
+      assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+    } finally {
+      try {
+        await page.evaluate(() => {
+          window.fixture.hold = '';
+          window.fixture.release();
+        });
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Findings pagination and severity filtering remain available in every category', async () => {
+    for (const name of ['Bugs', 'Performance', 'Security']) {
+      const { page, close } = await pageFor();
+      try {
+        await page.evaluate((category) => {
+          const state = window.fixture.state;
+          const items = Array.from({ length: 101 }, (_, i) => ({
+            id: `page-${i}`,
+            title: `Saved finding ${i}`,
+            level: i % 2 ? 'low' : 'high',
+          }));
+          state.results[category] = {
+            saved_finding_count: 101,
+            semantic:
+              category === 'bugs'
+                ? items.map((item) => ({ ...state.finding, ...item, severity: item.level }))
+                : [],
+            performance:
+              category === 'performance'
+                ? [
+                    {
+                      ...state.performance,
+                      findings: items.map((item) => ({
+                        ...state.performance.findings[0],
+                        ...item,
+                        potential_impact: item.level,
+                      })),
+                    },
+                  ]
+                : [],
+            security:
+              category === 'security'
+                ? [
+                    {
+                      ...state.security,
+                      findings: items.map((item) => ({
+                        ...state.security.findings[0],
+                        ...item,
+                        severity: item.level,
+                      })),
+                    },
+                  ]
+                : [],
+          };
+        }, name.toLowerCase());
+        await nav(page, name);
+        await page.getByText('101 saved findings', { exact: true }).waitFor();
+        assert.equal(await page.locator('.result-row').count(), 100);
+        const before = await page.evaluate(() => window.fixture.requests.length);
+        await page.getByRole('button', { name: 'Show more', exact: true }).click();
+        assert.equal(await page.locator('.result-row').count(), 101);
+        await page.getByLabel('Finding severity', { exact: true }).selectOption('low');
+        assert.equal(await page.locator('.result-row').count(), 50);
+        await page.getByLabel('Finding severity', { exact: true }).selectOption('');
+        await page
+          .getByRole('textbox', { name: 'Filter findings', exact: true })
+          .fill('Saved finding');
+        assert.equal(
+          await page.locator('.result-row').count(),
+          100,
+          'Query changes reset pagination',
+        );
+        assert.equal(await page.evaluate(() => window.fixture.requests.length), before);
+        await page.setViewportSize({ width: 800, height: 1000 });
+        await resultsListLayout(page);
+        await layout(page, `${name.toLowerCase()}-list-pagination-800-dark-standard`);
+      } finally {
+        await close();
+      }
+    }
   });
   await test('Empty, partial, canceled and failed results keep their state', async () => {
     for (const options of [

@@ -1123,6 +1123,61 @@ button.list-row:hover,
   max-width: 35%;
   flex-shrink: 0;
 }
+.results-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+.results-page > .notice {
+  margin-bottom: 0;
+}
+.results-page .panel-head h2 {
+  flex: 1 1 14rem;
+  overflow-wrap: anywhere;
+}
+.results-page summary,
+.results-page .button {
+  overflow-wrap: anywhere;
+}
+.results-source-path {
+  flex: 1 1 16rem;
+}
+.results-findings {
+  container-type: inline-size;
+}
+.results-findings .toolbar .input-wrap {
+  flex: 1 1 16rem;
+}
+.results-findings .toolbar .field {
+  flex: 0 1 14rem;
+}
+.results-findings .result-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) minmax(0, auto) 18px;
+  gap: 12px;
+  padding: 18px 5px;
+}
+.results-findings .result-badges {
+  min-width: 0;
+  max-width: none;
+}
+.results-reports {
+  gap: 20px;
+}
+@container (max-width: 40em) {
+  .results-findings .result-row {
+    grid-template-columns: 30px minmax(0, 1fr) 18px;
+  }
+  .results-findings .result-badges {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+  .results-findings .result-row > svg {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
 .table-wrap {
   overflow-x: auto;
 }
