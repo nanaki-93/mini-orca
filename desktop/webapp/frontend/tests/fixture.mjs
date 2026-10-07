@@ -40,6 +40,7 @@ export function installFixture(options = {}) {
     remote_provider: !!options.remote,
     reasoning_effort: 'medium',
     timeout: '2m',
+    ...options.modelMetadata?.[scope],
   });
   const insight = {
     mechanism: 'Cancellation needs to reach each unit of work.',
@@ -423,6 +424,7 @@ export function installFixture(options = {}) {
     terminals = [],
     failures = {
       ...(options.startupOffline ? { '/status': 'transport' } : {}),
+      ...(options.modelCatalogUnavailable ? { '/api/models/current': 503 } : {}),
       ...(options.restoreFailure ? { '/api/projects/restore': 503 } : {}),
       ...(options.importFailure ? { '/api/projects/import': 503 } : {}),
     };
