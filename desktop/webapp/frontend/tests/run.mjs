@@ -178,13 +178,18 @@ const surfaceInventory = {
       'uncertain',
     ],
     benchmark: [
+      'absent catalog (owner-inspected; failed discovery stays in Checks)',
       'catalog',
       'empty',
       'unavailable',
-      'samples',
+      'discovery read failed',
+      'samples with zero and unknown memory values',
+      'missing versus empty measurements',
       'failed',
       'canceled',
-      'busy',
+      'comparison unavailable',
+      'long names and commands',
+      'busy discovery/comparison',
       'stale',
     ],
     scan: ['absent', 'running', 'completed', 'failed', 'partial', 'canceled', 'unknown phases'],
@@ -366,6 +371,47 @@ async function headingContainment(heading) {
     return clipped;
   });
   assert.deepEqual(clippedText, [], 'Complete heading text stays within the introduction');
+  checks++;
+}
+async function benchmarkLayout(page) {
+  const surface = page.locator('.benchmark-workspace');
+  await headingContainment(surface.locator('.page-heading--intro'));
+  assert.equal(await surface.evaluate((el) => getComputedStyle(el).gap), '20px');
+  const overflow = await page
+    .locator(
+      '#main, .page, .benchmark-workspace, .benchmark-workspace .panel, .benchmark-workspace .panel-body, .benchmark-workspace .list-row, .benchmark-workspace .list-copy, .benchmark-comparison, .benchmark-comparison-heading, .benchmark-comparison .notice, .benchmark-comparison details, .benchmark-comparison pre',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((el) => el.scrollWidth > el.clientWidth + 1)
+        .map((el) => el.className || el.tagName),
+    );
+  assert.deepEqual(overflow, [], 'Benchmark content wraps; only sample tables scroll horizontally');
+  for (const row of await surface.locator('.list-row').all()) {
+    const bounds = await row.boundingBox();
+    const copy = await row.locator('.list-copy').boundingBox();
+    const action = await row.getByRole('button', { name: 'Compare', exact: true }).boundingBox();
+    assert.ok(action.x >= bounds.x - 1 && action.x + action.width <= bounds.x + bounds.width + 1);
+    assert.ok(action.y >= bounds.y - 1 && action.y + action.height <= bounds.y + bounds.height + 1);
+    assert.ok(
+      copy.x + copy.width <= action.x + 1 || copy.y + copy.height <= action.y + 1,
+      'Catalog commands and Compare actions do not collide',
+    );
+  }
+  const comparisonHeading = surface.locator('.benchmark-comparison-heading');
+  if (await comparisonHeading.count()) {
+    const bounds = await comparisonHeading.boundingBox();
+    const title = await comparisonHeading.locator('h2').boundingBox();
+    const status = await comparisonHeading.locator('.badge').boundingBox();
+    for (const box of [title, status]) {
+      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+    }
+    assert.ok(
+      title.x + title.width <= status.x + 1 || title.y + title.height <= status.y + 1,
+      'Comparison name and status do not collide',
+    );
+  }
   checks++;
 }
 async function introductionTreatment(surface) {
@@ -5363,6 +5409,398 @@ try {
       /ctx.Err/,
     );
     await close();
+  });
+  await test('Benchmark catalogs retain discovery, unavailable reasons and candidate guards', async () => {
+    const path = '/api/projects/current/drafts/draft-1/benchmarks';
+    const reason = `Catalog reason: ${'long-scope-'.repeat(70)}. Final catalog sentence.`;
+    for (const scenario of ['empty', 'unavailable', 'unavailable-choices', 'read-failed']) {
+      const { page, close } = await pageFor({
+        benchmarkCatalog: {
+          available: scenario === 'empty',
+          reason,
+          ...(scenario === 'unavailable-choices' ? {} : { benchmarks: [] }),
+        },
+      });
+      try {
+        await prepare(page);
+        await page.getByRole('button', { name: 'Validate draft', exact: true }).click();
+        await idle(page);
+        await page.getByRole('button', { name: 'Continue to checks', exact: true }).click();
+        if (scenario === 'read-failed')
+          await page.evaluate((path) => {
+            window.fixture.failures[path] = 503;
+          }, path);
+        await page.getByRole('button', { name: 'Benchmarks', exact: true }).click();
+        await idle(page);
+        if (scenario === 'read-failed') {
+          await page.getByText('Fixture rejection', { exact: true }).waitFor();
+          assert.equal(await page.locator('.checks-workspace').count(), 1);
+          assert.equal(await page.locator('.benchmark-workspace').count(), 0);
+          await layout(page, 'benchmark-discovery-read-failed-dark-standard-1440');
+          assert.equal(
+            await page.evaluate(() =>
+              window.fixture.requests.some((r) => r.path?.endsWith('/execution-trust')),
+            ),
+            false,
+          );
+          assert.equal(
+            await page.evaluate(
+              (path) =>
+                window.fixture.requests.filter((r) => r.path === path && r.method === 'POST')
+                  .length,
+              path,
+            ),
+            0,
+          );
+          continue;
+        }
+        const surface = page.locator('.benchmark-workspace');
+        assert.equal(await surface.getByText(reason, { exact: true }).isVisible(), true);
+        if (scenario === 'unavailable-choices') {
+          assert.equal(
+            await surface.getByRole('button', { name: 'Compare', exact: true }).isDisabled(),
+            true,
+          );
+          assert.equal(await surface.locator('.panel-head .badge').textContent(), 'unavailable');
+        } else {
+          await surface
+            .getByRole('heading', {
+              name:
+                scenario === 'empty' ? 'No existing benchmarks' : 'Benchmark catalog unavailable',
+              exact: true,
+            })
+            .waitFor();
+          assert.equal(
+            await surface.getByRole('button', { name: 'Compare', exact: true }).count(),
+            0,
+          );
+        }
+        const before = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method !== 'GET'),
+        );
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+          for (const larger of [false, true]) {
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+            for (const width of [1440, 800]) {
+              await page.setViewportSize({ width, height: 1000 });
+              await benchmarkLayout(page);
+              assert.equal(
+                await surface
+                  .getByRole('button', { name: 'Find benchmarks', exact: true })
+                  .isEnabled(),
+                true,
+              );
+              await layout(
+                page,
+                `benchmark-catalog-${scenario}-${theme}-${larger ? 'larger' : 'standard'}-${width}`,
+              );
+            }
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          }
+        }
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          before,
+        );
+        await page.evaluate((path) => {
+          window.fixture.hold = path;
+        }, path);
+        const find = surface.getByRole('button', { name: 'Find benchmarks', exact: true });
+        const discoveries = await page.evaluate(
+          (path) => window.fixture.requests.filter((r) => r.path === path).length,
+          path,
+        );
+        await find.click();
+        await page.waitForFunction(
+          ({ path, discoveries }) =>
+            window.fixture.requests.filter((r) => r.path === path).length > discoveries,
+          { path, discoveries },
+        );
+        assert.equal(await find.isDisabled(), true);
+        await benchmarkLayout(page);
+        await layout(page, `benchmark-catalog-${scenario}-busy-light-standard-800`);
+        await page.evaluate(() => {
+          window.fixture.hold = '';
+          window.fixture.release();
+        });
+        await idle(page);
+        assert.equal(
+          await page.evaluate(() =>
+            window.fixture.requests.some((r) => r.path?.endsWith('/execution-trust')),
+          ),
+          false,
+          'Discovery does not grant execution trust',
+        );
+        assert.equal(
+          await page.evaluate(
+            (path) =>
+              window.fixture.requests.filter((r) => r.path === path && r.method === 'POST').length,
+            path,
+          ),
+          0,
+        );
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+        await surface.getByRole('button', { name: 'Back to checks', exact: true }).click();
+        await page.locator('.checks-workspace').waitFor();
+      } finally {
+        await page
+          .evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          })
+          .catch(() => {});
+        await close();
+      }
+    }
+  });
+  await test('Benchmark comparisons preserve returned samples, explicit trust and internal table scrolling', async () => {
+    const path = '/api/projects/current/drafts/draft-1/benchmarks';
+    const name = `Benchmark${'LongProcessName'.repeat(45)}`;
+    const command = ['go', 'test', `-bench=${name}`, `./internal/${'long-package/'.repeat(40)}`];
+    const samples = [
+      { iterations: 9876543210123, ns_per_op: 987654321012345, bytes_per_op: 0, allocs_per_op: 0 },
+      { iterations: 1234567890123, ns_per_op: 123456789012345 },
+      {
+        iterations: 987654321012345,
+        ns_per_op: 987654321012345,
+        bytes_per_op: 987654321012345,
+        allocs_per_op: 987654321012345,
+      },
+    ];
+    const { page, close } = await pageFor({
+      benchmarkCatalog: { benchmarks: [{ name, scope: 'worker', command }] },
+      benchmarkResult: {
+        command,
+        base: { samples },
+        candidate: { samples: [...samples].reverse() },
+      },
+    });
+    try {
+      const references = {};
+      for (const theme of ['dark', 'light']) {
+        if (theme === 'light')
+          await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+        references[theme] = await panelTreatment(page.locator('.summary-details > .panel').first());
+      }
+      await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+      await prepare(page);
+      await page.getByRole('button', { name: 'Validate draft', exact: true }).click();
+      await idle(page);
+      await page.getByRole('button', { name: 'Continue to checks', exact: true }).click();
+      await page.getByRole('button', { name: 'Benchmarks', exact: true }).click();
+      await idle(page);
+      const surface = page.locator('.benchmark-workspace');
+      const compare = surface.getByRole('button', { name: 'Compare', exact: true });
+      const comparisons = () =>
+        page.evaluate(
+          (path) => window.fixture.requests.filter((r) => r.path === path && r.method === 'POST'),
+          path,
+        );
+      await compare.focus();
+      await page.keyboard.press('Enter');
+      const dialog = page.getByRole('dialog');
+      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await idle(page);
+      assert.deepEqual(await comparisons(), [], 'Canceled trust never runs a comparison');
+      await page.evaluate((path) => {
+        window.fixture.hold = path;
+      }, path);
+      await compare.click();
+      await dialog.getByRole('button', { name: 'Trust this project', exact: true }).click();
+      await page.waitForFunction(
+        (path) => window.fixture.requests.some((r) => r.path === path && r.method === 'POST'),
+        path,
+      );
+      assert.equal(await compare.isDisabled(), true);
+      assert.equal(
+        await surface.getByRole('button', { name: 'Find benchmarks', exact: true }).isDisabled(),
+        true,
+      );
+      await benchmarkLayout(page);
+      await layout(page, 'benchmark-busy-comparison-dark-standard-1440');
+      await page.evaluate(() => {
+        window.fixture.hold = '';
+        window.fixture.release();
+      });
+      await idle(page);
+      const states = [
+        { status: 'completed', base: { samples }, candidate: { samples: [...samples].reverse() } },
+        { status: 'failed', base: null, candidate: null },
+        { status: 'canceled', base: { samples }, candidate: null },
+        { status: 'unavailable', base: null, candidate: null },
+        { status: 'completed', base: { samples: [] }, candidate: null, empty: true },
+      ];
+      for (const state of states) {
+        if (state !== states[0]) {
+          await page.evaluate((state) => {
+            window.fixture.options.benchmarkResult = {
+              ...window.fixture.options.benchmarkResult,
+              ...state,
+              reason: `Comparison ${state.status}: ${'long-reason-'.repeat(65)}. Final comparison sentence.`,
+            };
+          }, state);
+          await compare.click();
+          await idle(page);
+        }
+        const comparison = surface.getByRole('region', {
+          name: 'Measured comparison',
+          exact: true,
+        });
+        assert.equal(
+          await comparison.locator('.benchmark-comparison-heading .badge').textContent(),
+          state.status,
+        );
+        assert.equal(
+          await comparison.getByRole('heading', { name, exact: true }).isVisible(),
+          true,
+        );
+        if (state !== states[0])
+          assert.match(
+            await comparison.locator('.notice').innerText(),
+            /Final comparison sentence\./,
+          );
+        await comparison.getByText('Command', { exact: true }).click();
+        assert.equal(await comparison.locator('pre').textContent(), command.join(' '));
+        const before = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method !== 'GET'),
+        );
+        for (const theme of ['dark', 'light']) {
+          // Each preceding state finishes in light appearance.
+          const currentTheme = await page.locator('html').getAttribute('data-theme');
+          if (currentTheme !== theme)
+            await page.getByRole('button', { name: `Switch to ${theme} appearance` }).click();
+          for (const panel of await surface.locator('section.panel').all())
+            assert.deepEqual(await panelTreatment(panel), references[theme]);
+          for (const larger of [false, true]) {
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+            for (const width of state === states[0] ? [1440, 1280, 1001, 800] : [1440, 800]) {
+              await page.setViewportSize({ width, height: 1000 });
+              await benchmarkLayout(page);
+              for (const [title, measurement] of [
+                ['Before', state.base],
+                ['Candidate', state.candidate],
+              ]) {
+                const panel = comparison
+                  .locator('section.panel')
+                  .filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+                if (!measurement) {
+                  assert.equal(
+                    await panel.getByText('No measurement', { exact: true }).isVisible(),
+                    true,
+                  );
+                  assert.equal(await panel.locator('table').count(), 0);
+                } else if (!measurement.samples.length) {
+                  assert.equal(
+                    await panel.getByText('No samples returned', { exact: true }).isVisible(),
+                    true,
+                  );
+                  assert.equal(await panel.locator('table').count(), 0);
+                } else {
+                  assert.deepEqual(
+                    await panel.locator('tbody tr').allTextContents(),
+                    measurement.samples.map((sample) =>
+                      [
+                        sample.iterations,
+                        sample.ns_per_op,
+                        sample.bytes_per_op,
+                        sample.allocs_per_op,
+                      ]
+                        .map((value) => value?.toLocaleString() ?? '—')
+                        .join(''),
+                    ),
+                  );
+                  const table = panel.getByRole('region', {
+                    name: `${title} measurements`,
+                    exact: true,
+                  });
+                  assert.equal(await table.evaluate((el) => el.scrollWidth > el.clientWidth), true);
+                  await page.keyboard.press('Tab');
+                  await table.focus();
+                  assert.equal(await table.evaluate((el) => el.matches(':focus-visible')), true);
+                  await table.evaluate((el) => {
+                    el.scrollLeft = 0;
+                  });
+                  await page.keyboard.press('ArrowRight');
+                  await page.waitForFunction(() => document.activeElement.scrollLeft > 0);
+                  await table.evaluate((el) => {
+                    el.scrollLeft = el.scrollWidth;
+                  });
+                  assert.ok((await table.evaluate((el) => el.scrollLeft)) > 0);
+                }
+              }
+              assert.equal(await compare.isEnabled(), true);
+              await layout(
+                page,
+                `benchmark-${state.empty ? 'empty-measurement' : state.status}-${theme}-${larger ? 'larger' : 'standard'}-${width}`,
+              );
+            }
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          }
+        }
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          before,
+          'Command disclosure, appearance and table inspection never run code or write source',
+        );
+        await comparison.getByText('Command', { exact: true }).click();
+      }
+      const submitted = await comparisons();
+      assert.equal(submitted.length, states.length);
+      for (const request of submitted)
+        assert.deepEqual(request.body, {
+          project_revision: 'revision-1',
+          expected_revision: 2,
+          expected_hash: 'draft-hash-2',
+          benchmark: name,
+          expected_scope: 'worker',
+        });
+      // Failed freshness reads retain evidence but block discovery and comparison.
+      await page.evaluate(() => {
+        window.fixture.failures['/api/projects/current/files/info'] = 503;
+        window.dispatchEvent(new Event('focus'));
+      });
+      await page.getByText('Fixture rejection', { exact: true }).waitFor();
+      assert.equal(await compare.isDisabled(), true);
+      assert.equal(
+        await surface.getByRole('button', { name: 'Find benchmarks', exact: true }).isDisabled(),
+        true,
+      );
+      await benchmarkLayout(page);
+      await layout(page, 'benchmark-stale-retained-light-standard-800');
+      await page.evaluate(() => {
+        window.fixture.state.changed = true;
+        window.dispatchEvent(new Event('focus'));
+      });
+      await surface
+        .getByRole('heading', { name: 'Draft validation required', exact: true })
+        .waitFor();
+      assert.equal(await compare.count(), 0);
+      assert.equal(await surface.locator('.benchmark-comparison').count(), 0);
+      await benchmarkLayout(page);
+      await layout(page, 'benchmark-stale-cleared-light-standard-800');
+      assert.deepEqual(await comparisons(), submitted);
+      assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+      assert.equal(
+        await page.evaluate(() =>
+          window.fixture.requests.some((r) => /\/(apply|undo|scan)$/.test(r.path || '')),
+        ),
+        false,
+      );
+    } finally {
+      await page
+        .evaluate(() => {
+          window.fixture.hold = '';
+          window.fixture.release();
+        })
+        .catch(() => {});
+      await close();
+    }
   });
   await test('Benchmarks, context, explanations, scan, findings, terminal and compact layouts', async () => {
     const { page, close } = await pageFor();
