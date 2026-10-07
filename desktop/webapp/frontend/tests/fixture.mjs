@@ -1195,6 +1195,7 @@ export function installFixture(options = {}) {
                         command: ['go', 'test', '-bench=BenchmarkProcess'],
                       },
                     ],
+                    ...options.benchmarkCatalog,
                   }
                 : {
                     ...sameDraft(state.draft),
@@ -1212,6 +1213,7 @@ export function installFixture(options = {}) {
                         { iterations: 1000, ns_per_op: 200, bytes_per_op: 0, allocs_per_op: 0 },
                       ],
                     },
+                    ...options.benchmarkResult,
                   },
             );
           if (path.endsWith('/apply') || path.endsWith('/undo')) {

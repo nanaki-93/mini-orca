@@ -1527,6 +1527,49 @@ progress::-webkit-progress-value {
 .receipt-workspace > .notice {
   margin: 0;
 }
+.benchmark-comparison {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  min-width: 0;
+}
+.benchmark-comparison > .grid {
+  gap: 20px;
+}
+.benchmark-comparison > .notice,
+.benchmark-comparison > details,
+.benchmark-comparison pre {
+  margin: 0;
+}
+.benchmark-comparison-heading h2 {
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+.benchmark-workspace .list-row {
+  flex-wrap: wrap;
+}
+.benchmark-workspace .list-copy {
+  flex: 1 1 12rem;
+}
+.benchmark-workspace .list-row .button {
+  min-width: 0;
+  max-width: 100%;
+}
+.benchmark-samples {
+  min-width: 0;
+  max-width: 100%;
+}
+.benchmark-samples:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+.benchmark-samples table {
+  min-width: max-content;
+}
+.benchmark-samples th,
+.benchmark-samples td {
+  white-space: nowrap;
+}
 .receipt-mark {
   color: var(--accent);
   margin-bottom: 20px;

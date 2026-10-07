@@ -78,9 +78,15 @@ export function Receipt({ s }: { s: State }) {
     </div>
   );
 }
-function Samples({ samples }: { samples: BenchmarkSample[] }) {
+function Samples({ samples, label }: { samples: BenchmarkSample[]; label: string }) {
+  if (!samples.length) return <p className="muted">No samples returned</p>;
   return (
-    <div className="table-wrap">
+    <div
+      className="table-wrap benchmark-samples"
+      role="region"
+      aria-label={`${label} measurements`}
+      tabIndex={0}
+    >
       <table>
         <thead>
           <tr>
@@ -108,8 +114,8 @@ export function Benchmark({ s }: { s: State }) {
   const c = s.benchmarkCatalog;
   const r = s.benchmark;
   return (
-    <>
-      <Heading title="Benchmark comparison" detail={s.draft?.target_symbol}>
+    <div className="workspace-page benchmark-workspace">
+      <Heading variant="intro" title="Benchmark comparison" detail={s.draft?.target_symbol}>
         <Go page="checks">Back to checks</Go>
         <Button
           disabled={!!s.busy || !currentDraft(s)}
@@ -119,7 +125,10 @@ export function Benchmark({ s }: { s: State }) {
           Find benchmarks
         </Button>
       </Heading>
-      <Panel title="Existing benchmarks">
+      <Panel
+        title="Existing benchmarks"
+        actions={c && !c.available ? <Badge value="unavailable" /> : undefined}
+      >
         {c?.reason && <Prose text={c.reason} />}
         {c?.benchmarks?.map((choice) => (
           <div className="list-row" key={`${choice.name}:${choice.scope}`}>
@@ -136,28 +145,31 @@ export function Benchmark({ s }: { s: State }) {
             </Button>
           </div>
         ))}
+        {c && !c.benchmarks?.length && (
+          <Empty title={c.available ? 'No existing benchmarks' : 'Benchmark catalog unavailable'} />
+        )}
         {!c && (
           <Empty title={currentDraft(s) ? 'No benchmark catalog' : 'Draft validation required'} />
         )}
       </Panel>
       {r && (
-        <>
-          <div className="row between section-gap">
+        <section className="benchmark-comparison" aria-label="Measured comparison">
+          <div className="row between wrap benchmark-comparison-heading">
             <h2>{r.benchmark}</h2>
             <Badge value={r.status} />
           </div>
           {r.reason && <Notice>{r.reason}</Notice>}
-          <div className="grid equal-columns section-gap">
+          <div className="grid equal-columns">
             <Panel title="Before">
               {r.base ? (
-                <Samples samples={r.base.samples} />
+                <Samples samples={r.base.samples} label="Before" />
               ) : (
                 <p className="muted">No measurement</p>
               )}
             </Panel>
             <Panel title="Candidate">
               {r.candidate ? (
-                <Samples samples={r.candidate.samples} />
+                <Samples samples={r.candidate.samples} label="Candidate" />
               ) : (
                 <p className="muted">No measurement</p>
               )}
@@ -166,9 +178,9 @@ export function Benchmark({ s }: { s: State }) {
           <Disclosure title="Command">
             <pre>{r.command?.join(' ')}</pre>
           </Disclosure>
-        </>
+        </section>
       )}
-    </>
+    </div>
   );
 }
 export function Scan({ s }: { s: State }) {
