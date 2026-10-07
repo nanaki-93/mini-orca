@@ -18,7 +18,14 @@ const surfaceInventory = {
     summary: ['reference', 'empty', 'unavailable', 'stale', 'failed', 'long identity'],
     welcome: ['no project', 'offline', 'opening', 'open failed'],
     project: ['no project', 'loaded', 'opening', 'open failed', 'long paths'],
-    models: ['configured', 'unavailable', 'empty', 'busy', 'long destinations'],
+    models: [
+      'configured',
+      'unavailable',
+      'empty',
+      'busy',
+      'long destinations',
+      'refresh failed with retained configuration',
+    ],
     search: ['files and commands', 'filtered empty', 'large list', 'long paths'],
     diagrams: ['rendered', 'empty', 'prose', 'invalid', 'oversized', 'source disclosure'],
   },
@@ -506,6 +513,33 @@ async function projectLayout(page) {
         );
       boxes.push(box);
     }
+  }
+  checks++;
+}
+async function modelsLayout(page) {
+  const surface = page.locator('.models-workspace');
+  await headingContainment(surface.locator('.page-heading--intro'));
+  assert.equal(await surface.evaluate((el) => getComputedStyle(el).gap), '20px');
+  const overflow = await page
+    .locator(
+      '#main, .page, .models-workspace, .models-grid, .models-workspace .panel, .models-workspace .panel-head, .models-workspace .panel-body, .model-configuration, .model-identity, .model-identity h3, .models-workspace .key-values, .models-workspace .key-values dd, .models-workspace .disclosure-body',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((el) => el.scrollWidth > el.clientWidth + 1)
+        .map((el) => el.className || el.tagName),
+    );
+  assert.deepEqual(overflow, [], 'Full model names and configuration values wrap without clipping');
+  const bounds = await surface.boundingBox();
+  for (const panel of await surface.locator('.panel').all()) {
+    const box = await panel.boundingBox();
+    assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+    const identity = panel.locator('.model-identity');
+    const icon = await identity.locator('.model-icon').boundingBox();
+    const name = await identity.locator('h3').boundingBox();
+    assert.ok(icon.x + icon.width <= name.x + 1, 'Model icon and complete name do not collide');
+    assert.ok(name.x + name.width <= box.x + box.width + 1);
+    assert.ok(name.y + name.height <= box.y + box.height + 1);
   }
   checks++;
 }
@@ -1464,6 +1498,10 @@ async function contrast(page, name) {
       '.list-copy small',
       '.results-state',
       '.results-page .page-heading p',
+      '.models-workspace .page-heading p',
+      '.models-workspace .model-identity h3',
+      '.models-workspace .key-values dt',
+      '.models-workspace .key-values dd',
       '.connection',
       '.nav-link:not(:disabled)',
       '.button:not(:disabled)',
@@ -1524,6 +1562,231 @@ try {
       ? { channel: process.env.MINI_ORCA_TEST_BROWSER || 'chrome' }
       : {}),
   });
+  await test('Models retain configured scopes, complete destinations and Summary presentation', async () => {
+    const metadata = {
+      analyze: {
+        model: `Analysis-${'LongModelName'.repeat(24)}`,
+        provider_origin: `https://${'RemoteProvider'.repeat(24)}.invalid`,
+        remote_provider: true,
+        profile: `analyze-${'LongProfile'.repeat(24)}`,
+        reasoning_effort: 'high',
+      },
+      bug: {
+        model: `Code-${'LongModelName'.repeat(24)}`,
+        provider_origin: `http://127.0.0.1:11434/${'LocalDestination'.repeat(24)}`,
+        profile: null,
+        reasoning_effort: null,
+        timeout: null,
+      },
+      function: {
+        model: `Edits-${'LongModelName'.repeat(24)}`,
+        provider_origin: `pi://${'ConfiguredProvider'.repeat(24)}`,
+        remote_provider: true,
+        reasoning_effort: '',
+      },
+    };
+    for (const state of ['configured', 'empty', 'unavailable']) {
+      const { page, close } = await pageFor({
+        modelMetadata: metadata,
+        emptyModelCatalog: state === 'empty',
+        modelCatalogUnavailable: state === 'unavailable',
+      });
+      try {
+        const reference = await panelTreatment(page.locator('.summary-details > .panel').first());
+        const intro = await introductionTreatment(page.locator('.summary-hero'));
+        await nav(page, 'Models');
+        const surface = page.locator('.models-workspace');
+        await surface.getByRole('heading', { name: 'Models', exact: true }).waitFor();
+        assert.deepEqual(
+          await introductionTreatment(surface.locator('.page-heading--intro')),
+          intro,
+        );
+        assert.match(
+          await surface.locator('.page-heading p').innerText(),
+          /not captured run choices or provider health/,
+        );
+        assert.equal(await surface.locator('input, select, textarea, a').count(), 0);
+        const panels = surface.locator('.panel');
+        assert.equal(await panels.count(), state === 'configured' ? 3 : 0);
+        if (state === 'configured') {
+          assert.deepEqual(await panels.locator('.panel-head h2').allTextContents(), [
+            'Project analysis',
+            'File & Security',
+            'Declaration edits',
+          ]);
+          for (const [index, scope] of ['analyze', 'bug', 'function'].entries()) {
+            const panel = panels.nth(index);
+            assert.deepEqual(await panelTreatment(panel), reference);
+            assert.equal(await panel.locator('h3').innerText(), metadata[scope].model);
+            assert.deepEqual(await panel.locator('dd').allTextContents(), [
+              metadata[scope].provider_origin,
+              metadata[scope].profile === null ? '—' : metadata[scope].profile || scope,
+              metadata[scope].reasoning_effort || 'Default',
+              metadata[scope].timeout === null ? '—' : '2m',
+            ]);
+            assert.equal(
+              await panel.locator('.badge').innerText(),
+              scope === 'bug' ? 'Local provider' : 'Remote provider',
+            );
+            assert.equal(
+              await panel
+                .locator('dd')
+                .first()
+                .evaluate((el) => getComputedStyle(el).userSelect === 'none'),
+              false,
+            );
+          }
+        } else {
+          await surface
+            .getByRole('heading', {
+              name: state === 'empty' ? 'No configured models' : 'Model configuration unavailable',
+              exact: true,
+            })
+            .waitFor();
+        }
+        await surface.getByText('Configuration', { exact: true }).click();
+        assert.equal(
+          await surface.locator('.disclosure-body').innerText(),
+          'Edit config.yaml, then restart the daemon.',
+        );
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+          for (const large of [false, true]) {
+            if (large) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+            for (const width of [1440, 1280, 1001, 800]) {
+              await page.setViewportSize({ width, height: 1000 });
+              await modelsLayout(page);
+              await layout(
+                page,
+                `models-${state}-${width}-${theme}-${large ? 'larger' : 'standard'}`,
+              );
+              await contrast(page, `Models ${state} ${width} ${theme} ${large}`);
+              assert.equal(
+                await surface.getByRole('button', { name: 'Refresh', exact: true }).isEnabled(),
+                true,
+              );
+            }
+            if (large) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          }
+        }
+        if (state === 'unavailable') {
+          await surface.getByRole('button', { name: 'Refresh', exact: true }).click();
+          await idle(page);
+          assert.equal(await panels.count(), 3, 'Refresh recovers a failed configuration read');
+          assert.equal(
+            await surface.getByRole('heading', { name: 'Model configuration unavailable' }).count(),
+            0,
+          );
+        }
+        assert.deepEqual(
+          await page.evaluate(() =>
+            window.fixture.requests.filter(
+              (r) => r.method !== 'GET' && r.path !== '/api/projects/restore',
+            ),
+          ),
+          [],
+        );
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+      } finally {
+        await close();
+      }
+    }
+  });
+
+  await test('Models Refresh stays a local configuration read and preserves busy presentation', async () => {
+    const { page, close } = await pageFor({ remote: true });
+    try {
+      await nav(page, 'Models');
+      const surface = page.locator('.models-workspace');
+      const before = await page.evaluate(
+        () => window.fixture.requests.filter((r) => r.path === '/api/models/current').length,
+      );
+      await page.evaluate(() => {
+        window.fixture.hold = '/api/models/current';
+      });
+      await surface.getByRole('button', { name: 'Refresh', exact: true }).focus();
+      await page.keyboard.press('Enter');
+      await page.waitForFunction(
+        (count) =>
+          window.fixture.requests.filter((r) => r.path === '/api/models/current').length > count,
+        before,
+      );
+      assert.equal(
+        await surface.getByRole('button', { name: 'Refresh', exact: true }).isDisabled(),
+        true,
+      );
+      assert.equal(
+        await surface.locator('.panel').count(),
+        3,
+        'Retain configuration during Refresh',
+      );
+      await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+      for (const width of [1440, 1280, 1001, 800]) {
+        await page.setViewportSize({ width, height: 1000 });
+        await modelsLayout(page);
+        await layout(page, `models-busy-${width}-dark-larger`);
+      }
+      await page.evaluate(() => {
+        window.fixture.hold = '';
+        window.fixture.release();
+      });
+      await idle(page);
+      assert.equal(
+        await surface.getByRole('button', { name: 'Refresh', exact: true }).isEnabled(),
+        true,
+      );
+      assert.equal(
+        await page.getByRole('dialog').count(),
+        0,
+        'Configuration Refresh requires no provider admission',
+      );
+      await page.evaluate(() => {
+        window.fixture.failures['/api/models/current'] = 503;
+      });
+      await surface.getByRole('button', { name: 'Refresh', exact: true }).click();
+      await idle(page);
+      await page
+        .getByRole('alert')
+        .filter({ hasText: /^models: Fixture rejection$/ })
+        .waitFor();
+      assert.equal(
+        await surface.locator('.panel').count(),
+        3,
+        'A failed Refresh retains configuration',
+      );
+      assert.equal(
+        await surface.getByRole('button', { name: 'Refresh', exact: true }).isEnabled(),
+        true,
+      );
+      assert.equal(
+        await page.evaluate(
+          () => window.fixture.requests.filter((r) => r.path === '/api/models/current').length,
+        ),
+        before + 2,
+      );
+      await modelsLayout(page);
+      await layout(page, 'models-refresh-failed-800-dark-larger');
+      assert.deepEqual(
+        await page.evaluate(() =>
+          window.fixture.requests.filter(
+            (r) => r.method !== 'GET' && r.path !== '/api/projects/restore',
+          ),
+        ),
+        [],
+      );
+      assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+    } finally {
+      await page
+        .evaluate(() => {
+          window.fixture.hold = '';
+          window.fixture.release();
+        })
+        .catch(() => {});
+      await close();
+    }
+  });
+
   await test('Welcome and Project retain Summary framing, startup recovery and distinct paths', async () => {
     const currentPath = `/fixture/${'CurrentProjectDirectory'.repeat(22)}/harbor`;
     const enteredPath = `/fixture/${'EnteredProjectDirectory'.repeat(22)}/next`;

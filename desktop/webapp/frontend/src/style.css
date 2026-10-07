@@ -777,6 +777,31 @@ pre {
 .project-current-path {
   font-family: var(--mono);
 }
+.models-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 20px;
+}
+.model-configuration {
+  gap: 20px;
+}
+.model-identity {
+  align-items: flex-start;
+}
+.model-identity .model-icon {
+  flex-shrink: 0;
+}
+.model-identity h3 {
+  min-width: 0;
+  margin: 0;
+  font-size: 1.1rem;
+}
+.models-workspace .panel-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.models-workspace .key-values {
+  margin-top: 0;
+}
 .summary-hero,
 .page-heading--intro {
   padding: 20px 24px;
@@ -1550,7 +1575,6 @@ progress::-webkit-progress-value {
 }
 .model-icon {
   color: var(--violet);
-  margin-bottom: 20px;
 }
 .receipt-workspace > .grid {
   gap: 20px;
@@ -1698,6 +1722,7 @@ progress::-webkit-progress-value {
   overflow-wrap: anywhere;
 }
 .project-workspace .key-values > div,
+.models-workspace .key-values > div,
 .context-inspection .key-values > div,
 .draft-workspace .key-values > div,
 .review-workspace .key-values > div,
@@ -1706,6 +1731,7 @@ progress::-webkit-progress-value {
   gap: 8px 20px;
 }
 .project-workspace .key-values dd,
+.models-workspace .key-values dd,
 .context-inspection .key-values dd,
 .draft-workspace .key-values dd,
 .review-workspace .key-values dd,

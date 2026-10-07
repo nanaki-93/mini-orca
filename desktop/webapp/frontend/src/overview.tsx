@@ -319,8 +319,12 @@ export function Summary({ s }: { s: State }) {
 }
 export function Models({ s }: { s: State }) {
   return (
-    <>
-      <Heading title="Models">
+    <div className="workspace-page models-workspace">
+      <Heading
+        title="Models"
+        detail="Current daemon configuration, not captured run choices or provider health."
+        variant="intro"
+      >
         <Button
           icon="refresh"
           disabled={!!s.busy}
@@ -329,7 +333,7 @@ export function Models({ s }: { s: State }) {
           Refresh
         </Button>
       </Heading>
-      <div className="grid three-columns">
+      <div className="grid models-grid">
         {Object.values(s.models?.scopes || {}).map((model) => (
           <Panel
             key={model.scope}
@@ -341,29 +345,37 @@ export function Models({ s }: { s: State }) {
               }[model.scope] || model.scope
             }
           >
-            <div className="model-icon">
-              <Icon name={model.remote_provider ? 'cloud' : 'laptop'} />
+            <div className="stack model-configuration">
+              <div className="row model-identity">
+                <div className="model-icon">
+                  <Icon name={model.remote_provider ? 'cloud' : 'laptop'} />
+                </div>
+                <h3>{model.model}</h3>
+              </div>
+              <div>
+                <Badge value={model.remote_provider ? 'Remote provider' : 'Local provider'} />
+              </div>
+              <KeyValues
+                values={[
+                  ['Destination', model.provider_origin],
+                  ['Profile', model.profile],
+                  ['Reasoning', model.reasoning_effort || 'Default'],
+                  ['Timeout', model.timeout],
+                ]}
+              />
             </div>
-            <h2>{model.model}</h2>
-            <div className="section-gap">
-              <Badge value={model.remote_provider ? 'Remote provider' : 'Local provider'} />
-            </div>
-            <KeyValues
-              values={[
-                ['Destination', model.provider_origin],
-                ['Profile', model.profile],
-                ['Reasoning', model.reasoning_effort || 'Default'],
-                ['Timeout', model.timeout],
-              ]}
-            />
           </Panel>
         ))}
       </div>
       <Disclosure title="Configuration">
         <p className="small muted">Edit config.yaml, then restart the daemon.</p>
       </Disclosure>
-      {!s.models && <Empty title="Model configuration unavailable" />}
-    </>
+      {!s.models ? (
+        <Empty title="Model configuration unavailable" />
+      ) : (
+        Object.keys(s.models.scopes || {}).length === 0 && <Empty title="No configured models" />
+      )}
+    </div>
   );
 }
 export function Diagrams({ s }: { s: State }) {
