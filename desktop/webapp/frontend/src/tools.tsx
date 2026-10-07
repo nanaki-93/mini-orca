@@ -17,6 +17,8 @@ import {
   Notice,
   Panel,
   Prose,
+  StatusDot,
+  human,
 } from './ui';
 
 export function Receipt({ s }: { s: State }) {
@@ -185,8 +187,23 @@ export function Benchmark({ s }: { s: State }) {
 }
 export function Scan({ s }: { s: State }) {
   return (
-    <>
-      <Heading title="Verified scan" detail={s.scan && <Badge value={s.scan.status} />}>
+    <div className="workspace-page scan-workspace">
+      <Heading
+        variant="intro"
+        title="Verified scan"
+        detail={
+          <>
+            {s.scan && (
+              <span className="scan-status">
+                <StatusDot value={s.scan.status} />
+                <span>Status: {human(s.scan.status)}</span>
+              </span>
+            )}
+            Local phase evidence. Completion does not mean every phase passed or the project is
+            safe.
+          </>
+        }
+      >
         <Go page="bugs">Findings</Go>
         {s.scan?.status === 'running' ? (
           <Button disabled={!!s.busy} onClick={() => void w.scanProject(true)}>
@@ -204,25 +221,41 @@ export function Scan({ s }: { s: State }) {
         )}
       </Heading>
       {s.scan ? (
-        <div className="stack">
+        <div className="stack scan-phases">
           {s.scan.phases?.map((phase, i) => (
-            <Panel title={phase.name} actions={<Badge value={phase.state} />} key={i}>
-              <pre className="command">{phase.command?.join(' ')}</pre>
-              {phase.output && (
-                <Disclosure title="Output">
-                  <pre>{phase.output}</pre>
-                </Disclosure>
+            <Panel
+              title={phase.name}
+              actions={
+                <span className="scan-status">
+                  <StatusDot value={phase.state} />
+                  <span>{human(phase.state)}</span>
+                </span>
+              }
+              key={i}
+            >
+              {phase.command?.length ? (
+                <pre className="command">{phase.command.join(' ')}</pre>
+              ) : (
+                <p className="small muted">No command reported</p>
               )}
               {phase.exit_code !== 0 && phase.exit_code !== undefined && (
                 <p className="small muted">Exit {phase.exit_code}</p>
               )}
+              {phase.output ? (
+                <Disclosure title="Output">
+                  <pre>{phase.output}</pre>
+                </Disclosure>
+              ) : (
+                <p className="small muted">No output returned</p>
+              )}
             </Panel>
           ))}
+          {!s.scan.phases?.length && <Empty title="No phase evidence returned" />}
         </div>
       ) : (
         <Empty title="No verified scan yet" icon="shield" />
       )}
-    </>
+    </div>
   );
 }
 function TerminalSession({ session, visible }: { session: TerminalUpdate; visible: boolean }) {

@@ -328,6 +328,7 @@ export function installFixture(options = {}) {
     finding,
     run: options.empty ? null : { ...run, ...structuredClone(options.runOverride || {}) },
     preview,
+    scan: options.scanReport ? { ...identity, ...structuredClone(options.scanReport) } : null,
     context,
     performance,
     security,
@@ -468,7 +469,7 @@ export function installFixture(options = {}) {
           const path = url.pathname;
           const body = payload ? JSON.parse(payload) : undefined;
           requests.push({ id, method, path, query: Object.fromEntries(url.searchParams), body });
-          if (window.fixture.hold === path)
+          if (window.fixture.hold === path || window.fixture.hold === `${method} ${path}`)
             await new Promise((resolve) => {
               held = resolve;
             });
@@ -1244,24 +1245,25 @@ export function installFixture(options = {}) {
               ...(undo ? options.declarationUndoReceipt : options.declarationReceipt),
             });
           }
-          if (path.endsWith('/scan'))
-            return response(
-              method === 'GET'
-                ? null
-                : {
-                    ...rev,
-                    status: method === 'DELETE' ? 'canceled' : 'completed',
-                    phases: [
-                      {
-                        name: 'vet',
-                        state: 'passed',
-                        command: ['go', 'vet', './...'],
-                        output: 'No findings',
-                        exit_code: 0,
-                      },
-                    ],
+          if (path.endsWith('/scan')) {
+            if (method === 'POST')
+              state.scan = {
+                ...rev,
+                status: 'completed',
+                phases: [
+                  {
+                    name: 'vet',
+                    state: 'passed',
+                    command: ['go', 'vet', './...'],
+                    output: 'No findings',
+                    exit_code: 0,
                   },
-            );
+                ],
+                ...structuredClone(options.scanResult || {}),
+              };
+            if (method === 'DELETE') state.scan = { ...state.scan, ...rev, status: 'canceled' };
+            return response(state.scan);
+          }
           throw new Error(`Unimplemented fixture route: ${method} ${target}`);
         },
         async Cancel(id) {

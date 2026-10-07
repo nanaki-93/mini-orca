@@ -192,7 +192,20 @@ const surfaceInventory = {
       'busy discovery/comparison',
       'stale',
     ],
-    scan: ['absent', 'running', 'completed', 'failed', 'partial', 'canceled', 'unknown phases'],
+    scan: [
+      'absent',
+      'running',
+      'completed with failed phase',
+      'failed',
+      'partial',
+      'canceled with retained evidence',
+      'unknown phases and states',
+      'missing command/output',
+      'missing/empty phases',
+      'long diagnostics',
+      'busy run/cancel',
+      'execution trust canceled/confirmed',
+    ],
     terminal: [
       'idle',
       'active',
@@ -410,6 +423,40 @@ async function benchmarkLayout(page) {
     assert.ok(
       title.x + title.width <= status.x + 1 || title.y + title.height <= status.y + 1,
       'Comparison name and status do not collide',
+    );
+  }
+  checks++;
+}
+async function scanLayout(page) {
+  const surface = page.locator('.scan-workspace');
+  await headingContainment(surface.locator('.page-heading--intro'));
+  assert.equal(await surface.evaluate((el) => getComputedStyle(el).gap), '20px');
+  const overflow = await page
+    .locator(
+      '#main, .page, .scan-workspace, .scan-phases, .scan-phases .panel, .scan-phases .panel-head, .scan-phases .panel-body, .scan-status, .scan-phases details, .scan-phases .disclosure-body, .scan-phases pre',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((el) => el.scrollWidth > el.clientWidth + 1)
+        .map((el) => el.className || el.tagName),
+    );
+  assert.deepEqual(
+    overflow,
+    [],
+    'Scan status, commands and complete diagnostics wrap within their panels',
+  );
+  for (const panel of await surface.locator('.panel').all()) {
+    const header = panel.locator('.panel-head');
+    const bounds = await header.boundingBox();
+    const title = await header.locator('h2').boundingBox();
+    const status = await header.locator('.scan-status').boundingBox();
+    for (const box of [title, status]) {
+      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+    }
+    assert.ok(
+      title.x + title.width <= status.x + 1 || title.y + title.height <= status.y + 1,
+      'Phase title and status do not collide',
     );
   }
   checks++;
@@ -5789,6 +5836,294 @@ try {
       assert.equal(
         await page.evaluate(() =>
           window.fixture.requests.some((r) => /\/(apply|undo|scan)$/.test(r.path || '')),
+        ),
+        false,
+      );
+    } finally {
+      await page
+        .evaluate(() => {
+          window.fixture.hold = '';
+          window.fixture.release();
+        })
+        .catch(() => {});
+      await close();
+    }
+  });
+  await test('Verified scan retains every phase, truthful status and passive diagnostics across appearances', async () => {
+    const command = ['go', 'test', `./internal/${'long-package/'.repeat(45)}`];
+    const output = `Diagnostic: ${'LongDiagnostic'.repeat(100)}\nFinal diagnostic line.\n<script>window.scanInjected = true</script>`;
+    const phases = [
+      { name: 'parse', state: 'passed', command: [], output: '', exit_code: 0 },
+      { name: 'vet', state: 'failed', command, output, exit_code: 17 },
+      {
+        name: 'tests',
+        state: 'completed',
+        command: ['go', 'test', './...'],
+        output: 'Returned test evidence',
+        exit_code: 0,
+      },
+      {
+        name: `custom-${'LongPhase'.repeat(40)}`,
+        state: `unknown_${'state'.repeat(40)}`,
+        exit_code: -1,
+      },
+    ];
+    for (const scenario of [
+      'absent',
+      'running',
+      'completed',
+      'failed',
+      'partial',
+      'canceled',
+      'missing-phases',
+      'empty-phases',
+    ]) {
+      const report =
+        scenario === 'absent'
+          ? null
+          : {
+              status: scenario.endsWith('phases') ? 'completed' : scenario,
+              ...(scenario === 'missing-phases'
+                ? {}
+                : { phases: scenario === 'empty-phases' ? [] : phases }),
+            };
+      const { page, close } = await pageFor({ scanReport: report });
+      try {
+        const references = {};
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+          await nav(page, 'Summary');
+          references[theme] = {
+            intro: await introductionTreatment(page.locator('.summary-hero')),
+            panel: await panelTreatment(page.locator('.summary-details .panel').first()),
+          };
+        }
+        await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+        await nav(page, 'Project');
+        await page.getByRole('button', { name: 'Verified scan', exact: true }).click();
+        await idle(page);
+        const surface = page.locator('.scan-workspace');
+        const heading = surface.locator('.page-heading--intro');
+        const action = surface.getByRole('button', {
+          name: scenario === 'running' ? 'Cancel scan' : 'Run scan',
+          exact: true,
+        });
+        assert.equal(await action.isEnabled(), true);
+        if (!report) {
+          await surface
+            .getByRole('heading', { name: 'No verified scan yet', exact: true })
+            .waitFor();
+        } else {
+          assert.equal(
+            await heading.getByText(`Status: ${report.status}`, { exact: true }).isVisible(),
+            true,
+          );
+          assert.equal(await surface.locator('.panel').count(), report.phases?.length || 0);
+          if (!report.phases?.length) {
+            await surface
+              .getByRole('heading', { name: 'No phase evidence returned', exact: true })
+              .waitFor();
+          } else {
+            for (const [i, phase] of phases.entries()) {
+              const panel = surface.locator('.panel').nth(i);
+              assert.equal(
+                await panel.getByRole('heading', { name: phase.name, exact: true }).isVisible(),
+                true,
+              );
+              assert.equal(
+                await panel.locator('.scan-status').textContent(),
+                phase.state.replaceAll('_', ' '),
+              );
+              if (phase.command?.length)
+                assert.equal(
+                  await panel.locator('.command').textContent(),
+                  phase.command.join(' '),
+                );
+              else
+                assert.equal(
+                  await panel.getByText('No command reported', { exact: true }).isVisible(),
+                  true,
+                );
+              if (phase.exit_code)
+                assert.equal(
+                  await panel.getByText(`Exit ${phase.exit_code}`, { exact: true }).isVisible(),
+                  true,
+                );
+              else assert.equal(await panel.getByText('Exit 0', { exact: true }).count(), 0);
+              if (!phase.output)
+                assert.equal(
+                  await panel.getByText('No output returned', { exact: true }).isVisible(),
+                  true,
+                );
+            }
+          }
+        }
+        const before = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method !== 'GET'),
+        );
+        for (const disclosure of await surface.locator('summary').all()) {
+          await disclosure.focus();
+          await page.keyboard.press('Enter');
+          assert.equal(await disclosure.evaluate((el) => el.parentElement.open), true);
+        }
+        if (report?.phases?.length) {
+          assert.equal(
+            await surface.locator('.panel').nth(1).locator('.disclosure-body pre').textContent(),
+            output,
+          );
+          assert.equal(
+            await surface.locator('.panel').nth(2).locator('.disclosure-body pre').textContent(),
+            phases[2].output,
+          );
+          assert.equal(
+            await surface
+              .locator('pre')
+              .evaluateAll((elements) =>
+                elements.every((el) => getComputedStyle(el).userSelect !== 'none'),
+              ),
+            true,
+          );
+          assert.equal(await surface.locator('textarea, [contenteditable="true"]').count(), 0);
+        }
+        assert.equal(await page.evaluate(() => window.scanInjected), undefined);
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+          assert.deepEqual(await introductionTreatment(heading), references[theme].intro);
+          if (report?.phases?.length)
+            assert.deepEqual(
+              await panelTreatment(surface.locator('.panel').first()),
+              references[theme].panel,
+            );
+          for (const larger of [false, true]) {
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+            for (const width of scenario === 'completed' ? [1440, 1280, 1001, 800] : [1440, 800]) {
+              await page.setViewportSize({ width, height: 1000 });
+              await scanLayout(page);
+              await layout(
+                page,
+                `scan-${scenario}-${theme}-${larger ? 'larger' : 'standard'}-${width}`,
+              );
+            }
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          }
+        }
+        await surface.getByRole('button', { name: 'Findings', exact: true }).click();
+        await page.getByRole('heading', { name: 'Bugs', exact: true }).waitFor();
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          before,
+          'Viewing phases, disclosures, appearance and findings does not admit work',
+        );
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Verified scan keeps explicit execution trust, guarded Run/Cancel and busy controls', async () => {
+    const path = '/api/projects/current/scan';
+    const phases = [
+      {
+        name: 'vet',
+        state: 'failed',
+        command: ['go', 'vet', './...'],
+        output: 'Retained diagnostic',
+        exit_code: 2,
+      },
+    ];
+    const { page, close } = await pageFor({ scanResult: { status: 'running', phases } });
+    try {
+      await nav(page, 'Project');
+      await page.getByRole('button', { name: 'Verified scan', exact: true }).click();
+      const surface = page.locator('.scan-workspace');
+      const run = surface.getByRole('button', { name: 'Run scan', exact: true });
+      const admissions = () =>
+        page.evaluate(
+          (path) => window.fixture.requests.filter((r) => r.path === path && r.method !== 'GET'),
+          path,
+        );
+      await run.click();
+      await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+      await idle(page);
+      assert.deepEqual(await admissions(), []);
+      assert.equal(
+        await page.evaluate(() =>
+          window.fixture.requests.some(
+            (r) => r.method === 'POST' && r.path?.endsWith('/execution-trust'),
+          ),
+        ),
+        false,
+      );
+      await run.click();
+      await page.evaluate((path) => {
+        window.fixture.hold = `POST ${path}`;
+      }, path);
+      await page.getByRole('dialog').getByRole('button', { name: 'Trust this project' }).click();
+      await page.waitForFunction(
+        (path) => window.fixture.requests.some((r) => r.path === path && r.method === 'POST'),
+        path,
+      );
+      assert.equal(await run.isDisabled(), true);
+      await page.setViewportSize({ width: 800, height: 1000 });
+      await scanLayout(page);
+      await layout(page, 'scan-busy-run-dark-standard-800');
+      await page.evaluate(() => {
+        window.fixture.hold = '';
+        window.fixture.release();
+      });
+      await idle(page);
+      await surface.getByText('Status: running', { exact: true }).waitFor();
+      const cancel = surface.getByRole('button', { name: 'Cancel scan', exact: true });
+      await page.evaluate((path) => {
+        window.fixture.hold = `DELETE ${path}`;
+      }, path);
+      await cancel.click();
+      await page.waitForFunction(
+        (path) => window.fixture.requests.some((r) => r.path === path && r.method === 'DELETE'),
+        path,
+      );
+      assert.equal(await cancel.isDisabled(), true);
+      assert.equal(await surface.getByText('Exit 2', { exact: true }).isVisible(), true);
+      await scanLayout(page);
+      await layout(page, 'scan-busy-cancel-dark-standard-800');
+      await page.evaluate(() => {
+        window.fixture.hold = '';
+        window.fixture.release();
+      });
+      await idle(page);
+      await surface.getByText('Status: canceled', { exact: true }).waitFor();
+      assert.equal(await run.isEnabled(), true);
+      await surface.locator('summary').click();
+      assert.equal(
+        await surface.locator('.disclosure-body pre').textContent(),
+        'Retained diagnostic',
+      );
+      const requests = await admissions();
+      assert.equal(requests.length, 2);
+      assert.deepEqual(requests[0].body, { project_revision: 'revision-1' });
+      assert.equal(requests[0].method, 'POST');
+      assert.equal(requests[1].method, 'DELETE');
+      assert.deepEqual(requests[1].query, { project_revision: 'revision-1' });
+      assert.equal(
+        await page.evaluate(
+          () =>
+            window.fixture.requests.filter(
+              (r) => r.method === 'POST' && r.path?.endsWith('/execution-trust'),
+            ).length,
+        ),
+        1,
+      );
+      assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+      assert.equal(
+        await page.evaluate(() =>
+          window.fixture.requests.some(
+            (r) =>
+              r.method !== 'GET' && /\/(generate|apply|undo|analysis\/runs)$/.test(r.path || ''),
+          ),
         ),
         false,
       );

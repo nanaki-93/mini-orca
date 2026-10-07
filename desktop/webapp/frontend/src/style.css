@@ -1570,6 +1570,30 @@ progress::-webkit-progress-value {
 .benchmark-samples td {
   white-space: nowrap;
 }
+.scan-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.scan-workspace .page-heading p .scan-status {
+  display: flex;
+  margin-bottom: 8px;
+}
+.scan-phases .panel-head h2 {
+  flex: 1 1 12rem;
+}
+.scan-phases .panel-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.scan-phases .panel-body > *,
+.scan-phases pre {
+  min-width: 0;
+  margin: 0;
+}
 .receipt-mark {
   color: var(--accent);
   margin-bottom: 20px;
