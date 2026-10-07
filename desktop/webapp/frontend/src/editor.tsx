@@ -575,8 +575,9 @@ function Checks({ s }: { s: State }) {
   const [lint, setLint] = useState(false);
   const [tests, setTests] = useState(false);
   return (
-    <div className="stack">
+    <div className="stack checks-workspace">
       <Panel
+        className="checks-controls"
         title="Checks"
         actions={s.checks && <Badge value={s.checks.applicable ? 'passed' : 'needs_attention'} />}
       >
@@ -601,7 +602,7 @@ function Checks({ s }: { s: State }) {
           </label>
           <span className="small muted">Parse & format (required)</span>
         </div>
-        <div className="actions section-gap">
+        <div className="actions">
           <Button
             tone="primary"
             disabled={!!s.busy || !currentDraft(s)}
@@ -622,19 +623,28 @@ function Checks({ s }: { s: State }) {
       </Panel>
       {s.checks ? (
         s.checks.checks.map((check, i) => (
-          <Panel title={check.name} actions={<Badge value={check.state} />} key={i}>
-            <div className="row between">
+          <Panel
+            className="check-evidence"
+            title={check.name}
+            actions={<Badge value={check.state} />}
+            key={i}
+          >
+            <div className="row between wrap">
               <span className="small muted">{check.required ? 'Required' : 'Optional'}</span>
               <span className="small muted">
                 {check.exit_code ? `Exit ${check.exit_code}` : ''}
               </span>
             </div>
             {check.command?.length ? (
-              <pre className="command">{check.command.join(' ')}</pre>
+              <pre className="command" aria-label={`${check.name} command`} tabIndex={0}>
+                {check.command.join(' ')}
+              </pre>
             ) : null}
             {check.output && (
               <Disclosure title="Output">
-                <pre>{check.output}</pre>
+                <pre aria-label={`${check.name} output`} tabIndex={0}>
+                  {check.output}
+                </pre>
               </Disclosure>
             )}
           </Panel>
@@ -643,19 +653,21 @@ function Checks({ s }: { s: State }) {
         <Empty title={currentDraft(s) ? 'No checks yet' : 'Draft validation required'} />
       )}
       {s.checks && !s.checks.applicable && (
-        <Button
-          disabled={!!s.busy}
-          onClick={() =>
-            void w.generate(
-              'Repair this draft using the failed check diagnostics. Preserve the task scope.',
-              s.draft!.mode as 'replace_symbol' | 'create_symbol',
-              s.draft!.target_symbol,
-              true,
-            )
-          }
-        >
-          Repair with assistant
-        </Button>
+        <div className="actions">
+          <Button
+            disabled={!!s.busy}
+            onClick={() =>
+              void w.generate(
+                'Repair this draft using the failed check diagnostics. Preserve the task scope.',
+                s.draft!.mode as 'replace_symbol' | 'create_symbol',
+                s.draft!.target_symbol,
+                true,
+              )
+            }
+          >
+            Repair with assistant
+          </Button>
+        </div>
       )}
     </div>
   );
