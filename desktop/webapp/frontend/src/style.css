@@ -1550,7 +1550,8 @@ progress::-webkit-progress-value {
 .context-inspection,
 .assistant-composition,
 .draft-workspace,
-.checks-workspace {
+.checks-workspace,
+.review-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 20px;
@@ -1587,16 +1588,19 @@ progress::-webkit-progress-value {
 .assistant-composition .panel-body,
 .draft-workspace .panel-body,
 .checks-workspace .panel-body,
+.review-workspace .panel-body,
 .check-evidence .panel-head h2 {
   overflow-wrap: anywhere;
 }
 .context-inspection .key-values > div,
-.draft-workspace .key-values > div {
+.draft-workspace .key-values > div,
+.review-workspace .key-values > div {
   flex-wrap: wrap;
   gap: 8px 20px;
 }
 .context-inspection .key-values dd,
-.draft-workspace .key-values dd {
+.draft-workspace .key-values dd,
+.review-workspace .key-values dd {
   flex: 1 1 12rem;
 }
 .context-references .list-row {
@@ -1639,7 +1643,8 @@ progress::-webkit-progress-value {
   margin: 0;
 }
 .checks-workspace .actions .button,
-.draft-workspace > .actions .button {
+.draft-workspace > .actions .button,
+.review-actions .button {
   min-width: 0;
   max-width: 100%;
 }
@@ -1803,11 +1808,16 @@ textarea.draft-code {
 .diff-line.removed .diff-sign {
   color: var(--red);
 }
-.review-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 15px;
+.review-target {
+  margin: 0;
+}
+.review-workspace .diff {
+  min-width: 0;
+}
+.review-workspace .code-header {
+  padding: 14px 20px;
+  flex-wrap: wrap;
+  gap: 8px 20px;
 }
 .command {
   color: var(--secondary);

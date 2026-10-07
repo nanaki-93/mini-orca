@@ -1109,8 +1109,8 @@ export function installFixture(options = {}) {
               declaration: `func ${state.session.target_symbol}(ctx context.Context) error {\n\treturn ctx.Err()\n}`,
               imports: options.draftImports ?? ['context'],
               revision: 1,
-              hash: 'draft-hash-1',
-              candidate_hash: 'candidate-1',
+              hash: options.declarationDraftHash ?? 'draft-hash-1',
+              candidate_hash: options.declarationCandidateHash ?? 'candidate-1',
               state: 'generated',
               engineering_insight: insight,
             };
@@ -1130,7 +1130,7 @@ export function installFixture(options = {}) {
             state.draft = {
               ...state.draft,
               revision: state.draft.revision + 1,
-              hash: 'draft-hash-' + (state.draft.revision + 1),
+              hash: options.declarationDraftHash ?? 'draft-hash-' + (state.draft.revision + 1),
               declaration: body.declaration,
               imports: body.imports,
               validation: undefined,
@@ -1145,7 +1145,7 @@ export function installFixture(options = {}) {
           if (path.endsWith('/checks'))
             return response({
               ...sameDraft(state.draft),
-              candidate_hash: 'candidate-1',
+              candidate_hash: state.draft.candidate_hash,
               applicable: !options.checkFail,
               checks: [
                 { name: 'parse', required: true, state: 'passed', command: [], output: '' },
