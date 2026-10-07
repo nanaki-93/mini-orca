@@ -2523,6 +2523,230 @@ try {
     assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
     await close();
   });
+  await test('Draft editing retains Summary panels, exact inputs and explicit validation across states', async () => {
+    const declaration = `func Process(ctx context.Context) error {\n\t// ${'LongDeclaration'.repeat(60)}\n\treturn ctx.Err()\n}\n`;
+    const imports = `  context  \n\nexample.invalid/${'long-import/'.repeat(35)}package\n\tstrings\t\n`;
+    const diagnostic = `Validation failed: ${'LongDiagnostic'.repeat(65)} final diagnostic.`;
+    for (const invalid of [false, true]) {
+      const { page, close } = await pageFor({
+        draftImports: ['context', `example.invalid/${'long-import/'.repeat(35)}package`],
+        ...(invalid
+          ? {
+              draftValidation: {
+                applicable: false,
+                scope_mode: 'single_declaration',
+                diagnostics: [{ message: diagnostic }],
+              },
+            }
+          : {}),
+      });
+      try {
+        const references = {};
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+          references[theme] = await panelTreatment(
+            page.locator('.summary-details > .panel').first(),
+          );
+        }
+        await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+        await openSource(page);
+        assert.equal(
+          await page.getByRole('tab', { name: 'Draft', exact: true }).isDisabled(),
+          true,
+        );
+        assert.equal(await page.getByLabel('Declaration draft', { exact: true }).count(), 0);
+        await layout(page, 'draft-absent-dark-standard-1440');
+        await prepare(page);
+        const draft = page.locator('.draft-workspace');
+        const editor = page.getByLabel('Declaration draft', { exact: true });
+        const importEditor = page.getByLabel('One import per line', { exact: true });
+        const passive = async () =>
+          page.evaluate(() => window.fixture.requests.filter((entry) => entry.method !== 'GET'));
+        const render = async (state, matrix = false) => {
+          const before = await passive();
+          for (const theme of matrix ? ['dark', 'light'] : ['dark']) {
+            if (theme === 'light')
+              await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            assert.deepEqual(
+              await panelTreatment(draft.locator('.panel').first()),
+              references[theme],
+            );
+            for (const larger of matrix ? [false, true] : [false]) {
+              if (larger)
+                await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+              for (const width of matrix ? [1440, 1280, 1001, 800] : [800]) {
+                await page.setViewportSize({ width, height: 1000 });
+                const issues = await draft.evaluate((root) => {
+                  const bounds = root.getBoundingClientRect();
+                  const issues = [];
+                  for (const node of root.querySelectorAll('.panel, .button, textarea')) {
+                    if (!node.getClientRects().length) continue;
+                    const box = node.getBoundingClientRect();
+                    if (box.left < bounds.left - 1 || box.right > bounds.right + 1)
+                      issues.push(`${node.className} escapes draft`);
+                  }
+                  const actions = [...root.querySelectorAll(':scope > .actions .button')].map(
+                    (node) => node.getBoundingClientRect(),
+                  );
+                  for (let i = 0; i < actions.length; i++) {
+                    for (const other of actions.slice(i + 1)) {
+                      const box = actions[i];
+                      if (
+                        box.left < other.right - 1 &&
+                        box.right > other.left + 1 &&
+                        box.top < other.bottom - 1 &&
+                        box.bottom > other.top + 1
+                      )
+                        issues.push('Draft continuation actions overlap');
+                    }
+                  }
+                  const editor = root.querySelector('.draft-code');
+                  if (
+                    editor.getBoundingClientRect().height < 390 ||
+                    getComputedStyle(editor).resize !== 'vertical'
+                  )
+                    issues.push('Draft editor lost height or vertical resize');
+                  return issues;
+                });
+                assert.deepEqual(issues, []);
+                await layout(
+                  page,
+                  `draft-${state}-${theme}-${larger ? 'larger' : 'standard'}-${width}`,
+                );
+              }
+              if (larger)
+                await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+            }
+          }
+          if (matrix) await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+          assert.deepEqual(
+            await passive(),
+            before,
+            'Draft disclosures and reflow never validate, execute or write',
+          );
+        };
+        const beforeDisclosure = await passive();
+        await draft.getByText('Imports', { exact: true }).click();
+        assert.deepEqual(await passive(), beforeDisclosure);
+        assert.equal(
+          await draft.locator('textarea').count(),
+          2,
+          'Only declaration and imports are editable',
+        );
+        assert.deepEqual(await draft.locator('.key-values dd').allTextContents(), [
+          'internal/worker/process.go',
+          'Process',
+          '1',
+        ]);
+        await render('generated', true);
+        assert.equal(
+          await draft.getByRole('button', { name: 'Continue to checks', exact: true }).count(),
+          0,
+        );
+        await editor.fill(declaration);
+        await importEditor.fill(imports);
+        assert.equal(await editor.inputValue(), declaration);
+        assert.equal(await importEditor.inputValue(), imports);
+        assert.equal(await draft.locator('.key-values dd').last().innerText(), '1 + local edits');
+        await render('edited');
+        const validationPath = '/api/projects/current/drafts/draft-1/validate';
+        await page.evaluate((path) => {
+          window.fixture.hold = path;
+        }, validationPath);
+        await draft.getByRole('button', { name: 'Validate draft', exact: true }).click();
+        await page.waitForFunction(
+          (path) => window.fixture.requests.some((entry) => entry.path === path),
+          validationPath,
+        );
+        assert.equal(await editor.isDisabled(), true);
+        assert.equal(await importEditor.isDisabled(), true);
+        assert.equal(
+          await draft.getByRole('button', { name: 'Validate draft', exact: true }).isDisabled(),
+          true,
+        );
+        await render('busy-validation');
+        await page.evaluate(() => {
+          window.fixture.hold = '';
+          window.fixture.release();
+        });
+        await idle(page);
+        const patch = await page.evaluate(() =>
+          window.fixture.requests.find(
+            (entry) => entry.method === 'PATCH' && entry.path.endsWith('/drafts/draft-1'),
+          ),
+        );
+        assert.equal(patch.body.declaration, declaration);
+        assert.deepEqual(
+          patch.body.imports,
+          imports
+            .split('\n')
+            .map((value) => value.trim())
+            .filter(Boolean),
+        );
+        assert.equal(await editor.inputValue(), declaration);
+        assert.equal(await draft.locator('.key-values dd').last().innerText(), '2');
+        assert.equal(await importEditor.inputValue(), patch.body.imports.join('\n'));
+        assert.equal(
+          await draft.getByRole('button', { name: 'Continue to checks', exact: true }).count(),
+          invalid ? 0 : 1,
+        );
+        if (invalid)
+          assert.equal(
+            await draft.locator('.draft-validation [role="alert"]').innerText(),
+            diagnostic,
+          );
+        await render(invalid ? 'invalid-long-diagnostics' : 'validated', true);
+        await importEditor.fill(`${imports}\nnet/http`);
+        assert.equal(
+          await draft.getByRole('button', { name: 'Continue to checks', exact: true }).count(),
+          0,
+        );
+        assert.equal(
+          await draft.locator('.draft-validation').count(),
+          0,
+          'Retained diagnostics cannot approve local edits',
+        );
+        await page.getByRole('tab', { name: 'Checks', exact: true }).click();
+        assert.equal(
+          await page.getByRole('button', { name: 'Run checks', exact: true }).isDisabled(),
+          true,
+        );
+        await page.getByRole('tab', { name: 'Draft', exact: true }).click();
+        assert.equal(await editor.inputValue(), declaration);
+        assert.equal(await importEditor.inputValue(), `${imports}\nnet/http`);
+        await render('edited-after-validation');
+        await page.evaluate(() => {
+          window.fixture.state.changed = true;
+        });
+        await page.getByRole('tab', { name: 'Assistant', exact: true }).click();
+        await page.getByRole('tab', { name: 'Draft', exact: true }).click();
+        await page.getByText('File evidence is outdated.', { exact: false }).waitFor();
+        assert.equal(await editor.isDisabled(), true);
+        assert.equal(await importEditor.isDisabled(), true);
+        assert.equal(
+          await draft.getByRole('button', { name: 'Validate draft', exact: true }).isDisabled(),
+          true,
+        );
+        await render('stale');
+        assert.equal(
+          await page.evaluate(() =>
+            window.fixture.requests.some((entry) => /\/(checks|apply)$/.test(entry.path)),
+          ),
+          false,
+        );
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+      } finally {
+        await page
+          .evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          })
+          .catch(() => {});
+        await close();
+      }
+    }
+  });
   await test('Draft, checks, review, explicit Apply and guarded Undo', async () => {
     const { page, close } = await pageFor();
     await prepare(page);

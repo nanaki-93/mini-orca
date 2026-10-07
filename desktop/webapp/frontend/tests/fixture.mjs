@@ -1107,7 +1107,7 @@ export function installFixture(options = {}) {
               target_symbol: state.session.target_symbol,
               mode: state.session.mode,
               declaration: `func ${state.session.target_symbol}(ctx context.Context) error {\n\treturn ctx.Err()\n}`,
-              imports: ['context'],
+              imports: options.draftImports ?? ['context'],
               revision: 1,
               hash: 'draft-hash-1',
               candidate_hash: 'candidate-1',
@@ -1138,8 +1138,8 @@ export function installFixture(options = {}) {
             return response(state.draft);
           }
           if (path.endsWith('/validate')) {
-            state.draft.validation = validation();
-            state.draft.state = 'validated';
+            state.draft.validation = options.draftValidation ?? validation();
+            state.draft.state = state.draft.validation.applicable ? 'validated' : 'invalid';
             return response(state.draft);
           }
           if (path.endsWith('/checks'))
