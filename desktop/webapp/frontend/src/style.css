@@ -1549,7 +1549,8 @@ progress::-webkit-progress-value {
 .source-inspection,
 .context-inspection,
 .assistant-composition,
-.draft-workspace {
+.draft-workspace,
+.checks-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 20px;
@@ -1584,7 +1585,9 @@ progress::-webkit-progress-value {
 .source-analysis .panel-body,
 .context-inspection .panel-body,
 .assistant-composition .panel-body,
-.draft-workspace .panel-body {
+.draft-workspace .panel-body,
+.checks-workspace .panel-body,
+.check-evidence .panel-head h2 {
   overflow-wrap: anywhere;
 }
 .context-inspection .key-values > div,
@@ -1621,6 +1624,21 @@ progress::-webkit-progress-value {
 .draft-validation .notice {
   margin: 0;
 }
+.checks-controls > .panel-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+.check-evidence > .panel-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.check-evidence pre,
+.check-evidence details {
+  margin: 0;
+}
+.checks-workspace .actions .button,
 .draft-workspace > .actions .button {
   min-width: 0;
   max-width: 100%;

@@ -387,6 +387,46 @@ async function panelTreatment(panel) {
     };
   });
 }
+async function focusedChecksLayout(page) {
+  const surface = page.locator('.checks-workspace');
+  assert.equal(await surface.evaluate((element) => getComputedStyle(element).gap), '20px');
+  const overflow = await page
+    .locator(
+      '#main, .page, .checks-workspace, .checks-workspace .panel, .checks-workspace .panel-head, .checks-workspace .panel-body, .checks-workspace .disclosure-body, .checks-workspace pre',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.scrollWidth > element.clientWidth + 1)
+        .map((element) => element.className || element.id || element.getAttribute('aria-label')),
+    );
+  assert.deepEqual(overflow, [], 'Focused controls, commands and complete output stay contained');
+  for (const panel of await surface.locator('.panel').all()) {
+    const bounds = await panel.boundingBox();
+    for (const control of await panel.locator('button, label, summary, pre').all()) {
+      if (!(await control.isVisible())) continue;
+      const box = await control.boundingBox();
+      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+    }
+  }
+  const boxes = [];
+  for (const control of await surface.locator('.button, .checkbox-line').all()) {
+    assert.equal(await control.isVisible(), true);
+    const box = await control.boundingBox();
+    const bounds = await surface.boundingBox();
+    assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+    for (const other of boxes)
+      assert.ok(
+        box.x + box.width <= other.x + 1 ||
+          other.x + other.width <= box.x + 1 ||
+          box.y + box.height <= other.y + 1 ||
+          other.y + other.height <= box.y + 1,
+        'Focused-check actions and optional controls do not collide',
+      );
+    boxes.push(box);
+  }
+  checks++;
+}
 async function assistantLayout(page) {
   const composition = page.locator('.assistant-composition');
   await headingContainment(page.locator('.source-workspace .page-heading--intro'));
@@ -2745,6 +2785,343 @@ try {
           .catch(() => {});
         await close();
       }
+    }
+  });
+  await test('Focused checks retain Summary panels, complete evidence and deliberate actions', async () => {
+    const command = ['go', 'test', `./${'long-package/'.repeat(45)}worker`];
+    const output = `Check diagnostic: ${'LongDiagnostic'.repeat(65)}\nFinal output line.`;
+    const attentionChecks = [
+      { name: 'parse', required: true, state: 'passed', command: [], output: '', exit_code: 0 },
+      { name: 'format', required: true, state: 'failed', command, output, exit_code: 2 },
+      { name: 'lint', required: false, state: 'skipped', command, output, exit_code: 0 },
+      { name: 'tests', required: false, state: 'canceled', command, output, exit_code: -1 },
+    ];
+    for (const attention of [false, true]) {
+      const { page, close } = await pageFor({
+        ...(attention ? { draftChecks: { applicable: false, checks: attentionChecks } } : {}),
+      });
+      try {
+        const references = {};
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+          references[theme] = await panelTreatment(
+            page.locator('.summary-details > .panel').first(),
+          );
+        }
+        await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+        await prepare(page);
+        await page.getByRole('button', { name: 'Validate draft', exact: true }).click();
+        await idle(page);
+        await page.getByRole('button', { name: 'Continue to checks', exact: true }).click();
+        const surface = page.locator('.checks-workspace');
+        const run = surface.getByRole('button', { name: 'Run checks', exact: true });
+        const review = surface.getByRole('button', { name: 'Review change', exact: true });
+        const benchmarks = surface.getByRole('button', { name: 'Benchmarks', exact: true });
+        const passive = async () =>
+          page.evaluate(() => window.fixture.requests.filter((entry) => entry.method !== 'GET'));
+        assert.equal(await surface.getByLabel('Lint', { exact: true }).isChecked(), false);
+        assert.equal(await surface.getByLabel('Tests', { exact: true }).isChecked(), false);
+        assert.equal(
+          await surface.getByText('Parse & format (required)', { exact: true }).isVisible(),
+          true,
+        );
+        assert.equal(
+          await surface.getByRole('heading', { name: 'No checks yet', exact: true }).isVisible(),
+          true,
+        );
+        assert.equal(await run.isEnabled(), true);
+        assert.equal(await review.isDisabled(), true);
+        assert.equal(await benchmarks.isEnabled(), true);
+        for (const width of [1440, 800]) {
+          await page.setViewportSize({ width, height: 1000 });
+          await focusedChecksLayout(page);
+          await layout(page, `checks-absent-dark-standard-${width}-${attention}`);
+        }
+        if (attention) {
+          await surface.getByLabel('Lint', { exact: true }).check();
+          await surface.getByLabel('Tests', { exact: true }).check();
+        }
+        await run.click();
+        if (attention)
+          await page
+            .getByRole('dialog')
+            .getByRole('button', { name: 'Trust this project' })
+            .click();
+        await idle(page);
+        const request = await page.evaluate(() =>
+          window.fixture.requests.find((entry) => entry.path.endsWith('/drafts/draft-1/checks')),
+        );
+        assert.equal(request.body.run_lint, attention);
+        assert.equal(request.body.run_tests, attention);
+        assert.equal(await review.isDisabled(), attention);
+        assert.equal(await benchmarks.isEnabled(), true);
+        assert.equal(
+          await surface.getByRole('button', { name: 'Repair with assistant', exact: true }).count(),
+          attention ? 1 : 0,
+        );
+        assert.equal(
+          await surface.locator('.checks-controls .badge').textContent(),
+          attention ? 'needs attention' : 'passed',
+        );
+        if (attention) {
+          assert.deepEqual(await surface.locator('.check-evidence .badge').allTextContents(), [
+            'passed',
+            'failed',
+            'skipped',
+            'canceled',
+          ]);
+          assert.deepEqual(
+            await surface.locator('.check-evidence .panel-body > .row').allTextContents(),
+            ['Required', 'RequiredExit 2', 'Optional', 'OptionalExit -1'],
+          );
+        }
+        const before = await passive();
+        for (const summary of await surface.locator('summary').all()) await summary.click();
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+          for (const panel of await surface.locator('.panel').all())
+            assert.deepEqual(await panelTreatment(panel), references[theme]);
+          for (const larger of [false, true]) {
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+            for (const width of [1440, 1280, 1001, 800]) {
+              await page.setViewportSize({ width, height: 1000 });
+              await focusedChecksLayout(page);
+              if (attention) {
+                for (const name of ['format', 'lint', 'tests']) {
+                  assert.equal(
+                    await surface.getByLabel(`${name} command`, { exact: true }).textContent(),
+                    command.join(' '),
+                  );
+                  assert.equal(
+                    await surface.getByLabel(`${name} output`, { exact: true }).textContent(),
+                    output,
+                  );
+                }
+                await surface.getByLabel('format output', { exact: true }).focus();
+                assert.equal(
+                  await surface
+                    .getByLabel('format output', { exact: true })
+                    .evaluate(
+                      (element) =>
+                        element === document.activeElement &&
+                        getComputedStyle(element).userSelect !== 'none',
+                    ),
+                  true,
+                );
+              }
+              await layout(
+                page,
+                `checks-${attention ? 'failed-skipped-canceled-long-evidence' : 'passed'}-${theme}-${larger ? 'larger' : 'standard'}-${width}`,
+              );
+            }
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          }
+        }
+        assert.deepEqual(
+          await passive(),
+          before,
+          'Output disclosure and reflow never run, repair, review or write',
+        );
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+        if (attention) {
+          const path = '/api/projects/current/chat/sessions/session-1/messages';
+          const count = await page.evaluate(
+            (path) => window.fixture.requests.filter((entry) => entry.path === path).length,
+            path,
+          );
+          await page.evaluate((path) => {
+            window.fixture.hold = path;
+          }, path);
+          const repairAction = surface.getByRole('button', {
+            name: 'Repair with assistant',
+            exact: true,
+          });
+          await repairAction.click();
+          await page.waitForFunction(
+            ({ path, count }) =>
+              window.fixture.requests.filter((entry) => entry.path === path).length > count,
+            { path, count },
+          );
+          for (const action of [run, review, benchmarks, repairAction])
+            assert.equal(await action.isDisabled(), true);
+          for (const name of ['Lint', 'Tests'])
+            assert.equal(await surface.getByLabel(name, { exact: true }).isDisabled(), true);
+          await focusedChecksLayout(page);
+          await layout(page, 'checks-busy-repair-light-standard-800');
+          await page.evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          });
+          await idle(page);
+          await page.getByLabel('Declaration draft', { exact: true }).waitFor();
+          const repair = await page.evaluate(() =>
+            window.fixture.requests.filter((entry) => entry.path.endsWith('/messages')).at(-1),
+          );
+          assert.equal(repair.body.repair, true);
+          assert.equal(repair.body.parent_draft_id, 'draft-1');
+          assert.equal(
+            repair.body.message,
+            'Repair this draft using the failed check diagnostics. Preserve the task scope.',
+          );
+        } else {
+          await benchmarks.click();
+          await idle(page);
+          assert.equal(
+            await page.evaluate(() =>
+              window.fixture.requests
+                .filter((entry) => entry.path.endsWith('/drafts/draft-1/benchmarks'))
+                .every((entry) => entry.method === 'GET'),
+            ),
+            true,
+          );
+          await nav(page, 'Source');
+          await page.getByRole('tab', { name: 'Checks', exact: true }).click();
+          await review.click();
+          await idle(page);
+          await page.getByRole('heading', { name: 'Review change', exact: true }).waitFor();
+          assert.equal(
+            await page.evaluate(() =>
+              window.fixture.requests.some((entry) => entry.path.endsWith('/apply')),
+            ),
+            false,
+          );
+        }
+      } finally {
+        await page
+          .evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          })
+          .catch(() => {});
+        await close();
+      }
+    }
+  });
+  await test('Focused checks preserve invalid, dirty, busy, canceled and stale candidate restrictions', async () => {
+    const { page, close } = await pageFor({
+      draftValidation: {
+        applicable: false,
+        scope_mode: 'single_declaration',
+        diagnostics: [{ message: 'Invalid declaration' }],
+      },
+    });
+    try {
+      await prepare(page);
+      await page.getByRole('button', { name: 'Validate draft', exact: true }).click();
+      await idle(page);
+      await page.getByRole('tab', { name: 'Checks', exact: true }).click();
+      const surface = page.locator('.checks-workspace');
+      const run = surface.getByRole('button', { name: 'Run checks', exact: true });
+      const review = surface.getByRole('button', { name: 'Review change', exact: true });
+      const benchmarks = surface.getByRole('button', { name: 'Benchmarks', exact: true });
+      const render = async (state) => {
+        for (const width of [1440, 800]) {
+          await page.setViewportSize({ width, height: 1000 });
+          await focusedChecksLayout(page);
+          await layout(page, `checks-${state}-dark-standard-${width}`);
+        }
+      };
+      assert.equal(
+        await surface
+          .getByRole('heading', { name: 'Draft validation required', exact: true })
+          .isVisible(),
+        true,
+      );
+      for (const action of [run, review, benchmarks]) assert.equal(await action.isDisabled(), true);
+      await render('invalid');
+      await page.getByRole('tab', { name: 'Draft', exact: true }).click();
+      await page.evaluate(() => {
+        delete window.fixture.options.draftValidation;
+      });
+      await page.getByRole('button', { name: 'Validate draft', exact: true }).click();
+      await idle(page);
+      await page.getByRole('button', { name: 'Continue to checks', exact: true }).click();
+      await surface.getByLabel('Lint', { exact: true }).check();
+      await surface.getByLabel('Tests', { exact: true }).check();
+      await run.click();
+      await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+      await idle(page);
+      assert.equal(
+        await page.evaluate(() =>
+          window.fixture.requests.some((entry) => entry.path.endsWith('/checks')),
+        ),
+        false,
+        'Declining trust does not execute checks',
+      );
+      const path = '/api/projects/current/drafts/draft-1/checks';
+      await page.evaluate((path) => {
+        window.fixture.hold = path;
+      }, path);
+      await run.click();
+      await page.getByRole('dialog').getByRole('button', { name: 'Trust this project' }).click();
+      await page.waitForFunction(
+        (path) => window.fixture.requests.some((entry) => entry.path === path),
+        path,
+      );
+      for (const action of [run, review, benchmarks]) assert.equal(await action.isDisabled(), true);
+      for (const name of ['Lint', 'Tests'])
+        assert.equal(await surface.getByLabel(name, { exact: true }).isDisabled(), true);
+      await render('busy');
+      await page
+        .locator('.busy-strip')
+        .getByRole('button', { name: 'Cancel', exact: true })
+        .click();
+      await idle(page);
+      await page.evaluate(() => {
+        window.fixture.hold = '';
+        window.fixture.release();
+      });
+      await page.waitForTimeout(100);
+      assert.equal(
+        await surface.locator('.check-evidence').count(),
+        0,
+        'Canceled late response cannot become current evidence',
+      );
+      assert.equal(await run.isEnabled(), true);
+      assert.equal(await review.isDisabled(), true);
+      await render('canceled-request');
+      await run.click();
+      await idle(page);
+      assert.equal(await review.isEnabled(), true);
+      await page.getByRole('tab', { name: 'Draft', exact: true }).click();
+      await page
+        .getByLabel('Declaration draft', { exact: true })
+        .fill('func Process(ctx context.Context) error { return nil }');
+      await page.getByRole('tab', { name: 'Checks', exact: true }).click();
+      for (const action of [run, review, benchmarks]) assert.equal(await action.isDisabled(), true);
+      assert.equal(await surface.locator('.check-evidence').count(), 0);
+      await render('dirty');
+      await page.getByRole('tab', { name: 'Draft', exact: true }).click();
+      await page.getByRole('button', { name: 'Validate draft', exact: true }).click();
+      await idle(page);
+      await page.getByRole('button', { name: 'Continue to checks', exact: true }).click();
+      await page.evaluate(() => {
+        window.fixture.state.changed = true;
+      });
+      await page.getByRole('tab', { name: 'Source', exact: true }).click();
+      await page.getByRole('tab', { name: 'Checks', exact: true }).click();
+      await page.getByText('File evidence is outdated.', { exact: false }).waitFor();
+      for (const action of [run, review, benchmarks]) assert.equal(await action.isDisabled(), true);
+      await render('stale');
+      assert.equal(
+        await page.evaluate(() =>
+          window.fixture.requests.some((entry) => /\/(apply|benchmarks)$/.test(entry.path)),
+        ),
+        false,
+      );
+      assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+    } finally {
+      await page
+        .evaluate(() => {
+          window.fixture.hold = '';
+          window.fixture.release();
+        })
+        .catch(() => {});
+      await close();
     }
   });
   await test('Draft, checks, review, explicit Apply and guarded Undo', async () => {

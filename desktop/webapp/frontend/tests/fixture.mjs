@@ -1168,6 +1168,7 @@ export function installFixture(options = {}) {
                     ]
                   : []),
               ],
+              ...options.draftChecks,
             });
           if (path.endsWith('/execution-trust')) {
             if (method === 'POST') state.trusted = true;
