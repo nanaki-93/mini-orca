@@ -219,7 +219,7 @@ const surfaceInventory = {
 };
 const aliases = { welcome: 'project', manifest: 'context' };
 const captures = [];
-async function pageFor(options = {}) {
+async function pageFor(options = {}, { restored = true } = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   try {
     const page = await context.newPage();
@@ -230,12 +230,26 @@ async function pageFor(options = {}) {
     });
     await page.addInitScript(installFixture, options);
     await page.goto(url);
-    await page
-      .getByRole('heading', { name: options.projectName || 'harbor', exact: true })
-      .waitFor();
-    await page.waitForFunction(() =>
-      window.fixture.requests.some((request) => request.path?.endsWith('/analysis/selection')),
-    );
+    if (restored) {
+      await page
+        .getByRole('heading', { name: options.projectName || 'harbor', exact: true })
+        .waitFor();
+      await page.waitForFunction(() =>
+        window.fixture.requests.some((request) => request.path?.endsWith('/analysis/selection')),
+      );
+    } else {
+      await page.getByRole('heading', { name: 'Open project', exact: true }).first().waitFor();
+      await page.waitForFunction(() =>
+        window.fixture.requests.some((request) => request.path === '/status'),
+      );
+      if (options.startupOffline)
+        await page.getByText('Connection lost', { exact: true }).waitFor();
+      else
+        await page.locator('.connection').getByText('Daemon connected', { exact: true }).waitFor();
+      if (options.restoreFailure && !options.noRememberedProject)
+        await page.getByText('Fixture rejection', { exact: true }).waitFor();
+      await idle(page);
+    }
     return { page, close: () => context.close() };
   } catch (error) {
     await context.close();
@@ -458,6 +472,40 @@ async function scanLayout(page) {
       title.x + title.width <= status.x + 1 || title.y + title.height <= status.y + 1,
       'Phase title and status do not collide',
     );
+  }
+  checks++;
+}
+async function projectLayout(page) {
+  const surface = page.locator('.project-workspace');
+  await headingContainment(surface.locator('.page-heading--intro'));
+  assert.equal(await surface.evaluate((el) => getComputedStyle(el).gap), '20px');
+  const overflow = await page
+    .locator(
+      '#main, .page, .project-workspace, .project-workspace .panel, .project-workspace .panel-body, .project-workspace .key-values, .project-workspace .key-values dd, .project-workspace .disclosure-body, .project-folder, .project-opening .actions',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((el) => el.scrollWidth > el.clientWidth + 1)
+        .map((el) => el.className || el.tagName),
+    );
+  assert.deepEqual(overflow, [], 'Project facts and full identity values wrap within panels');
+  for (const region of await surface.locator('.project-folder, .actions').all()) {
+    const bounds = await region.boundingBox();
+    const boxes = [];
+    for (const control of await region.locator('input, button').all()) {
+      const box = await control.boundingBox();
+      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+      for (const other of boxes)
+        assert.ok(
+          box.x + box.width <= other.x + 1 ||
+            other.x + other.width <= box.x + 1 ||
+            box.y + box.height <= other.y + 1 ||
+            other.y + other.height <= box.y + 1,
+          'Project fields and actions do not collide',
+        );
+      boxes.push(box);
+    }
   }
   checks++;
 }
@@ -1476,6 +1524,261 @@ try {
       ? { channel: process.env.MINI_ORCA_TEST_BROWSER || 'chrome' }
       : {}),
   });
+  await test('Welcome and Project retain Summary framing, startup recovery and distinct paths', async () => {
+    const currentPath = `/fixture/${'CurrentProjectDirectory'.repeat(22)}/harbor`;
+    const enteredPath = `/fixture/${'EnteredProjectDirectory'.repeat(22)}/next`;
+    const projectName = `Harbor-${'LongProjectName'.repeat(20)}`;
+    for (const state of ['welcome', 'offline', 'restore-failed', 'loaded']) {
+      const loaded = state === 'loaded';
+      const { page, close } = await pageFor(
+        {
+          projectPath: currentPath,
+          projectName,
+          chosenPath: enteredPath,
+          noRememberedProject: state === 'welcome',
+          startupOffline: state === 'offline',
+          restoreFailure: state === 'restore-failed',
+        },
+        { restored: loaded },
+      );
+      try {
+        let reference;
+        if (loaded) {
+          reference = await panelTreatment(page.locator('.summary-details > .panel').first());
+          await nav(page, 'Project');
+          assert.equal(await page.locator('.project-current-path').innerText(), currentPath);
+          const facts = page.locator('.project-facts');
+          assert.equal(await facts.locator('dd').first().innerText(), projectName);
+          assert.deepEqual(await facts.locator('dd').allTextContents(), [
+            projectName,
+            'go',
+            '24',
+            '18',
+            '2,450',
+            '',
+          ]);
+          await page.getByText('Project identity', { exact: true }).click();
+          assert.match(
+            await facts.locator('.disclosure-body').innerText(),
+            /project-1\s+revision-1/,
+          );
+        } else {
+          assert.equal(await page.locator('.page[data-accent="welcome"]').count(), 1);
+          assert.equal(await page.getByRole('button', { name: 'Refresh facts' }).count(), 0);
+          if (state === 'offline')
+            await page.getByText('Connection lost', { exact: true }).waitFor();
+          if (state === 'restore-failed')
+            await page.getByText('Fixture rejection', { exact: true }).waitFor();
+          if (state === 'welcome') {
+            assert.equal(await page.getByLabel('Project folder').inputValue(), '');
+            assert.equal(
+              await page.getByRole('button', { name: 'Open saved project' }).isDisabled(),
+              true,
+            );
+            assert.equal(
+              await page.evaluate(() =>
+                window.fixture.requests.some((r) => r.path === '/api/projects/restore'),
+              ),
+              false,
+            );
+          }
+        }
+        await page.getByLabel('Project folder').fill(enteredPath);
+        for (const name of ['Open saved project', 'Import & analyze'])
+          assert.equal(
+            await page.getByRole('button', { name, exact: true }).isDisabled(),
+            state === 'offline',
+          );
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+          for (const large of [false, true]) {
+            if (large) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+            for (const width of [1440, 800]) {
+              await page.setViewportSize({ width, height: 1000 });
+              await projectLayout(page);
+              await layout(
+                page,
+                `${loaded ? 'project' : 'welcome'}-${state}-${width}-${theme}-${large ? 'larger' : 'standard'}`,
+              );
+              await contrast(
+                page,
+                `Project ${state} ${width} ${theme} ${large ? 'larger' : 'standard'}`,
+              );
+              assert.equal(await page.getByLabel('Project folder').inputValue(), enteredPath);
+              if (loaded)
+                assert.equal(await page.locator('.project-current-path').innerText(), currentPath);
+            }
+            if (large) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          }
+          if (reference && theme === 'dark')
+            assert.deepEqual(await panelTreatment(page.locator('.project-facts')), reference);
+        }
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+        assert.deepEqual(
+          await page.evaluate(() =>
+            window.fixture.requests.filter(
+              (r) => r.method !== 'GET' && r.path !== '/api/projects/restore',
+            ),
+          ),
+          [],
+        );
+        await page.getByRole('button', { name: 'Browse', exact: true }).click();
+        await idle(page);
+        assert.equal(await page.getByLabel('Project folder').inputValue(), enteredPath);
+        assert.equal(await page.evaluate(() => window.fixture.browsed), 1);
+        if (state === 'offline') {
+          await page.getByRole('button', { name: 'Reconnect', exact: true }).click();
+          await idle(page);
+          assert.equal(
+            await page.getByRole('button', { name: 'Open saved project' }).isEnabled(),
+            true,
+          );
+          assert.equal(await page.getByRole('button', { name: 'Reconnect' }).count(), 0);
+          assert.equal(
+            await page.evaluate(() =>
+              window.fixture.requests.some((r) => r.path === '/api/projects/restore'),
+            ),
+            false,
+            'Reconnect does not open a project',
+          );
+        }
+        if (loaded) {
+          await page.getByRole('button', { name: 'Refresh facts', exact: true }).click();
+          await idle(page);
+          assert.equal(
+            await page.evaluate(
+              () => window.fixture.requests.filter((r) => r.path?.endsWith('/reindex')).length,
+            ),
+            1,
+          );
+          const before = await page.evaluate(
+            () => window.fixture.requests.filter((r) => r.method !== 'GET').length,
+          );
+          for (const [name, route] of [
+            ['Summary', 'summary'],
+            ['Verified scan', 'scan'],
+            ['Terminal', 'terminal'],
+            ['Models', 'models'],
+          ]) {
+            await page
+              .locator('.project-workspace')
+              .getByRole('button', { name, exact: true })
+              .click();
+            await page.locator(`.page[data-accent="${route}"]`).waitFor();
+            await nav(page, 'Project');
+          }
+          assert.equal(
+            await page.evaluate(
+              () => window.fixture.requests.filter((r) => r.method !== 'GET').length,
+            ),
+            before,
+          );
+          assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+        }
+      } finally {
+        await close();
+      }
+    }
+  });
+
+  await test('Project opening retains explicit admission, busy disablement and failure recovery', async () => {
+    for (const kind of [
+      'held',
+      'restore-failed',
+      'import-failed',
+      'import-canceled',
+      'import-success',
+    ]) {
+      const path = `/fixture/${'EnteredProjectDirectory'.repeat(22)}`;
+      const { page, close } = await pageFor(
+        {
+          noRememberedProject: true,
+          chosenPath: path,
+          holdOpening: kind === 'held',
+          restoreFailure: kind === 'restore-failed',
+          importFailure: kind === 'import-failed',
+          remote: true,
+        },
+        { restored: false },
+      );
+      try {
+        await page.getByRole('button', { name: 'Browse', exact: true }).click();
+        await idle(page);
+        const importing = kind.startsWith('import');
+        await page
+          .getByRole('button', {
+            name: importing ? 'Import & analyze' : 'Open saved project',
+            exact: true,
+          })
+          .click();
+        if (importing) {
+          const dialog = page.getByRole('dialog');
+          await dialog
+            .getByRole('button', {
+              name: kind === 'import-canceled' ? 'Cancel' : 'Continue',
+              exact: true,
+            })
+            .click();
+        }
+        if (kind === 'held') {
+          await page.waitForFunction(() =>
+            window.fixture.requests.some((r) => r.path === '/api/projects/restore'),
+          );
+          for (const name of ['Browse', 'Open saved project', 'Import & analyze'])
+            assert.equal(await page.getByRole('button', { name, exact: true }).isDisabled(), true);
+          for (const width of [1440, 1280, 1001, 800]) {
+            await page.setViewportSize({ width, height: 1000 });
+            await projectLayout(page);
+            await layout(page, `project-opening-${width}-dark-standard`);
+          }
+          await page.evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          });
+        } else if (kind !== 'import-success') {
+          await idle(page);
+          if (kind !== 'import-canceled')
+            await page.getByText('Fixture rejection', { exact: true }).waitFor();
+          await page.setViewportSize({ width: 800, height: 1000 });
+          assert.equal(await page.getByLabel('Project folder').inputValue(), path);
+          assert.equal(
+            await page.getByRole('button', { name: 'Open saved project' }).isEnabled(),
+            true,
+          );
+          await projectLayout(page);
+          await layout(page, `project-${kind}-800-dark-standard`);
+          await page.getByRole('button', { name: 'Open saved project', exact: true }).click();
+        }
+        await page.getByRole('heading', { name: 'harbor', exact: true }).waitFor();
+        await idle(page);
+        const admissions = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method === 'POST'),
+        );
+        assert.ok(
+          admissions.every((r) =>
+            ['/api/projects/restore', '/api/projects/import'].includes(r.path),
+          ),
+        );
+        assert.equal(admissions.at(-1).body.project_path, path);
+        if (kind === 'import-failed' || kind === 'import-success')
+          assert.equal(admissions[0].body.confirm_remote_provider, true);
+        if (kind === 'import-canceled')
+          assert.ok(admissions.every((r) => r.path !== '/api/projects/import'));
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+      } finally {
+        try {
+          await page.evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          });
+        } finally {
+          await close();
+        }
+      }
+    }
+  });
+
   await test('Redundant suggestion labels are removed while advisory content remains', async () => {
     const { page, close } = await pageFor({ featuresReady: true });
     assert.equal(

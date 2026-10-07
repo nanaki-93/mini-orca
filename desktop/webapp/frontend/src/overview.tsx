@@ -24,56 +24,59 @@ export function ProjectPage({ s }: { s: State }) {
     if (s.chosenPath) setPath(s.chosenPath);
   }, [s.chosenPath]);
   return (
-    <>
-      <Heading title={s.project ? 'Project' : 'Open project'} detail={s.project?.path} />
+    <div className="workspace-page project-workspace">
+      <Heading
+        title={s.project ? 'Project' : 'Open project'}
+        detail={s.project && <span className="project-current-path">{s.project.path}</span>}
+        variant="intro"
+      />
       <div className={s.project ? 'grid two-columns' : 'stack'}>
-        <Panel title="Open project">
-          <label className="field-label" htmlFor="project-path">
-            Project folder
-          </label>
-          <div className="row">
-            <input
-              id="project-path"
-              value={path}
-              onChange={(e) => setPath(e.target.value)}
-              placeholder="/path/to/project"
-              spellCheck={false}
-            />
-            <Button disabled={!!s.busy} icon="folder" onClick={() => void w.chooseProject()}>
-              Browse
-            </Button>
-          </div>
-          <div className="actions section-gap">
-            <Button
-              disabled={!!s.busy || !path.trim() || !s.connected}
-              tone="primary"
-              onClick={() => void w.openProject(path, false)}
-            >
-              Open saved project
-            </Button>
-            <Button
-              disabled={!!s.busy || !path.trim() || !s.connected}
-              onClick={() => void w.openProject(path, true)}
-            >
-              Import & analyze
-            </Button>
-          </div>
-          {!s.connected && (
-            <div className="section-gap">
-              <p className="small">
-                Start the daemon with <code>go run ./cmd/daemon</code>.
-              </p>
+        <Panel title="Open project" className="project-opening">
+          <div className="stack">
+            <div>
+              <label className="field-label" htmlFor="project-path">
+                Project folder
+              </label>
+              <div className="row project-folder">
+                <input
+                  id="project-path"
+                  value={path}
+                  onChange={(e) => setPath(e.target.value)}
+                  placeholder="/path/to/project"
+                  spellCheck={false}
+                />
+                <Button disabled={!!s.busy} icon="folder" onClick={() => void w.chooseProject()}>
+                  Browse
+                </Button>
+              </div>
+            </div>
+            <div className="actions">
               <Button
-                className="section-gap"
-                onClick={() => void w.act('Connect', () => w.connect())}
+                disabled={!!s.busy || !path.trim() || !s.connected}
+                tone="primary"
+                onClick={() => void w.openProject(path, false)}
               >
-                Reconnect
+                Open saved project
+              </Button>
+              <Button
+                disabled={!!s.busy || !path.trim() || !s.connected}
+                onClick={() => void w.openProject(path, true)}
+              >
+                Import & analyze
               </Button>
             </div>
-          )}
+            {!s.connected && (
+              <div className="stack">
+                <p className="small">
+                  Start the daemon with <code>go run ./cmd/daemon</code>.
+                </p>
+                <Button onClick={() => void w.act('Connect', () => w.connect())}>Reconnect</Button>
+              </div>
+            )}
+          </div>
         </Panel>
         {s.project && (
-          <Panel title="Project facts">
+          <Panel title="Project facts" className="project-facts">
             <KeyValues
               values={[
                 ['Project', s.project.name],
@@ -104,7 +107,7 @@ export function ProjectPage({ s }: { s: State }) {
         )}
       </div>
       {s.project && (
-        <div className="grid equal-columns section-gap">
+        <div className="grid equal-columns">
           <Panel title="Languages">
             <KeyValues
               values={Object.entries(s.project.languages || {}).map(([key, value]) => [
@@ -128,7 +131,7 @@ export function ProjectPage({ s }: { s: State }) {
           </Panel>
         </div>
       )}
-    </>
+    </div>
   );
 }
 export function Summary({ s }: { s: State }) {

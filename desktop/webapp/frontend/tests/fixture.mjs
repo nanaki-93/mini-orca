@@ -421,7 +421,11 @@ export function installFixture(options = {}) {
   };
   const requests = [],
     terminals = [],
-    failures = {};
+    failures = {
+      ...(options.startupOffline ? { '/status': 'transport' } : {}),
+      ...(options.restoreFailure ? { '/api/projects/restore': 503 } : {}),
+      ...(options.importFailure ? { '/api/projects/import': 503 } : {}),
+    };
   let held = null;
   window.fixture = {
     state,
@@ -430,9 +434,10 @@ export function installFixture(options = {}) {
     terminals,
     failures,
     release: () => held?.(),
-    hold: '',
+    hold: options.holdOpening ? '/api/projects/restore' : '',
   };
-  localStorage.setItem('mini-orca:last-project', project.path);
+  if (options.noRememberedProject) localStorage.removeItem('mini-orca:last-project');
+  else localStorage.setItem('mini-orca:last-project', project.path);
   const sameDraft = (d) => ({
     ...identity,
     draft_id: d.id,
@@ -1270,7 +1275,8 @@ export function installFixture(options = {}) {
           requests.push({ method: 'CANCEL', id });
         },
         async ChooseDirectory() {
-          return '/fixture/harbor';
+          window.fixture.browsed = (window.fixture.browsed || 0) + 1;
+          return options.chosenPath ?? '/fixture/harbor';
         },
         async SetUnsavedDraft(dirty) {
           window.fixture.dirty = dirty;
