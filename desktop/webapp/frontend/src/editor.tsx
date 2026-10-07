@@ -677,16 +677,15 @@ function Review({ s }: { s: State }) {
   if (!d) return <Empty title="No draft to review" />;
   const diff = d.validation?.diff;
   return (
-    <div className="stack">
-      <div className="review-heading">
-        <div>
-          <h2>Review change</h2>
-          <p className="small muted">
-            {d.target_path} · {d.target_symbol}
-          </p>
-        </div>
-        <Badge value={canApply(s) ? 'ready_to_apply' : 'checks_required'} />
-      </div>
+    <div className="stack review-workspace">
+      <Panel
+        title="Review change"
+        actions={<Badge value={canApply(s) ? 'ready_to_apply' : 'checks_required'} />}
+      >
+        <p className="small muted review-target">
+          {d.target_path} · {d.target_symbol}
+        </p>
+      </Panel>
       {s.dirty && <Notice>Local edits need validation.</Notice>}
       {!s.dirty && diff ? (
         <div className="panel diff" aria-label="Read-only composed diff" tabIndex={0}>
@@ -697,7 +696,7 @@ function Review({ s }: { s: State }) {
             </span>
             <span>1 file</span>
           </div>
-          <pre>
+          <pre tabIndex={0} aria-label="Composed diff lines">
             {diff.lines.map((line, i) => (
               <span className={`diff-line ${line.kind}`} key={i}>
                 <span className="line-number" aria-hidden="true">
@@ -731,7 +730,7 @@ function Review({ s }: { s: State }) {
           <p className="small muted">No current checks.</p>
         )}
       </Panel>
-      <div className="actions end">
+      <div className="actions end review-actions">
         <Go page="draft">Edit draft</Go>
         <Go page="checks">Checks</Go>
         <Button

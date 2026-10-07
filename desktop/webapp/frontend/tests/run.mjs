@@ -387,6 +387,70 @@ async function panelTreatment(panel) {
     };
   });
 }
+async function declarationReviewLayout(page) {
+  const surface = page.locator('.review-workspace');
+  assert.equal(await surface.evaluate((element) => getComputedStyle(element).gap), '20px');
+  const overflow = await page
+    .locator(
+      '#main, .page, .review-workspace, .review-workspace .panel, .review-workspace .panel-head, .review-workspace .panel-body, .review-workspace .code-header, .review-workspace .disclosure-body',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((element) => element.scrollWidth > element.clientWidth + 1)
+        .map((element) => element.className || element.id),
+    );
+  assert.deepEqual(overflow, [], 'Review metadata and boundaries wrap; only diff lines scroll');
+  const header = surface.locator('.panel-head').first();
+  const headerBounds = await header.boundingBox();
+  const title = await header.locator('h2').boundingBox();
+  const readiness = await header.locator('.badge').boundingBox();
+  for (const box of [title, readiness])
+    assert.ok(
+      box.x >= headerBounds.x - 1 &&
+        box.x + box.width <= headerBounds.x + headerBounds.width + 1 &&
+        box.y >= headerBounds.y - 1 &&
+        box.y + box.height <= headerBounds.y + headerBounds.height + 1,
+      'Review title and readiness remain contained',
+    );
+  assert.ok(
+    title.x + title.width <= readiness.x + 1 ||
+      readiness.x + readiness.width <= title.x + 1 ||
+      title.y + title.height <= readiness.y + 1 ||
+      readiness.y + readiness.height <= title.y + 1,
+    'Review title and readiness do not overlap',
+  );
+  const bounds = await surface.boundingBox();
+  const boxes = [];
+  for (const control of await surface.locator('.button, summary').all()) {
+    assert.equal(await control.isVisible(), true);
+    const box = await control.boundingBox();
+    assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+    for (const other of boxes)
+      assert.ok(
+        box.x + box.width <= other.x + 1 ||
+          other.x + other.width <= box.x + 1 ||
+          box.y + box.height <= other.y + 1 ||
+          other.y + other.height <= box.y + 1,
+        'Review decisions and disclosures do not collide',
+      );
+    boxes.push(box);
+  }
+  const diff = surface.getByLabel('Composed diff lines', { exact: true });
+  if (await diff.count()) {
+    assert.equal(await diff.evaluate((element) => getComputedStyle(element).overflowX), 'auto');
+    await diff.focus();
+    assert.equal(
+      await diff.evaluate(
+        (element) =>
+          element === document.activeElement && getComputedStyle(element).userSelect !== 'none',
+      ),
+      true,
+      'Complete composed diff is keyboard reachable and selectable',
+    );
+    assert.equal(await surface.locator('textarea, [contenteditable="true"]').count(), 0);
+  }
+  checks++;
+}
 async function focusedChecksLayout(page) {
   const surface = page.locator('.checks-workspace');
   assert.equal(await surface.evaluate((element) => getComputedStyle(element).gap), '20px');
@@ -3122,6 +3186,221 @@ try {
         })
         .catch(() => {});
       await close();
+    }
+  });
+  await test('Declaration review shares Summary panels and preserves guarded decisions', async () => {
+    const draftHash = 'draft-'.repeat(65);
+    const candidateHash = 'candidate-'.repeat(65);
+    const baseHash = 'base-'.repeat(65);
+    const diffText = `\treturn ${'longIdentifier'.repeat(65)}`;
+    for (const scenario of ['ready', 'no-checks', 'failed-checks', 'missing-diff', 'stale']) {
+      const { page, close } = await pageFor({
+        declarationDraftHash: draftHash,
+        declarationCandidateHash: candidateHash,
+        sourceFile: { content_hash: baseHash },
+        checkFail: scenario === 'failed-checks',
+        draftValidation: {
+          applicable: true,
+          scope_mode: 'single_declaration',
+          diagnostics: [],
+          ...(scenario === 'missing-diff'
+            ? {}
+            : {
+                diff: {
+                  old_path: 'internal/worker/process.go',
+                  new_path: 'internal/worker/process.go',
+                  lines: [
+                    { kind: 'added', new_line: 6, text: diffText },
+                    { kind: 'context', old_line: 7, new_line: 7, text: 'Final diff line.' },
+                  ],
+                },
+              }),
+        },
+      });
+      try {
+        const references = {};
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+          references[theme] = await panelTreatment(
+            page.locator('.summary-details > .panel').first(),
+          );
+        }
+        await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+        await prepare(page);
+        // The production Review tab rejects unvalidated/dirty candidates, rather than rendering them.
+        await page.getByRole('tab', { name: 'Review', exact: true }).click();
+        await idle(page);
+        assert.equal(await page.locator('.review-workspace').count(), 0);
+        await page.getByText('Validate the current draft first.', { exact: true }).waitFor();
+        if (scenario === 'ready')
+          await layout(page, 'review-missing-validation-admission-blocked-dark-standard-1440');
+        await page.getByRole('button', { name: 'Validate draft', exact: true }).click();
+        await idle(page);
+        if (scenario !== 'no-checks') {
+          await page.getByRole('button', { name: 'Continue to checks', exact: true }).click();
+          await page.getByRole('button', { name: 'Run checks', exact: true }).click();
+          await idle(page);
+        }
+        await page.getByRole('tab', { name: 'Review', exact: true }).click();
+        await idle(page);
+        const surface = page.locator('.review-workspace');
+        const apply = surface.getByRole('button', { name: 'Apply change', exact: true });
+        const writes = async () =>
+          page.evaluate(() => window.fixture.requests.filter((entry) => entry.method !== 'GET'));
+        if (scenario === 'stale') {
+          await page.evaluate(() => {
+            window.fixture.state.changed = true;
+            window.dispatchEvent(new Event('focus'));
+          });
+          await page.getByText('File evidence is outdated.', { exact: false }).waitFor();
+        }
+        assert.equal(await apply.isEnabled(), ['ready', 'missing-diff'].includes(scenario));
+        assert.equal(
+          await surface.locator('.panel-head .badge').first().textContent(),
+          ['ready', 'missing-diff'].includes(scenario) ? 'ready to apply' : 'checks required',
+        );
+        if (scenario === 'no-checks' || scenario === 'stale')
+          await surface.getByText('No current checks.', { exact: true }).waitFor();
+        if (scenario === 'failed-checks')
+          assert.deepEqual(await surface.locator('.panel-body .badge').allTextContents(), [
+            'passed',
+            'failed',
+          ]);
+        if (scenario === 'missing-diff')
+          await surface.getByRole('heading', { name: 'Diff requires draft validation' }).waitFor();
+        const before = await writes();
+        await declarationReviewLayout(page);
+        await layout(page, `review-${scenario}-identity-collapsed-dark-standard-1440`);
+        await surface.getByText('Change identity', { exact: true }).click();
+        for (const value of [baseHash, draftHash, candidateHash])
+          assert.equal(await surface.getByText(value, { exact: true }).isVisible(), true);
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+          for (const panel of await surface.locator('section.panel').all())
+            assert.deepEqual(await panelTreatment(panel), references[theme]);
+          for (const larger of [false, true]) {
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+            for (const width of [1440, 1280, 1001, 800]) {
+              await page.setViewportSize({ width, height: 1000 });
+              await declarationReviewLayout(page);
+              const diff = surface.getByLabel('Composed diff lines', { exact: true });
+              if (await diff.count()) {
+                assert.deepEqual(await diff.locator('code').allTextContents(), [
+                  diffText,
+                  'Final diff line.',
+                ]);
+                assert.equal(
+                  await diff.evaluate((element) => element.scrollWidth > element.clientWidth),
+                  true,
+                );
+                await diff.evaluate((element) => {
+                  element.scrollLeft = element.scrollWidth;
+                });
+                assert.ok((await diff.evaluate((element) => element.scrollLeft)) > 0);
+              }
+              await layout(
+                page,
+                `review-${scenario}-long-identities-${theme}-${larger ? 'larger' : 'standard'}-${width}`,
+              );
+            }
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          }
+        }
+        assert.deepEqual(
+          await writes(),
+          before,
+          'Diff/identity inspection and reflow never check or apply',
+        );
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+        if (scenario === 'ready') {
+          const path = '/api/projects/current/apply';
+          await page.evaluate((path) => {
+            window.fixture.hold = path;
+            window.fixture.failures[path] = 'transport';
+          }, path);
+          await apply.click();
+          await page.waitForFunction(
+            (path) => window.fixture.requests.some((entry) => entry.path === path),
+            path,
+          );
+          assert.equal(await apply.isDisabled(), true);
+          await declarationReviewLayout(page);
+          await layout(page, 'review-busy-apply-light-standard-800');
+          const request = await page.evaluate(
+            (path) => window.fixture.requests.find((entry) => entry.path === path),
+            path,
+          );
+          assert.deepEqual(request.body, {
+            draft_id: 'draft-1',
+            draft_revision: 2,
+            draft_hash: draftHash,
+            project_id: 'project-1',
+            project_revision: 'revision-1',
+            base_file_hash: baseHash,
+            confirm: true,
+          });
+          await page.evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          });
+          await idle(page);
+          await page
+            .getByText(
+              'The source operation could not be confirmed. Refresh the project before continuing.',
+              { exact: true },
+            )
+            .waitFor();
+          assert.equal(await apply.isDisabled(), true);
+          await declarationReviewLayout(page);
+          await layout(page, 'review-uncertain-write-light-standard-800');
+          assert.equal(
+            await page.evaluate(
+              (path) => window.fixture.requests.filter((entry) => entry.path === path).length,
+              path,
+            ),
+            1,
+          );
+        }
+        // Recovery navigation stays reachable without dispatching any new checks or writes.
+        await surface.getByRole('button', { name: 'Checks', exact: true }).click();
+        await page.locator('.checks-workspace').waitFor();
+        if (scenario === 'ready' || scenario === 'stale') continue;
+        await page.getByRole('tab', { name: 'Review', exact: true }).click();
+        await idle(page);
+        await surface.getByRole('button', { name: 'Edit draft', exact: true }).click();
+        await page
+          .getByLabel('Declaration draft', { exact: true })
+          .fill('func Process(ctx context.Context) error { return nil }');
+        await page.getByRole('tab', { name: 'Review', exact: true }).click();
+        await idle(page);
+        assert.equal(
+          await surface.count(),
+          0,
+          'Dirty candidates cannot enter Review or inherit Apply readiness',
+        );
+        assert.equal(
+          await page.getByLabel('Declaration draft', { exact: true }).inputValue(),
+          'func Process(ctx context.Context) error { return nil }',
+        );
+        assert.deepEqual(
+          await writes(),
+          before,
+          'Review rejection does not validate, check or apply',
+        );
+        await layout(page, `review-dirty-admission-blocked-light-standard-800-${scenario}`);
+      } finally {
+        await page
+          .evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          })
+          .catch(() => {});
+        await close();
+      }
     }
   });
   await test('Draft, checks, review, explicit Apply and guarded Undo', async () => {
