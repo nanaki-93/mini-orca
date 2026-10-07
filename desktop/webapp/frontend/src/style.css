@@ -1548,7 +1548,8 @@ progress::-webkit-progress-value {
 .source-workspace .editor-content,
 .source-inspection,
 .context-inspection,
-.assistant-composition {
+.assistant-composition,
+.draft-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 20px;
@@ -1582,14 +1583,17 @@ progress::-webkit-progress-value {
 }
 .source-analysis .panel-body,
 .context-inspection .panel-body,
-.assistant-composition .panel-body {
+.assistant-composition .panel-body,
+.draft-workspace .panel-body {
   overflow-wrap: anywhere;
 }
-.context-inspection .key-values > div {
+.context-inspection .key-values > div,
+.draft-workspace .key-values > div {
   flex-wrap: wrap;
   gap: 8px 20px;
 }
-.context-inspection .key-values dd {
+.context-inspection .key-values dd,
+.draft-workspace .key-values dd {
   flex: 1 1 12rem;
 }
 .context-references .list-row {
@@ -1606,8 +1610,20 @@ progress::-webkit-progress-value {
   grid-template-columns: minmax(0, 1fr);
   gap: 20px;
 }
-.assistant-request details {
+.assistant-request details,
+.draft-imports details {
   margin: 0;
+}
+.draft-validation .panel-body {
+  display: grid;
+  gap: 12px;
+}
+.draft-validation .notice {
+  margin: 0;
+}
+.draft-workspace > .actions .button {
+  min-width: 0;
+  max-width: 100%;
 }
 .assistant-request-actions .button {
   min-width: 0;

@@ -501,17 +501,21 @@ function DraftEditor({ s }: { s: State }) {
       </Empty>
     );
   return (
-    <div className="stack">
-      <div className="row between wrap">
-        <div className="row">
-          <strong>{d.target_symbol}</strong>
+    <div className="stack draft-workspace">
+      <Panel
+        title="Draft target"
+        actions={
           <Badge value={s.dirty ? 'edited' : d.validation?.applicable ? 'validated' : d.state} />
-        </div>
-        <span className="small muted">
-          Revision {d.revision}
-          {s.dirty ? ' + local edits' : ''}
-        </span>
-      </div>
+        }
+      >
+        <KeyValues
+          values={[
+            ['File', <span className="mono">{d.target_path}</span>],
+            ['Declaration', <span className="mono">{d.target_symbol}</span>],
+            ['Revision', `${d.revision}${s.dirty ? ' + local edits' : ''}`],
+          ]}
+        />
+      </Panel>
       <div className="panel">
         <div className="code-header">Declaration draft</div>
         <textarea
@@ -523,21 +527,23 @@ function DraftEditor({ s }: { s: State }) {
           onChange={(event) => w.editDraft(event.target.value, s.imports)}
         />
       </div>
-      <Disclosure title="Imports">
-        <label htmlFor="draft-imports" className="field-label">
-          One import per line
-        </label>
-        <textarea
-          id="draft-imports"
-          className="mono"
-          spellCheck={false}
-          disabled={!!s.busy || s.fileStale}
-          value={s.imports}
-          onChange={(event) => w.editDraft(s.declaration, event.target.value)}
-        />
-      </Disclosure>
+      <Panel className="draft-imports">
+        <Disclosure title="Imports">
+          <label htmlFor="draft-imports" className="field-label">
+            One import per line
+          </label>
+          <textarea
+            id="draft-imports"
+            className="mono"
+            spellCheck={false}
+            disabled={!!s.busy || s.fileStale}
+            value={s.imports}
+            onChange={(event) => w.editDraft(s.declaration, event.target.value)}
+          />
+        </Disclosure>
+      </Panel>
       {!s.dirty && !!d.validation?.diagnostics?.length && (
-        <Panel title="Validation">
+        <Panel title="Validation" className="draft-validation">
           {d.validation.diagnostics.map((diagnostic, i) => (
             <Notice error key={i}>
               {diagnostic.message}
