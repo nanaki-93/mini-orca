@@ -1239,6 +1239,7 @@ export function installFixture(options = {}) {
                 files: state.files,
               },
               warnings: [],
+              ...(undo ? options.declarationUndoReceipt : options.declarationReceipt),
             });
           }
           if (path.endsWith('/scan'))

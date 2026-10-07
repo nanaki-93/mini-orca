@@ -167,7 +167,16 @@ const surfaceInventory = {
     review: ['ready', 'dirty', 'missing validation', 'failed checks', 'stale', 'busy', 'uncertain'],
   },
   tools: {
-    receipt: ['absent', 'applied', 'undone', 'optional audit unavailable', 'busy', 'uncertain'],
+    // Absent Receipt is a defensive owner state: production enters this route only in
+    // acceptReceipt with a receipt. Do not add a debug route to render that guard.
+    receipt: [
+      'absent (owner-inspected)',
+      'applied',
+      'undone',
+      'optional audit unavailable',
+      'busy',
+      'uncertain',
+    ],
     benchmark: [
       'catalog',
       'empty',
@@ -3392,6 +3401,170 @@ try {
           'Review rejection does not validate, check or apply',
         );
         await layout(page, `review-dirty-admission-blocked-light-standard-800-${scenario}`);
+      } finally {
+        await page
+          .evaluate(() => {
+            window.fixture.hold = '';
+            window.fixture.release();
+          })
+          .catch(() => {});
+        await close();
+      }
+    }
+  });
+  await test('Standalone receipts retain complete audit evidence and guarded Undo across layouts', async () => {
+    const audit = {
+      id: 'receipt-'.repeat(65),
+      action: 'apply',
+      target_path: `internal/${'long-directory/'.repeat(20)}worker.go`,
+      outcome: 'success',
+      before_hash: 'before-'.repeat(65),
+      after_hash: 'after-'.repeat(65),
+      timestamp: '2026-10-04T05:00:00Z',
+    };
+    const warning = `Receipt warning: ${'long-diagnostic-'.repeat(65)}. Final warning sentence.`;
+    for (const scenario of ['long', 'optional-unavailable', 'uncertain']) {
+      const { page, close } = await pageFor({
+        declarationReceipt: {
+          audit: scenario === 'optional-unavailable' ? null : audit,
+          warnings: scenario === 'optional-unavailable' ? [] : [warning],
+        },
+        declarationUndoReceipt: { audit: { ...audit, action: 'undo' }, warnings: [warning] },
+      });
+      try {
+        const references = {};
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+          references[theme] = await panelTreatment(
+            page.locator('.summary-details > .panel').first(),
+          );
+        }
+        await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+        await prepare(page);
+        await validateAndCheck(page);
+        await page.getByRole('button', { name: 'Apply change', exact: true }).click();
+        await idle(page);
+        const surface = page.locator('.receipt-workspace');
+        const undo = surface.getByRole('button', { name: 'Undo change', exact: true });
+        const writes = () =>
+          page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET'));
+        const assertLayout = async () => {
+          await headingContainment(surface.locator('.page-heading--intro'));
+          assert.equal(await surface.evaluate((el) => getComputedStyle(el).gap), '20px');
+          const overflow = await page
+            .locator(
+              '#main, .page, .receipt-workspace, .receipt-workspace .panel, .receipt-workspace .panel-body, .receipt-workspace .notice, .receipt-workspace dd',
+            )
+            .evaluateAll((elements) =>
+              elements
+                .filter((el) => el.scrollWidth > el.clientWidth + 1)
+                .map((el) => el.className || el.tagName),
+            );
+          assert.deepEqual(overflow, [], 'Receipt audit values and warnings wrap without clipping');
+        };
+        const before = await writes();
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+          for (const panel of await surface.locator('section.panel').all())
+            assert.deepEqual(await panelTreatment(panel), references[theme]);
+          for (const larger of [false, true]) {
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+            for (const width of [1440, 1280, 1001, 800]) {
+              await page.setViewportSize({ width, height: 1000 });
+              await assertLayout();
+              assert.equal(await undo.isEnabled(), true);
+              if (scenario === 'optional-unavailable') {
+                assert.deepEqual(await surface.locator('dd').allTextContents(), [
+                  '—',
+                  '—',
+                  '—',
+                  '—',
+                  'Available',
+                  '—',
+                  '—',
+                  'applied-hash',
+                  'revision-2',
+                ]);
+              } else {
+                for (const value of [
+                  audit.id,
+                  audit.before_hash,
+                  audit.after_hash,
+                  audit.target_path,
+                ])
+                  assert.equal(
+                    await surface.locator('dd').filter({ hasText: value }).isVisible(),
+                    true,
+                  );
+                assert.equal(await surface.getByText(warning, { exact: true }).isVisible(), true);
+              }
+              await layout(
+                page,
+                `receipt-${scenario}-${theme}-${larger ? 'larger' : 'standard'}-${width}`,
+              );
+            }
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          }
+        }
+        assert.deepEqual(
+          await writes(),
+          before,
+          'Receipt inspection and reflow do not verify or mutate source',
+        );
+        const path = '/api/projects/current/undo';
+        await undo.click();
+        const dialog = page.getByRole('dialog');
+        assert.equal(await dialog.isVisible(), true);
+        assert.equal((await writes()).filter((r) => r.path === path).length, 0);
+        await page.evaluate(
+          ({ path, fail }) => {
+            window.fixture.hold = path;
+            if (fail) window.fixture.failures[path] = 'transport';
+          },
+          { path, fail: scenario === 'uncertain' },
+        );
+        await dialog.getByRole('button', { name: 'Undo change', exact: true }).click();
+        await page.waitForFunction(
+          (path) => window.fixture.requests.some((r) => r.path === path),
+          path,
+        );
+        assert.equal(await undo.isDisabled(), true);
+        await assertLayout();
+        await layout(page, `receipt-${scenario}-busy-undo-light-standard-800`);
+        await page.evaluate(() => {
+          window.fixture.hold = '';
+          window.fixture.release();
+        });
+        await idle(page);
+        if (scenario === 'uncertain') {
+          await page
+            .getByText(
+              'The source operation could not be confirmed. Refresh the project before continuing.',
+              { exact: true },
+            )
+            .waitFor();
+          assert.equal(await undo.isDisabled(), true);
+        } else {
+          await surface.getByRole('heading', { name: 'Change undone', exact: true }).waitFor();
+          assert.equal(await undo.count(), 0);
+          assert.equal(await surface.getByText('Unavailable', { exact: true }).isVisible(), true);
+          assert.equal(await surface.getByText(warning, { exact: true }).isVisible(), true);
+        }
+        await assertLayout();
+        await layout(page, `receipt-${scenario}-undo-outcome-light-standard-800`);
+        const request = (await writes()).filter((r) => r.path === path);
+        assert.equal(request.length, 1);
+        assert.equal(request[0].body.post_apply_hash, 'applied-hash');
+        assert.equal(request[0].body.project_revision, 'revision-2');
+        const after = await writes();
+        await surface.getByRole('button', { name: 'Open source', exact: true }).click();
+        await idle(page);
+        assert.deepEqual(await writes(), after, 'Open source is passive');
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
       } finally {
         await page
           .evaluate(() => {

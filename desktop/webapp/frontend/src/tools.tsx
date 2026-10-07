@@ -21,53 +21,61 @@ import {
 
 export function Receipt({ s }: { s: State }) {
   const r = s.receipt;
-  if (!r) return <Empty title="No change receipt" />;
   return (
-    <>
+    <div className="workspace-page receipt-workspace">
       <Heading
-        title={r.audit?.action === 'undo' ? 'Change undone' : 'Change applied'}
-        detail={r.audit?.target_path}
+        variant="intro"
+        title={
+          !r ? 'Change receipt' : r.audit?.action === 'undo' ? 'Change undone' : 'Change applied'
+        }
+        detail={r?.audit?.target_path}
       >
-        <Go page="editor">Open source</Go>
-        {r.undo_available && (
+        {r && <Go page="editor">Open source</Go>}
+        {r?.undo_available && (
           <Button icon="undo" disabled={!!s.busy || s.uncertain} onClick={() => void w.undo()}>
             Undo change
           </Button>
         )}
       </Heading>
-      <div className="grid two-columns">
-        <Panel title="Receipt">
-          <div className="receipt-mark">
-            <Icon name="circleCheck" />
+      {!r ? (
+        <Empty title="No change receipt" />
+      ) : (
+        <>
+          <div className="grid two-columns">
+            <Panel title="Receipt">
+              <div className="receipt-mark">
+                <Icon name="circleCheck" />
+              </div>
+              <KeyValues
+                values={[
+                  ['Action', r.audit?.action],
+                  ['Outcome', r.audit?.outcome],
+                  ['File', r.audit?.target_path],
+                  [
+                    'Time',
+                    r.audit?.timestamp ? new Date(r.audit.timestamp).toLocaleString() : undefined,
+                  ],
+                  ['Undo', r.undo_available ? 'Available' : 'Unavailable'],
+                ]}
+              />
+            </Panel>
+            <Panel title="Audit">
+              <KeyValues
+                values={[
+                  ['Receipt', r.audit?.id],
+                  ['Before', r.audit?.before_hash],
+                  ['After', r.audit?.after_hash || r.post_apply_hash],
+                  ['Project revision', r.project_revision],
+                ]}
+              />
+            </Panel>
           </div>
-          <KeyValues
-            values={[
-              ['Action', r.audit?.action],
-              ['Outcome', r.audit?.outcome],
-              ['File', r.audit?.target_path],
-              [
-                'Time',
-                r.audit?.timestamp ? new Date(r.audit.timestamp).toLocaleString() : undefined,
-              ],
-              ['Undo', r.undo_available ? 'Available' : 'Unavailable'],
-            ]}
-          />
-        </Panel>
-        <Panel title="Audit">
-          <KeyValues
-            values={[
-              ['Receipt', r.audit?.id],
-              ['Before', r.audit?.before_hash],
-              ['After', r.audit?.after_hash || r.post_apply_hash],
-              ['Project revision', r.project_revision],
-            ]}
-          />
-        </Panel>
-      </div>
-      {(r.warnings || []).map((warning, i) => (
-        <Notice key={i}>{warning}</Notice>
-      ))}
-    </>
+          {(r.warnings || []).map((warning, i) => (
+            <Notice key={i}>{warning}</Notice>
+          ))}
+        </>
+      )}
+    </div>
   );
 }
 function Samples({ samples }: { samples: BenchmarkSample[] }) {

@@ -1521,6 +1521,12 @@ progress::-webkit-progress-value {
   color: var(--violet);
   margin-bottom: 20px;
 }
+.receipt-workspace > .grid {
+  gap: 20px;
+}
+.receipt-workspace > .notice {
+  margin: 0;
+}
 .receipt-mark {
   color: var(--accent);
   margin-bottom: 20px;
@@ -1589,18 +1595,21 @@ progress::-webkit-progress-value {
 .draft-workspace .panel-body,
 .checks-workspace .panel-body,
 .review-workspace .panel-body,
+.receipt-workspace .panel-body,
 .check-evidence .panel-head h2 {
   overflow-wrap: anywhere;
 }
 .context-inspection .key-values > div,
 .draft-workspace .key-values > div,
-.review-workspace .key-values > div {
+.review-workspace .key-values > div,
+.receipt-workspace .key-values > div {
   flex-wrap: wrap;
   gap: 8px 20px;
 }
 .context-inspection .key-values dd,
 .draft-workspace .key-values dd,
-.review-workspace .key-values dd {
+.review-workspace .key-values dd,
+.receipt-workspace .key-values dd {
   flex: 1 1 12rem;
 }
 .context-references .list-row {
