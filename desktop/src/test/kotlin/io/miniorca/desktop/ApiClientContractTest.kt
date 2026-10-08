@@ -11,6 +11,29 @@ import kotlinx.serialization.json.Json
 
 class ApiClientContractTest {
   @Test
+  fun performanceResultsRetainConfiguredAndResolvedModelNamesIncludingLegacyReports() {
+    val run = analysisRunFixture()
+    for (configuredModel in listOf("", "\"configured_model\":\"selected-model\",")) {
+      val response =
+          """{
+        "identity":${Json.encodeToString(run.identity)},
+        "progress":{"category":"performance","status":"completed_empty","coverage":{"total":1,"succeeded":1},"finding_count":0},
+        "performance":[{
+          "project_id":"project","project_revision":"revision","path":"main.go",
+          "content_hash":"hash","status":"completed","findings":[],
+          $configuredModel"model":"resolved-model-version"
+        }]
+      }"""
+      val api =
+          ApiClient(transport = DaemonTransport { _, _, _ -> TransportResponse(200, response) })
+      val report = api.analysisResults(run.identity, "performance").performance.single()
+      assertEquals("resolved-model-version", report.model)
+      assertEquals(if (configuredModel.isEmpty()) "" else "selected-model", report.configuredModel)
+      assertEquals("completed", report.status)
+    }
+  }
+
+  @Test
   fun savedResultCountsAndRetainedFileIdentitiesDecodeIndependentlyOfRunProgress() {
     val run = analysisRunFixture()
     val response =

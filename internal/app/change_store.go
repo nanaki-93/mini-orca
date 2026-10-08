@@ -94,7 +94,7 @@ func validateStoredChange(session ChangeSession) error {
 			return fmt.Errorf("proposal dropped or changed a pinned regression test")
 		}
 	}
-	return nil
+	return validateStoredWorkflow(session.Workflow)
 }
 
 func validateStoredEdits(edits []ChangeEdit, targets map[string]bool) error {
@@ -159,7 +159,11 @@ func listChangeSessions(root string) ([]ChangeHistoryEntry, error) {
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, ChangeHistoryEntry{ID: session.ID, ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, Kind: session.Kind, Title: session.Title, Revision: session.Revision, Hash: session.Hash, State: session.State, Freshness: session.Freshness, UpdatedAt: session.UpdatedAt})
+		entry := ChangeHistoryEntry{ID: session.ID, ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, Kind: session.Kind, Title: session.Title, Revision: session.Revision, Hash: session.Hash, State: session.State, Freshness: session.Freshness, UpdatedAt: session.UpdatedAt}
+		if session.Workflow != nil {
+			entry.WorkflowStatus = session.Workflow.Status
+		}
+		result = append(result, entry)
 		if len(result) > 200 {
 			return nil, fmt.Errorf("change history exceeds 200 sessions")
 		}

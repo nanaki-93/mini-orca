@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { activeRun, analysisSetupModels, workspace as w, type State } from './workspace';
+import { CapturedModels, ModelSelectors } from './analysis-models';
 import {
-  Badge,
   Button,
   Disclosure,
   Empty,
@@ -14,7 +14,7 @@ import {
   StatusDot,
   human,
 } from './ui';
-import type { AnalysisModels, Limits } from './models';
+import type { Limits } from './models';
 
 const stages = ['semantic', 'performance', 'security_rules', 'security_ai'];
 const stageNames: Record<string, string> = {
@@ -25,96 +25,6 @@ const stageNames: Record<string, string> = {
   feature_suggestions: 'New feature suggestions',
 };
 const defaults: Limits = { batch_files: 20, budget_seconds: 600, max_attempts_per_stage: 2 };
-
-export function CapturedModels({ plan }: { plan?: import('./models').AnalysisPreview }) {
-  if (!plan?.models) return <p className="small muted">Models unavailable</p>;
-  return (
-    <div className="grid three-columns">
-      {(
-        [
-          ['code', 'Code', ['semantic']],
-          ['review', 'Performance & Security', ['performance', 'security_rules', 'security_ai']],
-          ['features', 'Feature discovery', ['feature_suggestions']],
-        ] as const
-      ).map(([key, label, stages]) => {
-        const profile = plan.models![key];
-        const provider = plan.providers?.find((p) =>
-          p.stages.some((s) => (stages as readonly string[]).includes(s)),
-        );
-        const spec = provider?.model;
-        return (
-          <div key={key}>
-            <strong className="block">{label}</strong>
-            {spec ? (
-              <>
-                <div className="row between wrap">
-                  <span>{spec.model}</span>
-                  <Badge value={spec.remote_provider ? 'Remote' : 'Local'} />
-                </div>
-                <div className="small muted">{spec.provider_origin}</div>
-                <div className="small muted">Profile: {profile}</div>
-              </>
-            ) : (
-              <div className="small muted">
-                <div className="row between wrap">
-                  <span>Unavailable</span>
-                </div>
-                <div className="small muted">Profile: {profile || 'legacy'}</div>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function ModelSelectors({
-  s,
-  value,
-  disabled,
-  onChange,
-  className = '',
-}: {
-  s: State;
-  value: AnalysisModels;
-  disabled: boolean;
-  onChange: (models: AnalysisModels) => void;
-  className?: string;
-}) {
-  const choices = Object.entries(s.models?.scopes || {});
-  return (
-    <div className={`form-grid ${className}`}>
-      {(
-        [
-          ['code', 'Code analysis model'],
-          ['review', 'Performance & Security model'],
-          ['features', 'Feature discovery model'],
-        ] as const
-      ).map(([key, label]) => (
-        <label key={key}>
-          <span>{label}</span>
-          <select
-            className="field"
-            aria-label={label}
-            value={value[key]}
-            disabled={disabled || !choices.length}
-            onChange={(event) =>
-              onChange({ ...value, [key]: event.target.value as AnalysisModels[typeof key] })
-            }
-          >
-            {!choices.length && <option value={value[key]}>Models unavailable</option>}
-            {choices.map(([profile, model]) => (
-              <option key={profile} value={profile}>
-                {model.model} · {profile} · {model.remote_provider ? 'Remote' : 'Local'}
-              </option>
-            ))}
-          </select>
-        </label>
-      ))}
-    </div>
-  );
-}
 
 export function Analysis({ s }: { s: State }) {
   const [filter, setFilter] = useState('');
@@ -192,9 +102,24 @@ export function Analysis({ s }: { s: State }) {
       </Heading>
 
       <div className="stack analysis-sections">
-        <Panel title="Run settings" className="analysis-run-settings">
+        <Panel
+          title="Analysis setup"
+          className="analysis-run-settings"
+          actions={
+            <Button
+              icon="refresh"
+              tone="ghost small"
+              disabled={s.modelsLoading || !!s.busy}
+              onClick={() => void w.loadAvailableModels()}
+            >
+              Refresh models
+            </Button>
+          }
+        >
+          <p className="analysis-settings-intro">
+            Choose a model for each operation. Your last run stays below for reference.
+          </p>
           <ModelSelectors
-            className="analysis-settings-fields"
             s={s}
             value={models}
             disabled={!!s.busy}
@@ -230,25 +155,27 @@ export function Analysis({ s }: { s: State }) {
               Refresh previously analyzed files
             </label>
           </Disclosure>
+          <section className="analysis-last-run" aria-label="Last run">
+            <div className="analysis-last-run-heading">
+              <h3>Last run</h3>
+              {s.run && (
+                <div className="row wrap">
+                  <span className="row">
+                    <Icon name="activity" />
+                    <StatusDot value={s.run.status} label="Analysis" />
+                    <span>{human(s.run.status)}</span>
+                  </span>
+                  <Go page="analysis-run">View run</Go>
+                </div>
+              )}
+            </div>
+            {s.run ? (
+              <CapturedModels plan={s.run.plan} compact />
+            ) : (
+              <p className="small muted">No analysis run yet.</p>
+            )}
+          </section>
         </Panel>
-        {s.run && (
-          <Panel
-            title="Last run"
-            className="analysis-last-run"
-            actions={
-              <div className="row wrap">
-                <span className="row">
-                  <Icon name="activity" />
-                  <StatusDot value={s.run.status} label="Analysis" />
-                  <span>{human(s.run.status)}</span>
-                </span>
-                <Go page="analysis-run">View run</Go>
-              </div>
-            }
-          >
-            <CapturedModels plan={s.run.plan} />
-          </Panel>
-        )}
       </div>
 
       <div className="toolbar">
@@ -379,14 +306,15 @@ export function AnalysisPreview({ s }: { s: State }) {
   const isRepair = !!p.recover_incomplete;
   const isResume = !!s.resume;
 
-  const currentSetup = w.snapshot().analysisSetup;
+  const currentSetup = s.analysisSetup && analysisSetupModels(s);
+  const capturedSetup = p.models && analysisSetupModels({ ...s, analysisSetup: p.models });
   const mismatch =
     isResume &&
     currentSetup &&
     p.models &&
-    (currentSetup.code !== p.models.code ||
-      currentSetup.review !== p.models.review ||
-      currentSetup.features !== p.models.features);
+    (currentSetup.code !== capturedSetup?.code ||
+      currentSetup.review !== capturedSetup?.review ||
+      currentSetup.features !== capturedSetup?.features);
 
   return (
     <div className="workspace-page analysis-preview">

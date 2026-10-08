@@ -104,17 +104,48 @@ func TestFeatureMalformedOutputPreservesPreviousSuggestions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	duplicate := strings.Replace(validFeatureResponse, `}]}`, `},`+strings.TrimSuffix(strings.TrimPrefix(validFeatureResponse, `{"suggestions":[`), `]}`)+`]}`, 1)
-	for _, invalid := range []string{`{}`, strings.Replace(validFeatureResponse, "main.go", "invented.go", 1), strings.Replace(validFeatureResponse, "small", "instant", 1), strings.Replace(validFeatureResponse, `"benefit":`, `"status":"verified","benefit":`, 1), duplicate} {
+	for _, invalid := range []string{`{}`, strings.Replace(validFeatureResponse, "main.go", "invented.go", 1), strings.Replace(validFeatureResponse, "small", "instant", 1), strings.Replace(validFeatureResponse, `"benefit":`, `"status":"verified","benefit":`, 1), featureOutput("One", "Two", "Three", "Four", "Five", "Six")} {
 		output.Store(invalid)
 		request := featureRequestFor(t, service, "Improve the project.")
 		if _, err := service.GenerateFeatures(context.Background(), FeatureGenerateRequest{FeatureRequest: request}); err == nil {
 			t.Fatalf("accepted output %s", invalid)
 		}
 		retained, err := service.Features(context.Background())
-		if err != nil || retained.Status != "failed" || retained.Failure != "Feature search failed. Try again." || featureIdeasJSON(t, retained) != featureIdeasJSON(t, good) {
+		if err != nil || retained.Status != "failed" || !strings.Contains(retained.Failure, "invalid content or unsupported project paths") || featureIdeasJSON(t, retained) != featureIdeasJSON(t, good) {
 			t.Fatalf("failure lost previous ideas: %+v, %v", retained, err)
 		}
+	}
+}
+
+func TestFeatureFailureExplainsCauseWithoutProviderDiagnostics(t *testing.T) {
+	for _, test := range []struct {
+		name, response, failure string
+		status                  int
+	}{
+		{"invalid content", `{"suggestions":[],"source-private-marker":"credential-private-marker"}`, "invalid content or unsupported project paths", http.StatusOK},
+		{"empty response", "", "complete, valid response", http.StatusOK},
+		{"rejected schema", "credential-private-marker", "rejected the feature response format", http.StatusBadRequest},
+		{"provider unavailable", "credential-private-marker", "connection or CLI login", http.StatusServiceUnavailable},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(test.status)
+				if test.status != http.StatusOK {
+					_, _ = fmt.Fprint(w, test.response)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: test.response}}}})
+			}))
+			defer provider.Close()
+			service, _ := newSemanticAnalysisService(t, provider.URL, 0)
+			if _, err := generateFeaturesFor(t, service, "Improve the project."); err == nil {
+				t.Fatal("failed generation was reported as successful")
+			}
+			report, err := service.Features(context.Background())
+			if err != nil || report.Status != "failed" || !strings.Contains(report.Failure, test.failure) || strings.Contains(report.Failure, "private-marker") {
+				t.Fatalf("saved failure = %+v, %v", report, err)
+			}
+		})
 	}
 }
 
@@ -231,10 +262,10 @@ func writeFeatureHistoryBytes(t *testing.T, root string, data []byte) {
 }
 
 func TestFeatureGenerationAddsNewIdeasAndSuppressesDuplicates(t *testing.T) {
-	provider, url := newFeatureTestProvider(t, featureOutput("Add cancellation-aware work", "Export analysis reports"))
+	provider, url := newFeatureTestProvider(t, featureOutput("Add cancellation-aware work", "Export analysis reports", "Add cancellation-aware work"))
 	s, _ := newSemanticAnalysisService(t, url, 0)
 	first, err := generateFeaturesFor(t, s, "Improve.")
-	if err != nil || len(first.Suggestions) != 2 || first.LastGeneration == nil || first.LastGeneration.AddedCount != 2 || first.LastGeneration.DuplicateCount != 0 {
+	if err != nil || len(first.Suggestions) != 2 || first.LastGeneration == nil || first.LastGeneration.AddedCount != 2 || first.LastGeneration.DuplicateCount != 1 {
 		t.Fatalf("first generation=%+v err=%v", first, err)
 	}
 	firstGeneration := first.LastGeneration.GenerationID
@@ -251,15 +282,15 @@ func TestFeatureGenerationAddsNewIdeasAndSuppressesDuplicates(t *testing.T) {
 	if _, err := s.UpdateFeatureStatus(context.Background(), first.Suggestions[1].ID, FeatureStatusRequest{FeatureRequest: request, Status: "dismissed"}); err != nil {
 		t.Fatal(err)
 	}
-	// An exact repeat, a reworded repeat of the dismissed idea, one new idea and
-	// a reworded repeat of that new idea within the same response.
-	provider.output.Store(featureOutput("Add cancellation-aware work", "export   ANALYSIS reports!", "Schedule nightly analysis", "Schedule nightly analysis."))
+	// Existing saved/dismissed ideas and exact or normalized repeats within the
+	// response are all duplicates; the one new capability remains open.
+	provider.output.Store(featureOutput("Add cancellation-aware work", "export   ANALYSIS reports!", "Schedule nightly analysis", "Schedule nightly analysis.", "Schedule nightly analysis"))
 	second, err := generateFeaturesFor(t, s, "Improve.")
 	if err != nil || second.Status != "ready" || len(second.Suggestions) != 3 {
 		t.Fatalf("second generation=%+v err=%v", second, err)
 	}
 	outcome := second.LastGeneration
-	if outcome == nil || outcome.AddedCount != 1 || outcome.DuplicateCount != 3 || outcome.GenerationID == firstGeneration || len(second.Generations) != 2 {
+	if outcome == nil || outcome.AddedCount != 1 || outcome.DuplicateCount != 4 || outcome.GenerationID == firstGeneration || len(second.Generations) != 2 {
 		t.Fatalf("outcome=%+v generations=%+v", outcome, second.Generations)
 	}
 	kept, added := second.Suggestions[:2], second.Suggestions[2]
@@ -293,6 +324,7 @@ func TestFeatureGenerationDuplicateOnlyAndEmptyOutputKeepTheList(t *testing.T) {
 		duplicates int
 	}{
 		{featureOutput("ADD cancellation aware work"), 1},
+		{featureOutput("Add cancellation-aware work", "Add cancellation-aware work"), 2},
 		{`{"suggestions":[]}`, 0},
 	} {
 		provider.output.Store(test.output)

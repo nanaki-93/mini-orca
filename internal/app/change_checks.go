@@ -36,14 +36,21 @@ func (s *Service) CheckChange(ctx context.Context, id string, request ChangeChec
 		}
 		checks = append(checks, executed...)
 	}
+	return s.publishChangeChecks(ctx, id, request, checks)
+}
+
+func (s *Service) publishChangeChecks(ctx context.Context, id string, request ChangeCheckRequest, checks []DraftCheck) (*ChangeSession, error) {
 	s.changesMu.Lock()
 	defer s.changesMu.Unlock()
-	current, _, err := s.loadChangeForAction(ctx, id, request.ChangeIdentity)
+	current, root, err := s.loadChangeForAction(ctx, id, request.ChangeIdentity)
 	if err != nil {
 		return nil, err
 	}
 	current.Checks, current.ReviewedHash, current.UpdatedAt = checks, "", time.Now().UTC()
 	current.CheckOptions = request.DraftCheckOptions
+	if current.Workflow != nil && changeWorkflowReviewable(current) {
+		current.Workflow.Stages[3].Status = "waiting"
+	}
 	pinChangeRegression(current, checks)
 	if err := writeChangeSession(root, current); err != nil {
 		return nil, err
@@ -169,10 +176,13 @@ func (s *Service) ReviewChange(ctx context.Context, id string, identity ChangeId
 	if err != nil {
 		return nil, err
 	}
-	if len(session.Checks) == 0 || !requiredChecksPassed(session.Checks) || s.changeAuthority[session.ProjectID+"/"+id] != "checks:"+session.Hash {
+	if !changeWorkflowReviewable(session) || len(session.Checks) == 0 || !requiredChecksPassed(session.Checks) || s.changeAuthority[session.ProjectID+"/"+id] != "checks:"+session.Hash {
 		return nil, fmt.Errorf("complete current proposal checks before review")
 	}
 	session.ReviewedHash = session.Hash
+	if session.Workflow != nil {
+		session.Workflow.Stages[3].Status = "completed"
+	}
 	if err := writeChangeSession(root, session); err != nil {
 		return nil, err
 	}

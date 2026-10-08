@@ -5,13 +5,19 @@ Mini-Orca reads one YAML file, normally ignored `config.yaml`. Start with
 validated once at daemon startup, and unknown or retired keys stop startup with
 the full field path in the error. JSON configuration files are not supported.
 
-Every prompt-bearing operation has one fixed model scope:
+The daemon configures three model profiles, used by default as follows:
 
 | Scope | Used for |
 | --- | --- |
 | `analyze` | Project import, architectural summaries and source-based Performance review |
 | `bug` | Selected-file analysis and Analyze-all suggestions |
 | `function` | Declaration proposals and explicit repairs |
+
+The Chat agent workflow chooses a profile independently for Creation, Testing
+and Review. Defaults are `function`, `bug` and `analyze`, respectively. Configure
+each profile below, then choose the stage assignments in Chat. A captured run
+keeps its selected model, timeout and retry budget; remote consent covers every
+selected remote profile. These selections do not change other operations' defaults.
 
 All three scopes are required. Each selects a `provider` (`openai`, `agy`, or
 `pi`) and a `model`. Omitted `provider` retains the OpenAI-compatible HTTP
@@ -51,7 +57,7 @@ or provide a settings UI.
 
 The HTTP provider boundary is one non-streaming OpenAI-compatible Chat Completions
 request. Native Anthropic Messages, Gemini `generateContent`, OpenAI Responses,
-tool calls, model enumeration, and vendor SDKs are not supported. Provider
+tool calls, HTTP model enumeration, and vendor SDKs are not supported. Provider
 errors are reduced to a status code so provider bodies cannot leak a key.
 
 ## CLI providers
@@ -94,22 +100,34 @@ invalid; names containing spaces fail configuration validation with instructions
 to use a slug. Model availability depends on the CLI account. Restart the daemon
 after changing its configuration.
 
+Analysis can also select any model available through Pi without adding it to a
+scope in `config.yaml`. The picker reads Pi's `get_available_models` RPC catalog,
+including custom local models configured in Pi's `models.json`. It uses the first
+configured Pi `cli_path` (Analyze, Bug, then Function), or `pi` on the daemon's
+`PATH` when no scope uses Pi. No prompt or project context is sent during discovery.
+Refresh models after updating Pi's authentication or model configuration. Pi
+catalog failures leave configured choices available; local catalog entries still
+require prompt consent because the CLI controls its downstream destination.
+Catalog assignments use the operation's context/dispatch limits; discovered Pi
+models retain Pi's default thinking settings.
+
 Each request starts a separate process in a private temporary directory, using
 Mini-Orca's supplied source context. Pi runs in JSON print mode with tools,
-extensions, skills, context-file discovery and session saving disabled. Its
+extensions, MCP, skills, context-file discovery and session saving disabled. Its
 temporary project settings disable automatic retries and compaction. Agy uses
 a temporary `mini-orca` agent with file, command, subagent and MCP tools disabled,
-slash expansion disabled, and JSON stdin/stdout. Schema requests permit only
-agy's `finish` tool, which formats the final answer. These adapters require
-CLI versions supporting those options and the documented event formats.
+slash expansion disabled, and JSON stdin/stdout. Agy also keeps `finish` disabled:
+native schema completion depends on that tool, which user hooks can reject.
+These adapters require CLI versions supporting those options and the documented
+event formats.
 See the [Pi CLI reference](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/cli.md)
 and [agy headless reference](https://www.antigravity.google/docs/cli/headless/).
 
-Only a successful final assistant response is accepted. Agy receives native
-JSON Schema constraints and its native `structured_output` is used instead of
-the prose response; Pi receives the schema in its system prompt. Mini-Orca
-validates both outputs against the schema locally, with no unconstrained
-fallback. Failed, truncated, tool-bearing or incomplete responses fail the request.
+Only a successful final assistant response is accepted. Both CLI providers
+receive the JSON Schema in their system prompt and must return a JSON answer.
+Mini-Orca validates the final response against that schema locally, with no
+unconstrained fallback. Failed, truncated, tool-bearing or incomplete responses
+fail the request.
 CLI stderr and raw protocol errors are not returned or logged. Output is bounded
 to 4 MiB and stderr to 64 KiB. HTTP and CLI transports honor the workflow's
 bounded deadline, including the longer feature discovery allowance. Direct

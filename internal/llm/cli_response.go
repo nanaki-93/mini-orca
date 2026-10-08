@@ -4,30 +4,30 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 )
 
+// ErrPiAuthenticationExpired identifies a provider-reported expiry without
+// retaining the provider's diagnostic text or credentials.
+var ErrPiAuthenticationExpired = errors.New("Pi authentication has expired; sign in to the selected provider in Pi again")
+
 type cliResponseDecoder struct {
-	profile    config.ModelProfile
-	response   *ChatResponse
-	structured bool
-	started    bool
-	finished   bool
+	profile  config.ModelProfile
+	response *ChatResponse
+	started  bool
+	finished bool
 }
 
 type agyStepEvent struct {
-	Type     string `json:"step_type"`
-	ToolName string `json:"tool_name"`
-	ToolInfo *struct {
-		Name string `json:"name"`
-	} `json:"tool_info"`
+	Type string `json:"step_type"`
 }
 
-func decodeCLIResponse(profile config.ModelProfile, output []byte, structured bool) (*ChatResponse, error) {
-	decoder := cliResponseDecoder{profile: profile, structured: structured}
+func decodeCLIResponse(profile config.ModelProfile, output []byte) (*ChatResponse, error) {
+	decoder := cliResponseDecoder{profile: profile}
 	scanner := bufio.NewScanner(bytes.NewReader(output))
 	scanner.Buffer(make([]byte, 4096), maxProviderResponseBytes)
 	for scanner.Scan() {
@@ -60,10 +60,9 @@ func (d *cliResponseDecoder) agyEvent(data []byte) error {
 		} `json:"init"`
 		Step   agyStepEvent `json:"step_update"`
 		Result struct {
-			Status           string          `json:"status"`
-			Response         string          `json:"response"`
-			StructuredOutput json.RawMessage `json:"structured_output"`
-			Usage            struct {
+			Status   string `json:"status"`
+			Response string `json:"response"`
+			Usage    struct {
 				Input  int `json:"input_tokens"`
 				Output int `json:"output_tokens"`
 				Total  int `json:"total_tokens"`
@@ -86,12 +85,8 @@ func (d *cliResponseDecoder) agyEvent(data []byte) error {
 		if !d.started || d.finished || event.Result.Status != "SUCCESS" {
 			return unusableCLIResponse("agy did not complete successfully")
 		}
-		content, err := agyFinalContent(event.Result.Response, event.Result.StructuredOutput, d.structured)
-		if err != nil {
-			return err
-		}
 		d.finished = true
-		d.response = cliChatResponse(d.profile.Model, content, ChatUsage{
+		d.response = cliChatResponse(d.profile.Model, event.Result.Response, ChatUsage{
 			PromptTokens: event.Result.Usage.Input, CompletionTokens: event.Result.Usage.Output, TotalTokens: event.Result.Usage.Total,
 		})
 	default:
@@ -104,35 +99,10 @@ func (d *cliResponseDecoder) agyStep(step agyStepEvent) error {
 	if !d.started || d.finished {
 		return unusableCLIResponse("agy progress is outside its model turn")
 	}
-	if step.Type == "subagent" {
+	if step.Type == "subagent" || step.Type == "tool" {
 		return unusableCLIResponse("agy attempted tool use")
-	}
-	if step.Type != "tool" {
-		return nil
-	}
-	// Schema requests enable finish solely to format the native result.
-	if !d.structured || step.ToolName != "finish" {
-		return unusableCLIResponse("agy attempted tool use")
-	}
-	if step.ToolInfo != nil && step.ToolInfo.Name != "" && step.ToolInfo.Name != "finish" {
-		return unusableCLIResponse("agy reported conflicting tool names")
 	}
 	return nil
-}
-
-func agyFinalContent(response string, output json.RawMessage, structured bool) (string, error) {
-	if !structured {
-		return response, nil
-	}
-	if len(output) != 0 {
-		return string(output), nil
-	}
-	// Preserve the existing optional blank-review contract. Nonempty prose is
-	// never a substitute for the native schema result, even if it parses as JSON.
-	if strings.TrimSpace(response) == "" {
-		return response, nil
-	}
-	return "", unusableCLIResponse("agy did not return the required structured output")
 }
 
 func (d *cliResponseDecoder) piEvent(data []byte) error {
@@ -170,16 +140,18 @@ func (d *cliResponseDecoder) piMessage(data json.RawMessage) error {
 	if json.Unmarshal(data, &role) != nil {
 		return unusableCLIResponse("malformed pi message")
 	}
-	if role.Role == "user" {
+	// Pi echoes prompt context in the event stream; only assistant content is output.
+	if role.Role == "system" || role.Role == "user" {
 		return nil
 	}
 	if role.Role != "assistant" {
 		return unusableCLIResponse("pi returned an unexpected message role")
 	}
 	var message struct {
-		StopReason string `json:"stopReason"`
-		Model      string `json:"model"`
-		Content    []struct {
+		StopReason   string `json:"stopReason"`
+		ErrorMessage string `json:"errorMessage"`
+		Model        string `json:"model"`
+		Content      []struct {
 			Type string `json:"type"`
 			Text string `json:"text"`
 		} `json:"content"`
@@ -189,8 +161,11 @@ func (d *cliResponseDecoder) piMessage(data json.RawMessage) error {
 			Total  int `json:"totalTokens"`
 		} `json:"usage"`
 	}
-	if json.Unmarshal(data, &message) != nil || message.StopReason != "stop" || !d.started || d.finished || d.response != nil {
+	if json.Unmarshal(data, &message) != nil || !d.started || d.finished || d.response != nil {
 		return unusableCLIResponse("pi assistant response did not complete normally")
+	}
+	if message.StopReason != "stop" {
+		return piCompletionError(message.StopReason, message.ErrorMessage)
 	}
 	if !matchesPiModel(d.profile.Model, message.Model) {
 		return unusableCLIResponse("pi returned a different model than configured; use an exact model ID")
@@ -209,6 +184,13 @@ func (d *cliResponseDecoder) piMessage(data json.RawMessage) error {
 		PromptTokens: message.Usage.Input, CompletionTokens: message.Usage.Output, TotalTokens: message.Usage.Total,
 	})
 	return nil
+}
+
+func piCompletionError(stopReason, message string) error {
+	if stopReason == "error" && strings.HasPrefix(strings.ToLower(strings.TrimSpace(message)), "your authentication token has expired.") {
+		return fmt.Errorf("llm client: %w: %w", ErrRequestRejected, ErrPiAuthenticationExpired)
+	}
+	return unusableCLIResponse("pi assistant response did not complete normally")
 }
 
 func matchesPiModel(configured, actual string) bool {

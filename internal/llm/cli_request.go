@@ -40,7 +40,7 @@ func (c *Client) chatCLI(ctx context.Context, messages []ChatMessage, format *Re
 	if err != nil {
 		return nil, err
 	}
-	response, err = decodeCLIResponse(c.profile, output, format != nil)
+	response, err = decodeCLIResponse(c.profile, output)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func prepareCLIInvocation(profile config.ModelProfile, messages []ChatMessage, f
 	if profile.Provider == config.PiProvider {
 		invocation.args, err = preparePi(directory, profile, system)
 	} else {
-		invocation.args, err = prepareAgy(directory, profile, system, format)
+		invocation.args, err = prepareAgy(directory, profile, system)
 		input, _ := json.Marshal(map[string]any{"event": "user", "message": map[string]string{"content": prompt}})
 		invocation.input = string(input) + "\n"
 	}
@@ -108,7 +108,7 @@ func preparePi(directory string, profile config.ModelProfile, system string) ([]
 	if err := writeCLIFile(directory, ".pi/settings.json", settings); err != nil {
 		return nil, err
 	}
-	args := []string{"--print", "--mode", "json", "--no-session", "--no-tools", "--no-extensions", "--no-skills", "--no-prompt-templates", "--no-themes", "--no-context-files", "--offline", "--approve", "--system-prompt", filepath.Join(directory, "system.txt"), "--model", profile.Model}
+	args := []string{"--print", "--mode", "json", "--no-session", "--no-tools", "--no-extensions", "--no-mcp", "--no-skills", "--no-prompt-templates", "--no-themes", "--no-context-files", "--offline", "--approve", "--system-prompt", filepath.Join(directory, "system.txt"), "--model", profile.Model}
 	if profile.ReasoningEffort != "" {
 		effort := profile.ReasoningEffort
 		if effort == "none" {
@@ -119,26 +119,16 @@ func preparePi(directory string, profile config.ModelProfile, system string) ([]
 	return args, nil
 }
 
-func prepareAgy(directory string, profile config.ModelProfile, system string, format *ResponseFormat) ([]string, error) {
-	allowedTools := "[]"
-	if format != nil {
-		// Native schema output requires finish; it only formats the final answer.
-		allowedTools = "[finish]"
-		system += "\n\nComplete the answer with the finish tool, using the required schema's fields as its arguments."
-	}
-	agent := "---\nname: mini-orca\ndescription: Mini-Orca completion provider\ntools: " + allowedTools + "\nmainAgent: true\nsubagent: false\ninheritMcp: false\ncommandExecutionPolicy: off\nmcpServers: []\nskills: []\nplugins: []\n---\n# System Prompt\n" + system
+func prepareAgy(directory string, profile config.ModelProfile, system string) ([]string, error) {
+	// Native --json-schema requires finish, which user tool hooks can deny.
+	// Keep this a text completion, with the prompted schema enforced by chatCLI.
+	agent := "---\nname: mini-orca\ndescription: Mini-Orca completion provider\ntools: []\nmainAgent: true\nsubagent: false\ninheritMcp: false\ncommandExecutionPolicy: off\nmcpServers: []\nskills: []\nplugins: []\n---\n# System Prompt\n" + system
 	if err := writeCLIFile(directory, ".agents/agents/mini-orca/agent.md", agent); err != nil {
 		return nil, err
 	}
 	args := []string{"--input-format", "stream-json", "--output-format", "stream-json", "--agent", "mini-orca", "--disable-slash-commands", "--model", profile.Model, "--log-file", os.DevNull}
 	if profile.ReasoningEffort != "" {
 		args = append(args, "--effort", profile.ReasoningEffort)
-	}
-	if format != nil {
-		if err := writeCLIFile(directory, "schema.json", string(format.JSONSchema.Schema)); err != nil {
-			return nil, err
-		}
-		args = append(args, "--json-schema", filepath.Join(directory, "schema.json"))
 	}
 	return args, nil
 }

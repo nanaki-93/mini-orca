@@ -90,7 +90,7 @@ func TestCLIProvidersAnalyzeAndProposeDraftsWithScopeConsent(t *testing.T) {
 	}
 }
 
-func TestAgyGeneratesFeaturesWithStructuredFinishEvents(t *testing.T) {
+func TestAgyGeneratesFeaturesWithoutNativeToolCalls(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("CLI providers require process-group cleanup")
 	}
@@ -149,26 +149,26 @@ func TestAgyGeneratesFeaturesWithStructuredFinishEvents(t *testing.T) {
 
 func cliAppProfile(t *testing.T, provider config.ModelProvider, model, content, calls string) config.ModelProfileConfig {
 	t.Helper()
-	var output, structuredOutput string
+	var output string
 	if provider == config.PiProvider {
 		message, err := json.Marshal(map[string]any{"type": "message_end", "message": map[string]any{"role": "assistant", "model": model, "stopReason": "stop", "content": []map[string]string{{"type": "text", "text": content}}}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		output = "{\"type\":\"agent_start\"}\n" + string(message) + "\n{\"type\":\"agent_end\"}\n"
+		output = "{\"type\":\"agent_start\"}\n" +
+			`{"type":"message_end","message":{"role":"system","content":"","sections":{"preamble":"Only explain the supplied source."}}}` + "\n" +
+			string(message) + "\n{\"type\":\"agent_end\"}\n"
 	} else {
 		init, _ := json.Marshal(map[string]any{"event": "init", "init": map[string]any{"agent": "mini-orca", "model": model, "tools": []string{"view_file", "run_command", "finish"}}})
-		result, _ := json.Marshal(map[string]any{"event": "result", "result": map[string]any{"status": "SUCCESS", "response": "Task completed.", "structured_output": json.RawMessage(content)}})
-		finish := `{"event":"step_update","step_update":{"step_type":"tool","state":"ACTIVE","tool_name":"finish","tool_info":{"name":"finish"}}}` + "\n" +
-			`{"event":"step_update","step_update":{"step_type":"tool","state":"DONE","tool_name":"finish","tool_info":{"name":"finish"}}}` + "\n"
-		structuredOutput = string(init) + "\n" + finish + string(result) + "\n"
-		result, _ = json.Marshal(map[string]any{"event": "result", "result": map[string]string{"status": "SUCCESS", "response": content}})
+		result, _ := json.Marshal(map[string]any{"event": "result", "result": map[string]string{"status": "SUCCESS", "response": content}})
 		output = string(init) + "\n" + string(result) + "\n"
 	}
 	path := filepath.Join(t.TempDir(), "fake-agent")
 	script := "#!/bin/sh\ncat >/dev/null\nprintf x >> '" + strings.ReplaceAll(calls, "'", "'\\''") + "'\n"
-	if structuredOutput != "" {
-		script += "for arg in \"$@\"; do\nif [ \"$arg\" = --json-schema ]; then\ncat <<'MINI_ORCA_RESPONSE'\n" + structuredOutput + "MINI_ORCA_RESPONSE\nexit 0\nfi\ndone\n"
+	if provider == config.AgyProvider {
+		// Reproduce installations where native schema completion is blocked by
+		// a tool hook. A final JSON response must not depend on finish being allowed.
+		script += "for arg in \"$@\"; do\nif [ \"$arg\" = --json-schema ]; then\nexit 1\nfi\ndone\n"
 	}
 	script += "cat <<'MINI_ORCA_RESPONSE'\n" + output + "MINI_ORCA_RESPONSE\n"
 	if err := os.WriteFile(path, []byte(script), 0700); err != nil {

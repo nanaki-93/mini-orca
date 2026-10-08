@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"net/http"
+	"time"
 )
 
 type FeatureHandler struct {
@@ -34,7 +36,23 @@ func (h *FeatureHandler) Generate(w http.ResponseWriter, r *http.Request) {
 	if !decodeWorkflowBody(w, r, &request) {
 		return
 	}
+	// Generation has its own bounded context and can outlive the ordinary
+	// server write timeout. Restore that timeout before sending the response.
+	server, _ := r.Context().Value(http.ServerContextKey).(*http.Server)
+	response := http.NewResponseController(w)
+	if server != nil && server.WriteTimeout > 0 {
+		if err := response.SetWriteDeadline(time.Time{}); err != nil {
+			api.WriteAppError(w, api.Internal("prepare feature response deadline", "Feature generation could not start. Try again.", err))
+			return
+		}
+	}
 	value, err := h.service.GenerateFeatures(r.Context(), request)
+	if server != nil && server.WriteTimeout > 0 {
+		if deadlineErr := response.SetWriteDeadline(time.Now().Add(server.WriteTimeout)); deadlineErr != nil {
+			api.WriteAppError(w, api.Internal("restore feature response deadline", "Refresh suggestions to read the feature result.", deadlineErr))
+			return
+		}
+	}
 	respondWorkflow(w, value, err)
 }
 func (h *FeatureHandler) Status(w http.ResponseWriter, r *http.Request) {

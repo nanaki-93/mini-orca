@@ -146,6 +146,7 @@ func TestSecurityCachePersistsSourceFreeFreshnessBoundReports(t *testing.T) {
 	input.ContextPolicyVersion = policy.Version()
 	input.ProviderOrigin = "github_token=provider-secret"
 	report := securityReport(input, SecurityStatusPartial)
+	report.Model = "resolved-model-version"
 	report.Reason = `"api_key": "json-secret"; Authorization=Bearer equals-secret`
 	report.ProviderOrigin = "github_token=provider-secret"
 	report.Findings[0].ObservedCondition = "openai_api_token=provider-api-secret"
@@ -169,6 +170,9 @@ func TestSecurityCachePersistsSourceFreeFreshnessBoundReports(t *testing.T) {
 	loaded, err := cache.Load(input)
 	if err != nil || loaded == nil || loaded.Status != SecurityStatusPartial || loaded.Findings[0].Triage != SecurityTriageOpen || loaded.Findings[0].VerificationState != SecurityVerificationUnverified {
 		t.Fatalf("loaded security report = %+v, %v", loaded, err)
+	}
+	if loaded.Model != report.Model || loaded.ConfiguredModel != input.ConfiguredModel {
+		t.Fatalf("model provenance changed: %+v", loaded)
 	}
 	if loaded.Findings[0].EngineeringInsight == nil || strings.Contains(loaded.Findings[0].EngineeringInsight.Mechanism, "insight secret") {
 		t.Fatalf("loaded insight was not redacted = %+v", loaded.Findings[0].EngineeringInsight)
@@ -209,6 +213,11 @@ func TestSecurityCachePersistsSourceFreeFreshnessBoundReports(t *testing.T) {
 	changedProfile.Profile = "other"
 	if stale, err := cache.Load(changedProfile); err != nil || stale == nil || stale.Status != SecurityStatusStale {
 		t.Fatalf("AI provenance stale report = %+v, %v", stale, err)
+	}
+	changedModel := input
+	changedModel.Model, changedModel.ConfiguredModel = report.Model, report.Model
+	if stale, err := cache.Load(changedModel); err != nil || stale == nil || stale.Status != SecurityStatusStale {
+		t.Fatalf("changed model selection was reused: %+v, %v", stale, err)
 	}
 	changed := input
 	changed.ContentHash = "sha256:changed"

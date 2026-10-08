@@ -34,13 +34,20 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
 
 - **Project** opens a saved project locally. **Import & analyze** creates a new
   overview, with explicit confirmation for a remote Analyze provider.
-- **Analysis** selects files and configured models for Code, Performance/Security
+- **Analysis** selects files and available models for Bug analysis, Performance/Security
   and feature discovery, previews request limits and provider destinations,
   and runs, pauses, resumes or cancels the captured queue. Each new admission
   requires its own start confirmation for remote-provider sharing and Security
-  review. Model dropdowns use the daemon's configured Analyze, Bug and Function
-  profiles; defaults are Bug for Code and Analyze for reviews/features. Choices
-  belong to the captured run and remain fixed when resuming.
+  review. **Analysis setup** combines model assignments, request limits and Last run.
+  Each operation opens a searchable model picker with model icons and provider/location
+  metadata. All models, Pi, Local and Configured filters do not assign jobs to models.
+  The catalog combines configured models with every model available through the local
+  Pi installation, including custom local servers. **Refresh models** reloads the catalog;
+  Pi discovery errors leave configured choices available and explain how to retry.
+  Defaults remain Bug for bug analysis and Analyze for reviews/features. Performance
+  and Security share one model choice. Last run shows captured model names and icons,
+  including older runs with provider details but no explicit model choices. View run
+  and the preview retain destination details. Choices remain fixed when resuming.
   It also generates one project-wide set of feature suggestions using saved
   goals and policy-filtered context, honoring file exclusions. Its progress and
   request allowance stay separate from finding counts; completed ideas are reused
@@ -52,21 +59,46 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
 - **Bugs**, **Performance** and **Security** show searchable results and their
   evidence. Details retain complete model prose, provenance and verification
   guidance. Findings and performance hypotheses keep their reported confidence.
-- **Features** uses project goals to suggest advisory new capabilities. Searching
-  for features is additive: new ideas accumulate alongside existing ones, retaining
-  prior triage decisions, and duplicates are skipped. Ideas generated from previous
-  source become stale when the project changes and must be updated by a new search
-  before they can be discussed in Chat. Opening an idea does not generate code.
+- **Features** uses project goals to suggest advisory new capabilities. Searches
+  use the same extended deadline as feature discovery in Analysis. New ideas
+  accumulate alongside existing ones, retaining prior triage decisions, and
+  duplicates are skipped. Ideas generated from previous
+  source become stale when the project changes and remain available for triage.
+  A new search adds current ideas without revalidating older ones; only current
+  ideas can be discussed in Chat. Opening an idea does not generate code.
 - **Chat** captures up to eight explicit Go/Markdown paths, including new files.
+  **Configure workflow** on a feature idea or Bug/Performance/Security finding
+  opens the captured task setup and suggests a test path. Choose a Creation,
+  Testing and Review model independently, then select **Run workflow**. The
+  choices reference the daemon's configured Function, Bug and Analyze profiles
+  (the respective defaults); configure their actual providers/models in `config.yaml`.
+  Include a `_test.go` path. The testing agent writes tests, then the daemon runs
+  them in an isolated copy before the review agent evaluates the proposal.
+  The app shows each stage, captured models, check evidence and review findings;
+  progress remains visible during navigation, and **Cancel workflow** stops work.
+  Failed tests or requested changes block approval. A successful run waits for
+  human diff review and explicit Apply. Performance remains unmeasured unless
+  actual benchmark evidence is available. Interrupted runs need an explicit new
+  run; the workflow never resumes provider calls from history automatically.
   Describe a task or use **Prepare fix** on a finding. Preparation generates and
   checks a proposal, with at most three repairs of failed checks. Read every diff,
   select **Review this diff**, then **Approve and apply** and confirm its scope.
   Requested tests remain required; execution trust and remote-provider consent
   are separate. New revisions clear earlier review. Local history restores a
   conversation without generation or inherited check/review authority.
-- **Instructions** guides root or directory AGENTS.md loading, editable preset
-  additions and custom guidance. Existing files are registered by reading them;
-  inherited guides show their origins and scope. **Preview instruction diff**
+- **Instructions** loads root or directory AGENTS.md and offers independent rules
+  across eight sections following [AGENTS.md conventions](https://agents.md/):
+  architecture, setup/build, code style, testing, security/data, UI/accessibility,
+  documentation and handoff. The catalog matches indexed languages, build manifests
+  and supported imports in that scope, alongside common project rules. Each match
+  shows its reason, example paths and the exact text to add. Search the choices or
+  filter by section; selections persist across filters and can be cleared together.
+  Reindex after project changes to refresh matches. **Add selected guidance** groups
+  chosen rules under Markdown section headings in the editable draft, reusing
+  matching headings without overwriting custom text. Text already in the draft or
+  inherited guides is disabled to avoid duplicates.
+  Existing files are registered by reading them; inherited guides show their
+  origins and scope. **Preview instruction diff**
   creates a manual proposal in Chat with the same explicit Review/Apply workflow.
 - After Apply, **Verify applied change** checks the applied file identities and
   runs Go tests/vet in a copied workspace with fresh execution trust. Markdown-only

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type * as M from './models';
-import { workspace as w, type State } from './workspace';
+import { workspace as w, activeChangeWorkflow, type State } from './workspace';
 import {
   Badge,
   Button,
@@ -154,8 +154,29 @@ export function Results({ s }: { s: State }) {
           </Button>
           {detail.path && (
             <Button
+              disabled={!!s.busy || activeChangeWorkflow(s.change) || detail.freshness === 'stale'}
+              onClick={() =>
+                w.seedWorkflow({
+                  title: detail.title.slice(0, 200),
+                  paths: [detail.path],
+                  kind:
+                    category === 'performance'
+                      ? 'performance'
+                      : category === 'security'
+                        ? 'security'
+                        : 'fix',
+                  message: `Address this finding: ${detail.title}\n${detail.text.map(([label, text]) => `${label}: ${text}`).join('\n')}`,
+                  acceptance_criteria: detail.task?.acceptance_criteria || [],
+                })
+              }
+            >
+              Configure workflow
+            </Button>
+          )}
+          {detail.path && (
+            <Button
               tone="primary"
-              disabled={!!s.busy || detail.freshness === 'stale'}
+              disabled={!!s.busy || activeChangeWorkflow(s.change) || detail.freshness === 'stale'}
               onClick={() => {
                 const seed = {
                   title: detail.title.slice(0, 200),

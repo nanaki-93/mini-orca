@@ -64,6 +64,122 @@ func TestAnalysisFreshnessSurvivesProjectLifecycle(t *testing.T) {
 	}
 }
 
+func TestAnalysisCoverageWithResolvedModelSurvivesResumeAndRestart(t *testing.T) {
+	server, calls := analysisModelResponseServer(t, "resolved-model-version", emptyAnalysisReply)
+	s, _ := newAnalysisFreshnessService(t, server.URL, true)
+	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{1, 30, 2}, nil)
+	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	paused := completedAnalysisRun(t, s)
+	if paused.Status != AnalysisRunPaused {
+		t.Fatalf("first batch status=%s", paused.Status)
+	}
+	overview, err := s.ProjectOverview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.Coverage != (AnalysisCoverage{Total: 2, Fresh: 1, Partial: 1}) {
+		t.Errorf("first batch coverage=%+v", overview.Coverage)
+	}
+	resume := analysisRunPreviewFor(t, s, preview.Limits, &paused.Identity)
+	if resume.ExpectedModelRequests != 3 {
+		t.Errorf("resume requests=%d, want 3 for the remaining file", resume.ExpectedModelRequests)
+	}
+	confirmations := analysisStartFor(resume).Confirmations
+	if _, err := s.ControlAnalysisRun(context.Background(), AnalysisRunControlRequest{Identity: paused.Identity, Action: AnalysisRunResume, PreviewID: resume.PreviewID, Confirmations: &confirmations}); err != nil {
+		t.Fatal(err)
+	}
+	completed := completedAnalysisRun(t, s)
+	if completed.Status != AnalysisRunCompletedEmpty || calls.Load() != 6 {
+		t.Fatalf("resumed status=%s calls=%d", completed.Status, calls.Load())
+	}
+	for _, phase := range []string{"completed", "restarted"} {
+		if phase == "restarted" {
+			s = transitionAnalysisProject(t, s, "restart")
+		}
+		overview, err = s.ProjectOverview()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if overview.Coverage != (AnalysisCoverage{Total: 2, Fresh: 2}) {
+			t.Errorf("%s coverage=%+v", phase, overview.Coverage)
+		}
+	}
+	selection := readSelectionFor(t, s)
+	assertSelectionStages(t, selection, "helper.go", "fresh", "up to date")
+	assertSelectionStages(t, selection, "main.go", "fresh", "up to date")
+	cached := analysisRunPreviewFor(t, s, preview.Limits, nil)
+	if cached.ExpectedModelRequests != 0 || calls.Load() != 6 {
+		t.Fatalf("fresh evidence was not reused: requests=%d calls=%d", cached.ExpectedModelRequests, calls.Load())
+	}
+	results, err := s.ReadAnalysisSection(context.Background(), completed.Identity, project.FindingCategoryPerformance, "main.go")
+	if err != nil || len(results.Performance) != 1 {
+		t.Fatalf("performance results=%+v error=%v", results, err)
+	}
+	report := results.Performance[0]
+	if report.Model != "resolved-model-version" || report.ConfiguredModel != s.runtimes.analyze.profile.Model || report.Status != "completed" {
+		t.Fatalf("lost requested or returned model provenance: %+v", report)
+	}
+	// A real model-selection change still invalidates the reviews, even when
+	// its new name happens to match the previous provider's reported model.
+	s.runtimes.analyze.profile.Model = "resolved-model-version"
+	s.runtimes.analyze.effective.Model = "resolved-model-version"
+	overview, err = s.ProjectOverview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.Coverage != (AnalysisCoverage{Total: 2, Stale: 2}) || calls.Load() != 6 {
+		t.Fatalf("changed configuration coverage=%+v calls=%d", overview.Coverage, calls.Load())
+	}
+}
+
+func TestAnalysisCoverageReadsLegacyPerformanceModelIdentity(t *testing.T) {
+	for _, model := range []string{"", "resolved-model-version"} {
+		t.Run("returned model="+model, func(t *testing.T) {
+			server, calls := analysisModelResponseServer(t, model, emptyAnalysisReply)
+			s, root := newSemanticAnalysisService(t, server.URL, 0)
+			preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+			if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+				t.Fatal(err)
+			}
+			run := completedAnalysisRun(t, s)
+			results, err := s.ReadAnalysisSection(context.Background(), run.Identity, project.FindingCategoryPerformance, "main.go")
+			if err != nil || len(results.Performance) != 1 {
+				t.Fatalf("performance results=%+v error=%v", results, err)
+			}
+			// Schema 1 reports predating configured_model remain readable.
+			legacy := results.Performance[0]
+			legacy.ConfiguredModel = ""
+			if err := project.StorePerformanceFileReport(root, legacy); err != nil {
+				t.Fatal(err)
+			}
+			want := AnalysisCoverage{Total: 1, Fresh: 1}
+			requests := 0
+			if model != "" {
+				want = AnalysisCoverage{Total: 1, Stale: 1}
+				requests = 1 // The original selection cannot be recovered from an alias alone.
+			}
+			overview, err := s.ProjectOverview()
+			if err != nil || overview.Coverage != want {
+				t.Fatalf("legacy coverage=%+v error=%v", overview, err)
+			}
+			preview = analysisRunPreviewFor(t, s, preview.Limits, nil)
+			if preview.ExpectedModelRequests != requests || calls.Load() != 3 {
+				t.Fatalf("legacy requests=%d calls=%d", preview.ExpectedModelRequests, calls.Load())
+			}
+			if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); err != nil {
+				t.Fatal(err)
+			}
+			completedAnalysisRun(t, s)
+			overview, err = s.ProjectOverview()
+			if err != nil || overview.Coverage != (AnalysisCoverage{Total: 1, Fresh: 1}) || calls.Load() != int32(3+requests) {
+				t.Fatalf("legacy recovery=%+v calls=%d error=%v", overview, calls.Load(), err)
+			}
+		})
+	}
+}
+
 func TestAnalysisFreshnessDetectsChangesAcrossProjectLifecycle(t *testing.T) {
 	for _, transition := range []string{"restore", "restart", "reindex", "switch back"} {
 		for _, change := range []string{"edit", "add", "delete"} {

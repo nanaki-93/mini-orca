@@ -457,6 +457,9 @@ func (s *Service) StartAnalysisRun(ctx context.Context, request AnalysisRunStart
 	if err := request.Validate(); err != nil {
 		return nil, err
 	}
+	if err := s.validateAnalysisModelSelections(ctx, request.Models, nil); err != nil {
+		return nil, err
+	}
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()
 	c := s.analysisRun
@@ -541,6 +544,11 @@ func (s *Service) currentAnalysisRunLocked(ctx context.Context) (*AnalysisRun, e
 func (s *Service) ControlAnalysisRun(ctx context.Context, request AnalysisRunControlRequest) (*AnalysisRun, error) {
 	if err := request.Validate(); err != nil {
 		return nil, err
+	}
+	if request.Action == AnalysisRunResume {
+		if err := s.validateAnalysisModelSelections(ctx, nil, &request.Identity); err != nil {
+			return nil, err
+		}
 	}
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()

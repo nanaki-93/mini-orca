@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
-import { workspace as w, canApplyChange, changeChecksPassed, type State } from './workspace';
+import {
+  workspace as w,
+  canApplyChange,
+  changeChecksPassed,
+  activeChangeWorkflow,
+  workflowReviewable,
+  type State,
+} from './workspace';
+import { WorkflowModels, WorkflowProgress, defaultWorkflowModels } from './change-workflow';
 import {
   Badge,
   Button,
@@ -19,6 +27,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
   const [paths, setPaths] = useState('');
   const [message, setMessage] = useState('');
   const [tests, setTests] = useState(true);
+  const [kind, setKind] = useState('feature');
   useEffect(() => {
     setTitle(change?.title || s.changeSeed?.title || 'New feature');
     setPaths(
@@ -26,34 +35,36 @@ export function ChangeWorkspace({ s }: { s: State }) {
     );
     setMessage(change ? '' : s.changeSeed?.message || '');
     setTests(change?.kind !== 'instructions');
+    setKind(change?.kind || s.changeSeed?.kind || 'feature');
   }, [change?.id, s.changeSeed]);
-  const submit = () =>
-    void w.prepareChange(
-      {
-        title,
-        paths: paths
-          .split('\n')
-          .map((path) => path.trim())
-          .filter(Boolean),
-        message,
-        kind: change?.kind || s.changeSeed?.kind || 'feature',
-        acceptance_criteria: change?.acceptance_criteria || s.changeSeed?.acceptance_criteria || [],
-      },
-      tests,
-    );
+  const seed = {
+    title,
+    paths: paths
+      .split('\n')
+      .map((path) => path.trim())
+      .filter(Boolean),
+    message,
+    kind,
+    acceptance_criteria: change?.acceptance_criteria || s.changeSeed?.acceptance_criteria || [],
+  };
+  const submit = () => void w.prepareChange(seed, tests);
+  const running = activeChangeWorkflow(change);
+  const models = s.workflowModels || change?.workflow?.models || defaultWorkflowModels;
   const blocked =
-    !!s.busy || (!!change && (change.state !== 'draft' || change.freshness !== 'current'));
+    !!s.busy ||
+    running ||
+    (!!change && (change.state !== 'draft' || change.freshness !== 'current'));
   return (
     <div className="chat-page">
       <Heading
         title="Chat"
-        detail="Capture file scope, describe a change, then review the checked proposal before applying."
+        detail="Create, test and review a change with configurable agents, then approve the final file differences."
         variant="intro"
       >
         <Go page="editor" icon="code">
           Inspect source
         </Go>
-        <Button disabled={!!s.busy} onClick={() => w.newChange()}>
+        <Button disabled={!!s.busy || running} onClick={() => w.newChange()}>
           New conversation
         </Button>
       </Heading>
@@ -156,6 +167,21 @@ export function ChangeWorkspace({ s }: { s: State }) {
           {!change ? (
             <Panel title="Task and file scope">
               <label className="block">
+                Task type
+                <select
+                  className="field"
+                  aria-label="Task type"
+                  value={kind}
+                  disabled={!!s.busy}
+                  onChange={(event) => setKind(event.target.value)}
+                >
+                  <option value="feature">Feature</option>
+                  <option value="fix">Bug fix</option>
+                  <option value="performance">Performance</option>
+                  <option value="security">Security</option>
+                </select>
+              </label>
+              <label className="block">
                 Task title
                 <input
                   value={title}
@@ -240,24 +266,53 @@ export function ChangeWorkspace({ s }: { s: State }) {
               disabled={blocked}
               placeholder="Describe a new feature, fix, or improvement…"
             />
-            <label className="checkbox-line">
-              <input
-                type="checkbox"
-                checked={tests}
-                disabled={blocked || change?.kind === 'instructions'}
-                onChange={(e) => setTests(e.target.checked)}
-              />
-              Run project tests after generation
-            </label>
-            <div className="actions">
-              <Button
-                tone="primary"
-                disabled={blocked || !message.trim() || !paths.trim() || !title.trim()}
-                onClick={submit}
-              >
-                Prepare change
-              </Button>
-            </div>
+            {kind !== 'instructions' && (
+              <>
+                <WorkflowModels s={s} value={models} disabled={blocked} />
+                {!seed.paths.some((path) => path.endsWith('_test.go')) && (
+                  <p className="small muted">
+                    Include an existing or new _test.go path to run the agent workflow.
+                  </p>
+                )}
+                <div className="actions section-gap">
+                  <Button
+                    tone="primary"
+                    disabled={
+                      blocked ||
+                      !message.trim() ||
+                      !title.trim() ||
+                      !seed.paths.some((path) => path.endsWith('_test.go')) ||
+                      !s.models
+                    }
+                    onClick={() => void w.startChangeWorkflow(seed, models)}
+                  >
+                    Run workflow
+                  </Button>
+                </div>
+              </>
+            )}
+            {!change?.workflow && (
+              <>
+                <label className="checkbox-line">
+                  <input
+                    type="checkbox"
+                    checked={tests}
+                    disabled={blocked || change?.kind === 'instructions'}
+                    onChange={(e) => setTests(e.target.checked)}
+                  />
+                  Run project tests after generation
+                </label>
+                <div className="actions">
+                  <Button
+                    tone="primary"
+                    disabled={blocked || !message.trim() || !paths.trim() || !title.trim()}
+                    onClick={submit}
+                  >
+                    Prepare change
+                  </Button>
+                </div>
+              </>
+            )}
           </Panel>
           <Panel className="chat-history">
             <Disclosure title="Local history">
@@ -271,11 +326,20 @@ export function ChangeWorkspace({ s }: { s: State }) {
                     <span className="list-copy">
                       <strong>{entry.title}</strong>
                       <small>
-                        {entry.state} · revision {entry.revision}
+                        {entry.workflow_status || entry.state} · revision {entry.revision}
                       </small>
                     </span>
-                    <Button disabled={!!s.busy} onClick={() => void w.resumeChange(entry.id)}>
-                      Resume
+                    <Button
+                      disabled={!!s.busy || running}
+                      onClick={() =>
+                        void (['running', 'canceling'].includes(entry.workflow_status || '')
+                          ? w.viewChange(entry.id)
+                          : w.resumeChange(entry.id))
+                      }
+                    >
+                      {['running', 'canceling'].includes(entry.workflow_status || '')
+                        ? 'View workflow'
+                        : 'Resume'}
                     </Button>
                   </div>
                 ))
@@ -289,6 +353,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
           </Panel>
         </section>
         <section className="workspace-page chat-review" aria-label="Proposal review">
+          <WorkflowProgress s={s} />
           {change?.changes.length ? (
             <>
               <Panel
@@ -357,25 +422,30 @@ export function ChangeWorkspace({ s }: { s: State }) {
                     </div>
                   ))
                 )}
-                <div className="actions section-gap">
-                  <Button disabled={blocked} onClick={() => void w.checkChange(tests)}>
-                    Check proposal
-                  </Button>
-                  {change.checks.length > 0 && !changeChecksPassed(change) && (
-                    <Button
-                      disabled={blocked || change.repair_attempts >= 3}
-                      onClick={() => void w.repairChange()}
-                    >
-                      Repair failed checks
+                {!change.workflow && (
+                  <div className="actions section-gap">
+                    <Button disabled={blocked} onClick={() => void w.checkChange(tests)}>
+                      Check proposal
                     </Button>
-                  )}
-                </div>
+                    {change.checks.length > 0 && !changeChecksPassed(change) && (
+                      <Button
+                        disabled={blocked || change.repair_attempts >= 3}
+                        onClick={() => void w.repairChange()}
+                      >
+                        Repair failed checks
+                      </Button>
+                    )}
+                  </div>
+                )}
               </Panel>
-              <Panel title="Review and apply">
+              <Panel title={change.workflow ? 'Human review and apply' : 'Review and apply'}>
                 <div className="actions">
                   <Button
                     disabled={
-                      blocked || !changeChecksPassed(change) || change.reviewed_hash === change.hash
+                      blocked ||
+                      !workflowReviewable(change) ||
+                      !changeChecksPassed(change) ||
+                      change.reviewed_hash === change.hash
                     }
                     onClick={() => void w.reviewChange()}
                   >
