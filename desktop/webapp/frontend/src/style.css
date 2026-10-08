@@ -65,6 +65,35 @@
   --violet-soft: #eee7ff;
   --shadow: 0 24px 80px #172c2524;
 }
+:root[data-theme='midnight'] {
+  color-scheme: dark;
+  --canvas: #091422;
+  --sidebar: #0d1b2b;
+  --panel: #112238;
+  --raised: #193049;
+  --hover: #233d56;
+  --line: #29455e;
+  --control-line: #718da7;
+  --subtle-line: #22394f;
+  --text: #e9f5ff;
+  --secondary: #c3d9ec;
+  --muted: #a3bed5;
+  --accent: #78dcdf;
+  --accent-hover: #a2eef0;
+  --accent-text: #082e31;
+  --accent-soft: #153b43;
+  --green: #80ddba;
+  --green-soft: #123a30;
+  --red: #ff9faa;
+  --red-soft: #3c2635;
+  --amber: #f9cb7f;
+  --amber-soft: #3b301d;
+  --blue: #85d9ed;
+  --blue-soft: #16394d;
+  --violet: #c6b1fc;
+  --violet-soft: #2e2b4d;
+  --shadow: 0 24px 80px #0009;
+}
 :root.large-text {
   font-size: 17px;
 }
@@ -2175,6 +2204,20 @@ textarea.draft-code {
 .statusbar button[aria-pressed='true'] {
   color: var(--accent);
   background: var(--accent-soft);
+}
+.theme-switcher {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--canvas);
+}
+.theme-switcher button {
+  font-weight: 650;
+}
+.theme-switcher button[aria-pressed='true'] {
+  box-shadow: inset 0 -2px var(--accent);
 }
 .statusbar svg {
   width: 14px;

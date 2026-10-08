@@ -47,9 +47,17 @@ const editorPages: Page[] = [
   'checks',
   'review',
 ];
+const themes = [
+  { id: 'dark', name: 'Graphite', letter: 'G' },
+  { id: 'light', name: 'Porcelain', letter: 'P' },
+  { id: 'midnight', name: 'Midnight', letter: 'M' },
+] as const;
 function App() {
   const s = useSyncExternalStore(w.subscribe, w.snapshot);
-  const [theme, setTheme] = useState(localStorage.getItem('mini-orca:theme') || 'dark');
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('mini-orca:theme');
+    return themes.find((choice) => choice.id === saved)?.id || 'dark';
+  });
   const [large, setLarge] = useState(localStorage.getItem('mini-orca:large') === 'true');
   const main = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -245,12 +253,19 @@ function App() {
                     ? `Daemon ${s.version}`
                     : ''}
               </span>
-              <button
-                aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} appearance`}
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              >
-                <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
-              </button>
+              <div className="theme-switcher" role="group" aria-label="Theme">
+                {themes.map((choice) => (
+                  <button
+                    key={choice.id}
+                    aria-label={`${choice.name} theme`}
+                    aria-pressed={theme === choice.id}
+                    title={`${choice.name} (${choice.letter})`}
+                    onClick={() => setTheme(choice.id)}
+                  >
+                    {choice.letter}
+                  </button>
+                ))}
+              </div>
               <button
                 aria-label="Larger text"
                 aria-pressed={large}
