@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -69,6 +70,60 @@ func analysisHandlerRequest(t *testing.T, handler http.HandlerFunc, method, targ
 	w := httptest.NewRecorder()
 	handler(w, r)
 	return w
+}
+
+func TestAnalysisHandlerPausedRunRejectsReplacementWithRecoveryMessage(t *testing.T) {
+	h, projectHandler, analysis, calls := newAnalysisHandlerFixture(t)
+	writeProjectHandlerFixture(t, analysis.Path, "helper.go", "package main\nfunc Help() {}\n")
+	if _, err := projectHandler.manager.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	analysis, _ = projectHandler.manager.Analysis()
+	request := app.AnalysisPreviewRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Scope: app.AnalysisRunScopeProject, Limits: app.AnalysisRunLimits{BatchFiles: 1, BudgetSeconds: 30, MaxAttemptsPerStage: 2}}
+	preview := func() app.AnalysisRunPreview {
+		t.Helper()
+		w := analysisHandlerRequest(t, h.Preview, "POST", "/analysis/preview", request)
+		var result app.AnalysisRunPreview
+		if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &result) != nil {
+			t.Fatalf("preview=%d %s", w.Code, w.Body)
+		}
+		return result
+	}
+	plan := preview()
+	start := app.AnalysisRunStartRequest{Identity: plan.Identity, PreviewID: plan.PreviewID, Limits: plan.Limits, Confirmations: app.AnalysisRunConfirmations{SecurityReview: true}}
+	if w := analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", start); w.Code != http.StatusAccepted {
+		t.Fatalf("start=%d %s", w.Code, w.Body)
+	}
+	paused := waitHandlerAnalysis(t, h, analysis, app.AnalysisRunPaused)
+	if paused.Status != app.AnalysisRunPaused {
+		t.Fatalf("status=%s, want paused", paused.Status)
+	}
+	before := calls.Load()
+	request.Limits.BudgetSeconds = 1800
+	plan = preview()
+	start.PreviewID, start.Identity, start.Limits = plan.PreviewID, plan.Identity, plan.Limits
+	w := analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", start)
+	var failure api.AppError
+	if w.Code != http.StatusConflict || json.Unmarshal(w.Body.Bytes(), &failure) != nil {
+		t.Fatalf("replacement=%d %s", w.Code, w.Body)
+	}
+	if !strings.Contains(failure.UserMessage, "Continue or cancel") || strings.Contains(failure.UserMessage, "project changed") {
+		t.Errorf("misleading paused-run recovery: %s", failure.UserMessage)
+	}
+	retained := waitHandlerAnalysis(t, h, analysis, app.AnalysisRunPaused)
+	if retained.Identity != paused.Identity || calls.Load() != before {
+		t.Fatalf("replacement changed the saved run or dispatched: calls=%d want=%d", calls.Load(), before)
+	}
+	request.ResumeRun, request.Limits = &paused.Identity, paused.Plan.Limits
+	plan = preview()
+	control := app.AnalysisRunControlRequest{Identity: paused.Identity, Action: app.AnalysisRunResume, PreviewID: plan.PreviewID, Confirmations: &start.Confirmations}
+	if w := analysisHandlerRequest(t, h.Control, "POST", "/analysis/run/control", control); w.Code != http.StatusOK {
+		t.Fatalf("resume=%d %s", w.Code, w.Body)
+	}
+	completed := waitHandlerAnalysis(t, h, analysis, app.AnalysisRunCompletedEmpty)
+	if completed.Status != app.AnalysisRunCompletedEmpty || completed.Identity.ID != paused.Identity.ID || calls.Load() <= before {
+		t.Fatalf("continuation status=%s calls=%d", completed.Status, calls.Load())
+	}
 }
 
 func TestAnalysisHandlerFeatureStepRequiresMatchingAdmission(t *testing.T) {

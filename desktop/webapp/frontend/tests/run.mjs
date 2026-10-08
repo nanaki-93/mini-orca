@@ -5590,7 +5590,7 @@ try {
     }
   });
   await test('Analysis last-run status preserves eligibility and passive View run navigation', async () => {
-    for (const status of ['running', 'paused', 'failed', 'completed']) {
+    for (const status of ['running', 'paused', 'interrupted', 'failed', 'completed']) {
       for (const hasRecovery of [false, true]) {
         const { page, close } = await pageFor({ runStatus: status, hasRecovery });
         try {
@@ -5598,7 +5598,14 @@ try {
           await idle(page);
           assert.equal(await page.locator('.captured-models').count(), 0);
           assert.equal(
-            await page.getByRole('button', { name: 'Prepare analysis', exact: true }).isDisabled(),
+            await page
+              .getByRole('button', {
+                name: ['paused', 'interrupted'].includes(status)
+                  ? 'Prepare continuation'
+                  : 'Prepare analysis',
+                exact: true,
+              })
+              .isDisabled(),
             status === 'running',
           );
           const repair = page.getByRole('button', { name: 'Repair analysis', exact: true });
@@ -5608,7 +5615,7 @@ try {
           await nav(page, 'Files');
           assert.equal(
             await page.getByRole('button', { name: 'Include shown', exact: true }).isDisabled(),
-            ['running', 'paused'].includes(status),
+            ['running', 'paused', 'interrupted'].includes(status),
           );
           const before = await page.evaluate(() =>
             window.fixture.requests.filter((request) => request.method !== 'GET'),
@@ -5628,6 +5635,95 @@ try {
           await close();
         }
       }
+    }
+  });
+  await test('Analysis setup resumes retained work after refresh with captured settings and fresh consent', async () => {
+    for (const status of ['paused', 'interrupted']) {
+      const { page, close } = await pageFor({ remote: true, runStatus: status });
+      try {
+        const saved = await page.evaluate(() => structuredClone(window.fixture.state.run));
+        await nav(page, 'Analysis');
+        await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+        await idle(page);
+        assert.equal(
+          await page.getByRole('button', { name: 'Prepare analysis', exact: true }).count(),
+          0,
+        );
+        await page
+          .getByText(
+            `Your saved analysis is ${status}. Continue with its captured settings, or cancel it in Last run before starting a new analysis.`,
+            { exact: true },
+          )
+          .waitFor();
+        await page.locator('.analysis-run-settings summary').click();
+        await page.getByLabel('Time budget · seconds', { exact: true }).fill('1800');
+        await chooseModel(page.getByLabel('Bug analysis model'), 'function');
+        await layout(page, `analysis-setup-${status}-continuation`);
+        await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
+        await idle(page);
+        await page.getByRole('heading', { name: 'Continue analysis', exact: true }).waitFor();
+        await page
+          .getByText(`${saved.plan.limits.budget_seconds} seconds`, { exact: true })
+          .waitFor();
+        const preview = await page.evaluate(() =>
+          window.fixture.requests.find((r) => r.path.endsWith('/analysis/preview')),
+        );
+        assert.deepEqual(preview.body.resume_run, saved.identity);
+        assert.deepEqual(preview.body.limits, saved.plan.limits);
+        assert.deepEqual(preview.body.models, saved.plan.models);
+        await page.getByRole('button', { name: 'Resume analysis', exact: true }).click();
+        await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+        await idle(page);
+        assert.equal(await page.evaluate(() => window.fixture.state.run.status), status);
+        assert.equal(
+          await page.evaluate(() =>
+            window.fixture.requests.some((r) => r.body?.action === 'resume'),
+          ),
+          false,
+        );
+        await startAnalysis(page, true);
+        const requests = await page.evaluate(() => window.fixture.requests);
+        const resume = requests.find((r) => r.body?.action === 'resume');
+        assert.deepEqual(resume.body.identity, saved.identity);
+        assert.equal(resume.body.preview_id, 'preview-1');
+        assert.deepEqual(resume.body.confirmations, {
+          provider_ids: ['provider-1'],
+          security_review: true,
+        });
+        assert.equal(
+          requests.some((r) => r.method === 'POST' && r.path.endsWith('/analysis/run')),
+          false,
+        );
+        assert.equal(await page.evaluate(() => window.fixture.state.run.status), 'running');
+        assert.equal(await page.getByRole('alert').count(), 0);
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Canceling a retained analysis enables a new run with the current budget', async () => {
+    const { page, close } = await pageFor({ runStatus: 'paused' });
+    try {
+      await nav(page, 'Last run');
+      await page.getByRole('button', { name: 'Cancel run', exact: true }).click();
+      await idle(page);
+      await nav(page, 'Analysis');
+      await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+      await idle(page);
+      await startAnalysis(page);
+      const requests = await page.evaluate(() => window.fixture.requests);
+      const cancel = requests.findIndex((r) => r.body?.action === 'cancel');
+      const start = requests.findIndex(
+        (r) => r.method === 'POST' && r.path.endsWith('/analysis/run'),
+      );
+      assert.ok(
+        cancel >= 0 && start > cancel,
+        'A replacement starts only after explicit cancellation',
+      );
+      assert.equal(requests[start].body.limits.budget_seconds, 1800);
+      assert.equal(await page.getByRole('alert').count(), 0);
+    } finally {
+      await close();
     }
   });
   await test('Analysis preview requires consent; pause and resume use captured identities', async () => {

@@ -45,6 +45,9 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   save file selections before preparing a run. Request limits remain in a disclosure;
   new runs default to a 1,800-second (30-minute) file-analysis budget per batch.
   Continuations retain the saved run's limits.
+  When a run is paused or interrupted, **Prepare continuation** on Analysis
+  prepares the saved run with its captured settings and fresh consent. To use
+  new settings, cancel the saved run in **Last run**, then prepare a new analysis.
   Preparing a run captures scope and provider destinations. Starting it still
   confirms remote-provider sharing and Security review for that admission.
   **Last run** focuses on current progress and pause, continue or cancel controls.
