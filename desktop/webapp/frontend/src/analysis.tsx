@@ -27,8 +27,9 @@ const stageNames: Record<string, string> = {
 const defaults: Limits = { batch_files: 20, budget_seconds: 600, max_attempts_per_stage: 2 };
 
 function selectionPaths(s: State) {
-  return s.analysisSelectionDraft?.selectionID === s.selection?.selection_id
-    ? s.analysisSelectionDraft!.excluded
+  return s.analysisSelectionDraft &&
+    s.analysisSelectionDraft.selectionID === s.selection?.selection_id
+    ? s.analysisSelectionDraft.excluded
     : s.selection?.excluded_paths || [];
 }
 function selectionChanged(s: State) {

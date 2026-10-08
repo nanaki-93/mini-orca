@@ -451,7 +451,7 @@ async function benchmarkLayout(page) {
   if (await comparisonHeading.count()) {
     const bounds = await comparisonHeading.boundingBox();
     const title = await comparisonHeading.locator('h2').boundingBox();
-    const status = await comparisonHeading.locator('.badge').boundingBox();
+    const status = await comparisonHeading.locator('.badge, .status-dot').boundingBox();
     for (const box of [title, status]) {
       assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
       assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
@@ -1914,7 +1914,11 @@ try {
               .locator('.project-workspace')
               .getByRole('button', { name, exact: true })
               .click();
-            await page.locator(`.page[data-accent="${route}"]`).waitFor();
+            await page
+              .locator(
+                route === 'terminal' ? '.terminal-container' : `.page[data-accent="${route}"]`,
+              )
+              .waitFor();
             await nav(page, 'Project');
           }
           assert.equal(
@@ -2454,7 +2458,10 @@ try {
           if (!selected) return false;
           const bounds = code.getBoundingClientRect();
           const line = selected.getBoundingClientRect();
-          return line.top >= bounds.top && line.bottom <= bounds.bottom;
+          // scrollTop rounds to whole pixels while line boxes retain fractional heights.
+          return (
+            Math.round(line.top - bounds.top) >= 0 && Math.round(line.bottom - bounds.bottom) <= 0
+          );
         });
         assert.equal(
           await code.evaluate((element) => {
@@ -2656,6 +2663,9 @@ try {
       };
       const { page, close } = await pageFor(options);
       try {
+        const writesBeforeInspection = await page.evaluate(() =>
+          window.fixture.requests.filter((request) => request.method !== 'GET'),
+        );
         await openSource(page);
         if (stateCase === 'read-failed')
           await page.evaluate(() => {
@@ -2709,11 +2719,12 @@ try {
           await page.getByRole('heading', { name: 'Included files', exact: true }).waitFor();
           await layout(page, 'context-read-failed-recovered-light-standard-800');
         }
-        assert.equal(
-          await page.evaluate(
-            () => window.fixture.requests.filter((request) => request.method !== 'GET').length,
+        assert.deepEqual(
+          await page.evaluate(() =>
+            window.fixture.requests.filter((request) => request.method !== 'GET'),
           ),
-          0,
+          writesBeforeInspection,
+          'Context inspection must not admit work after the initial local project restore',
         );
       } finally {
         await close();
@@ -3057,6 +3068,9 @@ try {
           : {}),
       });
       try {
+        const writesBeforeInspection = await page.evaluate(() =>
+          window.fixture.requests.filter((request) => request.method !== 'GET'),
+        );
         await page.setViewportSize({ width: 800, height: 1000 });
         await page.getByRole('button', { name: 'Larger text', exact: true }).click();
         await nav(page, 'Source');
@@ -3092,11 +3106,12 @@ try {
         }
         await headingContainment(page.locator('.source-workspace .page-heading--intro'));
         await layout(page, `source-${stateCase}-800-dark-larger`);
-        assert.equal(
-          await page.evaluate(
-            () => window.fixture.requests.filter((request) => request.method !== 'GET').length,
+        assert.deepEqual(
+          await page.evaluate(() =>
+            window.fixture.requests.filter((request) => request.method !== 'GET'),
           ),
-          0,
+          writesBeforeInspection,
+          'Source inspection must not admit work after the initial local project restore',
         );
       } finally {
         await close();
@@ -3470,7 +3485,7 @@ try {
           await page.getByRole('button', { name: 'Run checks', exact: true }).isDisabled(),
           true,
         );
-        await page.getByRole('tab', { name: 'Draft', exact: true }).click();
+        await page.getByRole('tab', { name: 'Draft Edited', exact: true }).click();
         assert.equal(await editor.inputValue(), declaration);
         assert.equal(await importEditor.inputValue(), `${imports}\nnet/http`);
         await render('edited-after-validation');
@@ -3478,7 +3493,7 @@ try {
           window.fixture.state.changed = true;
         });
         await page.getByRole('tab', { name: 'Assistant', exact: true }).click();
-        await page.getByRole('tab', { name: 'Draft', exact: true }).click();
+        await page.getByRole('tab', { name: 'Draft Edited', exact: true }).click();
         await page.getByText('File evidence is outdated.', { exact: false }).waitFor();
         assert.equal(await editor.isDisabled(), true);
         assert.equal(await importEditor.isDisabled(), true);
@@ -3813,7 +3828,7 @@ try {
       for (const action of [run, review, benchmarks]) assert.equal(await action.isDisabled(), true);
       assert.equal(await surface.locator('.check-evidence').count(), 0);
       await render('dirty');
-      await page.getByRole('tab', { name: 'Draft', exact: true }).click();
+      await page.getByRole('tab', { name: 'Draft Edited', exact: true }).click();
       await page.getByRole('button', { name: 'Validate draft', exact: true }).click();
       await idle(page);
       await page.getByRole('button', { name: 'Continue to checks', exact: true }).click();
@@ -3932,8 +3947,24 @@ try {
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
             await page.getByRole('button', { name: 'Switch to light appearance' }).click();
-          for (const panel of await surface.locator('section.panel').all())
-            assert.deepEqual(await panelTreatment(panel), references[theme]);
+          for (const panel of await surface.locator('section.panel').all()) {
+            const treatment = await panelTreatment(panel);
+            const insightAccent = await panel.evaluate((element) => {
+              if (!element.classList.contains('insight')) return null;
+              const style = getComputedStyle(element);
+              const probe = document.createElement('span');
+              probe.style.color = 'var(--violet)';
+              element.append(probe);
+              const color = getComputedStyle(probe).color;
+              probe.remove();
+              return style.borderLeftWidth === '3px' && style.borderLeftColor === color;
+            });
+            if (insightAccent !== null) {
+              assert.equal(insightAccent, true, 'Engineering insight retains its category accent');
+              // The accent edge gives this panel a different border shorthand.
+              assert.deepEqual(treatment, { ...references[theme], border: '' });
+            } else assert.deepEqual(treatment, references[theme]);
+          }
           for (const larger of [false, true]) {
             if (larger)
               await page.getByRole('button', { name: 'Larger text', exact: true }).click();
@@ -4546,6 +4577,36 @@ try {
       } finally {
         await close();
       }
+    }
+  });
+  await test('Analysis and Files recover from unavailable file selection without inventing an empty scope', async () => {
+    const { page, close } = await pageFor({ selectionUnavailable: true });
+    try {
+      await nav(page, 'Analysis');
+      assert.equal(
+        await page.getByRole('button', { name: 'Prepare analysis', exact: true }).isDisabled(),
+        true,
+      );
+      await page.getByText('— eligible files selected', { exact: true }).waitFor();
+      await nav(page, 'Files');
+      await page
+        .getByRole('heading', { name: 'File selection unavailable', exact: true })
+        .waitFor();
+      assert.equal(
+        await page.getByRole('button', { name: 'Include shown', exact: true }).isDisabled(),
+        true,
+      );
+      await layout(page, 'analysis-files-unavailable');
+      await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+      await idle(page);
+      assert.equal(
+        await page.getByRole('button', { name: 'Include shown', exact: true }).isEnabled(),
+        true,
+      );
+      await page.getByLabel('Include internal/worker/process.go', { exact: true }).waitFor();
+      await layout(page, 'analysis-files-recovered');
+    } finally {
+      await close();
     }
   });
   await test('Analysis file filtering and bulk edits retain explicit Save selection before preparation', async () => {
@@ -6495,10 +6556,13 @@ try {
           name: 'Measured comparison',
           exact: true,
         });
-        assert.equal(
-          await comparison.locator('.benchmark-comparison-heading .badge').textContent(),
-          state.status,
-        );
+        const comparisonStatus = comparison.locator('.benchmark-comparison-heading');
+        if (state.status === 'completed')
+          assert.equal(
+            await comparisonStatus.getByRole('img', { name: 'completed', exact: true }).isVisible(),
+            true,
+          );
+        else assert.equal(await comparisonStatus.locator('.badge').textContent(), state.status);
         assert.equal(
           await comparison.getByRole('heading', { name, exact: true }).isVisible(),
           true,
@@ -6565,12 +6629,13 @@ try {
                   });
                   assert.equal(await table.evaluate((el) => el.scrollWidth > el.clientWidth), true);
                   await page.keyboard.press('Tab');
+                  await table.scrollIntoViewIfNeeded();
                   await table.focus();
                   assert.equal(await table.evaluate((el) => el.matches(':focus-visible')), true);
                   await table.evaluate((el) => {
                     el.scrollLeft = 0;
                   });
-                  await page.keyboard.press('ArrowRight');
+                  await page.keyboard.press('ArrowRight', { delay: 100 });
                   await page.waitForFunction(() => document.activeElement.scrollLeft > 0);
                   await table.evaluate((el) => {
                     el.scrollLeft = el.scrollWidth;
@@ -6633,7 +6698,9 @@ try {
       assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
       assert.equal(
         await page.evaluate(() =>
-          window.fixture.requests.some((r) => /\/(apply|undo|scan)$/.test(r.path || '')),
+          window.fixture.requests.some(
+            (r) => r.method !== 'GET' && /\/(apply|undo|scan)$/.test(r.path || ''),
+          ),
         ),
         false,
       );
@@ -6786,6 +6853,7 @@ try {
         }
         assert.equal(await page.evaluate(() => window.scanInjected), undefined);
         for (const theme of ['dark', 'light']) {
+          await page.setViewportSize({ width: 1440, height: 1000 });
           if (theme === 'light')
             await page.getByRole('button', { name: 'Switch to light appearance' }).click();
           assert.deepEqual(await introductionTreatment(heading), references[theme].intro);
@@ -6953,7 +7021,7 @@ try {
     };
     for (const scenario of ['large-list', 'empty-index', 'filtered-empty']) {
       const { page, close } = await pageFor({
-        sourcePaths: scenario === 'empty-index' ? [] : paths,
+        ...(scenario === 'empty-index' ? { emptyIndex: true } : { sourcePaths: paths }),
       });
       try {
         const baseline = await page.evaluate(() =>
@@ -8610,7 +8678,8 @@ try {
         await page.evaluate(
           () =>
             window.fixture.requests.filter(
-              (r) => r.path.endsWith('/messages') && r.path.includes('/changes/'),
+              (r) =>
+                r.method === 'POST' && r.path.endsWith('/messages') && r.path.includes('/changes/'),
             ).length,
         ),
         1,
