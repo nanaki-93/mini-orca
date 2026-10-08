@@ -1,0 +1,946 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Mini-Orca · Theme study</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #e8e9ed;
+        color: #252936;
+        font:
+          14px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+      button,
+      input {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:focus-visible,
+      summary:focus-visible,
+      input:focus-visible {
+        outline: 3px solid var(--accent, #6555d8);
+        outline-offset: 4px;
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.6;
+      }
+      .studio {
+        max-width: 1360px;
+        margin: auto;
+        padding: 28px;
+      }
+      .studio-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 22px;
+      }
+      .studio-header h1 {
+        font-size: 19px;
+        letter-spacing: -0.5px;
+        margin: 0;
+      }
+      .studio-header p {
+        font-size: 12px;
+        color: #545d70;
+        margin: 5px 0 0;
+      }
+      .themes {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .themes button {
+        border: 1px solid #bbc0cc;
+        background: #f9faff;
+        color: #333b4c;
+        padding: 9px 16px;
+        border-radius: 8px;
+        font-weight: 600;
+      }
+      .themes button[aria-pressed="true"] {
+        background: #252936;
+        color: white;
+        border-color: #252936;
+      }
+      .app {
+        --canvas: #101217;
+        --sidebar: #15171e;
+        --panel: #1b1e27;
+        --raised: #242936;
+        --line: #353b4b;
+        --text: #f0f2fa;
+        --muted: #adb5c8;
+        --accent: #b7a8ff;
+        --accent-text: #1b103a;
+        --green: #80ddb0;
+        --red: #ff9ca9;
+        --amber: #f4ca80;
+        --cyan: #8ad7e8;
+        --violet: #b7a8ff;
+        background: var(--canvas);
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 24px 60px #1a233025;
+        display: grid;
+        grid-template-columns: 205px minmax(0, 1fr);
+        min-height: 760px;
+      }
+      .app[data-theme="porcelain"] {
+        --canvas: #f4f6fa;
+        --sidebar: #fff;
+        --panel: #fff;
+        --raised: #ecf0f7;
+        --line: #d8deea;
+        --text: #182238;
+        --muted: #526078;
+        --accent: #5141b4;
+        --accent-text: #fff;
+        --green: #146542;
+        --red: #aa2545;
+        --amber: #825200;
+        --cyan: #066878;
+        --violet: #6349af;
+      }
+      .app[data-theme="midnight"] {
+        --canvas: #091422;
+        --sidebar: #0d1b2b;
+        --panel: #112238;
+        --raised: #193049;
+        --line: #29455e;
+        --text: #e9f5ff;
+        --muted: #a3bed5;
+        --accent: #78dcdf;
+        --accent-text: #082e31;
+        --green: #80ddba;
+        --red: #ff9faa;
+        --amber: #f9cb7f;
+        --cyan: #85d9ed;
+        --violet: #c6b1fc;
+      }
+      aside {
+        background: var(--sidebar);
+        border-right: 1px solid var(--line);
+        padding: 26px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+      }
+      .brand {
+        font-size: 20px;
+        font-weight: 750;
+        letter-spacing: -0.8px;
+      }
+      .brand i {
+        display: inline-flex;
+        border: 2px solid var(--accent);
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        background: linear-gradient(135deg, var(--accent) 50%, transparent 50%);
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+      .project {
+        background: var(--raised);
+        padding: 12px;
+        border-radius: 8px;
+        font-weight: 600;
+      }
+      .project small {
+        display: block;
+        font-weight: 400;
+        font-size: 11px;
+        color: var(--muted);
+        padding-left: 30px;
+      }
+      .project span {
+        color: var(--accent);
+        margin-right: 12px;
+      }
+      .nav-label {
+        font-size: 10px;
+        letter-spacing: 1.4px;
+        font-weight: 700;
+        color: var(--muted);
+        margin: 0 12px 10px;
+      }
+      .nav {
+        display: grid;
+        gap: 5px;
+      }
+      .nav button {
+        background: none;
+        color: var(--muted);
+        border: 0;
+        padding: 10px 12px;
+        border-radius: 7px;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .nav button[aria-current="page"] {
+        color: var(--accent);
+        background: var(--raised);
+        font-weight: 600;
+      }
+      .nav svg {
+        width: 17px;
+        height: 17px;
+      }
+      .aside-bottom {
+        margin-top: auto;
+        font-size: 11px;
+        color: var(--muted);
+        padding: 10px;
+      }
+      .body {
+        min-width: 0;
+      }
+      .topbar {
+        height: 65px;
+        border-bottom: 1px solid var(--line);
+        padding: 0 30px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .topbar strong {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .connection:before {
+        content: "";
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--green);
+        margin-right: 8px;
+      }
+      .content {
+        padding: 34px;
+        display: grid;
+        gap: 24px;
+      }
+      .intro {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 20px;
+      }
+      .eyebrow {
+        color: var(--accent);
+        font-size: 10px;
+        letter-spacing: 1.5px;
+        font-weight: 700;
+        margin-bottom: 7px;
+      }
+      .intro h2 {
+        font-size: 29px;
+        letter-spacing: -1px;
+        margin: 0;
+        font-weight: 650;
+      }
+      .intro p {
+        margin: 5px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .button {
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 10px 16px;
+        background: var(--raised);
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .primary {
+        background: var(--accent);
+        color: var(--accent-text);
+        border-color: var(--accent);
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        min-width: 0;
+      }
+      .panel-head {
+        padding: 18px 22px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .panel-head h3 {
+        font-size: 13px;
+        font-weight: 600;
+        margin: 0;
+      }
+      .panel-body {
+        padding: 22px;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .caption {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .assignments {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .assignment {
+        padding: 16px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border: 1px solid var(--line);
+        border-top: 3px solid var(--tone);
+        border-radius: 8px;
+        background: var(--canvas);
+      }
+      .role {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .role svg {
+        display: block;
+        color: var(--tone);
+        margin-bottom: 10px;
+        width: 21px;
+        height: 21px;
+      }
+      .model-button {
+        width: 39px;
+        height: 39px;
+        display: grid;
+        place-items: center;
+        background: var(--raised);
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        font-size: 23px;
+      }
+      .role small {
+        display: block;
+        color: var(--muted);
+      }
+      details {
+        border-top: 1px solid var(--line);
+        margin-top: 22px;
+        font-size: 12px;
+      }
+      summary {
+        cursor: pointer;
+        color: var(--muted);
+        padding: 15px 0;
+      }
+      details p {
+        margin: 0 0 12px;
+        color: var(--muted);
+      }
+      .scope-line {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 17px 22px;
+        font-size: 12px;
+      }
+      .scope-line strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+      .scope-line p {
+        margin: 0;
+      }
+      .notice {
+        border-left: 3px solid var(--accent);
+        padding: 0 0 0 14px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .metric {
+        padding: 18px;
+        border-top: 3px solid var(--tone);
+      }
+      .metric h3 {
+        font-size: 12px;
+        margin: 0;
+      }
+      .metric strong {
+        display: block;
+        color: var(--tone);
+        font-size: 37px;
+        letter-spacing: -1.5px;
+        line-height: 1.3;
+        margin: 12px 0 5px;
+      }
+      .metric p {
+        color: var(--muted);
+        font-size: 11px;
+        margin: 0;
+      }
+      .metric button {
+        border: 0;
+        background: transparent;
+        color: var(--tone);
+        padding: 12px 0 0;
+        font-size: 12px;
+      }
+      .status {
+        color: var(--green);
+        font-size: 12px;
+      }
+      .progress {
+        height: 5px;
+        background: var(--raised);
+        border-radius: 3px;
+        overflow: hidden;
+        margin-top: 14px;
+      }
+      .progress span {
+        display: block;
+        background: var(--green);
+        width: 100%;
+        height: 100%;
+      }
+      .captured {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 18px;
+      }
+      .captured small {
+        display: block;
+        color: var(--muted);
+        font-size: 10px;
+        margin-bottom: 7px;
+      }
+      .captured span {
+        font-size: 12px;
+      }
+      .file-toolbar {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+      }
+      .file-toolbar input {
+        background: var(--panel);
+        color: var(--text);
+        border: 1px solid var(--line);
+        padding: 10px 13px;
+        border-radius: 7px;
+        min-width: 0;
+        width: 260px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        text-align: left;
+        font-size: 12px;
+      }
+      th {
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 500;
+      }
+      td,
+      th {
+        padding: 15px 18px;
+        border-bottom: 1px solid var(--line);
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      .file-name {
+        font:
+          11px/1.6 ui-monospace,
+          SFMono-Regular,
+          monospace;
+        color: var(--text);
+      }
+      input[type="checkbox"] {
+        accent-color: var(--accent);
+        width: 14px;
+        height: 14px;
+        vertical-align: middle;
+        margin-right: 12px;
+      }
+      .dot {
+        font-size: 11px;
+        color: var(--green);
+      }
+      .diff-header {
+        font:
+          11px ui-monospace,
+          monospace;
+        background: var(--raised);
+        padding: 15px 20px;
+        border-bottom: 1px solid var(--line);
+      }
+      pre {
+        margin: 0;
+        padding: 17px 0;
+        overflow: auto;
+        font:
+          12px/2 ui-monospace,
+          monospace;
+      }
+      .line {
+        display: block;
+        padding: 0 20px;
+      }
+      .line.remove {
+        color: var(--red);
+        background: color-mix(in srgb, var(--red) 9%, transparent);
+      }
+      .line.add {
+        color: var(--green);
+        background: color-mix(in srgb, var(--green) 9%, transparent);
+      }
+      .accept {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 18px 22px;
+      }
+      .accept p {
+        margin: 3px 0 0;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .checks {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        font-size: 11px;
+        color: var(--green);
+      }
+      .preview-message {
+        font-size: 12px;
+        color: var(--accent);
+        min-height: 18px;
+      }
+      .studio-foot {
+        color: #545d70;
+        font-size: 11px;
+        margin-top: 15px;
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+      }
+      .popup {
+        position: fixed;
+        inset: 0;
+        background: #0008;
+        display: grid;
+        place-items: center;
+        z-index: 2;
+      }
+      .popup[hidden] {
+        display: none;
+      }
+      .picker {
+        background: var(--panel);
+        color: var(--text);
+        padding: 24px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        max-width: 400px;
+        width: 90%;
+      }
+      .picker h3 {
+        margin: 0 0 6px;
+      }
+      .picker button {
+        width: 100%;
+        text-align: left;
+        margin-top: 10px;
+      }
+      .picker p {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      svg {
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.7;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      @media (max-width: 1050px) {
+        .assignments,
+        .metrics {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .captured {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .content {
+          padding: 24px;
+        }
+        .app {
+          grid-template-columns: 175px minmax(0, 1fr);
+        }
+      }
+      @media (max-width: 720px) {
+        .studio {
+          padding: 12px;
+        }
+        .studio-header {
+          flex-wrap: wrap;
+        }
+        .app {
+          display: block;
+          min-height: 0;
+        }
+        aside {
+          padding: 14px;
+          gap: 14px;
+        }
+        .brand,
+        .project,
+        .nav-label,
+        .aside-bottom {
+          display: none;
+        }
+        .nav {
+          display: flex;
+          flex-wrap: wrap;
+        }
+        .nav button {
+          padding: 8px;
+        }
+        .topbar {
+          padding: 0 20px;
+          height: 50px;
+        }
+        .connection {
+          display: none;
+        }
+        .content {
+          padding: 20px;
+          gap: 18px;
+        }
+        .intro {
+          flex-wrap: wrap;
+        }
+        .intro h2 {
+          font-size: 25px;
+        }
+        .file-toolbar {
+          flex-wrap: wrap;
+        }
+        .file-toolbar input {
+          width: 100%;
+        }
+        .table-wrap {
+          overflow-x: auto;
+        }
+        .accept {
+          flex-wrap: wrap;
+        }
+        .metrics,
+        .assignments {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .captured {
+          grid-template-columns: 1fr;
+        }
+        .studio-foot {
+          flex-wrap: wrap;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="studio">
+      <header class="studio-header">
+        <div>
+          <h1>Mini-Orca / Theme study</h1>
+          <p>
+            Interactive mockups · Sample project and results · No provider calls
+            or source writes
+          </p>
+        </div>
+        <div class="themes" aria-label="Preview theme">
+          <button data-theme="graphite" aria-pressed="true">Graphite</button
+          ><button data-theme="porcelain" aria-pressed="false">Porcelain</button
+          ><button data-theme="midnight" aria-pressed="false">Midnight</button>
+        </div>
+      </header>
+      <div class="app" data-theme="graphite">
+        <aside>
+          <div class="brand"><i></i>mini-orca.</div>
+          <div class="project">
+            <span>H</span>harbor<small>LOCAL WORKSPACE</small>
+          </div>
+          <div>
+            <div class="nav-label">WORKSPACE</div>
+            <nav class="nav" aria-label="Mockup pages"></nav>
+          </div>
+          <div class="aside-bottom">
+            Local-first.<br />Every change stays in your control.
+          </div>
+        </aside>
+        <div class="body">
+          <header class="topbar">
+            <span
+              >harbor &nbsp; / &nbsp;
+              <strong id="breadcrumb">Analysis</strong></span
+            ><span class="connection">Daemon connected · Example</span>
+          </header>
+          <main class="content" id="content"></main>
+        </div>
+        <div class="popup" hidden>
+          <section
+            class="picker"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Choose a model"
+          >
+            <h3>Choose a model</h3>
+            <p>Preview choices for <span id="model-role"></span></p>
+            <div id="choices"></div>
+            <button class="button" id="close-picker">Cancel</button>
+          </section>
+        </div>
+      </div>
+      <footer class="studio-foot">
+        <span id="theme-description"
+          >Graphite · Neutral charcoal, lavender actions, distinct evidence
+          colors.</span
+        ><span>Explore Analysis, Files, Last run and Accept change.</span>
+      </footer>
+    </div>
+    <script>
+      const icons = {
+        analysis: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+        files: '<path d="M3 7V4h7l2 3h9v13H3z"/>',
+        run: '<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/>',
+        change: '<path d="m8 5-6 7 6 7m8-14 6 7-6 7M14 3l-4 18"/>',
+        bugs: '<rect x="7" y="6" width="10" height="15" rx="5"/><path d="M3 10h4m10 0h4M3 16h4m10 0h4M12 6v15"/>',
+        performance: '<path d="M4 18a9 9 0 1 1 16 0M6 18h12M12 13l5-6"/>',
+        security:
+          '<path d="m12 3 8 3v6c0 4-3 7-8 9-5-2-8-5-8-9V6zM9 12l2 2 4-4"/>',
+        features:
+          '<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/>',
+      };
+      const icon = (n) =>
+        `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[n]}</svg>`;
+      const roles = [
+        ["bugs", "Bug analysis", "red"],
+        ["performance", "Performance", "amber"],
+        ["security", "Security", "cyan"],
+        ["features", "Feature discovery", "violet"],
+      ];
+      const selections = {
+        bugs: "GPT-5",
+        performance: "Claude Sonnet",
+        security: "GPT-5",
+        features: "Gemini Pro",
+      };
+      const capturedSelections = { ...selections };
+      const app = document.querySelector(".app"),
+        main = document.querySelector("main");
+      let page = "analysis",
+        accepted = false;
+      let previous;
+      const pages = {
+        analysis: "Analysis",
+        files: "Files",
+        run: "Last run",
+        change: "Accept change",
+      };
+      const glyph = (n) =>
+        n.startsWith("GPT") ? "◉" : n.startsWith("Claude") ? "✳" : "✦";
+      const intro = (eyebrow, title, detail, action = "") =>
+        `<header class="intro"><div><div class="eyebrow">${eyebrow}</div><h2>${title}</h2><p>${detail}</p></div>${action}</header>`;
+      function render() {
+        document.querySelector(".nav").innerHTML = Object.entries(pages)
+          .map(
+            ([k, v]) =>
+              `<button data-page="${k}" ${page === k ? 'aria-current="page"' : ""}>${icon(k)}${v}</button>`,
+          )
+          .join("");
+        document.querySelector("#breadcrumb").textContent = pages[page];
+        if (page === "analysis")
+          main.innerHTML =
+            intro(
+              "PROJECT INTELLIGENCE",
+              "A focused view of your code.",
+              "Choose your models, then start a scoped analysis.",
+              '<button class="button primary" data-action="preview">Prepare analysis ↗</button>',
+            ) +
+            `<section class="panel"><div class="panel-head"><h3>Analysis models</h3><span class="caption">Independent choices</span></div><div class="panel-body"><div class="assignments">${roles.map(([key, label, tone]) => `<div class="assignment" style="--tone:var(--${tone})"><div class="role">${icon(key)}${label}</div><button class="model-button" data-model="${key}" title="${label}: ${selections[key]}" aria-label="${label} model: ${selections[key]}">${glyph(selections[key])}</button></div>`).join("")}</div><details><summary>Batch & request limits</summary><p>20 files per batch · 10 minute budget · 2 attempts per stage</p></details></div></section><section class="panel scope-line"><div><strong>18 files selected</strong><p class="caption">Go and Markdown · Project exclusions respected</p></div><button class="button" data-page="files">Manage files</button></section><div class="notice">Starting analysis asks for consent before sharing context with remote providers or requesting Security review.</div><div class="preview-message" role="status"></div>`;
+        if (page === "files")
+          main.innerHTML =
+            intro(
+              "ANALYSIS SCOPE",
+              "Files",
+              "Choose the files included in the next run.",
+              '<button class="button primary" data-action="save">Save selection</button>',
+            ) +
+            `<div class="file-toolbar"><input aria-label="Filter files" placeholder="Filter by path…"><span class="caption">18 eligible files · 2 excluded</span></div><div class="panel table-wrap"><table><thead><tr><th>File</th><th>Bugs</th><th>Performance</th><th>Security</th></tr></thead><tbody>${["cmd/server/main.go", "internal/worker/process.go", "internal/worker/process_test.go", "internal/api/handlers.go", "internal/config/config.go", "README.md"].map((p) => `<tr data-file="${p}"><td class="file-name"><label><input type="checkbox" checked>${p}</label></td><td class="dot">● Current</td><td class="dot">● Current</td><td class="dot">● Current</td></tr>`).join("")}</tbody></table></div><div class="notice">Selection changes affect the next run. Your source remains read-only.</div><div class="preview-message" role="status"></div>`;
+        if (page === "run")
+          main.innerHTML =
+            intro(
+              "LATEST ANALYSIS",
+              "Your results, at a glance.",
+              "18 files completed · 42 seconds · Today, 10:24",
+              '<span class="status">● Completed</span>',
+            ) +
+            `<div class="metrics">${roles.map(([key, label, tone], i) => `<section class="panel metric" style="--tone:var(--${tone})"><h3>${label}</h3><strong>${[3, 2, 1, 5][i]}</strong><p>${["Model suggestions", "Hypotheses · unmeasured", "Rules + advisory review", "Advisory ideas"][i]}</p><button data-action="results" data-category="${label}">View results ↗</button></section>`).join("")}</div><section class="panel"><div class="panel-head"><h3>Captured models</h3><span class="caption">Used for this run</span></div><div class="panel-body"><div class="captured">${roles.map(([key, label]) => `<div><small>${label}</small><span>${glyph(capturedSelections[key])} &nbsp; ${capturedSelections[key]}</span></div>`).join("")}</div><details><summary>Coverage & provider details</summary><p>18 of 18 files completed. No failed or unavailable stages.</p><p>Example remote models. The production app shows the exact captured provider destinations here.</p></details></div></section><section class="panel"><div class="panel-body"><div class="scope-line" style="padding:0"><strong>Analysis complete</strong><span class="caption">72 of 72 file stages finished</span></div><div class="progress"><span></span></div></div></section><div class="preview-message" role="status"></div>`;
+        if (page === "change")
+          main.innerHTML =
+            intro(
+              "CODE CHANGE",
+              accepted ? "Change accepted." : "Ready for your decision.",
+              "Handle cancellation in the worker · 2 files changed",
+              `<span class="status">● ${accepted ? "Applied" : "Checks passed"}</span>`,
+            ) +
+            `<div class="checks"><span>✓ Created</span><span>✓ Tests passed</span><span>✓ Agent review passed</span></div><section class="panel"><div class="diff-header">internal/worker/process.go &nbsp; <span class="muted">Read-only diff</span></div><pre><span class="line">  func Process(ctx context.Context) error {</span><span class="line remove">−     return nil</span><span class="line add">+     if err := ctx.Err(); err != nil {</span><span class="line add">+         return err</span><span class="line add">+     }</span><span class="line">      return process(ctx)</span><span class="line">  }</span></pre></section><section class="panel"><div class="diff-header">internal/worker/process_test.go &nbsp; <span class="muted">Read-only diff</span></div><pre><span class="line add">+ func TestProcessCanceled(t *testing.T) {</span><span class="line add">+     ctx, cancel := context.WithCancel(context.Background())</span><span class="line add">+     cancel()</span><span class="line add">+     if err := Process(ctx); !errors.Is(err, context.Canceled) {</span><span class="line add">+         t.Fatalf("expected cancellation, got %v", err)</span><span class="line add">+     }</span><span class="line add">+ }</span></pre></section><section class="panel accept"><div><strong>${accepted ? "Applied to 2 files" : "Review the differences above"}</strong><p>${accepted ? "Guarded Undo remains available for unchanged files." : "Accept applies this exact revision to the 2 displayed files."}</p></div><button class="button primary" data-action="${accepted ? "undo" : "accept"}">${accepted ? "Undo change" : "Accept changes"}</button></section><div class="preview-message" role="status"></div>`;
+      }
+      function message(text) {
+        document.querySelector(".preview-message").textContent = text;
+      }
+      document.addEventListener("click", (e) => {
+        const button = e.target.closest("button");
+        if (!button) return;
+        if (button.dataset.theme) {
+          const theme = button.dataset.theme;
+          app.dataset.theme = theme;
+          document
+            .querySelectorAll(".themes button")
+            .forEach((b) =>
+              b.setAttribute("aria-pressed", String(b === button)),
+            );
+          document.querySelector("#theme-description").textContent = {
+            graphite:
+              "Graphite · Neutral charcoal, lavender actions, distinct evidence colors.",
+            porcelain:
+              "Porcelain · Clear white surfaces, indigo actions, crisp information hierarchy.",
+            midnight:
+              "Midnight · Deep navy, cyan actions, vivid result categories.",
+          }[theme];
+        }
+        if (button.dataset.page) {
+          page = button.dataset.page;
+          render();
+        }
+        if (button.dataset.model) {
+          previous = button;
+          const role = button.dataset.model;
+          document.querySelector("#model-role").textContent = roles.find(
+            (r) => r[0] === role,
+          )[1];
+          document.querySelector("#choices").innerHTML = [
+            "GPT-5",
+            "Claude Sonnet",
+            "Gemini Pro",
+          ]
+            .map(
+              (name) =>
+                `<button class="button" data-choice="${name}" data-role="${role}">${glyph(name)} &nbsp; ${name}</button>`,
+            )
+            .join("");
+          document.querySelector(".popup").hidden = false;
+          document.querySelector("#choices button").focus();
+        }
+        if (button.dataset.choice) {
+          selections[button.dataset.role] = button.dataset.choice;
+          document.querySelector(".popup").hidden = true;
+          render();
+          document
+            .querySelector(`[data-model="${button.dataset.role}"]`)
+            .focus();
+        }
+        if (button.id === "close-picker") {
+          document.querySelector(".popup").hidden = true;
+          previous?.focus();
+        }
+        const action = button.dataset.action;
+        if (action === "preview")
+          message(
+            "Preview only: 18 files captured. Production asks for provider consent before Start.",
+          );
+        if (action === "save") {
+          message("Preview selection saved. No files were written.");
+        }
+        if (action === "results")
+          message(
+            `${button.dataset.category}: sample results only. Full finding evidence is available in the production workspace.`,
+          );
+        if (action === "accept" || action === "undo") {
+          accepted = action === "accept";
+          render();
+          message("Preview only. No source files were changed.");
+        }
+      });
+      document.addEventListener("input", (e) => {
+        if (e.target.matches('[aria-label="Filter files"]'))
+          document
+            .querySelectorAll("[data-file]")
+            .forEach(
+              (row) =>
+                (row.hidden = !row.dataset.file
+                  .toLowerCase()
+                  .includes(e.target.value.toLowerCase())),
+            );
+      });
+      document.addEventListener("keydown", (e) => {
+        const popup = document.querySelector(".popup");
+        if (popup.hidden) return;
+        if (e.key === "Escape") {
+          popup.hidden = true;
+          previous?.focus();
+        }
+        if (e.key === "Tab") {
+          const buttons = [...popup.querySelectorAll("button")];
+          const first = buttons[0],
+            last = buttons.at(-1);
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      });
+      render();
+    </script>
+  </body>
+</html>
