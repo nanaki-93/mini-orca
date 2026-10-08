@@ -66,20 +66,22 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
 - **Chat** captures up to eight explicit Go/Markdown paths, including new files.
   **Configure workflow** on a feature idea or Bug/Performance/Security finding
   opens the captured task setup and suggests a test path. Choose a Creation,
-  Testing and Review model independently, then select **Run workflow**. The
+  Testing and Review model independently, then select **Generate changes**. Model choices live under **Agent models**. The
   choices reference the daemon's configured Function, Bug and Analyze profiles
   (the respective defaults); configure their actual providers/models in `config.yaml`.
   Include a `_test.go` path. The testing agent writes tests, then the daemon runs
   them in an isolated copy before the review agent evaluates the proposal.
   The app shows each stage, captured models, check evidence and review findings;
   progress remains visible during navigation, and **Cancel workflow** stops work.
-  Failed tests or requested changes block approval. A successful run waits for
-  human diff review and explicit Apply. Performance remains unmeasured unless
+  Failed tests or requested changes block approval. A successful run displays read-only diffs and waits for **Accept changes**. Performance remains unmeasured unless
   actual benchmark evidence is available. Interrupted runs need an explicit new
   run; the workflow never resumes provider calls from history automatically.
-  Describe a task or use **Prepare fix** on a finding. Preparation generates and
-  checks a proposal, with at most three repairs of failed checks. Read every diff,
-  select **Review this diff**, then **Approve and apply** and confirm its scope.
+  Describe a task or use **Prepare fix** on a finding. Generation checks the proposal and can repair failed checks up to three times.
+  Read the displayed file diffs, then select **Accept changes** once. This records
+  review and applies only that revision; failed review, a replacement proposal or
+  navigation while review is pending prevents Apply. With a captured `_test.go`
+  path, creation, testing and agent review run automatically; otherwise generation
+  uses the direct checked-proposal path.
   Requested tests remain required; execution trust and remote-provider consent
   are separate. New revisions clear earlier review. Local history restores a
   conversation without generation or inherited check/review authority.
@@ -96,7 +98,7 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   inherited guides is disabled to avoid duplicates.
   Existing files are registered by reading them; inherited guides show their
   origins and scope. **Preview instruction diff**
-  creates a manual proposal in Chat with the same explicit Review/Apply workflow.
+  creates a manual proposal in Chat with the same explicit **Accept changes** action.
 - After Apply, **Verify applied change** checks the applied file identities and
   runs Go tests/vet in a copied workspace with fresh execution trust. Markdown-only
   verification checks text and hashes. **Reanalyze changed files** requests fresh

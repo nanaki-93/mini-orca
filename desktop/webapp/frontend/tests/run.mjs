@@ -39,6 +39,7 @@ const surfaceInventory = {
     diagrams: ['rendered', 'empty', 'prose', 'invalid', 'oversized', 'source disclosure'],
   },
   analysis: {
+    'analysis-files': ['selection', 'unsaved', 'filtered'],
     analysis: ['setup', 'no run', 'saved run', 'busy', 'unavailable models', 'dirty selection'],
     'analysis-preview': [
       'new',
@@ -8044,7 +8045,7 @@ try {
       );
       await page.getByText('Local history', { exact: true }).click();
       await page.getByText('No saved conversations.', { exact: true }).waitFor();
-      const prepare = conversation.getByRole('button', { name: 'Prepare change', exact: true });
+      const prepare = conversation.getByRole('button', { name: 'Generate changes', exact: true });
       assert.equal(await prepare.isDisabled(), true);
       await page.getByLabel('Task title', { exact: true }).fill(title);
       await page.getByLabel('Files to change', { exact: true }).fill(paths.join('\n'));
@@ -8133,8 +8134,6 @@ try {
         '',
         'Existing identity effect clears the first submitted request',
       );
-      await page.getByRole('button', { name: 'Review this diff', exact: true }).click();
-      await idle(page);
       await page.getByRole('button', { name: 'New conversation', exact: true }).click();
       await page.getByRole('button', { name: 'Refresh history', exact: true }).click();
       await conversation
@@ -8147,11 +8146,7 @@ try {
       await conversation.getByRole('button', { name: 'Resume', exact: true }).click();
       await idle(page);
       assert.equal(
-        await page.getByRole('button', { name: 'Approve and apply', exact: true }).isDisabled(),
-        true,
-      );
-      assert.equal(
-        await page.getByRole('button', { name: 'Review this diff', exact: true }).isDisabled(),
+        await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
         true,
       );
       assert.equal(
@@ -8210,7 +8205,7 @@ try {
             await page.evaluate(() => {
               window.fixture.failures['/api/projects/current/changes/change-1/messages'] = 503;
             });
-          await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+          await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
           await idle(page);
           if (state === 'failed') {
             await page.getByText('Fixture rejection', { exact: true }).waitFor();
@@ -8240,7 +8235,7 @@ try {
           if (state === 'failed')
             await page.getByLabel('Change request', { exact: true }).fill('Retry explicitly.');
           assert.equal(
-            await page.getByRole('button', { name: 'Prepare change', exact: true }).isDisabled(),
+            await page.getByRole('button', { name: 'Generate changes', exact: true }).isDisabled(),
             state === 'stale',
           );
         }
@@ -8262,7 +8257,7 @@ try {
               await chatReviewLayout(page);
               if (state === 'stale') {
                 const review = page.getByRole('region', { name: 'Proposal review', exact: true });
-                for (const name of ['Check proposal', 'Review this diff', 'Approve and apply'])
+                for (const name of ['Check proposal', 'Accept changes'])
                   assert.equal(
                     await review.getByRole('button', { name, exact: true }).isDisabled(),
                     true,
@@ -8309,7 +8304,7 @@ try {
           .getByLabel('Change request', { exact: true })
           .fill('Preserve complete proposal evidence.');
         await page.getByLabel('Run project tests after generation', { exact: true }).uncheck();
-        await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+        await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
         await idle(page);
         const review = page.getByRole('region', { name: 'Proposal review', exact: true });
         if (state === 'missing') {
@@ -8342,16 +8337,8 @@ try {
             true,
           );
           assert.equal(
-            await review
-              .getByRole('button', { name: 'Review this diff', exact: true })
-              .isDisabled(),
+            await review.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
             state === 'exhausted',
-          );
-          assert.equal(
-            await review
-              .getByRole('button', { name: 'Approve and apply', exact: true })
-              .isDisabled(),
-            true,
           );
           if (state === 'exhausted') {
             assert.equal(
@@ -8400,22 +8387,12 @@ try {
         };
         await render(state);
         if (state === 'unreviewed') {
-          await review.getByRole('button', { name: 'Review this diff', exact: true }).click();
-          await idle(page);
-          await review.getByText('Revision reviewed.', { exact: true }).waitFor();
           assert.equal(
-            await review
-              .getByRole('button', { name: 'Review this diff', exact: true })
-              .isDisabled(),
+            await review.getByRole('button', { name: 'Accept changes', exact: true }).isEnabled(),
             true,
           );
-          assert.equal(
-            await review
-              .getByRole('button', { name: 'Approve and apply', exact: true })
-              .isEnabled(),
-            true,
-          );
-          await render('reviewed');
+          await render('ready-to-accept');
+          await page.getByLabel('Run project tests after generation').uncheck();
           await page.evaluate(() => {
             window.fixture.hold = '/api/projects/current/changes/change-1/checks';
           });
@@ -8432,7 +8409,7 @@ try {
             checksBefore,
           );
           await page.locator('.busy-strip').waitFor();
-          for (const name of ['Check proposal', 'Review this diff', 'Approve and apply'])
+          for (const name of ['Check proposal', 'Accept changes'])
             assert.equal(
               await review.getByRole('button', { name, exact: true }).isDisabled(),
               true,
@@ -8444,11 +8421,9 @@ try {
           });
           await idle(page);
           assert.equal(
-            await review
-              .getByRole('button', { name: 'Approve and apply', exact: true })
-              .isDisabled(),
-            true,
-            'Rechecking clears earlier review',
+            await review.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
+            false,
+            'Passing checks make the current diff ready for fresh acceptance',
           );
         }
       } finally {
@@ -8463,33 +8438,46 @@ try {
       }
     }
   });
-  await test('Chat revisions require fresh review before grouped Apply and Undo', async () => {
+  await test('Chat accepts the displayed revision with one click and retains guarded Undo', async () => {
     const { page, close } = await pageFor();
     await nav(page, 'Chat');
     await page.getByLabel('Add an existing file').selectOption('internal/worker/process.go');
     await page.getByLabel('Change request', { exact: true }).fill('Handle cancellation.');
-    await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+    await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Trust this project' }).click();
     await idle(page);
     await page.getByLabel('Read-only diff for internal/worker/process.go').waitFor();
-    assert.equal(await page.getByRole('button', { name: 'Approve and apply' }).isEnabled(), false);
-    await page.getByRole('button', { name: 'Review this diff' }).click();
-    await idle(page);
-    assert.equal(await page.getByRole('button', { name: 'Approve and apply' }).isEnabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Accept changes' }).isEnabled(), true);
     await page.getByLabel('Change request', { exact: true }).fill('Preserve the existing API too.');
-    await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+    await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
     await idle(page);
-    assert.equal(await page.getByRole('button', { name: 'Approve and apply' }).isEnabled(), false);
-    await page.getByRole('button', { name: 'Review this diff' }).click();
-    await idle(page);
+    assert.equal(await page.getByRole('button', { name: 'Accept changes' }).isEnabled(), true);
     await layout(page, 'chat-review');
-    await page.getByRole('button', { name: 'Approve and apply' }).click();
-    await page
-      .getByRole('dialog')
-      .getByRole('button', { name: 'Apply proposal', exact: true })
-      .click();
+    const revision = await page.evaluate(() => {
+      const requests = window.fixture.requests;
+      if (requests.some((r) => r.path.endsWith('/review') || r.path.endsWith('/apply')))
+        throw new Error('Generation must not approve changes');
+      return window.fixture.state.changes['change-1'];
+    });
+    await page.getByRole('button', { name: 'Accept changes' }).click();
     await idle(page);
     await page.getByRole('heading', { name: 'Change applied', exact: true }).waitFor();
+    assert.equal(
+      await page.getByRole('dialog').count(),
+      0,
+      'Acceptance needs no second confirmation',
+    );
+    const writes = await page.evaluate(() =>
+      window.fixture.requests.filter(
+        (r) => r.path.endsWith('/review') || r.path.endsWith('/apply'),
+      ),
+    );
+    assert.equal(writes.length, 2);
+    for (const request of writes) {
+      assert.equal(request.body.hash, revision.hash);
+      assert.equal(request.body.revision, revision.revision);
+    }
+    assert.equal(writes[1].body.confirm, true);
     assert.equal(
       await page.evaluate(
         () =>
@@ -8512,17 +8500,15 @@ try {
     await page.getByLabel('Add an existing file').selectOption('internal/worker/process.go');
     await page.getByLabel('Change request', { exact: true }).fill('Add cancellation.');
     await page.getByLabel('Run project tests after generation').uncheck();
-    await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+    await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
-    await idle(page);
-    await page.getByRole('button', { name: 'Review this diff' }).click();
     await idle(page);
     await page.getByRole('button', { name: 'New conversation' }).click();
     await page.getByText('Local history', { exact: true }).click();
     await page.getByRole('button', { name: 'Refresh history' }).click();
     await page.getByRole('button', { name: 'Resume', exact: true }).click();
     await idle(page);
-    assert.equal(await page.getByRole('button', { name: 'Approve and apply' }).isEnabled(), false);
+    assert.equal(await page.getByRole('button', { name: 'Accept changes' }).isEnabled(), false);
     assert.equal(
       await page.evaluate(
         () =>
@@ -8551,7 +8537,7 @@ try {
       requests.some((r) => r.path.endsWith('/apply')),
       false,
     );
-    assert.equal(await page.getByRole('button', { name: 'Review this diff' }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: 'Accept changes' }).isDisabled(), true);
     await close();
   });
   await test('Canceled chat responses do not publish a late proposal or reset local follow-up', async () => {
@@ -8564,7 +8550,7 @@ try {
       await page.evaluate(() => {
         window.fixture.hold = '/api/projects/current/changes/change-1/messages';
       });
-      await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+      await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
       await page.waitForFunction(() =>
         window.fixture.requests.some(
           (r) => r.path.endsWith('/messages') && r.path.includes('/changes/'),
@@ -8573,7 +8559,7 @@ try {
       for (const control of [
         page.getByLabel('Change request', { exact: true }),
         page.getByLabel('Run project tests after generation'),
-        page.getByRole('button', { name: 'Prepare change', exact: true }),
+        page.getByRole('button', { name: 'Generate changes', exact: true }),
         page.getByRole('button', { name: 'New conversation', exact: true }),
         page.getByRole('button', { name: 'Refresh history', exact: true }),
       ]) {
@@ -8615,7 +8601,7 @@ try {
           'Retry only when explicitly requested.',
         );
         assert.equal(
-          await page.getByRole('button', { name: 'Prepare change', exact: true }).isEnabled(),
+          await page.getByRole('button', { name: 'Generate changes', exact: true }).isEnabled(),
           true,
         );
         await layout(page, `chat-conversation-canceled-${width}`);
@@ -9834,14 +9820,8 @@ try {
       ),
       false,
     );
-    assert.equal(await page.getByRole('button', { name: 'Approve and apply' }).isDisabled(), true);
-    await page.getByRole('button', { name: 'Review this diff' }).click();
-    await idle(page);
-    await page.getByRole('button', { name: 'Approve and apply' }).click();
-    await page
-      .getByRole('dialog')
-      .getByRole('button', { name: 'Apply proposal', exact: true })
-      .click();
+    assert.equal(await page.getByRole('button', { name: 'Accept changes' }).isDisabled(), false);
+    await page.getByRole('button', { name: 'Accept changes' }).click();
     await idle(page);
     const instructions = await page.evaluate(() => window.fixture.state.instructions);
     assert.equal(instructions['AGENTS.md'], '# Project rules\n\nPreserve public APIs.\n');
@@ -10002,15 +9982,9 @@ try {
         await page.getByLabel('Add an existing file').selectOption('internal/worker/process.go');
         await page.getByLabel('Change request', { exact: true }).fill('Handle cancellation.');
         await page.getByLabel('Run project tests after generation').uncheck();
-        await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+        await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
         await idle(page);
-        await page.getByRole('button', { name: 'Review this diff', exact: true }).click();
-        await idle(page);
-        await page.getByRole('button', { name: 'Approve and apply', exact: true }).click();
-        await page
-          .getByRole('dialog')
-          .getByRole('button', { name: 'Apply proposal', exact: true })
-          .click();
+        await page.getByRole('button', { name: 'Accept changes', exact: true }).click();
         await idle(page);
         const outcome = page.getByRole('region', { name: 'Change outcome', exact: true });
         if (state === 'response-lost') {
@@ -10118,7 +10092,7 @@ try {
             uncertain && (await control.textContent()).trim() !== 'Refresh project',
           );
         assert.equal(
-          await page.getByRole('button', { name: 'Approve and apply', exact: true }).isDisabled(),
+          await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
           true,
         );
         await render(state);
@@ -10190,9 +10164,7 @@ try {
               0,
             );
             assert.equal(
-              await page
-                .getByRole('button', { name: 'Approve and apply', exact: true })
-                .isDisabled(),
+              await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
               true,
             );
             assert.equal(
@@ -10241,16 +10213,10 @@ try {
       await page.getByLabel('Add an existing file').selectOption('internal/worker/process.go');
       await page.getByLabel('Change request', { exact: true }).fill('Handle cancellation.');
       await page.getByLabel('Run project tests after generation').uncheck();
-      await page.getByRole('button', { name: 'Prepare change', exact: true }).click();
+      await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
       await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
       await idle(page);
-      await page.getByRole('button', { name: 'Review this diff' }).click();
-      await idle(page);
-      await page.getByRole('button', { name: 'Approve and apply' }).click();
-      await page
-        .getByRole('dialog')
-        .getByRole('button', { name: 'Apply proposal', exact: true })
-        .click();
+      await page.getByRole('button', { name: 'Accept changes' }).click();
       await idle(page);
       await page.getByText(mutationWarning, { exact: true }).waitFor();
       assert.equal(

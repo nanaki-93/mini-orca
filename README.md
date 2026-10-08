@@ -7,16 +7,17 @@ The Wails/React desktop client talks to a Go daemon through a native bridge.
 ## Use it
 
 1. Open a local project and inspect its summary, files and symbols.
-2. Select **Prepare analysis** in Analysis. Review the whole-project inventory,
+2. Choose your file scope in **Files**, then select **Prepare analysis** in Analysis.
+   Assign Bug, Performance, Security and feature models independently. Review the inventory,
    request bounds and model destinations, then confirm the displayed run.
    Analysis also checks for new feature suggestions using saved project goals.
    Summary links category counts to Bugs, Performance, Security and Features.
 3. Use **Prepare fix** on a finding, or describe a feature in **Chat** with up to
-   eight explicit Go/Markdown paths, including new files. Preparation generates
-   a proposal, checks it and attempts at most three repairs of failed checks.
+   eight explicit Go/Markdown paths, including new files. **Generate changes**
+   creates and checks a proposal, with at most three repairs of failed checks.
    Project tests require execution trust; preparation stops at diff review.
-4. Read all proposed diffs, select **Review this diff**, then **Approve and apply**.
-   Confirm the displayed scope. Further chat revisions require new checks/review.
+4. Read all proposed diffs, then select **Accept changes** once to apply the
+   displayed revision. Further chat revisions require fresh checks and acceptance.
    Guarded **Undo proposal** restores the latest unchanged grouped change.
 5. Use **Features** for goal-aware advisory ideas, with Save/Dismiss and a passive
    handoff to Chat. Use **Instructions** to load root/directory AGENTS.md guides,
