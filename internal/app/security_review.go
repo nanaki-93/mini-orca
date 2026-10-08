@@ -29,6 +29,7 @@ type securityReviewSnapshot struct {
 	file          project.IndexFile
 	source        string
 	policyVersion string
+	instructions  project.EffectiveInstructions
 	runtime       modelRuntime
 	modelProfile  string
 	symbol        *project.SymbolInfo
@@ -66,6 +67,9 @@ func (s *Service) executeSecurityReview(ctx context.Context, snapshot securityRe
 	schema, err := securityReviewResponseSchema(snapshot)
 	if err != nil {
 		return modelOutput{}, nil, err
+	}
+	if snapshot.instructions.Text != "" {
+		prompt += "\n\n" + project.InstructionPromptGuidance + snapshot.instructions.Text
 	}
 	timeout := s.analysisTimeout
 	if snapshot.modelProfile != "" {
@@ -112,6 +116,7 @@ func (s *Service) publishSecurityReview(ctx context.Context, snapshot securityRe
 		Profile: runtime.effective.Profile, Scope: runtime.effective.Scope, ProviderOrigin: runtime.effective.ProviderOrigin,
 		ReasoningEffort: securityReasoningEffort(runtime.effective.ReasoningEffort), PromptVersion: project.SecurityPromptVersion,
 		ContextPolicyVersion: snapshot.policyVersion, GeneratedAt: time.Now().UTC(),
+		InstructionsFingerprint: snapshot.instructions.Fingerprint,
 	}
 	if result.Model != "" {
 		report.Model = result.Model
@@ -194,7 +199,11 @@ func (s *Service) prepareSecurityReview(request SecurityReviewRequest) (security
 	if err != nil {
 		return securityReviewSnapshot{}, err
 	}
-	return securityReviewSnapshot{request: request, root: root, analysis: *analysis, file: *file, source: source, policyVersion: policy.Version(), runtime: s.runtimes.analyze, symbol: symbol}, nil
+	instructions, err := project.ResolveInstructions(root, file.Path)
+	if err != nil {
+		return securityReviewSnapshot{}, err
+	}
+	return securityReviewSnapshot{request: request, root: root, analysis: *analysis, file: *file, source: source, policyVersion: policy.Version(), runtime: s.runtimes.analyze, symbol: symbol, instructions: instructions}, nil
 }
 
 func securityReviewSource(root string, file project.IndexFile, baseHash string) (string, error) {
@@ -249,7 +258,7 @@ func (s *Service) validateSecurityReviewSnapshot(ctx context.Context, snapshot s
 	if err != nil {
 		return err
 	}
-	if current.root != snapshot.root || current.policyVersion != snapshot.policyVersion || current.file.ContentHash != snapshot.file.ContentHash || current.analysis.ProjectID != snapshot.analysis.ProjectID || current.analysis.ProjectRevision != snapshot.analysis.ProjectRevision || !sameSecurityReviewSymbol(current.symbol, snapshot.symbol) {
+	if current.root != snapshot.root || current.policyVersion != snapshot.policyVersion || current.file.ContentHash != snapshot.file.ContentHash || current.analysis.ProjectID != snapshot.analysis.ProjectID || current.analysis.ProjectRevision != snapshot.analysis.ProjectRevision || current.instructions.Fingerprint != snapshot.instructions.Fingerprint || !sameSecurityReviewSymbol(current.symbol, snapshot.symbol) {
 		return project.ErrRevisionConflict
 	}
 	return nil

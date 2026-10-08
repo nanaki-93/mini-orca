@@ -15,7 +15,7 @@ import (
 
 const (
 	projectAnalysisSchemaVersion = "1"
-	projectAnalysisPromptVersion = "project-analysis-v5"
+	projectAnalysisPromptVersion = "project-analysis-v6"
 	projectAnalysisReportPath    = ".mini-orca/project-analysis.json"
 	maxProjectAnalysisBytes      = 64 * 1024
 	maxProjectAnalysisItems      = 32

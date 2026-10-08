@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,7 +16,7 @@ import (
 )
 
 const (
-	PerformancePromptVersion  = "performance-file-v5"
+	PerformancePromptVersion  = "performance-file-v6"
 	PerformanceMaxSourceBytes = 64 * 1024
 	maxPerformanceOutputBytes = 64 * 1024
 	maxPerformanceFindings    = 5
@@ -40,23 +41,24 @@ type PerformanceFinding struct {
 }
 
 type PerformanceFileReport struct {
-	SchemaVersion        string               `json:"schema_version"`
-	ProjectID            string               `json:"project_id"`
-	ProjectRevision      string               `json:"project_revision"`
-	Path                 string               `json:"path"`
-	ContentHash          string               `json:"content_hash"`
-	Status               string               `json:"status"`
-	Findings             []PerformanceFinding `json:"findings"`
-	Warning              string               `json:"warning,omitempty"`
-	Model                string               `json:"model"`
-	ConfiguredModel      string               `json:"configured_model,omitempty"`
-	Profile              string               `json:"profile"`
-	Scope                string               `json:"scope"`
-	ProviderOrigin       string               `json:"provider_origin,omitempty"`
-	ReasoningEffort      string               `json:"reasoning_effort,omitempty"`
-	PromptVersion        string               `json:"prompt_version"`
-	ContextPolicyVersion string               `json:"context_policy_version"`
-	GeneratedAt          time.Time            `json:"generated_at"`
+	SchemaVersion           string               `json:"schema_version"`
+	ProjectID               string               `json:"project_id"`
+	ProjectRevision         string               `json:"project_revision"`
+	Path                    string               `json:"path"`
+	ContentHash             string               `json:"content_hash"`
+	Status                  string               `json:"status"`
+	Findings                []PerformanceFinding `json:"findings"`
+	Warning                 string               `json:"warning,omitempty"`
+	Model                   string               `json:"model"`
+	ConfiguredModel         string               `json:"configured_model,omitempty"`
+	Profile                 string               `json:"profile"`
+	Scope                   string               `json:"scope"`
+	ProviderOrigin          string               `json:"provider_origin,omitempty"`
+	ReasoningEffort         string               `json:"reasoning_effort,omitempty"`
+	PromptVersion           string               `json:"prompt_version"`
+	ContextPolicyVersion    string               `json:"context_policy_version"`
+	InstructionsFingerprint string               `json:"instructions_fingerprint,omitempty"`
+	GeneratedAt             time.Time            `json:"generated_at"`
 }
 
 type performanceWire struct {
@@ -253,6 +255,12 @@ func LoadPerformanceFileReport(root, path, contentHash string, policy *ContextPo
 		return nil, nil
 	}
 	if performanceReportIsStale(report, root, path, contentHash, policy) {
+		report.Status = "stale"
+	}
+	if err := ValidateInstructions(root, path, report.InstructionsFingerprint); err != nil {
+		if !errors.Is(err, ErrRevisionConflict) {
+			return nil, err
+		}
 		report.Status = "stale"
 	}
 	return clonePerformanceFileReport(&report), nil

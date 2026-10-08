@@ -141,7 +141,7 @@ Declaration explanation requests bind `project_id`, `project_revision`, `base_fi
 
 Explanation responses are transient. This route does not create chat sessions or drafts, persist chat or analysis history, run checks, or change Apply/Undo state. Cancellation, malformed provider output, and stale request identity return an error without publishing a result.
 
-Security review requests require `project_id`, `project_revision`, `base_file_hash`, `path`, and `confirm_remote_provider`; `symbol` is optional but must identify one exact atomic indexed declaration. The request uses the configured Analyze scope and requires fresh `confirm_remote_provider: true` before a non-loopback HTTP or CLI provider receives source. It sends at most 64 KiB and accepts at most 64 KiB of one strict JSON response with at most five advisory `model_suspicion` findings. The provider receives a strict `json_schema` response format with lowercase rule/category identifiers and file-specific path, line bounds and symbol choices. Provider rejection of structured output fails the stage without falling back to unconstrained output. Prompt version `security-file-v2` also requires source-free explanations and an empty findings array when no concrete security concern is supported, including documentation and ignore files. Earlier prompt versions remain readable but are stale for current reviews. The service rechecks project, revision, file hash, policy, focused declaration, and provider identity before delivery, after response, before caching, and before returning. Reports omit source, redact stored/returned prose, and reject meaningful source-line token sequences even when spacing or punctuation changes. Findings are advisory suspicions, and `completed_empty` means no findings were returned; it does not mean the file is secure. The route never runs suggested exploit code, scans, or project code; a configured CLI runs only as the model transport.
+Security review requests require `project_id`, `project_revision`, `base_file_hash`, `path`, and `confirm_remote_provider`; `symbol` is optional but must identify one exact atomic indexed declaration. The request uses the configured Analyze scope and requires fresh `confirm_remote_provider: true` before a non-loopback HTTP or CLI provider receives source. It sends at most 64 KiB of target source plus up to 32 KiB of applicable project instructions, and accepts at most 64 KiB of one strict JSON response with at most five advisory `model_suspicion` findings. The provider receives a strict `json_schema` response format with lowercase rule/category identifiers and file-specific path, line bounds and symbol choices. Provider rejection of structured output fails the stage without falling back to unconstrained output. Prompt version `security-file-v3` also requires source-free explanations and an empty findings array when no concrete security concern is supported, including documentation and ignore files. Earlier prompt versions remain readable but are stale for current reviews. The service rechecks project, revision, file hash, policy, focused declaration, and provider identity before delivery, after response, before caching, and before returning. Reports omit source, redact stored/returned prose, and reject meaningful source-line token sequences even when spacing or punctuation changes. Findings are advisory suspicions, and `completed_empty` means no findings were returned; it does not mean the file is secure. The route never runs suggested exploit code, scans, or project code; a configured CLI runs only as the model transport.
 
 ## Trusted local execution
 
@@ -404,7 +404,7 @@ pause/cancel stops both workers. Failed generation keeps
 previous ideas and permits other stages to continue; overall progress reflects
 partial results. Cancellation and source/goal changes reject late publication.
 Saved schema-1 runs without feature fields retain their original behavior.
-The feature prompt identity (`feature-suggestions-v3`) is part of the provider
+The feature prompt identity (`feature-suggestions-v4`) is part of the provider
 fingerprint, so finished runs that included features under an earlier prompt
 read as `stale`, not corrupt.
 
@@ -548,7 +548,7 @@ Ranges spanning declarations remain valid file/line findings without a symbol
 label. Legacy responses containing a symbol still require that declaration to
 contain the complete range; invalid labels are never silently discarded. Provider
 rejection fails the stage without falling back to unconstrained output.
-The Performance prompt is `performance-file-v5`; older saved reports remain
+The Performance prompt is `performance-file-v6`; older saved reports remain
 readable but require refresh for current coverage. Failed Performance stages
 retain source-free explanations for malformed JSON, invalid fields or values,
 invalid anchors, and oversized responses. A terminal `partial`
@@ -686,7 +686,13 @@ All new GET routes require `project_id` and `project_revision` query guards.
 The instructions preview also requires a canonical relative `path` ending in
 `AGENTS.md`. It reads root-to-directory guides, respecting context exclusions
 and rejecting symlinks. More local guidance applies within its own directory.
-Instructions guide generation; they grant no provider, execution or Apply authority.
+Applicable guides are included by default in project and file analysis, performance
+and security AI reviews, declaration explanations and drafts, feature suggestions,
+and proposal creation, testing and review. They grant no provider, execution or
+Apply authority. AI file reports carry optional `instructions_fingerprint`
+provenance; changed applicable guides make cached reports stale and invalidate
+in-flight results. Older reports without this identity can only remain current
+when no applicable guide exists and their other cache identities still match.
 The preview's `presets` contain independent guidelines organized by `category`
 into common AGENTS.md sections: project overview/architecture, build/development,
 code style, testing, security/data, UI/accessibility, documentation and handoff.

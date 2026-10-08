@@ -54,8 +54,14 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   timeout), honors file exclusions and reuses completed ideas on resume.
   Failed feature discovery leaves other analysis results available.
 - **Bugs**, **Performance** and **Security** show searchable results and their
-  evidence. Details retain complete model prose, provenance and verification
-  guidance. Findings and performance hypotheses keep their reported confidence.
+  evidence, with the exact file, declaration and line, cause and proposed solution.
+  **Review fix plan** opens an app-guided task; **Prepare fix** starts it after
+  any required consent. Task type, title, scope, model assignments, checks and the
+  generated request are read-only. Go fixes include a regression test path and use
+  the configured Function, Bug and Analyze profiles for creation, testing and review.
+  Select a file in **Files to change** to inspect its read-only diff. Selecting files
+  never generates, checks or applies a proposal. Findings and performance hypotheses
+  keep their reported confidence; the app does not invent a missing cause or solution.
 - **Features** uses project goals to suggest advisory new capabilities. Searches
   use the same extended deadline as feature discovery in Analysis. New ideas
   accumulate alongside existing ones, retaining prior triage decisions, and
@@ -64,7 +70,7 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   A new search adds current ideas without revalidating older ones; only current
   ideas can be discussed in Chat. Opening an idea does not generate code.
 - **Chat** captures up to eight explicit Go/Markdown paths, including new files.
-  **Configure workflow** on a feature idea or Bug/Performance/Security finding
+  **Configure workflow** on a feature idea
   opens the captured task setup and suggests a test path. Choose a Creation,
   Testing and Review model independently, then select **Generate changes**. Model choices live under **Agent models**. The
   choices reference the daemon's configured Function, Bug and Analyze profiles
@@ -99,6 +105,11 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   Existing files are registered by reading them; inherited guides show their
   origins and scope. **Preview instruction diff**
   creates a manual proposal in Chat with the same explicit **Accept changes** action.
+  Agents use applicable root and directory guidance by default for analysis,
+  explanations, suggestions, creation, testing and review, honoring context exclusions.
+  The workspace shows its instruction status and **Create AGENTS.md** opens the
+  root instruction wizard when no root guide exists. Guidance changes invalidate
+  affected AI reports and proposals; navigation alone never requests a model.
 - After Apply, **Verify applied change** checks the applied file identities and
   runs Go tests/vet in a copied workspace with fresh execution trust. Markdown-only
   verification checks text and hashes. **Reanalyze changed files** requests fresh

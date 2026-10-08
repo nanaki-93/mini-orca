@@ -11,6 +11,25 @@ import kotlinx.serialization.json.Json
 
 class ApiClientContractTest {
   @Test
+  fun analysisReportsRetainGuidanceIdentityAndDecodeLegacyReports() {
+    for (fingerprint in listOf("", "sha256:guidance")) {
+      val field =
+          if (fingerprint.isEmpty()) "" else "\"instructions_fingerprint\":\"$fingerprint\","
+      val semantic =
+          Json.decodeFromString<FileAnalysis>("""{$field"path":"main.go","status":"fresh"}""")
+      val security =
+          Json.decodeFromString<SecurityFileReport>(
+              """{$field"path":"main.go","status":"completed_empty"}""")
+      val performance =
+          Json.decodeFromString<PerformanceFileReport>(
+              """{$field"project_id":"project","project_revision":"revision","path":"main.go","content_hash":"source","status":"completed"}""")
+      assertEquals(fingerprint, semantic.instructionsFingerprint)
+      assertEquals(fingerprint, security.instructionsFingerprint)
+      assertEquals(fingerprint, performance.instructionsFingerprint)
+    }
+  }
+
+  @Test
   fun analysisModelsDecodeIndependentChoicesAndLegacyReview() {
     val models =
         Json.decodeFromString<AnalysisModels>(

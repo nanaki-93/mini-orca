@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type * as M from './models';
 import { workspace as w, activeChangeWorkflow, type State } from './workspace';
+import { defaultWorkflowModels } from './change-workflow';
 import {
   Badge,
   Button,
@@ -33,6 +34,8 @@ interface ResultRow {
   text: [string, string][];
   finding?: M.Finding;
   task?: M.TaskSpec;
+  cause: string;
+  solution: string;
 }
 function semantic(f: M.Finding): ResultRow {
   return {
@@ -53,6 +56,10 @@ function semantic(f: M.Finding): ResultRow {
     ],
     finding: f,
     task: f.task_spec,
+    cause: f.evidence || f.message,
+    solution:
+      f.task_spec?.acceptance_criteria.join('\n') ||
+      'A solution has not been established yet. The fix agent will investigate this finding and explain its proposed correction before you apply it.',
   };
 }
 function performance(report: M.PerformanceReport): ResultRow[] {
@@ -68,6 +75,8 @@ function performance(report: M.PerformanceReport): ResultRow[] {
     status: report.status,
     kind: 'Performance hypothesis',
     insight: f.engineering_insight,
+    cause: f.observed_pattern,
+    solution: f.recommendation,
     text: [
       ['Observed pattern', f.observed_pattern],
       ['Workload', f.workload_conditions],
@@ -90,6 +99,8 @@ function security(report: M.SecurityReport): ResultRow[] {
     status: f.verification_state || f.triage,
     kind: report.source || 'Security finding',
     insight: f.engineering_insight,
+    cause: f.observed_condition,
+    solution: f.remediation,
     text: [
       ['Observed condition', f.observed_condition],
       ['Evidence', f.evidence_kind],
@@ -124,11 +135,21 @@ export function Results({ s }: { s: State }) {
       (!severity || row.severity === severity),
   );
   const detail = unique.find((row) => row.key === selected);
-  const open = async (row: ResultRow, prepare: boolean) => {
-    await w.openFile(row.path, row.symbol, row.task);
-    if (prepare && w.state.file?.path === row.path && !w.state.fileStale)
-      await w.navigate('assistant');
-  };
+  const fixSeed = (row: ResultRow): M.ChangeSeed => ({
+    title: row.title.slice(0, 200),
+    paths: [row.path],
+    kind: category === 'performance' ? 'performance' : category === 'security' ? 'security' : 'fix',
+    message: `Address this finding: ${row.title}\nLocation: ${row.path}${row.line ? `:${row.line}` : ''}${row.symbol ? ` (${row.symbol})` : ''}\nCause: ${row.cause}\nProposed solution: ${row.solution}\n${row.text.map(([label, text]) => `${label}: ${text}`).join('\n')}\nExplain the cause and the proposed solution, including how each changed file addresses the finding. Preserve unrelated behavior.`,
+    acceptance_criteria: row.task?.acceptance_criteria || [],
+    finding: {
+      path: row.path,
+      symbol: row.symbol,
+      line: row.line,
+      cause: row.cause,
+      solution: row.solution,
+      confidence: row.confidence,
+    },
+  });
   if (detail)
     return (
       <div className="workspace-page results-page results-detail">
@@ -149,28 +170,18 @@ export function Results({ s }: { s: State }) {
           <Button icon="back" onClick={() => setSelected(undefined)}>
             All findings
           </Button>
-          <Button disabled={!!s.busy} onClick={() => void open(detail, false)}>
+          <Button
+            disabled={!!s.busy}
+            onClick={() => void w.openFile(detail.path, detail.symbol, detail.task)}
+          >
             Open source
           </Button>
           {detail.path && (
             <Button
               disabled={!!s.busy || activeChangeWorkflow(s.change) || detail.freshness === 'stale'}
-              onClick={() =>
-                w.seedWorkflow({
-                  title: detail.title.slice(0, 200),
-                  paths: [detail.path],
-                  kind:
-                    category === 'performance'
-                      ? 'performance'
-                      : category === 'security'
-                        ? 'security'
-                        : 'fix',
-                  message: `Address this finding: ${detail.title}\n${detail.text.map(([label, text]) => `${label}: ${text}`).join('\n')}`,
-                  acceptance_criteria: detail.task?.acceptance_criteria || [],
-                })
-              }
+              onClick={() => w.seedWorkflow(fixSeed(detail))}
             >
-              Configure workflow
+              Review fix plan
             </Button>
           )}
           {detail.path && (
@@ -178,32 +189,42 @@ export function Results({ s }: { s: State }) {
               tone="primary"
               disabled={!!s.busy || activeChangeWorkflow(s.change) || detail.freshness === 'stale'}
               onClick={() => {
-                const seed = {
-                  title: detail.title.slice(0, 200),
-                  paths: [detail.path],
-                  kind: category === 'performance' ? 'performance' : 'fix',
-                  message: `Address this finding: ${detail.title}\n${detail.text.map(([label, text]) => `${label}: ${text}`).join('\n')}`,
-                  acceptance_criteria: detail.task?.acceptance_criteria || [],
-                };
-                w.seedChange(seed);
-                void w.prepareChange(seed, true);
+                w.seedWorkflow(fixSeed(detail));
+                const seed = w.state.changeSeed;
+                if (seed)
+                  void (seed.paths.some((path) => path.endsWith('_test.go'))
+                    ? w.startChangeWorkflow(seed, defaultWorkflowModels)
+                    : w.prepareChange(seed, true));
               }}
             >
               Prepare fix
             </Button>
           )}
-          {detail.symbol && (
-            <Button
-              tone="primary"
-              disabled={!!s.busy || detail.freshness === 'stale'}
-              onClick={() => void open(detail, true)}
-            >
-              Prepare change
-            </Button>
-          )}
         </Heading>
         <div className="grid two-columns results-detail-layout">
           <div className="stack">
+            <Panel title="Cause" className="fix-explanation">
+              <p className="small muted">Reported finding · {human(detail.confidence)}</p>
+              <Prose
+                text={
+                  detail.cause ||
+                  'The saved finding does not include a cause. Review the evidence before preparing a fix.'
+                }
+              />
+            </Panel>
+            <Panel title="Proposed solution" className="fix-explanation">
+              <Prose
+                text={
+                  detail.solution ||
+                  'No remediation was supplied. The fix agent will explain its proposed solution before Apply.'
+                }
+              />
+              {category === 'performance' && (
+                <p className="small muted">
+                  A performance hypothesis; any improvement needs measurement.
+                </p>
+              )}
+            </Panel>
             {detail.text
               .filter(([, content]) => content)
               .map(([title, content]) => (

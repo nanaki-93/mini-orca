@@ -199,7 +199,7 @@ func TestAnalyzeFileRefreshClassifiesLegacyCacheWithoutPassiveModelCalls(t *test
 		}
 	}
 	fresh, err := service.AnalyzeFile(context.Background(), "main.go", true, false)
-	if err != nil || fresh.Status != project.AnalysisStatusFresh || fresh.PromptVersion != "file-analysis-v14" || len(fresh.Risks) != 1 || fresh.Risks[0].Category != project.FindingCategorySecurity || calls.Load() != 1 {
+	if err != nil || fresh.Status != project.AnalysisStatusFresh || fresh.PromptVersion != "file-analysis-v15" || len(fresh.Risks) != 1 || fresh.Risks[0].Category != project.FindingCategorySecurity || calls.Load() != 1 {
 		t.Fatalf("explicit refresh = %+v, %v; calls=%d", fresh, err, calls.Load())
 	}
 	if _, err := service.CachedFileAnalysis("main.go"); err != nil || calls.Load() != 1 {
@@ -346,8 +346,8 @@ func TestCachedFileAnalysisMarksV11PromptResultsStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := EngineeringInsightPromptVersion(); got != "file-analysis-v14" {
-		t.Fatalf("file analysis prompt version = %q, want file-analysis-v14", got)
+	if got := EngineeringInsightPromptVersion(); got != "file-analysis-v15" {
+		t.Fatalf("file analysis prompt version = %q, want file-analysis-v15", got)
 	}
 	legacy := project.FileAnalysis{
 		SchemaVersion: "1", ProjectID: prepared.input.ProjectID, ProjectRevision: prepared.input.ProjectRevision,

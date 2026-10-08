@@ -93,6 +93,7 @@ data class FileAnalysis(
     @SerialName("symbol_explanations") val symbolExplanations: Map<String, String> = emptyMap(),
     @SerialName("engineering_insight") val engineeringInsight: EngineeringInsight? = null,
     val failure: String = "",
+    @SerialName("instructions_fingerprint") val instructionsFingerprint: String = "",
     @SerialName("generated_at") val generatedAt: String = ""
 )
 
@@ -512,6 +513,7 @@ data class SecurityFileReport(
     @SerialName("reasoning_effort") val reasoningEffort: String = "",
     @SerialName("prompt_version") val promptVersion: String = "",
     @SerialName("context_policy_version") val contextPolicyVersion: String = "",
+    @SerialName("instructions_fingerprint") val instructionsFingerprint: String = "",
     @SerialName("generated_at") val generatedAt: String = "",
 )
 
@@ -949,6 +951,7 @@ data class PerformanceFileReport(
     @SerialName("reasoning_effort") val reasoningEffort: String = "",
     @SerialName("prompt_version") val promptVersion: String = "",
     @SerialName("context_policy_version") val contextPolicyVersion: String = "",
+    @SerialName("instructions_fingerprint") val instructionsFingerprint: String = "",
     @SerialName("generated_at") val generatedAt: String = "",
 )
 

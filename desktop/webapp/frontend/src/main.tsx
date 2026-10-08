@@ -16,6 +16,7 @@ import { Editor } from './editor';
 import { ChangeWorkspace } from './change-workspace';
 import { Features } from './features';
 import { Instructions } from './instructions';
+import { ProjectGuidance } from './project-guidance';
 import { Benchmark, Scan, Receipt, TerminalWorkspace } from './tools';
 import './style.css';
 
@@ -215,6 +216,7 @@ function App() {
               </div>
             )}
             <div className="page" data-accent={s.page}>
+              <ProjectGuidance s={s} />
               {s.page !== 'chat' && s.change?.workflow && s.change.state === 'draft' && (
                 <Notice>
                   <div className="row between wrap" aria-live="polite">

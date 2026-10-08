@@ -29,7 +29,7 @@ type FeatureSuggestion struct {
 	Freshness    string `json:"freshness,omitempty"`
 }
 
-const featureSuggestionsPromptVersion = "feature-suggestions-v3"
+const featureSuggestionsPromptVersion = "feature-suggestions-v4"
 
 var errInvalidFeatureResponse = errors.New("invalid feature response")
 
@@ -320,13 +320,6 @@ func featureContext(ctx context.Context, root string, excluded []string) (string
 	text, manifest, err := project.NewContextBuilder().BuildWithExcludedFiles(root, "", excluded)
 	if err != nil {
 		return "", manifest, "", err
-	}
-	instructions, err := project.ResolveInstructions(root, "")
-	if err != nil {
-		return "", manifest, "", err
-	}
-	if !featurePathExcluded("AGENTS.md", excluded) {
-		text += instructions.Text
 	}
 	fingerprint, err := benchmarkSourceFingerprint(ctx, root)
 	return text, manifest, fingerprint, err

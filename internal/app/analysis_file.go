@@ -337,6 +337,9 @@ func (execution *analysisFileStageExecution) semantic(ctx context.Context, resul
 		return err
 	}
 	if err := publishAnalysisReport(func() error {
+		if err := project.ValidateInstructions(prepared.root, prepared.indexedFile.Path, prepared.instructions.Fingerprint); err != nil {
+			return err
+		}
 		if err := prepared.cache.Store(*fresh); err != nil {
 			return err
 		}

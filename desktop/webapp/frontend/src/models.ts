@@ -277,6 +277,7 @@ export interface PerformanceFinding {
   engineering_insight?: Insight;
 }
 export interface PerformanceReport extends ProjectIdentity {
+  instructions_fingerprint?: string;
   path: string;
   content_hash: string;
   status: string;
@@ -304,6 +305,7 @@ export interface SecurityFinding {
   engineering_insight?: Insight;
 }
 export interface SecurityReport extends ProjectIdentity {
+  instructions_fingerprint?: string;
   path: string;
   content_hash: string;
   status: string;
@@ -343,6 +345,7 @@ export interface ContextManifest {
   remote_provider?: boolean;
 }
 export interface FileAnalysis extends ProjectIdentity {
+  instructions_fingerprint?: string;
   content_hash: string;
   path: string;
   status: string;
@@ -580,6 +583,14 @@ export interface ChangeSeed {
   kind: string;
   paths: string[];
   acceptance_criteria: string[];
+  finding?: {
+    path: string;
+    symbol: string;
+    line: number;
+    cause: string;
+    solution: string;
+    confidence: string;
+  };
 }
 
 export interface FeatureGeneration {

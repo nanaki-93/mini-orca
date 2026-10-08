@@ -80,3 +80,43 @@ func TestInstructionsMissingAndSymlink(t *testing.T) {
 		t.Fatal("followed instruction symlink")
 	}
 }
+
+func TestProjectContextIncludesApplicableGuidesOnceAndHonorsExclusions(t *testing.T) {
+	root := t.TempDir()
+	for path, content := range map[string]string{
+		"AGENTS.md":          "Root cancellation guidance.",
+		"internal/AGENTS.md": "Scoped worker guidance.",
+		"other/AGENTS.md":    "Unrelated guide content.",
+		"internal/main.go":   "package main\nfunc Run() {}\n",
+		"README.md":          strings.Repeat("Long project context. ", 3000),
+	} {
+		full := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, excluded := range [][]string{nil, {"AGENTS.md"}} {
+		text, manifest, err := NewContextBuilder().BuildWithExcludedFiles(root, "internal/main.go", excluded)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantRoot := 1
+		if len(excluded) != 0 {
+			wantRoot = 0
+		}
+		if strings.Count(text, "Root cancellation guidance.") != wantRoot || strings.Count(text, "Scoped worker guidance.") != 1 || strings.Contains(text, "Unrelated guide content.") {
+			t.Fatal("context lost guide scope or exclusions")
+		}
+		for _, file := range manifest.Included {
+			if file.Path == "internal/AGENTS.md" && (file.Hash == "" || file.Truncated) {
+				t.Fatal("guide manifest does not describe full guidance")
+			}
+		}
+		if estimateTokens(text) > manifest.TokenLimit {
+			t.Fatal("guides bypassed context budget")
+		}
+	}
+}
