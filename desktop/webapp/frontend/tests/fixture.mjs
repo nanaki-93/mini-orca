@@ -434,6 +434,7 @@ export function installFixture(options = {}) {
     failures = {
       ...(options.startupOffline ? { '/status': 'transport' } : {}),
       ...(options.modelCatalogUnavailable ? { '/api/models/current': 503 } : {}),
+      ...(options.selectionUnavailable ? { '/api/projects/current/analysis/selection': 503 } : {}),
       ...(options.restoreFailure ? { '/api/projects/restore': 503 } : {}),
       ...(options.importFailure ? { '/api/projects/import': 503 } : {}),
     };
@@ -983,7 +984,7 @@ export function installFixture(options = {}) {
               analysis_run: state.run,
             });
           if (path.endsWith('/index') || path.endsWith('/reindex'))
-            return response({ ...rev, files: state.files });
+            return response({ ...rev, files: options.emptyIndex ? [] : state.files });
           if (path.endsWith('/findings'))
             return response({ ...rev, findings: options.empty ? [] : [state.finding] });
           if (path.includes('/findings/')) {
