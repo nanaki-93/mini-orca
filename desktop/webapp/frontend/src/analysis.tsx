@@ -24,7 +24,7 @@ const stageNames: Record<string, string> = {
   security_ai: 'Security AI',
   feature_suggestions: 'New feature suggestions',
 };
-const defaults: Limits = { batch_files: 20, budget_seconds: 600, max_attempts_per_stage: 2 };
+const defaults: Limits = { batch_files: 20, budget_seconds: 1800, max_attempts_per_stage: 2 };
 
 function selectionPaths(s: State) {
   return s.analysisSelectionDraft &&

@@ -1025,6 +1025,7 @@ export function installFixture(options = {}) {
           }
           if (path.endsWith('/analysis/preview')) {
             state.preview = structuredClone(body.resume_run ? state.run.plan : preview);
+            if (!body.resume_run) state.preview.limits = structuredClone(body.limits);
             const choices = body.resume_run ? state.run.plan.models : body.models;
             state.preview.models = choices;
             if (body.recover_incomplete) {
