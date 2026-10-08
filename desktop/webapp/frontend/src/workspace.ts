@@ -195,7 +195,7 @@ export function changeChecksPassed(change: M.ChangeSession) {
     change.checks.every((check) => !check.required || check.state === 'passed')
   );
 }
-export function canApplyChange(s: State) {
+export function canAcceptChange(s: State) {
   const change = s.change;
   return (
     !!change &&
@@ -204,9 +204,13 @@ export function canApplyChange(s: State) {
     change.freshness === 'current' &&
     projectKey(change) === projectKey(s.project) &&
     changeChecksPassed(change) &&
-    workflowReviewable(change) &&
-    change.reviewed_hash === change.hash
+    change.changes.length > 0 &&
+    workflowReviewable(change)
   );
+}
+
+export function canApplyChange(s: State) {
+  return canAcceptChange(s) && s.change!.reviewed_hash === s.change!.hash;
 }
 
 export const activeChangeWorkflow = (change?: M.ChangeSession) =>
@@ -228,6 +232,7 @@ export class Workspace {
   private epoch = 0;
   private fileEpoch = 0;
   private operation = 0;
+  private navigation = 0;
   private answer?: (accepted: boolean) => void;
   private timer?: ReturnType<typeof setTimeout>;
   private stopped = false;
@@ -494,6 +499,7 @@ export class Workspace {
     });
   }
   async navigate(page: Page) {
+    this.navigation++;
     this.set({ page, error: '' });
     if (page === 'analysis' && !this.state.availableModels) await this.loadAvailableModels();
     if (['editor', 'draft', 'checks', 'review', 'assistant', 'benchmark'].includes(page))
@@ -1809,7 +1815,12 @@ export class Workspace {
         if (!(await this.requestChangeMessage('Repair failed checks.', true))) return;
         if (!(await this.requestChangeChecks(tests))) return;
       }
-      this.set({ notice: 'Proposal ready for review.' });
+      this.set({
+        notice:
+          this.state.change && changeChecksPassed(this.state.change)
+            ? 'Changes are ready. Review the diff, then accept.'
+            : 'Checks need attention. Review the diagnostics before retrying.',
+      });
     });
   }
   async checkChange(tests: boolean) {
@@ -1839,39 +1850,44 @@ export class Workspace {
       this.set({ change, changeSeed: undefined, page: 'chat' });
     });
   }
-  async reviewChange() {
-    await this.act('Review proposal', async () => {
-      const change = this.state.change!;
-      const epoch = this.epoch;
-      const operation = this.operation;
-      const reviewed = await this.api.post<M.ChangeSession>(
-        `${current}/changes/${encodeURIComponent(change.id)}/review`,
-        this.changeIdentity(),
-      );
-      if (
-        epoch === this.epoch &&
-        operation === this.operation &&
-        this.state.change?.hash === reviewed.hash &&
-        reviewed.id === change.id
-      )
-        this.set({ change: reviewed });
-    });
-  }
-  async applyChange() {
+  async acceptChange() {
     await this.act('Apply change', async () => {
       const change = this.state.change;
-      if (!change || !canApplyChange(this.state))
-        throw new Error('Check and review the current proposal.');
+      if (!change || this.state.page !== 'chat' || !canAcceptChange(this.state))
+        throw new Error('The displayed proposal needs current passing checks and model review.');
+      const epoch = this.epoch;
+      const operation = this.operation;
+      const navigation = this.navigation;
+      const identity = this.changeIdentity(change);
+      // One explicit acceptance records review and applies only the displayed revision.
+      const reviewed = await this.api.post<M.ChangeSession>(
+        `${current}/changes/${encodeURIComponent(change.id)}/review`,
+        identity,
+      );
       if (
-        !(await this.confirm({
-          title: 'Apply this proposal?',
-          message: `${change.title} · revision ${change.revision}`,
-          accept: 'Apply proposal',
-          details: change.changes.map((edit) => edit.path),
-        }))
+        epoch !== this.epoch ||
+        operation !== this.operation ||
+        navigation !== this.navigation ||
+        this.state.page !== 'chat' ||
+        this.state.change?.id !== change.id ||
+        this.state.change.revision !== change.revision ||
+        this.state.change.hash !== change.hash
       )
         return;
-      const receipt = await this.writeChangeSource(change.id, 'apply', this.changeIdentity());
+      if (
+        reviewed.id !== change.id ||
+        reviewed.revision !== change.revision ||
+        reviewed.hash !== change.hash ||
+        projectKey(reviewed) !== projectKey(change) ||
+        reviewed.reviewed_hash !== change.hash ||
+        !canAcceptChange(this.state)
+      )
+        throw new Error(
+          'The reviewed proposal changed. Inspect the current diff before accepting.',
+        );
+      this.set({ change: reviewed });
+      if (!canApplyChange(this.state)) throw new Error('The proposal is no longer ready to apply.');
+      const receipt = await this.writeChangeSource(change.id, 'apply', identity);
       await this.acceptChangeMutation(receipt);
     });
   }

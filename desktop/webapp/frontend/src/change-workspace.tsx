@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
   workspace as w,
-  canApplyChange,
+  canAcceptChange,
   changeChecksPassed,
   activeChangeWorkflow,
-  workflowReviewable,
   type State,
 } from './workspace';
 import { WorkflowModels, WorkflowProgress, defaultWorkflowModels } from './change-workflow';
@@ -47,9 +46,11 @@ export function ChangeWorkspace({ s }: { s: State }) {
     kind,
     acceptance_criteria: change?.acceptance_criteria || s.changeSeed?.acceptance_criteria || [],
   };
-  const submit = () => void w.prepareChange(seed, tests);
   const running = activeChangeWorkflow(change);
   const models = s.workflowModels || change?.workflow?.models || defaultWorkflowModels;
+  const useAgents =
+    kind !== 'instructions' &&
+    (!!change?.workflow || seed.paths.some((path) => path.endsWith('_test.go')));
   const blocked =
     !!s.busy ||
     running ||
@@ -58,7 +59,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
     <div className="chat-page">
       <Heading
         title="Chat"
-        detail="Create, test and review a change with configurable agents, then approve the final file differences."
+        detail="Describe a change. Review the generated diff and accept when it is ready."
         variant="intro"
       >
         <Go page="editor" icon="code">
@@ -266,53 +267,46 @@ export function ChangeWorkspace({ s }: { s: State }) {
               disabled={blocked}
               placeholder="Describe a new feature, fix, or improvement…"
             />
-            {kind !== 'instructions' && (
-              <>
+            {useAgents ? (
+              <Disclosure title="Agent models">
                 <WorkflowModels s={s} value={models} disabled={blocked} />
-                {!seed.paths.some((path) => path.endsWith('_test.go')) && (
-                  <p className="small muted">
-                    Include an existing or new _test.go path to run the agent workflow.
-                  </p>
-                )}
-                <div className="actions section-gap">
-                  <Button
-                    tone="primary"
-                    disabled={
-                      blocked ||
-                      !message.trim() ||
-                      !title.trim() ||
-                      !seed.paths.some((path) => path.endsWith('_test.go')) ||
-                      !s.models
-                    }
-                    onClick={() => void w.startChangeWorkflow(seed, models)}
-                  >
-                    Run workflow
-                  </Button>
-                </div>
-              </>
+              </Disclosure>
+            ) : (
+              <label className="checkbox-line">
+                <input
+                  type="checkbox"
+                  checked={tests}
+                  disabled={blocked || change?.kind === 'instructions'}
+                  onChange={(e) => setTests(e.target.checked)}
+                />
+                Run project tests after generation
+              </label>
             )}
-            {!change?.workflow && (
-              <>
-                <label className="checkbox-line">
-                  <input
-                    type="checkbox"
-                    checked={tests}
-                    disabled={blocked || change?.kind === 'instructions'}
-                    onChange={(e) => setTests(e.target.checked)}
-                  />
-                  Run project tests after generation
-                </label>
-                <div className="actions">
-                  <Button
-                    tone="primary"
-                    disabled={blocked || !message.trim() || !paths.trim() || !title.trim()}
-                    onClick={submit}
-                  >
-                    Prepare change
-                  </Button>
-                </div>
-              </>
-            )}
+            <p className="small muted">
+              {useAgents
+                ? 'Creation, tests and agent review run automatically.'
+                : 'Generation and checks run automatically. Include a _test.go path to use separate testing and review agents.'}
+            </p>
+            <div className="actions section-gap">
+              <Button
+                tone="primary"
+                icon="sparkles"
+                disabled={
+                  blocked ||
+                  !message.trim() ||
+                  !paths.trim() ||
+                  !title.trim() ||
+                  (useAgents && !s.models)
+                }
+                onClick={() =>
+                  void (useAgents
+                    ? w.startChangeWorkflow(seed, models)
+                    : w.prepareChange(seed, tests))
+                }
+              >
+                Generate changes
+              </Button>
+            </div>
           </Panel>
           <Panel className="chat-history">
             <Disclosure title="Local history">
@@ -361,7 +355,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
                 actions={<Badge value={`${change.changes.length} files`} />}
               >
                 <p className="small muted">
-                  Revision {change.revision} · Read every file diff before reviewing this proposal.
+                  Revision {change.revision} · Review each file diff before accepting.
                 </p>
                 {change.kind === 'performance' && (
                   <Notice>Performance unmeasured; tests do not establish a speedup.</Notice>
@@ -438,28 +432,24 @@ export function ChangeWorkspace({ s }: { s: State }) {
                   </div>
                 )}
               </Panel>
-              <Panel title={change.workflow ? 'Human review and apply' : 'Review and apply'}>
-                <div className="actions">
-                  <Button
-                    disabled={
-                      blocked ||
-                      !workflowReviewable(change) ||
-                      !changeChecksPassed(change) ||
-                      change.reviewed_hash === change.hash
-                    }
-                    onClick={() => void w.reviewChange()}
-                  >
-                    Review this diff
-                  </Button>
-                  <Button
-                    tone="primary"
-                    disabled={!!s.busy || !canApplyChange(s)}
-                    onClick={() => void w.applyChange()}
-                  >
-                    Approve and apply
-                  </Button>
-                </div>
-                {change.reviewed_hash === change.hash && <p role="status">Revision reviewed.</p>}
+              <Panel title="Accept this change" className="change-acceptance">
+                <p className="small muted">
+                  Accept applies revision {change.revision} to the {change.changes.length} displayed{' '}
+                  {change.changes.length === 1 ? 'file' : 'files'}. Review each diff above.
+                </p>
+                <Button
+                  tone="primary"
+                  icon="check"
+                  disabled={!!s.busy || !canAcceptChange(s)}
+                  onClick={() => void w.acceptChange()}
+                >
+                  Accept changes
+                </Button>
+                {!canAcceptChange(s) && (
+                  <p className="small muted">
+                    Current passing checks and an approved agent review, when used, are required.
+                  </p>
+                )}
               </Panel>
               <Panel className="chat-provider-context">
                 <Disclosure title="Provider context">
