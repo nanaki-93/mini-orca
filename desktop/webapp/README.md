@@ -47,9 +47,10 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   Continuations retain the saved run's limits.
   Preparing a run captures scope and provider destinations. Starting it still
   confirms remote-provider sharing and Security review for that admission.
-  **Last run** shows result counts, honest completion states and current progress.
-  Captured models appear only here and in the admission preview. Coverage,
-  provider destinations and file diagnostics are available in disclosures.
+  **Last run** focuses on current progress and pause, continue or cancel controls.
+  **Run details** reveals result counts, captured models, coverage, provider
+  destinations and file diagnostics. Failures remain visible when details are
+  collapsed. Open result workspaces through the sidebar or **Summary**.
   Pausing/resuming retains captured model choices, including older runs that
   shared one Performance/Security choice. Feature discovery runs independently
   of file analysis, gets at least ten minutes (or the selected model's longer
