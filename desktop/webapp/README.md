@@ -48,6 +48,8 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   Preparing a run captures scope and provider destinations. Starting it still
   confirms remote-provider sharing and Security review for that admission.
   **Last run** focuses on current progress and pause, continue or cancel controls.
+  The progress bar and percentage count finished file-analysis steps, including
+  unsuccessful or skipped steps; feature discovery has its own status.
   **Run details** reveals result counts, captured models, coverage, provider
   destinations and file diagnostics. Failures remain visible when details are
   collapsed. Open result workspaces through the sidebar or **Summary**.

@@ -1746,23 +1746,88 @@ summary .row {
 .provider-row:first-child {
   padding-top: 0;
 }
-progress {
+.analysis-progress-heading,
+.analysis-progress-meta,
+.analysis-feature-progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+.analysis-progress-heading h2 {
+  margin-bottom: 4px;
+  font-size: 1rem;
+}
+.analysis-progress-percent {
+  color: var(--accent);
+  font-size: 2.4rem;
+  font-weight: 550;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.analysis-progress-percent small {
+  margin-left: 3px;
+  font-size: 1rem;
+}
+.analysis-progress-bar {
+  appearance: none;
   display: block;
   width: 100%;
-  height: 8px;
+  height: 12px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 999px;
+  overflow: hidden;
   background: var(--raised);
   accent-color: var(--accent);
-  margin: 20px 0 10px;
+  margin: 20px 0 12px;
 }
-progress::-webkit-progress-bar {
-  border-radius: 8px;
+.analysis-progress-bar::-webkit-progress-bar {
+  border-radius: 999px;
   background: var(--raised);
 }
-progress::-webkit-progress-value {
-  border-radius: 8px;
+.analysis-progress-bar::-webkit-progress-value {
+  border-radius: 999px;
   background: var(--accent);
+  transition: width 240ms ease;
+}
+.analysis-progress-bar::-moz-progress-bar {
+  border-radius: 999px;
+  background: var(--accent);
+}
+.analysis-progress-meta {
+  margin-top: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.analysis-current-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 24px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--secondary);
+}
+.analysis-current-step .spinner {
+  flex-shrink: 0;
+  margin-top: 0.25em;
+}
+.analysis-current-step p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.analysis-feature-progress {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 0.86rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .analysis-progress-bar::-webkit-progress-value {
+    transition: none;
+  }
 }
 .model-icon {
   color: var(--violet);
