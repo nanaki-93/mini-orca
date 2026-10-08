@@ -814,6 +814,9 @@ pre {
 .analysis-run > details {
   margin-top: 0;
 }
+.analysis-run-details {
+  gap: 20px;
+}
 .analysis-run-status {
   display: inline-flex;
   align-items: center;

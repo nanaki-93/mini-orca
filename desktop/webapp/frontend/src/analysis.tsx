@@ -63,9 +63,6 @@ export function Analysis({ s }: { s: State }) {
         detail={`${s.selection?.files.filter((f) => !f.reason && !excluded.includes(f.path)).length ?? '—'} eligible files selected`}
       >
         <div className="actions heading-action-group">
-          <Go page="analysis-files" icon="folder">
-            Files
-          </Go>
           <Go page="analysis-run" icon="activity">
             View run
           </Go>
@@ -97,9 +94,6 @@ export function Analysis({ s }: { s: State }) {
           >
             Search more feature suggestions
           </Button>
-          <Go page="features" icon="arrow-right">
-            Explore features
-          </Go>
           <Button
             disabled={!!s.busy}
             icon="refresh"
@@ -465,11 +459,7 @@ export function AnalysisRun({ s }: { s: State }) {
     return (
       <div className="workspace-page analysis-run">
         <Heading variant="intro" title="Project analysis" />
-        <Empty title="No analysis run yet">
-          <Go page="analysis" tone="primary">
-            Prepare analysis
-          </Go>
-        </Empty>
+        <Empty title="No analysis run yet">Prepare a run from Analysis in the sidebar.</Empty>
       </div>
     );
   const total = run.sections.reduce((sum, section) => sum + section.coverage.total, 0);
@@ -509,8 +499,6 @@ export function AnalysisRun({ s }: { s: State }) {
           </span>
         }
       >
-        <Go page="analysis-files">Files</Go>
-        <Go page="analysis">Analysis setup</Go>
         {['running', 'queued'].includes(run.status) && (
           <Button icon="pause" disabled={!!s.busy} onClick={() => void w.controlRun('pause')}>
             Pause
@@ -535,61 +523,7 @@ export function AnalysisRun({ s }: { s: State }) {
         )}
       </Heading>
       {run.reason && <Notice>{run.reason}</Notice>}
-      <div className="grid analysis-run-categories">
-        {run.sections.map((section) => (
-          <Panel
-            key={section.category}
-            title={human(section.category)}
-            className="run-result-card"
-            actions={<StatusDot value={section.status} label={human(section.category)} />}
-          >
-            <div data-accent={section.category} className="run-result-summary">
-              <div className="metric-number">{section.finding_count ?? '—'}</div>
-              <span>{human(section.status)}</span>
-            </div>
-            <p className="small muted">
-              {section.finding_count === null
-                ? 'No successful evidence yet'
-                : section.category === 'performance'
-                  ? 'Hypotheses · unmeasured'
-                  : 'Saved findings'}
-            </p>
-            <Go page={section.category as 'bugs' | 'performance' | 'security'}>Open results</Go>
-            <Disclosure title="Coverage details">
-              <KeyValues
-                values={[
-                  ['Completed', section.coverage.succeeded],
-                  ['Partial', section.coverage.partial],
-                  ['Failed', section.coverage.failed],
-                  ['Unavailable', section.coverage.unavailable],
-                  ['Skipped', section.coverage.skipped],
-                  ['Pending', section.coverage.pending],
-                ]}
-              />
-            </Disclosure>
-          </Panel>
-        ))}
-        {run.features && (
-          <Panel
-            title="New feature suggestions"
-            className="run-result-card"
-            actions={<StatusDot value={run.features.status} label="Features" />}
-          >
-            <div data-accent="features" className="run-result-summary">
-              <div className="metric-number">{run.features.suggestion_count ?? '—'}</div>
-              <span>{human(run.features.status)}</span>
-            </div>
-            <p className="small muted">Advisory ideas</p>
-            {run.features.reason && <Notice>{run.features.reason}</Notice>}
-            <Go page="features">Open feature suggestions</Go>
-            <Disclosure title="Attempt details">
-              <p>
-                {run.features.attempts} of {run.plan.limits.max_attempts_per_stage} attempts used
-              </p>
-            </Disclosure>
-          </Panel>
-        )}
-      </div>
+      {run.features?.reason && <Notice>Feature discovery: {run.features.reason}</Notice>}
       <Panel
         title={`${run.window_files_completed} files completed this batch`}
         actions={<span className="muted small">{run.elapsed_seconds}s elapsed</span>}
@@ -610,47 +544,104 @@ export function AnalysisRun({ s }: { s: State }) {
           {done} of {total} analysis steps finished
         </div>
       </Panel>
-      <Panel title="Captured models" className="analysis-run-models">
-        <CapturedModels plan={run.plan} compact />
-        <Disclosure title="Provider details">
-          <CapturedModels plan={run.plan} />
-        </Disclosure>
-      </Panel>
-      <Disclosure title="File progress">
-        <div className="scroll-list">
-          {run.files.map((file) => (
-            <Disclosure
-              title={
-                <span className="row between wrap">
-                  <span className="mono small analysis-file-path">{file.path}</span>
-                  <span className="row wrap analysis-file-statuses">
-                    {file.stages.map((stage) => (
-                      <span key={stage.stage} title={stageNames[stage.stage]}>
-                        <StatusDot value={stage.status} label={stageNames[stage.stage]} />
-                      </span>
-                    ))}
-                  </span>
-                </span>
-              }
-              key={file.path}
-            >
-              {file.stages.map((stage) => (
-                <div className="list-row" key={stage.stage}>
-                  <span className="list-copy">
-                    <strong>{stageNames[stage.stage]}</strong>
-                    <small>
-                      {stage.reason ||
-                        `${stage.attempts} attempts${stage.cached ? ' · cached' : ''}`}
-                    </small>
-                  </span>
-                  <span className="analysis-run-status small">
-                    <StatusDot value={stage.status} label={stageNames[stage.stage]} />
-                    <span>{human(stage.status)}</span>
-                  </span>
+      <Disclosure title="Run details">
+        <div className="stack analysis-run-details">
+          <div className="grid analysis-run-categories">
+            {run.sections.map((section) => (
+              <Panel
+                key={section.category}
+                title={human(section.category)}
+                className="run-result-card"
+                actions={<StatusDot value={section.status} label={human(section.category)} />}
+              >
+                <div data-accent={section.category} className="run-result-summary">
+                  <div className="metric-number">{section.finding_count ?? '—'}</div>
+                  <span>{human(section.status)}</span>
                 </div>
-              ))}
+                <p className="small muted">
+                  {section.finding_count === null
+                    ? 'No successful evidence yet'
+                    : section.category === 'performance'
+                      ? 'Hypotheses · unmeasured'
+                      : 'Saved findings'}
+                </p>
+                <Disclosure title="Coverage details">
+                  <KeyValues
+                    values={[
+                      ['Completed', section.coverage.succeeded],
+                      ['Partial', section.coverage.partial],
+                      ['Failed', section.coverage.failed],
+                      ['Unavailable', section.coverage.unavailable],
+                      ['Skipped', section.coverage.skipped],
+                      ['Pending', section.coverage.pending],
+                    ]}
+                  />
+                </Disclosure>
+              </Panel>
+            ))}
+            {run.features && (
+              <Panel
+                title="New feature suggestions"
+                className="run-result-card"
+                actions={<StatusDot value={run.features.status} label="Features" />}
+              >
+                <div data-accent="features" className="run-result-summary">
+                  <div className="metric-number">{run.features.suggestion_count ?? '—'}</div>
+                  <span>{human(run.features.status)}</span>
+                </div>
+                <p className="small muted">Advisory ideas</p>
+                <Disclosure title="Attempt details">
+                  <p>
+                    {run.features.attempts} of {run.plan.limits.max_attempts_per_stage} attempts
+                    used
+                  </p>
+                </Disclosure>
+              </Panel>
+            )}
+          </div>
+          <Panel title="Captured models" className="analysis-run-models">
+            <CapturedModels plan={run.plan} compact />
+            <Disclosure title="Provider details">
+              <CapturedModels plan={run.plan} />
             </Disclosure>
-          ))}
+          </Panel>
+          <Disclosure title="File progress">
+            <div className="scroll-list">
+              {run.files.map((file) => (
+                <Disclosure
+                  title={
+                    <span className="row between wrap">
+                      <span className="mono small analysis-file-path">{file.path}</span>
+                      <span className="row wrap analysis-file-statuses">
+                        {file.stages.map((stage) => (
+                          <span key={stage.stage} title={stageNames[stage.stage]}>
+                            <StatusDot value={stage.status} label={stageNames[stage.stage]} />
+                          </span>
+                        ))}
+                      </span>
+                    </span>
+                  }
+                  key={file.path}
+                >
+                  {file.stages.map((stage) => (
+                    <div className="list-row" key={stage.stage}>
+                      <span className="list-copy">
+                        <strong>{stageNames[stage.stage]}</strong>
+                        <small>
+                          {stage.reason ||
+                            `${stage.attempts} attempts${stage.cached ? ' · cached' : ''}`}
+                        </small>
+                      </span>
+                      <span className="analysis-run-status small">
+                        <StatusDot value={stage.status} label={stageNames[stage.stage]} />
+                        <span>{human(stage.status)}</span>
+                      </span>
+                    </div>
+                  ))}
+                </Disclosure>
+              ))}
+            </div>
+          </Disclosure>
         </div>
       </Disclosure>
     </div>

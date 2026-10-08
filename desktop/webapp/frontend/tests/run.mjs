@@ -1225,6 +1225,7 @@ async function analysisRunLayout(page) {
     );
   assert.deepEqual(overflow, [], 'Run content remains contained without horizontal clipping');
   for (const panel of await workspace.locator('section.panel').all()) {
+    if (!(await panel.isVisible())) continue;
     const bounds = await panel.boundingBox();
     const headerParts = await panel.locator('.panel-head > *').all();
     const boxes = [];
@@ -4477,15 +4478,18 @@ try {
               'Task detail retains ordinary heading typography',
             );
             assert.deepEqual(await intro.getByRole('button').allTextContents(), [
-              'Files',
               'View run',
               'Prepare analysis',
               'Repair analysis',
               'Search more feature suggestions',
-              'Explore features',
               'Refresh',
             ]);
             assert.equal(await intro.locator('.button.primary').innerText(), 'Prepare analysis');
+            for (const removed of ['Files', 'Explore features'])
+              assert.equal(
+                await intro.getByRole('button', { name: removed, exact: true }).count(),
+                0,
+              );
             assert.equal(await intro.locator('.heading-action-group').count(), 2);
             await layout(page, `analysis-introduction-repair-${suffix}`);
           }
@@ -4571,12 +4575,7 @@ try {
         }
         assert.equal(await page.getByRole('table').count(), 0);
         assert.equal(await page.getByLabel('Filter analysis files').count(), 0);
-        for (const action of [
-          'Prepare analysis',
-          'Search more feature suggestions',
-          'Explore features',
-          'Refresh',
-        ])
+        for (const action of ['Prepare analysis', 'Search more feature suggestions', 'Refresh'])
           assert.equal(await page.getByRole('button', { name: action, exact: true }).count(), 1);
       } finally {
         await close();
@@ -4907,6 +4906,7 @@ try {
       await chooseModel(page.getByLabel('Feature discovery model', { exact: true }), 'analyze');
       assert.deepEqual(await families(), ['claude', 'openai', 'gemini', 'gemini']);
       await nav(page, 'Last run');
+      await page.getByText('Run details', { exact: true }).click();
       await capturedDetails(page.locator('.analysis-run-models'), saved.details);
       await nav(page, 'Analysis');
       assert.deepEqual(
@@ -5209,6 +5209,7 @@ try {
         );
         await page.getByRole('button', { name: 'View run', exact: true }).click();
         await page.getByRole('heading', { name: 'Project analysis', exact: true }).waitFor();
+        await page.getByText('Run details', { exact: true }).click();
         const runPanel = page.locator('section.panel').filter({
           has: page.getByRole('heading', { name: 'Captured models', exact: true }),
         });
@@ -5782,6 +5783,7 @@ try {
     await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
     await idle(page);
     await startAnalysis(page);
+    await page.getByText('Run details', { exact: true }).click();
     await page
       .getByRole('heading', { name: 'New feature suggestions', exact: true })
       .locator('..')
@@ -5804,7 +5806,7 @@ try {
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.evaluate(() => document.documentElement.classList.add('large-text'));
     await layout(page, 'analysis-feature-progress-large-text');
-    await page.getByRole('button', { name: 'Open results', exact: true }).first().click();
+    await nav(page, 'Bugs');
     await page.waitForFunction(() =>
       window.fixture.requests.some((r) => r.path.endsWith('/analysis/results')),
     );
@@ -5818,12 +5820,15 @@ try {
         'The model request or response failed. Other analysis results remain available.';
     });
     await page
-      .getByText('The model request or response failed. Other analysis results remain available.', {
-        exact: true,
-      })
+      .getByText(
+        'Feature discovery: The model request or response failed. Other analysis results remain available.',
+        {
+          exact: true,
+        },
+      )
       .waitFor();
     assert.equal(await activity.count(), 0, 'Settled runs must stop showing active progress');
-    assert.equal(await page.getByRole('button', { name: 'Open results' }).count(), 3);
+    assert.equal(await page.getByRole('button', { name: 'Open results' }).count(), 0);
     assert.equal(
       await page.evaluate(
         () =>
@@ -5910,6 +5915,23 @@ try {
           assert.equal(await notice.innerText(), reason);
           assert.equal(await notice.locator('details').count(), 0);
         }
+        assert.equal(await workspace.getByRole('link').count(), 0);
+        for (const removed of [
+          'Files',
+          'Analysis setup',
+          'Open results',
+          'Open feature suggestions',
+        ])
+          assert.equal(
+            await workspace.getByRole('button', { name: removed, exact: true }).count(),
+            0,
+          );
+        const runDetails = workspace.locator(':scope > details');
+        assert.equal(await runDetails.getAttribute('open'), null);
+        await analysisRunLayout(page);
+        await layout(page, `analysis-run-${status}-collapsed-1440-dark-standard`);
+        await runDetails.locator(':scope > summary').press('Enter');
+        assert.equal(await runDetails.getAttribute('open'), '');
         const features = workspace.locator('section.panel').filter({
           has: page.getByRole('heading', { name: 'New feature suggestions', exact: true }),
         });
@@ -5930,7 +5952,7 @@ try {
         const before = await page.evaluate(() =>
           window.fixture.requests.filter((r) => r.method !== 'GET'),
         );
-        const fileProgress = workspace.locator(':scope > details');
+        const fileProgress = workspace.locator('.analysis-run-details > details');
         await fileProgress.locator(':scope > summary').click();
         const disclosure = fileProgress.locator('details').first();
         await disclosure.locator('summary').press('Enter');
@@ -5943,19 +5965,10 @@ try {
         await page.getByRole('button', { name: 'Larger text', exact: true }).click();
         await analysisRunLayout(page);
         await layout(page, `analysis-run-${status}-800-light-larger`);
-        await workspace
-          .getByRole('button', { name: 'Open feature suggestions', exact: true })
-          .click();
-        await nav(page, 'Analysis');
-        await page.getByRole('button', { name: 'View run', exact: true }).click();
-        for (const index of [0, 1, 2]) {
-          await workspace
-            .getByRole('button', { name: 'Open results', exact: true })
-            .nth(index)
-            .click();
+        for (const destination of ['Features', 'Bugs', 'Performance', 'Security']) {
+          await nav(page, destination);
           await idle(page);
-          await nav(page, 'Analysis');
-          await page.getByRole('button', { name: 'View run', exact: true }).click();
+          await nav(page, 'Last run');
         }
         assert.deepEqual(
           await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
@@ -6075,6 +6088,7 @@ try {
       await nav(page, 'Analysis');
       await page.getByRole('button', { name: 'View run', exact: true }).click();
       const workspace = page.locator('.analysis-run');
+      await workspace.getByText('Run details', { exact: true }).click();
       const models = workspace.locator('.analysis-run-models');
       assert.deepEqual(
         await introductionTreatment(workspace.locator('.page-heading--intro')),
@@ -6116,10 +6130,12 @@ try {
         has: page.getByRole('heading', { name: 'New feature suggestions', exact: true }),
       });
       assert.equal(await featurePanel.locator('.metric-number').innerText(), '—');
-      assert.equal(await featurePanel.getByText(reason, { exact: true }).isVisible(), true);
+      assert.equal(
+        await workspace.getByText(`Feature discovery: ${reason}`, { exact: true }).isVisible(),
+        true,
+      );
       assert.equal(await featurePanel.locator('details').count(), 1);
-      assert.equal(await featurePanel.getByText(reason, { exact: true }).isVisible(), true);
-      const fileProgress = workspace.locator(':scope > details');
+      const fileProgress = workspace.locator('.analysis-run-details > details');
       await fileProgress.locator(':scope > summary').click();
       const disclosure = fileProgress.locator('details').first();
       await disclosure.locator('summary').press('Enter');
@@ -6182,8 +6198,7 @@ try {
         await page.waitForFunction(() => window.fixture.requests.some((r) => r.body?.action));
         const heading = page.locator('.analysis-run .page-heading--intro');
         for (const control of await heading.getByRole('button').all())
-          if (!['Files', 'Analysis setup'].includes(await control.innerText()))
-            assert.equal(await control.isDisabled(), true);
+          assert.equal(await control.isDisabled(), true);
         const request = await page.evaluate(() =>
           window.fixture.requests.find((r) => r.body?.action),
         );
@@ -6217,7 +6232,7 @@ try {
       }
     }
   });
-  await test('An absent Analysis run keeps recovery reachable after a local refresh', async () => {
+  await test('An absent Analysis run directs recovery through the sidebar after a local refresh', async () => {
     const { page, close } = await pageFor({ runStatus: 'running' });
     try {
       await nav(page, 'Analysis');
@@ -6242,10 +6257,11 @@ try {
             assert.equal(
               await page
                 .locator('.analysis-run')
-                .getByRole('button', { name: 'Prepare analysis', exact: true })
+                .getByText('Prepare a run from Analysis in the sidebar.', { exact: true })
                 .isVisible(),
               true,
             );
+            assert.equal(await page.locator('.analysis-run').getByRole('button').count(), 0);
             await layout(
               page,
               `analysis-run-absent-${width}-${theme}-${large ? 'larger' : 'standard'}`,
@@ -6253,10 +6269,7 @@ try {
           }
         }
       }
-      await page
-        .locator('.analysis-run')
-        .getByRole('button', { name: 'Prepare analysis', exact: true })
-        .click();
+      await nav(page, 'Analysis');
       await page.getByRole('heading', { name: 'Analysis', exact: true }).waitFor();
       assert.deepEqual(
         await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
@@ -9154,6 +9167,7 @@ try {
     const start = requests.find((r) => r.path.endsWith('/analysis/run') && r.method === 'POST');
     assert.equal(start.body.include_features, true);
     assert.deepEqual(start.body.confirmations.provider_ids, ['code-bug', 'review-analyze']);
+    await page.getByText('Run details', { exact: true }).click();
     await page.getByRole('heading', { name: 'New feature suggestions', exact: true }).waitFor();
     await layout(page, 'analysis-with-features');
     await nav(page, 'Summary');
@@ -9260,7 +9274,7 @@ try {
   await test('Feature goals and idea triage are local; Discuss only seeds Chat', async () => {
     const { page, close } = await pageFor({ remote: true });
     await nav(page, 'Analysis');
-    await page.getByRole('button', { name: 'Explore features' }).click();
+    await nav(page, 'Features');
     await page.getByRole('heading', { name: 'No features yet' }).waitFor();
     await page
       .getByLabel('Project goals', { exact: true })
