@@ -12,8 +12,8 @@ no actions call a provider, run project code or write source.
 
 Use the page navigation to compare Analysis, Files, Last run and Accept change.
 The icon model picker, file filter, theme switch and acceptance/Undo demonstration
-are interactive. Graphite and Porcelain inform the production dark/light palettes;
-Midnight is an alternative design proposal.
+are interactive. All three themes are available in the application through the
+footer's **G**, **P** and **M** controls.
 
 The real application retains exact captured provider metadata, consent, execution
 trust, required checks, revision/source identity guards and guarded Undo. The mockups

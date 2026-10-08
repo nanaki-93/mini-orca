@@ -5,6 +5,7 @@ import { serve } from '../preview.mjs';
 import { installFixture } from './fixture.mjs';
 import { testChangeWorkflows } from './change-workflow.mjs';
 import { testScrolling } from './scrolling.mjs';
+import { testThemes } from './themes.mjs';
 
 let server;
 let url;
@@ -13,6 +14,7 @@ const output = new URL('../test-results/', import.meta.url).pathname;
 await mkdir(output, { recursive: true });
 let checks = 0;
 const errors = [];
+const themeNames = { dark: 'Graphite theme', light: 'Porcelain theme', midnight: 'Midnight theme' };
 // Planned presentation states, not an attestation of coverage. Captures below record
 // what actually ran; each owner extends its cases as its surfaces are migrated.
 const surfaceInventory = {
@@ -1482,6 +1484,8 @@ async function contrast(page, name) {
       '.models-workspace .key-values dt',
       '.models-workspace .key-values dd',
       '.connection',
+      '.statusbar',
+      '.statusbar button',
       '.nav-link:not(:disabled)',
       '.button:not(:disabled)',
       '.text-link:not(:disabled)',
@@ -1547,6 +1551,7 @@ try {
       : {}),
   });
   await testScrolling({ test, pageFor, nav, idle, layout });
+  await testThemes({ test, pageFor, nav, idle, layout, contrast });
   await testChangeWorkflows({ test, pageFor, nav, idle, layout });
   await test('Models retain configured scopes, complete destinations and Summary presentation', async () => {
     const metadata = {
@@ -1637,7 +1642,7 @@ try {
         );
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            await page.getByRole('button', { name: 'Porcelain theme' }).click();
           for (const large of [false, true]) {
             if (large) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
             for (const width of [1440, 1280, 1001, 800]) {
@@ -1840,7 +1845,7 @@ try {
           );
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            await page.getByRole('button', { name: 'Porcelain theme' }).click();
           for (const large of [false, true]) {
             if (large) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
             for (const width of [1440, 800]) {
@@ -2092,7 +2097,7 @@ try {
       assert.ok(position.x > bounds.x + bounds.width * 0.8);
       assert.ok(position.y < bounds.y + 40);
       await contrast(page, `Summary ${status}`);
-      await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+      await page.getByRole('button', { name: 'Porcelain theme' }).click();
       await contrast(page, `Summary ${status} light`);
       if (status === 'completed_empty') await layout(page, 'summary-empty-success');
       await close();
@@ -2257,7 +2262,7 @@ try {
         if (width === 1000) await page.getByRole('button', { name: 'Larger text' }).click();
         for (const theme of ['dark', 'light']) {
           if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-            await page.getByRole('button', { name: `Switch to ${theme} appearance` }).click();
+            await page.getByRole('button', { name: themeNames[theme] }).click();
           const boxes = await page.locator('.metric-card').evaluateAll((cards) =>
             cards.map((card) => {
               const { x, y, width, height } = card.getBoundingClientRect();
@@ -2414,8 +2419,7 @@ try {
     });
     try {
       for (const theme of ['dark', 'light']) {
-        if (theme === 'light')
-          await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+        if (theme === 'light') await page.getByRole('button', { name: 'Porcelain theme' }).click();
         await nav(page, 'Summary');
         const referenceIntro = await introductionTreatment(page.locator('.summary-hero'));
         const referencePanel = await panelTreatment(
@@ -2545,8 +2549,7 @@ try {
     });
     try {
       for (const theme of ['dark', 'light']) {
-        if (theme === 'light')
-          await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+        if (theme === 'light') await page.getByRole('button', { name: 'Porcelain theme' }).click();
         await nav(page, 'Summary');
         const reference = await panelTreatment(page.locator('.summary-details > .panel').first());
         await openSource(page);
@@ -2699,7 +2702,7 @@ try {
         }
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            await page.getByRole('button', { name: 'Porcelain theme' }).click();
           for (const larger of [false, true]) {
             if (larger)
               await page.getByRole('button', { name: 'Larger text', exact: true }).click();
@@ -2757,12 +2760,12 @@ try {
         const references = {};
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            await page.getByRole('button', { name: 'Porcelain theme' }).click();
           references[theme] = await panelTreatment(
             page.locator('.summary-details > .panel').first(),
           );
         }
-        await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+        await page.getByRole('button', { name: 'Graphite theme' }).click();
         await openSource(page);
         await page.getByRole('button', { name: 'Explain declaration', exact: true }).click();
         await page.getByRole('dialog').getByRole('button', { name: 'Continue' }).click();
@@ -2855,7 +2858,7 @@ try {
         );
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            await page.getByRole('button', { name: 'Porcelain theme' }).click();
           assert.deepEqual(
             await panelTreatment(composition.locator('.panel').first()),
             references[theme],
@@ -3207,8 +3210,7 @@ try {
     await page.getByText('Components', { exact: true }).click();
     await page.getByText('Why & tradeoffs', { exact: true }).click();
     for (const theme of ['dark', 'light']) {
-      if (theme === 'light')
-        await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+      if (theme === 'light') await page.getByRole('button', { name: 'Porcelain theme' }).click();
       for (const name of [
         'Summary',
         'Analysis',
@@ -3317,12 +3319,12 @@ try {
         const references = {};
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            await page.getByRole('button', { name: 'Porcelain theme' }).click();
           references[theme] = await panelTreatment(
             page.locator('.summary-details > .panel').first(),
           );
         }
-        await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+        await page.getByRole('button', { name: 'Graphite theme' }).click();
         await openSource(page);
         assert.equal(
           await page.getByRole('tab', { name: 'Draft', exact: true }).isDisabled(),
@@ -3340,7 +3342,7 @@ try {
           const before = await passive();
           for (const theme of matrix ? ['dark', 'light'] : ['dark']) {
             if (theme === 'light')
-              await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+              await page.getByRole('button', { name: 'Porcelain theme' }).click();
             assert.deepEqual(
               await panelTreatment(draft.locator('.panel').first()),
               references[theme],
@@ -3392,7 +3394,7 @@ try {
                 await page.getByRole('button', { name: 'Larger text', exact: true }).click();
             }
           }
-          if (matrix) await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+          if (matrix) await page.getByRole('button', { name: 'Graphite theme' }).click();
           assert.deepEqual(
             await passive(),
             before,
@@ -3537,12 +3539,12 @@ try {
         const references = {};
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            await page.getByRole('button', { name: 'Porcelain theme' }).click();
           references[theme] = await panelTreatment(
             page.locator('.summary-details > .panel').first(),
           );
         }
-        await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+        await page.getByRole('button', { name: 'Graphite theme' }).click();
         await prepare(page);
         await page.getByRole('button', { name: 'Validate draft', exact: true }).click();
         await idle(page);
@@ -3613,7 +3615,7 @@ try {
         for (const summary of await surface.locator('summary').all()) await summary.click();
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            await page.getByRole('button', { name: 'Porcelain theme' }).click();
           for (const panel of await surface.locator('.panel').all())
             assert.deepEqual(await panelTreatment(panel), references[theme]);
           for (const larger of [false, true]) {
@@ -3890,12 +3892,12 @@ try {
         const references = {};
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            await page.getByRole('button', { name: 'Porcelain theme' }).click();
           references[theme] = await panelTreatment(
             page.locator('.summary-details > .panel').first(),
           );
         }
-        await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+        await page.getByRole('button', { name: 'Graphite theme' }).click();
         await prepare(page);
         // The production Review tab rejects unvalidated/dirty candidates, rather than rendering them.
         await page.getByRole('tab', { name: 'Review', exact: true }).click();
@@ -3946,7 +3948,7 @@ try {
           assert.equal(await surface.getByText(value, { exact: true }).isVisible(), true);
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            await page.getByRole('button', { name: 'Porcelain theme' }).click();
           for (const panel of await surface.locator('section.panel').all()) {
             const treatment = await panelTreatment(panel);
             const insightAccent = await panel.evaluate((element) => {
@@ -4111,12 +4113,12 @@ try {
         const references = {};
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            await page.getByRole('button', { name: 'Porcelain theme' }).click();
           references[theme] = await panelTreatment(
             page.locator('.summary-details > .panel').first(),
           );
         }
-        await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+        await page.getByRole('button', { name: 'Graphite theme' }).click();
         await prepare(page);
         await validateAndCheck(page);
         await page.getByRole('button', { name: 'Apply change', exact: true }).click();
@@ -4142,7 +4144,7 @@ try {
         const before = await writes();
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            await page.getByRole('button', { name: 'Porcelain theme' }).click();
           for (const panel of await surface.locator('section.panel').all())
             assert.deepEqual(await panelTreatment(panel), references[theme]);
           for (const larger of [false, true]) {
@@ -4425,7 +4427,7 @@ try {
           if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
           for (const theme of ['dark', 'light']) {
             if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-              await page.getByRole('button', { name: `Switch to ${theme} appearance` }).click();
+              await page.getByRole('button', { name: themeNames[theme] }).click();
             await nav(page, 'Summary');
             await idle(page);
             const hero = page.locator('.summary-hero');
@@ -4543,7 +4545,7 @@ try {
           await page.setViewportSize({ width, height: width === 1440 ? 1000 : 900 });
           for (const theme of ['dark', 'light']) {
             if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-              await page.getByRole('button', { name: `Switch to ${theme} appearance` }).click();
+              await page.getByRole('button', { name: themeNames[theme] }).click();
             for (const large of [false, true]) {
               const text = page.getByRole('button', { name: 'Larger text', exact: true });
               if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
@@ -4616,7 +4618,7 @@ try {
       await idle(page);
       await page.setViewportSize({ width: 800, height: 900 });
       await page.getByRole('button', { name: 'Larger text', exact: true }).click();
-      await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+      await page.getByRole('button', { name: 'Porcelain theme' }).click();
       const writes = () =>
         page.evaluate(() => window.fixture.requests.filter((request) => request.method !== 'GET'));
       const before = await writes();
@@ -4894,7 +4896,7 @@ try {
       assert.equal(await page.locator('.captured-models').count(), 0);
       for (const theme of ['dark', 'light']) {
         if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-          await page.getByRole('button', { name: `Switch to ${theme} appearance` }).click();
+          await page.getByRole('button', { name: themeNames[theme] }).click();
         await contrast(page, `Analysis model cards ${theme}`);
         await layout(page, `analysis-model-cards-${theme}`);
       }
@@ -5388,7 +5390,7 @@ try {
           await page.setViewportSize({ width, height: 1000 });
           for (const theme of ['dark', 'light']) {
             if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-              await page.getByRole('button', { name: `Switch to ${theme} appearance` }).click();
+              await page.getByRole('button', { name: themeNames[theme] }).click();
             for (const large of [false, true]) {
               const text = page.getByRole('button', { name: 'Larger text', exact: true });
               if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
@@ -5533,7 +5535,7 @@ try {
           await page.setViewportSize({ width, height: 1000 });
           for (const theme of ['dark', 'light']) {
             if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-              await page.getByRole('button', { name: `Switch to ${theme} appearance` }).click();
+              await page.getByRole('button', { name: themeNames[theme] }).click();
             for (const large of [false, true]) {
               const text = page.getByRole('button', { name: 'Larger text', exact: true });
               if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
@@ -5925,7 +5927,7 @@ try {
         await analysisRunLayout(page);
         await layout(page, `analysis-run-${status}-1440-dark-standard`);
         await page.setViewportSize({ width: 800, height: 900 });
-        await page.getByRole('button', { name: 'Switch to light appearance', exact: true }).click();
+        await page.getByRole('button', { name: 'Porcelain theme', exact: true }).click();
         await page.getByRole('button', { name: 'Larger text', exact: true }).click();
         await analysisRunLayout(page);
         await layout(page, `analysis-run-${status}-800-light-larger`);
@@ -6125,9 +6127,7 @@ try {
         await page.setViewportSize({ width, height: 1000 });
         for (const theme of ['dark', 'light']) {
           if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-            await page
-              .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
-              .click();
+            await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
           for (const large of [false, true]) {
             const text = page.getByRole('button', { name: 'Larger text', exact: true });
             if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
@@ -6222,9 +6222,7 @@ try {
         await page.setViewportSize({ width, height: 1000 });
         for (const theme of ['dark', 'light']) {
           if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-            await page
-              .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
-              .click();
+            await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
           for (const large of [false, true]) {
             const text = page.getByRole('button', { name: 'Larger text', exact: true });
             if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
@@ -6386,7 +6384,7 @@ try {
         );
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            await page.getByRole('button', { name: 'Porcelain theme' }).click();
           for (const larger of [false, true]) {
             if (larger)
               await page.getByRole('button', { name: 'Larger text', exact: true }).click();
@@ -6488,11 +6486,10 @@ try {
     try {
       const references = {};
       for (const theme of ['dark', 'light']) {
-        if (theme === 'light')
-          await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+        if (theme === 'light') await page.getByRole('button', { name: 'Porcelain theme' }).click();
         references[theme] = await panelTreatment(page.locator('.summary-details > .panel').first());
       }
-      await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+      await page.getByRole('button', { name: 'Graphite theme' }).click();
       await prepare(page);
       await page.getByRole('button', { name: 'Validate draft', exact: true }).click();
       await idle(page);
@@ -6581,7 +6578,7 @@ try {
           // Each preceding state finishes in light appearance.
           const currentTheme = await page.locator('html').getAttribute('data-theme');
           if (currentTheme !== theme)
-            await page.getByRole('button', { name: `Switch to ${theme} appearance` }).click();
+            await page.getByRole('button', { name: themeNames[theme] }).click();
           for (const panel of await surface.locator('section.panel').all())
             assert.deepEqual(await panelTreatment(panel), references[theme]);
           for (const larger of [false, true]) {
@@ -6757,14 +6754,14 @@ try {
         const references = {};
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            await page.getByRole('button', { name: 'Porcelain theme' }).click();
           await nav(page, 'Summary');
           references[theme] = {
             intro: await introductionTreatment(page.locator('.summary-hero')),
             panel: await panelTreatment(page.locator('.summary-details .panel').first()),
           };
         }
-        await page.getByRole('button', { name: 'Switch to dark appearance' }).click();
+        await page.getByRole('button', { name: 'Graphite theme' }).click();
         await nav(page, 'Project');
         await page.getByRole('button', { name: 'Verified scan', exact: true }).click();
         await idle(page);
@@ -6855,7 +6852,7 @@ try {
         for (const theme of ['dark', 'light']) {
           await page.setViewportSize({ width: 1440, height: 1000 });
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            await page.getByRole('button', { name: 'Porcelain theme' }).click();
           assert.deepEqual(await introductionTreatment(heading), references[theme].intro);
           if (report?.phases?.length)
             assert.deepEqual(
@@ -7029,7 +7026,7 @@ try {
         );
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+            await page.getByRole('button', { name: 'Porcelain theme' }).click();
           await nav(page, 'Summary');
           const intro = await page.locator('.summary-hero').evaluate(introStyle);
           const panel = await panelTreatment(page.locator('.summary-details .panel').first());
@@ -7232,7 +7229,7 @@ try {
       }
       await page.getByRole('tab', { name: 'Review', exact: true }).count();
     }
-    await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+    await page.getByRole('button', { name: 'Porcelain theme' }).click();
     await nav(page, 'Summary');
     await layout(page, 'summary-light');
     await close();
@@ -7281,9 +7278,7 @@ try {
         );
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page
-              .getByRole('button', { name: 'Switch to light appearance', exact: true })
-              .click();
+            await page.getByRole('button', { name: 'Porcelain theme', exact: true }).click();
           for (const larger of [false, true]) {
             const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
             if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
@@ -7496,9 +7491,7 @@ try {
         const complete = await workspace.textContent();
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page
-              .getByRole('button', { name: 'Switch to light appearance', exact: true })
-              .click();
+            await page.getByRole('button', { name: 'Porcelain theme', exact: true }).click();
           for (const larger of [false, true]) {
             const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
             if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
@@ -7922,9 +7915,7 @@ try {
           await resultsListLayout(page);
           await layout(page, `${category}-list-${scenario}-1440-dark-standard`);
           await page.setViewportSize({ width: 800, height: 1000 });
-          await page
-            .getByRole('button', { name: 'Switch to light appearance', exact: true })
-            .click();
+          await page.getByRole('button', { name: 'Porcelain theme', exact: true }).click();
           await page.getByRole('button', { name: 'Larger text', exact: true }).click();
           await resultsListLayout(page);
           await layout(page, `${category}-list-${scenario}-800-light-larger`);
@@ -8125,9 +8116,7 @@ try {
       const render = async (state, widths) => {
         for (const theme of ['dark', 'light']) {
           if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-            await page
-              .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
-              .click();
+            await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
           for (const larger of [false, true]) {
             const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
             if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
@@ -8312,9 +8301,7 @@ try {
         );
         for (const theme of ['dark', 'light']) {
           if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-            await page
-              .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
-              .click();
+            await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
           for (const larger of [false, true]) {
             const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
             if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
@@ -8429,9 +8416,7 @@ try {
           );
           for (const theme of ['dark', 'light']) {
             if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-              await page
-                .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
-                .click();
+              await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
             for (const larger of [false, true]) {
               const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
               if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
@@ -8779,7 +8764,7 @@ try {
       await layout(page, `summary-feature-count-${JSON.stringify(options)}`);
       await card.focus();
       await contrast(page, 'Summary feature counts');
-      await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+      await page.getByRole('button', { name: 'Porcelain theme' }).click();
       await contrast(page, 'Summary feature counts light');
       await card.click();
       await page.getByRole('heading', { name: 'Features', exact: true }).waitFor();
@@ -8898,9 +8883,7 @@ try {
       const complete = await workspace.textContent();
       for (const theme of ['dark', 'light']) {
         if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-          await page
-            .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
-            .click();
+          await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
         for (const larger of [false, true]) {
           const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
           if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
@@ -9016,9 +8999,7 @@ try {
         );
         for (const theme of ['dark', 'light']) {
           if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-            await page
-              .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
-              .click();
+            await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
           for (const larger of [false, true]) {
             const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
             if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
@@ -9374,9 +9355,7 @@ try {
           );
           for (const theme of ['dark', 'light']) {
             if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-              await page
-                .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
-                .click();
+              await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
             for (const larger of [false, true]) {
               const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
               if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
@@ -9419,9 +9398,7 @@ try {
             }
           }
           // Reset appearance before comparing the next step to the dark/standard reference.
-          await page
-            .getByRole('button', { name: 'Switch to dark appearance', exact: true })
-            .click();
+          await page.getByRole('button', { name: 'Graphite theme', exact: true }).click();
           await page.getByRole('button', { name: 'Larger text', exact: true }).click();
         }
         await page.getByRole('button', { name: 'Edit guidance', exact: true }).click();
@@ -9498,9 +9475,7 @@ try {
         await page.getByText('AGENTS.md · scope .', { exact: true }).click();
         for (const theme of ['dark', 'light']) {
           if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-            await page
-              .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
-              .click();
+            await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
           for (const larger of [false, true]) {
             const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
             if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
@@ -9668,8 +9643,7 @@ try {
       );
       await page.getByLabel('Keep changes focused', { exact: true }).uncheck();
       for (const theme of ['dark', 'light']) {
-        if (theme === 'light')
-          await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+        if (theme === 'light') await page.getByRole('button', { name: 'Porcelain theme' }).click();
         for (const larger of [false, true]) {
           if (larger) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
           for (const width of [1440, 800]) {
@@ -9774,8 +9748,7 @@ try {
       await page.getByRole('status').filter({ hasText: '3 guidelines selected' }).waitFor();
       assert.equal(await draft.inputValue(), original);
       for (const theme of ['dark', 'light']) {
-        if (theme === 'light')
-          await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+        if (theme === 'light') await page.getByRole('button', { name: 'Porcelain theme' }).click();
         await page.setViewportSize({ width: 800, height: 1000 });
         await page.getByRole('button', { name: 'Larger text', exact: true }).click();
         await instructionsLayout(page);
@@ -10072,9 +10045,7 @@ try {
           );
           for (const theme of ['dark', 'light']) {
             if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-              await page
-                .getByRole('button', { name: `Switch to ${theme} appearance`, exact: true })
-                .click();
+              await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
             for (const larger of [false, true]) {
               const size = page.getByRole('button', { name: 'Larger text', exact: true });
               if (((await size.getAttribute('aria-pressed')) === 'true') !== larger)

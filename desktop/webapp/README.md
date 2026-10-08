@@ -139,10 +139,13 @@ Performance changes remain unmeasured until an explicit benchmark comparison.
 Restoring a project never starts a provider request or shell. **⌘K / Ctrl+K** opens
 file and command search. Actions have visible focus and descriptive labels.
 
-The dark Graphite and light Porcelain palettes use separate colors for actions,
-successful checks and analysis categories. The [interactive theme mockups](../../.mockups/production-ready/index.html)
-compare both palettes with a Midnight alternative across Analysis, Files,
-Last run and change acceptance. Mockup data is illustrative and performs no work.
+The footer's **G**, **P** and **M** controls select Graphite, Porcelain and Midnight.
+The selected theme is remembered across launches. Graphite uses charcoal surfaces,
+Porcelain uses light surfaces, and Midnight pairs navy surfaces with cyan actions.
+All three palettes use separate colors for actions, successful checks and analysis
+categories. The [interactive theme mockups](../../.mockups/production-ready/index.html)
+compare the three themes across Analysis, Files, Last run and change acceptance.
+Mockup data is illustrative and performs no work.
 
 ## Implementation and checks
 
