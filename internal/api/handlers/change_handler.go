@@ -144,11 +144,6 @@ func (h *ChangeHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	respondWorkflow(w, value, err)
 }
 
-type InstructionPreset struct {
-	ID      string `json:"id"`
-	Label   string `json:"label"`
-	Content string `json:"content"`
-}
 type InstructionPreview struct {
 	ProjectID       string                        `json:"project_id"`
 	ProjectRevision string                        `json:"project_revision"`
@@ -156,7 +151,7 @@ type InstructionPreview struct {
 	ExistingContent string                        `json:"existing_content"`
 	Exists          bool                          `json:"exists"`
 	Effective       project.EffectiveInstructions `json:"effective"`
-	Presets         []InstructionPreset           `json:"presets"`
+	Presets         []project.InstructionPreset   `json:"presets"`
 }
 
 func (h *ChangeHandler) Instructions(w http.ResponseWriter, r *http.Request) {
@@ -179,6 +174,11 @@ func (h *ChangeHandler) Instructions(w http.ResponseWriter, r *http.Request) {
 		respondWorkflow(w, nil, err)
 		return
 	}
+	presets, err := project.SuggestInstructionPresets(root, path, index.Files)
+	if err != nil {
+		respondWorkflow(w, nil, err)
+		return
+	}
 	current, err := h.manager.Index()
 	if err != nil {
 		respondWorkflow(w, nil, err)
@@ -188,14 +188,7 @@ func (h *ChangeHandler) Instructions(w http.ResponseWriter, r *http.Request) {
 		respondWorkflow(w, nil, project.ErrRevisionConflict)
 		return
 	}
-	preview := InstructionPreview{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Path: path, Effective: effective, Presets: []InstructionPreset{
-		{"focused", "Keep changes focused", "Keep changes limited to the requested behavior. Preserve unrelated work and public contracts."},
-		{"tests", "Test meaningful behavior", "Cover changed behavior and meaningful error paths with deterministic tests. Report checks actually run."},
-		{"style", "Follow project conventions", "Read nearby implementations before editing. Reuse existing patterns and avoid unnecessary dependencies."},
-		{"security", "Protect sensitive data", "Keep credentials and source-bearing diagnostics out of logs and Git. Validate external input at its boundary."},
-		{"review", "Review every change", "Prepare a diff and explain behavior and verification before explicitly approved source changes."},
-		{"cancellation", "Preserve cancellation", "Propagate cancellation and deadlines, reject stale asynchronous results, and own background work lifetimes."},
-	}}
+	preview := InstructionPreview{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Path: path, Effective: effective, Presets: presets}
 	for _, file := range effective.Files {
 		if file.Path == path {
 			preview.Exists, preview.ExistingContent = true, file.Content

@@ -935,6 +935,7 @@ data class PerformanceFileReport(
     val findings: List<PerformanceFinding> = emptyList(),
     val warning: String = "",
     val model: String = "",
+    @SerialName("configured_model") val configuredModel: String = "",
     val profile: String = "",
     val scope: String = "",
     @SerialName("provider_origin") val providerOrigin: String = "",

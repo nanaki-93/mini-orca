@@ -47,6 +47,8 @@ export interface State {
   index?: M.ProjectIndex;
   overview?: M.Overview;
   models?: M.ModelCatalog;
+  availableModels?: M.AvailableModels;
+  modelsLoading?: boolean;
   findings?: M.Finding[];
   selection?: M.Selection;
   run?: M.AnalysisRun | null;
@@ -90,11 +92,17 @@ export interface State {
   featureGenerationRequested: boolean;
   instructionPreview?: M.InstructionPreview;
   analysisSetup?: M.AnalysisModels;
+  workflowModels?: M.ChangeWorkflowModels;
 }
 export function analysisSetupModels(s: State): M.AnalysisModels {
-  if (s.analysisSetup) return s.analysisSetup;
-  if (s.run?.plan?.models) return s.run.plan.models;
-  return { code: 'bug', review: 'analyze', features: 'analyze' };
+  const setup = s.analysisSetup ||
+    s.run?.plan?.models || { code: 'bug', review: 'analyze', features: 'analyze' };
+  const resolve = (id: string) => s.availableModels?.defaults[id] || id;
+  return {
+    code: resolve(setup.code),
+    review: resolve(setup.review),
+    features: resolve(setup.features),
+  };
 }
 const initial = (): State => ({
   page: 'welcome',
@@ -168,6 +176,7 @@ export function canCancelOperation(label: string) {
       'Choose project',
       'Start terminal',
       'Close terminal',
+      'Start workflow',
     ].includes(label)
   );
 }
@@ -187,7 +196,20 @@ export function canApplyChange(s: State) {
     change.freshness === 'current' &&
     projectKey(change) === projectKey(s.project) &&
     changeChecksPassed(change) &&
+    workflowReviewable(change) &&
     change.reviewed_hash === change.hash
+  );
+}
+
+export const activeChangeWorkflow = (change?: M.ChangeSession) =>
+  !!change?.workflow && ['running', 'canceling'].includes(change.workflow.status);
+export function workflowReviewable(change: M.ChangeSession) {
+  const flow = change.workflow;
+  return (
+    !flow ||
+    (flow.status === 'awaiting_human_review' &&
+      flow.review?.verdict === 'approve' &&
+      flow.review.proposal_hash === change.hash)
   );
 }
 
@@ -206,6 +228,7 @@ export class Workspace {
   private resultRequests: Record<string, number> = {};
   private featureRequest = 0;
   private instructionRequest = 0;
+  private modelCatalogRequest = 0;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -269,7 +292,11 @@ export class Workspace {
         await this.poll();
         this.schedule();
       },
-      activeRun(this.state.run) || this.state.scan?.status === 'running' ? 1000 : 5000,
+      activeChangeWorkflow(this.state.change) ||
+        activeRun(this.state.run) ||
+        this.state.scan?.status === 'running'
+        ? 1000
+        : 5000,
     );
   }
   async connect() {
@@ -375,6 +402,7 @@ export class Workspace {
     const identity = this.identity();
     await Promise.all([
       this.loadFeatures(),
+      this.loadChangeHistory(),
       this.resource(
         'overview',
         () => this.api.get<M.Overview>(`${current}/overview`, identity),
@@ -459,6 +487,7 @@ export class Workspace {
   }
   async navigate(page: Page) {
     this.set({ page, error: '' });
+    if (page === 'analysis' && !this.state.availableModels) await this.loadAvailableModels();
     if (['editor', 'draft', 'checks', 'review', 'assistant', 'benchmark'].includes(page))
       await this.refreshFile();
     if (page === 'chat') await this.loadChangeHistory();
@@ -468,7 +497,21 @@ export class Workspace {
     if (['bugs', 'performance', 'security'].includes(page)) await this.loadResults(page);
     if (page === 'context' || page === 'manifest') await this.inspectContext();
   }
+  async loadAvailableModels() {
+    const request = ++this.modelCatalogRequest;
+    const epoch = this.epoch;
+    this.set({ modelsLoading: true });
+    await this.resource(
+      'availableModels',
+      () => this.api.get<M.AvailableModels>('/api/models/available'),
+      (availableModels) => this.set({ availableModels }),
+      () => request === this.modelCatalogRequest,
+    );
+    if (epoch === this.epoch && request === this.modelCatalogRequest)
+      this.set({ modelsLoading: false });
+  }
   private async poll() {
+    if (activeChangeWorkflow(this.state.change)) await this.refreshChangeWorkflow();
     if (this.state.busy || !this.state.project) return;
     const identity = this.identity();
     await this.resource(
@@ -822,8 +865,13 @@ export class Workspace {
   ): Promise<boolean | null> {
     const models = await this.api.get<M.ModelCatalog>('/api/models/current');
     this.set({ models });
-    const model = models.scopes[scope];
-    if (!model) throw new Error(`No ${scope} provider is configured.`);
+    const choices = models.scopes[scope]
+      ? undefined
+      : await this.api.get<M.AvailableModels>('/api/models/available');
+    const model =
+      models.scopes[scope] || choices?.models.find((choice) => choice.id === scope)?.model;
+    if (!model)
+      throw new Error('The selected model is unavailable. Refresh models and choose again.');
     if (!model.remote_provider && !explicit) return false;
     const accepted = await this.confirm({
       title,
@@ -832,15 +880,19 @@ export class Workspace {
         : 'Request an AI Security review of this file?',
       accept: 'Continue',
       details: [
+        ...(models.scopes[scope] ? [`Scope: ${scope}`] : []),
         model.model,
         model.provider_origin,
-        `Scope: ${scope}`,
         ...(paths || [this.state.file?.path || 'Project context']),
       ],
     });
     if (!accepted) return null;
-    const latest = await this.api.get<M.ModelCatalog>('/api/models/current');
-    if (JSON.stringify(latest.scopes[scope]) !== JSON.stringify(model))
+    const latest = choices
+      ? (await this.api.get<M.AvailableModels>('/api/models/available')).models.find(
+          (choice) => choice.id === scope,
+        )?.model
+      : (await this.api.get<M.ModelCatalog>('/api/models/current')).scopes[scope];
+    if (JSON.stringify(latest) !== JSON.stringify(model))
       throw new Error('Provider configuration changed. Review the new destination and try again.');
     return model.remote_provider;
   }
@@ -1267,7 +1319,7 @@ export class Workspace {
     });
   }
   seedChange(seed: M.ChangeSeed) {
-    if (this.state.busy) return;
+    if (this.state.busy || activeChangeWorkflow(this.state.change)) return;
     this.set({
       changeSeed: seed,
       change: undefined,
@@ -1276,6 +1328,13 @@ export class Workspace {
       error: '',
     });
     void this.loadChangeHistory();
+  }
+  seedWorkflow(seed: M.ChangeSeed) {
+    const paths = [...seed.paths];
+    const source = paths.find((path) => path.endsWith('.go') && !path.endsWith('_test.go'));
+    if (source && paths.length < 8 && !paths.some((path) => path.endsWith('_test.go')))
+      paths.push(source.replace(/\.go$/, '_test.go'));
+    this.seedChange({ ...seed, paths });
   }
   async loadFeatures() {
     if (!this.state.project) return;
@@ -1318,7 +1377,8 @@ export class Workspace {
       const setup = analysisSetupModels(this.state);
       const profile = setup.features;
       const titles = report.suggestions.map((s) => s.title);
-      const details = [`Origin: ${origin}`, `Profile: ${profile}`];
+      const details = [`Origin: ${origin}`];
+      if (this.state.models?.scopes[profile]) details.push(`Profile: ${profile}`);
       if (titles.length) {
         details.push(`Existing idea titles: ${titles.length}`);
         details.push(...titles.map((t) => `- ${t}`));
@@ -1376,14 +1436,16 @@ export class Workspace {
         this.set({ features });
     });
   }
-  discussFeature(idea: M.FeatureSuggestion) {
-    this.seedChange({
+  discussFeature(idea: M.FeatureSuggestion, workflow = false) {
+    const seed = {
       title: idea.title,
       kind: 'feature',
       paths: idea.paths,
       acceptance_criteria: idea.acceptance_criteria,
       message: `${idea.title}\n\nBenefit: ${idea.benefit}\nContext: ${idea.evidence}\n\nAcceptance criteria:\n${idea.acceptance_criteria.map((item) => `- ${item}`).join('\n')}`,
-    });
+    };
+    if (workflow) this.seedWorkflow(seed);
+    else this.seedChange(seed);
   }
   async loadInstructions(path: string) {
     if (!this.state.project) return false;
@@ -1408,6 +1470,8 @@ export class Workspace {
   }
   async proposeInstructions(content: string) {
     await this.act('Preview instruction diff', async () => {
+      if (activeChangeWorkflow(this.state.change))
+        throw new Error('Finish or cancel the active workflow first.');
       const preview = this.state.instructionPreview;
       if (!preview || projectKey(preview) !== projectKey(this.state.project))
         throw new Error('Load the current instruction scope first.');
@@ -1440,7 +1504,7 @@ export class Workspace {
     });
   }
   newChange() {
-    if (this.state.busy) return;
+    if (this.state.busy || activeChangeWorkflow(this.state.change)) return;
     this.set({ change: undefined, changeSeed: undefined, changeReceipt: undefined });
   }
   async loadChangeHistory() {
@@ -1472,6 +1536,12 @@ export class Workspace {
         },
       ),
     ]);
+    if (!this.state.change && projectKey(this.state.project) === projectKey(identity)) {
+      const active = this.state.changeHistory?.find((entry) =>
+        ['running', 'canceling'].includes(entry.workflow_status || ''),
+      );
+      if (active) await this.viewChange(active.id);
+    }
   }
   private changeIdentity(change = this.state.change) {
     if (!change) throw new Error('Choose a change conversation.');
@@ -1481,6 +1551,155 @@ export class Workspace {
       revision: change.revision,
       hash: change.hash,
     };
+  }
+  setWorkflowModels(workflowModels: M.ChangeWorkflowModels) {
+    this.set({ workflowModels });
+  }
+  async viewChange(id: string) {
+    const epoch = this.epoch;
+    const previous = this.state.change?.id,
+      operation = this.operation;
+    await this.resource(
+      'change workflow',
+      () =>
+        this.api.get<M.ChangeSession>(
+          `${current}/changes/${encodeURIComponent(id)}`,
+          this.identity(),
+        ),
+      (change) => {
+        if (change.id !== id || projectKey(change) !== projectKey(this.state.project))
+          throw new Error('Workflow belongs to another project revision.');
+        this.set({ change, changeSeed: undefined, page: 'chat' });
+      },
+      () =>
+        epoch === this.epoch &&
+        operation === this.operation &&
+        previous === this.state.change?.id &&
+        !activeChangeWorkflow(this.state.change),
+    );
+  }
+  private async refreshChangeWorkflow() {
+    const change = this.state.change;
+    if (!change?.workflow) return;
+    await this.resource(
+      'change workflow',
+      () =>
+        this.api.get<M.ChangeSession>(
+          `${current}/changes/${encodeURIComponent(change.id)}`,
+          this.identity(),
+        ),
+      (next) => {
+        if (
+          next.id !== change.id ||
+          projectKey(next) !== projectKey(change) ||
+          next.workflow?.id !== change.workflow?.id
+        )
+          throw new Error('Workflow identity changed.');
+        if (next.revision >= (this.state.change?.revision || 0)) this.set({ change: next });
+      },
+      () =>
+        this.state.change?.id === change.id &&
+        this.state.change?.workflow?.id === change.workflow?.id,
+    );
+  }
+  private async confirmWorkflow(seed: M.ChangeSeed, models: M.ChangeWorkflowModels) {
+    const catalog = await this.api.get<M.ModelCatalog>('/api/models/current');
+    this.set({ models: catalog });
+    const selected = [models.create, models.test, models.review];
+    if (selected.some((profile) => !catalog.scopes[profile]))
+      throw new Error('Choose a configured model for every workflow stage.');
+    const remote = [
+      ...new Set(selected.filter((profile) => catalog.scopes[profile].remote_provider)),
+    ];
+    if (remote.length || seed.kind === 'security') {
+      const accepted = await this.confirm({
+        title: seed.kind === 'security' ? 'Start security workflow?' : 'Send workflow context?',
+        message:
+          'Create, write and run tests, then request a model review for the captured files. Human review is required before Apply.',
+        accept: 'Start workflow',
+        details: [
+          ...Object.entries(models).map(
+            ([stage, profile]) =>
+              `${stage}: ${catalog.scopes[profile].model} · ${profile} · ${catalog.scopes[profile].provider_origin}`,
+          ),
+          ...seed.paths,
+        ],
+      });
+      if (!accepted) return null;
+      const latest = await this.api.get<M.ModelCatalog>('/api/models/current');
+      if (
+        selected.some(
+          (profile) =>
+            JSON.stringify(catalog.scopes[profile]) !== JSON.stringify(latest.scopes[profile]),
+        )
+      )
+        throw new Error('Provider configuration changed. Review the new destinations.');
+    }
+    return remote;
+  }
+  async startChangeWorkflow(seed: M.ChangeSeed, models: M.ChangeWorkflowModels) {
+    await this.act('Start workflow', async () => {
+      if (activeChangeWorkflow(this.state.change))
+        throw new Error('Finish or cancel the active workflow.');
+      if (!seed.paths.some((path) => path.endsWith('_test.go')))
+        throw new Error('Include a Go test path (_test.go) in Files to change.');
+      const epoch = this.epoch,
+        operation = this.operation;
+      const profiles = await this.confirmWorkflow(seed, models);
+      if (profiles === null || !(await this.trust(true))) return;
+      if (epoch !== this.epoch || operation !== this.operation) return;
+      let change = this.state.change;
+      if (!change) {
+        change = await this.api.post<M.ChangeSession>(`${current}/changes`, {
+          ...this.identity(),
+          kind: seed.kind,
+          title: seed.title,
+          paths: seed.paths,
+          acceptance_criteria: seed.acceptance_criteria,
+        });
+        if (epoch !== this.epoch || operation !== this.operation) return;
+        if (projectKey(change) !== projectKey(this.state.project))
+          throw new Error('Conversation belongs to another project revision.');
+        this.set({ change, page: 'chat' });
+      }
+      const id = change.id;
+      try {
+        const next = await this.api.post<M.ChangeSession>(
+          `${current}/changes/${encodeURIComponent(id)}/workflow`,
+          {
+            ...this.changeIdentity(change),
+            message: seed.message,
+            models,
+            confirmed_profiles: profiles,
+            confirm_security: seed.kind === 'security',
+          },
+        );
+        if (epoch !== this.epoch || operation !== this.operation || this.state.change?.id !== id)
+          return;
+        if (next.id !== id || projectKey(next) !== projectKey(change) || !next.workflow)
+          throw new Error('Workflow identity does not match this conversation.');
+        this.set({ change: next, changeReceipt: undefined, workflowModels: models, page: 'chat' });
+      } catch (error) {
+        if (epoch === this.epoch && this.state.change?.id === id) await this.viewChange(id);
+        throw error;
+      }
+    });
+  }
+  async cancelChangeWorkflow() {
+    await this.act('Cancel workflow', async () => {
+      const change = this.state.change;
+      if (!activeChangeWorkflow(change) || !change?.workflow) return;
+      const epoch = this.epoch;
+      const next = await this.api.post<M.ChangeSession>(
+        `${current}/changes/${encodeURIComponent(change.id)}/workflow/cancel`,
+        {
+          ...this.identity(),
+          workflow_id: change.workflow.id,
+        },
+      );
+      if (epoch === this.epoch && this.state.change?.workflow?.id === change.workflow.id)
+        this.set({ change: next });
+    });
   }
   private async requestChangeMessage(message: string, repair = false) {
     const change = this.state.change;
@@ -1598,6 +1817,8 @@ export class Workspace {
   }
   async resumeChange(id: string) {
     await this.act('Resume conversation', async () => {
+      if (activeChangeWorkflow(this.state.change))
+        throw new Error('Finish or cancel the active workflow first.');
       const epoch = this.epoch;
       const operation = this.operation;
       const change = await this.api.post<M.ChangeSession>(

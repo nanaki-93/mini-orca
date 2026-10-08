@@ -49,6 +49,7 @@ type PerformanceFileReport struct {
 	Findings             []PerformanceFinding `json:"findings"`
 	Warning              string               `json:"warning,omitempty"`
 	Model                string               `json:"model"`
+	ConfiguredModel      string               `json:"configured_model,omitempty"`
 	Profile              string               `json:"profile"`
 	Scope                string               `json:"scope"`
 	ProviderOrigin       string               `json:"provider_origin,omitempty"`

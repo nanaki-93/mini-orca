@@ -32,16 +32,17 @@ export function installFixture(options = {}) {
     analysis_status: 'fresh',
   }));
   if (options.sourceFile) Object.assign(files[0], options.sourceFile);
-  const model = (scope) => ({
-    scope,
-    profile: scope,
-    model: options.modelNames?.[scope] || 'test-model',
-    provider_origin: options.remote ? 'https://provider.invalid' : 'http://127.0.0.1:11434',
-    remote_provider: !!options.remote,
-    reasoning_effort: 'medium',
-    timeout: '2m',
-    ...options.modelMetadata?.[scope],
-  });
+  const model = (scope) =>
+    options.availableModels?.models.find((choice) => choice.id === scope)?.model || {
+      scope,
+      profile: scope,
+      model: options.modelNames?.[scope] || 'test-model',
+      provider_origin: options.remote ? 'https://provider.invalid' : 'http://127.0.0.1:11434',
+      remote_provider: !!options.remote,
+      reasoning_effort: 'medium',
+      timeout: '2m',
+      ...options.modelMetadata?.[scope],
+    };
   const insight = {
     mechanism: 'Cancellation needs to reach each unit of work.',
     why_it_matters_here: 'Workers otherwise keep consuming resources after their caller has left.',
@@ -324,6 +325,7 @@ export function installFixture(options = {}) {
       sec[key] = prose(key);
   }
   const state = {
+    availableModels: options.availableModels,
     project,
     files,
     finding,
@@ -347,7 +349,10 @@ export function installFixture(options = {}) {
     changeReceipt: null,
     features: {
       ...identity,
+      schema_version: options.legacyShape ? 1 : 2,
       hash: 'features-empty',
+      workspace_hash: 'workspace-1',
+      updated_at: '2026-10-04T01:00:00Z',
       goals: options.featuresLongContent ? `Recovery goals ${'LongGoal'.repeat(40)}` : '',
       status: options.featuresReady ? (options.featuresFail ? 'failed' : 'ready') : 'not_generated',
       freshness: options.featuresStale ? 'stale' : 'current',
@@ -356,12 +361,8 @@ export function installFixture(options = {}) {
           ? [
               {
                 ...idea,
-                generation_id: options.legacyShape ? undefined : 'gen-1',
-                freshness: options.legacyShape
-                  ? undefined
-                  : options.featuresStale
-                    ? 'stale'
-                    : 'current',
+                generation_id: options.legacyShape ? 'legacy' : 'gen-1',
+                freshness: options.featuresStale ? 'stale' : 'current',
               },
               ...(options.featuresMixedTriage
                 ? [
@@ -376,25 +377,33 @@ export function installFixture(options = {}) {
                 : []),
             ]
           : [],
-      generations: options.legacyShape
-        ? undefined
-        : options.featuresReady
-          ? [
-              {
-                id: 'gen-1',
-                timestamp: '2026-10-04T01:00:00Z',
-                goals: '',
-                provider_id: 'provider-1',
-                model_summary: {
-                  profile: 'analyze',
-                  model: model('analyze').model,
-                  provider_origin: model('analyze').provider_origin,
-                  remote_provider: model('analyze').remote_provider,
-                },
-              },
-            ]
-          : [],
-      last_generation: options.legacyShape ? undefined : options.featuresReady ? 'gen-1' : '',
+      generations: options.featuresReady
+        ? [
+            {
+              id: options.legacyShape ? 'legacy' : 'gen-1',
+              generated_at: '2026-10-04T01:00:00Z',
+              project_revision: identity.project_revision,
+              workspace_hash: 'workspace-1',
+              goals_hash: 'goals-1',
+              model: options.legacyShape
+                ? null
+                : {
+                    profile: 'analyze',
+                    model: model('analyze').model,
+                    provider_origin: model('analyze').provider_origin,
+                    remote_provider: model('analyze').remote_provider,
+                  },
+            },
+          ]
+        : [],
+      last_generation:
+        options.legacyShape || !options.featuresReady
+          ? undefined
+          : {
+              generation_id: 'gen-1',
+              added_count: options.featuresEmpty ? 0 : options.featuresMixedTriage ? 3 : 1,
+              duplicate_count: 0,
+            },
       failure:
         options.featuresReady && options.featuresFail ? 'Feature search failed. Try again.' : '',
       context_manifest: options.featuresLongContent
@@ -535,10 +544,11 @@ export function installFixture(options = {}) {
                   ...(state.features.generations || []),
                   {
                     id: newGenId,
-                    timestamp: '2026-10-04T01:05:00Z',
-                    goals: body.goals,
-                    provider_id: 'provider-1',
-                    model_summary: {
+                    generated_at: '2026-10-04T01:05:00Z',
+                    project_revision: rev.project_revision,
+                    workspace_hash: 'workspace-1',
+                    goals_hash: `goals:${body.goals}`,
+                    model: {
                       profile: body.profile || 'analyze',
                       model: model(body.profile || 'analyze').model,
                       provider_origin: model(body.profile || 'analyze').provider_origin,
@@ -546,7 +556,12 @@ export function installFixture(options = {}) {
                     },
                   },
                 ];
-                state.features.last_generation = newGenId;
+                state.features.schema_version = 2;
+                state.features.last_generation = {
+                  generation_id: newGenId,
+                  added_count: options.featuresEmpty || options.duplicateOnly ? 0 : 1,
+                  duplicate_count: options.duplicateOnly ? 1 : 0,
+                };
                 if (options.featuresEmpty) {
                   // do not add ideas
                 } else if (options.duplicateOnly) {
@@ -607,15 +622,25 @@ export function installFixture(options = {}) {
                   : [],
                 fingerprint: 'guide-1',
               },
-              presets: [
+              presets: options.instructionPresets || [
+                {
+                  id: 'go',
+                  label: 'Follow Go conventions',
+                  category: 'Code style and conventions',
+                  content: 'Format changed Go code with gofmt.',
+                  reason: 'Go source in this scope',
+                  evidence: ['internal/worker.go'],
+                },
                 {
                   id: 'focused',
                   label: 'Keep changes focused',
+                  category: 'Review and handoff',
                   content: 'Preserve unrelated work.',
                 },
                 {
                   id: 'tests',
                   label: 'Test meaningful behavior',
+                  category: 'Testing and validation',
                   content: 'Test behavior and error paths.',
                 },
               ],
@@ -707,6 +732,77 @@ export function installFixture(options = {}) {
               };
             if (!action)
               return response({ ...change, freshness: state.changed ? 'stale' : 'current' });
+            if (action === 'workflow') {
+              if (parts[7] === 'cancel') {
+                change.workflow.status = 'canceled';
+                change.workflow.reason = 'Workflow canceled. No source was applied.';
+                change.workflow.stages[0].status = 'canceled';
+                return response(change);
+              }
+              change.revision++;
+              change.workflow = {
+                id: `workflow-${change.revision}`,
+                status: 'running',
+                models: body.models,
+                stages: ['create', 'test', 'review', 'human_review'].map((name, index) => ({
+                  name,
+                  status: index === 0 ? 'running' : index === 3 ? 'blocked' : 'pending',
+                  ...(index < 3 ? { model: model(body.models[name]) } : {}),
+                })),
+                started_at: '2026-10-08T00:00:00Z',
+                updated_at: '2026-10-08T00:00:00Z',
+              };
+              change.reviewed_hash = '';
+              window.fixture.completeWorkflow = (status = 'awaiting_human_review') => {
+                change.revision++;
+                change.hash = `workflow-proposal-${change.revision}`;
+                change.changes = change.targets.map((target) => ({
+                  path: target.path,
+                  content: source.replace('return nil', 'return ctx.Err()'),
+                  hash: `candidate-${change.revision}`,
+                  diff: validation().diff,
+                }));
+                change.check_options = { run_tests: true };
+                change.checks = [
+                  {
+                    name: 'tests',
+                    required: true,
+                    state: status === 'failed' ? 'failed' : 'passed',
+                    output: status === 'failed' ? 'Boundary test failed.' : '',
+                  },
+                ];
+                change.workflow.status = status;
+                change.workflow.updated_at = '2026-10-08T00:01:00Z';
+                change.workflow.stages.forEach((stage, index) => {
+                  stage.status =
+                    index === 3
+                      ? status === 'awaiting_human_review'
+                        ? 'waiting'
+                        : 'blocked'
+                      : 'completed';
+                });
+                if (status === 'failed') {
+                  change.workflow.reason =
+                    'Tests or source checks failed. Inspect the check evidence before running again.';
+                  change.workflow.stages[1].status = 'failed';
+                  change.workflow.stages[2].status = 'skipped';
+                } else {
+                  change.workflow.review = {
+                    proposal_hash: change.hash,
+                    verdict: status === 'changes_requested' ? 'changes_requested' : 'approve',
+                    summary:
+                      options.workflowSummary ||
+                      'The change handles cancellation and its tests pass.',
+                    findings:
+                      status === 'changes_requested'
+                        ? ['Add a regression test for invalid input.']
+                        : [],
+                  };
+                }
+              };
+              if (!options.workflowRunning) window.fixture.completeWorkflow(options.workflowStatus);
+              return response(change);
+            }
             if (action === 'resume') {
               change.checks = [];
               change.reviewed_hash = '';
@@ -823,6 +919,23 @@ export function installFixture(options = {}) {
               version: 'fixture',
               workflow: 'single_coder_preview',
             });
+          if (path === '/api/models/available')
+            return response(
+              state.availableModels || {
+                defaults: { analyze: 'analyze', bug: 'bug', function: 'function' },
+                models: options.emptyModelCatalog
+                  ? []
+                  : ['analyze', 'bug', 'function'].map((scope) => ({
+                      id: scope,
+                      name: model(scope).model,
+                      provider: 'openai',
+                      source: 'configured',
+                      location: model(scope).remote_provider ? 'remote' : 'local',
+                      model: { ...model(scope), scope: '' },
+                    })),
+                pi: { status: 'ready' },
+              },
+            );
           if (path === '/api/models/current')
             return response({
               scopes: options.emptyModelCatalog
@@ -920,7 +1033,7 @@ export function installFixture(options = {}) {
                   id: code,
                   stages: ['semantic'],
                   model: { ...model(choices.code), scope: 'bug' },
-                  remote_confirmation_required: !!options.remote,
+                  remote_confirmation_required: model(choices.code).remote_provider,
                 },
                 {
                   id: review,
@@ -930,7 +1043,7 @@ export function installFixture(options = {}) {
                     ...(features === review ? ['feature_suggestions'] : []),
                   ],
                   model: { ...model(choices.review), scope: 'analyze' },
-                  remote_confirmation_required: !!options.remote,
+                  remote_confirmation_required: model(choices.review).remote_provider,
                 },
                 ...(features === review
                   ? []
@@ -939,7 +1052,7 @@ export function installFixture(options = {}) {
                         id: features,
                         stages: ['feature_suggestions'],
                         model: { ...model(choices.features), scope: 'analyze' },
-                        remote_confirmation_required: !!options.remote,
+                        remote_confirmation_required: model(choices.features).remote_provider,
                       },
                     ]),
               ];

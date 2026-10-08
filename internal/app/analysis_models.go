@@ -6,7 +6,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 )
 
-// Choices reference configured profiles; credentials and endpoints remain daemon-owned.
+// Choices reference catalog models or legacy profiles; credentials remain daemon-owned.
 type AnalysisModels struct {
 	Code     string `json:"code"`
 	Review   string `json:"review"`
@@ -18,8 +18,8 @@ func (models *AnalysisModels) Validate() error {
 		return nil
 	}
 	for _, profile := range []string{models.Code, models.Review, models.Features} {
-		if profile != "analyze" && profile != "bug" && profile != "function" {
-			return fmt.Errorf("analysis models must reference configured analyze, bug or function profiles")
+		if !validModelSelection(profile) {
+			return fmt.Errorf("analysis models must reference catalog model IDs or configured analyze, bug or function profiles")
 		}
 	}
 	return nil
@@ -62,7 +62,7 @@ func (s *Service) runtimeForAnalysisScope(scope config.ModelScope, profile strin
 	if profile == "" {
 		profile = string(scope)
 	}
-	runtime, _ := s.runtimes.forScope(profile) // Request and stored-plan validation reject unknown profiles.
+	runtime, _ := s.selectedRuntime(scope, profile) // Admission validates catalog membership before dispatch.
 	runtime.profile.Scope = scope
 	runtime.effective.Scope = string(scope)
 	return runtime

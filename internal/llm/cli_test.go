@@ -51,8 +51,8 @@ func TestCLIProvidersSendOnlyControlledArgumentsAndValidateStructuredResponses(t
 				t.Fatalf("request directory was retained: %v", err)
 			}
 			assertCLIFlags(t, provider, request.Args)
-			if provider == config.AgyProvider && (!strings.Contains(request.System, "tools: [finish]") || !strings.Contains(request.System, "inheritMcp: false") || !strings.Contains(request.System, "commandExecutionPolicy: off") || !strings.Contains(request.System, "# System Prompt\n")) {
-				t.Fatal("agy agent must load the system prompt and permit only structured completion")
+			if provider == config.AgyProvider && (!strings.Contains(request.System, "tools: []") || !strings.Contains(request.System, "inheritMcp: false") || !strings.Contains(request.System, "commandExecutionPolicy: off") || !strings.Contains(request.System, "# System Prompt\n")) {
+				t.Fatal("agy agent must load the system prompt and disable all tools")
 			}
 			if provider == config.PiProvider && !strings.Contains(request.Settings, `"enabled":false`) {
 				t.Fatal("pi automatic retry and compaction must be disabled")
@@ -144,7 +144,7 @@ func TestCLIProtocolRejectsIncorrectModelsAndExtraTurns(t *testing.T) {
 			"extra turn":    valid + valid,
 		} {
 			t.Run(string(provider)+"/"+name, func(t *testing.T) {
-				if _, err := decodeCLIResponse(profile, []byte(output), false); !errors.Is(err, ErrUnusableResponse) {
+				if _, err := decodeCLIResponse(profile, []byte(output)); !errors.Is(err, ErrUnusableResponse) {
 					t.Fatalf("invalid CLI protocol = %v", err)
 				}
 			})
@@ -152,24 +152,59 @@ func TestCLIProtocolRejectsIncorrectModelsAndExtraTurns(t *testing.T) {
 	}
 }
 
-func TestCLIPiAcceptsUserEventsAndRejectsToolsAndRetries(t *testing.T) {
+func TestCLIPiAcceptsContextEventsAndRejectsToolsAndRetries(t *testing.T) {
 	profile := config.ModelProfile{Provider: config.PiProvider, Model: "fixture-provider/fixture-model"}
 	valid := cliFixtureOutput(config.PiProvider, "success")
-	user := "{\"type\":\"message_end\",\"message\":{\"role\":\"user\",\"content\":\"input\"}}\n"
-	withUser := strings.Replace(valid, "{\"type\":\"agent_start\"}\n", "{\"type\":\"agent_start\"}\n"+user, 1)
-	if _, err := decodeCLIResponse(profile, []byte(withUser), false); err != nil {
-		t.Fatal(err)
-	}
 	for name, output := range map[string]string{
-		"tool message": strings.Replace(withUser, `"role":"user"`, `"role":"toolResult"`, 1),
-		"tool call":    strings.Replace(valid, `"type":"text"`, `"type":"toolCall"`, 1),
-		"retry":        strings.Replace(valid, `"willRetry":false`, `"willRetry":true`, 1),
+		"with context":    valid,
+		"without context": strings.Replace(valid, piContextEvents, "", 1),
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := decodeCLIResponse(profile, []byte(output), false); !errors.Is(err, ErrUnusableResponse) {
+			response, err := decodeCLIResponse(profile, []byte(output))
+			if err != nil || response.Choices[0].Message.Content != cliFixtureContent {
+				t.Fatalf("Pi final answer = %+v, %v", response, err)
+			}
+		})
+	}
+	for name, output := range map[string]string{
+		"tool message": strings.Replace(valid, `"role":"user"`, `"role":"toolResult"`, 1),
+		"unknown role": strings.Replace(valid, `"role":"system"`, `"role":"unexpected"`, 1),
+		"tool call":    strings.Replace(valid, `"type":"thinking"`, `"type":"toolCall"`, 1),
+		"retry":        strings.Replace(valid, `"willRetry":false`, `"willRetry":true`, 1),
+		"only context": "{\"type\":\"agent_start\"}\n" + piContextEvents + "{\"type\":\"agent_end\",\"willRetry\":false}\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := decodeCLIResponse(profile, []byte(output)); !errors.Is(err, ErrUnusableResponse) {
 				t.Fatalf("invalid Pi protocol = %v", err)
 			}
 		})
+	}
+}
+
+func TestCLIPiExpiredAuthenticationDoesNotExposeProviderDiagnostics(t *testing.T) {
+	profile, _ := cliFixture(t, config.PiProvider, "auth-expired")
+	_, err := NewClient(profile).Chat(context.Background(), []ChatMessage{{Role: "user", Content: "hello"}})
+	if !errors.Is(err, ErrPiAuthenticationExpired) || !errors.Is(err, ErrRequestRejected) || strings.Contains(err.Error(), "private-marker") {
+		t.Fatalf("expired authentication = %v", err)
+	}
+
+	failed := cliFixtureOutput(config.PiProvider, "auth-expired")
+	for name, output := range map[string]string{
+		"other provider failure": strings.Replace(failed, "Your authentication token has expired.", "An unknown provider failure occurred.", 1),
+		"truncation":             strings.Replace(failed, `"stopReason":"error"`, `"stopReason":"length"`, 1),
+		"aborted":                strings.Replace(failed, `"stopReason":"error"`, `"stopReason":"aborted"`, 1),
+		"outside model turn":     strings.Replace(failed, "{\"type\":\"agent_start\"}\n", "", 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := decodeCLIResponse(profile, []byte(output))
+			if !errors.Is(err, ErrUnusableResponse) || errors.Is(err, ErrPiAuthenticationExpired) || strings.Contains(err.Error(), "private-marker") {
+				t.Fatalf("non-authentication failure = %v", err)
+			}
+		})
+	}
+	completed := strings.Replace(failed, `"stopReason":"error"`, `"stopReason":"stop"`, 1)
+	if _, err := decodeCLIResponse(profile, []byte(completed)); err != nil {
+		t.Fatalf("successful content was treated as an authentication failure: %v", err)
 	}
 }
 
@@ -340,6 +375,8 @@ func TestCLIHelperProcess(t *testing.T) {
 	}
 	fmt.Fprint(os.Stderr, "credential-private-marker source-private-marker")
 	switch mode {
+	case "catalog":
+		fmt.Print(piCatalogFixture)
 	case "exit":
 		os.Exit(7)
 	case "wait", "wait-child":
@@ -361,10 +398,24 @@ func TestCLIHelperProcess(t *testing.T) {
 const agyFinishEvents = `{"event":"step_update","step_update":{"step_type":"tool","state":"ACTIVE","tool_name":"finish","tool_info":{"name":"finish"}}}` + "\n" +
 	`{"event":"step_update","step_update":{"step_type":"tool","state":"DONE","tool_name":"finish","tool_info":{"name":"finish"}}}` + "\n"
 
+// Pi 1.0 emits its prompt context before the final assistant message.
+const piContextEvents = `{"type":"message_end","message":{"role":"system","content":"","sections":{"preamble":"source-private-marker","cwd":"<cwd>\n/private/fixture\n</cwd>"}}}` + "\n" +
+	`{"type":"message_end","message":{"role":"user","content":[{"type":"text","text":"source-private-marker"}]}}` + "\n"
+
 func cliFixtureOutput(provider config.ModelProvider, mode string) string {
 	content := cliFixtureContent
 	if mode == "empty" {
 		content = ""
+	}
+	switch mode {
+	case "invalid-json", "native-only":
+		content = "Task completed."
+	case "invalid-schema":
+		content = `{"answer":42}`
+	case "null-json":
+		content = `null`
+	case "extra-property":
+		content = `{"answer":"done","toolAction":"Completing task"}`
 	}
 	if provider == config.AgyProvider {
 		// Agy reports its global catalog even when the custom agent denies these tools.
@@ -380,16 +431,8 @@ func cliFixtureOutput(provider config.ModelProvider, mode string) string {
 			status = "WAITING"
 		}
 		payload := map[string]any{"status": status, "response": content, "usage": map[string]int{"input_tokens": 10, "output_tokens": 20, "total_tokens": 30}}
-		if content != "" && mode != "missing-structured" {
-			payload["structured_output"] = json.RawMessage(content)
-			payload["response"] = `{"answer":"café 世界","toolAction":"Completing task","toolSummary":"Task completion"}`
-		}
-		if mode == "invalid-structured" || mode == "null-structured" {
-			payload["response"] = content
-			payload["structured_output"] = json.RawMessage(`{"answer":42}`)
-			if mode == "null-structured" {
-				payload["structured_output"] = json.RawMessage(`null`)
-			}
+		if mode == "native-only" {
+			payload["structured_output"] = json.RawMessage(cliFixtureContent)
 		}
 		result, _ := json.Marshal(map[string]any{"event": "result", "result": payload})
 		if mode == "finish" {
@@ -397,7 +440,7 @@ func cliFixtureOutput(provider config.ModelProvider, mode string) string {
 		}
 		return init + string(result) + "\n"
 	}
-	start := "{\"type\":\"agent_start\"}\n"
+	start := "{\"type\":\"agent_start\"}\n" + piContextEvents
 	if mode == "partial" {
 		return start
 	}
@@ -408,7 +451,12 @@ func cliFixtureOutput(provider config.ModelProvider, mode string) string {
 	if mode == "failed" {
 		stop = "length"
 	}
-	message, _ := json.Marshal(map[string]any{"type": "message_end", "message": map[string]any{"role": "assistant", "model": "fixture-model", "stopReason": stop, "content": []any{map[string]string{"type": "thinking", "thinking": "not the answer"}, map[string]string{"type": "text", "text": content}}, "usage": map[string]int{"input": 10, "output": 20, "totalTokens": 30}}})
+	failure := ""
+	if mode == "auth-expired" {
+		stop = "error"
+		failure = "Your authentication token has expired. Please try refreshing it. credential-private-marker source-private-marker"
+	}
+	message, _ := json.Marshal(map[string]any{"type": "message_end", "message": map[string]any{"role": "assistant", "model": "fixture-model", "stopReason": stop, "errorMessage": failure, "content": []any{map[string]string{"type": "thinking", "thinking": "not the answer"}, map[string]string{"type": "text", "text": content}}, "usage": map[string]int{"input": 10, "output": 20, "totalTokens": 30}}})
 	return start + string(message) + "\n{\"type\":\"agent_end\",\"willRetry\":false}\n"
 }
 
@@ -419,7 +467,7 @@ func assertCLIFlags(t *testing.T, provider config.ModelProvider, args []string) 
 	if provider == config.PiProvider {
 		flags = append(flags, "--print", "--mode json", "--no-tools", "--no-session", "--no-extensions", "--no-skills", "--no-context-files", "--offline", "--thinking high")
 	} else {
-		flags = append(flags, "--input-format stream-json", "--output-format stream-json", "--agent mini-orca", "--disable-slash-commands", "--effort high", "--json-schema")
+		flags = append(flags, "--input-format stream-json", "--output-format stream-json", "--agent mini-orca", "--disable-slash-commands", "--effort high")
 	}
 	for _, flag := range flags {
 		if !strings.Contains(joined, flag) {

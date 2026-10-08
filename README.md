@@ -69,6 +69,9 @@ The daemon owns indexing, context exclusions, model requests and guarded source
 mutation. The desktop renders state and rejects stale asynchronous results.
 Three configured scopes serve project/Performance/Security analysis (`analyze`), file/bug
 analysis (`bug`) and change/declaration proposals/repairs (`function`).
+The Chat agent workflow can select these profiles independently for creation,
+test writing and model review, followed by a human review of the checked diffs.
+Feature ideas and Bug/Performance/Security findings can seed the same workflow.
 
 Project-local `.mini-orca/` stores `index.json`, `project-analysis.json`,
 `file-analysis/`, `findings.json`, `performance/files/`, unified progress in

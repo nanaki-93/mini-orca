@@ -66,12 +66,16 @@ func main() {
 	// Wait for shutdown signal
 	quit := waitForShutdown()
 	logging.Info("Received shutdown signal", "signal", quit)
+	application.CancelChangeWorkflows()
 
 	// Shutdown HTTP server
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logging.Error("HTTP server shutdown error", "error", err)
+	}
+	if err := application.ShutdownChangeWorkflows(shutdownCtx); err != nil {
+		logging.Error("Change workflow shutdown error", "error", err)
 	}
 
 	logging.Info("Shutdown complete")
@@ -143,6 +147,8 @@ func newHTTPMux(
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/resume", changeHandler.Resume)
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/messages", changeHandler.Message)
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/checks", changeHandler.Checks)
+	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/workflow", changeHandler.StartWorkflow)
+	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/workflow/cancel", changeHandler.CancelWorkflow)
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/review", changeHandler.Review)
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/apply", changeHandler.Apply)
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/undo", changeHandler.Undo)
@@ -162,6 +168,7 @@ func newHTTPMux(
 
 	modelHandler := handlers.NewModelHandler(application)
 	mux.HandleFunc("GET /api/models/current", modelHandler.Current)
+	mux.HandleFunc("GET /api/models/available", modelHandler.Available)
 	contextHandler := handlers.NewContextHandler(application)
 	mux.HandleFunc("GET /api/projects/current/context", contextHandler.Preview)
 

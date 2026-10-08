@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -11,6 +14,61 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
+
+func TestAvailableModelCatalogIncludesPiMetadataAndRejectsQueries(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("CLI providers require process-group cleanup")
+	}
+	manager, err := project.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := filepath.Join(t.TempDir(), "fake-pi")
+	script := `#!/bin/sh
+cat >/dev/null
+cat <<'MODELS'
+{"id":"models","type":"response","command":"get_available_models","success":true,"data":{"models":[{"provider":"local-server","id":"qwen","name":"Qwen","baseUrl":"http://localhost:1234/v1","headers":{"Authorization":"private-token"}}]}}
+MODELS
+`
+	if err := os.WriteFile(command, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.ModelScopes.Function = config.ModelProfileConfig{Provider: config.PiProvider, CLIPath: command, Model: "local-server/default"}
+	service, err := app.New(cfg, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, query := range []string{"", "?model=arbitrary", "?%ZZ"} {
+		response := httptest.NewRecorder()
+		NewModelHandler(service).Available(response, httptest.NewRequest(http.MethodGet, "/api/models/available"+query, nil))
+		if query != "" {
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("query accepted: %s", response.Body.String())
+			}
+			continue
+		}
+		var catalog app.AvailableModels
+		if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &catalog) != nil || catalog.Pi.Status != "ready" {
+			t.Fatalf("catalog response = %d: %s", response.Code, response.Body.String())
+		}
+		if len(catalog.Defaults) != 3 || len(catalog.Models) == 0 || catalog.Models[len(catalog.Models)-1].ID != "pi:local-server/qwen" {
+			t.Fatalf("missing catalog data: %+v", catalog)
+		}
+		if strings.Contains(response.Body.String(), "private-token") || strings.Contains(response.Body.String(), command) {
+			t.Fatal("catalog exposed credentials or executable path")
+		}
+	}
+	if err := os.Remove(command); err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	NewModelHandler(service).Available(response, httptest.NewRequest(http.MethodGet, "/api/models/available", nil))
+	var catalog app.AvailableModels
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &catalog) != nil || catalog.Pi.Status != "unavailable" || len(catalog.Models) == 0 {
+		t.Fatalf("configured models lost when Pi unavailable: %s", response.Body.String())
+	}
+}
 
 func TestCurrentModelCatalogExposesOnlyScopedProfilesWithoutSecrets(t *testing.T) {
 	manager, err := project.NewManager(t.TempDir())

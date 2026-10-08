@@ -484,8 +484,17 @@ func analysisSemanticCacheUsable(report *project.FileAnalysis, revision string) 
 }
 
 func analysisPerformanceCacheUsable(report *project.PerformanceFileReport, analysis project.Analysis, runtime modelRuntime) bool {
+	if report == nil {
+		return false
+	}
+	configuredModel := report.ConfiguredModel
+	if configuredModel == "" {
+		// Older reports only stored the returned model. Reuse them only when
+		// that name exactly matches the current selection.
+		configuredModel = report.Model
+	}
 	model := runtime.effective
-	return report != nil && report.Status == "completed" && report.ProjectID == analysis.ProjectID && report.ProjectRevision == analysis.ProjectRevision && report.Model == runtime.profile.Model && report.Profile == model.Profile && report.Scope == model.Scope && report.ProviderOrigin == model.ProviderOrigin && report.ReasoningEffort == model.ReasoningEffort
+	return report.Status == "completed" && report.ProjectID == analysis.ProjectID && report.ProjectRevision == analysis.ProjectRevision && configuredModel == runtime.profile.Model && report.Profile == model.Profile && report.Scope == model.Scope && report.ProviderOrigin == model.ProviderOrigin && report.ReasoningEffort == model.ReasoningEffort
 }
 
 func analysisSecurityCacheInput(analysis project.Analysis, file project.IndexFile, runtime modelRuntime, policyVersion string) project.SecurityReportInput {

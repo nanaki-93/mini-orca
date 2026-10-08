@@ -95,7 +95,7 @@ func captureChangeScope(root string, session *ChangeSession, paths []string) err
 }
 
 func validChangeKind(kind string) bool {
-	return kind == "fix" || kind == "performance" || kind == "feature" || kind == "instructions"
+	return kind == "fix" || kind == "performance" || kind == "security" || kind == "feature" || kind == "instructions"
 }
 
 func validateChangeCriteria(criteria []string) error {
@@ -162,6 +162,7 @@ func (s *Service) ChangeSession(ctx context.Context, id string) (*ChangeSession,
 			session.Freshness = "stale"
 		}
 	}
+	s.restoreChangeWorkflow(session)
 	return session, nil
 }
 
@@ -171,6 +172,13 @@ func (s *Service) ResumeChange(ctx context.Context, id string) (*ChangeSession, 
 	s.changesMu.Lock()
 	defer s.changesMu.Unlock()
 	root := s.manager.Root()
+	s.changeWorkflow.mu.Lock()
+	job := s.changeWorkflow.job
+	running := job != nil && !job.finished && job.root == root && job.sessionID == id
+	s.changeWorkflow.mu.Unlock()
+	if running {
+		return nil, fmt.Errorf("%w: cancel the workflow before restoring its conversation", project.ErrRevisionConflict)
+	}
 	session, err := s.ChangeSession(ctx, id)
 	if err != nil {
 		return nil, err
@@ -182,7 +190,11 @@ func (s *Service) ResumeChange(ctx context.Context, id string) (*ChangeSession, 
 	if s.manager.Root() != root || session.ProjectID != index.ProjectID {
 		return nil, project.ErrRevisionConflict
 	}
+	if changeWorkflowActive(session.Workflow) {
+		return nil, fmt.Errorf("%w: cancel the workflow before restoring its conversation", project.ErrRevisionConflict)
+	}
 	session.Checks, session.ReviewedHash = []DraftCheck{}, ""
+	invalidateChangeWorkflow(session, "Restored workflow evidence requires a new run.")
 	delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
 	if err := writeChangeSession(root, session); err != nil {
 		return nil, err
@@ -197,17 +209,38 @@ func (s *Service) ChangeHistory(ctx context.Context) ([]ChangeHistoryEntry, erro
 	if _, err := s.manager.Index(); err != nil {
 		return nil, err
 	}
-	return listChangeSessions(s.manager.Root())
+	history, err := listChangeSessions(s.manager.Root())
+	if err != nil {
+		return nil, err
+	}
+	s.changeWorkflow.mu.Lock()
+	defer s.changeWorkflow.mu.Unlock()
+	for i := range history {
+		entry := &history[i]
+		if entry.WorkflowStatus == "running" || entry.WorkflowStatus == "canceling" {
+			job := s.changeWorkflow.job
+			if job == nil || job.finished || job.sessionID != entry.ID || job.root != s.manager.Root() {
+				entry.WorkflowStatus = "interrupted"
+			}
+		}
+	}
+	return history, nil
 }
 
 func (s *Service) loadChangeForAction(ctx context.Context, id string, identity ChangeIdentity) (*ChangeSession, string, error) {
 	root := s.manager.Root()
+	if err := ctx.Err(); err != nil {
+		return nil, root, err
+	}
 	session, err := readChangeSession(root, id)
 	if err != nil {
 		return nil, root, err
 	}
 	if session.State != "draft" || identity.ProjectID != session.ProjectID || identity.ProjectRevision != session.ProjectRevision || identity.Revision != session.Revision || identity.Hash != session.Hash {
 		return nil, root, project.ErrRevisionConflict
+	}
+	if changeWorkflowActive(session.Workflow) && ctx.Value(changeWorkflowContextKey{}) != session.Workflow.ID {
+		return nil, root, fmt.Errorf("%w: this proposal belongs to an active workflow", project.ErrRevisionConflict)
 	}
 	if err := s.verifyChangeCurrent(ctx, root, session); err != nil {
 		return nil, root, err
@@ -236,6 +269,10 @@ func (s *Service) SendChangeMessage(ctx context.Context, id string, request Chan
 }
 
 func (s *Service) generateChangeMessage(ctx context.Context, root string, session *ChangeSession, request ChangeMessageRequest) (*ChangeSession, error) {
+	return s.generateChangeWithRuntime(ctx, root, session, request, s.runtimes.function)
+}
+
+func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, session *ChangeSession, request ChangeMessageRequest, runtime modelRuntime) (*ChangeSession, error) {
 	text, manifest, err := changeContext(root, session)
 	if err != nil {
 		return nil, err
@@ -244,9 +281,8 @@ func (s *Service) generateChangeMessage(ctx context.Context, root string, sessio
 	if err != nil {
 		return nil, err
 	}
-	runtime := s.runtimes.function
 	if runtime.effective.ContextMaxTokens > 0 && len(messages[0].Content)+len(messages[1].Content) > runtime.effective.ContextMaxTokens*4 {
-		return nil, fmt.Errorf("selected context exceeds configured Function token limit")
+		return nil, fmt.Errorf("selected context exceeds configured %s token limit", runtime.effective.Profile)
 	}
 	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
 	defer cancel()
@@ -267,6 +303,9 @@ func (s *Service) generateChangeMessage(ctx context.Context, root string, sessio
 	session.Revision++
 	session.Changes, session.Hash = edits, changeProposalHash(edits)
 	session.Checks, session.ReviewedHash = []DraftCheck{}, ""
+	if ctx.Value(changeWorkflowContextKey{}) == nil {
+		invalidateChangeWorkflow(session, "The proposal changed. Run the workflow again before human review.")
+	}
 	delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
 	session.ContextManifest = s.contextManifestForRuntime(manifest, runtime)
 	now := time.Now().UTC()

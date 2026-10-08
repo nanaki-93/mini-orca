@@ -12,6 +12,97 @@ import (
 	"time"
 )
 
+type requestTransport func(*http.Request) (*http.Response, error)
+
+func (transport requestTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return transport(request)
+}
+
+func TestFeatureGenerationDoesNotShortenTheWorkflowDeadline(t *testing.T) {
+	for _, allowance := range []time.Duration{0, time.Minute, 10 * time.Minute, 20 * time.Minute} {
+		t.Run(allowance.String(), func(t *testing.T) {
+			ctx := context.Background()
+			if allowance > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, allowance)
+				defer cancel()
+			}
+			client, err := NewClient("http://127.0.0.1:9090")
+			if err != nil {
+				t.Fatal(err)
+			}
+			client.http.Transport = requestTransport(func(request *http.Request) (*http.Response, error) {
+				deadline, bounded := request.Context().Deadline()
+				if request.URL.Path == "/api/projects/current/features/generate" {
+					want, supplied := ctx.Deadline()
+					if bounded != supplied || bounded && !deadline.Equal(want) {
+						t.Errorf("feature transport deadline = %v (bounded %t), caller = %v (bounded %t)", deadline, bounded, want, supplied)
+					}
+				} else if !bounded || time.Until(deadline) > client.http.Timeout {
+					t.Errorf("ordinary request lost its transport timeout: %v", deadline)
+				}
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"status":"ready"}`))}, nil
+			})
+			for _, target := range []string{"/api/projects/current/features/generate", "/api/projects/current/features/generate?request=1"} {
+				result, err := client.Request(ctx, "feature", http.MethodPost, target, "{}")
+				if err != nil || result.Status != http.StatusOK {
+					t.Fatalf("feature generation = %+v, %v", result, err)
+				}
+			}
+			if _, err := client.Request(context.Background(), "status", http.MethodGet, "/status", ""); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestFeatureGenerationRemainsCancelable(t *testing.T) {
+	for _, action := range []string{"request", "parent", "close"} {
+		t.Run(action, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			client, err := NewClient("http://127.0.0.1:9090")
+			if err != nil {
+				t.Fatal(err)
+			}
+			entered := make(chan struct{})
+			client.http.Transport = requestTransport(func(request *http.Request) (*http.Response, error) {
+				close(entered)
+				<-request.Context().Done()
+				return nil, request.Context().Err()
+			})
+			done := make(chan error, 1)
+			go func() {
+				_, err := client.Request(ctx, "feature", http.MethodPost, "/api/projects/current/features/generate", "{}")
+				done <- err
+			}()
+			select {
+			case <-entered:
+			case <-time.After(time.Second):
+				t.Fatal("feature request did not reach transport")
+			}
+			switch action {
+			case "request":
+				client.Cancel("feature")
+			case "parent":
+				cancel()
+			case "close":
+				if err := client.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			select {
+			case err := <-done:
+				if !errors.Is(err, context.Canceled) {
+					t.Fatalf("feature cancellation = %v", err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("feature request ignored cancellation")
+			}
+		})
+	}
+}
+
 func TestNativeRequestsPreserveDaemonContract(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Origin") != "" || r.Header.Get("Accept") != "application/json" || r.Header.Get("Content-Type") != "application/json" {
@@ -32,6 +123,27 @@ func TestNativeRequestsPreserveDaemonContract(t *testing.T) {
 	result, err := client.Request(context.Background(), "1", "POST", "/api/projects/current/execution-trust", `{"project_revision":"r1","confirm":true}`)
 	if err != nil || result.Status != 409 || !strings.Contains(result.Body, "Refresh project") {
 		t.Fatalf("structured failure was lost: %#v, %v", result, err)
+	}
+}
+
+func TestNativeModelCatalogReadsStayOnTheDaemon(t *testing.T) {
+	client, err := NewClient("http://127.0.0.1:9090")
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	client.http.Transport = requestTransport(func(request *http.Request) (*http.Response, error) {
+		calls++
+		if request.Method != http.MethodGet || request.URL.Path != "/api/models/available" || request.Header.Get("Origin") != "" {
+			t.Fatalf("catalog request changed: %s %s", request.Method, request.URL)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"models":[],"defaults":{},"pi":{"status":"ready"}}`))}, nil
+	})
+	if result, err := client.Request(context.Background(), "catalog", http.MethodGet, "/api/models/available", ""); err != nil || result.Status != http.StatusOK {
+		t.Fatalf("catalog response = %+v, %v", result, err)
+	}
+	if _, err := client.Request(context.Background(), "invalid", http.MethodPost, "/api/models/available", "{}"); err == nil || calls != 1 {
+		t.Fatal("catalog endpoint permitted a write")
 	}
 }
 
@@ -90,8 +202,13 @@ func TestBridgeDoesNotFollowRedirects(t *testing.T) {
 	}))
 	defer server.Close()
 	client, _ := NewClient(server.URL)
-	if _, err := client.Request(context.Background(), "1", "GET", "/status", ""); err == nil || reached.Load() {
-		t.Fatal("redirect escaped daemon origin")
+	for _, request := range [][3]string{
+		{http.MethodGet, "/status", ""},
+		{http.MethodPost, "/api/projects/current/features/generate", "{}"},
+	} {
+		if _, err := client.Request(context.Background(), "1", request[0], request[1], request[2]); err == nil || reached.Load() {
+			t.Fatalf("redirect escaped daemon origin for %s", request[1])
+		}
 	}
 }
 
@@ -146,6 +263,8 @@ func TestBridgeSharedChangeRoutesRemainAllowlisted(t *testing.T) {
 		{"POST", "/api/projects/current/changes/change-id/messages", "{}"},
 		{"POST", "/api/projects/current/changes/change-id/apply", "{}"},
 		{"POST", "/api/projects/current/changes/change-id/verify", "{}"},
+		{"POST", "/api/projects/current/changes/change-id/workflow", "{}"},
+		{"POST", "/api/projects/current/changes/change-id/workflow/cancel", "{}"},
 		{"POST", "/api/projects/current/instructions/proposal", "{}"},
 		{"POST", "/api/projects/current/features/generate", "{}"},
 		{"PATCH", "/api/projects/current/features/idea", "{}"},

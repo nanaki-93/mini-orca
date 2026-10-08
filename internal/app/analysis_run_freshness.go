@@ -1,6 +1,10 @@
 package app
 
-import "context"
+import (
+	"context"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
+)
 
 // Reindex owns jobLifecycleMu. A progress write fault remains available through
 // run reads and controls without hiding the successfully refreshed index.
@@ -20,7 +24,7 @@ func (s *Service) refreshAnalysisRunFreshnessLocked(ctx context.Context) error {
 	if stale && (c.fault != nil || !analysisRunHasTerminalEvidence(c.run)) {
 		return nil
 	}
-	if err := s.validateAnalysisQueue(ctx, c.root, &c.run.Plan, true); err != nil {
+	if err := s.validateAnalysisRunFreshness(ctx, c.root, c.run); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -41,6 +45,25 @@ func (s *Service) refreshAnalysisRunFreshnessLocked(ctx context.Context) error {
 	return nil
 }
 
+func (s *Service) validateAnalysisRunFreshness(ctx context.Context, root string, run *AnalysisRun) error {
+	switch run.Status {
+	case AnalysisRunCompleted, AnalysisRunCompletedEmpty, AnalysisRunPartial, AnalysisRunFailed, AnalysisRunUnavailable, AnalysisRunStale:
+		// Finished evidence depends on analyzed source, policy and providers.
+		// The admission inventory and execution workspace also contain ignored
+		// runtime files; changes there must not invalidate saved results.
+		if err := s.validateAnalysisQueue(ctx, root, &run.Plan, false); err != nil {
+			return err
+		}
+		index, err := s.manager.Index()
+		if err != nil {
+			return err
+		}
+		return project.VerifyProjectSources(ctx, root, index)
+	default:
+		return s.validateAnalysisQueue(ctx, root, &run.Plan, true)
+	}
+}
+
 func analysisRunHasTerminalEvidence(run *AnalysisRun) bool {
 	evidence := false
 	if run.Features != nil {
@@ -52,12 +75,16 @@ func analysisRunHasTerminalEvidence(run *AnalysisRun) bool {
 			return false
 		}
 	}
-	for _, file := range run.Files {
-		for _, stage := range file.Stages {
+	for i, file := range run.Files {
+		for j, stage := range file.Stages {
 			switch stage.Status {
 			case AnalysisStageCompleted, AnalysisStageCompletedEmpty, AnalysisStagePartial:
 				evidence = true
 			case AnalysisStageFailed, AnalysisStageUnavailable:
+			case AnalysisStageSkipped:
+				if run.Plan.Files[i].Stages[j].Eligible {
+					return false
+				}
 			default:
 				return false
 			}

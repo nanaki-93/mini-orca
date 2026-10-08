@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { createRoot } from 'react-dom/client';
 import { workspace as w, canCancelOperation, type Page } from './workspace';
-import { Button, Icon, Modal, Notice } from './ui';
+import { Button, Icon, Modal, Notice, human } from './ui';
 import { Summary, ProjectPage, Models, Diagrams, SearchPage } from './overview';
 import { Analysis, AnalysisPreview, AnalysisRun } from './analysis';
 import { Results } from './results';
@@ -204,6 +204,14 @@ function App() {
               </div>
             )}
             <div className="page" data-accent={s.page}>
+              {s.page !== 'chat' && s.change?.workflow && s.change.state === 'draft' && (
+                <Notice>
+                  <div className="row between wrap" aria-live="polite">
+                    <span>Agent workflow · {human(s.change.workflow.status)}</span>
+                    <Button onClick={() => void w.navigate('chat')}>View workflow</Button>
+                  </div>
+                </Notice>
+              )}
               {s.error && <Notice error>{s.error}</Notice>}
               {s.notice && <Notice>{s.notice}</Notice>}
               {Object.entries(s.resourceErrors).map(([key, error]) => (

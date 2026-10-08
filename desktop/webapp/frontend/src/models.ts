@@ -92,9 +92,22 @@ export interface ModelCatalog {
   scopes: Record<string, Model>;
 }
 export interface AnalysisModels {
-  code: 'analyze' | 'bug' | 'function';
-  review: 'analyze' | 'bug' | 'function';
-  features: 'analyze' | 'bug' | 'function';
+  code: string;
+  review: string;
+  features: string;
+}
+export interface ModelChoice {
+  id: string;
+  name: string;
+  provider: string;
+  source: 'configured' | 'pi';
+  location: 'local' | 'remote' | 'unknown';
+  model: Model;
+}
+export interface AvailableModels {
+  models: ModelChoice[];
+  defaults: Record<string, string>;
+  pi: { status: 'ready' | 'unavailable'; message?: string };
 }
 export interface TaskSpec {
   schema_version: string;
@@ -267,6 +280,8 @@ export interface PerformanceReport extends ProjectIdentity {
   status: string;
   findings: PerformanceFinding[];
   warning?: string;
+  model?: string;
+  configured_model?: string;
 }
 export interface SecurityFinding {
   id: string;
@@ -508,6 +523,7 @@ export interface ChangeSession extends ProjectIdentity {
   check_options?: { run_tests?: boolean; run_lint?: boolean };
   reviewed_hash?: string;
   repair_attempts: number;
+  workflow?: ChangeWorkflow;
   context_manifest: ContextManifest;
   updated_at: string;
 }
@@ -523,7 +539,22 @@ export type ChangeHistoryEntry = Pick<
   | 'state'
   | 'freshness'
   | 'updated_at'
->;
+> & { workflow_status?: string };
+export interface ChangeWorkflowModels {
+  create: string;
+  test: string;
+  review: string;
+}
+export interface ChangeWorkflow {
+  id: string;
+  status: string;
+  reason?: string;
+  models: ChangeWorkflowModels;
+  stages: { name: string; status: string; model?: Model }[];
+  review?: { proposal_hash: string; verdict: string; summary: string; findings: string[] };
+  started_at: string;
+  updated_at: string;
+}
 export interface ChangeMutation extends ProjectIdentity {
   session_id: string;
   state: string;
@@ -551,15 +582,22 @@ export interface ChangeSeed {
 
 export interface FeatureGeneration {
   id: string;
-  timestamp: string;
-  goals: string;
-  provider_id?: string;
-  model_summary?: {
+  generated_at: string;
+  project_revision: string;
+  workspace_hash: string;
+  goals_hash: string;
+  model: {
     profile: string;
     model: string;
     provider_origin: string;
     remote_provider: boolean;
-  };
+  } | null;
+}
+
+export interface FeatureGenerationOutcome {
+  generation_id: string;
+  added_count: number;
+  duplicate_count: number;
 }
 
 export interface FeatureSuggestion {
@@ -575,21 +613,31 @@ export interface FeatureSuggestion {
   status: 'open' | 'saved' | 'dismissed';
 }
 export interface FeatureReport extends ProjectIdentity {
+  schema_version: number;
   hash: string;
   goals: string;
   status: string;
   freshness: string;
   failure?: string;
   suggestions: FeatureSuggestion[];
-  generations?: FeatureGeneration[];
-  last_generation?: string;
+  generations: FeatureGeneration[];
+  last_generation?: FeatureGenerationOutcome;
+  workspace_hash: string;
   context_manifest: ContextManifest;
+  updated_at: string;
 }
 export interface InstructionPreview extends ProjectIdentity {
   path: string;
   exists: boolean;
   existing_content: string;
-  presets: { id: string; label: string; content: string }[];
+  presets: {
+    id: string;
+    label: string;
+    content: string;
+    category?: string;
+    reason?: string;
+    evidence?: string[];
+  }[];
   effective: {
     files: { path: string; scope: string; content: string; hash: string }[];
     excluded: { path: string; reason: string }[];

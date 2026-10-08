@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -12,7 +14,95 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+type featureResponseWriter struct {
+	http.ResponseWriter
+	deadlines []time.Time
+}
+
+func (w *featureResponseWriter) SetWriteDeadline(deadline time.Time) error {
+	w.deadlines = append(w.deadlines, deadline)
+	return http.NewResponseController(w.ResponseWriter).SetWriteDeadline(deadline)
+}
+
+func TestFeatureHTTPGenerationOutlivesServerWriteTimeout(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		output   string
+		status   int
+		deadline time.Duration
+	}{
+		{name: "success", output: `{"suggestions":[]}`, status: http.StatusOK},
+		{name: "invalid response", output: `{}`, status: http.StatusBadRequest},
+		{name: "workflow deadline", output: `{"suggestions":[]}`, status: http.StatusGatewayTimeout, deadline: 50 * time.Millisecond},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			const writeTimeout = 20 * time.Millisecond
+			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// Hold the model response past the HTTP server's ordinary cutoff.
+				select {
+				case <-time.After(5 * writeTimeout):
+				case <-r.Context().Done():
+					return
+				}
+				_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: test.output}}}})
+			}))
+			defer provider.Close()
+			fixture := newChangeHandlerFixture(t, provider.URL)
+			handler := NewFeatureHandler(fixture.service, fixture.manager)
+			deadlines := make(chan []time.Time, 1)
+			daemon := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if test.deadline > 0 {
+					ctx, cancel := context.WithTimeout(r.Context(), test.deadline)
+					defer cancel()
+					r = r.WithContext(ctx)
+				}
+				tracked := &featureResponseWriter{ResponseWriter: w}
+				handler.Generate(tracked, r)
+				deadlines <- tracked.deadlines
+			}))
+			daemon.Config.WriteTimeout = writeTimeout
+			daemon.Start()
+			defer daemon.Close()
+			index, err := fixture.manager.Index()
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, err := json.Marshal(app.FeatureGenerateRequest{FeatureRequest: app.FeatureRequest{
+				ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, ExpectedHash: "empty", Goals: "Improve cancellation.",
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			client := daemon.Client()
+			client.Timeout = 2 * time.Second
+			response, err := client.Post(daemon.URL+"/api/projects/current/features/generate", "application/json", bytes.NewReader(body))
+			if err != nil {
+				t.Fatalf("feature response was cut off before the workflow completed: %v", err)
+			}
+			defer response.Body.Close()
+			if response.StatusCode != test.status {
+				t.Fatalf("feature status = %d, want %d", response.StatusCode, test.status)
+			}
+			var result map[string]any
+			if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+				t.Fatalf("incomplete feature response: %v", err)
+			}
+			if test.status == http.StatusOK && result["status"] != "ready" {
+				t.Fatalf("feature result = %+v", result)
+			}
+			if test.status != http.StatusOK && result["user_message"] == nil {
+				t.Fatalf("structured generation failure was lost: %+v", result)
+			}
+			applied := <-deadlines
+			if len(applied) != 2 || !applied[0].IsZero() || applied[1].IsZero() {
+				t.Fatalf("generation did not suspend then restore the response write deadline: %v", applied)
+			}
+		})
+	}
+}
 
 func TestFeatureHTTPGenerationAndTriage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

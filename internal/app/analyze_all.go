@@ -118,6 +118,7 @@ func (s *Service) Reindex() (*project.ProjectIndex, error) {
 }
 
 func (s *Service) reindexActiveProject() (*project.ProjectIndex, error) {
+	s.CancelChangeWorkflows()
 	s.cancelGoScan()
 	index, err := s.manager.Reindex()
 	if err == nil {
@@ -144,6 +145,7 @@ func (s *Service) replaceActiveProject(activate func() error) error {
 }
 
 func (s *Service) invalidateJobsForProjectChange() {
+	s.CancelChangeWorkflows()
 	s.interruptAnalysisRunForProjectChange()
 	s.cancelGoScan()
 	s.clearDraftsForProjectChange()

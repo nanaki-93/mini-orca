@@ -65,6 +65,50 @@ func BuildIndex(root, id, revision string) (*ProjectIndex, error) {
 	return buildIndex(root, id, revision, true)
 }
 
+// VerifyProjectSources compares live source contents with an index snapshot.
+// It ignores policy-excluded files and never rewrites the index.
+func VerifyProjectSources(ctx context.Context, root string, index *ProjectIndex) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	policy, err := NewContextPolicy(root)
+	if err != nil {
+		return err
+	}
+	paths, err := WalkProjectFiles(ctx, ProjectWalkOptions{Root: root, Policy: policy, IncludeSymlinkFiles: true, MaxFiles: maxProjectFiles})
+	if err != nil {
+		return err
+	}
+	indexed := make(map[string]IndexFile, len(index.Files))
+	for _, file := range index.Files {
+		if policy.Decide(file.Path).Include {
+			indexed[file.Path] = file
+		}
+	}
+	if len(paths) != len(indexed) {
+		return ErrRevisionConflict
+	}
+	buffer := make([]byte, 32*1024)
+	for _, relative := range paths {
+		file, ok := indexed[relative]
+		if !ok {
+			return ErrRevisionConflict
+		}
+		path, err := ResolveFile(root, relative)
+		if err != nil {
+			return err
+		}
+		hash, err := hashFileContext(ctx, path, buffer, 0)
+		if err != nil {
+			return err
+		}
+		if hash != file.ContentHash {
+			return ErrRevisionConflict
+		}
+	}
+	return ctx.Err()
+}
+
 // buildIndex can refresh an in-memory index for startup restoration without
 // rewriting the persisted cache.
 func buildIndex(root, id, revision string, persist bool) (*ProjectIndex, error) {

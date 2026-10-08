@@ -53,6 +53,7 @@ type ChangeSession struct {
 	CheckOptions       DraftCheckOptions       `json:"check_options"`
 	ReviewedHash       string                  `json:"reviewed_hash,omitempty"`
 	RepairAttempts     int                     `json:"repair_attempts"`
+	Workflow           *ChangeWorkflow         `json:"workflow,omitempty"`
 	CreatedAt          time.Time               `json:"created_at"`
 	UpdatedAt          time.Time               `json:"updated_at"`
 }
@@ -69,6 +70,7 @@ type ChangeHistoryEntry struct {
 	Hash            string    `json:"hash"`
 	State           string    `json:"state"`
 	Freshness       string    `json:"freshness"`
+	WorkflowStatus  string    `json:"workflow_status,omitempty"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 

@@ -10,7 +10,8 @@ info:
     Project import, semantic analysis, Analyze-all, and chat messages can send
     prompt content; a non-loopback HTTP or CLI provider requires explicit confirmation for
     each of those requests. Verified scans, validation, checks, Apply, and Undo
-    do not send prompts and never run automatically.
+    do not send prompts. An explicitly started change workflow runs its trusted
+    checks after generation; source Apply and Undo always require human action.
 servers:
   - url: http://localhost:9090
     description: Local daemon
@@ -95,6 +96,28 @@ paths:
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeCheckRequest'}}}}
       responses:
         '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/workflow:
+    parameters:
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Start creation, test writing/execution and model review using captured profiles. Requires execution trust, a test path and consent for every selected remote profile. One active workflow per daemon; no automatic source Apply.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeWorkflowRequest'}}}}
+      responses:
+        '202': {description: Workflow admitted; poll the guarded session GET, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/workflow/cancel:
+    parameters:
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Cancel only the identified workflow; an old workflow ID cannot cancel its replacement.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeWorkflowControl'}}}}
+      responses:
+        '200': {description: Current workflow state, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeSession'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/review:
@@ -343,6 +366,19 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ModelCatalog'}
+  /api/models/available:
+    get:
+      tags: [Daemon]
+      summary: Available configured and Pi models, independent of operation
+      description: Reads Pi's available-model RPC catalog in an isolated, offline, tools-disabled process. Never sends a prompt. Accepts no query parameters. Pi failures return configured choices with pi.status unavailable.
+      responses:
+        '200':
+          description: Non-secret model choices and configured defaults.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AvailableModels'}
+        '400': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
   /api/projects/import:
     post:
       tags: [Projects]
@@ -921,8 +957,8 @@ components:
       type: object
       required: [scope, profile, model, provider_origin, remote_provider, temperature, max_tokens, context_max_tokens, timeout, max_retries]
       properties:
-        scope: {type: string, enum: [analyze, bug, function]}
-        profile: {type: string, enum: [analyze, bug, function]}
+        scope: {type: string, enum: ["", analyze, bug, function], description: Empty for unassigned catalog choices.}
+        profile: {$ref: '#/components/schemas/ModelSelection'}
         model: {type: string}
         reasoning_effort: {type: string, enum: [none, minimal, low, medium, high, xhigh, max], description: Optional configured reasoning effort supported by the selected provider.}
         provider_origin: {type: string, description: 'Sanitized HTTP origin, or cli://agy or cli://pi. Never includes a CLI executable path.'}
@@ -932,6 +968,42 @@ components:
         context_max_tokens: {type: integer}
         timeout: {type: string}
         max_retries: {type: integer}
+    ModelSelection:
+      type: string
+      minLength: 1
+      maxLength: 644
+      pattern: '^(analyze|bug|function|configured:[0-9a-fA-F]{64}|pi:[^/]+/.+)$'
+      description: Opaque ID returned by the available model catalog. Legacy analyze, bug and function profile names remain supported. Catalog membership is rechecked before admission; endpoints, executable paths and credentials cannot be supplied.
+    AvailableModels:
+      type: object
+      required: [models, defaults, pi]
+      properties:
+        models:
+          type: array
+          items: {$ref: '#/components/schemas/ModelChoice'}
+        defaults:
+          type: object
+          required: [analyze, bug, function]
+          properties:
+            analyze: {$ref: '#/components/schemas/ModelSelection'}
+            bug: {$ref: '#/components/schemas/ModelSelection'}
+            function: {$ref: '#/components/schemas/ModelSelection'}
+        pi:
+          type: object
+          required: [status]
+          properties:
+            status: {type: string, enum: [ready, unavailable]}
+            message: {type: string, description: Sanitized discovery failure and recovery guidance.}
+    ModelChoice:
+      type: object
+      required: [id, name, provider, source, location, model]
+      properties:
+        id: {$ref: '#/components/schemas/ModelSelection'}
+        name: {type: string}
+        provider: {type: string, description: Transport provider for configured models; Pi provider ID for discovered models.}
+        source: {type: string, enum: [configured, pi]}
+        location: {type: string, enum: [local, remote, unknown], description: Pi location is inferred from catalog baseUrl metadata. It does not waive CLI prompt consent or verify availability of the endpoint.}
+        model: {$ref: '#/components/schemas/ScopedModel'}
     ModelCatalog:
       type: object
       required: [scopes]
@@ -1882,11 +1954,11 @@ components:
       type: object
       additionalProperties: false
       required: [code, review, features]
-      description: Configured profile choices for one run. Omission uses Bug for Code and Analyze for reviews/features. Resume retains the captured choices; endpoints and credentials remain daemon-owned.
+      description: Model choices for one run. Omission uses Bug for Code and Analyze for reviews/features. Resume retains the captured choices; endpoints and credentials remain daemon-owned.
       properties:
-        code: {type: string, enum: [analyze, bug, function], description: Profile for semantic Code analysis.}
-        review: {type: string, enum: [analyze, bug, function], description: Profile for Performance and Security AI reviews.}
-        features: {type: string, enum: [analyze, bug, function], description: Profile for feature discovery.}
+        code: {$ref: '#/components/schemas/ModelSelection'}
+        review: {$ref: '#/components/schemas/ModelSelection'}
+        features: {$ref: '#/components/schemas/ModelSelection'}
     AnalysisPreviewRequest:
       type: object
       additionalProperties: false
@@ -2108,6 +2180,7 @@ components:
         findings: {type: array, items: {$ref: '#/components/schemas/PerformanceFinding'}}
         warning: {type: string}
         model: {type: string}
+        configured_model: {type: string, description: Requested model used for cache identity. Older reports may omit this field.}
         profile: {type: string}
         scope: {type: string}
         provider_origin: {type: string}
@@ -2129,7 +2202,7 @@ components:
       properties:
         project_id: {type: string}
         project_revision: {type: string}
-        kind: {type: string, enum: [fix, performance, feature, instructions]}
+        kind: {type: string, enum: [fix, performance, security, feature, instructions]}
         title: {type: string, minLength: 1, maxLength: 200}
         paths: {type: array, minItems: 1, maxItems: 8, uniqueItems: true, items: {type: string}}
         acceptance_criteria: {type: array, maxItems: 16, items: {type: string, maxLength: 1024}}
@@ -2163,6 +2236,61 @@ components:
           required: [confirm]
           properties:
             confirm: {type: boolean, enum: [true]}
+    ChangeWorkflowModels:
+      type: object
+      additionalProperties: false
+      required: [create, test, review]
+      properties:
+        create: {type: string, enum: [analyze, bug, function]}
+        test: {type: string, enum: [analyze, bug, function]}
+        review: {type: string, enum: [analyze, bug, function]}
+    ChangeWorkflowRequest:
+      allOf:
+        - {$ref: '#/components/schemas/ChangeIdentity'}
+        - type: object
+          required: [message, models]
+          properties:
+            message: {type: string, minLength: 1, maxLength: 8192}
+            models: {$ref: '#/components/schemas/ChangeWorkflowModels'}
+            confirmed_profiles: {type: array, items: {type: string, enum: [analyze, bug, function]}}
+            confirm_security: {type: boolean, description: Required true for security tasks}
+    ChangeWorkflowControl:
+      type: object
+      additionalProperties: false
+      required: [project_id, project_revision, workflow_id]
+      properties:
+        project_id: {type: string}
+        project_revision: {type: string}
+        workflow_id: {type: string}
+    ChangeWorkflow:
+      type: object
+      required: [id, status, models, stages, started_at, updated_at]
+      properties:
+        id: {type: string}
+        status: {type: string, enum: [running, canceling, failed, canceled, stale, interrupted, outdated, changes_requested, awaiting_human_review]}
+        reason: {type: string}
+        models: {$ref: '#/components/schemas/ChangeWorkflowModels'}
+        stages:
+          type: array
+          minItems: 4
+          maxItems: 4
+          items:
+            type: object
+            required: [name, status]
+            properties:
+              name: {type: string, enum: [create, test, review, human_review]}
+              status: {type: string, enum: [pending, running, completed, failed, canceled, stale, interrupted, skipped, blocked, waiting]}
+              model: {$ref: '#/components/schemas/ScopedModel'}
+        review:
+          type: object
+          required: [proposal_hash, verdict, summary, findings]
+          properties:
+            proposal_hash: {type: string}
+            verdict: {type: string, enum: [approve, changes_requested]}
+            summary: {type: string, minLength: 1, maxLength: 4096}
+            findings: {type: array, maxItems: 16, items: {type: string, minLength: 1, maxLength: 1024}}
+        started_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
     ChangeSession:
       type: object
       required: [id, project_id, project_revision, kind, title, revision, hash, state, freshness, targets, changes, messages, checks]
@@ -2209,6 +2337,7 @@ components:
         check_options: {type: object, properties: {run_tests: {type: boolean}, run_lint: {type: boolean}}}
         reviewed_hash: {type: string}
         repair_attempts: {type: integer, maximum: 3}
+        workflow: {$ref: '#/components/schemas/ChangeWorkflow'}
         context_manifest: {$ref: '#/components/schemas/ContextManifest'}
         instructions: {type: object, additionalProperties: {type: string}}
         policy_fingerprint: {type: string}
@@ -2241,6 +2370,7 @@ components:
         hash: {type: string}
         state: {type: string}
         freshness: {type: string}
+        workflow_status: {type: string}
         updated_at: {type: string, format: date-time}
     ChangeVerification:
       type: object
@@ -2275,7 +2405,23 @@ components:
               items: {type: object, properties: {path: {type: string}, scope: {type: string}, content: {type: string}, hash: {type: string}}}
         presets:
           type: array
-          items: {type: object, properties: {id: {type: string}, label: {type: string}, content: {type: string}}}
+          description: Independently selectable guidelines grouped by common AGENTS.md sections, matched locally to eligible indexed source files, build manifests and imports in the target directory. Common project rules are also included. No provider request is made.
+          items:
+            type: object
+            required: [id, label, category, content]
+            properties:
+              id: {type: string}
+              label: {type: string}
+              category:
+                type: string
+                enum: [Project overview and architecture, Build and development, Code style and conventions, Testing and validation, Security and data, UI and accessibility, Documentation, Review and handoff]
+              content: {type: string}
+              reason: {type: string, description: Why the guideline matches this scope.}
+              evidence:
+                type: array
+                maxItems: 3
+                description: Sorted example project-relative paths from the current index; absent for general guidelines.
+                items: {type: string}
     FeatureRequest:
       type: object
       properties:
@@ -2290,7 +2436,7 @@ components:
         - {$ref: '#/components/schemas/FeatureRequest'}
         - type: object
           properties:
-            profile: {type: string, enum: [analyze, bug, function]}
+            profile: {$ref: '#/components/schemas/ModelSelection'}
             analysis_selection_id: {type: string}
     FeatureStatusRequest:
       allOf:

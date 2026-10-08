@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -125,5 +126,46 @@ func TestChangeHTTPReadGuardsAndStrictRequests(t *testing.T) {
 	assertStructuredError(t, bad)
 	if response := workflowResponse(t, handler.ProposeInstructions, "POST", "/instructions/proposal", "", app.InstructionProposalRequest{ChangeCreateRequest: app.ChangeCreateRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Kind: "instructions", Title: "Escape", Paths: []string{"../AGENTS.md"}}, Content: "Escape."}); response.Code != 400 {
 		t.Fatal("unsafe instruction path accepted")
+	}
+}
+
+func TestInstructionPreviewIncludesScopedRecommendationsWithoutProviderOrWrites(t *testing.T) {
+	handler := newChangeHandlerFixture(t, "http://127.0.0.1:1")
+	index, _ := handler.manager.Index()
+	query := "?project_id=" + index.ProjectID + "&project_revision=" + index.ProjectRevision
+	for _, path := range []string{"AGENTS.md", "docs/AGENTS.md"} {
+		response := workflowResponse(t, handler.Instructions, "GET", "/instructions"+query+"&path="+path, "", nil)
+		if response.Code != http.StatusOK {
+			t.Fatalf("preview: %d %s", response.Code, response.Body.String())
+		}
+		var preview InstructionPreview
+		if err := json.Unmarshal(response.Body.Bytes(), &preview); err != nil {
+			t.Fatal(err)
+		}
+		foundGo := false
+		foundGoTests := false
+		for _, preset := range preview.Presets {
+			if preset.ID == "go-tests" {
+				foundGoTests = preset.Category == "Testing and validation"
+			}
+			if preset.ID == "go" {
+				foundGo = true
+				if preset.Reason == "" || len(preset.Evidence) != 1 || preset.Evidence[0] != "main.go" {
+					t.Fatalf("missing recommendation evidence: %+v", preset)
+				}
+			}
+		}
+		if foundGo != (path == "AGENTS.md") || foundGoTests != foundGo || preview.ProjectRevision != index.ProjectRevision {
+			t.Fatalf("incorrect scoped preview: %+v", preview)
+		}
+		if _, err := os.Stat(filepath.Join(handler.manager.Root(), path)); !os.IsNotExist(err) {
+			t.Fatalf("preview wrote instructions: %v", err)
+		}
+	}
+	for _, query := range []string{query + "&path=../AGENTS.md", "?path=AGENTS.md", strings.Replace(query, index.ProjectRevision, "stale", 1) + "&path=AGENTS.md"} {
+		response := workflowResponse(t, handler.Instructions, "GET", "/instructions"+query, "", nil)
+		if response.Code == http.StatusOK {
+			t.Fatalf("unsafe or stale preview accepted: %s", query)
+		}
 	}
 }

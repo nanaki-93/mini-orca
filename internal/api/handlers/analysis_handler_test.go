@@ -32,7 +32,7 @@ func newAnalysisHandlerFixture(t *testing.T) (*AnalysisHandler, *ProjectHandler,
 		if request.ResponseFormat != nil && request.ResponseFormat.JSONSchema != nil && request.ResponseFormat.JSONSchema.Name == "feature_suggestions" {
 			reply = `{"suggestions":[]}`
 		}
-		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: reply}}}})
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "resolved-model-version", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: reply}}}})
 	}))
 	t.Cleanup(server.Close)
 	root := t.TempDir()
@@ -249,7 +249,7 @@ func TestAnalysisHandlerRecoveryRequiresExplicitCompatibleAdmission(t *testing.T
 }
 
 func TestAnalysisHandlerPreflightStartControlsAndReadOnlySections(t *testing.T) {
-	h, _, analysis, calls := newAnalysisHandlerFixture(t)
+	h, projectHandler, analysis, calls := newAnalysisHandlerFixture(t)
 	request := app.AnalysisPreviewRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Scope: "project", Limits: app.AnalysisRunLimits{BatchFiles: 100, BudgetSeconds: 30, MaxAttemptsPerStage: 2}}
 	w := analysisHandlerRequest(t, h.Preview, "POST", "/analysis/preview", request)
 	if w.Code != 200 || calls.Load() != 0 {
@@ -279,6 +279,11 @@ func TestAnalysisHandlerPreflightStartControlsAndReadOnlySections(t *testing.T) 
 	if run.Status != app.AnalysisRunCompletedEmpty || calls.Load() != 3 {
 		t.Fatalf("run=%+v calls=%d", run, calls.Load())
 	}
+	w = analysisHandlerRequest(t, projectHandler.Overview, "GET", "/overview?project_revision="+url.QueryEscape(analysis.ProjectRevision), nil)
+	var overview app.ProjectOverview
+	if err := json.Unmarshal(w.Body.Bytes(), &overview); err != nil || w.Code != 200 || overview.Coverage != (app.AnalysisCoverage{Total: 1, Fresh: 1}) {
+		t.Fatalf("overview=%d %s error=%v", w.Code, w.Body, err)
+	}
 	guarded := analysisResultsQuery(run.Identity)
 	for _, category := range []string{"bugs", "performance", "security"} {
 		guarded.Set("category", category)
@@ -291,6 +296,15 @@ func TestAnalysisHandlerPreflightStartControlsAndReadOnlySections(t *testing.T) 
 		_ = json.Unmarshal(w.Body.Bytes(), &result)
 		if result.Progress.FindingCount == nil || *result.Progress.FindingCount != 0 || result.SavedFindingCount == nil || *result.SavedFindingCount != 0 || result.Identity != run.Identity {
 			t.Fatalf("result=%+v", result)
+		}
+		if category == "performance" {
+			if len(result.Performance) != 1 {
+				t.Fatalf("performance reports=%+v", result.Performance)
+			}
+			report := result.Performance[0]
+			if report.Model != "resolved-model-version" || report.ConfiguredModel != preview.Providers[1].Model.Model || report.Status != "completed" {
+				t.Fatalf("performance provenance=%+v", report)
+			}
 		}
 	}
 	for _, test := range []struct {

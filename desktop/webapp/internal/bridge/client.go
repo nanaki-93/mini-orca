@@ -51,8 +51,8 @@ func NewClient(base string) (*Client, error) {
 }
 
 var routes = map[string]*regexp.Regexp{
-	"GET":    regexp.MustCompile(`^/(health|status|api/models/current|api/projects/current/(changes(/(recovery|[^/]+))?|instructions|features|context|overview|findings|scan|execution-trust|index|files/(info|symbols|analysis)|impact|git|performance|performance/context|analysis/(selection|run|results)|drafts/[^/]+/benchmarks))$`),
-	"POST":   regexp.MustCompile(`^/api/projects/(import|restore|current/(changes(/[^/]+/(resume|messages|checks|review|apply|undo|verify))?|instructions/proposal|features/(goals|generate)|reindex|scan|execution-trust|files/(analysis|security-scan|explanation)|security-review|analysis/(selection|preview|run|run/control)|chat/sessions(/[^/]+/messages)?|drafts/[^/]+/(validate|checks|benchmarks)|apply|undo))$`),
+	"GET":    regexp.MustCompile(`^/(health|status|api/models/(current|available)|api/projects/current/(changes(/(recovery|[^/]+))?|instructions|features|context|overview|findings|scan|execution-trust|index|files/(info|symbols|analysis)|impact|git|performance|performance/context|analysis/(selection|run|results)|drafts/[^/]+/benchmarks))$`),
+	"POST":   regexp.MustCompile(`^/api/projects/(import|restore|current/(changes(/[^/]+/(resume|messages|checks|review|apply|undo|verify|workflow(/cancel)?))?|instructions/proposal|features/(goals|generate)|reindex|scan|execution-trust|files/(analysis|security-scan|explanation)|security-review|analysis/(selection|preview|run|run/control)|chat/sessions(/[^/]+/messages)?|drafts/[^/]+/(validate|checks|benchmarks)|apply|undo))$`),
 	"PATCH":  regexp.MustCompile(`^/api/projects/current/(drafts|findings|features)/[^/]+$`),
 	"DELETE": regexp.MustCompile(`^/api/projects/current/scan$`),
 }
@@ -126,7 +126,15 @@ func (c *Client) send(ctx context.Context, method, target, body string) (Respons
 	if body != "" {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	response, err := c.http.Do(request)
+	client := c.http
+	if method == http.MethodPost && request.URL.Path == "/api/projects/current/features/generate" {
+		// Feature discovery owns a ten-minute-or-longer workflow deadline. Keep
+		// caller cancellation without the shorter ordinary daemon request cutoff.
+		featureClient := *c.http
+		featureClient.Timeout = 0
+		client = &featureClient
+	}
+	response, err := client.Do(request)
 	if err != nil {
 		return Response{}, fmt.Errorf("daemon request failed: %w", err)
 	}

@@ -53,6 +53,7 @@ untrusted networks.
 | POST | `/api/projects/current/chat/sessions` | Open a Go declaration conversation pinned to project/file/revision/hash, mode, target, and optional reviewed task spec. |
 | POST | `/api/projects/current/chat/sessions/{sessionID}/messages` | Request one declaration proposal; the body cannot retarget the session and may explicitly request a bounded task repair. |
 | GET | `/api/models/current` | Non-secret `analyze`, `bug`, and `function` model catalog. |
+| GET | `/api/models/available` | Model choices from configured transports and Pi, with defaults and discovery status. |
 | GET | `/api/projects/current/context` | Bounded context manifest for a project-relative `path`; source is never returned. |
 | POST | `/api/projects/import` | Import the user-selected project and build deterministic project facts. |
 | POST | `/api/projects/restore` | Restore a previously imported local project without contacting the model. |
@@ -108,6 +109,8 @@ untrusted networks.
 | POST | `/api/projects/current/changes/{sessionID}/resume` | Restore history and clear check/review authority; no provider request. |
 | POST | `/api/projects/current/changes/{sessionID}/messages` | Generate a scoped proposal or explicitly request bounded check-driven repair. |
 | POST | `/api/projects/current/changes/{sessionID}/checks` | Check the current proposal; tests/vet require independent execution trust. |
+| POST | `/api/projects/current/changes/{sessionID}/workflow` | Start creation, test writing/execution and model review for the captured scope. |
+| POST | `/api/projects/current/changes/{sessionID}/workflow/cancel` | Cancel the identified workflow without applying source. |
 | POST | `/api/projects/current/changes/{sessionID}/review` | Record diff review for the current checked hash. |
 | POST | `/api/projects/current/changes/{sessionID}/apply` | Explicitly apply the current reviewed proposal with grouped recovery. |
 | POST | `/api/projects/current/changes/{sessionID}/undo` | Restore the latest unchanged grouped Apply or recover an interrupted mutation. |
@@ -343,17 +346,36 @@ consumers do not classify its prose. Stage work counts once in request budgets,
 even when it feeds several result sections. The preview exposes expected model
 requests without retries and the inclusive maximum for the remaining work.
 
-Preview/start accept optional `models: {code, review, features}`. Each value names
-one configured profile: `analyze`, `bug` or `function`; all three are required when
+`GET /api/models/available` returns `models[]` (`id`, `name`, `provider`,
+`source`, `location`, `model`), `defaults` mapping the three legacy scopes to
+configured IDs, and `pi: {status, message?}`. Configured choices are deduplicated
+by model/transport/sampling configuration, independently of operation. Pi entries
+include every authenticated/custom model reported by `get_available_models`,
+including local models from Pi's configuration. Discovery uses a private working
+directory, disables tools/extensions/MCP/context loading, sessions and startup
+network refreshes, and has a 20-second deadline. No prompt is sent. No query
+parameters are accepted. Pi failures retain configured choices with an explicit
+`unavailable` discovery status; an authenticated empty list is `ready`.
+Only safe metadata is returned, never authentication headers, full endpoint URLs
+or executable paths. `location` is `local` for loopback catalog destinations,
+`remote` for other nonempty destinations, and `unknown` when Pi omits the URL.
+This describes catalog metadata; all Pi prompt requests still require consent.
+
+Preview/start accept optional `models: {code, review, features}`. Each value is
+an opaque catalog ID (`configured:<hash>` or `pi:<provider>/<model>`), or a legacy
+configured profile name (`analyze`, `bug`, `function`); all three are required when
 the object is present. Omission retains Bug for semantic Code analysis and Analyze
-for Performance, Security AI and feature discovery. The selected profile supplies
-the model, endpoint, reasoning, timeout, retries and provider transport, while the
-logical request scope remains Bug for Code and Analyze for reviews/features.
-Clients cannot supply endpoints or credentials. Choices affect dispatch, cache
-freshness, provenance and provider/request accounting without changing daemon
-configuration. Preview and start must use identical choices; invalid values return
-400 and changed admission returns 409 before dispatch. The captured plan retains
-choices on restart/resume; a resume preview uses the original plan's choices.
+for Performance, Security AI and feature discovery. Catalog assignments use the
+operation's context and dispatch limits; legacy profile selections retain their
+original timeout/retry behavior. Configured choices retain their transport and
+sampling settings; discovered Pi choices use Pi's defaults. Logical scope remains
+Bug for Code and Analyze for reviews/features. Clients cannot supply endpoints,
+executable paths or credentials. Choices affect dispatch, cache freshness,
+provenance and provider accounting without changing daemon configuration.
+Preview and start must use identical choices. Invalid syntax returns 400; a
+missing choice or changed admission returns 409 before inference. Pi membership
+is rechecked before preview, start, resume and standalone feature generation;
+discovery failure stops admission. Captured choices survive restart/resume.
 Schema-1 runs without `models` remain readable with their original defaults.
 
 Preview/start accept `include_features` (default false for existing clients),
@@ -532,6 +554,13 @@ section has useful evidence and incomplete coverage, with no work still pending
 or running. An all-failed/unavailable section cannot claim zero findings. Stale
 counts are historical and must not contribute to fresh navigation badges.
 
+Performance and Security review freshness uses the requested `configured_model`,
+while `model` preserves the provider's returned name, which may be a resolved
+alias or version. A different returned name alone does not make a completed
+review stale. Older Performance reports omit `configured_model` and reuse `model`
+for this check; if it differs from the current selection, explicit recovery must
+refresh that review. Source, revision, policy and provider checks still apply.
+
 Result reads also return nullable `saved_finding_count`, the total of the returned
 classified semantic, Performance and Security findings. It includes retained stale
 reports and is independent of `progress.finding_count`, which still measures the
@@ -553,10 +582,15 @@ Resume applies to paused/interrupted runs. Canceled or stale runs require a new
 explicit start. Restart restores interrupted progress and never dispatches work.
 Restoring or switching projects interrupts active work without making saved
 results stale. Reindexing unchanged files preserves both results and active work;
-freshness follows captured file contents and inventory, policy, and provider
-identity, not timestamps or app sessions. Finished results incorrectly marked
-stale by older restore/reindex behavior recover in memory when all captured inputs
-still match. Changed inputs and unfinished stale work remain stale.
+freshness follows captured source contents and inventory, policy, and provider
+identity, not timestamps or app sessions. Reading finished runs checks the live
+source revision without rewriting the index; additions or removals of files
+excluded by context policy do not invalidate their saved progress or file results.
+Start/resume retain the complete admission inventory and execution workspace guards.
+Finished results incorrectly marked stale by older restore/reindex behavior
+recover in memory when their source, policy and provider identities still match,
+including runs with ineligible skipped stages. Changed inputs and unfinished stale
+work remain stale.
 Window counters reset only on an admitted resume; total elapsed/attempt counters
 and completed reports remain. Persistence failure stops dispatch before the next
 stage and exposes a recoverable operational failure.
@@ -651,9 +685,22 @@ The instructions preview also requires a canonical relative `path` ending in
 `AGENTS.md`. It reads root-to-directory guides, respecting context exclusions
 and rejecting symlinks. More local guidance applies within its own directory.
 Instructions guide generation; they grant no provider, execution or Apply authority.
+The preview's `presets` contain independent guidelines organized by `category`
+into common AGENTS.md sections: project overview/architecture, build/development,
+code style, testing, security/data, UI/accessibility, documentation and handoff.
+These are organizational conventions, not mandatory AGENTS.md fields.
+Choices match indexed languages, build manifests, UI files and supported imports
+in the selected directory and descendants. This includes Go, Node/TypeScript,
+Python, JVM, Rust, shell, Markdown, Go HTTP/database/CLI libraries, React imports
+in TypeScript, desktop host manifests, Dockerfiles and GitHub Actions workflows.
+Common project rules are always available. Matched entries carry `reason` and `evidence`
+(up to three sorted indexed paths); general entries omit these fields. Current
+context exclusions and binary-file filtering apply to the indexed evidence.
+Reindex to refresh file facts. Loading these choices makes no provider request,
+executes no project code and does not write AGENTS.md.
 
 A change creation body carries `project_id`, `project_revision`, `kind`
-(`fix`, `performance`, `feature`, `instructions`), `title`, `paths` and optional
+(`fix`, `performance`, `security`, `feature`, `instructions`), `title`, `paths` and optional
 `acceptance_criteria`. Targets are immutable; Go/Markdown file creation is supported,
 but deletes and other languages are unavailable. A manual instruction proposal adds
 `content` to this body and requires exactly one AGENTS.md path. It makes no model call.
@@ -679,6 +726,47 @@ History lists return summaries (`id`, project identity, kind, title, revision,
 hash, state, freshness and updated time); selected reads/resume return full contents.
 History reads are passive. Resume clears check/review authority; stale history is readable but cannot
 be applied. Existing declaration sessions retain their in-memory behavior.
+
+`POST /api/projects/current/changes/{sessionID}/workflow` starts a bounded agent
+workflow and returns HTTP 202 with the captured session and `workflow.id`.
+The request carries the current `ChangeIdentity`, `message`, and
+`models: {create, test, review}`. Each model value names one configured `analyze`,
+`bug` or `function` profile. `confirmed_profiles` lists the selected remote
+profiles the user approved; local profiles need no remote confirmation. Security
+tasks additionally require `confirm_security: true`. Current project execution
+trust and at least one captured `_test.go` path are required before dispatch.
+The workflow supports features, fixes, performance and security work; instruction
+editing keeps its existing manual proposal flow.
+
+The daemon runs creation, test writing plus fixed `go test ./...` checks, and a
+separate model review. The testing agent may change only captured `_test.go`
+paths; its edits merge with the implementation. Checks use the isolated workspace
+and existing regression baseline rules. Tests and review never apply source.
+There is one active change workflow per daemon, a 30-minute total deadline, and
+each model retains its configured request timeout and retry budget. Failed checks
+stop before review. A reviewer returning `changes_requested` blocks human approval
+until a new run produces a passing proposal and approving review.
+
+Poll the existing guarded session GET for `workflow.status`, ordered `stages`,
+captured model metadata, and the review's `proposal_hash`, `verdict`, `summary`
+and `findings`. Status distinguishes `running`, `canceling`, `failed`, `canceled`,
+`stale`, `interrupted`, `outdated`, `changes_requested` and
+`awaiting_human_review`. The final human stage waits for explicit diff review;
+model approval never sets `reviewed_hash`. Existing Review/Apply/Undo routes retain
+their identity and hash guards. Changing a proposal invalidates workflow review.
+`POST /api/projects/current/changes/{sessionID}/workflow/cancel` takes current
+`project_id`, `project_revision` and `workflow_id`, so stale controls cannot stop
+a replacement run. Project replacement, reindex and daemon shutdown cancel the
+worker. Background work can continue while the client navigates or disconnects.
+
+Workflow progress and advisory review are private source-bearing conversation
+history. List entries add `workflow_status` without review contents. Schema-1
+history without the optional `workflow` field remains readable. After a daemon
+restart, unfinished runs read as interrupted and do not automatically dispatch.
+Resume clears check/review authority and marks workflow evidence outdated; a new
+explicit run requires fresh admission. Progress persistence failures remain
+visible and cannot authorize Apply. No provider or project-code execution occurs
+when reading progress, restoring history or configuring the workflow.
 
 Grouped writes are journaled before source replacement. A failed write rolls back
 when current hashes still match; an unrelated concurrent edit blocks recovery
@@ -712,10 +800,16 @@ Each generation requests at most five ideas; each includes benefit, evidence,
 eligible affected paths, estimated effort and acceptance criteria. Ideas remain
 advisory and never enter Bugs/Performance/Security finding counts. Standalone
 generation via `POST /api/projects/current/features/generate` accepts an
-optional `profile` (`analyze`, `bug`, `function`; default `analyze`) to choose
-the model scope, and an optional `analysis_selection_id`. When the selection ID
+optional `profile` (catalog model ID or legacy `analyze`, `bug`, `function`;
+default `analyze`) to choose the model, and an optional `analysis_selection_id`. When the selection ID
 is present, its fingerprint is validated (409 on mismatch) and its exclusions
 are applied to the context and suggested paths.
+
+Standalone generation is synchronous and uses the same workflow deadline as
+analysis feature discovery: at least ten minutes, or the selected profile's
+timeout when longer. The native client waits for the workflow result or caller
+cancellation. The daemon suspends its ordinary response write deadline during
+generation and restores the bounded write allowance before sending the result.
 
 Every generation, from the Features routes or an analysis run, is additive. The
 prompt receives a bounded list of existing idea titles and statuses, newest first
@@ -750,7 +844,9 @@ The history stays bounded at 64 KiB. A generation that would exceed it adds no
 ideas, leaves the file unchanged and fails with `feature history is full;
 existing ideas were kept`; a v1 upgrade that would exceed it fails the same way
 with the v1 file intact. Failed generation retains earlier ideas with an
-explicit failure status; if that status cannot fit, the generation error is
+explicit failure status. Its `failure` explains whether the provider request,
+response format, or suggestion validation failed without storing raw provider
+diagnostics or rejected output. If that status cannot fit, the generation error is
 returned and the file is unchanged. Cancellation, project/source/goal changes,
 a concurrent report change and persistence errors write nothing new.
 

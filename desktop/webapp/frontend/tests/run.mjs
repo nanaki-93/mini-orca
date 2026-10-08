@@ -3,6 +3,8 @@ import { strict as assert } from 'node:assert';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { serve } from '../preview.mjs';
 import { installFixture } from './fixture.mjs';
+import { testChangeWorkflows } from './change-workflow.mjs';
+import { testScrolling } from './scrolling.mjs';
 
 let server;
 let url;
@@ -26,7 +28,14 @@ const surfaceInventory = {
       'long destinations',
       'refresh failed with retained configuration',
     ],
-    search: ['files and commands', 'filtered empty', 'large list', 'long paths'],
+    search: [
+      'files and commands',
+      'filtered empty',
+      'empty index',
+      'large list',
+      'long paths',
+      'keyboard activation',
+    ],
     diagrams: ['rendered', 'empty', 'prose', 'invalid', 'oversized', 'source disclosure'],
   },
   analysis: {
@@ -144,6 +153,11 @@ const surfaceInventory = {
       'busy',
       'long root and directory scope',
       'unchanged preview',
+      'project guideline selection',
+      'duplicate and inherited guidance',
+      'general guidance fallback',
+      'section and text filtering with retained selections',
+      'structured Markdown additions and existing headings',
     ],
   },
   editor: {
@@ -543,6 +557,35 @@ async function modelsLayout(page) {
   }
   checks++;
 }
+async function searchLayout(page) {
+  const surface = page.locator('.search-workspace');
+  await headingContainment(surface.locator('.page-heading--intro'));
+  assert.equal(await surface.evaluate((el) => getComputedStyle(el).gap), '20px');
+  const overflow = await page
+    .locator(
+      '#main, .page, .search-workspace, .search-regions, .search-workspace .panel, .search-workspace .panel-body, .search-workspace .list-row, .search-workspace .list-copy',
+    )
+    .evaluateAll((elements) =>
+      elements
+        .filter((el) => el.scrollWidth > el.clientWidth + 1)
+        .map((el) => el.className || el.id),
+    );
+  assert.deepEqual(overflow, [], 'Search retains complete paths within list panels');
+  for (const panel of await surface.locator('.panel').all()) {
+    const bounds = await panel.locator('.panel-body').boundingBox();
+    for (const row of await panel.locator('button').all()) {
+      const box = await row.boundingBox();
+      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
+      if (await row.evaluate((el) => el.classList.contains('list-row'))) {
+        const icon = await row.locator('svg').boundingBox();
+        const copy = await row.locator('span').first().boundingBox();
+        assert.ok(icon.x + icon.width <= copy.x + 1, 'Search icon and label do not collide');
+      }
+    }
+  }
+  checks++;
+}
 async function introductionTreatment(surface) {
   return surface.evaluate((element) => {
     const style = getComputedStyle(element);
@@ -914,7 +957,7 @@ async function instructionsLayout(page) {
   }
   const overflow = await page
     .locator(
-      '#main, .page, .instructions-page, .instruction-grid, .instructions-page .stack, .instructions-page .panel, .instructions-page .panel-head, .instructions-page .panel-body, .instructions-page .prose, .instructions-page .disclosure-body, .instructions-page .notice, .instructions-page summary, .instruction-presets',
+      '#main, .page, .instructions-page, .instruction-grid, .instructions-page .stack, .instructions-page .panel, .instructions-page .panel-head, .instructions-page .panel-body, .instructions-page .prose, .instructions-page .disclosure-body, .instructions-page .notice, .instructions-page summary, .instruction-presets, .instruction-option, .instruction-option-copy, .instruction-filters, .instruction-selection',
     )
     .evaluateAll((elements) =>
       elements
@@ -924,7 +967,7 @@ async function instructionsLayout(page) {
   assert.deepEqual(overflow, [], 'Guidance, paths and exclusions wrap without clipping');
   for (const panel of await workspace.locator('.panel').all()) {
     const bounds = await panel.boundingBox();
-    for (const control of await panel.locator('button, input, textarea, summary').all()) {
+    for (const control of await panel.locator('button, input, select, textarea, summary').all()) {
       if (!(await control.isVisible())) continue;
       const box = await control.boundingBox();
       assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
@@ -1198,13 +1241,22 @@ async function analysisRunLayout(page) {
   }
   checks++;
 }
+async function chooseModel(control, value) {
+  await control.click();
+  const options = control
+    .page()
+    .getByRole('dialog', { name: 'Choose a model' })
+    .getByRole('option');
+  await options.first().waitFor();
+  const values = await options.evaluateAll((elements) => elements.map((element) => element.value));
+  assert.ok(values.includes(value), `Available catalog includes ${value}`);
+  await options.nth(values.indexOf(value)).click();
+}
 async function analysisSections(page, hasRun) {
   const settings = page.locator('section.panel').filter({
-    has: page.getByRole('heading', { name: 'Run settings', exact: true }),
+    has: page.getByRole('heading', { name: 'Analysis setup', exact: true }),
   });
-  const lastRun = page.locator('section.panel').filter({
-    has: page.getByRole('heading', { name: 'Last run', exact: true }),
-  });
+  const lastRun = settings.locator('.analysis-last-run');
   const heading = page
     .locator('.page-heading')
     .filter({ has: page.getByRole('heading', { name: 'Analysis', exact: true }) });
@@ -1221,16 +1273,18 @@ async function analysisSections(page, hasRun) {
   // Allow one CSS pixel for fractional layout rounding.
   assert.ok(Math.abs(settingsBox.x - content.x) <= 1, 'Settings starts at the content edge');
   assert.ok(Math.abs(settingsBox.width - content.width) <= 1, 'Settings spans the content');
-  assert.equal(await lastRun.count(), hasRun ? 1 : 0);
+  assert.equal(await lastRun.count(), 1);
   const toolbar = await page.locator('.toolbar').boundingBox();
   const table = await page.locator('.table-wrap').boundingBox();
   let previous = settingsBox;
   if (hasRun) {
     const box = await lastRun.boundingBox();
-    assert.ok(Math.abs(box.x - content.x) <= 1, 'Last run starts at the content edge');
-    assert.ok(Math.abs(box.width - content.width) <= 1, 'Last run spans the content');
-    sectionGap(settingsBox, box);
-    const header = lastRun.locator('.panel-head');
+    assert.ok(box.x > settingsBox.x && box.x + box.width < settingsBox.x + settingsBox.width);
+    assert.ok(
+      box.y > settingsBox.y && box.y + box.height < settingsBox.y + settingsBox.height,
+      'Last run belongs to the same setup panel',
+    );
+    const header = lastRun.locator('.analysis-last-run-heading');
     const headerBox = await header.boundingBox();
     const parts = [
       lastRun.getByRole('heading', { name: 'Last run', exact: true }),
@@ -1255,7 +1309,6 @@ async function analysisSections(page, hasRun) {
         );
       boxes.push(bounds);
     }
-    previous = box;
   }
   sectionGap(previous, toolbar);
   sectionGap(toolbar, table);
@@ -1273,10 +1326,13 @@ async function analysisSections(page, hasRun) {
 }
 async function analysisSettingsFields(page, columns, expanded) {
   const settings = page.locator('section.panel').filter({
-    has: page.getByRole('heading', { name: 'Run settings', exact: true }),
+    has: page.getByRole('heading', { name: 'Analysis setup', exact: true }),
   });
   const panelBox = await settings.boundingBox();
-  for (const selector of ['select', ...(expanded ? ['input[type="number"]'] : [])]) {
+  for (const selector of [
+    '.analysis-model-trigger',
+    ...(expanded ? ['input[type="number"]'] : []),
+  ]) {
     const controls = settings.locator(selector);
     assert.equal(await controls.count(), 3);
     const boxes = [];
@@ -1309,7 +1365,7 @@ async function analysisSettingsFields(page, columns, expanded) {
 function savedModelsFixture(long = false) {
   const details = [
     {
-      label: 'Code',
+      label: 'Bug analysis',
       profile: 'bug',
       scope: 'bug',
       model: 'prior-code',
@@ -1370,17 +1426,26 @@ async function capturedDetails(panel, expected, columns) {
     return;
   }
   const groups = panel.locator('.three-columns > div');
+  const compact = (await panel.locator('.captured-models--compact').count()) > 0;
   assert.equal(await groups.count(), 3);
   const boxes = [];
-  const bodyBox = await panel.locator('.panel-body').boundingBox();
+  const bodyBox = await (compact ? panel : panel.locator('.panel-body')).boundingBox();
   for (const [index, detail] of expected.entries()) {
     const group = groups.nth(index);
-    assert.equal(await group.locator('strong').innerText(), detail.label);
-    assert.equal(await group.getByText(`Profile: ${detail.profile}`, { exact: true }).count(), 1);
+    if (compact) {
+      assert.equal(await group.getAttribute('title'), detail.label);
+      assert.equal(await group.locator('strong, .badge').count(), 0);
+      assert.equal(await group.getByText(/^Profile:/).count(), 0);
+    } else {
+      assert.equal(await group.locator('strong').innerText(), detail.label);
+      assert.equal(await group.getByText(/^Profile:/).count(), 0);
+    }
+    assert.equal(await group.locator('.analysis-model-icon svg').count(), 1);
     if (detail.model) {
       assert.equal(await group.getByText(detail.model, { exact: true }).count(), 1);
-      assert.equal(await group.getByText(detail.origin, { exact: true }).count(), 1);
-      assert.equal(await group.locator('.badge').innerText(), detail.remote ? 'Remote' : 'Local');
+      assert.equal(await group.getByText(detail.origin, { exact: true }).count(), compact ? 0 : 1);
+      if (!compact)
+        assert.equal(await group.locator('.badge').innerText(), detail.remote ? 'Remote' : 'Local');
     } else {
       assert.equal(await group.getByText('Unavailable', { exact: true }).count(), 1);
       assert.equal(await group.locator('.badge').count(), 0);
@@ -1394,6 +1459,7 @@ async function capturedDetails(panel, expected, columns) {
       const failures = [];
       while (walker.nextNode()) {
         if (!walker.currentNode.textContent.trim()) continue;
+        if (walker.currentNode.parentElement.closest('.sr-only')) continue;
         const range = document.createRange();
         range.selectNodeContents(walker.currentNode);
         for (const rect of range.getClientRects())
@@ -1482,8 +1548,13 @@ async function contrast(page, name) {
       '.prose p',
       '.panel-head h2',
       '.analysis-last-run .panel-head span:not(.status-dot)',
-      '.analysis-last-run .three-columns strong',
-      '.analysis-last-run .three-columns .row > span',
+      '.captured-model-name',
+      '.analysis-operation strong',
+      '.analysis-operation-description',
+      '.analysis-settings-intro',
+      '.analysis-model-trigger small',
+      '.model-picker-option-copy > span',
+      '.model-picker-option-copy small',
       '.metric-label',
       '.metric-number',
       '.metric-action',
@@ -1562,6 +1633,8 @@ try {
       ? { channel: process.env.MINI_ORCA_TEST_BROWSER || 'chrome' }
       : {}),
   });
+  await testScrolling({ test, pageFor, nav, idle, layout });
+  await testChangeWorkflows({ test, pageFor, nav, idle, layout });
   await test('Models retain configured scopes, complete destinations and Summary presentation', async () => {
     const metadata = {
       analyze: {
@@ -4623,6 +4696,280 @@ try {
       await close();
     }
   });
+  await test('Analysis model picker searches Pi and local models without job labels or inference', async () => {
+    const configured = `configured:${'a'.repeat(64)}`;
+    const availableModels = {
+      defaults: { analyze: configured, bug: configured, function: configured },
+      pi: { status: 'ready' },
+      models: [
+        {
+          id: configured,
+          name: 'Gemini 3.8 Flash',
+          provider: 'openai',
+          source: 'configured',
+          location: 'remote',
+          raw: 'gemini-3.8-flash',
+        },
+        {
+          id: 'pi:openai-codex/gpt-5',
+          name: 'GPT-5',
+          provider: 'openai-codex',
+          source: 'pi',
+          location: 'remote',
+          raw: 'openai-codex/gpt-5',
+        },
+        {
+          id: 'pi:lm-studio/qwen/local',
+          name: 'Qwen Local',
+          provider: 'lm-studio',
+          source: 'pi',
+          location: 'local',
+          raw: 'lm-studio/qwen/local',
+        },
+      ].map(({ raw, ...choice }) => ({
+        ...choice,
+        model: {
+          model: raw,
+          profile: choice.id,
+          scope: '',
+          provider_origin: choice.source === 'pi' ? 'cli://pi' : 'https://provider.invalid',
+          remote_provider: true,
+          timeout: '2m',
+          reasoning_effort: choice.source === 'configured' ? 'medium' : '',
+        },
+      })),
+    };
+    const { page, close } = await pageFor({ availableModels });
+    try {
+      await nav(page, 'Analysis');
+      const code = page.getByLabel('Bug analysis model', { exact: true });
+      await code.getByText('Gemini 3.8 Flash', { exact: true }).waitFor();
+      const before = await page.evaluate(() =>
+        window.fixture.requests.filter((r) => r.method !== 'GET'),
+      );
+      await code.click();
+      const dialog = page.getByRole('dialog', { name: 'Choose a model' });
+      const search = dialog.getByRole('combobox', { name: 'Search models' });
+      assert.equal(await search.evaluate((element) => element === document.activeElement), true);
+      assert.equal(await dialog.getByRole('option').count(), 3);
+      assert.doesNotMatch(
+        await dialog.getByRole('listbox').innerText(),
+        /\b(analyze|bug|feature|function)\b/i,
+      );
+      for (const width of [1440, 800]) {
+        await page.setViewportSize({ width, height: 900 });
+        for (const theme of ['dark', 'light']) {
+          await page.evaluate(
+            (value) => document.documentElement.setAttribute('data-theme', value),
+            theme,
+          );
+          for (const large of [false, true]) {
+            await page.evaluate(
+              (value) => document.documentElement.classList.toggle('large-text', value),
+              large,
+            );
+            const bounds = await dialog.boundingBox();
+            assert.ok(
+              bounds.x >= 0 &&
+                bounds.x + bounds.width <= width &&
+                bounds.y >= 0 &&
+                bounds.y + bounds.height <= 900,
+            );
+            assert.equal(
+              await dialog.evaluate((element) => element.scrollWidth > element.clientWidth + 1),
+              false,
+            );
+            await contrast(page, `Analysis model picker ${width} ${theme} ${large}`);
+            await layout(page, `analysis-model-picker-${width}-${theme}-${large}`);
+          }
+        }
+      }
+      await dialog.getByRole('button', { name: 'Pi', exact: true }).click();
+      assert.equal(await dialog.getByRole('option').count(), 2);
+      await dialog.getByRole('button', { name: 'Local', exact: true }).click();
+      assert.equal(await dialog.getByRole('option').count(), 1);
+      await dialog.getByRole('option', { name: /Qwen Local/ }).waitFor();
+      await search.fill('no-such-model');
+      await dialog.getByText('No models match these filters.', { exact: true }).waitFor();
+      await search.fill('lm-studio');
+      await search.press('Enter');
+      assert.equal(await code.getAttribute('value'), 'pi:lm-studio/qwen/local');
+      assert.equal(await code.evaluate((element) => element === document.activeElement), true);
+      await code.click();
+      await search.fill('gpt');
+      await page.keyboard.press('Escape');
+      assert.equal(
+        await code.getAttribute('value'),
+        'pi:lm-studio/qwen/local',
+        'Cancel retains the selected model',
+      );
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+        before,
+      );
+      await chooseModel(
+        page.getByLabel('Feature discovery model', { exact: true }),
+        'pi:openai-codex/gpt-5',
+      );
+      await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+      await idle(page);
+      const preview = await page.evaluate(() =>
+        window.fixture.requests.findLast((r) => r.path.endsWith('/analysis/preview')),
+      );
+      assert.deepEqual(preview.body.models, {
+        code: 'pi:lm-studio/qwen/local',
+        review: configured,
+        features: 'pi:openai-codex/gpt-5',
+      });
+      await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
+      const consent = page.getByRole('dialog');
+      await consent.getByText('lm-studio/qwen/local · cli://pi', { exact: true }).waitFor();
+      await consent.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await idle(page);
+      assert.equal(
+        await page.evaluate(
+          () =>
+            window.fixture.requests.filter(
+              (r) => r.method !== 'GET' && r.path.endsWith('/analysis/run'),
+            ).length,
+        ),
+        0,
+      );
+      await page.getByRole('button', { name: 'Back', exact: true }).click();
+      await page
+        .getByRole('button', { name: 'Search more feature suggestions', exact: true })
+        .click();
+      await page.getByRole('dialog').getByText('openai-codex/gpt-5', { exact: true }).waitFor();
+      assert.doesNotMatch(await page.getByRole('dialog').innerText(), /configured:|Profile:/);
+      await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
+      await idle(page);
+      const generation = await page.evaluate(() =>
+        window.fixture.requests.findLast((r) => r.path.endsWith('/features/generate')),
+      );
+      assert.equal(generation.body.profile, 'pi:openai-codex/gpt-5');
+      assert.equal(generation.body.confirm_remote_provider, true);
+      await code.click();
+      await page.evaluate(() => {
+        window.fixture.state.availableModels.pi = {
+          status: 'unavailable',
+          message: 'Pi models could not be loaded. Refresh to retry.',
+        };
+        window.fixture.state.availableModels.models =
+          window.fixture.state.availableModels.models.filter(
+            (choice) => choice.source === 'configured',
+          );
+      });
+      await dialog.getByRole('button', { name: 'Refresh models', exact: true }).click();
+      await dialog
+        .getByText('Pi models could not be loaded. Refresh to retry.', { exact: true })
+        .waitFor();
+      assert.equal(
+        await dialog.getByRole('option').count(),
+        1,
+        'Configured models remain available',
+      );
+      await page.keyboard.press('Escape');
+      await code.getByText('Model unavailable', { exact: true }).waitFor();
+      await page
+        .getByRole('button', { name: 'Search more feature suggestions', exact: true })
+        .click();
+      await idle(page);
+      await page
+        .getByRole('alert')
+        .getByText('The selected model is unavailable. Refresh models and choose again.', {
+          exact: true,
+        })
+        .waitFor();
+      assert.equal(
+        await page.evaluate(
+          () => window.fixture.requests.filter((r) => r.path.endsWith('/features/generate')).length,
+        ),
+        1,
+        'An unavailable selection cannot dispatch',
+      );
+    } finally {
+      await close();
+    }
+  });
+  await test('Analysis model cards identify families and keep last-run models independent of setup', async () => {
+    const saved = savedModelsFixture();
+    for (const [index, name] of ['gpt-4.1', 'gemini-2.5-pro', 'claude-sonnet-4'].entries()) {
+      saved.details[index].model = name;
+      saved.options.capturedProviders[index].model.model = name;
+    }
+    const { page, close } = await pageFor({
+      ...saved.options,
+      modelNames: { analyze: 'gemini-2.5-flash', bug: 'gpt-5', function: 'claude-opus-4' },
+    });
+    try {
+      await nav(page, 'Analysis');
+      await idle(page);
+      const cards = page.locator('.analysis-model-card');
+      assert.deepEqual(await cards.locator('.analysis-operation strong').allTextContents(), [
+        'Bug analysis',
+        'Performance & Security',
+        'Feature discovery',
+      ]);
+      await cards.nth(1).getByText('One model shared by both reviews.', { exact: true }).waitFor();
+      const families = () =>
+        cards
+          .locator('.analysis-model-icon')
+          .evaluateAll((icons) => icons.map((icon) => icon.dataset.family));
+      assert.deepEqual(await families(), ['openai', 'gemini', 'claude']);
+      const before = await page.evaluate(() =>
+        window.fixture.requests.filter((request) => request.method !== 'GET'),
+      );
+      const lastRun = page.locator('.analysis-last-run');
+      await capturedDetails(lastRun, saved.details, 3);
+      for (const theme of ['dark', 'light']) {
+        if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+          await page.getByRole('button', { name: `Switch to ${theme} appearance` }).click();
+        await contrast(page, `Analysis model cards ${theme}`);
+        await layout(page, `analysis-model-cards-${theme}`);
+      }
+      await chooseModel(page.getByLabel('Bug analysis model', { exact: true }), 'function');
+      await chooseModel(page.getByLabel('Performance & Security model', { exact: true }), 'bug');
+      await chooseModel(page.getByLabel('Feature discovery model', { exact: true }), 'analyze');
+      assert.deepEqual(await families(), ['claude', 'openai', 'gemini']);
+      await capturedDetails(lastRun, saved.details, 3);
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+        before,
+        'Choosing a model changes only the next run setup',
+      );
+    } finally {
+      await close();
+    }
+    const duplicate = await pageFor({ remote: true });
+    try {
+      await nav(duplicate.page, 'Analysis');
+      const select = duplicate.page.getByLabel('Bug analysis model', { exact: true });
+      await select.click();
+      assert.deepEqual(
+        await duplicate.page.getByRole('option').locator('strong').allTextContents(),
+        ['test-model', 'test-model', 'test-model'],
+      );
+      assert.equal((await duplicate.page.getByRole('listbox').innerText()).includes('bug'), false);
+      await duplicate.page.keyboard.press('Escape');
+      await chooseModel(select, 'function');
+      assert.equal(await select.getAttribute('value'), 'function');
+      assert.equal(
+        await duplicate.page
+          .locator('.analysis-model-card')
+          .first()
+          .locator('.analysis-model-icon')
+          .getAttribute('data-family'),
+        'generic',
+        'An unknown model must not inherit branding from its endpoint',
+      );
+      assert.equal(
+        await duplicate.page.getByText('OpenAI compatible · Remote', { exact: true }).count(),
+        3,
+      );
+    } finally {
+      await duplicate.close();
+    }
+  });
   await test('Analysis settings are keyboard accessible and edits stay local until preparation', async () => {
     const { page, close } = await pageFor({
       hasRecovery: true,
@@ -4638,20 +4985,23 @@ try {
       const before = await page.evaluate(() =>
         window.fixture.requests.filter((request) => request.method !== 'GET'),
       );
-      const code = page.getByLabel('Code analysis model', { exact: true });
+      const code = page.getByLabel('Bug analysis model', { exact: true });
       const review = page.getByLabel('Performance & Security model', { exact: true });
       const features = page.getByLabel('Feature discovery model', { exact: true });
-      assert.equal(
-        await code.locator('option[value="analyze"]').textContent(),
-        `review-${'long-model-name-'.repeat(12)} · analyze · Local`,
-        'Native options retain complete model identifiers',
-      );
       await code.focus();
-      await page.keyboard.press('d');
+      await page.keyboard.press('Enter');
+      const search = page.getByRole('combobox', { name: 'Search models' });
+      await search.fill('draft');
+      await page.keyboard.press('Enter');
       assert.equal(
-        await code.inputValue(),
+        await code.getAttribute('value'),
         'function',
-        'Native select supports keyboard type-ahead',
+        'Search and Enter select the model',
+      );
+      assert.equal(
+        await code.evaluate((control) => control === document.activeElement),
+        true,
+        'Selection restores trigger focus',
       );
       await contrast(page, 'Analysis code selector keyboard focus');
       await page.keyboard.press('Tab');
@@ -4673,9 +5023,9 @@ try {
       const attempts = page.getByLabel('Attempts per stage', { exact: true });
       const refresh = page.getByLabel('Refresh previously analyzed files', { exact: true });
       assert.equal(await batch.evaluate((control) => control === document.activeElement), true);
-      await code.selectOption('function');
-      await review.selectOption('bug');
-      await features.selectOption('function');
+      await chooseModel(code, 'function');
+      await chooseModel(review, 'bug');
+      await chooseModel(features, 'function');
       await batch.fill('37');
       await budget.fill('900');
       await attempts.fill('3');
@@ -4692,21 +5042,16 @@ try {
       await analysisSettingsFields(page, 3, true);
       // Exercise unequal label heights without replacing production labels or controls.
       const magnifiedLabels = await page.addStyleTag({
-        content:
-          '.analysis-run-settings .analysis-settings-fields > label > span { font-size: 3em; }',
+        content: '.analysis-operation > strong { font-size: 3em; }',
       });
       try {
-        const heights = await page
-          .locator('.analysis-settings-fields')
-          .first()
-          .locator('label > span')
-          .evaluateAll((labels) =>
-            labels.map((label) => {
-              const range = document.createRange();
-              range.selectNodeContents(label);
-              return range.getBoundingClientRect().height;
-            }),
-          );
+        const heights = await page.locator('.analysis-operation > strong').evaluateAll((labels) =>
+          labels.map((label) => {
+            const range = document.createRange();
+            range.selectNodeContents(label);
+            return range.getBoundingClientRect().height;
+          }),
+        );
         assert.ok(heights[1] > heights[0], 'The longer label wraps to another line');
         await analysisSettingsFields(page, 3, true);
       } finally {
@@ -4784,20 +5129,25 @@ try {
       }
     }
   });
-  await test('Analysis empty model catalog keeps unavailable native selects disabled', async () => {
+  await test('Analysis empty model catalog offers explicit refresh and honest empty state', async () => {
     const { page, close } = await pageFor({ emptyModelCatalog: true });
     try {
       await nav(page, 'Analysis');
       await idle(page);
       for (const [label, value] of [
-        ['Code analysis model', 'bug'],
+        ['Bug analysis model', 'bug'],
         ['Performance & Security model', 'analyze'],
         ['Feature discovery model', 'analyze'],
       ]) {
         const select = page.getByLabel(label, { exact: true });
-        assert.equal(await select.isDisabled(), true);
-        assert.equal(await select.inputValue(), value);
-        assert.deepEqual(await select.locator('option').allTextContents(), ['Models unavailable']);
+        assert.equal(await select.isDisabled(), false);
+        assert.equal(await select.getAttribute('value'), value);
+        await select.click();
+        await page
+          .getByText('No models available. Refresh the catalog to try again.', { exact: true })
+          .waitFor();
+        assert.equal(await page.getByRole('option').count(), 0);
+        await page.keyboard.press('Escape');
       }
       // An empty catalog is present metadata; do not add a new preparation eligibility rule.
       assert.equal(
@@ -4822,12 +5172,12 @@ try {
       const before = await page.evaluate(() =>
         window.fixture.requests.filter((request) => request.method !== 'GET'),
       );
-      const code = page.getByLabel('Code analysis model', { exact: true });
-      assert.equal(await code.inputValue(), 'bug');
-      assert.equal(await code.locator('option:checked').innerText(), 'current-code · bug · Local');
-      await code.selectOption('function');
-      await page.getByLabel('Performance & Security model', { exact: true }).selectOption('bug');
-      await page.getByLabel('Feature discovery model', { exact: true }).selectOption('analyze');
+      const code = page.getByLabel('Bug analysis model', { exact: true });
+      assert.equal(await code.getAttribute('value'), 'bug');
+      assert.equal(await code.locator('strong').innerText(), 'current-code');
+      await chooseModel(code, 'function');
+      await chooseModel(page.getByLabel('Performance & Security model', { exact: true }), 'bug');
+      await chooseModel(page.getByLabel('Feature discovery model', { exact: true }), 'analyze');
       const disclosure = page.locator('.analysis-run-settings details');
       for (const width of [1440, 1280, 1001, 800]) {
         await page.setViewportSize({ width, height: width === 1440 ? 1000 : 900 });
@@ -4866,7 +5216,11 @@ try {
           }
         }
       }
-      assert.equal(await code.inputValue(), 'function', 'Captured rendering does not reset setup');
+      assert.equal(
+        await code.getAttribute('value'),
+        'function',
+        'Captured rendering does not reset setup',
+      );
       assert.deepEqual(
         await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
         before,
@@ -4897,7 +5251,13 @@ try {
             };
       const expected =
         scenario === 'legacy'
-          ? null
+          ? saved.details.map((detail) => ({
+              label: detail.label,
+              profile: 'analyze',
+              model: 'test-model',
+              origin: 'http://127.0.0.1:11434',
+              remote: false,
+            }))
           : saved.details.map((detail, index) =>
               scenario === 'missing-provider' && index === 2
                 ? { label: detail.label, profile: detail.profile }
@@ -5020,12 +5380,15 @@ try {
         await idle(page);
         if (mode === 'continuation') {
           // Today's editable setup deliberately differs from the saved feature profile.
-          assert.equal(await page.getByLabel('Feature discovery model').inputValue(), 'function');
-          await page.getByLabel('Feature discovery model').selectOption('analyze');
+          assert.equal(
+            await page.getByLabel('Feature discovery model').getAttribute('value'),
+            'function',
+          );
+          await chooseModel(page.getByLabel('Feature discovery model'), 'analyze');
           await page.getByRole('button', { name: 'View run', exact: true }).click();
           await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
         } else {
-          await page.getByLabel('Feature discovery model').selectOption('function');
+          await chooseModel(page.getByLabel('Feature discovery model'), 'function');
           await page
             .getByRole('button', {
               name: mode === 'repair' ? 'Repair analysis' : 'Prepare analysis',
@@ -5188,6 +5551,7 @@ try {
       'feature-only',
       'missing-models',
       'missing-provider',
+      'missing-model-evidence',
       'absent',
     ]) {
       const { page, close } = await pageFor({
@@ -5215,7 +5579,9 @@ try {
                 }
               : scenario === 'missing-models'
                 ? { models: null }
-                : { providers: saved.options.capturedProviders.slice(0, 2) },
+                : scenario === 'missing-model-evidence'
+                  ? { models: null, providers: [] }
+                  : { providers: saved.options.capturedProviders.slice(0, 2) },
       });
       try {
         await nav(page, 'Analysis');
@@ -5237,14 +5603,16 @@ try {
           assert.equal(await start.isDisabled(), scenario === 'empty');
           if (scenario === 'empty' || scenario === 'feature-only')
             await page.getByRole('heading', { name: 'No selected files', exact: true }).waitFor();
-          if (scenario === 'missing-models' || scenario === 'missing-provider')
+          if (scenario.startsWith('missing-'))
             await capturedDetails(
               page.locator('.analysis-preview-models'),
-              scenario === 'missing-models'
+              scenario === 'missing-model-evidence'
                 ? null
-                : saved.details.map((detail, i) =>
-                    i === 2 ? { label: detail.label, profile: detail.profile } : detail,
-                  ),
+                : scenario === 'missing-models'
+                  ? saved.details
+                  : saved.details.map((detail, i) =>
+                      i === 2 ? { label: detail.label, profile: detail.profile } : detail,
+                    ),
               1,
             );
         }
@@ -5309,9 +5677,7 @@ try {
         try {
           await nav(page, 'Analysis');
           await idle(page);
-          const lastRun = page.locator('section.panel').filter({
-            has: page.getByRole('heading', { name: 'Last run', exact: true }),
-          });
+          const lastRun = page.locator('.analysis-last-run');
           await lastRun.getByText(status, { exact: true }).waitFor();
           assert.equal(
             await lastRun.getByRole('img').getAttribute('aria-label'),
@@ -5410,20 +5776,22 @@ try {
     });
     await nav(page, 'Analysis');
     const before = await page.evaluate(() => window.fixture.requests.length);
-    assert.equal(await page.getByLabel('Code analysis model').inputValue(), 'bug');
-    assert.equal(await page.getByLabel('Performance & Security model').inputValue(), 'analyze');
-    assert.equal(await page.getByLabel('Feature discovery model').inputValue(), 'analyze');
-    assert.deepEqual(
-      await page.getByLabel('Code analysis model').locator('option').allTextContents(),
-      [
-        'review-model · analyze · Remote',
-        'code-model · bug · Remote',
-        'draft-model · function · Remote',
-      ],
+    assert.equal(await page.getByLabel('Bug analysis model').getAttribute('value'), 'bug');
+    assert.equal(
+      await page.getByLabel('Performance & Security model').getAttribute('value'),
+      'analyze',
     );
-    await page.getByLabel('Code analysis model').selectOption('function');
-    await page.getByLabel('Performance & Security model').selectOption('bug');
-    await page.getByLabel('Feature discovery model').selectOption('analyze');
+    assert.equal(await page.getByLabel('Feature discovery model').getAttribute('value'), 'analyze');
+    await page.getByLabel('Bug analysis model').click();
+    assert.deepEqual(await page.getByRole('option').locator('strong').allTextContents(), [
+      'review-model',
+      'code-model',
+      'draft-model',
+    ]);
+    await page.keyboard.press('Escape');
+    await chooseModel(page.getByLabel('Bug analysis model'), 'function');
+    await chooseModel(page.getByLabel('Performance & Security model'), 'bug');
+    await chooseModel(page.getByLabel('Feature discovery model'), 'analyze');
     assert.equal(await page.evaluate(() => window.fixture.requests.length), before);
     await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
     await idle(page);
@@ -6700,6 +7068,168 @@ try {
           window.fixture.release();
         })
         .catch(() => {});
+      await close();
+    }
+  });
+  await test('Search aligns files and commands with Summary and retains local filtering and pagination', async () => {
+    const paths = Array.from(
+      { length: 205 },
+      (_, i) =>
+        `internal/${String(i).padStart(3, '0')}/${'long-directory-'.repeat(12)}/${'filename-'.repeat(10)}process.go`,
+    );
+    const introStyle = (el) => {
+      const css = getComputedStyle(el);
+      return {
+        background: css.backgroundColor,
+        border: css.border,
+        radius: css.borderRadius,
+        padding: css.padding,
+        shadow: css.boxShadow,
+      };
+    };
+    for (const scenario of ['large-list', 'empty-index', 'filtered-empty']) {
+      const { page, close } = await pageFor({
+        sourcePaths: scenario === 'empty-index' ? [] : paths,
+      });
+      try {
+        const baseline = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method !== 'GET'),
+        );
+        for (const theme of ['dark', 'light']) {
+          if (theme === 'light')
+            await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+          await nav(page, 'Summary');
+          const intro = await page.locator('.summary-hero').evaluate(introStyle);
+          const panel = await panelTreatment(page.locator('.summary-details .panel').first());
+          await page.keyboard.press(theme === 'dark' ? 'Meta+k' : 'Control+k');
+          const surface = page.locator('.search-workspace');
+          await surface.waitFor();
+          const input = surface.getByLabel('Search files and commands', { exact: true });
+          await input.fill(scenario === 'filtered-empty' ? 'no-such-file-or-command' : '');
+          assert.deepEqual(
+            await surface.locator('.page-heading--intro').evaluate(introStyle),
+            intro,
+          );
+          assert.deepEqual(await panelTreatment(surface.locator('.panel').first()), panel);
+          const files = surface.locator('.panel').first();
+          const commands = surface.locator('.panel').nth(1);
+          if (scenario === 'large-list') {
+            assert.equal(await files.locator('.list-row').count(), 100);
+            assert.equal(await files.locator('.list-copy small').first().textContent(), paths[0]);
+            assert.equal(
+              await files.locator('.list-copy strong').first().textContent(),
+              paths[0].split('/').at(-1),
+            );
+          } else {
+            await files.getByText('No matching files.', { exact: true }).waitFor();
+            assert.equal(await files.locator('button').count(), 0);
+          }
+          assert.equal(
+            await commands.locator('.list-row').count(),
+            scenario === 'filtered-empty' ? 0 : 7,
+          );
+          if (scenario === 'filtered-empty')
+            await commands.getByText('No matching commands.', { exact: true }).waitFor();
+          for (const larger of [false, true]) {
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+            for (const width of scenario === 'large-list' ? [1440, 1280, 1001, 800] : [1440, 800]) {
+              await page.setViewportSize({ width, height: 1000 });
+              await searchLayout(page);
+              await layout(
+                page,
+                `search-${scenario}-${theme}-${larger ? 'larger' : 'standard'}-${width}`,
+              );
+            }
+            if (larger)
+              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          }
+          if (scenario === 'large-list') {
+            const more = files.getByRole('button', { name: 'Show more', exact: true });
+            await more.focus();
+            await page.keyboard.press('Enter');
+            assert.equal(await files.locator('.list-row').count(), 200);
+            await more.click();
+            assert.equal(await files.locator('.list-row').count(), 205);
+            assert.equal(await more.count(), 0);
+            assert.equal(
+              await files.locator('.list-copy small').last().textContent(),
+              paths.at(-1),
+            );
+            await input.fill('PROCESS.GO');
+            assert.equal(
+              await files.locator('.list-row').count(),
+              100,
+              'Query changes reset pagination and filter case-insensitively',
+            );
+            await input.fill('internal/204/');
+            assert.equal(await files.locator('.list-row').count(), 1);
+            assert.equal(await files.locator('.list-copy small').textContent(), paths.at(-1));
+            await searchLayout(page);
+            await files.locator('.list-row').focus();
+            await page.keyboard.press('Enter');
+            await page.getByRole('tab', { name: 'Source', exact: true }).waitFor();
+            await idle(page);
+            assert.equal(
+              await page.locator('.source-workspace .page-heading p').textContent(),
+              paths.at(-1),
+            );
+          }
+        }
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          baseline,
+          'Search and file inspection do not admit work',
+        );
+        assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Search commands keep keyboard destinations passive and page focus unchanged', async () => {
+    const { page, close } = await pageFor();
+    try {
+      const baseline = await page.evaluate(() =>
+        window.fixture.requests.filter((r) => r.method !== 'GET'),
+      );
+      for (const [command, heading] of [
+        ['Summary', 'harbor'],
+        ['Analyze project', 'Analysis'],
+        ['Editor', 'Source'],
+        ['Terminal', 'Terminal'],
+        ['Models', 'Models'],
+        ['Verified scan', 'Verified scan'],
+        ['Open project', 'Project'],
+      ]) {
+        await page.keyboard.press('Control+k');
+        const surface = page.locator('.search-workspace');
+        await surface.waitFor();
+        // App's existing route effect focuses main after Search's autoFocus mount.
+        assert.equal(
+          await page.locator('#main').evaluate((el) => el === document.activeElement),
+          true,
+        );
+        const input = surface.getByLabel('Search files and commands', { exact: true });
+        await input.fill(command);
+        await page.keyboard.press('Tab');
+        const button = surface
+          .locator('.panel')
+          .nth(1)
+          .getByRole('button', { name: command, exact: true });
+        assert.equal(await button.evaluate((el) => el === document.activeElement), true);
+        await page.keyboard.press('Enter');
+        await page.getByRole('heading', { name: heading, exact: true }).waitFor();
+        await idle(page);
+        assert.equal(await surface.count(), 0);
+      }
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+        baseline,
+        'Command destinations never start their execution',
+      );
+      assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+    } finally {
       await close();
     }
   });
@@ -8436,8 +8966,8 @@ try {
         report.suggestions[0].evidence,
         ...report.suggestions[0].paths,
         ...report.suggestions[0].acceptance_criteria,
-        report.generations[0].model_summary.model,
-        report.generations[0].model_summary.provider_origin,
+        report.generations[0].model.model,
+        report.generations[0].model.provider_origin,
       ])
         assert.ok(
           (await workspace.textContent()).includes(text),
@@ -8563,7 +9093,7 @@ try {
           );
         }
         assert.equal(
-          await page.getByText(/Added \d+ new suggestions\.|No new suggestions found\./).count(),
+          await page.getByText(/Added \d+ new suggestions?\.|No new suggestions found\./).count(),
           0,
         );
         for (const theme of ['dark', 'light']) {
@@ -8638,7 +9168,7 @@ try {
         'saved',
       );
       assert.equal(
-        await page.getByText(/Added \d+ new suggestions\.|No new suggestions found\./).count(),
+        await page.getByText(/Added \d+ new suggestions?\.|No new suggestions found\./).count(),
         0,
       );
       assert.equal(
@@ -8748,31 +9278,71 @@ try {
     await idle(page);
 
     await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
-    await page.getByText('Added 1 new suggestions.').waitFor();
-
-    // Now request again with duplicateOnly
-    await page.evaluate(() => {
-      window.fixture.options.duplicateOnly = true;
-    });
-
+    await page.getByText('Added 1 new suggestion.', { exact: true }).waitFor();
+    await page.getByText('Suggestion context', { exact: true }).click();
     await page
-      .getByRole('button', { name: 'Search more feature suggestions', exact: true })
-      .click();
-    await page.getByText('Existing idea titles: 1').waitFor();
-    await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
-    await idle(page);
+      .getByText('Generated by test-model · https://provider.invalid', { exact: true })
+      .waitFor();
 
-    await page.getByText('No new suggestions found.').waitFor();
+    const retained = await page.evaluate(() => window.fixture.state.features.suggestions);
+    for (const duplicateOnly of [true, false]) {
+      await page.evaluate((duplicateOnly) => {
+        window.fixture.options.duplicateOnly = duplicateOnly;
+        window.fixture.options.featuresEmpty = !duplicateOnly;
+      }, duplicateOnly);
+
+      await page
+        .getByRole('button', { name: 'Search more feature suggestions', exact: true })
+        .click();
+      await page.getByText('Existing idea titles: 1').waitFor();
+      await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
+      await idle(page);
+
+      await page.getByText('No new suggestions found.', { exact: true }).waitFor();
+      assert.equal(await page.getByText(/Added \d+ new suggestions?\./).count(), 0);
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.state.features.suggestions),
+        retained,
+        'Duplicate-only and empty searches retain existing ideas',
+      );
+    }
 
     // Check profile/consent request-shape cases
     const requests = await page.evaluate(() =>
       window.fixture.requests.filter((r) => r.path.endsWith('/features/generate')),
     );
-    assert.equal(requests.length, 2);
+    assert.equal(requests.length, 3);
     assert.equal(requests[0].body.profile, 'analyze');
     assert.equal(requests[0].body.confirm_remote_provider, true);
 
     await close();
+  });
+
+  await test('Legacy feature history keeps ideas without inventing generation counts or model details', async () => {
+    const { page, close } = await pageFor({ featuresReady: true, legacyShape: true });
+    try {
+      await nav(page, 'Features');
+      await idle(page);
+      await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
+      await page.getByText('Suggestion context', { exact: true }).click();
+      assert.equal(await page.getByText(/Generated by /).count(), 0);
+      assert.equal(
+        await page.getByText(/Added \d+ new suggestions?\.|No new suggestions found\./).count(),
+        0,
+      );
+      assert.equal(
+        await page.getByRole('button', { name: 'Discuss in chat', exact: true }).isEnabled(),
+        true,
+      );
+      assert.equal(
+        await page.evaluate(() =>
+          window.fixture.requests.some((r) => r.path.endsWith('/features/generate')),
+        ),
+        false,
+      );
+    } finally {
+      await close();
+    }
   });
 
   await test('Feature goals and idea triage are local; Discuss only seeds Chat', async () => {
@@ -9133,6 +9703,232 @@ try {
       }
     }
   });
+  await test('Instruction guidelines explain project matches, keep selections local and prevent duplicates', async () => {
+    const evidence = `internal/${'nested-directory-'.repeat(30)}/worker.go`;
+    const presets = [
+      {
+        id: 'go',
+        label: 'Follow Go conventions',
+        category: 'Code style and conventions',
+        content: 'Format changed Go code with gofmt.',
+        reason: 'Go source in this scope',
+        evidence: [evidence],
+      },
+      { id: 'public', label: 'Preserve public APIs', content: 'Preserve public APIs.' },
+      { id: 'focused', label: 'Keep changes focused', content: 'Preserve unrelated work.' },
+    ];
+    const { page, close } = await pageFor({ instructionPresets: presets });
+    try {
+      await nav(page, 'Instructions');
+      await page.getByLabel('Instruction path').fill('internal/AGENTS.md');
+      await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+      const draft = page.getByLabel('Custom instructions');
+      await draft.waitFor();
+      const original = await draft.inputValue();
+      const requests = await page.evaluate(() => window.fixture.requests);
+      const files = await page.evaluate(() => window.fixture.state.instructions);
+      const recommended = page.getByRole('group', {
+        name: 'Code style and conventions',
+        exact: true,
+      });
+      await recommended.getByText(evidence, { exact: true }).waitFor();
+      await recommended.getByText(presets[0].content, { exact: true }).waitFor();
+      await page.getByText('Inherited from AGENTS.md', { exact: true }).waitFor();
+      assert.equal(
+        await page.getByLabel('Preserve public APIs', { exact: true }).isDisabled(),
+        true,
+      );
+      const go = page.getByLabel('Follow Go conventions', { exact: true });
+      await go.focus();
+      await page.keyboard.press('Space');
+      await page.getByLabel('Keep changes focused', { exact: true }).check();
+      await page.getByRole('status').filter({ hasText: '2 guidelines selected' }).waitFor();
+      assert.equal(await draft.inputValue(), original);
+      assert.equal(
+        await page.getByRole('button', { name: 'Continue to preview', exact: true }).isDisabled(),
+        true,
+      );
+      await page.getByLabel('Keep changes focused', { exact: true }).uncheck();
+      for (const theme of ['dark', 'light']) {
+        if (theme === 'light')
+          await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+        for (const larger of [false, true]) {
+          if (larger) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          for (const width of [1440, 800]) {
+            await page.setViewportSize({ width, height: 1000 });
+            await instructionsLayout(page);
+            await layout(
+              page,
+              `instructions-guidelines-${theme}-${larger ? 'larger' : 'standard'}-${width}`,
+            );
+          }
+          await contrast(page, `Instruction guidelines ${theme}`);
+          if (larger) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        }
+      }
+      const add = page.getByRole('button', { name: 'Add selected guidance', exact: true });
+      await add.click();
+      assert.equal(
+        await draft.inputValue(),
+        `${original}\n\n## Code style and conventions\n\n- ${presets[0].content}\n`,
+      );
+      assert.equal(await go.isDisabled(), true);
+      assert.equal(await add.isDisabled(), true);
+      await page.getByText('Already in this draft', { exact: true }).waitFor();
+      await page.getByLabel('Keep changes focused', { exact: true }).check();
+      await add.click();
+      assert.equal((await draft.inputValue()).split(presets[0].content).length, 2);
+      assert.ok(!(await draft.inputValue()).includes(presets[1].content));
+      await draft.fill(original);
+      assert.equal(await go.isEnabled(), true, 'Removing a guideline makes it available again');
+      await go.check();
+      await draft.fill(`${original}\n- Format changed Go code\n  with gofmt.\n`);
+      assert.equal(await go.isDisabled(), true, 'Manually entered wrapped guidance is detected');
+      assert.equal(await add.isDisabled(), true);
+      assert.deepEqual(await page.evaluate(() => window.fixture.requests), requests);
+      assert.deepEqual(await page.evaluate(() => window.fixture.state.instructions), files);
+      await page.getByRole('button', { name: 'Back to scope', exact: true }).click();
+      await page.getByLabel('Instruction path').fill('new/AGENTS.md');
+      await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+      assert.equal(await draft.inputValue(), '');
+      assert.equal(await go.isChecked(), false);
+      assert.equal(await add.isDisabled(), true);
+    } finally {
+      await close();
+    }
+  });
+  await test('Instruction catalog filters retain choices and compose standard sections without overwriting custom guidance', async () => {
+    const presets = [
+      {
+        id: 'go-errors',
+        label: 'Preserve Go error contracts',
+        category: 'Code style and conventions',
+        content: 'Wrap errors with operation context.',
+        reason: 'Go source in this scope',
+        evidence: ['internal/worker.go'],
+      },
+      {
+        id: 'go-concurrency',
+        label: 'Own goroutines and cancellation',
+        category: 'Code style and conventions',
+        content: 'Give each goroutine a bounded lifetime.',
+      },
+      {
+        id: 'go-tests',
+        label: 'Test Go packages',
+        category: 'Testing and validation',
+        content: 'Use isolated package fixtures.',
+      },
+      {
+        id: 'http',
+        label: 'Protect network boundaries',
+        category: 'Security and data',
+        content: 'Validate network requests before side effects.',
+      },
+    ];
+    const { page, close } = await pageFor({ instructionPresets: presets });
+    try {
+      await nav(page, 'Instructions');
+      await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+      const draft = page.getByLabel('Custom instructions');
+      const original =
+        '# Local rules\n\n```markdown\n## Testing and validation\nExample only.\n```\n\n## Code style and conventions\nKeep my formatting.\n\n## Custom rules\nPreserve my closing section.\n';
+      await draft.fill(original);
+      const baseline = await page.evaluate(() => window.fixture.requests);
+      const section = page.getByLabel('AGENTS.md section', { exact: true });
+      const search = page.getByLabel('Find guidelines', { exact: true });
+      await section.selectOption('Code style and conventions');
+      assert.equal(await page.locator('.instruction-option').count(), 2);
+      await page.getByLabel(presets[0].label, { exact: true }).check();
+      await section.selectOption('');
+      await search.fill('NETWORK');
+      assert.equal(await page.locator('.instruction-option').count(), 1);
+      await page.getByLabel(presets[3].label, { exact: true }).check();
+      await search.fill('');
+      await section.selectOption('Testing and validation');
+      await page.getByLabel(presets[2].label, { exact: true }).check();
+      await search.fill('no matching rule');
+      await page
+        .getByText('No guidelines match these filters. Your selection is retained.', {
+          exact: true,
+        })
+        .waitFor();
+      await page.getByRole('status').filter({ hasText: '3 guidelines selected' }).waitFor();
+      assert.equal(await draft.inputValue(), original);
+      for (const theme of ['dark', 'light']) {
+        if (theme === 'light')
+          await page.getByRole('button', { name: 'Switch to light appearance' }).click();
+        await page.setViewportSize({ width: 800, height: 1000 });
+        await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        await instructionsLayout(page);
+        await layout(page, `instructions-filtered-selection-${theme}`);
+        await contrast(page, `Instruction filters ${theme}`);
+        await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+      }
+      await page.getByRole('button', { name: 'Add selected guidance', exact: true }).click();
+      let content = await draft.inputValue();
+      assert.equal(content.split('## Code style and conventions').length, 2);
+      assert.ok(content.includes('```markdown\n## Testing and validation\nExample only.\n```'));
+      assert.ok(
+        content.includes('Keep my formatting.\n\n## Custom rules\nPreserve my closing section.'),
+      );
+      assert.ok(content.includes('## Testing and validation\n\n- Use isolated package fixtures.'));
+      for (const i of [0, 2, 3]) assert.ok(content.includes(presets[i].content));
+      assert.ok(!content.includes(presets[1].content));
+      await search.fill('internal/worker.go');
+      await section.selectOption('');
+      assert.equal(
+        await page.locator('.instruction-option').count(),
+        1,
+        'File evidence is searchable',
+      );
+      assert.equal(await page.getByLabel(presets[0].label, { exact: true }).isDisabled(), true);
+      await search.fill('');
+      await page.getByLabel(presets[1].label, { exact: true }).check();
+      await page.getByRole('button', { name: 'Clear selection', exact: true }).click();
+      assert.equal(
+        await page.getByRole('button', { name: 'Add selected guidance', exact: true }).isDisabled(),
+        true,
+      );
+      await page.getByLabel(presets[1].label, { exact: true }).check();
+      await page.getByRole('button', { name: 'Add selected guidance', exact: true }).click();
+      content = await draft.inputValue();
+      assert.equal(
+        content.split('## Code style and conventions').length,
+        2,
+        'Repeated additions reuse the section',
+      );
+      assert.ok(content.includes(presets[1].content));
+      assert.deepEqual(await page.evaluate(() => window.fixture.requests), baseline);
+    } finally {
+      await close();
+    }
+  });
+  await test('Instruction guidelines offer general choices when scope has no indexed matches', async () => {
+    const { page, close } = await pageFor({
+      instructionPresets: [
+        { id: 'tests', label: 'Test meaningful behavior', content: 'Test error paths.' },
+      ],
+    });
+    try {
+      await nav(page, 'Instructions');
+      await page.getByLabel('Instruction path').fill('new/AGENTS.md');
+      await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+      await page
+        .getByText('No matching indexed files in this scope. Use general or custom guidance.', {
+          exact: true,
+        })
+        .waitFor();
+      await page.getByLabel('Test meaningful behavior', { exact: true }).check();
+      await page.getByRole('button', { name: 'Add selected guidance', exact: true }).click();
+      assert.equal(
+        await page.getByLabel('Custom instructions').inputValue(),
+        '# Project instructions\n\n- Test error paths.\n',
+      );
+    } finally {
+      await close();
+    }
+  });
   await test('Instruction wizard preserves inherited rules and requires diff review and Apply', async () => {
     const { page, close } = await pageFor();
     await nav(page, 'Instructions');
@@ -9146,6 +9942,7 @@ try {
     await page.getByText('AGENTS.md · scope .', { exact: true }).click();
     await page.getByText('Preserve public APIs.', { exact: true }).waitFor();
     await page.getByLabel('Keep changes focused', { exact: true }).check();
+    await page.getByLabel('Follow Go conventions', { exact: true }).check();
     await page.getByRole('button', { name: 'Add selected guidance', exact: true }).click();
     const content = await page.getByLabel('Custom instructions').inputValue();
     await page
@@ -9187,7 +9984,7 @@ try {
     assert.equal(instructions['AGENTS.md'], '# Project rules\n\nPreserve public APIs.\n');
     assert.match(
       instructions['internal/AGENTS.md'],
-      /Propagate cancellation[\s\S]*Preserve unrelated work[\s\S]*table-driven tests/,
+      /Propagate cancellation[\s\S]*Format changed Go code with gofmt[\s\S]*Preserve unrelated work[\s\S]*table-driven tests/,
     );
     await close();
   });

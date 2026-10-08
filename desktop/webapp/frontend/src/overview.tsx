@@ -427,8 +427,8 @@ export function SearchPage({ s }: { s: State }) {
     ['project', 'Open project', 'folder'],
   ];
   return (
-    <>
-      <Heading title="Jump to" />
+    <div className="workspace-page search-workspace">
+      <Heading title="Jump to" variant="intro" />
       <label htmlFor="search" className="sr-only">
         Search files and commands
       </label>
@@ -445,8 +445,9 @@ export function SearchPage({ s }: { s: State }) {
           placeholder="Find a file or command…"
         />
       </div>
-      <div className="grid two-columns section-gap">
+      <div className="grid two-columns search-regions">
         <Panel title={`Files · ${files.length}`}>
+          {!files.length && <p className="muted">No matching files.</p>}
           {files.slice(0, limit).map((file) => (
             <button className="list-row" key={file.path} onClick={() => void w.openFile(file.path)}>
               <Icon name="file" />
@@ -459,6 +460,9 @@ export function SearchPage({ s }: { s: State }) {
           {files.length > limit && <Button onClick={() => setLimit(limit + 100)}>Show more</Button>}
         </Panel>
         <Panel title="Commands">
+          {!commands.some(([, name]) => name.toLowerCase().includes(query.toLowerCase())) && (
+            <p className="muted">No matching commands.</p>
+          )}
           {commands
             .filter(([, name]) => name.toLowerCase().includes(query.toLowerCase()))
             .map(([page, name, icon]) => (
@@ -469,6 +473,6 @@ export function SearchPage({ s }: { s: State }) {
             ))}
         </Panel>
       </div>
-    </>
+    </div>
   );
 }

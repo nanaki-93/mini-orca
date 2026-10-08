@@ -52,6 +52,7 @@ type modelOutput struct {
 type Service struct {
 	manager                         *project.Manager
 	runtimes                        scopedRuntimes
+	discoverPiModels                func(context.Context, string) ([]llm.PiModel, error)
 	importTimeout                   time.Duration
 	analysisTimeout                 time.Duration
 	focusedCheckTimeout             time.Duration
@@ -60,6 +61,7 @@ type Service struct {
 	jobLifecycleMu                  sync.Mutex
 	changesMu                       sync.Mutex
 	changeAuthority                 map[string]string
+	changeWorkflow                  changeWorkflowController
 	analysisRun                     *analysisRunController
 	writeAnalysisRun                func(string, []byte, os.FileMode) error
 	goScan                          *goScanController
@@ -102,8 +104,9 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 
 	contextBuilder := project.NewContextBuilder()
 	service := &Service{
-		manager:         manager,
-		changeAuthority: make(map[string]string),
+		discoverPiModels: llm.DiscoverPiModels,
+		manager:          manager,
+		changeAuthority:  make(map[string]string),
 		runtimes: scopedRuntimes{
 			analyze:  newModelRuntime(profiles.Analyze, importTimeout, maxRetries),
 			bug:      newModelRuntime(profiles.Bug, analysisTimeout, maxRetries),

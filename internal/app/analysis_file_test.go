@@ -86,6 +86,11 @@ func analysisReply(stage AnalysisStage) string {
 
 func analysisResponseServer(t *testing.T, reply func(AnalysisStage) string) (*httptest.Server, *atomic.Int32) {
 	t.Helper()
+	return analysisModelResponseServer(t, "", reply)
+}
+
+func analysisModelResponseServer(t *testing.T, model string, reply func(AnalysisStage) string) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
 	calls := &atomic.Int32{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request llm.ChatRequest
@@ -104,7 +109,7 @@ func analysisResponseServer(t *testing.T, reply func(AnalysisStage) string) (*ht
 			stage = AnalysisStageFeatures
 		}
 		calls.Add(1)
-		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Role: "assistant", Content: reply(stage)}, FinishReason: "stop"}}})
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: model, Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Role: "assistant", Content: reply(stage)}, FinishReason: "stop"}}})
 	}))
 	t.Cleanup(server.Close)
 	return server, calls

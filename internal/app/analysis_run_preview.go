@@ -69,6 +69,9 @@ func (s *Service) PreviewAnalysisRun(ctx context.Context, request AnalysisPrevie
 	if err := request.Validate(); err != nil {
 		return nil, err
 	}
+	if err := s.validateAnalysisModelSelections(ctx, request.Models, request.ResumeRun); err != nil {
+		return nil, err
+	}
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()
 	c := s.analysisRun
