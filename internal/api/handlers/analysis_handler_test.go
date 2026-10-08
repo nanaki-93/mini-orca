@@ -103,7 +103,7 @@ func TestAnalysisHandlerFeatureStepRequiresMatchingAdmission(t *testing.T) {
 
 func TestAnalysisHandlerModelsRequireMatchingAdmission(t *testing.T) {
 	h, _, analysis, calls := newAnalysisHandlerFixture(t)
-	models := &app.AnalysisModels{Code: "function", Review: "bug", Features: "analyze"}
+	models := &app.AnalysisModels{Code: "function", Performance: "bug", Security: "function", Features: "analyze"}
 	request := app.AnalysisPreviewRequest{IncludeFeatures: true, Models: models,
 		ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision,
 		Scope: "project", Limits: app.AnalysisRunLimits{BatchFiles: 100, BudgetSeconds: 30, MaxAttemptsPerStage: 2}}
@@ -116,14 +116,14 @@ func TestAnalysisHandlerModelsRequireMatchingAdmission(t *testing.T) {
 		t.Fatalf("model plan=%+v %v", preview, err)
 	}
 	start := app.AnalysisRunStartRequest{Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits,
-		IncludeFeatures: true, Models: &app.AnalysisModels{Code: "bug", Review: "bug", Features: "analyze"},
+		IncludeFeatures: true, Models: &app.AnalysisModels{Code: "function", Performance: "bug", Security: "analyze", Features: "analyze"},
 		Confirmations: app.AnalysisRunConfirmations{SecurityReview: true}}
 	w = analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", start)
 	if w.Code != http.StatusConflict || calls.Load() != 0 {
 		t.Fatalf("retargeted model=%d %s calls=%d", w.Code, w.Body, calls.Load())
 	}
 	assertStructuredError(t, w)
-	start.Models.Code = "unknown"
+	start.Models.Security = "unknown"
 	w = analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", start)
 	if w.Code != http.StatusBadRequest || calls.Load() != 0 {
 		t.Fatalf("invalid model=%d %s calls=%d", w.Code, w.Body, calls.Load())

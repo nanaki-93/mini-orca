@@ -361,10 +361,12 @@ or executable paths. `location` is `local` for loopback catalog destinations,
 `remote` for other nonempty destinations, and `unknown` when Pi omits the URL.
 This describes catalog metadata; all Pi prompt requests still require consent.
 
-Preview/start accept optional `models: {code, review, features}`. Each value is
+Preview/start accept optional `models: {code, performance, security, features}`. Each value is
 an opaque catalog ID (`configured:<hash>` or `pi:<provider>/<model>`), or a legacy
-configured profile name (`analyze`, `bug`, `function`); all three are required when
-the object is present. Omission retains Bug for semantic Code analysis and Analyze
+configured profile name (`analyze`, `bug`, `function`); all four operations need a choice when
+the object is present. Older clients and saved runs may supply `review` as the
+fallback for either omitted `performance` or `security` choice. Explicit operation
+choices take precedence; legacy captured identities remain unchanged. Omission retains Bug for semantic Code analysis and Analyze
 for Performance, Security AI and feature discovery. Catalog assignments use the
 operation's context and dispatch limits; legacy profile selections retain their
 original timeout/retry behavior. Configured choices retain their transport and

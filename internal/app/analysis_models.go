@@ -8,16 +8,23 @@ import (
 
 // Choices reference catalog models or legacy profiles; credentials remain daemon-owned.
 type AnalysisModels struct {
-	Code     string `json:"code"`
-	Review   string `json:"review"`
-	Features string `json:"features"`
+	Code string `json:"code"`
+	// Review preserves model assignments in older clients and saved runs.
+	Review      string `json:"review,omitempty"`
+	Features    string `json:"features"`
+	Performance string `json:"performance,omitempty"`
+	Security    string `json:"security,omitempty"`
 }
 
 func (models *AnalysisModels) Validate() error {
 	if models == nil {
 		return nil
 	}
-	for _, profile := range []string{models.Code, models.Review, models.Features} {
+	profiles := models.selections()
+	if models.Review != "" {
+		profiles = append(profiles, models.Review)
+	}
+	for _, profile := range profiles {
 		if !validModelSelection(profile) {
 			return fmt.Errorf("analysis models must reference catalog model IDs or configured analyze, bug or function profiles")
 		}
@@ -34,13 +41,34 @@ func (models *AnalysisModels) profile(stage AnalysisStage) string {
 		return models.Code
 	case AnalysisStageFeatures:
 		return models.Features
+	case AnalysisStagePerformance:
+		if models.Performance != "" {
+			return models.Performance
+		}
+	case AnalysisStageSecurityAI:
+		if models.Security != "" {
+			return models.Security
+		}
 	default:
-		return models.Review
+		return ""
 	}
+	return models.Review
+}
+
+func (models *AnalysisModels) selections() []string {
+	return []string{models.Code, models.profile(AnalysisStagePerformance), models.profile(AnalysisStageSecurityAI), models.Features}
 }
 
 func (s *Service) analysisModelRuntime(stage AnalysisStage, models *AnalysisModels) modelRuntime {
 	return s.runtimeForAnalysisScope(analysisStageScope(stage), models.profile(stage))
+}
+
+func (s *Service) analysisFileModelIdentity(models *AnalysisModels) [3]EffectiveModel {
+	return [3]EffectiveModel{
+		s.analysisModelRuntime(AnalysisStageSemantic, models).effective,
+		s.analysisModelRuntime(AnalysisStagePerformance, models).effective,
+		s.analysisModelRuntime(AnalysisStageSecurityAI, models).effective,
+	}
 }
 
 func analysisStageScope(stage AnalysisStage) config.ModelScope {

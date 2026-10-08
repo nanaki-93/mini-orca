@@ -1953,10 +1953,15 @@ components:
     AnalysisModels:
       type: object
       additionalProperties: false
-      required: [code, review, features]
-      description: Model choices for one run. Omission uses Bug for Code and Analyze for reviews/features. Resume retains the captured choices; endpoints and credentials remain daemon-owned.
+      required: [code, features]
+      anyOf:
+        - required: [performance, security]
+        - required: [review]
+      description: Independent model choices for one run. Legacy review supplies either missing Performance or Security choice. Omission uses Bug for Code and Analyze for reviews/features. Resume retains the captured choices; endpoints and credentials remain daemon-owned.
       properties:
         code: {$ref: '#/components/schemas/ModelSelection'}
+        performance: {$ref: '#/components/schemas/ModelSelection'}
+        security: {$ref: '#/components/schemas/ModelSelection'}
         review: {$ref: '#/components/schemas/ModelSelection'}
         features: {$ref: '#/components/schemas/ModelSelection'}
     AnalysisPreviewRequest:

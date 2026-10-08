@@ -239,7 +239,7 @@ func TestAnalysisSelectionRecoveryStateOrderAndCounts(t *testing.T) {
 		"recoverable.go": {recoverable: 2},
 		"model.go":       {codeModelMissing: true},
 		"changed.go":     {sourceBlocked: true},
-		"ignored.go":     {recoverable: 5, sourceBlocked: true, reviewModelMissing: true},
+		"ignored.go":     {recoverable: 5, sourceBlocked: true, performanceModelMissing: true},
 	}
 	evidence := func(paths ...string) analysisRecoveryEvidence {
 		selected := map[string]analysisFileRecovery{}
@@ -259,9 +259,9 @@ func TestAnalysisSelectionRecoveryStateOrderAndCounts(t *testing.T) {
 	assertRecovery(t, s.analysisRecoverySummaryLocked(evidence("recoverable.go", "model.go"), nil), AnalysisRecoveryAvailable, 1, 2, "")
 	assertRecovery(t, s.analysisRecoverySummaryLocked(evidence("model.go"), nil), AnalysisRecoveryBlocked, 0, 0, "the bug model profile used for Code analysis")
 	review := evidence("ignored.go")
-	review.files["ignored.go"] = analysisFileRecovery{reviewModelMissing: true}
+	review.files["ignored.go"] = analysisFileRecovery{performanceModelMissing: true}
 	review.models = &AnalysisModels{Code: "bug", Review: "function", Features: "analyze"}
-	assertRecovery(t, s.analysisRecoverySummaryLocked(review, nil), AnalysisRecoveryBlocked, 0, 0, "the function model profile used for Performance & Security")
+	assertRecovery(t, s.analysisRecoverySummaryLocked(review, nil), AnalysisRecoveryBlocked, 0, 0, "the function model profile used for Performance")
 	assertRecovery(t, s.analysisRecoverySummaryLocked(evidence(), nil), AnalysisRecoveryComplete, 0, 0, "")
 	// Persistence faults and active workers supersede saved-selection work, as at admission.
 	s.analysisRun.fault = errAnalysisRunPersistence

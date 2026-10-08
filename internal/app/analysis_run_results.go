@@ -248,7 +248,7 @@ func (reader *analysisSectionReader) readPerformance(file AnalysisRunFile) error
 
 func (reader *analysisSectionReader) readSecurity(indexed project.IndexFile, file AnalysisRunFile) error {
 	for j := 2; j <= 3; j++ {
-		input := analysisSecurityCacheInput(*reader.analysis, indexed, reader.service.analysisModelRuntime(AnalysisStagePerformance, reader.run.Plan.Models), reader.policy.Version())
+		input := analysisSecurityCacheInput(*reader.analysis, indexed, reader.service.analysisModelRuntime(AnalysisStageSecurityAI, reader.run.Plan.Models), reader.policy.Version())
 		if j == 2 {
 			input = securityRulesInput(securityRulesSnapshot{analysis: *reader.analysis, file: indexed, policyVersion: reader.policy.Version()})
 		}

@@ -45,7 +45,7 @@ func TestAnalysisModelsDispatchChosenProvidersAndRetainDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	original := s.CurrentModelCatalog()
-	models := &AnalysisModels{Code: "function", Review: "bug", Features: "analyze"}
+	models := &AnalysisModels{Code: "function", Performance: "bug", Security: "analyze", Features: "analyze"}
 	preview := analysisModelsPreviewFor(t, s, models, AnalysisRunLimits{100, 30, 2})
 	if analyzeCalls.Load()+bugCalls.Load()+functionCalls.Load() != 0 || len(preview.Providers) != 3 {
 		t.Fatalf("model preview dispatched or lost a provider: %+v", preview)
@@ -55,7 +55,7 @@ func TestAnalysisModelsDispatchChosenProvidersAndRetainDefaults(t *testing.T) {
 	}
 	models.Code = "bug" // Caller changes cannot retarget the admitted run.
 	run := completedAnalysisRun(t, s)
-	if run.Status != AnalysisRunCompleted || functionCalls.Load() != 1 || bugCalls.Load() != 2 || analyzeCalls.Load() != 1 {
+	if run.Status != AnalysisRunCompleted || functionCalls.Load() != 1 || bugCalls.Load() != 1 || analyzeCalls.Load() != 2 {
 		t.Fatalf("chosen providers were not used: status=%s code=%d review=%d features=%d", run.Status, functionCalls.Load(), bugCalls.Load(), analyzeCalls.Load())
 	}
 	if !reflect.DeepEqual(original, s.CurrentModelCatalog()) || run.Plan.Models.Code != "function" {
@@ -86,7 +86,7 @@ func TestAnalysisModelsDispatchChosenProvidersAndRetainDefaults(t *testing.T) {
 		t.Fatalf("selected model caches were not reused: %+v", cached)
 	}
 	defaults := analysisModelsPreviewFor(t, s, nil, preview.Limits)
-	if defaults.ExpectedModelRequests != 4 || defaults.Identity.ProviderFingerprint == preview.Identity.ProviderFingerprint {
+	if defaults.ExpectedModelRequests != 3 || defaults.Identity.ProviderFingerprint == preview.Identity.ProviderFingerprint {
 		t.Fatalf("default profiles reused another model's evidence: %+v", defaults)
 	}
 }
@@ -220,5 +220,24 @@ func TestAnalysisModelsPersistAcrossResumeAndRejectChangedProvider(t *testing.T)
 	}
 	if runtime := s.analysisModelRuntime(AnalysisStageSemantic, nil); runtime.profile.Scope != config.BugModelScope {
 		t.Fatal("legacy default scope changed")
+	}
+}
+
+func TestAnalysisIndependentModelsRejectInvalidSelections(t *testing.T) {
+	server, calls := analysisResponseServer(t, emptyAnalysisReply)
+	s, _ := newSemanticAnalysisService(t, server.URL, 0)
+	index, _ := s.manager.Index()
+	for _, models := range []AnalysisModels{
+		{Code: "bug", Performance: "function", Features: "analyze"},
+		{Code: "bug", Performance: "invalid", Security: "analyze", Features: "analyze"},
+		{Code: "bug", Performance: "function", Security: "configured:missing", Features: "analyze"},
+	} {
+		_, err := s.PreviewAnalysisRun(context.Background(), AnalysisPreviewRequest{
+			Models: &models, ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision,
+			Scope: AnalysisRunScopeProject, Limits: AnalysisRunLimits{100, 30, 2},
+		})
+		if err == nil || calls.Load() != 0 {
+			t.Fatalf("invalid selection admitted: %+v, %v", models, err)
+		}
 	}
 }
