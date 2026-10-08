@@ -10,7 +10,7 @@ import { createRoot } from 'react-dom/client';
 import { workspace as w, canCancelOperation, type Page } from './workspace';
 import { Button, Icon, Modal, Notice, human } from './ui';
 import { Summary, ProjectPage, Models, Diagrams, SearchPage } from './overview';
-import { Analysis, AnalysisPreview, AnalysisRun } from './analysis';
+import { Analysis, AnalysisFiles, AnalysisPreview, AnalysisRun } from './analysis';
 import { Results } from './results';
 import { Editor } from './editor';
 import { ChangeWorkspace } from './change-workspace';
@@ -22,6 +22,8 @@ import './style.css';
 const mainNav: [Page, string, string][] = [
   ['summary', 'Summary', 'grid'],
   ['analysis', 'Analysis', 'activity'],
+  ['analysis-files', 'Files', 'folder'],
+  ['analysis-run', 'Last run', 'clock'],
   ['bugs', 'Bugs', 'bug'],
   ['performance', 'Performance', 'gauge'],
   ['security', 'Security', 'shield'],
@@ -91,7 +93,7 @@ function App() {
         disabled={!s.project && !['project', 'models'].includes(page)}
         aria-current={
           s.page === page ||
-          (page === 'analysis' && s.page.startsWith('analysis')) ||
+          (page === 'analysis' && s.page === 'analysis-preview') ||
           (page === 'editor' && editorPages.includes(s.page))
             ? 'page'
             : undefined
@@ -119,6 +121,7 @@ function App() {
     content = <ProjectPage s={s} />;
   else if (s.page === 'summary') content = <Summary s={s} />;
   else if (s.page === 'analysis') content = <Analysis s={s} />;
+  else if (s.page === 'analysis-files') content = <AnalysisFiles s={s} />;
   else if (s.page === 'analysis-preview') content = <AnalysisPreview s={s} />;
   else if (s.page === 'analysis-run') content = <AnalysisRun s={s} />;
   else if (['bugs', 'performance', 'security'].includes(s.page))

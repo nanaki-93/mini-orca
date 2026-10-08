@@ -93,7 +93,9 @@ export interface ModelCatalog {
 }
 export interface AnalysisModels {
   code: string;
-  review: string;
+  performance?: string;
+  security?: string;
+  review?: string;
   features: string;
 }
 export interface ModelChoice {
