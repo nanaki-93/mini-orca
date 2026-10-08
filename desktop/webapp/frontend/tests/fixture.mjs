@@ -1008,7 +1008,14 @@ export function installFixture(options = {}) {
               ...rev,
               selection_id: state.selectionId,
               excluded_paths: state.excluded,
-              editable: !['running', 'paused'].includes(state.run?.status),
+              editable: ![
+                'queued',
+                'running',
+                'pausing',
+                'paused',
+                'interrupted',
+                'canceling',
+              ].includes(state.run?.status),
               files: files.map((f) => ({
                 path: f.path,
                 reason: '',
@@ -1100,6 +1107,19 @@ export function installFixture(options = {}) {
           }
           if (path.endsWith('/analysis/run')) {
             if (method === 'POST') {
+              if (
+                ['queued', 'running', 'pausing', 'paused', 'interrupted', 'canceling'].includes(
+                  state.run?.status,
+                )
+              )
+                return {
+                  status: 409,
+                  body: JSON.stringify({
+                    type: 'conflict',
+                    user_message:
+                      'An analysis run is already active or paused. Continue or cancel it before starting a new analysis.',
+                  }),
+                };
               state.run = {
                 ...run,
                 plan: { ...state.preview },

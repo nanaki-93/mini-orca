@@ -44,10 +44,10 @@ export function Analysis({ s }: { s: State }) {
   const models = analysisSetupModels(s);
   const excluded = selectionPaths(s);
   const changed = selectionChanged(s);
+  const continuation =
+    s.run && ['paused', 'interrupted'].includes(s.run.status) ? s.run : undefined;
   const hasRepair =
-    !activeRun(s.run) &&
-    !['paused', 'interrupted'].includes(s.run?.status || '') &&
-    s.selection?.recovery?.state === 'available';
+    !activeRun(s.run) && !continuation && s.selection?.recovery?.state === 'available';
   const preview = (mode: 'new' | 'repair') => {
     if (changed) {
       w.fail('Save your file selection before preparing a run.');
@@ -69,10 +69,16 @@ export function Analysis({ s }: { s: State }) {
           <Button
             tone="primary"
             icon="play"
-            disabled={!!s.busy || !s.selection || !s.models || activeRun(s.run)}
-            onClick={() => preview('new')}
+            disabled={
+              !!s.busy || (!continuation && (!s.selection || !s.models || activeRun(s.run)))
+            }
+            onClick={() =>
+              continuation
+                ? void w.previewAnalysis('resume', continuation.plan.limits)
+                : preview('new')
+            }
           >
-            Prepare analysis
+            {continuation ? 'Prepare continuation' : 'Prepare analysis'}
           </Button>
           {hasRepair && (
             <Button
@@ -104,6 +110,12 @@ export function Analysis({ s }: { s: State }) {
         </div>
       </Heading>
 
+      {continuation && (
+        <Notice>
+          Your saved analysis is {human(continuation.status)}. Continue with its captured settings,
+          or cancel it in Last run before starting a new analysis.
+        </Notice>
+      )}
       <div className="stack analysis-sections">
         <Panel
           title="Analysis setup"

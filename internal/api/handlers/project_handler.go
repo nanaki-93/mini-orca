@@ -709,6 +709,8 @@ func writeProjectError(w http.ResponseWriter, action string, err error) {
 		api.WriteAppError(w, api.Internal(action, "Analysis progress could not be saved. Read the retained overview, then resume or cancel explicitly.", err))
 	case errors.Is(err, app.ErrAnalysisLegacyMigration):
 		api.WriteAppError(w, api.Conflict(action, "This saved legacy job cannot resume. Its progress is retained; review it and explicitly start a new job or use unified analysis preview/start.", err))
+	case errors.Is(err, app.ErrAnalysisRunBusy):
+		api.WriteAppError(w, api.Conflict(action, "An analysis run is already active or paused. Continue or cancel it before starting a new analysis.", err))
 	case errors.Is(err, project.ErrNoActiveProject):
 		api.WriteAppError(w, api.NotFound(action, "Import a project before using this endpoint.", err))
 	case errors.Is(err, project.ErrExcludedFile):

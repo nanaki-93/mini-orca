@@ -421,7 +421,10 @@ type AnalysisSectionResults struct {
 }
 
 var errAnalysisRunPersistence = errors.New("analysis progress could not be saved; resume or cancel to recover")
-var errAnalysisRunBusy = fmt.Errorf("%w: an analysis run is already active; pause or cancel it before replacement", project.ErrRevisionConflict)
+var errAnalysisRunBusy = fmt.Errorf("%w: an analysis run is already active; continue or cancel it before replacement", project.ErrRevisionConflict)
+
+// ErrAnalysisRunBusy distinguishes retained work from a changed project identity.
+var ErrAnalysisRunBusy = errAnalysisRunBusy
 
 // ErrAnalysisProgressUnavailable identifies recoverable progress storage failures.
 var ErrAnalysisProgressUnavailable = errAnalysisRunPersistence
