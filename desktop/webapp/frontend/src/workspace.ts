@@ -92,6 +92,7 @@ export interface State {
   // Saved history does not authorize generation notices in a new project session.
   featureGenerationRequested: boolean;
   instructionPreview?: M.InstructionPreview;
+  projectInstructions?: M.InstructionPreview;
   analysisSetup?: M.AnalysisModels;
   analysisLimits?: M.Limits;
   analysisRefresh?: boolean;
@@ -241,6 +242,7 @@ export class Workspace {
   private resultRequests: Record<string, number> = {};
   private featureRequest = 0;
   private instructionRequest = 0;
+  private projectInstructionRequest = 0;
   private modelCatalogRequest = 0;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -416,6 +418,7 @@ export class Workspace {
     await Promise.all([
       this.loadFeatures(),
       this.loadChangeHistory(),
+      this.loadProjectInstructions(),
       this.resource(
         'overview',
         () => this.api.get<M.Overview>(`${current}/overview`, identity),
@@ -1478,6 +1481,33 @@ export class Workspace {
     );
     return loaded;
   }
+  async loadProjectInstructions() {
+    if (!this.state.project) return;
+    const request = ++this.projectInstructionRequest;
+    const identity = this.identity();
+    this.set({ projectInstructions: undefined });
+    await this.resource(
+      'default instructions',
+      () =>
+        this.api.get<M.InstructionPreview>(`${current}/instructions`, {
+          ...identity,
+          path: 'AGENTS.md',
+        }),
+      (projectInstructions) => {
+        if (projectKey(projectInstructions) !== projectKey(identity))
+          throw new Error('Project instructions belong to another revision. Refresh the project.');
+        this.set({ projectInstructions });
+      },
+      () =>
+        request === this.projectInstructionRequest &&
+        projectKey(this.state.project) === projectKey(identity),
+    );
+  }
+  async openProjectInstructions() {
+    this.navigation++;
+    this.set({ page: 'instructions', error: '' });
+    await this.loadInstructions('AGENTS.md');
+  }
   clearInstructionScope() {
     this.instructionRequest++;
     this.set({ instructionPreview: undefined });
@@ -1725,7 +1755,7 @@ export class Workspace {
     const confirmed = await this.confirmModel(
       'function',
       repair ? 'Repair proposal' : 'Prepare proposal',
-      false,
+      change.kind === 'security',
       change.targets.map((target) => target.path),
     );
     if (confirmed === null) return false;

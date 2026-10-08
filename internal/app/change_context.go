@@ -67,6 +67,9 @@ func changeContext(root string, session *ChangeSession) (string, project.Context
 			if seenInstructions[file.Path] {
 				continue
 			}
+			if len(seenInstructions) == 0 {
+				text.WriteString(project.InstructionPromptGuidance + "\n")
+			}
 			seenInstructions[file.Path] = true
 			text.WriteString("\nGuide " + file.Path + " (applies within " + file.Scope + "):\n" + file.Content + "\n")
 			manifest.Included = append(manifest.Included, project.ContextFile{Path: file.Path, Hash: file.Hash, SizeBytes: int64(len(file.Content))})
@@ -81,6 +84,9 @@ func changeContext(root string, session *ChangeSession) (string, project.Context
 }
 
 func changeMessages(session *ChangeSession, message, text string) ([]llm.ChatMessage, error) {
+	if session.Kind == "fix" || session.Kind == "performance" || session.Kind == "security" {
+		message += "\nExplain the cause supported by the supplied evidence and the proposed solution in the explanation field. State any unproven cause or remaining uncertainty explicitly. Explain how the changed files address this finding."
+	}
 	input, err := json.Marshal(struct {
 		Request      string               `json:"request"`
 		Criteria     []string             `json:"acceptance_criteria"`

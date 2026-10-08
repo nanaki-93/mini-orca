@@ -4,6 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { serve } from '../preview.mjs';
 import { installFixture } from './fixture.mjs';
 import { testChangeWorkflows } from './change-workflow.mjs';
+import { testGuidedFixes } from './guided-fixes.mjs';
 import { testScrolling } from './scrolling.mjs';
 import { testThemes } from './themes.mjs';
 
@@ -1553,6 +1554,7 @@ try {
   await testScrolling({ test, pageFor, nav, idle, layout });
   await testThemes({ test, pageFor, nav, idle, layout, contrast });
   await testChangeWorkflows({ test, pageFor, nav, idle, layout });
+  await testGuidedFixes({ test, pageFor, nav, idle, layout });
   await test('Models retain configured scopes, complete destinations and Summary presentation', async () => {
     const metadata = {
       analyze: {
@@ -7508,7 +7510,7 @@ try {
                 'All findings',
                 'Open source',
                 'Prepare fix',
-                'Prepare change',
+                'Review fix plan',
                 ...(semantic ? ['Dismiss', 'Mark fixed'] : []),
               ])
                 assert.equal(
@@ -7550,7 +7552,7 @@ try {
         await idle(page);
         await page.locator('.result-row').click();
         await workspace.locator('.results-state').getByText('stale', { exact: true }).waitFor();
-        for (const label of ['Prepare fix', 'Prepare change'])
+        for (const label of ['Prepare fix', 'Review fix plan'])
           assert.equal(
             await workspace.getByRole('button', { name: label, exact: true }).isDisabled(),
             true,
@@ -7594,8 +7596,8 @@ try {
           0,
         );
         assert.equal(
-          await workspace.getByRole('button', { name: 'Prepare change', exact: true }).count(),
-          0,
+          await workspace.getByRole('button', { name: 'Review fix plan', exact: true }).count(),
+          1,
         );
         await workspace.getByText('File-level finding', { exact: true }).waitFor();
         if (!semantic && category === 'security')
@@ -7629,7 +7631,7 @@ try {
         for (const label of [
           'Open source',
           'Prepare fix',
-          'Prepare change',
+          'Review fix plan',
           ...(semantic ? ['Dismiss', 'Mark fixed'] : []),
         ])
           assert.equal(
@@ -7699,8 +7701,8 @@ try {
       await close();
     }
   });
-  await test('Finding source inspection and declaration handoff remain distinct from generation', async () => {
-    for (const action of ['Open source', 'Prepare change']) {
+  await test('Finding source inspection and guided fix planning remain distinct from generation', async () => {
+    for (const action of ['Open source', 'Review fix plan']) {
       const { page, close } = await pageFor();
       try {
         await nav(page, 'Bugs');
@@ -7711,7 +7713,10 @@ try {
         await page.getByRole('button', { name: action, exact: true }).click();
         if (action === 'Open source')
           await page.getByLabel('Read-only source', { exact: true }).waitFor();
-        else await page.getByLabel('Change request', { exact: true }).waitFor();
+        else {
+          await page.getByText('App-generated request', { exact: true }).click();
+          await page.getByLabel('Change request', { exact: true }).waitFor();
+        }
         await idle(page);
         assert.deepEqual(
           await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
@@ -8344,7 +8349,6 @@ try {
     const diagnostic = `Failure details ${'complete_diagnostic_'.repeat(100)} end of diagnostics`;
     for (const state of ['unreviewed', 'exhausted', 'missing']) {
       const { page, close } = await pageFor({
-        changeProposalKind: 'performance',
         changeDiff: { lines: [{ kind: 'add', new_line: 1, text: code }] },
         changeCheckOutput: diagnostic,
         changeChecksFail: state === 'exhausted',
@@ -8367,15 +8371,13 @@ try {
           assert.equal(await review.getByRole('button').count(), 0);
         } else {
           assert.deepEqual(await panelTreatment(review.locator('.panel').first()), reference);
-          assert.equal(await review.locator('.diff').count(), paths.length);
+          assert.equal(await review.locator('.diff').count(), 1);
           for (const path of paths) {
+            await review.getByLabel('Files to change', { exact: true }).selectOption(path);
             const diff = review.getByLabel(`Read-only diff for ${path}`, { exact: true });
             assert.equal(await diff.locator('code').textContent(), code);
             assert.equal(await diff.locator('.code-header strong').textContent(), path);
           }
-          await review
-            .getByText('Performance unmeasured; tests do not establish a speedup.', { exact: true })
-            .waitFor();
           const beforeDisclosures = await page.evaluate(() =>
             window.fixture.requests.filter((r) => r.method !== 'GET'),
           );
@@ -8577,11 +8579,12 @@ try {
     await layout(page, 'chat-large-text');
     await close();
   });
-  await test('Prepare fix stops after bounded repair and never applies automatically', async () => {
+  await test('Direct proposals stop after bounded repair and never apply automatically', async () => {
     const { page, close } = await pageFor({ changeChecksFail: true });
-    await nav(page, 'Bugs');
-    await page.locator('.result-row').first().click();
-    await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
+    await nav(page, 'Chat');
+    await page.getByLabel('Files to change', { exact: true }).fill('internal/worker/process.go');
+    await page.getByLabel('Change request', { exact: true }).fill('Handle cancellation.');
+    await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Trust this project' }).click();
     await idle(page);
     const requests = await page.evaluate(() => window.fixture.requests);

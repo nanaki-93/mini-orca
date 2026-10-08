@@ -19,6 +19,7 @@ type performanceReviewSnapshot struct {
 	file          project.IndexFile
 	source        string
 	policyVersion string
+	instructions  project.EffectiveInstructions
 }
 
 func (s *Service) preparePerformanceReview(path string) (performanceReviewSnapshot, error) {
@@ -48,7 +49,11 @@ func (s *Service) preparePerformanceReview(path string) (performanceReviewSnapsh
 	if err != nil {
 		return performanceReviewSnapshot{}, err
 	}
-	return performanceReviewSnapshot{runtime: s.runtimes.analyze, root: root, analysis: *analysis, file: *file, source: info.Content, policyVersion: policy.Version()}, nil
+	instructions, err := project.ResolveInstructions(root, file.Path)
+	if err != nil {
+		return performanceReviewSnapshot{}, err
+	}
+	return performanceReviewSnapshot{runtime: s.runtimes.analyze, root: root, analysis: *analysis, file: *file, source: info.Content, policyVersion: policy.Version(), instructions: instructions}, nil
 }
 
 func (s *Service) requestPerformanceReview(ctx context.Context, snapshot performanceReviewSnapshot, dispatch *analysisModelDispatch) (modelOutput, error) {
@@ -61,6 +66,9 @@ func (s *Service) requestPerformanceReview(ctx context.Context, snapshot perform
 		return modelOutput{}, err
 	}
 	schema := performanceReviewResponseSchema(snapshot)
+	if snapshot.instructions.Text != "" {
+		prompt += "\n\n" + project.InstructionPromptGuidance + snapshot.instructions.Text
+	}
 	timeout := s.analysisTimeout
 	if snapshot.modelProfile != "" {
 		timeout = duration(runtime.effective.Timeout)
@@ -86,6 +94,7 @@ func (s *Service) publishPerformanceReview(ctx context.Context, snapshot perform
 	if result.Model != "" {
 		report.Model = result.Model
 	}
+	report.InstructionsFingerprint = snapshot.instructions.Fingerprint
 	store := func() error {
 		if err := s.validatePerformanceReviewSnapshot(ctx, snapshot); err != nil {
 			return err
@@ -99,6 +108,9 @@ func (s *Service) publishPerformanceReview(ctx context.Context, snapshot perform
 }
 
 func (s *Service) validatePerformanceReviewSnapshot(ctx context.Context, snapshot performanceReviewSnapshot) error {
+	if err := project.ValidateInstructions(snapshot.root, snapshot.file.Path, snapshot.instructions.Fingerprint); err != nil {
+		return err
+	}
 	if s.runtimeForAnalysisScope(config.AnalyzeModelScope, snapshot.modelProfile).effective != snapshot.runtime.effective {
 		return project.ErrRevisionConflict
 	}

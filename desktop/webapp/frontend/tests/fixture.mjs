@@ -410,17 +410,19 @@ export function installFixture(options = {}) {
         ? { ...context, included: idea.paths.map((path) => ({ ...context.included[0], path })) }
         : context,
     },
-    instructions: {
-      'AGENTS.md': options.instructionsLongContent
-        ? `# Project rules\n\nPreserve public APIs.\n\nInherited boundary: ${'RootGuidance'.repeat(40)}\n`
-        : '# Project rules\n\nPreserve public APIs.\n',
-      'internal/AGENTS.md': '# Internal rules\n\nPropagate cancellation.\n',
-      ...(options.instructionPath
-        ? {
-            [options.instructionPath]: `# Directory rules\n\nPropagate cancellation.\n\n${'DirectoryGuidance'.repeat(40)}\n`,
-          }
-        : {}),
-    },
+    instructions: options.instructionsMissing
+      ? {}
+      : {
+          'AGENTS.md': options.instructionsLongContent
+            ? `# Project rules\n\nPreserve public APIs.\n\nInherited boundary: ${'RootGuidance'.repeat(40)}\n`
+            : '# Project rules\n\nPreserve public APIs.\n',
+          'internal/AGENTS.md': '# Internal rules\n\nPropagate cancellation.\n',
+          ...(options.instructionPath
+            ? {
+                [options.instructionPath]: `# Directory rules\n\nPropagate cancellation.\n\n${'DirectoryGuidance'.repeat(40)}\n`,
+              }
+            : {}),
+        },
     draft: undefined,
     session: undefined,
     applied: false,
@@ -754,6 +756,7 @@ export function installFixture(options = {}) {
                 updated_at: '2026-10-08T00:00:00Z',
               };
               change.reviewed_hash = '';
+              change.messages.push({ role: 'user', content: body.message });
               window.fixture.completeWorkflow = (status = 'awaiting_human_review') => {
                 change.revision++;
                 change.hash = `workflow-proposal-${change.revision}`;
@@ -763,6 +766,11 @@ export function installFixture(options = {}) {
                   hash: `candidate-${change.revision}`,
                   diff: validation().diff,
                 }));
+                change.messages.push({
+                  role: 'assistant',
+                  content:
+                    'Cause: cancellation was ignored. Solution: return the context error and cover cancellation in a regression test.',
+                });
                 change.check_options = { run_tests: true };
                 change.checks = [
                   {

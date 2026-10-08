@@ -1302,8 +1302,9 @@ components:
         scope: {type: string, enum: [analyze]}
         provider_origin: {type: string}
         reasoning_effort: {type: string}
-        prompt_version: {type: string, enum: [security-file-v1, security-file-v2]}
+        prompt_version: {type: string, enum: [security-file-v1, security-file-v2, security-file-v3]}
         context_policy_version: {type: string}
+        instructions_fingerprint: {type: string, description: Identity of the applicable AGENTS.md guides used for AI review.}
         generated_at: {type: string, format: date-time}
       oneOf:
         - required: [rule_set_version]
@@ -1386,6 +1387,7 @@ components:
         profile: {type: string}
         prompt_version: {type: string}
         context_policy_version: {type: string}
+        instructions_fingerprint: {type: string, description: Identity of the applicable AGENTS.md guides used for analysis.}
         generated_at: {type: string, format: date-time}
     AnalyzeAllRequest:
       type: object
@@ -2192,6 +2194,7 @@ components:
         reasoning_effort: {type: string}
         prompt_version: {type: string}
         context_policy_version: {type: string}
+        instructions_fingerprint: {type: string, description: Identity of the applicable AGENTS.md guides used for review.}
         generated_at: {type: string, format: date-time}
     ChangeIdentity:
       type: object

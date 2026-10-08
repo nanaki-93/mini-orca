@@ -18,7 +18,9 @@ import {
   Panel,
   Prose,
   BulletContent,
+  KeyValues,
 } from './ui';
+import type { ChangeSession } from './models';
 
 export function ChangeWorkspace({ s }: { s: State }) {
   const change = s.change;
@@ -26,7 +28,21 @@ export function ChangeWorkspace({ s }: { s: State }) {
   const [paths, setPaths] = useState('');
   const [message, setMessage] = useState('');
   const [tests, setTests] = useState(true);
-  const [kind, setKind] = useState('feature');
+  const taskKind = change?.kind || s.changeSeed?.kind || 'feature';
+  const guided = ['fix', 'performance', 'security'].includes(taskKind);
+  const finding = s.changeSeed?.finding;
+  const request = guided
+    ? s.changeSeed?.message ||
+      change?.messages.find((entry) => entry.role === 'user')?.content ||
+      message
+    : message;
+  const taskLabel =
+    taskKind === 'fix'
+      ? 'Bug fix'
+      : taskKind === 'performance'
+        ? 'Performance fix'
+        : 'Security fix';
+  const explanations = change?.messages.filter((entry) => entry.role === 'assistant') || [];
   useEffect(() => {
     setTitle(change?.title || s.changeSeed?.title || 'New feature');
     setPaths(
@@ -34,7 +50,6 @@ export function ChangeWorkspace({ s }: { s: State }) {
     );
     setMessage(change ? '' : s.changeSeed?.message || '');
     setTests(change?.kind !== 'instructions');
-    setKind(change?.kind || s.changeSeed?.kind || 'feature');
   }, [change?.id, s.changeSeed]);
   const seed = {
     title,
@@ -42,29 +57,56 @@ export function ChangeWorkspace({ s }: { s: State }) {
       .split('\n')
       .map((path) => path.trim())
       .filter(Boolean),
-    message,
-    kind,
+    message: request,
+    kind: taskKind,
     acceptance_criteria: change?.acceptance_criteria || s.changeSeed?.acceptance_criteria || [],
   };
   const running = activeChangeWorkflow(change);
-  const models = s.workflowModels || change?.workflow?.models || defaultWorkflowModels;
+  const models = guided
+    ? change?.workflow?.models || defaultWorkflowModels
+    : s.workflowModels || change?.workflow?.models || defaultWorkflowModels;
   const useAgents =
-    kind !== 'instructions' &&
+    taskKind !== 'instructions' &&
     (!!change?.workflow || seed.paths.some((path) => path.endsWith('_test.go')));
   const blocked =
     !!s.busy ||
     running ||
     (!!change && (change.state !== 'draft' || change.freshness !== 'current'));
+  const sourcePath = finding?.path || change?.targets[0]?.path || seed.paths[0];
   return (
-    <div className="chat-page">
+    <div className={`chat-page${guided ? ' guided-fix' : ''}`}>
       <Heading
-        title="Chat"
-        detail="Describe a change. Review the generated diff and accept when it is ready."
+        title={guided ? taskLabel : 'Chat'}
+        detail={
+          guided
+            ? 'Understand the finding, run the guided fix, then review each file before applying.'
+            : 'Describe a change. Review the generated diff and accept when it is ready.'
+        }
         variant="intro"
       >
-        <Go page="editor" icon="code">
-          Inspect source
-        </Go>
+        {guided && (
+          <Go
+            page={
+              taskKind === 'fix' ? 'bugs' : taskKind === 'performance' ? 'performance' : 'security'
+            }
+            icon="back"
+          >
+            All findings
+          </Go>
+        )}
+        {guided ? (
+          <Button
+            icon="code"
+            disabled={!!s.busy || !sourcePath}
+            onClick={() => void w.openFile(sourcePath, finding?.symbol || '')}
+          >
+            Inspect source
+          </Button>
+        ) : (
+          <Go page="editor" icon="code">
+            Inspect source
+          </Go>
+        )}
         <Button disabled={!!s.busy || running} onClick={() => w.newChange()}>
           New conversation
         </Button>
@@ -165,22 +207,72 @@ export function ChangeWorkspace({ s }: { s: State }) {
       )}
       <div className="change-workspace">
         <section className="workspace-page chat-conversation" aria-label="Change conversation">
-          {!change ? (
+          {guided ? (
+            <>
+              <Panel
+                title={change?.title || title}
+                actions={
+                  <Badge
+                    value={change?.freshness === 'stale' ? 'stale' : change?.state || 'Guided fix'}
+                  />
+                }
+              >
+                <KeyValues
+                  values={[
+                    ['Task type', taskLabel],
+                    [
+                      'Location',
+                      finding
+                        ? `${finding.path}${finding.line ? `:${finding.line}` : ''}`
+                        : change?.targets[0]?.path || seed.paths[0],
+                    ],
+                    ['Declaration', finding?.symbol || 'File-level finding'],
+                    [
+                      'Scope',
+                      `${seed.paths.length} app-selected ${seed.paths.length === 1 ? 'file' : 'files'}`,
+                    ],
+                    ['Checks', 'Run project tests before acceptance'],
+                  ]}
+                />
+                <BulletContent title="Acceptance criteria" items={seed.acceptance_criteria} />
+                {change?.freshness === 'stale' && (
+                  <Notice>
+                    Source or guidance changed. Refresh the findings and start a new fix.
+                  </Notice>
+                )}
+              </Panel>
+              <Panel title="Cause" className="fix-explanation">
+                <p className="small muted">
+                  {finding
+                    ? `Reported finding · ${finding.confidence.replaceAll('_', ' ')}`
+                    : 'Saved finding context'}
+                </p>
+                <Prose
+                  text={
+                    finding?.cause ||
+                    request ||
+                    'The saved task has no cause recorded. Review the source and original finding before applying.'
+                  }
+                />
+              </Panel>
+              <Panel title="Proposed solution" className="fix-explanation">
+                {explanations.length ? (
+                  explanations.map((entry, index) => <Prose key={index} text={entry.content} />)
+                ) : (
+                  <Prose
+                    text={
+                      finding?.solution ||
+                      'Review the generated explanation and file differences below. The proposed correction is subject to tests and your review.'
+                    }
+                  />
+                )}
+              </Panel>
+            </>
+          ) : !change ? (
             <Panel title="Task and file scope">
               <label className="block">
                 Task type
-                <select
-                  className="field"
-                  aria-label="Task type"
-                  value={kind}
-                  disabled={!!s.busy}
-                  onChange={(event) => setKind(event.target.value)}
-                >
-                  <option value="feature">Feature</option>
-                  <option value="fix">Bug fix</option>
-                  <option value="performance">Performance</option>
-                  <option value="security">Security</option>
-                </select>
+                <input className="field" aria-label="Task type" value={taskKind} readOnly />
               </label>
               <label className="block">
                 Task title
@@ -246,28 +338,54 @@ export function ChangeWorkspace({ s }: { s: State }) {
               )}
             </Panel>
           )}
-          {change?.messages.map((entry, i) => (
-            <Panel
-              key={i}
-              title={entry.role === 'user' ? 'You' : 'Assistant'}
-              className="chat-message"
-            >
-              <Prose text={entry.content} />
-            </Panel>
-          ))}
-          <Panel title="Describe the change">
-            <label className="sr-only" htmlFor="chat-request">
-              Change request
-            </label>
-            <textarea
-              id="chat-request"
-              className="composer"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              disabled={blocked}
-              placeholder="Describe a new feature, fix, or improvement…"
-            />
-            {useAgents ? (
+          {!guided &&
+            change?.messages.map((entry, i) => (
+              <Panel
+                key={i}
+                title={entry.role === 'user' ? 'You' : 'Assistant'}
+                className="chat-message"
+              >
+                <Prose text={entry.content} />
+              </Panel>
+            ))}
+          <Panel title={guided ? 'Guided fix plan' : 'Describe the change'}>
+            {guided ? (
+              <Disclosure title="App-generated request">
+                <textarea
+                  aria-label="Change request"
+                  className="composer"
+                  value={request}
+                  readOnly
+                />
+              </Disclosure>
+            ) : (
+              <>
+                <label className="sr-only" htmlFor="chat-request">
+                  Change request
+                </label>
+                <textarea
+                  id="chat-request"
+                  className="composer"
+                  value={request}
+                  onChange={(e) => setMessage(e.target.value)}
+                  disabled={blocked}
+                  placeholder="Describe a new feature, fix, or improvement…"
+                />
+              </>
+            )}
+            {guided ? (
+              <>
+                <p className="small muted">
+                  The app sets the task, file scope, agent models and checks from this finding.
+                  Generation prepares a diff; Apply requires your acceptance.
+                </p>
+                {useAgents && (
+                  <Disclosure title="Agent models">
+                    <WorkflowModels s={s} value={models} disabled readOnly />
+                  </Disclosure>
+                )}
+              </>
+            ) : useAgents ? (
               <Disclosure title="Agent models">
                 <WorkflowModels s={s} value={models} disabled={blocked} />
               </Disclosure>
@@ -293,7 +411,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
                 icon="sparkles"
                 disabled={
                   blocked ||
-                  !message.trim() ||
+                  !request.trim() ||
                   !paths.trim() ||
                   !title.trim() ||
                   (useAgents && !s.models)
@@ -301,10 +419,14 @@ export function ChangeWorkspace({ s }: { s: State }) {
                 onClick={() =>
                   void (useAgents
                     ? w.startChangeWorkflow(seed, models)
-                    : w.prepareChange(seed, tests))
+                    : w.prepareChange(seed, guided || tests))
                 }
               >
-                Generate changes
+                {guided
+                  ? change?.changes.length
+                    ? 'Regenerate fix'
+                    : 'Run fix'
+                  : 'Generate changes'}
               </Button>
             </div>
           </Panel>
@@ -361,43 +483,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
                   <Notice>Performance unmeasured; tests do not establish a speedup.</Notice>
                 )}
               </Panel>
-              {change.changes.map((edit) => (
-                <div
-                  className="panel diff"
-                  aria-label={`Read-only diff for ${edit.path}`}
-                  tabIndex={0}
-                  key={edit.path}
-                >
-                  <div className="code-header">
-                    <strong>{edit.path}</strong>
-                    <span>Read-only</span>
-                  </div>
-                  <pre>
-                    {edit.diff.lines.map((line, i) => {
-                      const kind =
-                        line.kind === 'add'
-                          ? 'added'
-                          : line.kind === 'remove'
-                            ? 'removed'
-                            : line.kind;
-                      return (
-                        <span className={`diff-line ${kind}`} key={i}>
-                          <span className="line-number" aria-hidden="true">
-                            {line.old_line || ''}
-                          </span>
-                          <span className="line-number" aria-hidden="true">
-                            {line.new_line || ''}
-                          </span>
-                          <span className="diff-sign" aria-hidden="true">
-                            {kind === 'added' ? '+' : kind === 'removed' ? '−' : ' '}
-                          </span>
-                          <code>{line.text || ' '}</code>
-                        </span>
-                      );
-                    })}
-                  </pre>
-                </div>
-              ))}
+              <ChangeFiles change={change} paths={seed.paths} />
               <Panel title="Check evidence">
                 {change.checks.length === 0 ? (
                   <p>No current checks.</p>
@@ -418,7 +504,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
                 )}
                 {!change.workflow && (
                   <div className="actions section-gap">
-                    <Button disabled={blocked} onClick={() => void w.checkChange(tests)}>
+                    <Button disabled={blocked} onClick={() => void w.checkChange(guided || tests)}>
                       Check proposal
                     </Button>
                     {change.checks.length > 0 && !changeChecksPassed(change) && (
@@ -463,6 +549,8 @@ export function ChangeWorkspace({ s }: { s: State }) {
                 </Disclosure>
               </Panel>
             </>
+          ) : guided ? (
+            <ChangeFiles change={change} paths={seed.paths} />
           ) : (
             <Panel>
               <Empty title="No proposal yet" icon="code" />
@@ -471,5 +559,68 @@ export function ChangeWorkspace({ s }: { s: State }) {
         </section>
       </div>
     </div>
+  );
+}
+
+function ChangeFiles({ change, paths }: { change?: ChangeSession; paths: string[] }) {
+  const [selected, setSelected] = useState('');
+  const files = change?.changes.length ? change.changes.map((edit) => edit.path) : paths;
+  const path = files.includes(selected) ? selected : files[0] || '';
+  const edit = change?.changes.find((file) => file.path === path);
+  return (
+    <Panel title="Files to change" className="change-files">
+      <label className="block">
+        Select a file to review
+        <select
+          className="field"
+          aria-label="Files to change"
+          value={path}
+          onChange={(event) => setSelected(event.target.value)}
+        >
+          {!files.length && <option value="">No captured files</option>}
+          {files.map((file) => (
+            <option key={file} value={file}>
+              {file}
+            </option>
+          ))}
+        </select>
+      </label>
+      {edit ? (
+        <div className="diff" aria-label={`Read-only diff for ${edit.path}`} tabIndex={0}>
+          <div className="code-header">
+            <strong>{edit.path}</strong>
+            <span>
+              Read-only · {files.indexOf(path) + 1} of {files.length}
+            </span>
+          </div>
+          <pre>
+            {edit.diff.lines.map((line, i) => {
+              const kind =
+                line.kind === 'add' ? 'added' : line.kind === 'remove' ? 'removed' : line.kind;
+              return (
+                <span className={`diff-line ${kind}`} key={i}>
+                  <span className="line-number" aria-hidden="true">
+                    {line.old_line || ''}
+                  </span>
+                  <span className="line-number" aria-hidden="true">
+                    {line.new_line || ''}
+                  </span>
+                  <span className="diff-sign" aria-hidden="true">
+                    {kind === 'added' ? '+' : kind === 'removed' ? '−' : ' '}
+                  </span>
+                  <code>{line.text || ' '}</code>
+                </span>
+              );
+            })}
+          </pre>
+        </div>
+      ) : (
+        <Empty
+          title={activeChangeWorkflow(change) ? 'Preparing the fix…' : 'No proposal yet'}
+          detail="Run the fix to see the proposed changes for this file. Source stays unchanged until you accept."
+          icon="code"
+        />
+      )}
+    </Panel>
   );
 }

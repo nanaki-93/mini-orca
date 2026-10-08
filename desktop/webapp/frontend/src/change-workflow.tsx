@@ -1,6 +1,6 @@
 import { activeChangeWorkflow, workspace as w, type State } from './workspace';
 import type { ChangeWorkflowModels } from './models';
-import { Badge, BulletContent, Button, Notice, Panel, Prose, human } from './ui';
+import { Badge, BulletContent, Button, KeyValues, Notice, Panel, Prose, human } from './ui';
 
 export const defaultWorkflowModels: ChangeWorkflowModels = {
   create: 'function',
@@ -12,23 +12,33 @@ export function WorkflowModels({
   s,
   value,
   disabled,
+  readOnly = false,
 }: {
   s: State;
   value: ChangeWorkflowModels;
   disabled: boolean;
+  readOnly?: boolean;
 }) {
+  const roles = [
+    ['create', 'Creation model'],
+    ['test', 'Testing model'],
+    ['review', 'Review model'],
+  ] as const;
+  if (readOnly)
+    return (
+      <KeyValues
+        values={roles.map(([key, label]) => [
+          label,
+          `${s.models?.scopes[value[key]]?.model || 'Model unavailable'} · ${value[key]}`,
+        ])}
+      />
+    );
   const choices = Object.entries(s.models?.scopes || {});
   return (
     <fieldset className="workflow-models" disabled={disabled}>
       <legend>Models for this workflow</legend>
       <div className="form-grid">
-        {(
-          [
-            ['create', 'Creation model'],
-            ['test', 'Testing model'],
-            ['review', 'Review model'],
-          ] as const
-        ).map(([key, label]) => (
+        {roles.map(([key, label]) => (
           <label key={key}>
             {label}
             <select

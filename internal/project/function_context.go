@@ -60,12 +60,18 @@ func (b *ContextBuilder) BuildFunctionWithManifest(root string, options Function
 	if err != nil {
 		return "", manifest, err
 	}
-	text := renderFunctionContext(path, *file, declaration, options)
 	instructions, err := ResolveInstructions(canonical, path)
 	if err != nil {
 		return "", manifest, err
 	}
-	text += instructions.Text
+	guidance := ""
+	if instructions.Text != "" {
+		guidance = InstructionPromptGuidance + instructions.Text + "\n"
+		if estimateTokens(guidance) >= manifest.TokenLimit {
+			return "", manifest, fmt.Errorf("project instructions exceed the function context token limit")
+		}
+	}
+	text := guidance + renderFunctionContext(path, *file, declaration, options)
 	for _, instruction := range instructions.Files {
 		manifest.Included = append(manifest.Included, ContextFile{Path: instruction.Path, SizeBytes: int64(len(instruction.Content)), Hash: instruction.Hash, Tokens: estimateTokens(instruction.Content)})
 	}

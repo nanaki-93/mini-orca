@@ -233,7 +233,11 @@ func (s *Service) AnalysisContextManifest(targetFile string) (project.ContextMan
 	if err != nil {
 		return project.ContextManifest{}, err
 	}
-	return s.contextManifestForRuntime(semanticManifest(*indexedFile), s.runtimes.bug), nil
+	instructions, err := project.ResolveInstructions(s.manager.Root(), indexedFile.Path)
+	if err != nil {
+		return project.ContextManifest{}, err
+	}
+	return s.contextManifestForRuntime(semanticInstructionManifest(*indexedFile, instructions), s.runtimes.bug), nil
 }
 
 func (s *Service) contextManifestForRuntime(manifest project.ContextManifest, runtime modelRuntime) project.ContextManifest {

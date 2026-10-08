@@ -87,7 +87,7 @@ See the [API guide](docs/api-contract.md) for current contracts and boundaries.
 ## Existing projects and preferences
 
 No model-scope configuration rename is required. Fresh semantic reports use prompt
-`file-analysis-v14` with explicit Bugs/Performance/Security risk categories. The
+`file-analysis-v15` with explicit Bugs/Performance/Security risk categories. The
 persisted semantic report schema remains `1`; uncategorized historical findings
 remain visible as historical/unclassified evidence and never enter new category
 counts. Changed prompt/provider/source identities require fresh analysis; reading

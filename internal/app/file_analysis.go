@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	semanticAnalysisPromptVersion = "file-analysis-v14"
+	semanticAnalysisPromptVersion = "file-analysis-v15"
 	maxSemanticAnalysisBytes      = 64 * 1024
 	fileAnalysisInsightFieldCount = 4
 	fileAnalysisInsightMaxChars   = 250
@@ -166,13 +166,14 @@ type semanticAnalysisSuggestion struct {
 }
 
 type preparedFileAnalysis struct {
-	root        string
-	runtime     modelRuntime
-	analysis    *project.Analysis
-	indexedFile *project.IndexFile
-	source      string
-	cache       *project.FileAnalysisCache
-	input       project.FileAnalysisInput
+	root         string
+	runtime      modelRuntime
+	analysis     *project.Analysis
+	indexedFile  *project.IndexFile
+	source       string
+	cache        *project.FileAnalysisCache
+	input        project.FileAnalysisInput
+	instructions project.EffectiveInstructions
 }
 
 // AnalyzeFile creates or refreshes a semantic summary for exactly one selected
@@ -218,7 +219,11 @@ func (s *Service) prepareFileAnalysis(targetFile string) (preparedFileAnalysis, 
 	if err != nil {
 		return preparedFileAnalysis{}, err
 	}
-	return preparedFileAnalysis{root: s.manager.Root(), runtime: s.runtimes.bug, analysis: analysis, indexedFile: indexedFile, source: fileInfo.Content, cache: cache, input: input}, nil
+	instructions, err := project.ResolveInstructions(s.manager.Root(), indexedFile.Path)
+	if err != nil {
+		return preparedFileAnalysis{}, err
+	}
+	return preparedFileAnalysis{root: s.manager.Root(), runtime: s.runtimes.bug, analysis: analysis, indexedFile: indexedFile, source: fileInfo.Content, cache: cache, input: input, instructions: instructions}, nil
 }
 
 func reusableFileAnalysis(cached *project.FileAnalysis) bool {
@@ -237,8 +242,11 @@ func (s *Service) generateFileAnalysis(ctx context.Context, prepared preparedFil
 	if err != nil {
 		var modelErr *analysisModelError
 		if errors.As(err, &modelErr) {
-			return s.storeAnalysisFailure(prepared.cache, prepared.input, err)
+			return s.storeAnalysisFailure(prepared, err)
 		}
+		return nil, err
+	}
+	if err := project.ValidateInstructions(prepared.root, prepared.indexedFile.Path, prepared.instructions.Fingerprint); err != nil {
 		return nil, err
 	}
 	if err := prepared.cache.Store(*fresh); err != nil {
@@ -258,9 +266,13 @@ func (s *Service) requestFileAnalysis(ctx context.Context, prepared preparedFile
 		return nil, err
 	}
 	runtime := prepared.runtime
-	prompt, err := semanticPrompt(prepared.source, *prepared.analysis, index, *prepared.indexedFile, s.contextManifestForRuntime(semanticManifest(*prepared.indexedFile), runtime))
+	manifest := semanticInstructionManifest(*prepared.indexedFile, prepared.instructions)
+	prompt, err := semanticPrompt(prepared.source, *prepared.analysis, index, *prepared.indexedFile, s.contextManifestForRuntime(manifest, runtime))
 	if err != nil {
 		return nil, err
+	}
+	if prepared.instructions.Text != "" {
+		prompt += "\n\n" + project.InstructionPromptGuidance + prepared.instructions.Text
 	}
 	timed, cancel := context.WithTimeout(ctx, duration(runtime.effective.Timeout))
 	defer cancel()
@@ -271,6 +283,9 @@ func (s *Service) requestFileAnalysis(ctx context.Context, prepared preparedFile
 	}
 	if err != nil {
 		return nil, &analysisModelError{err}
+	}
+	if err := project.ValidateInstructions(prepared.root, prepared.indexedFile.Path, prepared.instructions.Fingerprint); err != nil {
+		return nil, err
 	}
 	parsed, err := parseSemanticAnalysis(result.Content, *prepared.indexedFile, prepared.source)
 	if err != nil {
@@ -293,7 +308,8 @@ func newFileAnalysis(prepared preparedFileAnalysis, parsed semanticAnalysisRespo
 		SideEffects: parsed.SideEffects, Risks: parsed.Risks, Suggestions: parsed.Suggestions, EngineeringInsight: project.CloneEngineeringInsight(parsed.EngineeringInsight),
 		SymbolExplanations: parsed.SymbolExplanations, Status: project.AnalysisStatusFresh,
 		Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, ReasoningEffort: input.ReasoningEffort, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion,
-		GeneratedAt: time.Now().UTC(),
+		GeneratedAt:             time.Now().UTC(),
+		InstructionsFingerprint: prepared.instructions.Fingerprint,
 	}
 	return fresh
 }
@@ -350,12 +366,17 @@ func (s *Service) syncFileAnalysisStatus(input project.FileAnalysisInput, status
 	return s.manager.UpdateFileAnalysisStatus(input.ProjectID, input.ProjectRevision, input.Path, status)
 }
 
-func (s *Service) storeAnalysisFailure(cache *project.FileAnalysisCache, input project.FileAnalysisInput, cause error) (*project.FileAnalysis, error) {
+func (s *Service) storeAnalysisFailure(prepared preparedFileAnalysis, cause error) (*project.FileAnalysis, error) {
 	if strings.Contains(cause.Error(), "context canceled") || strings.Contains(cause.Error(), "deadline exceeded") {
 		return nil, cause
 	}
+	if err := project.ValidateInstructions(prepared.root, prepared.indexedFile.Path, prepared.instructions.Fingerprint); err != nil {
+		return nil, err
+	}
+	input := prepared.input
 	failed := project.FileAnalysis{SchemaVersion: "1", ProjectID: input.ProjectID, ProjectRevision: input.ProjectRevision, Path: input.Path, ContentHash: input.ContentHash, Language: input.Language, Status: project.AnalysisStatusFailed, Failure: "The model returned an unusable file summary. Retry the analysis.", Model: input.Model, ConfiguredModel: input.Model, Profile: input.Profile, Scope: input.Scope, ProviderOrigin: input.ProviderOrigin, ReasoningEffort: input.ReasoningEffort, PromptVersion: input.PromptVersion, ContextPolicyVersion: input.ContextPolicyVersion, GeneratedAt: time.Now().UTC()}
-	if err := cache.Store(failed); err != nil {
+	failed.InstructionsFingerprint = prepared.instructions.Fingerprint
+	if err := prepared.cache.Store(failed); err != nil {
 		return nil, err
 	}
 	if err := s.syncFileAnalysisStatus(input, failed.Status); err != nil {
@@ -406,6 +427,19 @@ func semanticPrompt(source string, analysis project.Analysis, index *project.Pro
 func semanticManifest(target project.IndexFile) project.ContextManifest {
 	tokens := int((target.SizeBytes + 3) / 4)
 	return project.ContextManifest{Included: []project.ContextFile{{Path: target.Path, SizeBytes: target.SizeBytes, Hash: target.ContentHash, Tokens: tokens}}, Excluded: []project.ContextDecision{}, EstimatedTokens: tokens, ByteLimit: maxSemanticAnalysisBytes, TokenLimit: maxSemanticAnalysisBytes / 4}
+}
+
+func semanticInstructionManifest(target project.IndexFile, instructions project.EffectiveInstructions) project.ContextManifest {
+	manifest := semanticManifest(target)
+	for _, file := range instructions.Files {
+		tokens := (len([]rune(file.Content)) + 3) / 4
+		manifest.Included = append(manifest.Included, project.ContextFile{Path: file.Path, SizeBytes: int64(len(file.Content)), Hash: file.Hash, Tokens: tokens})
+		manifest.EstimatedTokens += tokens
+	}
+	manifest.Excluded = append(manifest.Excluded, instructions.Excluded...)
+	manifest.ByteLimit += project.MaxInstructionBytes
+	manifest.TokenLimit += project.MaxInstructionBytes / 4
+	return manifest
 }
 
 func boundedSignatures(index *project.ProjectIndex, targetPath string) []string {

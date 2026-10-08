@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,33 +62,34 @@ type Suggestion struct {
 // Deterministic symbols and imports remain in ProjectIndex; this record only
 // stores model interpretation and its validity inputs.
 type FileAnalysis struct {
-	SchemaVersion        string              `json:"schema_version"`
-	ProjectID            string              `json:"project_id"`
-	ProjectRevision      string              `json:"project_revision"`
-	Path                 string              `json:"path"`
-	ContentHash          string              `json:"content_hash"`
-	Language             string              `json:"language"`
-	Purpose              string              `json:"purpose,omitempty"`
-	Responsibilities     []string            `json:"responsibilities,omitempty"`
-	Symbols              []SymbolInfo        `json:"symbols,omitempty"`
-	Imports              []string            `json:"imports,omitempty"`
-	Dependencies         []string            `json:"dependencies,omitempty"`
-	SideEffects          []string            `json:"side_effects,omitempty"`
-	EngineeringInsight   *EngineeringInsight `json:"engineering_insight,omitempty"`
-	Risks                []Finding           `json:"risks,omitempty"`
-	Suggestions          []Suggestion        `json:"suggestions,omitempty"`
-	SymbolExplanations   map[string]string   `json:"symbol_explanations,omitempty"`
-	Status               string              `json:"status"`
-	Failure              string              `json:"failure,omitempty"`
-	Model                string              `json:"model,omitempty"`
-	ConfiguredModel      string              `json:"configured_model,omitempty"`
-	Profile              string              `json:"profile,omitempty"`
-	Scope                string              `json:"scope,omitempty"`
-	ProviderOrigin       string              `json:"provider_origin,omitempty"`
-	ReasoningEffort      string              `json:"reasoning_effort,omitempty"`
-	PromptVersion        string              `json:"prompt_version"`
-	ContextPolicyVersion string              `json:"context_policy_version"`
-	GeneratedAt          time.Time           `json:"generated_at"`
+	SchemaVersion           string              `json:"schema_version"`
+	ProjectID               string              `json:"project_id"`
+	ProjectRevision         string              `json:"project_revision"`
+	Path                    string              `json:"path"`
+	ContentHash             string              `json:"content_hash"`
+	Language                string              `json:"language"`
+	Purpose                 string              `json:"purpose,omitempty"`
+	Responsibilities        []string            `json:"responsibilities,omitempty"`
+	Symbols                 []SymbolInfo        `json:"symbols,omitempty"`
+	Imports                 []string            `json:"imports,omitempty"`
+	Dependencies            []string            `json:"dependencies,omitempty"`
+	SideEffects             []string            `json:"side_effects,omitempty"`
+	EngineeringInsight      *EngineeringInsight `json:"engineering_insight,omitempty"`
+	Risks                   []Finding           `json:"risks,omitempty"`
+	Suggestions             []Suggestion        `json:"suggestions,omitempty"`
+	SymbolExplanations      map[string]string   `json:"symbol_explanations,omitempty"`
+	Status                  string              `json:"status"`
+	Failure                 string              `json:"failure,omitempty"`
+	Model                   string              `json:"model,omitempty"`
+	ConfiguredModel         string              `json:"configured_model,omitempty"`
+	Profile                 string              `json:"profile,omitempty"`
+	Scope                   string              `json:"scope,omitempty"`
+	ProviderOrigin          string              `json:"provider_origin,omitempty"`
+	ReasoningEffort         string              `json:"reasoning_effort,omitempty"`
+	PromptVersion           string              `json:"prompt_version"`
+	ContextPolicyVersion    string              `json:"context_policy_version"`
+	InstructionsFingerprint string              `json:"instructions_fingerprint,omitempty"`
+	GeneratedAt             time.Time           `json:"generated_at"`
 }
 
 // FileAnalysisInput identifies the exact inputs that make an analysis valid.
@@ -121,7 +123,7 @@ func NewFileAnalysisCache(root string) (*FileAnalysisCache, error) {
 }
 
 // Load returns a cache entry whose status is fresh, stale, missing, failed, or
-// running. It never reads source content and recovers corrupt cache files.
+// running. It checks applicable guidance and recovers corrupt cache files.
 func (c *FileAnalysisCache) Load(input FileAnalysisInput) (*FileAnalysis, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -144,6 +146,12 @@ func (c *FileAnalysisCache) Load(input FileAnalysisInput) (*FileAnalysis, error)
 		return newMissingAnalysis(input), nil
 	}
 	if !analysisMatches(analysis, input) {
+		analysis.Status = AnalysisStatusStale
+	}
+	if err := ValidateInstructions(c.root, input.Path, analysis.InstructionsFingerprint); err != nil {
+		if !errors.Is(err, ErrRevisionConflict) {
+			return nil, err
+		}
 		analysis.Status = AnalysisStatusStale
 	}
 	return cloneFileAnalysis(&analysis), nil

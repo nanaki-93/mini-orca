@@ -82,6 +82,10 @@ func (b *ContextBuilder) BuildWithExcludedFiles(root, target string, excludedPat
 		return "", manifest, err
 	}
 	var result strings.Builder
+	guides, err := appendContextGuidance(&result, canonical, target, ignored)
+	if err != nil {
+		return "", manifest, err
+	}
 	emitted, omitted := writeContextInventory(&result, prioritize(files, target))
 	if len(omitted) > 0 {
 		manifest.Truncated = true
@@ -89,6 +93,13 @@ func (b *ContextBuilder) BuildWithExcludedFiles(root, target string, excludedPat
 	}
 	var includedIndex map[string]int
 	manifest.Included, includedIndex = contextManifestFiles(canonical, emitted)
+	for _, file := range guides {
+		if index, ok := includedIndex[file.Path]; ok {
+			manifest.Included[index] = file
+		} else {
+			manifest.Included = append(manifest.Included, file)
+		}
+	}
 	b.appendContextSnippets(&result, canonical, target, emitted, includedIndex, &manifest)
 	manifest.EstimatedTokens = estimateTokens(result.String())
 	return result.String(), manifest, nil
@@ -229,6 +240,11 @@ func (b *ContextBuilder) appendContextSnippet(result *strings.Builder, root, tar
 }
 
 func contextSnippet(root, target, relative string) ([]byte, int, bool) {
+	// Applicable guides are emitted in full before source; other directory
+	// guides must not become instructions for this target through a snippet.
+	if filepath.Base(relative) == "AGENTS.md" {
+		return nil, 0, false
+	}
 	fullPath, err := ResolveFile(root, relative)
 	if err != nil || !contextCandidate(relative) {
 		return nil, 0, false
@@ -288,7 +304,12 @@ func prioritize(files []string, target string) []string {
 		available[file] = true
 	}
 	seen := make(map[string]bool, len(files))
-	for _, file := range []string{target, "README.md", "go.mod", "build.gradle.kts", "build.gradle", "package.json", "Cargo.toml", "pyproject.toml"} {
+	preferred := []string{target}
+	for _, scope := range instructionScopes(target) {
+		preferred = append(preferred, filepath.ToSlash(filepath.Join(scope, "AGENTS.md")))
+	}
+	preferred = append(preferred, "README.md", "go.mod", "build.gradle.kts", "build.gradle", "package.json", "Cargo.toml", "pyproject.toml")
+	for _, file := range preferred {
 		if file != "" && available[file] && !seen[file] {
 			ordered = append(ordered, file)
 			seen[file] = true

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -20,7 +21,7 @@ import (
 )
 
 const (
-	SecurityPromptVersion               = "security-file-v2"
+	SecurityPromptVersion               = "security-file-v3"
 	SecurityMaxSourceBytes              = 64 * 1024
 	maxSecurityOutputBytes              = 64 * 1024
 	maxSecurityFindings                 = 5
@@ -89,25 +90,26 @@ type SecurityFinding struct {
 // SecurityFileReport is owned by either deterministic rules or an AI review.
 // The source-specific provenance makes those evidence types unambiguous.
 type SecurityFileReport struct {
-	SchemaVersion        string            `json:"schema_version"`
-	ProjectID            string            `json:"project_id"`
-	ProjectRevision      string            `json:"project_revision"`
-	Path                 string            `json:"path"`
-	ContentHash          string            `json:"content_hash"`
-	Status               string            `json:"status"`
-	Source               string            `json:"source"`
-	RuleSetVersion       string            `json:"rule_set_version,omitempty"`
-	Findings             []SecurityFinding `json:"findings"`
-	Reason               string            `json:"reason,omitempty"`
-	Model                string            `json:"model,omitempty"`
-	ConfiguredModel      string            `json:"configured_model,omitempty"`
-	Profile              string            `json:"profile,omitempty"`
-	Scope                string            `json:"scope,omitempty"`
-	ProviderOrigin       string            `json:"provider_origin,omitempty"`
-	ReasoningEffort      string            `json:"reasoning_effort,omitempty"`
-	PromptVersion        string            `json:"prompt_version,omitempty"`
-	ContextPolicyVersion string            `json:"context_policy_version"`
-	GeneratedAt          time.Time         `json:"generated_at"`
+	SchemaVersion           string            `json:"schema_version"`
+	ProjectID               string            `json:"project_id"`
+	ProjectRevision         string            `json:"project_revision"`
+	Path                    string            `json:"path"`
+	ContentHash             string            `json:"content_hash"`
+	Status                  string            `json:"status"`
+	Source                  string            `json:"source"`
+	RuleSetVersion          string            `json:"rule_set_version,omitempty"`
+	Findings                []SecurityFinding `json:"findings"`
+	Reason                  string            `json:"reason,omitempty"`
+	Model                   string            `json:"model,omitempty"`
+	ConfiguredModel         string            `json:"configured_model,omitempty"`
+	Profile                 string            `json:"profile,omitempty"`
+	Scope                   string            `json:"scope,omitempty"`
+	ProviderOrigin          string            `json:"provider_origin,omitempty"`
+	ReasoningEffort         string            `json:"reasoning_effort,omitempty"`
+	PromptVersion           string            `json:"prompt_version,omitempty"`
+	ContextPolicyVersion    string            `json:"context_policy_version"`
+	InstructionsFingerprint string            `json:"instructions_fingerprint,omitempty"`
+	GeneratedAt             time.Time         `json:"generated_at"`
 }
 
 type SecurityReportInput struct {
@@ -363,20 +365,34 @@ func (c *SecurityReportCache) Load(input SecurityReportInput) (*SecurityFileRepo
 		}
 		return nil, nil
 	}
-	if !securityReportMatchesInput(report, input) {
-		report.Status = SecurityStatusStale
-		return cloneSecurityFileReport(&report), nil
+	current, err := c.reportCurrent(report, input)
+	if err != nil {
+		return nil, err
 	}
-	policy, err := NewContextPolicy(c.root)
-	if err != nil || policy.Version() != report.ContextPolicyVersion || !policy.Decide(report.Path).Include {
-		report.Status = SecurityStatusStale
-		return cloneSecurityFileReport(&report), nil
-	}
-	current, err := GetFileInfo(c.root, report.Path)
-	if err != nil || current.SizeBytes > SecurityMaxSourceBytes || current.ContentHash != report.ContentHash {
+	if !current {
 		report.Status = SecurityStatusStale
 	}
 	return cloneSecurityFileReport(&report), nil
+}
+
+func (c *SecurityReportCache) reportCurrent(report SecurityFileReport, input SecurityReportInput) (bool, error) {
+	if !securityReportMatchesInput(report, input) {
+		return false, nil
+	}
+	if report.Source == SecuritySourceAI {
+		if err := ValidateInstructions(c.root, report.Path, report.InstructionsFingerprint); err != nil {
+			if !errors.Is(err, ErrRevisionConflict) {
+				return false, err
+			}
+			return false, nil
+		}
+	}
+	policy, err := NewContextPolicy(c.root)
+	if err != nil || policy.Version() != report.ContextPolicyVersion || !policy.Decide(report.Path).Include {
+		return false, nil
+	}
+	current, err := GetFileInfo(c.root, report.Path)
+	return err == nil && current.SizeBytes <= SecurityMaxSourceBytes && current.ContentHash == report.ContentHash, nil
 }
 
 func (c *SecurityReportCache) cachePath(path, source string) string {
