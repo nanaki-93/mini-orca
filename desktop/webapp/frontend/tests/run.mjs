@@ -4534,7 +4534,7 @@ try {
         assert.equal(await disclosure.getAttribute('open'), null, 'Limits start collapsed');
         for (const [label, value, min, max] of [
           ['Files per batch', '20', '1', '500'],
-          ['Time budget · seconds', '600', '1', '3600'],
+          ['Time budget · seconds', '1800', '1', '3600'],
           ['Attempts per stage', '2', '1', '4'],
         ]) {
           const field = page.getByLabel(label, { exact: true });
@@ -5225,6 +5225,7 @@ try {
         await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
         await idle(page);
         await page.getByRole('heading', { name: 'Continue analysis', exact: true }).waitFor();
+        await page.getByText('600 seconds', { exact: true }).waitFor();
         const previewPanel = page.locator('section.panel').filter({
           has: page.getByRole('heading', { name: 'Models', exact: true }),
         });
@@ -5633,6 +5634,11 @@ try {
     await nav(page, 'Analysis');
     await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
     await idle(page);
+    const preview = await page.evaluate(() =>
+      window.fixture.requests.find((r) => r.path.endsWith('/analysis/preview')),
+    );
+    assert.equal(preview.body.limits.budget_seconds, 1800);
+    await page.getByText('1800 seconds', { exact: true }).waitFor();
     assert.equal(
       await page.getByRole('button', { name: 'Start analysis', exact: true }).isDisabled(),
       false,
@@ -5679,6 +5685,10 @@ try {
     );
     assert.equal(resumed.body.identity.generation, 'generation-1');
     assert.equal(resumed.body.preview_id, 'preview-bug-analyze-analyze-analyze');
+    assert.equal(
+      await page.evaluate(() => window.fixture.state.run.plan.limits.budget_seconds),
+      1800,
+    );
     await layout(page, 'analysis-run');
     await close();
   });

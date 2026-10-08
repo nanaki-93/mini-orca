@@ -42,7 +42,9 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   reloads it; Pi discovery failures leave configured choices available.
   **Files** manages captured file selection, exclusions and per-file status.
   Unsaved selection and setup choices survive navigation between these pages;
-  save file selections before preparing a run. Request limits remain in a disclosure.
+  save file selections before preparing a run. Request limits remain in a disclosure;
+  new runs default to a 1,800-second (30-minute) file-analysis budget per batch.
+  Continuations retain the saved run's limits.
   Preparing a run captures scope and provider destinations. Starting it still
   confirms remote-provider sharing and Security review for that admission.
   **Last run** shows result counts, honest completion states and current progress.
