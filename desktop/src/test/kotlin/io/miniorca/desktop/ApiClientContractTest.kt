@@ -11,6 +11,23 @@ import kotlinx.serialization.json.Json
 
 class ApiClientContractTest {
   @Test
+  fun analysisModelsDecodeIndependentChoicesAndLegacyReview() {
+    val models =
+        Json.decodeFromString<AnalysisModels>(
+            """{"code":"bug","performance":"function","security":"analyze","features":"analyze"}""")
+    assertEquals("function", models.performance)
+    assertEquals("analyze", models.security)
+    assertNull(models.review)
+    assertEquals(models, Json.decodeFromString<AnalysisModels>(Json.encodeToString(models)))
+    val legacy =
+        Json.decodeFromString<AnalysisModels>(
+            """{"code":"bug","review":"function","features":"analyze"}""")
+    assertEquals("function", legacy.review)
+    assertNull(legacy.performance)
+    assertNull(legacy.security)
+  }
+
+  @Test
   fun performanceResultsRetainConfiguredAndResolvedModelNamesIncludingLegacyReports() {
     val run = analysisRunFixture()
     for (configuredModel in listOf("", "\"configured_model\":\"selected-model\",")) {

@@ -769,7 +769,14 @@ data class AnalysisRunIdentity(
           projectId, projectRevision, policyFingerprint, providerFingerprint, queueId)
 }
 
-@Serializable data class AnalysisModels(val code: String, val review: String, val features: String)
+@Serializable
+data class AnalysisModels(
+    val code: String,
+    val review: String? = null,
+    val features: String,
+    val performance: String? = null,
+    val security: String? = null,
+)
 
 @Serializable
 data class AnalysisPreviewRequest(

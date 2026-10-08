@@ -25,26 +25,38 @@ func analysisFingerprint(value any) (string, error) {
 }
 
 func (s *Service) analysisProviders(includeFeatures bool, models *AnalysisModels) ([]AnalysisProviderRequirement, error) {
-	providers := make([]AnalysisProviderRequirement, 0, 3)
-	entries := []struct {
+	providers := make([]AnalysisProviderRequirement, 0, 4)
+	type providerEntry struct {
 		runtime modelRuntime
 		stages  []AnalysisStage
 		prompts []string
-	}{
-		{s.analysisModelRuntime(AnalysisStageSemantic, models), []AnalysisStage{AnalysisStageSemantic}, []string{semanticAnalysisPromptVersion}},
-		{s.analysisModelRuntime(AnalysisStagePerformance, models), []AnalysisStage{AnalysisStagePerformance, AnalysisStageSecurityAI}, []string{project.PerformancePromptVersion, project.SecurityPromptVersion}},
 	}
+	entries := []providerEntry{
+		{s.analysisModelRuntime(AnalysisStageSemantic, models), []AnalysisStage{AnalysisStageSemantic}, []string{semanticAnalysisPromptVersion}},
+		{s.analysisModelRuntime(AnalysisStagePerformance, models), []AnalysisStage{AnalysisStagePerformance}, []string{project.PerformancePromptVersion}},
+	}
+	stages := []AnalysisStage{AnalysisStageSecurityAI}
 	if includeFeatures {
-		runtime := s.analysisModelRuntime(AnalysisStageFeatures, models)
-		if runtime.effective == entries[1].runtime.effective {
-			entries[1].stages = append(entries[1].stages, AnalysisStageFeatures)
-			entries[1].prompts = append(entries[1].prompts, featureSuggestionsPromptVersion)
-		} else {
-			entries = append(entries, struct {
-				runtime modelRuntime
-				stages  []AnalysisStage
-				prompts []string
-			}{runtime, []AnalysisStage{AnalysisStageFeatures}, []string{featureSuggestionsPromptVersion}})
+		stages = append(stages, AnalysisStageFeatures)
+	}
+	for _, stage := range stages {
+		runtime := s.analysisModelRuntime(stage, models)
+		prompt := project.SecurityPromptVersion
+		if stage == AnalysisStageFeatures {
+			prompt = featureSuggestionsPromptVersion
+		}
+		// Keep the legacy grouping and fingerprint when review operations share a model.
+		matched := false
+		for i := 1; i < len(entries); i++ {
+			if runtime.effective == entries[i].runtime.effective {
+				entries[i].stages = append(entries[i].stages, stage)
+				entries[i].prompts = append(entries[i].prompts, prompt)
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			entries = append(entries, providerEntry{runtime, []AnalysisStage{stage}, []string{prompt}})
 		}
 	}
 	for _, entry := range entries {

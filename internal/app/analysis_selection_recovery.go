@@ -29,10 +29,11 @@ type AnalysisRecoverySummary struct {
 
 // analysisFileRecovery is one eligible file's contribution to the summary.
 type analysisFileRecovery struct {
-	recoverable        int
-	sourceBlocked      bool
-	codeModelMissing   bool
-	reviewModelMissing bool
+	recoverable             int
+	sourceBlocked           bool
+	codeModelMissing        bool
+	performanceModelMissing bool
+	securityModelMissing    bool
 }
 
 type analysisRecoveryEvidence struct {
@@ -54,8 +55,10 @@ func (s *Service) classifyAnalysisFileRecovery(stages []AnalysisFileStageStatus,
 		case analysisStageNeedsModel:
 			if stage.Stage == AnalysisStageSemantic {
 				result.codeModelMissing = true
+			} else if stage.Stage == AnalysisStagePerformance {
+				result.performanceModelMissing = true
 			} else {
-				result.reviewModelMissing = true
+				result.securityModelMissing = true
 			}
 		}
 	}
@@ -82,7 +85,7 @@ func (s *Service) analysisRecoverySummaryLocked(evidence analysisRecoveryEvidenc
 		summary.State, summary.Reason = AnalysisRecoveryBlocked, "A selected file changed or could not be read since indexing. Refresh project files, then repair analysis."
 	case summary.StageCount > 0:
 		summary.State = AnalysisRecoveryAvailable
-	case total.codeModelMissing || total.reviewModelMissing:
+	case total.codeModelMissing || total.performanceModelMissing || total.securityModelMissing:
 		summary.State, summary.Reason = AnalysisRecoveryBlocked, analysisRecoveryModelReason(total, evidence.models)
 	default:
 		summary.State = AnalysisRecoveryComplete
@@ -115,7 +118,8 @@ func summarizeAnalysisRecoveryFiles(files map[string]analysisFileRecovery, exclu
 		}
 		total.sourceBlocked = total.sourceBlocked || file.sourceBlocked
 		total.codeModelMissing = total.codeModelMissing || file.codeModelMissing
-		total.reviewModelMissing = total.reviewModelMissing || file.reviewModelMissing
+		total.performanceModelMissing = total.performanceModelMissing || file.performanceModelMissing
+		total.securityModelMissing = total.securityModelMissing || file.securityModelMissing
 	}
 	return summary, total
 }
@@ -125,8 +129,11 @@ func analysisRecoveryModelReason(missing analysisFileRecovery, models *AnalysisM
 	if missing.codeModelMissing {
 		needs = append(needs, fmt.Sprintf("the %s model profile used for Code analysis", analysisStageProfile(AnalysisStageSemantic, models)))
 	}
-	if missing.reviewModelMissing {
-		needs = append(needs, fmt.Sprintf("the %s model profile used for Performance & Security", analysisStageProfile(AnalysisStagePerformance, models)))
+	if missing.performanceModelMissing {
+		needs = append(needs, fmt.Sprintf("the %s model profile used for Performance", analysisStageProfile(AnalysisStagePerformance, models)))
+	}
+	if missing.securityModelMissing {
+		needs = append(needs, fmt.Sprintf("the %s model profile used for Security", analysisStageProfile(AnalysisStageSecurityAI, models)))
 	}
 	return "Configure " + strings.Join(needs, " and ") + " to complete the remaining analysis, or prepare a new analysis with configured models."
 }
