@@ -1216,7 +1216,7 @@ async function analysisRunLayout(page) {
   }
   const overflow = await page
     .locator(
-      '#main, .page, .analysis-run, .analysis-run .panel, .analysis-run .panel-head, .analysis-run .panel-body, .analysis-run .three-columns > div, .analysis-run .scroll-list, .analysis-run summary, .analysis-run .list-row, .analysis-run .notice',
+      '#main, .page, .analysis-run, .analysis-run .panel, .analysis-run .panel-head, .analysis-run .panel-body, .analysis-run .panel-pad, .analysis-progress-heading, .analysis-progress-meta, .analysis-current-step, .analysis-feature-progress, .analysis-run .three-columns > div, .analysis-run .scroll-list, .analysis-run summary, .analysis-run .list-row, .analysis-run .notice',
     )
     .evaluateAll((elements) =>
       elements
@@ -5796,9 +5796,12 @@ try {
       window.fixture.state.run.files[0].stages[1].status = 'running';
     });
     const activity = page.getByRole('status', { name: 'Current analysis step' });
-    await activity.getByText('Generating feature suggestions…', { exact: true }).waitFor();
+    await page
+      .getByRole('status', { name: 'Feature discovery progress' })
+      .getByText('running', { exact: true })
+      .waitFor();
     await activity.getByText('Performance · internal/worker/process.go', { exact: true }).waitFor();
-    await page.getByText('75s elapsed', { exact: true }).waitFor();
+    await page.getByText('1m 15s elapsed', { exact: true }).waitFor();
     await page.getByText('Advisory ideas', { exact: true }).waitFor();
     await page.getByText('Attempt details', { exact: true }).click();
     await page.getByText('1 of 2 attempts used', { exact: true }).waitFor();
@@ -6101,16 +6104,14 @@ try {
         .waitFor();
       assert.equal(await workspace.getByText('0s elapsed', { exact: true }).count(), 1);
       assert.equal(
-        await workspace
-          .getByRole('heading', { name: '0 files completed this batch', exact: true })
-          .count(),
+        await workspace.getByText('0 files completed this batch', { exact: true }).count(),
         1,
       );
-      const progress = workspace.getByRole('progressbar', { name: 'Analysis progress' });
+      const progress = workspace.getByRole('progressbar', { name: 'File analysis progress' });
       assert.equal(await progress.getAttribute('value'), '6');
       assert.equal(await progress.getAttribute('max'), '12');
       assert.equal(
-        await workspace.getByText('6 of 12 analysis steps finished', { exact: true }).count(),
+        await workspace.getByText('6 of 12 file analysis steps finished', { exact: true }).count(),
         1,
       );
       assert.deepEqual(
@@ -6293,6 +6294,162 @@ try {
       .waitFor();
     await layout(page, 'analysis-file-progress');
     await close();
+  });
+  await test('Analysis progress separates finished file steps from independent feature discovery', async () => {
+    for (const scenario of [
+      {
+        name: 'queued',
+        total: 3,
+        done: 0,
+        failed: 0,
+        status: 'queued',
+        feature: 'pending',
+        percent: '0%',
+      },
+      {
+        name: 'partial',
+        total: 3,
+        done: 2,
+        failed: 1,
+        status: 'running',
+        feature: 'failed',
+        percent: '66%',
+      },
+      {
+        name: 'files-finished',
+        total: 3,
+        done: 3,
+        failed: 0,
+        status: 'running',
+        feature: 'running',
+        percent: '100%',
+      },
+      { name: 'feature-only', total: 0, done: 0, failed: 0, status: 'running', feature: 'running' },
+    ]) {
+      const { page, close } = await pageFor({
+        runStatus: scenario.status,
+        runOverride: {
+          elapsed_seconds: 1800,
+          files: [],
+          window_files_completed: 0,
+          sections: [
+            {
+              category: 'bugs',
+              status: scenario.status,
+              finding_count: null,
+              coverage: {
+                total: scenario.total,
+                succeeded: scenario.done - scenario.failed,
+                partial: 0,
+                failed: scenario.failed,
+                pending: scenario.total - scenario.done,
+                running: 0,
+                skipped: 0,
+                unavailable: 0,
+              },
+            },
+          ],
+          features: {
+            status: scenario.feature,
+            attempts: 1,
+            suggestion_count: null,
+            reason:
+              scenario.feature === 'failed' ? 'Provider unavailable. File analysis continues.' : '',
+          },
+        },
+      });
+      try {
+        await nav(page, 'Last run');
+        const workspace = page.locator('.analysis-run');
+        const writes = await page.evaluate(() =>
+          window.fixture.requests.filter((request) => request.method !== 'GET'),
+        );
+        const progress = workspace.getByRole('progressbar', { name: 'File analysis progress' });
+        const percent = workspace.locator('.analysis-progress-percent');
+        assert.equal(await workspace.locator(':scope > details').getAttribute('open'), null);
+        assert.equal(await progress.count(), scenario.total > 0 ? 1 : 0);
+        assert.equal(await percent.count(), scenario.total > 0 ? 1 : 0);
+        if (scenario.total > 0) {
+          assert.equal(await progress.getAttribute('value'), String(scenario.done));
+          assert.equal(await progress.getAttribute('max'), String(scenario.total));
+          assert.equal(
+            await progress.getAttribute('aria-valuetext'),
+            `${scenario.done} of ${scenario.total} file analysis steps finished`,
+          );
+          assert.equal(await percent.innerText(), scenario.percent);
+          const before = await progress.boundingBox();
+          const current = await workspace
+            .getByRole('status', { name: 'Current analysis step' })
+            .boundingBox();
+          assert.ok(
+            before.y + before.height < current.y,
+            'Measured progress precedes current activity',
+          );
+        } else {
+          await workspace.getByText('No file analysis steps', { exact: true }).waitFor();
+        }
+        await workspace.getByText('30m 0s elapsed', { exact: true }).waitFor();
+        await workspace
+          .getByRole('status', { name: 'Feature discovery progress' })
+          .getByText(scenario.feature, { exact: true })
+          .waitFor();
+        await workspace
+          .locator('.page-heading--intro')
+          .getByText(scenario.status, { exact: true })
+          .waitFor();
+        if (scenario.feature === 'failed')
+          await workspace
+            .getByText('Feature discovery: Provider unavailable. File analysis continues.', {
+              exact: true,
+            })
+            .waitFor();
+        for (const width of [1440, 800]) {
+          await page.setViewportSize({ width, height: 1000 });
+          const large = page.getByRole('button', { name: 'Larger text', exact: true });
+          if ((await large.getAttribute('aria-pressed')) !== String(width === 800))
+            await large.click();
+          for (const theme of ['dark', 'light', 'midnight']) {
+            if ((await page.locator('html').getAttribute('data-theme')) !== theme)
+              await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
+            await page.locator('#main').evaluate((element) => {
+              element.scrollTop = 0;
+            });
+            await analysisRunLayout(page);
+            await contrast(page, `Analysis progress ${scenario.name}-${width}-${theme}`);
+            await layout(page, `analysis-progress-${scenario.name}-${width}-${theme}`);
+          }
+        }
+        if (scenario.name === 'partial') {
+          await page.emulateMedia({ reducedMotion: 'reduce' });
+          assert.equal(
+            await progress.evaluate(
+              (element) => getComputedStyle(element, '::-webkit-progress-value').transitionDuration,
+            ),
+            '0s',
+          );
+          await page.evaluate(() => {
+            const coverage = window.fixture.state.run.sections[0].coverage;
+            coverage.succeeded = 2;
+            coverage.pending = 0;
+          });
+          await page.waitForFunction(() => document.querySelector('progress')?.value === 3);
+          assert.equal(await percent.innerText(), '100%');
+          await workspace
+            .getByRole('status', { name: 'Feature discovery progress' })
+            .getByText('failed', { exact: true })
+            .waitFor();
+        }
+        assert.deepEqual(
+          await page.evaluate(() =>
+            window.fixture.requests.filter((request) => request.method !== 'GET'),
+          ),
+          writes,
+          'Reading progress and changing appearance never admits work or writes source',
+        );
+      } finally {
+        await close();
+      }
+    }
   });
   await test('Late file responses cannot replace the current file', async () => {
     const { page, close } = await pageFor();

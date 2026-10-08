@@ -477,6 +477,10 @@ export function AnalysisRun({ s }: { s: State }) {
     file.stages.some((stage) => stage.status === 'running'),
   );
   const runningStage = runningFile?.stages.find((stage) => stage.status === 'running');
+  const elapsed =
+    run.elapsed_seconds < 60
+      ? `${run.elapsed_seconds}s`
+      : `${Math.floor(run.elapsed_seconds / 60)}m ${run.elapsed_seconds % 60}s`;
   const currentStep =
     run.status === 'canceling'
       ? 'Canceling analysis…'
@@ -486,7 +490,11 @@ export function AnalysisRun({ s }: { s: State }) {
           ? `${stageNames[runningStage.stage]} · ${runningFile!.path}`
           : run.features?.status === 'running'
             ? 'Generating feature suggestions…'
-            : 'Preparing analysis…';
+            : run.status === 'queued'
+              ? 'Preparing analysis…'
+              : total > 0 && done === total
+                ? 'Finalizing analysis…'
+                : 'Waiting for the next step…';
   return (
     <div className="workspace-page analysis-run">
       <Heading
@@ -524,25 +532,58 @@ export function AnalysisRun({ s }: { s: State }) {
       </Heading>
       {run.reason && <Notice>{run.reason}</Notice>}
       {run.features?.reason && <Notice>Feature discovery: {run.features.reason}</Notice>}
-      <Panel
-        title={`${run.window_files_completed} files completed this batch`}
-        actions={<span className="muted small">{run.elapsed_seconds}s elapsed</span>}
-      >
-        {activeRun(run) && (
-          <div role="status" aria-label="Current analysis step">
-            <p className="row wrap">
-              <span className="spinner" aria-hidden="true" />
-              {currentStep}
+      <Panel className="analysis-progress">
+        <div className="analysis-progress-heading">
+          <div>
+            <h2>File analysis</h2>
+            <p className="small muted">
+              {total > 0
+                ? `${done} of ${total} file analysis steps finished`
+                : 'No file analysis steps'}
             </p>
-            {runningStage && run.features?.status === 'running' && run.status === 'running' && (
-              <p className="small muted">Generating feature suggestions…</p>
-            )}
+          </div>
+          {total > 0 && (
+            <strong className="analysis-progress-percent" aria-hidden="true">
+              {Math.floor((done / total) * 100)}
+              <small>%</small>
+            </strong>
+          )}
+        </div>
+        {total > 0 && (
+          <progress
+            className="analysis-progress-bar"
+            value={done}
+            max={total}
+            aria-label="File analysis progress"
+            aria-valuetext={`${done} of ${total} file analysis steps finished`}
+          />
+        )}
+        <div className="analysis-progress-meta small muted">
+          <span>{run.window_files_completed} files completed this batch</span>
+          <span>{elapsed} elapsed</span>
+        </div>
+        {activeRun(run) && (
+          <div className="analysis-current-step" role="status" aria-label="Current analysis step">
+            <span className="spinner" aria-hidden="true" />
+            <p>{currentStep}</p>
           </div>
         )}
-        <progress value={done} max={Math.max(total, 1)} aria-label="Analysis progress" />
-        <div className="small muted">
-          {done} of {total} analysis steps finished
-        </div>
+        {run.features && (
+          <div
+            className="analysis-feature-progress"
+            role="status"
+            aria-label="Feature discovery progress"
+          >
+            <span className="row">
+              <Icon name="sparkles" />
+              Feature discovery
+            </span>
+            <span className="analysis-run-status">
+              <StatusDot value={run.features.status} label="Feature discovery" />
+              <span>{human(run.features.status)}</span>
+            </span>
+          </div>
+        )}
       </Panel>
       <Disclosure title="Run details">
         <div className="stack analysis-run-details">
