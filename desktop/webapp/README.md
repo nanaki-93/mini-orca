@@ -139,6 +139,11 @@ Performance changes remain unmeasured until an explicit benchmark comparison.
 Restoring a project never starts a provider request or shell. **⌘K / Ctrl+K** opens
 file and command search. Actions have visible focus and descriptive labels.
 
+The dark Graphite and light Porcelain palettes use separate colors for actions,
+successful checks and analysis categories. The [interactive theme mockups](../../.mockups/production-ready/index.html)
+compare both palettes with a Midnight alternative across Analysis, Files,
+Last run and change acceptance. Mockup data is illustrative and performs no work.
+
 ## Implementation and checks
 
 `frontend/src/workspace.ts` owns immutable workflow snapshots, consent and request

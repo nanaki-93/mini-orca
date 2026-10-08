@@ -1,28 +1,30 @@
 :root {
   color-scheme: dark;
-  --canvas: #060c09;
-  --sidebar: #080f0b;
-  --panel: #101b14;
-  --raised: #19281e;
-  --hover: #203428;
-  --line: #304a39;
-  --control-line: #5f7b67;
-  --subtle-line: #23362a;
-  --text: #f1fff4;
-  --secondary: #c3d9c9;
-  --muted: #91ae9b;
-  --accent: #5cfa8b;
-  --accent-hover: #83ffa6;
-  --accent-text: #05200e;
-  --accent-soft: #143521;
-  --red: #ff8595;
-  --red-soft: #3a1821;
-  --amber: #ffd16b;
-  --amber-soft: #362a11;
-  --blue: #71dce8;
-  --blue-soft: #113239;
-  --violet: #c1a0ff;
-  --violet-soft: #2a2042;
+  --canvas: #101217;
+  --sidebar: #15171e;
+  --panel: #1b1e27;
+  --raised: #242936;
+  --hover: #303749;
+  --line: #3b4355;
+  --control-line: #788299;
+  --subtle-line: #2e3544;
+  --text: #f0f2fa;
+  --secondary: #c8d0e0;
+  --muted: #a9b4ca;
+  --accent: #b7a8ff;
+  --accent-hover: #cebefd;
+  --accent-text: #1b103a;
+  --accent-soft: #302844;
+  --green: #80ddb0;
+  --green-soft: #17382c;
+  --red: #ff9ca9;
+  --red-soft: #3d222d;
+  --amber: #f4ca80;
+  --amber-soft: #382d19;
+  --blue: #8ad7e8;
+  --blue-soft: #18343d;
+  --violet: #c4adff;
+  --violet-soft: #302746;
   --shadow: 0 24px 80px #0009;
   --section-color: var(--accent);
   --section-soft: var(--accent-soft);
@@ -36,29 +38,31 @@
 }
 :root[data-theme='light'] {
   color-scheme: light;
-  --canvas: #f1f7f2;
-  --sidebar: #e7f0e9;
+  --canvas: #f4f6fa;
+  --sidebar: #ffffff;
   --panel: #fff;
-  --raised: #e6efe8;
-  --hover: #dceadf;
-  --line: #c2d3c7;
-  --control-line: #688372;
-  --subtle-line: #d8e4db;
-  --text: #0c2515;
-  --secondary: #294b36;
-  --muted: #456650;
-  --accent: #076b30;
-  --accent-hover: #085626;
+  --raised: #ecf0f7;
+  --hover: #e2e8f2;
+  --line: #cbd4e3;
+  --control-line: #6f7e96;
+  --subtle-line: #dde3ed;
+  --text: #182238;
+  --secondary: #34435e;
+  --muted: #526078;
+  --accent: #5141b4;
+  --accent-hover: #403294;
   --accent-text: #fff;
-  --accent-soft: #d5efdd;
-  --red: #b22043;
-  --red-soft: #fce3e9;
-  --amber: #805900;
-  --amber-soft: #fff0c9;
-  --blue: #006576;
-  --blue-soft: #daf3f7;
-  --violet: #6540a0;
-  --violet-soft: #ede3ff;
+  --accent-soft: #ede8ff;
+  --green: #146542;
+  --green-soft: #dff3e8;
+  --red: #aa2545;
+  --red-soft: #fbe4ec;
+  --amber: #825200;
+  --amber-soft: #fcf0cf;
+  --blue: #066878;
+  --blue-soft: #dff3f8;
+  --violet: #6349af;
+  --violet-soft: #eee7ff;
   --shadow: 0 24px 80px #172c2524;
 }
 :root.large-text {
@@ -373,7 +377,7 @@ pre {
   height: 7px;
   border-radius: 50%;
   display: inline-block;
-  background: var(--accent);
+  background: var(--green);
   flex-shrink: 0;
 }
 .status-dot.offline {
@@ -823,12 +827,11 @@ pre {
   font-size: 0.72rem;
   font-weight: 600;
   line-height: 1.5;
-  text-transform: capitalize;
   white-space: nowrap;
 }
 .badge.green {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--green-soft);
+  color: var(--green);
 }
 .badge.amber {
   background: var(--amber-soft);
@@ -854,7 +857,7 @@ pre {
   border-radius: 50%;
 }
 .status-dot.green {
-  background: var(--accent);
+  background: var(--green);
 }
 .status-dot.yellow {
   background: var(--amber);
@@ -1033,6 +1036,7 @@ pre {
   gap: 12px;
 }
 .metric-card {
+  border-top: 3px solid var(--section-color);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -2087,10 +2091,10 @@ textarea.draft-code {
   user-select: none;
 }
 .diff-line.added {
-  background: var(--accent-soft);
+  background: var(--green-soft);
 }
 .diff-line.added .diff-sign {
-  color: var(--accent);
+  color: var(--green);
 }
 .diff-line.removed {
   background: var(--red-soft);
@@ -2519,20 +2523,20 @@ dialog.model-picker {
 }
 @media (max-height: 760px) {
   .sidebar {
-    padding-top: 16px;
+    padding-top: 12px;
   }
   .brand {
     padding-bottom: 12px;
   }
   .project-switcher {
     padding-block: 8px;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
   }
   .nav-label {
     margin-bottom: 6px;
   }
   .nav-link {
-    padding-block: 4px;
+    padding-block: 3px;
     margin-block: 1px;
   }
   .sidebar-bottom {
@@ -2837,4 +2841,29 @@ dialog.model-picker {
   .change-workspace {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.run-result-card {
+  border-top: 3px solid var(--section-color);
+}
+.run-result-card:has([data-accent='bugs']) {
+  --section-color: var(--red);
+}
+.run-result-card:has([data-accent='performance']) {
+  --section-color: var(--amber);
+}
+.run-result-card:has([data-accent='security']) {
+  --section-color: var(--blue);
+}
+.run-result-card:has([data-accent='features']) {
+  --section-color: var(--violet);
+}
+.change-acceptance {
+  border-color: var(--accent);
+}
+.change-acceptance .panel-head {
+  background: var(--accent-soft);
+}
+.change-acceptance .panel-body > p {
+  margin-bottom: 14px;
 }
