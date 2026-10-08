@@ -1024,38 +1024,35 @@ export function installFixture(options = {}) {
             // A continuation keeps the saved destinations, not today's configured providers.
             if (choices && !body.resume_run) {
               const code = `code-${choices.code}`;
-              const review = `review-${choices.review}`;
+              const performanceChoice = choices.performance || choices.review;
+              const securityChoice = choices.security || choices.review;
+              const review = `review-${performanceChoice}`;
+              const security =
+                securityChoice === performanceChoice ? review : `security-${securityChoice}`;
               const features =
-                choices.features === choices.review ? review : `features-${choices.features}`;
-              state.preview.preview_id = `preview-${choices.code}-${choices.review}-${choices.features}`;
-              state.preview.providers = [
-                {
-                  id: code,
-                  stages: ['semantic'],
-                  model: { ...model(choices.code), scope: 'bug' },
-                  remote_confirmation_required: model(choices.code).remote_provider,
-                },
-                {
-                  id: review,
-                  stages: [
-                    'performance',
-                    'security_ai',
-                    ...(features === review ? ['feature_suggestions'] : []),
-                  ],
-                  model: { ...model(choices.review), scope: 'analyze' },
-                  remote_confirmation_required: model(choices.review).remote_provider,
-                },
-                ...(features === review
-                  ? []
-                  : [
-                      {
-                        id: features,
-                        stages: ['feature_suggestions'],
-                        model: { ...model(choices.features), scope: 'analyze' },
-                        remote_confirmation_required: model(choices.features).remote_provider,
-                      },
-                    ]),
-              ];
+                choices.features === performanceChoice
+                  ? review
+                  : choices.features === securityChoice
+                    ? security
+                    : `features-${choices.features}`;
+              state.preview.preview_id = `preview-${choices.code}-${performanceChoice}-${securityChoice}-${choices.features}`;
+              state.preview.providers = [];
+              for (const [id, choice, stage, scope] of [
+                [code, choices.code, 'semantic', 'bug'],
+                [review, performanceChoice, 'performance', 'analyze'],
+                [security, securityChoice, 'security_ai', 'analyze'],
+                [features, choices.features, 'feature_suggestions', 'analyze'],
+              ]) {
+                const provider = state.preview.providers.find((item) => item.id === id);
+                if (provider) provider.stages.push(stage);
+                else
+                  state.preview.providers.push({
+                    id,
+                    stages: [stage],
+                    model: { ...model(choice), scope },
+                    remote_confirmation_required: model(choice).remote_provider,
+                  });
+              }
               state.preview.files.forEach((file) =>
                 file.stages.forEach((stage) => {
                   stage.provider_id =
@@ -1063,7 +1060,9 @@ export function installFixture(options = {}) {
                       ? code
                       : stage.stage === 'security_rules'
                         ? undefined
-                        : review;
+                        : stage.stage === 'security_ai'
+                          ? security
+                          : review;
                   if (stage.stage === 'security_rules') stage.max_model_requests = 0;
                 }),
               );

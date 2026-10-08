@@ -34,28 +34,25 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
 
 - **Project** opens a saved project locally. **Import & analyze** creates a new
   overview, with explicit confirmation for a remote Analyze provider.
-- **Analysis** selects files and available models for Bug analysis, Performance/Security
-  and feature discovery, previews request limits and provider destinations,
-  and runs, pauses, resumes or cancels the captured queue. Each new admission
-  requires its own start confirmation for remote-provider sharing and Security
-  review. **Analysis setup** combines model assignments, request limits and Last run.
-  Each operation opens a searchable model picker with model icons and provider/location
-  metadata. All models, Pi, Local and Configured filters do not assign jobs to models.
-  The catalog combines configured models with every model available through the local
-  Pi installation, including custom local servers. **Refresh models** reloads the catalog;
-  Pi discovery errors leave configured choices available and explain how to retry.
-  Defaults remain Bug for bug analysis and Analyze for reviews/features. Performance
-  and Security share one model choice. Last run shows captured model names and icons,
-  including older runs with provider details but no explicit model choices. View run
-  and the preview retain destination details. Choices remain fixed when resuming.
-  It also generates one project-wide set of feature suggestions using saved
-  goals and policy-filtered context, honoring file exclusions. Its progress and
-  request allowance stay separate from finding counts; completed ideas are reused
-  on resume. Feature discovery and file analysis run independently, so a slow
-  search cannot delay file results. Discovery gets at least ten minutes, or the
-  selected feature model's timeout when longer; file batches keep their own time limit.
-  The run shows both active steps, elapsed time and feature attempt allowance. A failed feature step leaves
-  other analysis results available.
+- **Analysis** configures independent models for Bug analysis, Performance, Security
+  and feature discovery. Compact icon buttons open a searchable model picker;
+  hover or keyboard focus identifies the selected model. Names and provider
+  locations remain visible inside the picker. The catalog includes configured
+  models and models available through the local Pi installation. **Refresh models**
+  reloads it; Pi discovery failures leave configured choices available.
+  **Files** manages captured file selection, exclusions and per-file status.
+  Unsaved selection and setup choices survive navigation between these pages;
+  save file selections before preparing a run. Request limits remain in a disclosure.
+  Preparing a run captures scope and provider destinations. Starting it still
+  confirms remote-provider sharing and Security review for that admission.
+  **Last run** shows result counts, honest completion states and current progress.
+  Captured models appear only here and in the admission preview. Coverage,
+  provider destinations and file diagnostics are available in disclosures.
+  Pausing/resuming retains captured model choices, including older runs that
+  shared one Performance/Security choice. Feature discovery runs independently
+  of file analysis, gets at least ten minutes (or the selected model's longer
+  timeout), honors file exclusions and reuses completed ideas on resume.
+  Failed feature discovery leaves other analysis results available.
 - **Bugs**, **Performance** and **Security** show searchable results and their
   evidence. Details retain complete model prose, provenance and verification
   guidance. Findings and performance hypotheses keep their reported confidence.

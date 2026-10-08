@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { activeRun, analysisSetupModels, workspace as w, type State } from './workspace';
 import { CapturedModels, ModelSelectors } from './analysis-models';
 import {
@@ -26,21 +26,23 @@ const stageNames: Record<string, string> = {
 };
 const defaults: Limits = { batch_files: 20, budget_seconds: 600, max_attempts_per_stage: 2 };
 
-export function Analysis({ s }: { s: State }) {
-  const [filter, setFilter] = useState('');
-  const [limit, setLimit] = useState(100);
-  const [excluded, setExcluded] = useState<string[]>(s.selection?.excluded_paths || []);
-  const [limits, setLimits] = useState(defaults);
-  const [refresh, setRefresh] = useState(false);
-  const models = analysisSetupModels(s);
-  useEffect(() => setExcluded(s.selection?.excluded_paths || []), [s.selection?.selection_id]);
-  const files = (s.selection?.files || []).filter((file) =>
-    file.path.toLowerCase().includes(filter.toLowerCase()),
+function selectionPaths(s: State) {
+  return s.analysisSelectionDraft?.selectionID === s.selection?.selection_id
+    ? s.analysisSelectionDraft!.excluded
+    : s.selection?.excluded_paths || [];
+}
+function selectionChanged(s: State) {
+  return (
+    JSON.stringify([...selectionPaths(s)].sort()) !==
+    JSON.stringify([...(s.selection?.excluded_paths || [])].sort())
   );
-  const changed =
-    JSON.stringify([...excluded].sort()) !==
-    JSON.stringify([...(s.selection?.excluded_paths || [])].sort());
-  const edit = !!s.selection?.editable && !s.busy;
+}
+export function Analysis({ s }: { s: State }) {
+  const limits = s.analysisLimits || defaults;
+  const refresh = s.analysisRefresh || false;
+  const models = analysisSetupModels(s);
+  const excluded = selectionPaths(s);
+  const changed = selectionChanged(s);
   const hasRepair =
     !activeRun(s.run) &&
     !['paused', 'interrupted'].includes(s.run?.status || '') &&
@@ -60,6 +62,12 @@ export function Analysis({ s }: { s: State }) {
         detail={`${s.selection?.files.filter((f) => !f.reason && !excluded.includes(f.path)).length ?? '—'} eligible files selected`}
       >
         <div className="actions heading-action-group">
+          <Go page="analysis-files" icon="folder">
+            Files
+          </Go>
+          <Go page="analysis-run" icon="activity">
+            View run
+          </Go>
           <Button
             tone="primary"
             icon="play"
@@ -116,9 +124,7 @@ export function Analysis({ s }: { s: State }) {
             </Button>
           }
         >
-          <p className="analysis-settings-intro">
-            Choose a model for each operation. Your last run stays below for reference.
-          </p>
+          <p className="analysis-settings-intro">Choose a model for each operation.</p>
           <ModelSelectors
             s={s}
             value={models}
@@ -141,7 +147,9 @@ export function Analysis({ s }: { s: State }) {
                     min={min}
                     max={max}
                     value={limits[key]}
-                    onChange={(e) => setLimits({ ...limits, [key]: Number(e.target.value) })}
+                    onChange={(e) =>
+                      w.set({ analysisLimits: { ...limits, [key]: Number(e.target.value) } })
+                    }
                   />
                 </label>
               ))}
@@ -150,34 +158,55 @@ export function Analysis({ s }: { s: State }) {
               <input
                 type="checkbox"
                 checked={refresh}
-                onChange={(e) => setRefresh(e.target.checked)}
+                onChange={(e) => w.set({ analysisRefresh: e.target.checked })}
               />
               Refresh previously analyzed files
             </label>
           </Disclosure>
-          <section className="analysis-last-run" aria-label="Last run">
-            <div className="analysis-last-run-heading">
-              <h3>Last run</h3>
-              {s.run && (
-                <div className="row wrap">
-                  <span className="row">
-                    <Icon name="activity" />
-                    <StatusDot value={s.run.status} label="Analysis" />
-                    <span>{human(s.run.status)}</span>
-                  </span>
-                  <Go page="analysis-run">View run</Go>
-                </div>
-              )}
-            </div>
-            {s.run ? (
-              <CapturedModels plan={s.run.plan} compact />
-            ) : (
-              <p className="small muted">No analysis run yet.</p>
-            )}
-          </section>
         </Panel>
       </div>
 
+      {changed && (
+        <Notice>
+          File selection has unsaved changes. <Go page="analysis-files">Save selection in Files</Go>
+        </Notice>
+      )}
+    </div>
+  );
+}
+export function AnalysisFiles({ s }: { s: State }) {
+  const [filter, setFilter] = useState('');
+  const [limit, setLimit] = useState(100);
+  const excluded = selectionPaths(s);
+  const setExcluded = (paths: string[]) =>
+    w.set({
+      analysisSelectionDraft: { selectionID: s.selection!.selection_id, excluded: paths },
+      preview: undefined,
+    });
+  const changed = selectionChanged(s);
+  const edit = !!s.selection?.editable && !s.busy;
+  const files = (s.selection?.files || []).filter((file) =>
+    file.path.toLowerCase().includes(filter.toLowerCase()),
+  );
+  return (
+    <div className="workspace-page analysis-files">
+      <Heading
+        variant="intro"
+        title="Files"
+        detail={`${s.selection?.files.filter((f) => !f.reason && !excluded.includes(f.path)).length ?? '—'} eligible files selected`}
+      >
+        <Go page="analysis" icon="activity">
+          Analysis setup
+        </Go>
+        <Button
+          icon="refresh"
+          disabled={!!s.busy || changed}
+          onClick={() => void w.act('Refresh files', () => w.refreshProject())}
+        >
+          Refresh
+        </Button>
+      </Heading>
+      {changed && <Notice>Save your selection before starting analysis.</Notice>}
       <div className="toolbar">
         <div className="input-wrap">
           <Icon name="search" />
@@ -313,7 +342,8 @@ export function AnalysisPreview({ s }: { s: State }) {
     currentSetup &&
     p.models &&
     (currentSetup.code !== capturedSetup?.code ||
-      currentSetup.review !== capturedSetup?.review ||
+      currentSetup.performance !== capturedSetup?.performance ||
+      currentSetup.security !== capturedSetup?.security ||
       currentSetup.features !== capturedSetup?.features);
 
   return (
@@ -478,7 +508,8 @@ export function AnalysisRun({ s }: { s: State }) {
           </span>
         }
       >
-        <Go page="analysis">Files</Go>
+        <Go page="analysis-files">Files</Go>
+        <Go page="analysis">Analysis setup</Go>
         {['running', 'queued'].includes(run.status) && (
           <Button icon="pause" disabled={!!s.busy} onClick={() => void w.controlRun('pause')}>
             Pause
@@ -503,9 +534,61 @@ export function AnalysisRun({ s }: { s: State }) {
         )}
       </Heading>
       {run.reason && <Notice>{run.reason}</Notice>}
-      <Panel title="Captured models" className="analysis-run-models">
-        <CapturedModels plan={run.plan} />
-      </Panel>
+      <div className="grid analysis-run-categories">
+        {run.sections.map((section) => (
+          <Panel
+            key={section.category}
+            title={human(section.category)}
+            className="run-result-card"
+            actions={<StatusDot value={section.status} label={human(section.category)} />}
+          >
+            <div data-accent={section.category} className="run-result-summary">
+              <div className="metric-number">{section.finding_count ?? '—'}</div>
+              <span>{human(section.status)}</span>
+            </div>
+            <p className="small muted">
+              {section.finding_count === null
+                ? 'No successful evidence yet'
+                : section.category === 'performance'
+                  ? 'Hypotheses · unmeasured'
+                  : 'Saved findings'}
+            </p>
+            <Go page={section.category as 'bugs' | 'performance' | 'security'}>Open results</Go>
+            <Disclosure title="Coverage details">
+              <KeyValues
+                values={[
+                  ['Completed', section.coverage.succeeded],
+                  ['Partial', section.coverage.partial],
+                  ['Failed', section.coverage.failed],
+                  ['Unavailable', section.coverage.unavailable],
+                  ['Skipped', section.coverage.skipped],
+                  ['Pending', section.coverage.pending],
+                ]}
+              />
+            </Disclosure>
+          </Panel>
+        ))}
+        {run.features && (
+          <Panel
+            title="New feature suggestions"
+            className="run-result-card"
+            actions={<StatusDot value={run.features.status} label="Features" />}
+          >
+            <div data-accent="features" className="run-result-summary">
+              <div className="metric-number">{run.features.suggestion_count ?? '—'}</div>
+              <span>{human(run.features.status)}</span>
+            </div>
+            <p className="small muted">Advisory ideas</p>
+            {run.features.reason && <Notice>{run.features.reason}</Notice>}
+            <Go page="features">Open feature suggestions</Go>
+            <Disclosure title="Attempt details">
+              <p>
+                {run.features.attempts} of {run.plan.limits.max_attempts_per_stage} attempts used
+              </p>
+            </Disclosure>
+          </Panel>
+        )}
+      </div>
       <Panel
         title={`${run.window_files_completed} files completed this batch`}
         actions={<span className="muted small">{run.elapsed_seconds}s elapsed</span>}
@@ -523,57 +606,16 @@ export function AnalysisRun({ s }: { s: State }) {
         )}
         <progress value={done} max={Math.max(total, 1)} aria-label="Analysis progress" />
         <div className="small muted">
-          {done} of {total} category work units finished
+          {done} of {total} analysis steps finished
         </div>
       </Panel>
-      {run.features && (
-        <Panel
-          title="New feature suggestions"
-          actions={
-            <span className="analysis-run-status small">
-              <StatusDot value={run.features.status} label="Features" />
-              <span>{human(run.features.status)}</span>
-            </span>
-          }
-        >
-          <div className="metric-number">{run.features.suggestion_count ?? '—'}</div>
-          <p className="small muted">
-            Advisory ideas · {run.features.attempts} of {run.plan.limits.max_attempts_per_stage}{' '}
-            attempts used
-          </p>
-          {run.features.reason && <Notice>{run.features.reason}</Notice>}
-          <Go page="features">Open feature suggestions</Go>
-        </Panel>
-      )}
-      <div className="grid three-columns analysis-run-categories">
-        {run.sections.map((section) => (
-          <Panel
-            key={section.category}
-            title={human(section.category)}
-            actions={
-              <span className="analysis-run-status small">
-                <StatusDot value={section.status} label={human(section.category)} />
-                <span>{human(section.status)}</span>
-              </span>
-            }
-          >
-            <div className="metric-number">{section.finding_count ?? '—'}</div>
-            <p className="small muted">
-              {section.finding_count === null ? 'No successful evidence yet' : 'Saved findings'}
-            </p>
-            <KeyValues
-              values={[
-                ['Completed', section.coverage.succeeded],
-                ['Partial', section.coverage.partial],
-                ['Failed', section.coverage.failed],
-                ['Unavailable', section.coverage.unavailable],
-              ]}
-            />
-            <Go page={section.category as 'bugs' | 'performance' | 'security'}>Open results</Go>
-          </Panel>
-        ))}
-      </div>
-      <Panel title="File progress">
+      <Panel title="Captured models" className="analysis-run-models">
+        <CapturedModels plan={run.plan} compact />
+        <Disclosure title="Provider details">
+          <CapturedModels plan={run.plan} />
+        </Disclosure>
+      </Panel>
+      <Disclosure title="File progress">
         <div className="scroll-list">
           {run.files.map((file) => (
             <Disclosure
@@ -609,7 +651,7 @@ export function AnalysisRun({ s }: { s: State }) {
             </Disclosure>
           ))}
         </div>
-      </Panel>
+      </Disclosure>
     </div>
   );
 }

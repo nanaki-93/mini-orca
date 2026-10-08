@@ -9,6 +9,7 @@ export type Page =
   | 'summary'
   | 'project'
   | 'analysis'
+  | 'analysis-files'
   | 'analysis-preview'
   | 'analysis-run'
   | 'bugs'
@@ -92,15 +93,22 @@ export interface State {
   featureGenerationRequested: boolean;
   instructionPreview?: M.InstructionPreview;
   analysisSetup?: M.AnalysisModels;
+  analysisLimits?: M.Limits;
+  analysisRefresh?: boolean;
+  analysisSelectionDraft?: { selectionID: string; excluded: string[] };
   workflowModels?: M.ChangeWorkflowModels;
 }
-export function analysisSetupModels(s: State): M.AnalysisModels {
+export type AnalysisAssignments = Required<
+  Pick<M.AnalysisModels, 'code' | 'performance' | 'security' | 'features'>
+>;
+export function analysisSetupModels(s: State): AnalysisAssignments {
   const setup = s.analysisSetup ||
     s.run?.plan?.models || { code: 'bug', review: 'analyze', features: 'analyze' };
   const resolve = (id: string) => s.availableModels?.defaults[id] || id;
   return {
     code: resolve(setup.code),
-    review: resolve(setup.review),
+    performance: resolve(setup.performance || setup.review || 'analyze'),
+    security: resolve(setup.security || setup.review || 'analyze'),
     features: resolve(setup.features),
   };
 }
@@ -553,7 +561,7 @@ export class Workspace {
         selection_id: selection.selection_id,
         excluded_paths: paths,
       });
-      this.set({ selection: updated, preview: undefined });
+      this.set({ selection: updated, analysisSelectionDraft: undefined, preview: undefined });
     });
   }
   setAnalysisSetup(setup: M.AnalysisModels) {

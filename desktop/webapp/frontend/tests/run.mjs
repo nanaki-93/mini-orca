@@ -1252,113 +1252,45 @@ async function chooseModel(control, value) {
   assert.ok(values.includes(value), `Available catalog includes ${value}`);
   await options.nth(values.indexOf(value)).click();
 }
-async function analysisSections(page, hasRun) {
-  const settings = page.locator('section.panel').filter({
-    has: page.getByRole('heading', { name: 'Analysis setup', exact: true }),
-  });
-  const lastRun = settings.locator('.analysis-last-run');
-  const heading = page
-    .locator('.page-heading')
-    .filter({ has: page.getByRole('heading', { name: 'Analysis', exact: true }) });
-  const content = await page.locator('.workspace-page').boundingBox();
-  await headingContainment(heading);
-  const headingBox = await heading.boundingBox();
-  const settingsBox = await settings.boundingBox();
-  const sectionGap = (before, after) =>
-    assert.ok(
-      Math.abs(after.y - (before.y + before.height) - 20) <= 1,
-      'Workspace sections retain Summary’s 20px rhythm',
-    );
-  sectionGap(headingBox, settingsBox);
-  // Allow one CSS pixel for fractional layout rounding.
-  assert.ok(Math.abs(settingsBox.x - content.x) <= 1, 'Settings starts at the content edge');
-  assert.ok(Math.abs(settingsBox.width - content.width) <= 1, 'Settings spans the content');
-  assert.equal(await lastRun.count(), 1);
-  const toolbar = await page.locator('.toolbar').boundingBox();
-  const table = await page.locator('.table-wrap').boundingBox();
-  let previous = settingsBox;
-  if (hasRun) {
-    const box = await lastRun.boundingBox();
-    assert.ok(box.x > settingsBox.x && box.x + box.width < settingsBox.x + settingsBox.width);
-    assert.ok(
-      box.y > settingsBox.y && box.y + box.height < settingsBox.y + settingsBox.height,
-      'Last run belongs to the same setup panel',
-    );
-    const header = lastRun.locator('.analysis-last-run-heading');
-    const headerBox = await header.boundingBox();
-    const parts = [
-      lastRun.getByRole('heading', { name: 'Last run', exact: true }),
-      header.getByRole('img'),
-      header.getByText(/^(running|paused|failed|completed)$/, { exact: true }),
-      header.getByRole('button', { name: 'View run', exact: true }),
-    ];
-    const boxes = [];
-    for (const part of parts) {
-      assert.equal(await part.isVisible(), true, 'Last run header content remains visible');
-      const bounds = await part.boundingBox();
-      assert.ok(bounds.x >= headerBox.x && bounds.y >= headerBox.y);
-      assert.ok(bounds.x + bounds.width <= headerBox.x + headerBox.width + 1);
-      assert.ok(bounds.y + bounds.height <= headerBox.y + headerBox.height + 1);
-      for (const other of boxes)
-        assert.ok(
-          bounds.x + bounds.width <= other.x + 1 ||
-            other.x + other.width <= bounds.x + 1 ||
-            bounds.y + bounds.height <= other.y + 1 ||
-            other.y + other.height <= bounds.y + 1,
-          'Last run header content does not collide',
-        );
-      boxes.push(bounds);
-    }
-  }
-  sectionGap(previous, toolbar);
-  sectionGap(toolbar, table);
-  for (const box of [toolbar, table]) {
-    assert.ok(Math.abs(box.x - content.x) <= 1, 'File controls start at the workspace edge');
-    assert.ok(Math.abs(box.width - content.width) <= 1, 'File controls span the workspace');
-  }
-  for (const control of await page.locator('.toolbar').locator('input, button').all()) {
-    assert.equal(await control.isVisible(), true, 'File controls remain reachable');
-    const box = await control.boundingBox();
-    assert.ok(box.x >= toolbar.x - 1 && box.x + box.width <= toolbar.x + toolbar.width + 1);
-    assert.ok(box.y >= toolbar.y - 1 && box.y + box.height <= toolbar.y + toolbar.height + 1);
-  }
+async function analysisSections(page) {
+  const settings = page.locator('.analysis-run-settings');
+  await headingContainment(page.locator('.page-heading--intro'));
+  assert.equal(await page.getByRole('table').count(), 0, 'Files have their own page');
+  assert.equal(
+    await page.locator('.captured-models').count(),
+    0,
+    'Captured models only belong to the run',
+  );
+  const bounds = await page.locator('.workspace-page').boundingBox();
+  const box = await settings.boundingBox();
+  assert.ok(box.x >= bounds.x && box.x + box.width <= bounds.x + bounds.width + 1);
   checks++;
 }
 async function analysisSettingsFields(page, columns, expanded) {
-  const settings = page.locator('section.panel').filter({
-    has: page.getByRole('heading', { name: 'Analysis setup', exact: true }),
-  });
-  const panelBox = await settings.boundingBox();
+  const settings = page.locator('.analysis-run-settings');
   for (const selector of [
     '.analysis-model-trigger',
     ...(expanded ? ['input[type="number"]'] : []),
   ]) {
     const controls = settings.locator(selector);
-    assert.equal(await controls.count(), 3);
+    assert.equal(await controls.count(), selector.includes('trigger') ? 4 : 3);
     const boxes = [];
     for (const control of await controls.all()) {
       assert.equal(await control.isVisible(), true);
       const box = await control.boundingBox();
-      const label = await control.locator('..').boundingBox();
-      assert.ok(box.x >= panelBox.x && box.x + box.width <= panelBox.x + panelBox.width + 1);
-      assert.ok(box.y >= label.y && box.y + box.height <= label.y + label.height + 1);
+      const parent = await control.locator('..').boundingBox();
+      assert.ok(box.x >= parent.x && box.x + box.width <= parent.x + parent.width + 1);
+      for (const other of boxes)
+        assert.ok(
+          box.x >= other.x + other.width - 1 || box.y >= other.y + other.height - 1,
+          'Controls do not collide',
+        );
       boxes.push(box);
-    }
-    for (let i = 1; i < boxes.length; i++) {
-      assert.ok(Math.abs(boxes[i].width - boxes[0].width) <= 1, 'Equal control widths');
-      if (columns === 3) {
-        assert.ok(Math.abs(boxes[i].y - boxes[0].y) <= 1, 'Aligned control tops');
-        assert.ok(boxes[i].x >= boxes[i - 1].x + boxes[i - 1].width, 'Separate columns');
-      } else {
-        assert.ok(Math.abs(boxes[i].x - boxes[0].x) <= 1, 'Aligned stacked controls');
-        assert.ok(boxes[i].y >= boxes[i - 1].y + boxes[i - 1].height, 'Single-column reflow');
-      }
     }
   }
   assert.equal(
     await settings.evaluate((panel) => panel.scrollWidth > panel.clientWidth + 1),
     false,
-    'Settings has no internal horizontal overflow',
   );
   checks++;
 }
@@ -1417,74 +1349,48 @@ function savedModelsFixture(long = false) {
     },
   };
 }
-async function capturedDetails(panel, expected, columns) {
+async function capturedDetails(panel, expected) {
+  const grid = panel.locator('.captured-models').first();
   if (!expected) {
     assert.equal(await panel.getByText('Models unavailable', { exact: true }).count(), 1);
-    assert.equal(await panel.locator('.three-columns').count(), 0);
-    assert.equal(await panel.locator('.badge').count(), 0);
+    assert.equal(await grid.count(), 0);
     checks++;
     return;
   }
-  const groups = panel.locator('.three-columns > div');
-  const compact = (await panel.locator('.captured-models--compact').count()) > 0;
-  assert.equal(await groups.count(), 3);
+  const expanded = expected.flatMap((detail) =>
+    detail.label === 'Performance & Security'
+      ? [
+          { ...detail, label: 'Performance' },
+          { ...detail, label: 'Security' },
+        ]
+      : [detail],
+  );
+  const groups = grid.locator(':scope > .captured-model');
+  const compact = (await grid.getAttribute('class')).includes('--compact');
+  assert.equal(await groups.count(), 4);
   const boxes = [];
-  const bodyBox = await (compact ? panel : panel.locator('.panel-body')).boundingBox();
-  for (const [index, detail] of expected.entries()) {
+  for (const [index, detail] of expanded.entries()) {
     const group = groups.nth(index);
-    if (compact) {
-      assert.equal(await group.getAttribute('title'), detail.label);
-      assert.equal(await group.locator('strong, .badge').count(), 0);
-      assert.equal(await group.getByText(/^Profile:/).count(), 0);
-    } else {
-      assert.equal(await group.locator('strong').innerText(), detail.label);
-      assert.equal(await group.getByText(/^Profile:/).count(), 0);
-    }
+    assert.equal(await group.locator('strong').innerText(), detail.label);
     assert.equal(await group.locator('.analysis-model-icon svg').count(), 1);
+    assert.equal(await group.getByText(detail.model || 'Unavailable', { exact: true }).count(), 1);
     if (detail.model) {
-      assert.equal(await group.getByText(detail.model, { exact: true }).count(), 1);
       assert.equal(await group.getByText(detail.origin, { exact: true }).count(), compact ? 0 : 1);
       if (!compact)
         assert.equal(await group.locator('.badge').innerText(), detail.remote ? 'Remote' : 'Local');
-    } else {
-      assert.equal(await group.getByText('Unavailable', { exact: true }).count(), 1);
-      assert.equal(await group.locator('.badge').count(), 0);
     }
     const box = await group.boundingBox();
-    assert.ok(box.x >= bodyBox.x && box.x + box.width <= bodyBox.x + bodyBox.width + 1);
-    assert.ok(box.y >= bodyBox.y && box.y + box.height <= bodyBox.y + bodyBox.height + 1);
-    const clipped = await group.evaluate((element) => {
-      const bounds = element.getBoundingClientRect();
-      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-      const failures = [];
-      while (walker.nextNode()) {
-        if (!walker.currentNode.textContent.trim()) continue;
-        if (walker.currentNode.parentElement.closest('.sr-only')) continue;
-        const range = document.createRange();
-        range.selectNodeContents(walker.currentNode);
-        for (const rect of range.getClientRects())
-          if (
-            rect.left < bounds.left - 1 ||
-            rect.right > bounds.right + 1 ||
-            rect.top < bounds.top - 1 ||
-            rect.bottom > bounds.bottom + 1
-          )
-            failures.push(walker.currentNode.textContent);
-      }
-      return failures;
-    });
-    assert.deepEqual(clipped, [], `${detail.label}: complete text stays inside its group`);
+    assert.equal(
+      await group.evaluate((element) => element.scrollWidth > element.clientWidth + 1),
+      false,
+      'Model text fits',
+    );
+    for (const other of boxes)
+      assert.ok(
+        box.x >= other.x + other.width - 1 || box.y >= other.y + other.height - 1,
+        'Captured models do not collide',
+      );
     boxes.push(box);
-  }
-  for (let i = 1; i < boxes.length; i++) {
-    assert.ok(Math.abs(boxes[i].width - boxes[0].width) <= 1, 'Equal captured group widths');
-    if (columns === 3) {
-      assert.ok(Math.abs(boxes[i].y - boxes[0].y) <= 1, 'Aligned captured groups');
-      assert.ok(boxes[i].x >= boxes[i - 1].x + boxes[i - 1].width, 'Separate captured columns');
-    } else {
-      assert.ok(Math.abs(boxes[i].x - boxes[0].x) <= 1, 'Aligned stacked captured groups');
-      assert.ok(boxes[i].y >= boxes[i - 1].y + boxes[i - 1].height, 'Single captured column');
-    }
   }
   checks++;
 }
@@ -1500,6 +1406,7 @@ async function analysisOverflow(page) {
     );
   assert.deepEqual(overflowing, [], 'No internal main/page/panel/group horizontal overflow');
   const table = page.locator('.table-wrap');
+  if (!(await table.count())) return;
   const tableBox = await table.boundingBox();
   const pageBox = await page.locator('.workspace-page').boundingBox();
   assert.ok(
@@ -1619,6 +1526,11 @@ async function contrast(page, name) {
   checks++;
 }
 async function test(name, body) {
+  if (
+    process.env.MINI_ORCA_TEST_FILTER &&
+    !new RegExp(process.env.MINI_ORCA_TEST_FILTER).test(name)
+  )
+    return;
   await body();
   checks++;
   console.log(`PASS ${name}`);
@@ -4529,6 +4441,8 @@ try {
               'Task detail retains ordinary heading typography',
             );
             assert.deepEqual(await intro.getByRole('button').allTextContents(), [
+              'Files',
+              'View run',
               'Prepare analysis',
               'Repair analysis',
               'Search more feature suggestions',
@@ -4579,13 +4493,6 @@ try {
             rhythm,
             'Page and stacked sections share Summary’s rhythm',
           );
-        assert.equal(
-          await page
-            .locator('.table-wrap')
-            .evaluate((element) => getComputedStyle(element).borderRadius),
-          reference.radius,
-          'The scrolling file table retains the shared panel boundary',
-        );
         const disclosure = page.locator('.analysis-sections details');
         const summary = disclosure.locator('summary');
         assert.equal(await disclosure.getAttribute('open'), null, 'Limits start collapsed');
@@ -4626,15 +4533,13 @@ try {
             }
           }
         }
-        assert.equal(await page.getByRole('table').count(), 1);
-        assert.equal(await page.getByLabel('Filter analysis files').count(), 1);
+        assert.equal(await page.getByRole('table').count(), 0);
+        assert.equal(await page.getByLabel('Filter analysis files').count(), 0);
         for (const action of [
           'Prepare analysis',
           'Search more feature suggestions',
           'Explore features',
           'Refresh',
-          'Include shown',
-          'Exclude shown',
         ])
           assert.equal(await page.getByRole('button', { name: action, exact: true }).count(), 1);
       } finally {
@@ -4645,7 +4550,7 @@ try {
   await test('Analysis file filtering and bulk edits retain explicit Save selection before preparation', async () => {
     const { page, close } = await pageFor({ hasRecovery: true });
     try {
-      await nav(page, 'Analysis');
+      await nav(page, 'Files');
       await idle(page);
       await page.setViewportSize({ width: 800, height: 900 });
       await page.getByRole('button', { name: 'Larger text', exact: true }).click();
@@ -4665,6 +4570,7 @@ try {
       assert.equal(await page.getByLabel('Include internal/worker/config.go').isChecked(), true);
       await filter.fill('');
       assert.equal(await page.getByLabel('Include internal/worker/process.go').isChecked(), false);
+      await nav(page, 'Analysis');
       for (const action of ['Prepare analysis', 'Repair analysis']) {
         await page.getByRole('button', { name: action, exact: true }).click();
         await page
@@ -4677,9 +4583,11 @@ try {
         before,
         'Filtering and dirty preparation do not save or preview',
       );
+      await nav(page, 'Analysis');
       await analysisSections(page, true);
       await analysisOverflow(page);
       await layout(page, 'analysis-dirty-selection-800-light-large');
+      await nav(page, 'Files');
       await page.getByRole('button', { name: 'Save selection', exact: true }).click();
       await idle(page);
       assert.equal(
@@ -4743,7 +4651,7 @@ try {
     try {
       await nav(page, 'Analysis');
       const code = page.getByLabel('Bug analysis model', { exact: true });
-      await code.getByText('Gemini 3.8 Flash', { exact: true }).waitFor();
+      assert.match(await code.getAttribute('title'), /Gemini 3.8 Flash/);
       const before = await page.evaluate(() =>
         window.fixture.requests.filter((r) => r.method !== 'GET'),
       );
@@ -4818,7 +4726,8 @@ try {
       );
       assert.deepEqual(preview.body.models, {
         code: 'pi:lm-studio/qwen/local',
-        review: configured,
+        performance: configured,
+        security: configured,
         features: 'pi:openai-codex/gpt-5',
       });
       await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
@@ -4869,7 +4778,7 @@ try {
         'Configured models remain available',
       );
       await page.keyboard.press('Escape');
-      await code.getByText('Model unavailable', { exact: true }).waitFor();
+      assert.match(await code.getAttribute('title'), /Model unavailable/);
       await page
         .getByRole('button', { name: 'Search more feature suggestions', exact: true })
         .click();
@@ -4907,20 +4816,20 @@ try {
       const cards = page.locator('.analysis-model-card');
       assert.deepEqual(await cards.locator('.analysis-operation strong').allTextContents(), [
         'Bug analysis',
-        'Performance & Security',
+        'Performance',
+        'Security',
         'Feature discovery',
       ]);
-      await cards.nth(1).getByText('One model shared by both reviews.', { exact: true }).waitFor();
+      assert.equal(await cards.locator('.analysis-operation-description').count(), 0);
       const families = () =>
         cards
           .locator('.analysis-model-icon')
           .evaluateAll((icons) => icons.map((icon) => icon.dataset.family));
-      assert.deepEqual(await families(), ['openai', 'gemini', 'claude']);
+      assert.deepEqual(await families(), ['openai', 'gemini', 'gemini', 'claude']);
       const before = await page.evaluate(() =>
         window.fixture.requests.filter((request) => request.method !== 'GET'),
       );
-      const lastRun = page.locator('.analysis-last-run');
-      await capturedDetails(lastRun, saved.details, 3);
+      assert.equal(await page.locator('.captured-models').count(), 0);
       for (const theme of ['dark', 'light']) {
         if ((await page.locator('html').getAttribute('data-theme')) !== theme)
           await page.getByRole('button', { name: `Switch to ${theme} appearance` }).click();
@@ -4928,10 +4837,12 @@ try {
         await layout(page, `analysis-model-cards-${theme}`);
       }
       await chooseModel(page.getByLabel('Bug analysis model', { exact: true }), 'function');
-      await chooseModel(page.getByLabel('Performance & Security model', { exact: true }), 'bug');
+      await chooseModel(page.getByLabel('Performance model', { exact: true }), 'bug');
       await chooseModel(page.getByLabel('Feature discovery model', { exact: true }), 'analyze');
-      assert.deepEqual(await families(), ['claude', 'openai', 'gemini']);
-      await capturedDetails(lastRun, saved.details, 3);
+      assert.deepEqual(await families(), ['claude', 'openai', 'gemini', 'gemini']);
+      await nav(page, 'Last run');
+      await capturedDetails(page.locator('.analysis-run-models'), saved.details);
+      await nav(page, 'Analysis');
       assert.deepEqual(
         await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
         before,
@@ -4964,7 +4875,7 @@ try {
       );
       assert.equal(
         await duplicate.page.getByText('OpenAI compatible · Remote', { exact: true }).count(),
-        3,
+        4,
       );
     } finally {
       await duplicate.close();
@@ -4986,7 +4897,8 @@ try {
         window.fixture.requests.filter((request) => request.method !== 'GET'),
       );
       const code = page.getByLabel('Bug analysis model', { exact: true });
-      const review = page.getByLabel('Performance & Security model', { exact: true });
+      const review = page.getByLabel('Performance model', { exact: true });
+      const security = page.getByLabel('Security model', { exact: true });
       const features = page.getByLabel('Feature discovery model', { exact: true });
       await code.focus();
       await page.keyboard.press('Enter');
@@ -5007,6 +4919,8 @@ try {
       await page.keyboard.press('Tab');
       assert.equal(await review.evaluate((control) => control === document.activeElement), true);
       await contrast(page, 'Analysis model selector keyboard focus');
+      await page.keyboard.press('Tab');
+      assert.equal(await security.evaluate((control) => control === document.activeElement), true);
       await page.keyboard.press('Tab');
       assert.equal(await features.evaluate((control) => control === document.activeElement), true);
       await contrast(page, 'Analysis feature selector keyboard focus');
@@ -5040,23 +4954,6 @@ try {
       assert.equal(await attempts.inputValue(), '3');
       assert.equal(await refresh.isChecked(), true);
       await analysisSettingsFields(page, 3, true);
-      // Exercise unequal label heights without replacing production labels or controls.
-      const magnifiedLabels = await page.addStyleTag({
-        content: '.analysis-operation > strong { font-size: 3em; }',
-      });
-      try {
-        const heights = await page.locator('.analysis-operation > strong').evaluateAll((labels) =>
-          labels.map((label) => {
-            const range = document.createRange();
-            range.selectNodeContents(label);
-            return range.getBoundingClientRect().height;
-          }),
-        );
-        assert.ok(heights[1] > heights[0], 'The longer label wraps to another line');
-        await analysisSettingsFields(page, 3, true);
-      } finally {
-        await magnifiedLabels.evaluate((style) => style.remove());
-      }
       await layout(page, 'analysis-settings-long-options-expanded');
       assert.deepEqual(
         await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
@@ -5072,15 +4969,13 @@ try {
       await page.waitForFunction(() =>
         window.fixture.requests.some((r) => r.path.endsWith('/analysis/preview')),
       );
-      for (const control of [code, review, features])
+      for (const control of [code, review, security, features])
         assert.equal(await control.isDisabled(), true);
       for (const name of [
         'Prepare analysis',
         'Repair analysis',
         'Search more feature suggestions',
         'Refresh',
-        'Include shown',
-        'Exclude shown',
       ])
         assert.equal(await page.getByRole('button', { name, exact: true }).isDisabled(), true);
       for (const control of [batch, budget, attempts, refresh])
@@ -5097,7 +4992,8 @@ try {
       assert.equal(request.path, '/api/projects/current/analysis/preview');
       assert.deepEqual(request.body.models, {
         code: 'function',
-        review: 'bug',
+        performance: 'bug',
+        security: 'analyze',
         features: 'function',
       });
       assert.deepEqual(request.body.limits, {
@@ -5136,7 +5032,8 @@ try {
       await idle(page);
       for (const [label, value] of [
         ['Bug analysis model', 'bug'],
-        ['Performance & Security model', 'analyze'],
+        ['Performance model', 'analyze'],
+        ['Security model', 'analyze'],
         ['Feature discovery model', 'analyze'],
       ]) {
         const select = page.getByLabel(label, { exact: true });
@@ -5159,74 +5056,48 @@ try {
       await close();
     }
   });
-  await test('Analysis captured identifiers wrap in the real shell and stay distinct from setup', async () => {
-    const saved = savedModelsFixture(true);
-    const { page, close } = await pageFor({
-      ...saved.options,
-      modelNames: { analyze: 'current-review', bug: 'current-code', function: 'current-features' },
-    });
+  await test('Analysis and Files retain setup and unsaved scope across navigation', async () => {
+    const { page, close } = await pageFor();
     try {
       await nav(page, 'Analysis');
-      await idle(page);
-      const lastRun = page.locator('.analysis-last-run');
-      const before = await page.evaluate(() =>
-        window.fixture.requests.filter((request) => request.method !== 'GET'),
-      );
-      const code = page.getByLabel('Bug analysis model', { exact: true });
-      assert.equal(await code.getAttribute('value'), 'bug');
-      assert.equal(await code.locator('strong').innerText(), 'current-code');
-      await chooseModel(code, 'function');
-      await chooseModel(page.getByLabel('Performance & Security model', { exact: true }), 'bug');
-      await chooseModel(page.getByLabel('Feature discovery model', { exact: true }), 'analyze');
-      const disclosure = page.locator('.analysis-run-settings details');
-      for (const width of [1440, 1280, 1001, 800]) {
-        await page.setViewportSize({ width, height: width === 1440 ? 1000 : 900 });
-        for (const large of [false, true]) {
-          const text = page.getByRole('button', { name: 'Larger text', exact: true });
-          if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
-          for (const expanded of [false, true]) {
-            if ((await disclosure.getAttribute('open')) !== (expanded ? '' : null))
-              await disclosure.locator('summary').click();
-            await analysisSections(page, true);
-            const columns = width === 1440 || (width === 1280 && !large) ? 3 : 1;
-            await analysisSettingsFields(page, columns, expanded);
-            await capturedDetails(lastRun, saved.details, columns);
-            await analysisOverflow(page);
-            for (const theme of ['dark', 'light']) {
-              if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-                await page.getByRole('button', { name: `Switch to ${theme} appearance` }).click();
-              // Tab from the last settings control reaches the saved-run action in DOM order.
-              const previous = expanded
-                ? page.getByLabel('Refresh previously analyzed files')
-                : disclosure.locator('summary');
-              await previous.focus();
-              await page.keyboard.press('Tab');
-              const view = lastRun.getByRole('button', { name: 'View run', exact: true });
-              assert.equal(
-                await view.evaluate((button) => button === document.activeElement),
-                true,
-              );
-              assert.equal(await view.evaluate((button) => button.matches(':focus-visible')), true);
-              await contrast(page, `Captured models ${width} ${large} ${expanded} ${theme} focus`);
-              await layout(
-                page,
-                `analysis-captured-long-${width}-${large ? 'large' : 'default'}-${expanded ? 'expanded' : 'collapsed'}-${theme}`,
-              );
-            }
-          }
-        }
-      }
+      await chooseModel(page.getByLabel('Performance model', { exact: true }), 'function');
+      await chooseModel(page.getByLabel('Security model', { exact: true }), 'bug');
+      await page.locator('.analysis-run-settings summary').click();
+      await page.getByLabel('Files per batch', { exact: true }).fill('37');
+      await nav(page, 'Files');
+      await page.getByLabel('Include internal/worker/process.go', { exact: true }).uncheck();
+      await nav(page, 'Analysis');
       assert.equal(
-        await code.getAttribute('value'),
+        await page.getByLabel('Performance model', { exact: true }).getAttribute('value'),
         'function',
-        'Captured rendering does not reset setup',
       );
-      assert.deepEqual(
-        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
-        before,
-        'Setup, disclosure, appearance and focus changes permit only existing reads',
+      assert.equal(
+        await page.getByLabel('Security model', { exact: true }).getAttribute('value'),
+        'bug',
       );
-      assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
+      assert.equal(await page.getByLabel('Files per batch', { exact: true }).inputValue(), '37');
+      await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+      assert.equal(await page.getByRole('alert').count(), 1);
+      await nav(page, 'Files');
+      assert.equal(
+        await page.getByLabel('Include internal/worker/process.go', { exact: true }).isChecked(),
+        false,
+      );
+      await page.getByRole('button', { name: 'Save selection', exact: true }).click();
+      await idle(page);
+      await nav(page, 'Analysis');
+      await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+      await idle(page);
+      const request = await page.evaluate(() =>
+        window.fixture.requests.findLast((r) => r.path.endsWith('/analysis/preview')),
+      );
+      assert.deepEqual(request.body.models, {
+        code: 'bug',
+        performance: 'function',
+        security: 'bug',
+        features: 'analyze',
+      });
+      assert.equal(request.body.limits.batch_files, 37);
     } finally {
       await close();
     }
@@ -5270,27 +5141,7 @@ try {
         const before = await page.evaluate(() =>
           window.fixture.requests.filter((request) => request.method !== 'GET'),
         );
-        for (const [width, large] of [
-          [1440, false],
-          [1001, true],
-          [800, true],
-        ]) {
-          await page.setViewportSize({ width, height: width === 1440 ? 1000 : 900 });
-          const text = page.getByRole('button', { name: 'Larger text', exact: true });
-          if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
-          await capturedDetails(
-            page.locator('.analysis-last-run'),
-            expected,
-            width === 1440 ? 3 : 1,
-          );
-          await analysisSections(page, true);
-          await analysisOverflow(page);
-          await layout(
-            page,
-            `analysis-captured-${scenario}-${width}-${large ? 'large' : 'default'}`,
-          );
-        }
-        await page.locator('.analysis-last-run').getByRole('button', { name: 'View run' }).click();
+        await page.getByRole('button', { name: 'View run', exact: true }).click();
         await page.getByRole('heading', { name: 'Project analysis', exact: true }).waitFor();
         const runPanel = page.locator('section.panel').filter({
           has: page.getByRole('heading', { name: 'Captured models', exact: true }),
@@ -5677,12 +5528,7 @@ try {
         try {
           await nav(page, 'Analysis');
           await idle(page);
-          const lastRun = page.locator('.analysis-last-run');
-          await lastRun.getByText(status, { exact: true }).waitFor();
-          assert.equal(
-            await lastRun.getByRole('img').getAttribute('aria-label'),
-            `Analysis: ${status}`,
-          );
+          assert.equal(await page.locator('.captured-models').count(), 0);
           assert.equal(
             await page.getByRole('button', { name: 'Prepare analysis', exact: true }).isDisabled(),
             status === 'running',
@@ -5691,6 +5537,7 @@ try {
           const canRepair = hasRecovery && ['failed', 'completed'].includes(status);
           assert.equal(await repair.count(), canRepair ? 1 : 0);
           if (canRepair) assert.equal(await repair.isDisabled(), false);
+          await nav(page, 'Files');
           assert.equal(
             await page.getByRole('button', { name: 'Include shown', exact: true }).isDisabled(),
             ['running', 'paused'].includes(status),
@@ -5698,7 +5545,7 @@ try {
           const before = await page.evaluate(() =>
             window.fixture.requests.filter((request) => request.method !== 'GET'),
           );
-          await lastRun.getByRole('button', { name: 'View run', exact: true }).click();
+          await nav(page, 'Last run');
           await page.getByRole('heading', { name: 'Project analysis', exact: true }).waitFor();
           assert.equal(await page.getByRole('dialog').count(), 0);
           assert.deepEqual(
@@ -5765,7 +5612,7 @@ try {
       window.fixture.requests.find((r) => r.body?.action === 'resume'),
     );
     assert.equal(resumed.body.identity.generation, 'generation-1');
-    assert.equal(resumed.body.preview_id, 'preview-bug-analyze-analyze');
+    assert.equal(resumed.body.preview_id, 'preview-bug-analyze-analyze-analyze');
     await layout(page, 'analysis-run');
     await close();
   });
@@ -5777,10 +5624,7 @@ try {
     await nav(page, 'Analysis');
     const before = await page.evaluate(() => window.fixture.requests.length);
     assert.equal(await page.getByLabel('Bug analysis model').getAttribute('value'), 'bug');
-    assert.equal(
-      await page.getByLabel('Performance & Security model').getAttribute('value'),
-      'analyze',
-    );
+    assert.equal(await page.getByLabel('Performance model').getAttribute('value'), 'analyze');
     assert.equal(await page.getByLabel('Feature discovery model').getAttribute('value'), 'analyze');
     await page.getByLabel('Bug analysis model').click();
     assert.deepEqual(await page.getByRole('option').locator('strong').allTextContents(), [
@@ -5790,12 +5634,17 @@ try {
     ]);
     await page.keyboard.press('Escape');
     await chooseModel(page.getByLabel('Bug analysis model'), 'function');
-    await chooseModel(page.getByLabel('Performance & Security model'), 'bug');
+    await chooseModel(page.getByLabel('Performance model'), 'bug');
     await chooseModel(page.getByLabel('Feature discovery model'), 'analyze');
     assert.equal(await page.evaluate(() => window.fixture.requests.length), before);
     await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
     await idle(page);
-    const choices = { code: 'function', review: 'bug', features: 'analyze' };
+    const choices = {
+      code: 'function',
+      performance: 'bug',
+      security: 'analyze',
+      features: 'analyze',
+    };
     const previews = await page.evaluate(() =>
       window.fixture.requests.filter((r) => r.path.endsWith('/analysis/preview')),
     );
@@ -5817,11 +5666,11 @@ try {
       window.fixture.requests.find((r) => r.method === 'POST' && r.path.endsWith('/analysis/run')),
     );
     assert.deepEqual(start.body.models, choices);
-    assert.equal(start.body.preview_id, 'preview-function-bug-analyze');
+    assert.equal(start.body.preview_id, 'preview-function-bug-analyze-analyze');
     assert.deepEqual(start.body.confirmations.provider_ids, [
       'code-function',
       'review-bug',
-      'features-analyze',
+      'security-analyze',
     ]);
     assert.equal(start.body.confirmations.security_review, true);
     await page.getByRole('button', { name: 'Pause', exact: true }).click();
@@ -5872,7 +5721,9 @@ try {
     await activity.getByText('Generating feature suggestions…', { exact: true }).waitFor();
     await activity.getByText('Performance · internal/worker/process.go', { exact: true }).waitFor();
     await page.getByText('75s elapsed', { exact: true }).waitFor();
-    await page.getByText('Advisory ideas · 1 of 2 attempts used', { exact: true }).waitFor();
+    await page.getByText('Advisory ideas', { exact: true }).waitFor();
+    await page.getByText('Attempt details', { exact: true }).click();
+    await page.getByText('1 of 2 attempts used', { exact: true }).waitFor();
     await layout(page, 'analysis-feature-progress');
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.evaluate(() => document.documentElement.classList.add('large-text'));
@@ -5986,7 +5837,10 @@ try {
         const features = workspace.locator('section.panel').filter({
           has: page.getByRole('heading', { name: 'New feature suggestions', exact: true }),
         });
-        await features.locator('.panel-head').getByText(featureStatus, { exact: true }).waitFor();
+        await features
+          .locator('.run-result-summary')
+          .getByText(featureStatus, { exact: true })
+          .waitFor();
         assert.equal(
           await features.locator('.metric-number').innerText(),
           status === 'completed' ? '0' : '—',
@@ -5995,12 +5849,14 @@ try {
           const panel = workspace
             .locator('section.panel')
             .filter({ has: page.getByRole('heading', { name: category, exact: true }) });
-          assert.equal(await panel.locator('.panel-head .analysis-run-status').innerText(), status);
+          assert.equal(await panel.locator('.run-result-summary > span').innerText(), status);
         }
         const before = await page.evaluate(() =>
           window.fixture.requests.filter((r) => r.method !== 'GET'),
         );
-        const disclosure = workspace.locator('details').first();
+        const fileProgress = workspace.locator(':scope > details');
+        await fileProgress.locator(':scope > summary').click();
+        const disclosure = fileProgress.locator('details').first();
         await disclosure.locator('summary').press('Enter');
         assert.equal(await disclosure.getAttribute('open'), '');
         await disclosure.getByText('completed', { exact: true }).first().waitFor();
@@ -6164,25 +6020,32 @@ try {
       assert.equal(await progress.getAttribute('value'), '6');
       assert.equal(await progress.getAttribute('max'), '12');
       assert.equal(
-        await workspace.getByText('6 of 12 category work units finished', { exact: true }).count(),
+        await workspace.getByText('6 of 12 analysis steps finished', { exact: true }).count(),
         1,
       );
       assert.deepEqual(
         await workspace.locator('.analysis-run-categories .metric-number').allTextContents(),
-        ['—', '0', '2'],
+        ['—', '0', '2', '—'],
       );
       assert.equal(
         await workspace.getByText('No successful evidence yet', { exact: true }).count(),
         1,
       );
-      assert.equal(await workspace.getByText('Saved findings', { exact: true }).count(), 2);
+      assert.equal(await workspace.getByText('Saved findings', { exact: true }).count(), 1);
+      assert.equal(
+        await workspace.getByText('Hypotheses · unmeasured', { exact: true }).count(),
+        1,
+      );
       const featurePanel = workspace.locator('section.panel').filter({
         has: page.getByRole('heading', { name: 'New feature suggestions', exact: true }),
       });
       assert.equal(await featurePanel.locator('.metric-number').innerText(), '—');
       assert.equal(await featurePanel.getByText(reason, { exact: true }).isVisible(), true);
-      assert.equal(await featurePanel.locator('details').count(), 0);
-      const disclosure = workspace.locator('details').first();
+      assert.equal(await featurePanel.locator('details').count(), 1);
+      assert.equal(await featurePanel.getByText(reason, { exact: true }).isVisible(), true);
+      const fileProgress = workspace.locator(':scope > details');
+      await fileProgress.locator(':scope > summary').click();
+      const disclosure = fileProgress.locator('details').first();
       await disclosure.locator('summary').press('Enter');
       await disclosure.getByText(stageReason, { exact: true }).first().waitFor();
       await disclosure.getByText('1 attempts · cached', { exact: true }).waitFor();
@@ -6245,7 +6108,7 @@ try {
         await page.waitForFunction(() => window.fixture.requests.some((r) => r.body?.action));
         const heading = page.locator('.analysis-run .page-heading--intro');
         for (const control of await heading.getByRole('button').all())
-          if ((await control.innerText()) !== 'Files')
+          if (!['Files', 'Analysis setup'].includes(await control.innerText()))
             assert.equal(await control.isDisabled(), true);
         const request = await page.evaluate(() =>
           window.fixture.requests.find((r) => r.body?.action),
