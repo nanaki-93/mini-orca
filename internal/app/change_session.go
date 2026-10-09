@@ -338,7 +338,7 @@ func (s *Service) ProposeInstructions(ctx context.Context, request InstructionPr
 	if target.Exists && target.Content == request.Content {
 		return nil, fmt.Errorf("instructions are unchanged")
 	}
-	session.Changes = []ChangeEdit{{Path: target.Path, Content: request.Content, Hash: contentHash([]byte(request.Content)), Diff: changeDiff(target.Path, target.Content, request.Content)}}
+	session.Changes = []ChangeEdit{{Path: target.Path, Content: request.Content, Hash: contentHash([]byte(request.Content)), Diff: project.BuildUnifiedDiff(target.Path, target.Content, request.Content)}}
 	session.Hash, session.Revision = changeProposalHash(session.Changes), 1
 	session.Messages = []ChatSessionMessage{{Role: "assistant", Content: "Review the instruction changes before applying them.", CreatedAt: time.Now().UTC()}}
 	s.changesMu.Lock()

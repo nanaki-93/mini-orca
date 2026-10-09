@@ -102,6 +102,41 @@ func TestChangeMessageUsesSelectedProfileAndItsConsent(t *testing.T) {
 	}
 }
 
+func TestChangeProposalOmitsUnchangedAndFormattingOnlyFiles(t *testing.T) {
+	session := &ChangeSession{Targets: []ChangeTarget{
+		{Path: "main.go", Exists: true, Content: "package main\n\nfunc First() int { return 1 }\n\nfunc Untouched() int { return 2 }\n\nfunc Last() int { return 3 }\n"},
+		{Path: "helper.go", Exists: true, Content: "package main\nfunc Helper() {\n    println( 1 )\n}\n"},
+	}}
+	response := `{"explanation":"Fix two return values.","changes":[{"path":"main.go","content":"package main\n\nfunc First() int { return 4 }\n\nfunc Untouched() int { return 2 }\n\nfunc Last() int { return 5 }\n"},{"path":"helper.go","content":"package main\n\nfunc Helper() {\n\tprintln(1)\n}\n"}]}`
+	_, edits, err := parseChangeResponse(response, session)
+	if err != nil || len(edits) != 1 || edits[0].Path != "main.go" {
+		t.Fatalf("formatting-only file entered proposal: %+v, %v", edits, err)
+	}
+	for _, line := range edits[0].Diff.Lines {
+		if strings.Contains(line.Text, "Untouched") && line.Kind != "context" {
+			t.Fatalf("untouched declaration displayed as an edit: %+v", line)
+		}
+	}
+	if edit, err := makeChangeEdit(session, "helper.go", session.Targets[1].Content); err != nil || edit != nil {
+		t.Fatal("unchanged unformatted source became a change")
+	}
+}
+
+func TestChangeWhitespaceFilteringPreservesLiteralAndMarkdownChanges(t *testing.T) {
+	for _, test := range []struct{ path, before, after string }{
+		{"main.go", "package main\nconst text = \"two  spaces\"\n", "package main\nconst text = \"two spaces\"\n"},
+		{"main.go", "package main\nconst text = `\n  indent\n`\n", "package main\nconst text = `\n indent\n`\n"},
+		{"README.md", "line\n    code\n", "line\ncode\n"},
+		{"README.md", "line  \nbreak\n", "line\nbreak\n"},
+	} {
+		session := &ChangeSession{Targets: []ChangeTarget{{Path: test.path, Exists: true, Content: test.before}}}
+		edit, err := makeChangeEdit(session, test.path, test.after)
+		if err != nil || edit == nil || !strings.Contains(edit.Content, strings.TrimPrefix(test.after, "package main\n")) {
+			t.Fatalf("meaningful whitespace was dropped for %s: %+v, %v", test.path, edit, err)
+		}
+	}
+}
+
 func TestChangeGenerationHistoryAndRevision(t *testing.T) {
 	var calls atomic.Int32
 	server := changeProvider(t, func() string {

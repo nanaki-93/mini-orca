@@ -215,7 +215,7 @@ func Other() {}
 }
 
 func TestBuildUnifiedDiffKeepsFollowingLinesAsContextAfterInsertion(t *testing.T) {
-	diff := buildUnifiedDiff("fixture.go", "one\ntwo\nthree\n", "one\ninserted\ntwo\nthree\n")
+	diff := BuildUnifiedDiff("fixture.go", "one\ntwo\nthree\n", "one\ninserted\ntwo\nthree\n")
 	if len(diff.Lines) != 5 {
 		t.Fatalf("diff lines = %#v", diff.Lines)
 	}
