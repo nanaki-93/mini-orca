@@ -1931,7 +1931,7 @@ export class Workspace {
       this.set({
         notice:
           this.state.change && changeChecksPassed(this.state.change)
-            ? 'Changes are ready. Review the diff, then accept.'
+            ? 'Changes are ready for your review.'
             : 'Checks need attention. Review the diagnostics before retrying.',
       });
     });
