@@ -75,8 +75,8 @@ func (s *Service) analysisSelectionStageForModels(analysis project.Analysis, fil
 	}
 	cached, status, generatedAt, err := s.analysisStageCacheState(analysis, file, policy, stage, models)
 	if item, ok := evidence.stage(file, stage); ok && s.analysisModelRuntime(stage, models).effective == s.analysisModelRuntime(stage, evidence.models()).effective {
-		if status, reason := selectionRunStage(item, evidence.run); status != "" && selectionRunOverridesCache(item, evidence.run, cached, generatedAt) {
-			result.Status, result.Reason = status, reason
+		if runStatus, reason := selectionRunStage(item, evidence.run); runStatus != "" && selectionRunOverridesCache(item, evidence.run, cached, status, generatedAt) {
+			result.Status, result.Reason = runStatus, reason
 			return result
 		}
 	}
@@ -131,7 +131,6 @@ func selectionCacheStatus(status string) (string, string) {
 var selectionStageReasons = map[AnalysisStageStatus]string{
 	AnalysisStageCanceled:    "The run was canceled before this stage completed.",
 	AnalysisStageInterrupted: "The run was interrupted during this stage. Resume the run to continue.",
-	AnalysisStageStale:       "The run became outdated before this stage completed. Start a new analysis.",
 	AnalysisStageFailed:      "This stage failed before analysis could complete.",
 	AnalysisStagePartial:     "This stage returned incomplete analysis.",
 	AnalysisStageSkipped:     "This stage was skipped in the previous run.",
@@ -146,6 +145,8 @@ func selectionRunStage(stage AnalysisStageProgress, run *AnalysisRun) (string, s
 		return selectionWaitingReason(run)
 	case AnalysisStageRunning:
 		return "running", "Analysis is currently processing this stage."
+	case AnalysisStageStale:
+		return "interrupted", "The run stopped after its inputs changed. Current file evidence determines freshness."
 	default:
 		reason, ok := selectionStageReasons[stage.Status]
 		if !ok {
@@ -171,7 +172,7 @@ func selectionWaitingReason(run *AnalysisRun) (string, string) {
 	case AnalysisRunCanceled:
 		return "canceled", "The run was canceled before this stage completed."
 	case AnalysisRunStale:
-		return "stale", "The run became outdated before this stage completed. Start a new analysis."
+		return "interrupted", "The run became outdated before this stage completed. Start a new analysis."
 	default:
 		return "pending", "This stage is waiting in the analysis queue."
 	}
@@ -179,12 +180,20 @@ func selectionWaitingReason(run *AnalysisRun) (string, string) {
 
 // A failed refresh must not be hidden by a report from before that run. A later
 // explicit review may replace the failure without rerunning the whole project.
-func selectionRunOverridesCache(stage AnalysisStageProgress, run *AnalysisRun, cached bool, generatedAt time.Time) bool {
+func selectionRunOverridesCache(stage AnalysisStageProgress, run *AnalysisRun, cached bool, cacheStatus string, generatedAt time.Time) bool {
+	if run != nil && run.Status == AnalysisRunStale && (stage.Status == AnalysisStagePending || stage.Status == AnalysisStageStale) && (cached || cacheStatus == "stale") {
+		return false
+	}
 	if stage.Status == AnalysisStagePending || stage.Status == AnalysisStageRunning {
 		return true
 	}
 	if run != nil && !generatedAt.IsZero() && !generatedAt.Before(run.CreatedAt) {
 		return false
 	}
-	return !cached || stage.Status == AnalysisStageFailed || stage.Status == AnalysisStageStale || stage.Status == AnalysisStagePartial
+	switch stage.Status {
+	case AnalysisStageFailed, AnalysisStageStale, AnalysisStagePartial:
+		return true
+	default:
+		return !cached
+	}
 }

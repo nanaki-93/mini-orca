@@ -1571,6 +1571,11 @@ try {
           window.fixture.requests.find((r) => r.path.endsWith('/analysis/preview')),
         );
         assert.equal(preview.body.stale_only, true);
+        assert.equal(
+          preview.body.models,
+          undefined,
+          'A stale-only retry retains the default run profiles',
+        );
         assert.equal(preview.body.refresh, false);
         assert.equal(preview.body.include_features, false);
         assert.equal(preview.body.recover_incomplete, false);

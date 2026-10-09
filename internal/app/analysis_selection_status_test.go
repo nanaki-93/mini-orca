@@ -93,6 +93,31 @@ func TestAnalysisSelectionExplainsPausedCanceledAndIgnoredFiles(t *testing.T) {
 	}
 }
 
+func TestChangedFileDoesNotMakeUnfinishedUnchangedFilesStale(t *testing.T) {
+	ctx := context.Background()
+	server, calls := analysisResponseServer(t, emptyAnalysisReply)
+	s, root := newSemanticAnalysisServiceWithHelper(t, server.URL, 0)
+	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{1, 30, 2}, nil)
+	if _, err := s.StartAnalysisRun(ctx, analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	completedAnalysisRun(t, s)
+	if err := os.WriteFile(filepath.Join(root, "helper.go"), []byte("package main\nfunc Changed() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	selection := readSelectionFor(t, s)
+	assertSelectionStages(t, selection, "helper.go", "stale", "this file")
+	assertSelectionStages(t, selection, "main.go", "interrupted", "before this stage")
+	request := AnalysisPreviewRequest{ProjectID: selection.ProjectID, ProjectRevision: selection.ProjectRevision, Scope: AnalysisRunScopeProject, StaleOnly: true, Limits: preview.Limits}
+	retry, err := s.PreviewAnalysisRun(ctx, request)
+	if err != nil || len(retry.Files) != 1 || retry.Files[0].Path != "helper.go" || calls.Load() != 3 {
+		t.Fatalf("stale-only scope includes unchanged unfinished files: %+v, %v", retry, err)
+	}
+}
+
 func TestAnalysisSelectionExplainsStageFailuresAndUnavailableProviders(t *testing.T) {
 	server, _ := analysisResponseServer(t, emptyAnalysisReply)
 	s, _ := newSemanticAnalysisService(t, server.URL, 0)
