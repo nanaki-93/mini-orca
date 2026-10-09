@@ -17,6 +17,31 @@ export async function testGuidedFixes({
     await openModels(trigger.page());
     await selectModel(trigger, profile);
   };
+  await test('Double-clicking the next file never turns review into Apply', async () => {
+    const { page, close } = await pageFor({ trusted: true });
+    try {
+      await nav(page, 'Bugs');
+      await page.locator('.result-row').first().click();
+      await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
+      await idle(page);
+      await page.getByRole('button', { name: 'Review next file', exact: true }).dblclick();
+      await idle(page);
+      assert.equal(
+        await page.evaluate(() =>
+          window.fixture.requests.some(
+            (r) => r.path.endsWith('/review') || r.path.endsWith('/apply'),
+          ),
+        ),
+        false,
+      );
+      await page.getByRole('button', { name: 'Apply 2 files', exact: true }).click();
+      await idle(page);
+      await page.getByRole('heading', { name: 'Change applied', exact: true }).waitFor();
+    } finally {
+      await close();
+    }
+  });
+
   await test('Dedicated fix review advances file by file, resets for regeneration and preserves Apply and Undo', async () => {
     const { page, close } = await pageFor({ trusted: true });
     try {

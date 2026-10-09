@@ -342,7 +342,11 @@ function FixReview({
               tone="primary"
               icon="check"
               disabled={!!s.busy || !ready || !!next}
-              onClick={() => void w.acceptChange()}
+              onClick={(event) => {
+                // The preceding click may have advanced the last file at this same position.
+                if (event.detail > 1) return;
+                void w.acceptChange();
+              }}
             >
               Apply {files.length} {files.length === 1 ? 'file' : 'files'}
             </Button>
