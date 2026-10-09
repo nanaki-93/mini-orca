@@ -453,6 +453,12 @@ current indexed file identities; user and source-policy exclusions remain
 excluded. The dispatch plan, run coverage and file-filter guards still describe
 the admitted scope.
 
+File reports retain their original project revision as provenance. Their freshness
+depends on that file's current content, applicable instructions, policy and analyzer
+configuration. Editing another file does not invalidate them. A saved run may be
+stale as an execution snapshot while its unchanged files remain current; result
+reads still require that exact saved run identity and the active project.
+
 Resume first requests a new preview with `resume_run` identifying the existing
 run. It preserves that run's captured scope, limits and cumulative attempt counts,
 but recalculates remaining request bounds. Control echoes the run identity,

@@ -190,10 +190,10 @@ func (s *Service) analysisStageCacheState(analysis project.Analysis, file projec
 			return false, "", time.Time{}, err
 		}
 		status := report.Status
-		if status == project.AnalysisStatusFresh && !analysisSemanticCacheUsable(report, analysis.ProjectRevision) {
+		if status == project.AnalysisStatusFresh && !analysisSemanticCacheUsable(report) {
 			status = project.AnalysisStatusStale
 		}
-		return analysisSemanticCacheUsable(report, analysis.ProjectRevision), status, report.GeneratedAt, nil
+		return analysisSemanticCacheUsable(report), status, report.GeneratedAt, nil
 	case AnalysisStagePerformance:
 		return s.analysisPerformanceCacheState(analysis, file, policy, models)
 	default:

@@ -322,7 +322,7 @@ func (execution *analysisFileStageExecution) semantic(ctx context.Context, resul
 		if err != nil {
 			return err
 		}
-		if analysisSemanticCacheUsable(cached, execution.request.Run.ProjectRevision) {
+		if analysisSemanticCacheUsable(cached) {
 			result.Semantic = cached
 			analysisStageEvidence(&result.Progress, len(cached.Risks), false, true)
 			return nil
@@ -471,8 +471,8 @@ func (execution *analysisFileStageExecution) securityAI(ctx context.Context, res
 	return nil
 }
 
-func analysisSemanticCacheUsable(report *project.FileAnalysis, revision string) bool {
-	if report == nil || report.Status != project.AnalysisStatusFresh || report.ProjectRevision != revision {
+func analysisSemanticCacheUsable(report *project.FileAnalysis) bool {
+	if report == nil || report.Status != project.AnalysisStatusFresh {
 		return false
 	}
 	for _, risk := range report.Risks {
@@ -494,7 +494,7 @@ func analysisPerformanceCacheUsable(report *project.PerformanceFileReport, analy
 		configuredModel = report.Model
 	}
 	model := runtime.effective
-	return report.Status == "completed" && report.ProjectID == analysis.ProjectID && report.ProjectRevision == analysis.ProjectRevision && configuredModel == runtime.profile.Model && report.Profile == model.Profile && report.Scope == model.Scope && report.ProviderOrigin == model.ProviderOrigin && report.ReasoningEffort == model.ReasoningEffort
+	return report.Status == "completed" && report.ProjectID == analysis.ProjectID && configuredModel == runtime.profile.Model && report.Profile == model.Profile && report.Scope == model.Scope && report.ProviderOrigin == model.ProviderOrigin && report.ReasoningEffort == model.ReasoningEffort
 }
 
 func analysisSecurityCacheInput(analysis project.Analysis, file project.IndexFile, runtime modelRuntime, policyVersion string) project.SecurityReportInput {
