@@ -41,7 +41,7 @@ export interface FixPreparationContext {
   models: M.ModelCatalog;
   trust: M.ExecutionTrust;
 }
-export interface FixApproval extends FixPreparationContext {
+interface FixApproval extends FixPreparationContext {
   allowRemote: boolean;
   allowExecution: boolean;
 }
@@ -1706,22 +1706,63 @@ export class Workspace {
       throw new Error('Project changed. Refresh fix preparation.');
     return { models, trust };
   }
-  private async authorizeFix(profiles: string[], approval: FixApproval) {
+  private async checkedFixPreparation(profiles: string[], preparation: FixPreparationContext) {
     const epoch = this.epoch,
       operation = this.operation;
     const latest = await this.readFixPreparation();
     if (epoch !== this.epoch || operation !== this.operation) return null;
     if (
-      projectKey(latest.trust) !== projectKey(approval.trust) ||
-      JSON.stringify(latest.trust.commands) !== JSON.stringify(approval.trust.commands) ||
+      projectKey(latest.trust) !== projectKey(preparation.trust) ||
+      JSON.stringify(latest.trust.commands) !== JSON.stringify(preparation.trust.commands) ||
       profiles.some(
         (profile) =>
           !latest.models.scopes[profile] ||
           JSON.stringify(latest.models.scopes[profile]) !==
-            JSON.stringify(approval.models.scopes[profile]),
+            JSON.stringify(preparation.models.scopes[profile]),
       )
     )
       throw new Error('Preparation changed. Review the current models and permissions.');
+    return latest;
+  }
+  private async approveFix(
+    seed: M.ChangeSeed,
+    profiles: string[],
+    preparation: FixPreparationContext,
+  ): Promise<FixApproval | null> {
+    const epoch = this.epoch,
+      operation = this.operation;
+    const latest = await this.checkedFixPreparation(profiles, preparation);
+    if (!latest) return null;
+    const remote = [...new Set(profiles)]
+      .map((profile) => latest.models.scopes[profile])
+      .filter((model) => model.remote_provider);
+    if (remote.length || !latest.trust.trusted || seed.kind === 'security') {
+      const accepted = await this.confirm({
+        title: seed.kind === 'security' ? 'Prepare security fix?' : 'Prepare fix?',
+        message: [
+          remote.length
+            ? 'Send these files and their instructions to the selected remote models.'
+            : '',
+          !latest.trust.trusted ? 'Run project checks on this computer in an isolated copy.' : '',
+          seed.kind === 'security' ? 'Start the Security fix workflow.' : '',
+        ]
+          .filter(Boolean)
+          .join(' '),
+        accept: 'Prepare fix',
+        details: [
+          ...new Set(remote.map((model) => `${model.model} · ${model.provider_origin}`)),
+          ...seed.paths,
+          ...(!latest.trust.trusted ? latest.trust.commands.map((argv) => argv.join(' ')) : []),
+        ],
+      });
+      if (!accepted || epoch !== this.epoch || operation !== this.operation) return null;
+    }
+    return { ...latest, allowRemote: remote.length > 0, allowExecution: !latest.trust.trusted };
+  }
+  private async authorizeFix(profiles: string[], approval: FixApproval) {
+    const epoch = this.epoch;
+    const latest = await this.checkedFixPreparation(profiles, approval);
+    if (!latest) return null;
     const remote = [...new Set(profiles.filter((p) => latest.models.scopes[p].remote_provider))];
     if (remote.length && !approval.allowRemote)
       throw new Error('Allow sending the selected file context to the displayed providers.');
@@ -1739,7 +1780,7 @@ export class Workspace {
   async startChangeWorkflow(
     seed: M.ChangeSeed,
     models: M.ChangeWorkflowModels,
-    approval?: FixApproval,
+    preparation?: FixPreparationContext,
   ) {
     await this.act('Start workflow', async () => {
       if (activeChangeWorkflow(this.state.change))
@@ -1748,6 +1789,10 @@ export class Workspace {
         throw new Error('Include a Go test path (_test.go) in Files to change.');
       const epoch = this.epoch,
         operation = this.operation;
+      const approval = preparation
+        ? await this.approveFix(seed, Object.values(models), preparation)
+        : undefined;
+      if (approval === null) return;
       const profiles = approval
         ? await this.authorizeFix(Object.values(models), approval)
         : await this.confirmWorkflow(seed, models);
@@ -1880,10 +1925,14 @@ export class Workspace {
     seed: M.ChangeSeed,
     tests: boolean,
     profile = 'function',
-    approval?: FixApproval,
+    preparation?: FixPreparationContext,
   ) {
     await this.act('Prepare change', async () => {
       if (!seed.message.trim()) throw new Error('Describe the change.');
+      const approval = preparation
+        ? await this.approveFix(seed, [profile], preparation)
+        : undefined;
+      if (approval === null) return;
       if (!this.state.change) {
         const identity = this.identity();
         const epoch = this.epoch;
