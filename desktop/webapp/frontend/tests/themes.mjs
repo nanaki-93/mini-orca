@@ -1,6 +1,78 @@
 import { strict as assert } from 'node:assert';
 
 export async function testThemes({ test, pageFor, nav, idle, layout, contrast }) {
+  await test('Collapsible sidebar keeps every destination accessible and remembers its width', async () => {
+    const { page, close } = await pageFor();
+    try {
+      await idle(page);
+      const sidebar = page.getByRole('complementary', { name: 'Application' });
+      const destinations = await sidebar
+        .locator('.nav-link')
+        .evaluateAll((links) => links.map((link) => link.getAttribute('aria-label')));
+      assert.equal(destinations.length, 14);
+      const writes = await page.evaluate(() =>
+        window.fixture.requests.filter((request) => request.method !== 'GET'),
+      );
+      const expanded = await sidebar.boundingBox();
+      await sidebar.getByRole('button', { name: 'Collapse sidebar' }).focus();
+      await page.keyboard.press('Enter');
+      const toggle = sidebar.getByRole('button', { name: 'Expand sidebar' });
+      assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
+      assert.equal(await toggle.evaluate((element) => element === document.activeElement), true);
+      assert.ok((await sidebar.boundingBox()).width < expanded.width / 2);
+      for (const destination of destinations) {
+        const link = sidebar.getByRole('button', { name: destination, exact: true });
+        assert.equal(await link.getAttribute('title'), destination);
+        assert.equal(await link.locator('span').first().isVisible(), false);
+        await link.scrollIntoViewIfNeeded();
+        assert.equal(await link.isVisible(), true);
+      }
+      await nav(page, 'Bugs');
+      await idle(page);
+      assert.equal(
+        await sidebar
+          .getByRole('button', { name: 'Bugs', exact: true })
+          .getAttribute('aria-current'),
+        'page',
+      );
+      for (const theme of ['Graphite', 'Porcelain', 'Midnight']) {
+        await page.getByRole('button', { name: `${theme} theme`, exact: true }).click();
+        await page.setViewportSize({ width: 800, height: 640 });
+        await toggle.focus();
+        await contrast(page, `${theme} collapsed sidebar`);
+        await layout(page, `sidebar-collapsed-${theme.toLowerCase()}`);
+      }
+      assert.deepEqual(
+        await page.evaluate(() =>
+          window.fixture.requests.filter((request) => request.method !== 'GET'),
+        ),
+        writes,
+        'Sidebar changes and navigation perform no project work',
+      );
+      await page.reload();
+      await page.getByRole('heading', { name: 'harbor', exact: true }).waitFor();
+      await idle(page);
+      assert.equal(await toggle.isVisible(), true);
+      await toggle.press('Space');
+      assert.equal(
+        await sidebar
+          .getByRole('button', { name: 'Collapse sidebar' })
+          .getAttribute('aria-expanded'),
+        'true',
+      );
+      assert.equal(
+        await sidebar
+          .getByRole('button', { name: 'Summary', exact: true })
+          .locator('span')
+          .first()
+          .isVisible(),
+        true,
+      );
+    } finally {
+      await close();
+    }
+  });
+
   await test('G, P and M themes support keyboard selection and remember appearance', async () => {
     const { page, close } = await pageFor();
     try {

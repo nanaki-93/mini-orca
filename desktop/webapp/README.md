@@ -172,6 +172,10 @@ Performance changes remain unmeasured until an explicit benchmark comparison.
 Restoring a project never starts a provider request or shell. **⌘K / Ctrl+K** opens
 file and command search. Actions have visible focus and descriptive labels.
 
+Use **Collapse sidebar** below the navigation to keep only destination icons.
+Every destination keeps its accessible name and hover label; **Expand sidebar**
+restores labels and counts. The selected width is remembered across launches.
+
 The footer's **G**, **P** and **M** controls select Graphite, Porcelain and Midnight.
 The selected theme is remembered across launches. Graphite uses charcoal surfaces,
 Porcelain uses light surfaces, and Midnight pairs navy surfaces with cyan actions.
