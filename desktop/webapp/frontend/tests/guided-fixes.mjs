@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 
-export async function testGuidedFixes({ test, pageFor, nav, idle, layout }) {
+export async function testGuidedFixes({ test, pageFor, nav, idle, layout, chooseModel }) {
   async function confirmFix(page) {
     await page
       .getByRole('dialog')
@@ -8,6 +8,124 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout }) {
       .click();
     await idle(page);
   }
+
+  await test('Finding agent cards share the Analysis picker above the detail and stay passive across layouts', async () => {
+    for (const category of ['Bugs', 'Performance', 'Security']) {
+      const { page, close } = await pageFor({
+        modelNames: { function: 'gpt-4.1', bug: 'gemini-2.5-pro', analyze: 'claude-sonnet-4' },
+        trusted: true,
+      });
+      try {
+        await nav(page, 'Analysis');
+        const treatment = (card) =>
+          card.evaluate((element) => {
+            const style = getComputedStyle(element);
+            return [style.padding, style.borderRadius, style.backgroundColor];
+          });
+        const analysisStyle = await treatment(page.locator('.analysis-model-card').first());
+        await nav(page, category);
+        await page.locator('.result-row').first().click();
+        const models = page.locator('.fix-models');
+        const cards = models.locator('.analysis-model-card');
+        const before = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method !== 'GET'),
+        );
+        assert.deepEqual(
+          await cards.evaluateAll((elements) =>
+            elements.map((element) => element.dataset.agentType),
+          ),
+          ['create', 'test', 'review'],
+        );
+        assert.deepEqual(await treatment(cards.first()), analysisStyle);
+        assert.deepEqual(
+          await cards
+            .locator('.analysis-model-icon')
+            .evaluateAll((elements) => elements.map((element) => element.dataset.family)),
+          ['openai', 'gemini', 'claude'],
+        );
+        const creation = models.getByRole('button', { name: 'Creation model', exact: true });
+        await creation.focus();
+        await creation.press('Enter');
+        const dialog = page.getByRole('dialog', { name: 'Choose a model', exact: true });
+        const search = dialog.getByRole('combobox', { name: 'Search models', exact: true });
+        assert.equal(await search.evaluate((element) => element === document.activeElement), true);
+        assert.equal(await dialog.getByRole('button', { name: 'Pi', exact: true }).count(), 0);
+        await search.fill('no matching model');
+        await dialog.getByText('No models match these filters.', { exact: true }).waitFor();
+        await search.fill('gemini');
+        await search.press('Enter');
+        assert.equal(await creation.getAttribute('value'), 'bug');
+        assert.equal(
+          await creation.evaluate((element) => element === document.activeElement),
+          true,
+        );
+        await models.getByRole('button', { name: 'Review model', exact: true }).click();
+        await page.keyboard.press('Escape');
+        assert.equal(
+          await models
+            .getByRole('button', { name: 'Review model', exact: true })
+            .getAttribute('value'),
+          'analyze',
+        );
+        for (const width of [1440, 1000, 800]) {
+          await page.setViewportSize({ width, height: 1000 });
+          const modelBox = await models.boundingBox();
+          const detailBox = await page.locator('.results-detail-layout').boundingBox();
+          assert.ok(
+            modelBox.y + modelBox.height <= detailBox.y,
+            'Agent models precede the finding detail',
+          );
+          await page.locator('#main').evaluate((element) => {
+            element.scrollTop = 0;
+          });
+          await layout(page, `finding-agents-${category.toLowerCase()}-${width}`);
+        }
+        await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        await page.getByRole('button', { name: 'Porcelain theme', exact: true }).click();
+        await layout(page, `finding-agents-${category.toLowerCase()}-800-light-larger`);
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          before,
+        );
+      } finally {
+        await close();
+      }
+    }
+  });
+
+  await test('Unavailable workflow models recover through the shared picker without generating a fix', async () => {
+    const { page, close } = await pageFor({ emptyModelCatalog: true, trusted: true });
+    try {
+      await nav(page, 'Bugs');
+      await page.locator('.result-row').first().click();
+      assert.equal(
+        await page.getByRole('button', { name: 'Prepare fix', exact: true }).isDisabled(),
+        true,
+      );
+      await page.getByRole('button', { name: 'Creation model', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: 'Choose a model', exact: true });
+      await dialog
+        .getByText('No models available. Refresh the catalog to try again.', { exact: true })
+        .waitFor();
+      await page.evaluate(() => {
+        window.fixture.options.emptyModelCatalog = false;
+      });
+      await dialog.getByRole('button', { name: 'Refresh models', exact: true }).click();
+      await dialog.getByRole('option').first().waitFor();
+      await page.keyboard.press('Escape');
+      await page.getByRole('button', { name: 'Prepare fix', exact: true }).click({ trial: true });
+      assert.equal(
+        await page.evaluate(() =>
+          window.fixture.requests.some(
+            (r) => r.path.endsWith('/workflow') || r.path.endsWith('/messages'),
+          ),
+        ),
+        false,
+      );
+    } finally {
+      await close();
+    }
+  });
 
   await test('Guided fixes preserve cause, solution and scope with a passive file diff selector', async () => {
     for (const [category, kind] of [
@@ -34,9 +152,9 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout }) {
           await page.getByRole('heading', { name: 'File analysis', exact: true }).count(),
           0,
         );
-        await page.getByLabel('Creation model', { exact: true }).selectOption('bug');
-        await page.getByLabel('Testing model', { exact: true }).selectOption('function');
-        await page.getByLabel('Review model', { exact: true }).selectOption('analyze');
+        await chooseModel(page.getByLabel('Creation model', { exact: true }), 'bug');
+        await chooseModel(page.getByLabel('Testing model', { exact: true }), 'function');
+        await chooseModel(page.getByLabel('Review model', { exact: true }), 'analyze');
         assert.equal(
           await page.getByRole('button', { name: 'Prepare fix', exact: true }).isEnabled(),
           true,
@@ -75,7 +193,7 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout }) {
           await page.getByRole('combobox', { name: 'Task type', exact: true }).count(),
           0,
         );
-        assert.equal(await page.getByRole('combobox', { name: /model/i }).count(), 3);
+        assert.equal(await page.locator('.fix-models .analysis-model-trigger').count(), 3);
         assert.equal(await page.getByRole('checkbox').count(), 0);
         const files = page.getByRole('combobox', { name: 'Files to change', exact: true });
         const paths = await files
@@ -180,7 +298,7 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout }) {
           await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
           before,
         );
-        await page.getByLabel('Creation model', { exact: true }).selectOption('bug');
+        await chooseModel(page.getByLabel('Creation model', { exact: true }), 'bug');
         await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
         await confirmFix(page);
         assert.equal(await page.getByRole('dialog').count(), 0);
@@ -243,7 +361,7 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout }) {
     try {
       await nav(page, 'Bugs');
       await page.locator('.result-row').first().click();
-      await page.getByLabel('Creation model', { exact: true }).selectOption('bug');
+      await chooseModel(page.getByLabel('Creation model', { exact: true }), 'bug');
       assert.equal(await page.getByLabel('Testing model', { exact: true }).count(), 0);
       await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
       await idle(page);
@@ -265,7 +383,7 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout }) {
       try {
         await nav(page, 'Bugs');
         await page.locator('.result-row').first().click();
-        await page.getByLabel('Creation model', { exact: true }).waitFor();
+        await page.getByRole('button', { name: 'Prepare fix', exact: true }).click({ trial: true });
         await page.evaluate((scenario) => {
           if (scenario === 'destination')
             window.fixture.options.modelNames = { function: 'replacement-model' };

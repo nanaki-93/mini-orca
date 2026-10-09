@@ -110,6 +110,11 @@ export function ChangeWorkspace({ s }: { s: State }) {
           New conversation
         </Button>
       </Heading>
+      {(guided || useAgents) && (
+        <Panel title="Agent models" className="fix-models">
+          <WorkflowModels s={s} value={models} disabled={blocked} creationOnly={!useAgents} />
+        </Panel>
+      )}
       {(s.uncertain || s.changeReceipt) && (
         <section className="workspace-page chat-outcome" aria-label="Change outcome">
           {s.uncertain && (
@@ -372,22 +377,17 @@ export function ChangeWorkspace({ s }: { s: State }) {
                 />
               </>
             )}
-            {!guided &&
-              (useAgents ? (
-                <Disclosure title="Agent models">
-                  <WorkflowModels s={s} value={models} disabled={blocked} />
-                </Disclosure>
-              ) : (
-                <label className="checkbox-line">
-                  <input
-                    type="checkbox"
-                    checked={tests}
-                    disabled={blocked || change?.kind === 'instructions'}
-                    onChange={(e) => setTests(e.target.checked)}
-                  />
-                  Run project tests after generation
-                </label>
-              ))}
+            {!guided && !useAgents && (
+              <label className="checkbox-line">
+                <input
+                  type="checkbox"
+                  checked={tests}
+                  disabled={blocked || change?.kind === 'instructions'}
+                  onChange={(e) => setTests(e.target.checked)}
+                />
+                Run project tests after generation
+              </label>
+            )}
             <p className="small muted">
               {useAgents
                 ? 'Creation, tests and agent review run automatically.'

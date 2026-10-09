@@ -65,7 +65,8 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   evidence, with the exact file, declaration and line, cause and proposed solution.
   Finding actions, including **Mark as fixed**, sit in the header alongside the
   location and state; there is no separate Source panel.
-  Choose creation, testing and review models in the finding detail, then select
+  Creation, testing and review model cards sit above the finding details and use
+  the same searchable picker as Analysis. Choose each agent’s model, then select
   **Prepare fix**. When required, a single confirmation covers remote sharing,
   project checks and Security intent for the current files and models. The setup
   stays compact; changed destinations or project revisions require fresh preparation.
@@ -87,7 +88,9 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
 - **Chat** captures up to eight explicit Go/Markdown paths, including new files.
   **Configure workflow** on a feature idea
   opens the captured task setup and suggests a test path. Choose a Creation,
-  Testing and Review model independently, then select **Generate changes**. Model choices live under **Agent models**. The
+  Testing and Review model independently in **Agent models** at the top of the page,
+  then select **Generate changes**. These workflows use the configured profiles;
+  Analysis also offers Pi catalog models. The
   choices reference the daemon's configured Function, Bug and Analyze profiles
   (the respective defaults); configure their actual providers/models in `config.yaml`.
   Include a `_test.go` path. The testing agent writes tests, then the daemon runs
