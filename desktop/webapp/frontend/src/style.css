@@ -2966,6 +2966,17 @@ dialog.model-picker {
 .fix-permissions > p {
   margin-top: 0;
 }
+.fix-review-issues {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--amber);
+  background: var(--amber-soft);
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.fix-review-issues h3 {
+  margin-top: 0;
+}
 @container (min-width: 36em) {
   .workflow-model-selectors {
     grid-template-columns: repeat(3, minmax(0, 1fr));

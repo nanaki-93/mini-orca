@@ -18,9 +18,9 @@ import {
   Panel,
   Prose,
   BulletContent,
-  KeyValues,
 } from './ui';
 import { FixPreparation } from './fix-preparation';
+import { FixSolution } from './fix-solution';
 import type { ChangeSession } from './models';
 
 export function ChangeWorkspace({ s }: { s: State }) {
@@ -43,7 +43,6 @@ export function ChangeWorkspace({ s }: { s: State }) {
       : taskKind === 'performance'
         ? 'Performance fix'
         : 'Security fix';
-  const explanations = change?.messages.filter((entry) => entry.role === 'assistant') || [];
   useEffect(() => {
     setTitle(change?.title || s.changeSeed?.title || 'New feature');
     setPaths(
@@ -77,9 +76,17 @@ export function ChangeWorkspace({ s }: { s: State }) {
       <Heading
         title={guided ? taskLabel : 'Chat'}
         detail={
-          guided
-            ? 'Understand the finding, run the guided fix, then review each file before applying.'
-            : 'Describe a change. Review the generated diff and accept when it is ready.'
+          guided ? (
+            <span className="results-detail-meta">
+              <code>{`${sourcePath || 'No file selected'}${finding?.line ? `:${finding.line}` : ''}`}</code>
+              <span className="row wrap">
+                <span>{finding?.symbol || 'File-level finding'}</span>
+                <Badge value={change?.freshness === 'stale' ? 'stale' : change?.state || 'draft'} />
+              </span>
+            </span>
+          ) : (
+            'Describe a change. Review the generated diff and accept when it is ready.'
+          )
         }
         variant="intro"
       >
@@ -213,38 +220,6 @@ export function ChangeWorkspace({ s }: { s: State }) {
         <section className="workspace-page chat-conversation" aria-label="Change conversation">
           {guided ? (
             <>
-              <Panel
-                title={change?.title || title}
-                actions={
-                  <Badge
-                    value={change?.freshness === 'stale' ? 'stale' : change?.state || 'Guided fix'}
-                  />
-                }
-              >
-                <KeyValues
-                  values={[
-                    ['Task type', taskLabel],
-                    [
-                      'Location',
-                      finding
-                        ? `${finding.path}${finding.line ? `:${finding.line}` : ''}`
-                        : change?.targets[0]?.path || seed.paths[0],
-                    ],
-                    ['Declaration', finding?.symbol || 'File-level finding'],
-                    [
-                      'Scope',
-                      `${seed.paths.length} app-selected ${seed.paths.length === 1 ? 'file' : 'files'}`,
-                    ],
-                    ['Checks', 'Run project tests before acceptance'],
-                  ]}
-                />
-                <BulletContent title="Acceptance criteria" items={seed.acceptance_criteria} />
-                {change?.freshness === 'stale' && (
-                  <Notice>
-                    Source or guidance changed. Refresh the findings and start a new fix.
-                  </Notice>
-                )}
-              </Panel>
               <Panel title="Cause" className="fix-explanation">
                 <p className="small muted">
                   {finding
@@ -258,19 +233,13 @@ export function ChangeWorkspace({ s }: { s: State }) {
                     'The saved task has no cause recorded. Review the source and original finding before applying.'
                   }
                 />
-              </Panel>
-              <Panel title="Proposed solution" className="fix-explanation">
-                {explanations.length ? (
-                  explanations.map((entry, index) => <Prose key={index} text={entry.content} />)
-                ) : (
-                  <Prose
-                    text={
-                      finding?.solution ||
-                      'Review the generated explanation and file differences below. The proposed correction is subject to tests and your review.'
-                    }
-                  />
+                {change?.freshness === 'stale' && (
+                  <Notice>
+                    Source or guidance changed. Refresh the findings and start a new fix.
+                  </Notice>
                 )}
               </Panel>
+              <FixSolution s={s} />
             </>
           ) : !change ? (
             <Panel title="Task and file scope">
@@ -352,48 +321,35 @@ export function ChangeWorkspace({ s }: { s: State }) {
                 <Prose text={entry.content} />
               </Panel>
             ))}
-          <Panel title={guided ? 'Guided fix plan' : 'Describe the change'}>
-            {guided ? (
-              <Disclosure title="App-generated request">
-                <textarea
-                  aria-label="Change request"
-                  className="composer"
-                  value={request}
-                  readOnly
-                />
-              </Disclosure>
-            ) : (
-              <>
-                <label className="sr-only" htmlFor="chat-request">
-                  Change request
-                </label>
-                <textarea
-                  id="chat-request"
-                  className="composer"
-                  value={request}
-                  onChange={(e) => setMessage(e.target.value)}
-                  disabled={blocked}
-                  placeholder="Describe a new feature, fix, or improvement…"
-                />
-              </>
-            )}
-            {!guided && !useAgents && (
-              <label className="checkbox-line">
-                <input
-                  type="checkbox"
-                  checked={tests}
-                  disabled={blocked || change?.kind === 'instructions'}
-                  onChange={(e) => setTests(e.target.checked)}
-                />
-                Run project tests after generation
+          {!guided && (
+            <Panel title="Describe the change">
+              <label className="sr-only" htmlFor="chat-request">
+                Change request
               </label>
-            )}
-            <p className="small muted">
-              {useAgents
-                ? 'Creation, tests and agent review run automatically.'
-                : 'Generation and checks run automatically. Include a _test.go path to use separate testing and review agents.'}
-            </p>
-            {!guided && (
+              <textarea
+                id="chat-request"
+                className="composer"
+                value={request}
+                onChange={(e) => setMessage(e.target.value)}
+                disabled={blocked}
+                placeholder="Describe a new feature, fix, or improvement…"
+              />
+              {!useAgents && (
+                <label className="checkbox-line">
+                  <input
+                    type="checkbox"
+                    checked={tests}
+                    disabled={blocked || change?.kind === 'instructions'}
+                    onChange={(e) => setTests(e.target.checked)}
+                  />
+                  Run project tests after generation
+                </label>
+              )}
+              <p className="small muted">
+                {useAgents
+                  ? 'Creation, tests and agent review run automatically.'
+                  : 'Generation and checks run automatically. Include a _test.go path to use separate testing and review agents.'}
+              </p>
               <div className="actions section-gap">
                 <Button
                   tone="primary"
@@ -414,8 +370,8 @@ export function ChangeWorkspace({ s }: { s: State }) {
                   Generate changes
                 </Button>
               </div>
-            )}
-          </Panel>
+            </Panel>
+          )}
           {guided && (
             <FixPreparation
               s={s}
@@ -463,7 +419,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
           </Panel>
         </section>
         <section className="workspace-page chat-review" aria-label="Proposal review">
-          <WorkflowProgress s={s} />
+          <WorkflowProgress s={s} showOutcome={!guided} />
           {change?.changes.length ? (
             <>
               <Panel

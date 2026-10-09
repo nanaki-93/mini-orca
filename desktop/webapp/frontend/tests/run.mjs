@@ -1555,7 +1555,7 @@ try {
   await testScrolling({ test, pageFor, nav, idle, layout });
   await testThemes({ test, pageFor, nav, idle, layout, contrast });
   await testChangeWorkflows({ test, pageFor, nav, idle, layout, chooseModel });
-  await testGuidedFixes({ test, pageFor, nav, idle, layout, chooseModel });
+  await testGuidedFixes({ test, pageFor, nav, idle, layout, contrast, chooseModel });
   await test('Analyze stale files is available across result pages without widening the selection', async () => {
     for (const category of ['Summary', 'Analysis', 'Bugs', 'Performance', 'Security']) {
       const stalePath = 'internal/worker/process.go';
