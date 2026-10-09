@@ -41,10 +41,6 @@ export interface FixPreparationContext {
   models: M.ModelCatalog;
   trust: M.ExecutionTrust;
 }
-interface FixApproval extends FixPreparationContext {
-  allowRemote: boolean;
-  allowExecution: boolean;
-}
 export interface State {
   page: Page;
   busy: string;
@@ -1733,51 +1729,12 @@ export class Workspace {
       throw new Error('Preparation changed. Review the current models and permissions.');
     return latest;
   }
-  private async approveFix(
-    seed: M.ChangeSeed,
-    profiles: string[],
-    preparation: FixPreparationContext,
-  ): Promise<FixApproval | null> {
-    const epoch = this.epoch,
-      operation = this.operation;
+  private async authorizeFix(profiles: string[], preparation: FixPreparationContext) {
+    const epoch = this.epoch;
     const latest = await this.checkedFixPreparation(profiles, preparation);
     if (!latest) return null;
-    const remote = [...new Set(profiles)]
-      .map((profile) => latest.models.scopes[profile])
-      .filter((model) => model.remote_provider);
-    if (remote.length || !latest.trust.trusted || seed.kind === 'security') {
-      const accepted = await this.confirm({
-        title: seed.kind === 'security' ? 'Prepare security fix?' : 'Prepare fix?',
-        message: [
-          remote.length
-            ? 'Send these files and their instructions to the selected remote models.'
-            : '',
-          !latest.trust.trusted ? 'Run project checks on this computer in an isolated copy.' : '',
-          seed.kind === 'security' ? 'Start the Security fix workflow.' : '',
-        ]
-          .filter(Boolean)
-          .join(' '),
-        accept: 'Prepare fix',
-        details: [
-          ...new Set(remote.map((model) => `${model.model} · ${model.provider_origin}`)),
-          ...seed.paths,
-          ...(!latest.trust.trusted ? latest.trust.commands.map((argv) => argv.join(' ')) : []),
-        ],
-      });
-      if (!accepted || epoch !== this.epoch || operation !== this.operation) return null;
-    }
-    return { ...latest, allowRemote: remote.length > 0, allowExecution: !latest.trust.trusted };
-  }
-  private async authorizeFix(profiles: string[], approval: FixApproval) {
-    const epoch = this.epoch;
-    const latest = await this.checkedFixPreparation(profiles, approval);
-    if (!latest) return null;
     const remote = [...new Set(profiles.filter((p) => latest.models.scopes[p].remote_provider))];
-    if (remote.length && !approval.allowRemote)
-      throw new Error('Allow sending the selected file context to the displayed providers.');
     if (!latest.trust.trusted) {
-      if (!approval.allowExecution)
-        throw new Error('Allow project tests before preparing the fix.');
       if (epoch !== this.epoch) return null;
       await this.api.post(`${current}/execution-trust`, {
         project_revision: latest.trust.project_revision,
@@ -1798,14 +1755,10 @@ export class Workspace {
         throw new Error('Include a Go test path (_test.go) in Files to change.');
       const epoch = this.epoch,
         operation = this.operation;
-      const approval = preparation
-        ? await this.approveFix(seed, Object.values(models), preparation)
-        : undefined;
-      if (approval === null) return;
-      const profiles = approval
-        ? await this.authorizeFix(Object.values(models), approval)
+      const profiles = preparation
+        ? await this.authorizeFix(Object.values(models), preparation)
         : await this.confirmWorkflow(seed, models);
-      if (profiles === null || (!approval && !(await this.trust(true)))) return;
+      if (profiles === null || (!preparation && !(await this.trust(true)))) return;
       if (epoch !== this.epoch || operation !== this.operation) return;
       let change = this.state.change;
       if (!change) {
@@ -1864,7 +1817,7 @@ export class Workspace {
     message: string,
     repair = false,
     profile = 'function',
-    approval?: FixApproval,
+    preparation?: FixPreparationContext,
   ) {
     const change = this.state.change;
     if (!change || change.freshness !== 'current' || change.state !== 'draft')
@@ -1872,8 +1825,8 @@ export class Workspace {
     const identity = this.changeIdentity(change);
     const epoch = this.epoch;
     const operation = this.operation;
-    const confirmed = approval
-      ? ((await this.authorizeFix([profile], approval))?.includes(profile) ?? null)
+    const confirmed = preparation
+      ? ((await this.authorizeFix([profile], preparation))?.includes(profile) ?? null)
       : await this.confirmModel(
           profile,
           repair ? 'Repair proposal' : 'Prepare proposal',
@@ -1938,10 +1891,7 @@ export class Workspace {
   ) {
     await this.act('Prepare change', async () => {
       if (!seed.message.trim()) throw new Error('Describe the change.');
-      const approval = preparation
-        ? await this.approveFix(seed, [profile], preparation)
-        : undefined;
-      if (approval === null) return;
+      if (preparation && !(await this.authorizeFix([profile], preparation))) return;
       if (!this.state.change) {
         const identity = this.identity();
         const epoch = this.epoch;
@@ -1958,7 +1908,7 @@ export class Workspace {
           throw new Error('Conversation belongs to another project revision.');
         this.set({ change, page: 'chat' });
       }
-      if (!(await this.requestChangeMessage(seed.message, false, profile, approval))) return;
+      if (!(await this.requestChangeMessage(seed.message, false, profile, preparation))) return;
       if (!(await this.requestChangeChecks(tests))) return;
       for (
         let attempt = 0;
@@ -1974,7 +1924,7 @@ export class Workspace {
           )
         )
           break;
-        if (!(await this.requestChangeMessage('Repair failed checks.', true, profile, approval)))
+        if (!(await this.requestChangeMessage('Repair failed checks.', true, profile, preparation)))
           return;
         if (!(await this.requestChangeChecks(tests))) return;
       }

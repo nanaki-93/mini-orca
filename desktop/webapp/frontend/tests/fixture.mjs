@@ -1339,7 +1339,7 @@ export function installFixture(options = {}) {
             return response({
               ...rev,
               trusted: state.trusted,
-              commands: [
+              commands: options.executionCommands || [
                 ['go', 'test', './...'],
                 ['go', 'vet', './...'],
               ],

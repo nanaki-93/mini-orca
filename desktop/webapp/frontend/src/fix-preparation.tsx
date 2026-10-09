@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ChangeSeed } from './models';
 import { workspace as w, workflowSeed, type FixPreparationContext, type State } from './workspace';
 import { defaultWorkflowModels } from './change-workflow';
-import { BulletContent, Button, Notice, Panel } from './ui';
+import { BulletContent, Button, Disclosure, Notice, Panel } from './ui';
 
 export function FixPreparation({
   s,
@@ -40,6 +40,14 @@ export function FixPreparation({
   const models = s.workflowModels || s.change?.workflow?.models || defaultWorkflowModels;
   const profiles = useAgents ? Object.values(models) : [models.create];
   const ready = context && profiles.every((profile) => context.models.scopes[profile]);
+  const remote = [
+    ...new Set(
+      profiles.flatMap((profile) => {
+        const model = context?.models.scopes[profile];
+        return model?.remote_provider ? [`${model.model} · ${model.provider_origin}`] : [];
+      }),
+    ),
+  ];
   return (
     <Panel title="Prepare fix" className="fix-preparation">
       {error ? (
@@ -47,7 +55,25 @@ export function FixPreparation({
       ) : !context ? (
         <p>Loading models and permissions…</p>
       ) : (
-        <BulletContent title="Files in this fix" items={prepared.paths} />
+        <>
+          <BulletContent title="Files in this fix" items={prepared.paths} />
+          <div className="fix-permissions small">
+            <p>
+              Selecting {label} authorizes {seed.kind === 'security' ? 'a Security fix and ' : ''}
+              project checks in an isolated copy.
+              {remote.length > 0 &&
+                ' It also shares these files and their instructions with the remote models below.'}
+            </p>
+            <BulletContent title="Remote destinations" items={remote} />
+            <Disclosure title="Project checks">
+              {context.trust.commands.map((argv, index) => (
+                <p key={index}>
+                  <code>{argv.join(' ')}</code>
+                </p>
+              ))}
+            </Disclosure>
+          </div>
+        </>
       )}
       <div className="actions section-gap">
         <Button
