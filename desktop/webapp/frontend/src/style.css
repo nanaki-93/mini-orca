@@ -401,6 +401,55 @@ pre {
   margin-top: auto;
   padding-top: 35px;
 }
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 36px;
+  flex-shrink: 0;
+  margin-top: 16px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--secondary);
+  font-size: 0.8rem;
+  text-align: left;
+}
+.sidebar-toggle:hover {
+  background: var(--raised);
+  color: var(--text);
+}
+.sidebar.sidebar-collapsed {
+  width: 68px;
+  padding-inline: 10px;
+}
+.sidebar-collapsed .brand-name,
+.sidebar-collapsed .project-label,
+.sidebar-collapsed .project-switcher > .icon,
+.sidebar-collapsed .nav-link > span,
+.sidebar-collapsed .nav-label,
+.sidebar-collapsed .sidebar-toggle > span {
+  display: none;
+}
+.sidebar-collapsed .brand,
+.sidebar-collapsed .project-switcher,
+.sidebar-collapsed .nav-link,
+.sidebar-collapsed .sidebar-toggle {
+  justify-content: center;
+  padding-inline: 0;
+}
+.sidebar-collapsed .nav-link {
+  min-height: 36px;
+}
+.sidebar-collapsed .sidebar-bottom {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+.sidebar-collapsed .sidebar-toggle > .icon {
+  transform: rotate(180deg);
+}
 .status-dot {
   width: 7px;
   height: 7px;

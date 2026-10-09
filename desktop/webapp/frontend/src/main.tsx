@@ -29,13 +29,13 @@ const mainNav: [Page, string, string][] = [
   ['performance', 'Performance', 'gauge'],
   ['security', 'Security', 'shield'],
   ['features', 'Features', 'sparkles'],
-  ['chat', 'Chat', 'sparkles'],
+  ['chat', 'Chat', 'chat'],
 ];
 const utilityNav: [Page, string, string][] = [
   ['editor', 'Source', 'code'],
   ['instructions', 'Instructions', 'file'],
   ['terminal', 'Terminal', 'terminal'],
-  ['models', 'Models', 'sparkles'],
+  ['models', 'Models', 'layers'],
   ['project', 'Project', 'folder'],
 ];
 const editorPages: Page[] = [
@@ -60,6 +60,9 @@ function App() {
     return themes.find((choice) => choice.id === saved)?.id || 'dark';
   });
   const [large, setLarge] = useState(localStorage.getItem('mini-orca:large') === 'true');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem('mini-orca:sidebar-collapsed') === 'true',
+  );
   const main = useRef<HTMLElement>(null);
   useEffect(() => {
     void w.start();
@@ -78,6 +81,9 @@ function App() {
     document.documentElement.classList.toggle('large-text', large);
     localStorage.setItem('mini-orca:large', String(large));
   }, [large]);
+  useEffect(() => {
+    localStorage.setItem('mini-orca:sidebar-collapsed', String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
   useEffect(() => {
     main.current?.focus();
     main.current?.scrollTo(0, 0);
@@ -99,6 +105,7 @@ function App() {
         className="nav-link"
         data-accent={page}
         aria-label={label}
+        title={sidebarCollapsed ? label : undefined}
         disabled={!s.project && !['project', 'models'].includes(page)}
         aria-current={
           s.page === page ||
@@ -150,17 +157,27 @@ function App() {
         Skip to content
       </a>
       <div className="app-window">
-        <aside className="sidebar" aria-label="Application">
+        <aside
+          className={`sidebar${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}
+          aria-label="Application"
+        >
           <button
             className="brand"
+            aria-label="Mini-Orca home"
+            title={sidebarCollapsed ? 'Mini-Orca home' : undefined}
             onClick={() => void w.navigate(s.project ? 'summary' : 'welcome')}
           >
             <span className="brand-symbol">◒</span>
-            <span>
+            <span className="brand-name">
               mini-orca<span className="accent">.</span>
             </span>
           </button>
-          <button className="project-switcher" onClick={() => void w.navigate('project')}>
+          <button
+            className="project-switcher"
+            aria-label={`Switch project · ${s.project?.name || 'Open a project'}`}
+            title={sidebarCollapsed ? s.project?.name || 'Open a project' : undefined}
+            onClick={() => void w.navigate('project')}
+          >
             <span className="project-avatar">{s.project?.name?.[0]?.toUpperCase() || '+'}</span>
             <span className="project-label">
               <strong>{s.project?.name || 'Open a project'}</strong>
@@ -174,6 +191,16 @@ function App() {
             <div className="nav-label">Tools</div>
             <nav aria-label="Tools">{nav(utilityNav)}</nav>
           </div>
+          <button
+            className="sidebar-toggle"
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!sidebarCollapsed}
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+          >
+            <Icon name="sidebar" />
+            <span>Collapse sidebar</span>
+          </button>
         </aside>
         <div className="app-body">
           <header className="topbar">
