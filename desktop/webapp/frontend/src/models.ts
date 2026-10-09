@@ -196,6 +196,7 @@ export interface AnalysisPreview {
   max_model_requests: number;
   security_review_intent_required: boolean;
   retry_stale_failed?: boolean;
+  stale_only?: boolean;
   recover_incomplete?: boolean;
 }
 export interface Coverage {

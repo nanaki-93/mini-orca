@@ -6,6 +6,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
+const analysisStaleExclusion = "No stale analysis for this file."
 const analysisRetryExclusion = "No stale or failed analysis for this file."
 const analysisRecoveryExclusion = "No incomplete analysis for this file."
 
@@ -14,14 +15,17 @@ type analysisScopedSelection uint8
 
 const (
 	analysisSelectAll analysisScopedSelection = iota
+	analysisSelectStale
 	// analysisSelectStaleFailed keeps the established retry_stale_failed contract.
 	analysisSelectStaleFailed
 	// analysisSelectIncomplete selects every recoverable stage for recover_incomplete.
 	analysisSelectIncomplete
 )
 
-func analysisSelectionMode(retryStaleFailed, recoverIncomplete bool) analysisScopedSelection {
+func analysisSelectionMode(retryStaleFailed, recoverIncomplete, staleOnly bool) analysisScopedSelection {
 	switch {
+	case staleOnly:
+		return analysisSelectStale
 	case recoverIncomplete:
 		return analysisSelectIncomplete
 	case retryStaleFailed:
@@ -34,6 +38,8 @@ func analysisSelectionMode(retryStaleFailed, recoverIncomplete bool) analysisSco
 // exclusion is the reason recorded for inventory files that the selection omits.
 func (mode analysisScopedSelection) exclusion() string {
 	switch mode {
+	case analysisSelectStale:
+		return analysisStaleExclusion
 	case analysisSelectStaleFailed:
 		return analysisRetryExclusion
 	case analysisSelectIncomplete:
@@ -45,6 +51,8 @@ func (mode analysisScopedSelection) exclusion() string {
 
 func (mode analysisScopedSelection) selects(status string, configured bool) bool {
 	switch mode {
+	case analysisSelectStale:
+		return status == "stale"
 	case analysisSelectStaleFailed:
 		return status == "stale" || status == "failed"
 	case analysisSelectIncomplete:

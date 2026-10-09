@@ -577,7 +577,7 @@ export class Workspace {
     this.set({ analysisSetup: setup, preview: undefined, resume: undefined });
   }
   async previewAnalysis(
-    mode: 'new' | 'repair' | 'resume',
+    mode: 'new' | 'repair' | 'resume' | 'stale',
     limits: M.Limits,
     refresh = false,
     models?: M.AnalysisModels,
@@ -595,6 +595,7 @@ export class Workspace {
         limits: run?.plan.limits || limits,
         refresh: run?.plan.refresh || refresh,
         recover_incomplete: mode === 'repair',
+        stale_only: mode === 'stale',
         ...(run ? { resume_run: run.identity } : {}),
       });
       if (
@@ -669,6 +670,7 @@ export class Workspace {
             include_features: !!p.features,
             models: p.models,
             retry_stale_failed: p.retry_stale_failed || false,
+            stale_only: p.stale_only || false,
             recover_incomplete: p.recover_incomplete || false,
             confirmations,
           });

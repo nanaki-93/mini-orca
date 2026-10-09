@@ -107,6 +107,10 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 			return nil, project.ErrRevisionConflict
 		}
 		request.RecoverIncomplete = run.Plan.RecoverIncomplete
+		if request.StaleOnly && !run.Plan.StaleOnly {
+			return nil, project.ErrRevisionConflict
+		}
+		request.StaleOnly = run.Plan.StaleOnly
 		request.compatibilityStage = run.Plan.CompatibilityStage
 		request.compatibilityBudget = run.Plan.CompatibilityBudget
 		request.IncludeFeatures = run.Plan.Features != nil
@@ -127,7 +131,7 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 	if err != nil {
 		return nil, err
 	}
-	preview := &AnalysisRunPreview{Models: cloneAnalysisModels(request.Models), CompatibilityStage: request.compatibilityStage, CompatibilityBudget: request.compatibilityBudget, RetryStaleFailed: request.RetryStaleFailed, RecoverIncomplete: request.RecoverIncomplete, SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
+	preview := &AnalysisRunPreview{Models: cloneAnalysisModels(request.Models), CompatibilityStage: request.compatibilityStage, CompatibilityBudget: request.compatibilityBudget, RetryStaleFailed: request.RetryStaleFailed, StaleOnly: request.StaleOnly, RecoverIncomplete: request.RecoverIncomplete, SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
 		Identity: AnalysisQueueIdentity{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, PolicyFingerprint: policy.Version(), ProviderFingerprint: fingerprint},
 		Files:    []AnalysisPlannedFile{}, Excluded: []AnalysisExcludedFile{}, Providers: providers}
 	root := s.manager.Root()
@@ -149,7 +153,7 @@ func (s *Service) completeAnalysisPreviewLocked(ctx context.Context, root string
 			return nil, err
 		}
 	}
-	if mode := analysisSelectionMode(request.RetryStaleFailed, request.RecoverIncomplete); mode != analysisSelectAll {
+	if mode := analysisSelectionMode(request.RetryStaleFailed, request.RecoverIncomplete, request.StaleOnly); mode != analysisSelectAll {
 		if err := s.scopeAnalysisRetryPreview(ctx, mode, preview, request.ResumeRun); err != nil {
 			return nil, err
 		}

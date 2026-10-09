@@ -57,6 +57,60 @@ func retryPreviewFor(t *testing.T, s *Service, resume *AnalysisRunIdentity) *Ana
 	return preview
 }
 
+func TestStaleOnlyAnalysisSkipsUnrelatedFailuresAndRetainsScopeOnResume(t *testing.T) {
+	ctx := context.Background()
+	server, calls := analysisResponseServer(t, emptyAnalysisReply)
+	s, root := newSemanticAnalysisService(t, server.URL, 0)
+	for _, name := range []string{"fresh.go", "failed.go", "stale.go", "stale_two.go"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("package main\nfunc Run() {}\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.Reindex(); err != nil {
+		t.Fatal(err)
+	}
+	for _, status := range []string{"fresh", "failed", "stale"} {
+		seedRetrySemanticReport(t, s, status+".go", status)
+	}
+	seedRetrySemanticReport(t, s, "stale_two.go", "stale")
+	analysis, _ := s.manager.Analysis()
+	request := AnalysisPreviewRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Scope: AnalysisRunScopeProject, StaleOnly: true, Limits: AnalysisRunLimits{1, 30, 2}}
+	preview, err := s.PreviewAnalysisRun(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(preview.Files) != 2 || preview.Files[0].Path != "stale.go" || preview.Files[1].Path != "stale_two.go" || calls.Load() != 0 {
+		t.Fatalf("stale-only selection = %+v", preview.Files)
+	}
+	start := analysisStartFor(preview)
+	start.StaleOnly = false
+	if _, err := s.StartAnalysisRun(ctx, start); !errors.Is(err, project.ErrRevisionConflict) || calls.Load() != 0 {
+		t.Fatalf("widened stale-only admission = %v", err)
+	}
+	if _, err := s.StartAnalysisRun(ctx, analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	paused := completedAnalysisRun(t, s)
+	s.analysisRun = &analysisRunController{}
+	request.ResumeRun, request.StaleOnly = &paused.Identity, false
+	resume, err := s.PreviewAnalysisRun(ctx, request)
+	if err != nil || !resume.StaleOnly || len(resume.Files) != 2 || resume.ExpectedModelRequests != 3 {
+		t.Fatalf("resume = %+v, %v", resume, err)
+	}
+	confirmations := analysisStartFor(resume).Confirmations
+	if _, err := s.ControlAnalysisRun(ctx, AnalysisRunControlRequest{Identity: paused.Identity, Action: AnalysisRunResume, PreviewID: resume.PreviewID, Confirmations: &confirmations}); err != nil {
+		t.Fatal(err)
+	}
+	completed := completedAnalysisRun(t, s)
+	if completed.Status != AnalysisRunCompletedEmpty || calls.Load() != 6 {
+		t.Fatalf("completed = %s, calls = %d", completed.Status, calls.Load())
+	}
+	failed, err := s.CachedFileAnalysis("failed.go")
+	if err != nil || failed.Status != "failed" {
+		t.Fatalf("stale-only run retried unrelated failure: %+v, %v", failed, err)
+	}
+}
+
 func TestAnalysisRetrySelectsStaleAndFailedFilesAndPreservesSelectionOnResume(t *testing.T) {
 	server, calls := analysisResponseServer(t, emptyAnalysisReply)
 	s, root := newSemanticAnalysisService(t, server.URL, 0)
