@@ -67,9 +67,10 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   location and state; there is no separate Source panel.
   Creation, testing and review model cards sit above the finding details and use
   the same searchable picker as Analysis. Choose each agent’s model, then select
-  **Prepare fix**. When required, a single confirmation covers remote sharing,
-  project checks and Security intent for the current files and models. The setup
-  stays compact; changed destinations or project revisions require fresh preparation.
+  **Prepare fix** to start immediately. File scope, remote destinations and project
+  checks appear beside the action; selecting it authorizes those operations and,
+  for Security findings, the Security fix. Changed destinations or project revisions
+  require fresh preparation.
   Task type, title, file scope, checks and the generated request stay app-guided.
   Go fixes include a regression test path; Markdown-only fixes use the selected
   creation profile. **Go to file** opens the source without starting a fix.

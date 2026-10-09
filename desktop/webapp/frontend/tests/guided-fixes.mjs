@@ -1,14 +1,6 @@
 import { strict as assert } from 'node:assert';
 
 export async function testGuidedFixes({ test, pageFor, nav, idle, layout, chooseModel }) {
-  async function confirmFix(page) {
-    await page
-      .getByRole('dialog')
-      .getByRole('button', { name: 'Prepare fix', exact: true })
-      .click();
-    await idle(page);
-  }
-
   await test('Finding agent cards share the Analysis picker above the detail and stay passive across layouts', async () => {
     for (const category of ['Bugs', 'Performance', 'Security']) {
       const { page, close } = await pageFor({
@@ -165,7 +157,7 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout, choose
         );
         assert.equal(await page.locator('.fix-preparation input[type=checkbox]').count(), 0);
         await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
-        await confirmFix(page);
+        await idle(page);
         await page.getByRole('heading', { name: 'Proposal diff', exact: true }).waitFor();
         assert.equal(await page.getByRole('dialog').count(), 0);
         const preparedWrites = await page.evaluate(() =>
@@ -264,7 +256,7 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout, choose
     }
   });
 
-  await test('Guided fix permissions appear only on action and cancellation never dispatches', async () => {
+  await test('Guided fix shows scoped permissions and starts once without a confirmation popup', async () => {
     for (const category of ['Bugs', 'Performance', 'Security']) {
       const { page, close } = await pageFor({ remote: true });
       try {
@@ -273,38 +265,39 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout, choose
         await page.getByLabel('Creation model', { exact: true }).waitFor();
         const preparation = page.locator('.fix-preparation');
         assert.equal(await preparation.getByRole('checkbox').count(), 0);
+        await preparation.getByText('Remote destinations', { exact: true }).waitFor();
         assert.equal(
-          await preparation.getByText('Remote destinations', { exact: true }).count(),
-          0,
+          await preparation
+            .getByText('test-model · https://provider.invalid', { exact: true })
+            .count(),
+          1,
         );
-        assert.equal(await preparation.getByText('Test commands', { exact: true }).count(), 0);
+        if (category === 'Security')
+          await preparation
+            .getByText('Selecting Prepare fix authorizes a Security fix', {
+              exact: false,
+            })
+            .waitFor();
         const before = await page.evaluate(() =>
           window.fixture.requests.filter((r) => r.method !== 'GET'),
         );
-        await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
-        const dialog = page.getByRole('dialog');
-        await dialog.getByText('go test ./...', { exact: true }).waitFor();
-        assert.equal(
-          await dialog.getByText('test-model · https://provider.invalid', { exact: true }).count(),
-          1,
-        );
-        assert.deepEqual(
-          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
-          before,
-        );
-        await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-        await idle(page);
-        assert.deepEqual(
-          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
-          before,
-        );
+        await preparation.getByText('Project checks', { exact: true }).click();
+        await preparation.getByText('go test ./...', { exact: true }).waitFor();
         await chooseModel(page.getByLabel('Creation model', { exact: true }), 'bug');
-        await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
-        await confirmFix(page);
-        assert.equal(await page.getByRole('dialog').count(), 0);
-        const workflow = await page.evaluate(() =>
-          window.fixture.requests.find((r) => r.path.endsWith('/workflow')),
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          before,
         );
+        const prepare = page.getByRole('button', { name: 'Prepare fix', exact: true });
+        await prepare.focus();
+        await prepare.press('Enter');
+        await idle(page);
+        assert.equal(await page.getByRole('dialog').count(), 0);
+        const workflows = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.path.endsWith('/workflow')),
+        );
+        assert.equal(workflows.length, 1);
+        const [workflow] = workflows;
         assert.deepEqual(workflow.body.models, { create: 'bug', test: 'bug', review: 'analyze' });
         assert.deepEqual(workflow.body.confirmed_profiles.sort(), ['analyze', 'bug']);
         assert.equal(workflow.body.confirm_security, category === 'Security');
@@ -323,32 +316,19 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout, choose
     }
   });
 
-  await test('Guided confirmation rejects changed destinations before granting trust or dispatching', async () => {
-    const { page, close } = await pageFor({ remote: true });
+  await test('Guided fix starts immediately and remains cancelable without applying source', async () => {
+    const { page, close } = await pageFor({ remote: true, workflowRunning: true });
     try {
       await nav(page, 'Bugs');
       await page.locator('.result-row').first().click();
       await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
-      await page.getByRole('dialog').waitFor();
-      await page.evaluate(() => {
-        window.fixture.options.modelNames = { function: 'replacement-model' };
-      });
-      await confirmFix(page);
-      await page
-        .getByText('Preparation changed. Review the current models and permissions.', {
-          exact: true,
-        })
-        .waitFor();
+      await idle(page);
+      assert.equal(await page.getByRole('dialog').count(), 0);
+      await page.getByRole('button', { name: 'Cancel workflow', exact: true }).click();
+      await idle(page);
+      await page.getByText('Workflow canceled. No source was applied.', { exact: true }).waitFor();
       assert.equal(
-        await page.evaluate(() =>
-          window.fixture.requests.some(
-            (r) =>
-              r.method === 'POST' &&
-              (r.path.endsWith('/execution-trust') ||
-                r.path.endsWith('/workflow') ||
-                r.path.endsWith('/messages')),
-          ),
-        ),
+        await page.evaluate(() => window.fixture.requests.some((r) => r.path.endsWith('/apply'))),
         false,
       );
     } finally {
@@ -357,7 +337,7 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout, choose
   });
 
   await test('Markdown fixes use the selected creation model without a workflow or popup', async () => {
-    const { page, close } = await pageFor({ sourcePaths: ['README.md'], trusted: true });
+    const { page, close } = await pageFor({ sourcePaths: ['README.md'], remote: true });
     try {
       await nav(page, 'Bugs');
       await page.locator('.result-row').first().click();
@@ -372,14 +352,18 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout, choose
         false,
       );
       assert.equal(requests.find((r) => r.path.endsWith('/messages')).body.profile, 'bug');
+      assert.equal(
+        requests.find((r) => r.path.endsWith('/messages')).body.confirm_remote_provider,
+        true,
+      );
     } finally {
       await close();
     }
   });
 
   await test('Guided fix rejects changed destinations and unavailable preparation before dispatch', async () => {
-    for (const scenario of ['destination', 'unavailable']) {
-      const { page, close } = await pageFor({ trusted: true });
+    for (const scenario of ['destination', 'commands', 'revision', 'unavailable']) {
+      const { page, close } = await pageFor({ remote: true });
       try {
         await nav(page, 'Bugs');
         await page.locator('.result-row').first().click();
@@ -387,6 +371,10 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout, choose
         await page.evaluate((scenario) => {
           if (scenario === 'destination')
             window.fixture.options.modelNames = { function: 'replacement-model' };
+          else if (scenario === 'commands')
+            window.fixture.options.executionCommands = [['go', 'test', '-race', './...']];
+          else if (scenario === 'revision')
+            window.fixture.state.project.project_revision = 'replacement-revision';
           else window.fixture.failures['/api/projects/current/execution-trust'] = 503;
         }, scenario);
         await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
@@ -446,7 +434,7 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout, choose
       await nav(page, 'Bugs');
       await page.locator('.result-row').first().click();
       await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
-      await confirmFix(page);
+      await idle(page);
       assert.equal(await page.getByLabel('Change request', { exact: true }).isEditable(), false);
       assert.equal(
         await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),

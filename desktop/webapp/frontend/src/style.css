@@ -2956,6 +2956,16 @@ dialog.model-picker {
 .fix-models {
   container-type: inline-size;
 }
+.fix-permissions {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.fix-permissions > p {
+  margin-top: 0;
+}
 @container (min-width: 36em) {
   .workflow-model-selectors {
     grid-template-columns: repeat(3, minmax(0, 1fr));
