@@ -99,8 +99,9 @@ func TestAnalysisHandlerStaleOnlyAdmission(t *testing.T) {
 	if w := analysisHandlerRequest(t, h.Start, "POST", "/analysis/run", start); w.Code != http.StatusAccepted {
 		t.Fatalf("stale-only start = %d %s", w.Code, w.Body)
 	}
-	if calls.Load() != 0 {
-		t.Fatal("empty selection dispatched model requests")
+	run := waitHandlerAnalysis(t, h, analysis, app.AnalysisRunUnavailable)
+	if run.Status != app.AnalysisRunUnavailable || !run.Plan.StaleOnly || calls.Load() != 0 {
+		t.Fatalf("empty stale-only run did not settle without requests: status=%s calls=%d", run.Status, calls.Load())
 	}
 }
 
