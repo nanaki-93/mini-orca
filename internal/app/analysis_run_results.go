@@ -73,7 +73,7 @@ func (s *Service) analysisSectionReader(run *AnalysisRun, category project.Findi
 	if err != nil {
 		return nil, err
 	}
-	if analysis.ProjectID != identity.ProjectID || analysis.ProjectRevision != identity.ProjectRevision {
+	if analysis.ProjectID != identity.ProjectID {
 		return nil, project.ErrRevisionConflict
 	}
 	result := &AnalysisSectionResults{Identity: identity, Path: path, Semantic: []project.UnifiedFinding{}, Performance: []project.PerformanceFileReport{}, Security: []project.SecurityFileReport{}, Unclassified: []project.UnifiedFinding{}}
@@ -147,6 +147,13 @@ func (reader *analysisSectionReader) read(ctx context.Context, path string) erro
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		// Run identity describes the saved job; freshness follows each file.
+		info, err := project.GetFileInfo(reader.root, file.Path)
+		if err != nil {
+			return err
+		}
+		indexed.ContentHash = info.ContentHash
+		file.ContentHash = info.ContentHash
 		if err := reader.readSemantic(indexed, file); err != nil {
 			return err
 		}
@@ -195,7 +202,7 @@ func (reader *analysisSectionReader) readSemantic(indexed project.IndexFile, fil
 }
 
 func (reader *analysisSectionReader) appendSemanticFindings(semantic *project.FileAnalysis, file AnalysisRunFile) {
-	fresh := semantic.Status == project.AnalysisStatusFresh && semantic.ContentHash == file.ContentHash && semantic.ProjectRevision == reader.run.Identity.ProjectRevision && reader.run.Status != AnalysisRunStale
+	fresh := analysisSemanticCacheUsable(semantic) && semantic.ContentHash == file.ContentHash
 	// The adapter only accepts fresh status. Extract historical risks from a copy,
 	// then explicitly label them stale; no cache or history record is rewritten.
 	view := *semantic
@@ -237,7 +244,7 @@ func (reader *analysisSectionReader) readPerformance(file AnalysisRunFile) error
 	}
 	if report.ProjectID == reader.run.Identity.ProjectID {
 		hasEvidence := report.Status == "completed" || report.Status == "completed_empty" || report.Status == "partial" || len(report.Findings) > 0
-		if hasEvidence && (reader.run.Status == AnalysisRunStale || !analysisPerformanceCacheUsable(report, *reader.analysis, reader.service.analysisModelRuntime(AnalysisStagePerformance, reader.run.Plan.Models))) {
+		if hasEvidence && !analysisPerformanceCacheUsable(report, *reader.analysis, reader.service.analysisModelRuntime(AnalysisStagePerformance, reader.run.Plan.Models)) {
 			report.Status = "stale"
 		}
 		reader.result.Performance = append(reader.result.Performance, *report)
@@ -264,9 +271,6 @@ func (reader *analysisSectionReader) readSecurity(indexed project.IndexFile, fil
 		}
 		if report.ProjectID == reader.run.Identity.ProjectID {
 			hasEvidence := securityStageCacheUsable(report) || len(report.Findings) > 0
-			if hasEvidence && reader.run.Status == AnalysisRunStale {
-				report.Status = project.SecurityStatusStale
-			}
 			reader.result.Security = append(reader.result.Security, *report)
 			reader.hasEvidence = reader.hasEvidence || hasEvidence
 		}

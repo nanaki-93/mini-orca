@@ -28,9 +28,6 @@ func selectionEvidence(run *AnalysisRun, analysis project.Analysis) analysisSele
 	for _, file := range run.Plan.Excluded {
 		evidence.excluded[file.Path] = file.Reason
 	}
-	if run.Identity.ProjectRevision != analysis.ProjectRevision {
-		return evidence
-	}
 	evidence.run = run
 	for _, file := range run.Files {
 		evidence.files[file.Path] = file
@@ -117,7 +114,7 @@ func (e analysisSelectionEvidence) stage(file project.IndexFile, stage AnalysisS
 func selectionCacheStatus(status string) (string, string) {
 	switch status {
 	case "stale":
-		return "stale", "Saved analysis no longer matches the source, project revision or analysis configuration."
+		return "stale", "Saved analysis no longer matches this file, its instructions or analysis configuration."
 	case "failed":
 		return "failed", "The previous analysis failed. Retry analysis for this file."
 	case "partial":

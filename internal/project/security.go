@@ -653,7 +653,7 @@ func validSecurityVerification(value string) bool {
 func securityReportMatchesInput(report SecurityFileReport, input SecurityReportInput) bool {
 	// The provider may resolve the selected model to a different reported name.
 	// ConfiguredModel pins the request; Model remains response provenance.
-	return report.ProjectID == input.ProjectID && report.ProjectRevision == input.ProjectRevision && report.Path == input.Path && report.ContentHash == input.ContentHash && report.Source == input.Source && report.RuleSetVersion == input.RuleSetVersion && report.ConfiguredModel == input.ConfiguredModel && report.Profile == input.Profile && report.Scope == input.Scope && report.ProviderOrigin == input.ProviderOrigin && report.ReasoningEffort == input.ReasoningEffort && report.PromptVersion == input.PromptVersion && report.ContextPolicyVersion == input.ContextPolicyVersion
+	return report.ProjectID == input.ProjectID && report.Path == input.Path && report.ContentHash == input.ContentHash && report.Source == input.Source && report.RuleSetVersion == input.RuleSetVersion && report.ConfiguredModel == input.ConfiguredModel && report.Profile == input.Profile && report.Scope == input.Scope && report.ProviderOrigin == input.ProviderOrigin && report.ReasoningEffort == input.ReasoningEffort && report.PromptVersion == input.PromptVersion && report.ContextPolicyVersion == input.ContextPolicyVersion
 }
 func cloneSecurityFileReportValue(source SecurityFileReport) SecurityFileReport {
 	return *cloneSecurityFileReport(&source)

@@ -13,6 +13,82 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
+func TestAnalysisFreshnessIsLocalToChangedFiles(t *testing.T) {
+	ctx := context.Background()
+	server, calls := analysisResponseServer(t, func(stage AnalysisStage) string {
+		if stage == AnalysisStageSemantic {
+			return strings.Replace(validSemanticAnalysis, `"risks":[]`, `"risks":[{"category":"bugs","severity":"low","summary":"Review error handling."}]`, 1)
+		}
+		return emptyAnalysisReply(stage)
+	})
+	s, root := newAnalysisFreshnessService(t, server.URL, true)
+	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 30, 2}, nil)
+	if _, err := s.StartAnalysisRun(ctx, analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	run := completedAnalysisRun(t, s)
+	beforeCalls := calls.Load()
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Changed() {}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, transition := range []string{"before reindex", "reindex", "restart"} {
+		if transition != "before reindex" {
+			s = transitionAnalysisProject(t, s, transition)
+		}
+		for _, category := range []project.FindingCategory{project.FindingCategoryBugs, project.FindingCategoryPerformance, project.FindingCategorySecurity} {
+			result, err := s.ReadAnalysisSection(ctx, run.Identity, category, "")
+			if err != nil {
+				t.Fatalf("%s %s results: %v", transition, category, err)
+			}
+			assertFreshness := func(path, status string) {
+				t.Helper()
+				if (status == "stale") != (path == "main.go") {
+					t.Fatalf("%s %s %s freshness = %s", transition, category, path, status)
+				}
+			}
+			for _, finding := range result.Semantic {
+				assertFreshness(finding.Location.Path, finding.Freshness)
+			}
+			for _, report := range result.Performance {
+				assertFreshness(report.Path, report.Status)
+			}
+			for _, report := range result.Security {
+				assertFreshness(report.Path, report.Status)
+			}
+			if category == project.FindingCategoryBugs && len(result.Semantic) != 2 || category == project.FindingCategoryPerformance && len(result.Performance) != 2 || category == project.FindingCategorySecurity && len(result.Security) != 4 {
+				t.Fatalf("%s lost saved %s evidence", transition, category)
+			}
+		}
+		overview, err := s.ProjectOverview()
+		if err != nil || overview.Coverage.Fresh != 1 || overview.Coverage.Stale != 1 {
+			t.Fatalf("%s overview = %+v, %v", transition, overview, err)
+		}
+	}
+	if calls.Load() != beforeCalls {
+		t.Fatal("freshness reads dispatched provider work")
+	}
+	retry := retryPreviewFor(t, s, nil)
+	if len(retry.Files) != 1 || retry.Files[0].Path != "main.go" {
+		t.Fatalf("retry must only select the changed file: %+v", retry.Files)
+	}
+	if _, err := s.StartAnalysisRun(ctx, analysisStartFor(retry)); err != nil {
+		t.Fatal(err)
+	}
+	run = completedAnalysisRun(t, s)
+	if calls.Load() != beforeCalls+3 {
+		t.Fatalf("reanalyzed unchanged files: %d calls", calls.Load()-beforeCalls)
+	}
+	result, err := s.ReadAnalysisSection(ctx, run.Identity, project.FindingCategoryBugs, "")
+	if err != nil || len(result.Semantic) != 2 || len(result.RetainedFiles) != 1 {
+		t.Fatalf("retry lost unchanged findings: %+v %v", result, err)
+	}
+	for _, finding := range result.Semantic {
+		if finding.Freshness != project.FindingFreshnessFresh {
+			t.Fatalf("retry left current file stale: %+v", finding)
+		}
+	}
+}
+
 func TestAnalysisFreshnessSurvivesProjectLifecycle(t *testing.T) {
 	for _, transition := range []string{"restore", "restart", "reindex", "switch back"} {
 		t.Run(transition, func(t *testing.T) {
@@ -211,18 +287,17 @@ func TestAnalysisFreshnessDetectsChangesAcrossProjectLifecycle(t *testing.T) {
 				if overview.Run == nil || overview.Run.Status != AnalysisRunStale || overview.Run.Identity != completed.Identity || calls.Load() != 6 {
 					t.Fatalf("changed run=%+v calls=%d", overview.Run, calls.Load())
 				}
-				// File-local semantic descriptions remain reusable, but full-stage
-				// coverage includes reports tied to the changed project revision.
+				// Every file-local report remains reusable for unchanged source.
 				helper, err := s.CachedFileAnalysis("helper.go")
 				if err != nil || helper.Status != project.AnalysisStatusFresh {
 					t.Fatalf("unchanged semantic description invalidated: %+v %v", helper, err)
 				}
-				want := AnalysisCoverage{Total: 2, Stale: 2}
+				want := AnalysisCoverage{Total: 2, Fresh: 1, Stale: 1}
 				if change == "add" {
-					want.Total, want.Missing = 3, 1
+					want = AnalysisCoverage{Total: 3, Fresh: 2, Missing: 1}
 				}
 				if change == "delete" {
-					want.Total, want.Stale = 1, 1
+					want = AnalysisCoverage{Total: 1, Fresh: 1}
 				}
 				if overview.Coverage != want {
 					t.Fatalf("full-stage coverage=%+v, want %+v", overview.Coverage, want)
