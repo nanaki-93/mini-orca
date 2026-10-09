@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 
-export async function testGuidedFixes({ test, pageFor, nav, idle, layout, chooseModel }) {
+export async function testGuidedFixes({ test, pageFor, nav, idle, layout, contrast, chooseModel }) {
   await test('Finding agent cards share the Analysis picker above the detail and stay passive across layouts', async () => {
     for (const category of ['Bugs', 'Performance', 'Security']) {
       const { page, close } = await pageFor({
@@ -127,6 +127,10 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout, choose
     ]) {
       const { page, close } = await pageFor();
       try {
+        if (kind === 'fix')
+          await page.evaluate(() => {
+            window.fixture.state.finding.title = 'File analysis suggestion';
+          });
         await nav(page, category);
         await page.locator('.result-row').first().click();
         await page.getByRole('heading', { name: 'Cause', exact: true }).waitFor();
@@ -163,9 +167,12 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout, choose
         const preparedWrites = await page.evaluate(() =>
           window.fixture.requests.filter((r) => r.method !== 'GET'),
         );
-        const request = page.getByLabel('Change request', { exact: true });
-        assert.equal(await request.isEditable(), false);
-        const original = await request.inputValue();
+        assert.equal(await page.getByLabel('Change request', { exact: true }).count(), 0);
+        for (const title of ['File analysis suggestion', 'Guided fix plan'])
+          assert.equal(await page.getByRole('heading', { name: title, exact: true }).count(), 0);
+        assert.equal(await page.getByRole('region', { name: 'Model review report' }).count(), 0);
+        assert.equal(await page.getByText('Model verdict', { exact: true }).count(), 0);
+        const original = preparedWrites.find((r) => r.path.endsWith('/workflow')).body.message;
         assert.match(original, /Location: .*process.go:5/);
         assert.match(original, /Cause:/);
         assert.match(original, /Proposed solution:/);
@@ -180,7 +187,7 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout, choose
           'internal/worker/process.go',
         );
         await nav(page, 'Chat');
-        assert.equal(await request.inputValue(), original);
+        assert.equal(await page.getByLabel('Change request', { exact: true }).count(), 0);
         assert.equal(
           await page.getByRole('combobox', { name: 'Task type', exact: true }).count(),
           0,
@@ -198,18 +205,25 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout, choose
           await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
           preparedWrites,
         );
-        await page
-          .getByText(
-            'Cause: cancellation was ignored. Solution: return the context error and cover cancellation in a regression test.',
-            { exact: true },
-          )
+        const solution = page.locator('.fix-solution');
+        await solution
+          .getByText('Return the context error and cover cancellation in a regression test.', {
+            exact: true,
+          })
           .waitFor();
+        assert.equal(await solution.getByText('Cause:', { exact: false }).count(), 0);
+        assert.equal(
+          await page
+            .getByText('The change handles cancellation and its tests pass.', {
+              exact: true,
+            })
+            .count(),
+          0,
+        );
         if (kind === 'performance')
           await page
             .getByText('Performance unmeasured; tests do not establish a speedup.', { exact: true })
             .waitFor();
-        assert.equal(await request.isEditable(), false);
-        assert.equal(await request.inputValue(), original);
         const requests = await page.evaluate(() => window.fixture.requests);
         const capture = requests.find(
           (r) => r.method === 'POST' && r.path === '/api/projects/current/changes',
@@ -233,11 +247,14 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout, choose
         await files.press('ArrowUp');
         for (const width of [1440, 1000, 800]) {
           await page.setViewportSize({ width, height: 1000 });
+          await solution.scrollIntoViewIfNeeded();
           await layout(page, `guided-${kind}-${width}`);
+          await contrast(page, `guided-${kind}-${width}`);
         }
         await page.getByRole('button', { name: 'Larger text', exact: true }).click();
         await page.getByRole('button', { name: 'Porcelain theme', exact: true }).click();
         await layout(page, `guided-${kind}-800-light-larger`);
+        await contrast(page, `guided-${kind}-800-light-larger`);
         assert.deepEqual(
           await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
           requests.filter((r) => r.method !== 'GET'),
@@ -428,26 +445,100 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout, choose
     }
   });
 
-  await test('Guided fix failures retain readonly intent and cannot be accepted', async () => {
-    const { page, close } = await pageFor({ workflowStatus: 'failed' });
-    try {
-      await nav(page, 'Bugs');
-      await page.locator('.result-row').first().click();
-      await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
-      await idle(page);
-      assert.equal(await page.getByLabel('Change request', { exact: true }).isEditable(), false);
-      assert.equal(
-        await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
-        true,
-      );
-      await page.getByText('Diagnostics', { exact: true }).click();
-      await page.getByText('Boundary test failed.', { exact: true }).waitFor();
-      assert.equal(
-        await page.evaluate(() => window.fixture.requests.some((r) => r.path.endsWith('/apply'))),
-        false,
-      );
-    } finally {
-      await close();
+  await test('Guided solutions omit labeled causes in saved explanations and retain limitations', async () => {
+    for (const explanation of [
+      'Cause: cancellation was ignored. Solution: Return the context error.\n\nFailure remains when the caller ignores errors.',
+      'Cause: cancellation was ignored.\n\nProposed solution: Return the context error.\n\nFailure remains when the caller ignores errors.',
+      '## Root cause\n\nCancellation was ignored.\n\n## Proposed solution\n\nReturn the context error.\n\nFailure remains when the caller ignores errors.',
+      '**Cause:** cancellation was ignored.\n\n**Solution:** Return the context error.\n\nFailure remains when the caller ignores errors.',
+      'Return the context error.\n\nFailure remains when the caller ignores errors.',
+    ]) {
+      const { page, close } = await pageFor({ changeAssistantMessage: explanation, trusted: true });
+      try {
+        await nav(page, 'Bugs');
+        await page.locator('.result-row').first().click();
+        await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
+        await idle(page);
+        const solution = page.locator('.fix-solution');
+        await solution.getByText('Return the context error.', { exact: true }).waitFor();
+        await solution
+          .getByText('Failure remains when the caller ignores errors.', { exact: true })
+          .waitFor();
+        assert.doesNotMatch(await solution.innerText(), /cause|cancellation was ignored/i);
+        await page
+          .getByText('The worker continues after its request context is canceled.', {
+            exact: false,
+          })
+          .waitFor();
+      } finally {
+        await close();
+      }
+    }
+  });
+
+  await test('Guided fix failures and requested changes appear in the solution and block acceptance', async () => {
+    for (const category of ['Bugs', 'Performance', 'Security']) {
+      for (const status of ['failed', 'changes_requested']) {
+        const summary =
+          'Handle the invalid-input case. <script>window.reviewExecuted = true</script>';
+        const { page, close } = await pageFor({ workflowStatus: status, workflowSummary: summary });
+        try {
+          await nav(page, category);
+          await page.locator('.result-row').first().click();
+          await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
+          await idle(page);
+          assert.equal(await page.getByLabel('Change request', { exact: true }).count(), 0);
+          assert.equal(await page.getByText('Model verdict', { exact: true }).count(), 0);
+          assert.equal(
+            await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
+            true,
+          );
+          const solution = page.locator('.fix-solution');
+          if (status === 'failed') {
+            await solution
+              .getByText(
+                'Tests or source checks failed. Inspect the check evidence before running again.',
+                { exact: true },
+              )
+              .waitFor();
+            await solution.getByText('tests: failed', { exact: true }).waitFor();
+            await page.getByText('Diagnostics', { exact: true }).click();
+            await page.getByText('Boundary test failed.', { exact: true }).waitFor();
+          } else {
+            await solution
+              .getByRole('heading', { name: 'Changes needed before acceptance' })
+              .waitFor();
+            await solution.getByText(summary, { exact: true }).waitFor();
+            await solution
+              .getByText('Add a regression test for invalid input.', { exact: true })
+              .waitFor();
+            assert.equal(
+              await page.locator('.workflow-progress').getByText(summary, { exact: true }).count(),
+              0,
+            );
+            assert.equal(await page.evaluate(() => window.reviewExecuted === true), false);
+          }
+          for (const width of [1440, 800]) {
+            await page.setViewportSize({ width, height: 1000 });
+            await solution.scrollIntoViewIfNeeded();
+            await layout(page, `guided-${category.toLowerCase()}-${status}-${width}`);
+            await contrast(page, `guided-${category.toLowerCase()}-${status}-${width}`);
+          }
+          await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          await page.getByRole('button', { name: 'Porcelain theme', exact: true }).click();
+          await solution.scrollIntoViewIfNeeded();
+          await layout(page, `guided-${category.toLowerCase()}-${status}-800-light-larger`);
+          await contrast(page, `guided-${category.toLowerCase()}-${status}-800-light-larger`);
+          assert.equal(
+            await page.evaluate(() =>
+              window.fixture.requests.some((r) => r.path.endsWith('/apply')),
+            ),
+            false,
+          );
+        } finally {
+          await close();
+        }
+      }
     }
   });
 }

@@ -133,7 +133,7 @@ export function Results({ s }: { s: State }) {
     title: row.title.slice(0, 200),
     paths: [row.path],
     kind: category === 'performance' ? 'performance' : category === 'security' ? 'security' : 'fix',
-    message: `Address this finding: ${row.title}\nLocation: ${row.path}${row.line ? `:${row.line}` : ''}${row.symbol ? ` (${row.symbol})` : ''}\nCause: ${row.cause}\nProposed solution: ${row.solution}\n${row.text.map(([label, text]) => `${label}: ${text}`).join('\n')}\nExplain the cause and the proposed solution, including how each changed file addresses the finding. Preserve unrelated behavior.`,
+    message: `Address this finding: ${row.title}\nLocation: ${row.path}${row.line ? `:${row.line}` : ''}${row.symbol ? ` (${row.symbol})` : ''}\nCause: ${row.cause}\nProposed solution: ${row.solution}\n${row.text.map(([label, text]) => `${label}: ${text}`).join('\n')}\nExplain only the proposed solution, including how each changed file addresses the finding. The cause is shown separately. Report unresolved failures or limitations. Preserve unrelated behavior.`,
     acceptance_criteria: row.task?.acceptance_criteria || [],
     finding: {
       path: row.path,

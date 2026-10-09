@@ -71,7 +71,10 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   checks appear beside the action; selecting it authorizes those operations and,
   for Security findings, the Security fix. Changed destinations or project revisions
   require fresh preparation.
-  Task type, title, file scope, checks and the generated request stay app-guided.
+  The fix page keeps the cause separate from the generated solution and places
+  workflow failures and requested corrections under **Proposed solution**.
+  Task type, file scope, checks and the request stay app-guided, without a separate
+  plan card or request editor.
   Go fixes include a regression test path; Markdown-only fixes use the selected
   creation profile. **Go to file** opens the source without starting a fix.
   **Analyze stale files** refreshes only outdated files and preserves results for

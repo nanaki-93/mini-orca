@@ -47,7 +47,7 @@ const stageNames: Record<string, string> = {
   human_review: 'Human diff review',
 };
 
-export function WorkflowProgress({ s }: { s: State }) {
+export function WorkflowProgress({ s, showOutcome = true }: { s: State; showOutcome?: boolean }) {
   const workflow = s.change?.workflow;
   if (!workflow) return null;
   return (
@@ -78,8 +78,10 @@ export function WorkflowProgress({ s }: { s: State }) {
           </li>
         ))}
       </ol>
-      {workflow.reason && <Notice error={workflow.status === 'failed'}>{workflow.reason}</Notice>}
-      {workflow.review && (
+      {showOutcome && workflow.reason && (
+        <Notice error={workflow.status === 'failed'}>{workflow.reason}</Notice>
+      )}
+      {showOutcome && workflow.review && (
         <section aria-label="Model review report">
           <div className="row wrap">
             <strong>Model verdict</strong>

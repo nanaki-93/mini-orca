@@ -769,7 +769,8 @@ export function installFixture(options = {}) {
                 change.messages.push({
                   role: 'assistant',
                   content:
-                    'Cause: cancellation was ignored. Solution: return the context error and cover cancellation in a regression test.',
+                    options.changeAssistantMessage ||
+                    'Return the context error and cover cancellation in a regression test.',
                 });
                 change.check_options = { run_tests: true };
                 change.checks = [
