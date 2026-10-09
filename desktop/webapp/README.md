@@ -63,6 +63,8 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   Failed feature discovery leaves other analysis results available.
 - **Bugs**, **Performance** and **Security** show searchable results and their
   evidence, with the exact file, declaration and line, cause and proposed solution.
+  Finding actions, including **Mark as fixed**, sit in the header alongside the
+  location and state; there is no separate Source panel.
   Choose creation, testing and review models in the finding detail, then select
   **Prepare fix**. Remote destinations and any required project-test permission
   appear inline. Preparation starts directly without a plan page or popup.

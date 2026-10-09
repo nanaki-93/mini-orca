@@ -12,7 +12,6 @@ import {
   Heading,
   Icon,
   InsightCard,
-  KeyValues,
   Notice,
   Panel,
   Prose,
@@ -151,12 +150,24 @@ export function Results({ s }: { s: State }) {
           variant="intro"
           title={detail.title}
           detail={
-            <span className="row wrap">
-              <Badge value={detail.severity} />
-              <Badge value={detail.confidence} tone="violet" />
-              <span className="results-state">
-                <StatusDot value={detail.freshness} label="Freshness" />
-                <span>{human(detail.freshness)}</span>
+            <span className="results-detail-meta">
+              <span className="path">
+                {detail.path}
+                {detail.line ? `:${detail.line}` : ''}
+              </span>
+              <span>
+                <span>{detail.symbol || 'File-level finding'}</span> · {human(detail.kind)}
+              </span>
+              <span className="row wrap">
+                <Badge value={detail.severity} />
+                <Badge value={detail.confidence} tone="violet" />
+                <span aria-label="Finding state">
+                  <Badge value={detail.status} />
+                </span>
+                <span className="results-state">
+                  <StatusDot value={detail.freshness} label="Freshness" />
+                  <span>{human(detail.freshness)}</span>
+                </span>
               </span>
             </span>
           }
@@ -171,6 +182,28 @@ export function Results({ s }: { s: State }) {
           >
             Go to file
           </Button>
+          {detail.finding && (
+            <>
+              <Button
+                disabled={!!s.busy}
+                onClick={() =>
+                  void w.triage(
+                    detail.finding!,
+                    detail.status === 'dismissed' ? 'open' : 'dismissed',
+                  )
+                }
+              >
+                {detail.status === 'dismissed' ? 'Reopen' : 'Dismiss'}
+              </Button>
+              <Button
+                icon="check"
+                disabled={!!s.busy || detail.status === 'fixed'}
+                onClick={() => void w.triage(detail.finding!, 'fixed')}
+              >
+                Mark as fixed
+              </Button>
+            </>
+          )}
         </Heading>
         <div className="grid two-columns results-detail-layout">
           <div className="stack">
@@ -234,38 +267,6 @@ export function Results({ s }: { s: State }) {
                 }
               />
             )}
-            <Panel title="Source" className="results-detail-source">
-              <KeyValues
-                values={[
-                  ['File', detail.path],
-                  ['Declaration', detail.symbol || 'File-level finding'],
-                  ['Line', detail.line || '—'],
-                  ['Source', human(detail.kind)],
-                  ['State', <Badge value={detail.status} />],
-                ]}
-              />
-              {detail.finding && (
-                <div className="actions section-gap">
-                  <Button
-                    disabled={!!s.busy}
-                    onClick={() =>
-                      void w.triage(
-                        detail.finding!,
-                        detail.status === 'dismissed' ? 'open' : 'dismissed',
-                      )
-                    }
-                  >
-                    {detail.status === 'dismissed' ? 'Reopen' : 'Dismiss'}
-                  </Button>
-                  <Button
-                    disabled={!!s.busy || detail.status === 'fixed'}
-                    onClick={() => void w.triage(detail.finding!, 'fixed')}
-                  >
-                    Mark fixed
-                  </Button>
-                </div>
-              )}
-            </Panel>
             <InsightCard insight={detail.insight} />
           </div>
         </div>
