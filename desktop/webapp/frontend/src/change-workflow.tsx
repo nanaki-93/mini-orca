@@ -1,5 +1,6 @@
 import { activeChangeWorkflow, workspace as w, type State } from './workspace';
 import type { ChangeWorkflowModels } from './models';
+import { AgentModel } from './agent-model';
 import { Badge, BulletContent, Button, Notice, Panel, Prose, human } from './ui';
 
 export const defaultWorkflowModels: ChangeWorkflowModels = {
@@ -19,43 +20,22 @@ export function WorkflowModels({
   disabled: boolean;
   creationOnly?: boolean;
 }) {
-  const allRoles = [
-    ['create', 'Creation model'],
-    ['test', 'Testing model'],
-    ['review', 'Review model'],
-  ] as const;
-  const roles = creationOnly ? allRoles.slice(0, 1) : allRoles;
-  const choices = Object.entries(s.models?.scopes || {});
+  const roles = creationOnly ? (['create'] as const) : (['create', 'test', 'review'] as const);
   return (
     <fieldset className="workflow-models" disabled={disabled}>
-      <legend>Models for this workflow</legend>
-      <div className="form-grid">
-        {roles.map(([key, label]) => (
-          <label key={key}>
-            {label}
-            <select
-              className="field"
-              aria-label={label}
-              value={value[key]}
-              disabled={!choices.length}
-              onChange={(event) => w.setWorkflowModels({ ...value, [key]: event.target.value })}
-            >
-              {!choices.length && <option value={value[key]}>Models unavailable</option>}
-              {choices.map(([profile, model]) => (
-                <option key={profile} value={profile}>
-                  {model.model} · {profile} · {model.remote_provider ? 'Remote' : 'Local'}
-                </option>
-              ))}
-            </select>
-          </label>
+      <legend className="sr-only">Models for this workflow</legend>
+      <div className="analysis-model-selectors workflow-model-selectors">
+        {roles.map((type) => (
+          <AgentModel
+            key={type}
+            s={s}
+            type={type}
+            value={value[type]}
+            disabled={disabled}
+            onChange={(model) => w.setWorkflowModels({ ...value, [type]: model })}
+          />
         ))}
       </div>
-      {!creationOnly && (
-        <p className="small muted">
-          The testing model writes tests. The daemon runs go test ./... in an isolated copy.
-          Profiles use the providers configured for this daemon.
-        </p>
-      )}
     </fieldset>
   );
 }

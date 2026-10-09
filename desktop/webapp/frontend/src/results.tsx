@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type * as M from './models';
-import { workspace as w, activeChangeWorkflow, type State } from './workspace';
+import { workspace as w, activeChangeWorkflow, workflowSeed, type State } from './workspace';
 import { FixPreparation } from './fix-preparation';
+import { WorkflowModels, defaultWorkflowModels } from './change-workflow';
 import { StaleAnalysisButton } from './analysis';
 import {
   Badge,
@@ -143,6 +144,8 @@ export function Results({ s }: { s: State }) {
       confidence: row.confidence,
     },
   });
+  const seed = detail ? workflowSeed(fixSeed(detail)) : undefined;
+  const fixDisabled = !!s.busy || activeChangeWorkflow(s.change) || detail?.freshness === 'stale';
   if (detail)
     return (
       <div className="workspace-page results-page results-detail">
@@ -205,6 +208,16 @@ export function Results({ s }: { s: State }) {
             </>
           )}
         </Heading>
+        {seed && detail.path && (
+          <Panel title="Agent models" className="fix-models">
+            <WorkflowModels
+              s={s}
+              value={s.workflowModels || s.change?.workflow?.models || defaultWorkflowModels}
+              disabled={fixDisabled}
+              creationOnly={!seed.paths.some((path) => path.endsWith('_test.go'))}
+            />
+          </Panel>
+        )}
         <div className="grid two-columns results-detail-layout">
           <div className="stack">
             <Panel title="Cause" className="fix-explanation">
@@ -257,15 +270,8 @@ export function Results({ s }: { s: State }) {
             )}
           </div>
           <div className="stack">
-            {detail.path && (
-              <FixPreparation
-                key={detail.key}
-                s={s}
-                seed={fixSeed(detail)}
-                disabled={
-                  !!s.busy || activeChangeWorkflow(s.change) || detail.freshness === 'stale'
-                }
-              />
+            {seed && detail.path && (
+              <FixPreparation key={detail.key} s={s} seed={seed} disabled={fixDisabled} />
             )}
             <InsightCard insight={detail.insight} />
           </div>

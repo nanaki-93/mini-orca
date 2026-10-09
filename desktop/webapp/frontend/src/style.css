@@ -2950,15 +2950,16 @@ dialog.model-picker {
 .workflow-models {
   border: 0;
   padding: 0;
-  margin: 20px 0;
+  margin: 0;
   min-width: 0;
 }
-.workflow-models legend {
-  font-weight: 600;
-  margin-bottom: 12px;
+.fix-models {
+  container-type: inline-size;
 }
-.workflow-models .form-grid {
-  grid-template-columns: minmax(0, 1fr);
+@container (min-width: 36em) {
+  .workflow-model-selectors {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 .workflow-stages {
   list-style: decimal;

@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 
-export async function testChangeWorkflows({ test, pageFor, nav, idle, layout }) {
+export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, chooseModel }) {
   async function prepare(page) {
     await nav(page, 'Chat');
     await page
@@ -22,10 +22,9 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout }) 
     const { page, close } = await pageFor({ remote: true, workflowRunning: true });
     try {
       await prepare(page);
-      await page.getByText('Agent models', { exact: true }).click();
-      await page.getByLabel('Creation model', { exact: true }).selectOption('bug');
-      await page.getByLabel('Testing model', { exact: true }).selectOption('function');
-      await page.getByLabel('Review model', { exact: true }).selectOption('analyze');
+      await chooseModel(page.getByLabel('Creation model', { exact: true }), 'bug');
+      await chooseModel(page.getByLabel('Testing model', { exact: true }), 'function');
+      await chooseModel(page.getByLabel('Review model', { exact: true }), 'analyze');
       await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
       const consent = page.getByRole('dialog');
       await consent.getByText('internal/worker_test.go', { exact: true }).waitFor();

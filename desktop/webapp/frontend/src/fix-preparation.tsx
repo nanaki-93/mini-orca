@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ChangeSeed } from './models';
 import { workspace as w, workflowSeed, type FixPreparationContext, type State } from './workspace';
-import { WorkflowModels, defaultWorkflowModels } from './change-workflow';
+import { defaultWorkflowModels } from './change-workflow';
 import { BulletContent, Button, Notice, Panel } from './ui';
 
 export function FixPreparation({
@@ -18,6 +18,7 @@ export function FixPreparation({
   const [context, setContext] = useState<FixPreparationContext>();
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
+  const modelKey = JSON.stringify(s.models?.scopes);
   useEffect(() => {
     let current = true;
     setContext(undefined);
@@ -33,7 +34,7 @@ export function FixPreparation({
     return () => {
       current = false;
     };
-  }, [s.project?.project_id, s.project?.project_revision, refresh]);
+  }, [s.project?.project_id, s.project?.project_revision, modelKey, refresh]);
   const prepared = workflowSeed(seed);
   const useAgents = prepared.paths.some((path) => path.endsWith('_test.go'));
   const models = s.workflowModels || s.change?.workflow?.models || defaultWorkflowModels;
@@ -46,15 +47,7 @@ export function FixPreparation({
       ) : !context ? (
         <p>Loading models and permissions…</p>
       ) : (
-        <>
-          <WorkflowModels
-            s={{ ...s, models: context.models }}
-            value={models}
-            disabled={disabled}
-            creationOnly={!useAgents}
-          />
-          <BulletContent title="Files in this fix" items={prepared.paths} />
-        </>
+        <BulletContent title="Files in this fix" items={prepared.paths} />
       )}
       <div className="actions section-gap">
         <Button

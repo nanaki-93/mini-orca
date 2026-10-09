@@ -533,12 +533,20 @@ export class Workspace {
     const request = ++this.modelCatalogRequest;
     const epoch = this.epoch;
     this.set({ modelsLoading: true });
-    await this.resource(
-      'availableModels',
-      () => this.api.get<M.AvailableModels>('/api/models/available'),
-      (availableModels) => this.set({ availableModels }),
-      () => request === this.modelCatalogRequest,
-    );
+    await Promise.all([
+      this.resource(
+        'availableModels',
+        () => this.api.get<M.AvailableModels>('/api/models/available'),
+        (availableModels) => this.set({ availableModels }),
+        () => request === this.modelCatalogRequest,
+      ),
+      this.resource(
+        'models',
+        () => this.api.get<M.ModelCatalog>('/api/models/current'),
+        (models) => this.set({ models }),
+        () => request === this.modelCatalogRequest,
+      ),
+    ]);
     if (epoch === this.epoch && request === this.modelCatalogRequest)
       this.set({ modelsLoading: false });
   }
@@ -1704,6 +1712,7 @@ export class Workspace {
     ]);
     if (epoch !== this.epoch || projectKey(trust) !== projectKey(this.state.project))
       throw new Error('Project changed. Refresh fix preparation.');
+    this.set({ models });
     return { models, trust };
   }
   private async checkedFixPreparation(profiles: string[], preparation: FixPreparationContext) {
