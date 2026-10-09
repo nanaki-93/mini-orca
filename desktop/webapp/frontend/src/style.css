@@ -1421,8 +1421,11 @@ button.list-row:hover,
 .results-detail-layout > .stack {
   gap: 20px;
 }
-.results-detail-source .key-values {
-  margin-top: 0;
+.results-detail-meta {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .results-detail li {
   overflow-wrap: anywhere;

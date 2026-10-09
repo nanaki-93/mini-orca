@@ -13,9 +13,7 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout }) {
         await page.locator('.result-row').first().click();
         await page.getByRole('heading', { name: 'Cause', exact: true }).waitFor();
         await page.getByRole('heading', { name: 'Proposed solution', exact: true }).waitFor();
-        assert.ok(
-          (await page.locator('.results-detail-source').innerText()).includes('process.go'),
-        );
+        assert.ok((await page.locator('.results-detail-meta').innerText()).includes('process.go'));
         const before = await page.evaluate(() =>
           window.fixture.requests.filter((r) => r.method !== 'GET'),
         );

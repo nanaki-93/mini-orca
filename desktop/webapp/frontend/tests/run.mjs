@@ -7762,11 +7762,12 @@ try {
           await introductionTreatment(workspace.locator('.page-heading--intro')),
           referenceIntro,
         );
-        assert.deepEqual(await panelTreatment(panel('Source')), referencePanel);
+        assert.deepEqual(await panelTreatment(panel('Cause')), referencePanel);
+        assert.equal(await panel('Source').count(), 0);
         assert.equal(await workspace.locator('h1').innerText(), expected.title);
         if (!['suggested', 'ai_suggestion'].includes(expected.confidence))
           assert.equal(
-            await workspace.locator('.page-heading .badge').last().innerText(),
+            await workspace.locator('.page-heading .badge').nth(1).innerText(),
             expected.confidence.replaceAll('_', ' '),
           );
         for (const [title, content] of expected.text)
@@ -7776,11 +7777,15 @@ try {
               .evaluate((element) => element.textContent),
             content.replace(/\n\s*\n/g, ''),
           );
-        const metadata = panel('Source').locator('.key-values dd');
-        assert.equal(await metadata.nth(0).innerText(), expected.path);
-        assert.equal(await metadata.nth(1).innerText(), expected.symbol);
-        assert.equal(await metadata.nth(2).innerText(), '5');
-        assert.equal(await metadata.nth(3).innerText(), expected.source);
+        const metadata = workspace.locator('.results-detail-meta');
+        assert.equal(await metadata.locator('.path').innerText(), `${expected.path}:5`);
+        assert.ok((await metadata.innerText()).includes(expected.symbol));
+        assert.ok((await metadata.innerText()).includes(expected.source));
+        if (semantic)
+          await workspace
+            .locator('.page-heading')
+            .getByRole('button', { name: 'Mark as fixed', exact: true })
+            .waitFor();
         assert.equal(
           await panel('Engineering insight')
             .locator('.prose')
@@ -7833,7 +7838,7 @@ try {
                 'All findings',
                 'Go to file',
                 'Prepare fix',
-                ...(semantic ? ['Dismiss', 'Mark fixed'] : []),
+                ...(semantic ? ['Dismiss', 'Mark as fixed'] : []),
               ])
                 assert.equal(
                   await workspace.getByRole('button', { name: label, exact: true }).isEnabled(),
@@ -7953,7 +7958,7 @@ try {
         for (const label of [
           'Go to file',
           'Prepare fix',
-          ...(semantic ? ['Dismiss', 'Mark fixed'] : []),
+          ...(semantic ? ['Dismiss', 'Mark as fixed'] : []),
         ])
           assert.equal(
             await workspace.getByRole('button', { name: label, exact: true }).isDisabled(),
@@ -7994,17 +7999,14 @@ try {
       for (const [label, status] of [
         ['Dismiss', 'dismissed'],
         ['Reopen', 'open'],
-        ['Mark fixed', 'fixed'],
+        ['Mark as fixed', 'fixed'],
       ]) {
         await page.getByRole('button', { name: label, exact: true }).click();
         await idle(page);
-        assert.equal(
-          await page.locator('.results-detail-source .key-values dd').last().innerText(),
-          status,
-        );
+        assert.equal(await page.getByLabel('Finding state', { exact: true }).innerText(), status);
       }
       assert.equal(
-        await page.getByRole('button', { name: 'Mark fixed', exact: true }).isDisabled(),
+        await page.getByRole('button', { name: 'Mark as fixed', exact: true }).isDisabled(),
         true,
       );
       const writes = await page.evaluate(() =>
