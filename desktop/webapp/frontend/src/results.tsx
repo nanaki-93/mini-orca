@@ -405,6 +405,11 @@ export function Results({ s }: { s: State }) {
             ))}
           </select>
         </div>
+        <div className="findings-columns" aria-hidden="true">
+          <span>Finding</span>
+          <span>Impact / freshness</span>
+          <span />
+        </div>
         <div className="result-list">
           {filtered.slice(0, limit).map((row) => (
             <button className="result-row" key={row.key} onClick={() => setSelected(row.key)}>
@@ -427,19 +432,19 @@ export function Results({ s }: { s: State }) {
                   <span className="path">
                     {row.path}
                     {row.line ? `:${row.line}` : ''}
-                  </span>{' '}
-                  · {human(row.kind)}
+                  </span>
                 </small>
               </span>
               <span className="result-badges">
                 <Badge value={row.severity} />
-                <Badge value={row.confidence} tone="violet" />
                 <span className="results-state">
                   <StatusDot value={row.freshness} label="Freshness" hideSuccess />
                   <span>{human(row.freshness)}</span>
                 </span>
               </span>
-              <Icon name="chevron" />
+              <span className="finding-open">
+                Open fix <Icon name="chevron" />
+              </span>
             </button>
           ))}
         </div>

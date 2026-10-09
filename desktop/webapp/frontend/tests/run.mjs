@@ -7595,12 +7595,9 @@ try {
         const title = await page.locator('.result-row strong').innerText();
         const pathText = await page.locator('.result-row .path').innerText();
         assert.ok(pathText.includes('very-long-directory-'.repeat(12)));
-        assert.ok(
-          (await page.locator('.result-row small').innerText()).includes(
-            { Bugs: 'AI analysis', Performance: 'Performance hypothesis', Security: 'rules' }[name],
-          ),
-          'Rows retain category-specific provenance and evidence kind',
-        );
+        assert.equal(await page.locator('.result-row small').innerText(), pathText);
+        assert.equal(await page.locator('.result-row .finding-open').innerText(), 'Open fix');
+        assert.doesNotMatch(await page.locator('.result-row').innerText(), /AI suggestion/i);
         const before = await page.evaluate(() =>
           window.fixture.requests.filter((r) => r.method !== 'GET'),
         );
