@@ -1,6 +1,14 @@
 import { strict as assert } from 'node:assert';
 
 export async function testGuidedFixes({ test, pageFor, nav, idle, layout }) {
+  async function confirmFix(page) {
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Prepare fix', exact: true })
+      .click();
+    await idle(page);
+  }
+
   await test('Guided fixes preserve cause, solution and scope with a passive file diff selector', async () => {
     for (const [category, kind] of [
       ['Bugs', 'fix'],
@@ -30,18 +38,16 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout }) {
         await page.getByLabel('Testing model', { exact: true }).selectOption('function');
         await page.getByLabel('Review model', { exact: true }).selectOption('analyze');
         assert.equal(
-          await page.getByRole('button', { name: 'Prepare fix', exact: true }).isDisabled(),
+          await page.getByRole('button', { name: 'Prepare fix', exact: true }).isEnabled(),
           true,
         );
         assert.deepEqual(
           await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
           before,
         );
-        await page
-          .getByRole('checkbox', { name: 'Allow project tests for this revision', exact: true })
-          .check();
+        assert.equal(await page.locator('.fix-preparation input[type=checkbox]').count(), 0);
         await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
-        await idle(page);
+        await confirmFix(page);
         await page.getByRole('heading', { name: 'Proposal diff', exact: true }).waitFor();
         assert.equal(await page.getByRole('dialog').count(), 0);
         const preparedWrites = await page.evaluate(() =>
@@ -140,26 +146,43 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout }) {
     }
   });
 
-  await test('Guided remote fix consent stays inline and follows the selected models', async () => {
+  await test('Guided fix permissions appear only on action and cancellation never dispatches', async () => {
     for (const category of ['Bugs', 'Performance', 'Security']) {
-      const { page, close } = await pageFor({ remote: true, trusted: true });
+      const { page, close } = await pageFor({ remote: true });
       try {
         await nav(page, category);
         await page.locator('.result-row').first().click();
-        const allow = page.getByRole('checkbox', {
-          name: 'Allow sending these files and applicable instructions to the selected remote models',
-          exact: true,
-        });
-        const prepare = page.getByRole('button', { name: 'Prepare fix', exact: true });
-        await allow.waitFor();
-        assert.equal(await prepare.isDisabled(), true);
-        await allow.check();
-        await page.getByLabel('Creation model', { exact: true }).selectOption('bug');
-        assert.equal(await allow.isChecked(), false);
-        assert.equal(await prepare.isDisabled(), true);
-        await allow.check();
-        await prepare.click();
+        await page.getByLabel('Creation model', { exact: true }).waitFor();
+        const preparation = page.locator('.fix-preparation');
+        assert.equal(await preparation.getByRole('checkbox').count(), 0);
+        assert.equal(
+          await preparation.getByText('Remote destinations', { exact: true }).count(),
+          0,
+        );
+        assert.equal(await preparation.getByText('Test commands', { exact: true }).count(), 0);
+        const before = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method !== 'GET'),
+        );
+        await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
+        const dialog = page.getByRole('dialog');
+        await dialog.getByText('go test ./...', { exact: true }).waitFor();
+        assert.equal(
+          await dialog.getByText('test-model · https://provider.invalid', { exact: true }).count(),
+          1,
+        );
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          before,
+        );
+        await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
         await idle(page);
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          before,
+        );
+        await page.getByLabel('Creation model', { exact: true }).selectOption('bug');
+        await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
+        await confirmFix(page);
         assert.equal(await page.getByRole('dialog').count(), 0);
         const workflow = await page.evaluate(() =>
           window.fixture.requests.find((r) => r.path.endsWith('/workflow')),
@@ -167,9 +190,51 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout }) {
         assert.deepEqual(workflow.body.models, { create: 'bug', test: 'bug', review: 'analyze' });
         assert.deepEqual(workflow.body.confirmed_profiles.sort(), ['analyze', 'bug']);
         assert.equal(workflow.body.confirm_security, category === 'Security');
+        assert.equal(
+          await page.evaluate(
+            () =>
+              window.fixture.requests.filter(
+                (r) => r.method === 'POST' && r.path.endsWith('/execution-trust'),
+              ).length,
+          ),
+          1,
+        );
       } finally {
         await close();
       }
+    }
+  });
+
+  await test('Guided confirmation rejects changed destinations before granting trust or dispatching', async () => {
+    const { page, close } = await pageFor({ remote: true });
+    try {
+      await nav(page, 'Bugs');
+      await page.locator('.result-row').first().click();
+      await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
+      await page.getByRole('dialog').waitFor();
+      await page.evaluate(() => {
+        window.fixture.options.modelNames = { function: 'replacement-model' };
+      });
+      await confirmFix(page);
+      await page
+        .getByText('Preparation changed. Review the current models and permissions.', {
+          exact: true,
+        })
+        .waitFor();
+      assert.equal(
+        await page.evaluate(() =>
+          window.fixture.requests.some(
+            (r) =>
+              r.method === 'POST' &&
+              (r.path.endsWith('/execution-trust') ||
+                r.path.endsWith('/workflow') ||
+                r.path.endsWith('/messages')),
+          ),
+        ),
+        false,
+      );
+    } finally {
+      await close();
     }
   });
 
@@ -262,11 +327,8 @@ export async function testGuidedFixes({ test, pageFor, nav, idle, layout }) {
     try {
       await nav(page, 'Bugs');
       await page.locator('.result-row').first().click();
-      await page
-        .getByRole('checkbox', { name: 'Allow project tests for this revision', exact: true })
-        .check();
       await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
-      await idle(page);
+      await confirmFix(page);
       assert.equal(await page.getByLabel('Change request', { exact: true }).isEditable(), false);
       assert.equal(
         await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),

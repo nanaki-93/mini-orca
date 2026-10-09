@@ -66,8 +66,9 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   Finding actions, including **Mark as fixed**, sit in the header alongside the
   location and state; there is no separate Source panel.
   Choose creation, testing and review models in the finding detail, then select
-  **Prepare fix**. Remote destinations and any required project-test permission
-  appear inline. Preparation starts directly without a plan page or popup.
+  **Prepare fix**. When required, a single confirmation covers remote sharing,
+  project checks and Security intent for the current files and models. The setup
+  stays compact; changed destinations or project revisions require fresh preparation.
   Task type, title, file scope, checks and the generated request stay app-guided.
   Go fixes include a regression test path; Markdown-only fixes use the selected
   creation profile. **Go to file** opens the source without starting a fix.
