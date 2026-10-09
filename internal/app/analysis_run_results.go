@@ -147,25 +147,8 @@ func (reader *analysisSectionReader) read(ctx context.Context, path string) erro
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		// Run identity describes the saved job; freshness follows each file.
-		info, err := project.GetFileInfo(reader.root, file.Path)
-		if err != nil {
+		if err := reader.readFile(indexed, file); err != nil {
 			return err
-		}
-		indexed.ContentHash = info.ContentHash
-		file.ContentHash = info.ContentHash
-		if err := reader.readSemantic(indexed, file); err != nil {
-			return err
-		}
-		switch reader.result.Progress.Category {
-		case project.FindingCategoryPerformance:
-			if err := reader.readPerformance(file); err != nil {
-				return err
-			}
-		case project.FindingCategorySecurity:
-			if err := reader.readSecurity(indexed, file); err != nil {
-				return err
-			}
 		}
 	}
 	if reader.hasEvidence {
@@ -179,6 +162,26 @@ func (reader *analysisSectionReader) read(ctx context.Context, path string) erro
 		reader.result.SavedFindingCount = &count
 	}
 	return nil
+}
+
+func (reader *analysisSectionReader) readFile(indexed project.IndexFile, file AnalysisRunFile) error {
+	// Run identity describes the saved job; freshness follows each file.
+	info, err := project.GetFileInfo(reader.root, file.Path)
+	if err != nil {
+		return err
+	}
+	indexed.ContentHash, file.ContentHash = info.ContentHash, info.ContentHash
+	if err := reader.readSemantic(indexed, file); err != nil {
+		return err
+	}
+	switch reader.result.Progress.Category {
+	case project.FindingCategoryPerformance:
+		return reader.readPerformance(file)
+	case project.FindingCategorySecurity:
+		return reader.readSecurity(indexed, file)
+	default:
+		return nil
+	}
 }
 
 func (reader *analysisSectionReader) readSemantic(indexed project.IndexFile, file AnalysisRunFile) error {

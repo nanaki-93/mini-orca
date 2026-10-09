@@ -97,24 +97,9 @@ func (s *Service) PreviewAnalysisRun(ctx context.Context, request AnalysisPrevie
 
 func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPreviewRequest) (*AnalysisRunPreview, error) {
 	if request.ResumeRun != nil {
-		run := s.analysisRun.run
-		if run == nil || run.Identity != *request.ResumeRun || run.Plan.RetryStaleFailed != request.RetryStaleFailed {
-			return nil, project.ErrRevisionConflict
+		if err := captureAnalysisResumeOptions(&request, s.analysisRun.run); err != nil {
+			return nil, err
 		}
-		// Existing clients omit the option on resume, so the captured plan decides it;
-		// a request cannot turn a different run into a recovery run.
-		if request.RecoverIncomplete && !run.Plan.RecoverIncomplete {
-			return nil, project.ErrRevisionConflict
-		}
-		request.RecoverIncomplete = run.Plan.RecoverIncomplete
-		if request.StaleOnly && !run.Plan.StaleOnly {
-			return nil, project.ErrRevisionConflict
-		}
-		request.StaleOnly = run.Plan.StaleOnly
-		request.compatibilityStage = run.Plan.CompatibilityStage
-		request.compatibilityBudget = run.Plan.CompatibilityBudget
-		request.IncludeFeatures = run.Plan.Features != nil
-		request.Models = cloneAnalysisModels(run.Plan.Models)
 	}
 	analysis, index, policy, err := s.performanceInputs()
 	if err != nil {
@@ -144,6 +129,28 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 		}
 	}
 	return s.completeAnalysisPreviewLocked(ctx, root, preview, request)
+}
+
+func captureAnalysisResumeOptions(request *AnalysisPreviewRequest, run *AnalysisRun) error {
+	if run == nil || run.Identity != *request.ResumeRun || run.Plan.RetryStaleFailed != request.RetryStaleFailed {
+		return project.ErrRevisionConflict
+	}
+	// Existing clients omit the option on resume, so the captured plan decides it;
+	// a request cannot turn a different run into a recovery run.
+	if request.RecoverIncomplete && !run.Plan.RecoverIncomplete {
+		return project.ErrRevisionConflict
+	}
+	request.RecoverIncomplete = run.Plan.RecoverIncomplete
+	if request.StaleOnly && !run.Plan.StaleOnly {
+		return project.ErrRevisionConflict
+	}
+	request.StaleOnly = run.Plan.StaleOnly
+	request.compatibilityStage = run.Plan.CompatibilityStage
+	request.compatibilityBudget = run.Plan.CompatibilityBudget
+	request.IncludeFeatures = run.Plan.Features != nil
+	request.Models = cloneAnalysisModels(run.Plan.Models)
+
+	return nil
 }
 
 func (s *Service) completeAnalysisPreviewLocked(ctx context.Context, root string, preview *AnalysisRunPreview, request AnalysisPreviewRequest) (*AnalysisRunPreview, error) {

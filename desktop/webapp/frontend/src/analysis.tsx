@@ -41,12 +41,7 @@ export function StaleAnalysisButton({ s }: { s: State }) {
         !!s.busy || !s.models || !s.selection?.editable || activeRun(s.run) || selectionChanged(s)
       }
       onClick={() =>
-        void w.previewAnalysis(
-          'stale',
-          s.analysisLimits || defaults,
-          false,
-          s.run?.plan.models || analysisSetupModels(s),
-        )
+        void w.previewAnalysis('stale', s.analysisLimits || defaults, false, s.run?.plan.models)
       }
     >
       Analyze stale files ({count})
