@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type * as M from './models';
 import { workspace as w, activeChangeWorkflow, type State } from './workspace';
 import { defaultWorkflowModels } from './change-workflow';
+import { StaleAnalysisButton } from './analysis';
 import {
   Badge,
   Button,
@@ -170,6 +171,7 @@ export function Results({ s }: { s: State }) {
           <Button icon="back" onClick={() => setSelected(undefined)}>
             All findings
           </Button>
+          <StaleAnalysisButton s={s} />
           <Button
             disabled={!!s.busy}
             onClick={() => void w.openFile(detail.path, detail.symbol, detail.task)}
@@ -344,12 +346,19 @@ export function Results({ s }: { s: State }) {
         <Go page="analysis" tone="primary">
           Analyze project
         </Go>
+        <StaleAnalysisButton s={s} />
       </Heading>
       {results?.retained_files?.length ? (
         <Notice>
           Includes retained results from {results.retained_files.length} files outside this run.
         </Notice>
       ) : null}
+      {s.run?.status === 'stale' && (
+        <Notice>
+          Files are checked individually. Unchanged files keep their saved analysis; reanalyze the
+          stale files to refresh them.
+        </Notice>
+      )}
       {category === 'security' && s.file && (
         <Panel title="Selected source" className="results-source">
           <div className="row between wrap">

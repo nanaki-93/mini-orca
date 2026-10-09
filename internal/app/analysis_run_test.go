@@ -283,7 +283,7 @@ func analysisStartFor(preview *AnalysisRunPreview) AnalysisRunStartRequest {
 	for _, provider := range preview.Providers {
 		confirmations.ProviderIDs = append(confirmations.ProviderIDs, provider.ID)
 	}
-	return AnalysisRunStartRequest{Models: cloneAnalysisModels(preview.Models), IncludeFeatures: preview.Features != nil, Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits, RetryStaleFailed: preview.RetryStaleFailed, RecoverIncomplete: preview.RecoverIncomplete, Refresh: preview.Refresh, Confirmations: confirmations}
+	return AnalysisRunStartRequest{Models: cloneAnalysisModels(preview.Models), IncludeFeatures: preview.Features != nil, Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits, RetryStaleFailed: preview.RetryStaleFailed, StaleOnly: preview.StaleOnly, RecoverIncomplete: preview.RecoverIncomplete, Refresh: preview.Refresh, Confirmations: confirmations}
 }
 
 func waitAnalysisWindow(t *testing.T, s *Service) {

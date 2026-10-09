@@ -230,7 +230,7 @@ func analysisMetadataReason(value string) bool {
 		return true
 	}
 	switch value {
-	case "The provider rejected the Performance response format.", analysisSelectionExclusion, analysisRetryExclusion, analysisRecoveryExclusion, "Outside this compatibility queue.", "Not requested by this compatibility action.", "", "Excluded by source policy.", "Not a supported text source file.", "Source exceeds analyzer size limits.", "Not eligible for semantic source analysis.",
+	case "The provider rejected the Performance response format.", analysisSelectionExclusion, analysisRetryExclusion, analysisRecoveryExclusion, analysisStaleExclusion, "Outside this compatibility queue.", "Not requested by this compatibility action.", "", "Excluded by source policy.", "Not a supported text source file.", "Source exceeds analyzer size limits.", "Not eligible for semantic source analysis.",
 		"Passive security rules require a Go source file.", "The model for this stage is not configured.",
 		"Analysis stage could not complete.", "The stage needs an additional attempt allowance.", "The file is not eligible for this source analysis.",
 		"The report contains incomplete evidence; review its details.", "The model request or response failed. Other analysis results remain available.",
@@ -290,6 +290,9 @@ func validStoredAnalysisIdentity(run *AnalysisRun) bool {
 }
 
 func validStoredAnalysisIdentityPlan(plan *AnalysisRunPreview) bool {
+	if plan.StaleOnly && (plan.CompatibilityStage != "" || validateAnalysisSelectionOptions(plan.RecoverIncomplete, plan.Refresh, plan.RetryStaleFailed, plan.Features != nil, plan.StaleOnly) != nil) {
+		return false
+	}
 	if plan.RetryStaleFailed && (plan.Refresh || plan.CompatibilityStage != "") {
 		return false
 	}

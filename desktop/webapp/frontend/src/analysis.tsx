@@ -26,6 +26,34 @@ const stageNames: Record<string, string> = {
 };
 const defaults: Limits = { batch_files: 20, budget_seconds: 1800, max_attempts_per_stage: 2 };
 
+export function StaleAnalysisButton({ s }: { s: State }) {
+  const count = s.selection?.files.filter(
+    (file) =>
+      !file.reason &&
+      !s.selection?.excluded_paths.includes(file.path) &&
+      file.stages.some((stage) => stage.status === 'stale'),
+  ).length;
+  if (!count) return null;
+  return (
+    <Button
+      icon="refresh"
+      disabled={
+        !!s.busy || !s.models || !s.selection?.editable || activeRun(s.run) || selectionChanged(s)
+      }
+      onClick={() =>
+        void w.previewAnalysis(
+          'stale',
+          s.analysisLimits || defaults,
+          false,
+          s.run?.plan.models || analysisSetupModels(s),
+        )
+      }
+    >
+      Analyze stale files ({count})
+    </Button>
+  );
+}
+
 function selectionPaths(s: State) {
   return s.analysisSelectionDraft &&
     s.analysisSelectionDraft.selectionID === s.selection?.selection_id
@@ -66,6 +94,7 @@ export function Analysis({ s }: { s: State }) {
           <Go page="analysis-run" icon="activity">
             View run
           </Go>
+          <StaleAnalysisButton s={s} />
           <Button
             tone="primary"
             icon="play"

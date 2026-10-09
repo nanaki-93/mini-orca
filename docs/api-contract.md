@@ -414,7 +414,7 @@ identity includes scope, model, origin, reasoning, context/timeout/retry setting
 and prompt/rule versions. Cache availability is excluded from this stable identity:
 the run's own cache writes cannot invalidate its remaining queue. `preview_id`
 additionally binds current cache dispositions, remaining attempts/work and request
-bounds. Start echoes limits/refresh, `retry_stale_failed`, `recover_incomplete`, `include_features`, `models` and both identities; the daemon recomputes
+bounds. Start echoes limits/refresh, `retry_stale_failed`, `stale_only`, `recover_incomplete`, `include_features`, `models` and both identities; the daemon recomputes
 them before admission. A changed preflight yields 409 and requires a fresh preview.
 
 Preview and start accept optional `retry_stale_failed` (default false). When true,
@@ -428,6 +428,13 @@ combined with `refresh`. The selection is part of both admission fingerprints;
 resume echoes the option and retains the admitted file set even after reports
 become fresh. Excluded files remain accounted for in the inventory. An empty
 selection produces no model requests and is reported as unavailable, not clean.
+
+Preview and start accept `stale_only` (default false) to select just files with
+stale evidence. Unrelated failed or missing files are excluded; current stages
+stay cached. This option cannot be combined with `refresh`, `retry_stale_failed`,
+`recover_incomplete` or `include_features`. It is bound to both admission
+fingerprints. Resume uses the captured option and file set; requesting it for a
+run without that option returns 409.
 
 Preview and start also accept optional `recover_incomplete` (default false), which
 completes unfinished analysis without changing source code. Under the requested
@@ -448,7 +455,7 @@ admitted file set. An empty recovery selection produces no model requests.
 `retry_stale_failed` keeps the narrower semantics above for existing clients.
 
 Unfiltered result reads retain saved evidence from eligible files omitted only by
-the stale/failed or incomplete-work selection. `retained_files` supplies those
+the stale-only, stale/failed or incomplete-work selection. `retained_files` supplies those
 current indexed file identities; user and source-policy exclusions remain
 excluded. The dispatch plan, run coverage and file-filter guards still describe
 the admitted scope.

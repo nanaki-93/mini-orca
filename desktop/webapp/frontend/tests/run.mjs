@@ -1556,6 +1556,51 @@ try {
   await testThemes({ test, pageFor, nav, idle, layout, contrast });
   await testChangeWorkflows({ test, pageFor, nav, idle, layout });
   await testGuidedFixes({ test, pageFor, nav, idle, layout });
+  await test('Analyze stale files is available across result pages without widening the selection', async () => {
+    for (const category of ['Summary', 'Analysis', 'Bugs', 'Performance', 'Security']) {
+      const stalePath = 'internal/worker/process.go';
+      const { page, close } = await pageFor({
+        stalePaths: [stalePath],
+        failedPaths: ['internal/worker/config.go'],
+      });
+      try {
+        await nav(page, category);
+        await page.getByRole('button', { name: 'Analyze stale files (1)', exact: true }).click();
+        await idle(page);
+        const preview = await page.evaluate(() =>
+          window.fixture.requests.find((r) => r.path.endsWith('/analysis/preview')),
+        );
+        assert.equal(preview.body.stale_only, true);
+        assert.equal(preview.body.refresh, false);
+        assert.equal(preview.body.include_features, false);
+        assert.equal(preview.body.recover_incomplete, false);
+        assert.equal(
+          await page.evaluate(() =>
+            window.fixture.requests.some(
+              (r) => r.method === 'POST' && r.path.endsWith('/analysis/selection'),
+            ),
+          ),
+          false,
+        );
+        await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
+        await page.getByRole('dialog').getByRole('button', { name: 'Start', exact: true }).click();
+        await idle(page);
+        const start = await page.evaluate(() =>
+          window.fixture.requests.find(
+            (r) => r.method === 'POST' && r.path.endsWith('/analysis/run'),
+          ),
+        );
+        assert.equal(start.body.stale_only, true);
+        assert.equal(start.body.retry_stale_failed, false);
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.state.run.plan.files.map((file) => file.path)),
+          [stalePath],
+        );
+      } finally {
+        await close();
+      }
+    }
+  });
   await test('Models retain configured scopes, complete destinations and Summary presentation', async () => {
     const metadata = {
       analyze: {

@@ -19,6 +19,27 @@ import kotlinx.serialization.json.Json
 
 class DesktopAnalysisWorkflowTest {
   @Test
+  fun staleOnlyPlansAndRequestsRoundTripWithoutChangingLegacyDefaults() {
+    val plan = analysisPreviewFixture().copy(staleOnly = true)
+    assertTrue(Json.decodeFromString<AnalysisRunPreview>(Json.encodeToString(plan)).staleOnly)
+    val request =
+        AnalysisPreviewRequest(
+            "project", "revision", "project", false, plan.limits, staleOnly = true)
+    assertTrue(
+        Json.decodeFromString<AnalysisPreviewRequest>(Json.encodeToString(request)).staleOnly)
+    val start =
+        AnalysisRunStartRequest(
+            plan.identity,
+            plan.previewId,
+            plan.limits,
+            false,
+            AnalysisRunConfirmations(emptyList(), false),
+            staleOnly = true)
+    assertTrue(Json.decodeFromString<AnalysisRunStartRequest>(Json.encodeToString(start)).staleOnly)
+    assertFalse(analysisPreviewFixture().staleOnly)
+  }
+
+  @Test
   fun startRefreshesIncludedFilesAndResumePreservesTheRefreshChoice() {
     Harness().use { h ->
       h.workflow.preview()

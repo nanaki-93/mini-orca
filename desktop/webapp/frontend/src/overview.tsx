@@ -1,3 +1,4 @@
+import { StaleAnalysisButton } from './analysis';
 import { useEffect, useState } from 'react';
 import { workspace as w, type State, type Page } from './workspace';
 import {
@@ -210,6 +211,7 @@ export function Summary({ s }: { s: State }) {
           <Go page="analysis" icon="activity" tone="primary">
             Analyze project
           </Go>
+          <StaleAnalysisButton s={s} />
         </Heading>
         <dl className="summary-facts" aria-label="Project facts">
           <div>

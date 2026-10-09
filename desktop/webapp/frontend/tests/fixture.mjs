@@ -1019,7 +1019,15 @@ export function installFixture(options = {}) {
               files: files.map((f) => ({
                 path: f.path,
                 reason: '',
-                stages: stages.map((stage) => ({ stage, status: 'fresh', reason: '' })),
+                stages: stages.map((stage) => ({
+                  stage,
+                  status: options.stalePaths?.includes(f.path)
+                    ? 'stale'
+                    : options.failedPaths?.includes(f.path)
+                      ? 'failed'
+                      : 'fresh',
+                  reason: '',
+                })),
               })),
               recovery: options.hasRecovery
                 ? {
@@ -1037,6 +1045,12 @@ export function installFixture(options = {}) {
             state.preview.models = choices;
             if (body.recover_incomplete) {
               state.preview.recover_incomplete = true;
+            }
+            if (body.stale_only) {
+              state.preview.stale_only = true;
+              state.preview.files = state.preview.files.filter((file) =>
+                options.stalePaths?.includes(file.path),
+              );
             }
             // A continuation keeps the saved destinations, not today's configured providers.
             if (choices && !body.resume_run) {

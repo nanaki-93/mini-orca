@@ -95,7 +95,7 @@ func (s *Service) analysisSectionReader(run *AnalysisRun, category project.Findi
 	}
 	// A scoped retry or recovery changes dispatch scope, not the saved findings
 	// inventory. User/policy exclusions remain excluded; only scope-omitted files are retained.
-	if omitted := analysisSelectionMode(run.Plan.RetryStaleFailed, run.Plan.RecoverIncomplete).exclusion(); path == "" && omitted != "" {
+	if omitted := analysisSelectionMode(run.Plan.RetryStaleFailed, run.Plan.RecoverIncomplete, run.Plan.StaleOnly).exclusion(); path == "" && omitted != "" {
 		retained := make(map[string]bool)
 		for _, file := range run.Plan.Excluded {
 			retained[file.Path] = file.Reason == omitted
