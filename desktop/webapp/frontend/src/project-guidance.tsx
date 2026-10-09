@@ -2,7 +2,13 @@ import { workspace as w, type State } from './workspace';
 import { Button, Icon } from './ui';
 
 export function ProjectGuidance({ s }: { s: State }) {
-  if (!s.project || ['instructions', 'project', 'welcome', 'terminal', 'models'].includes(s.page))
+  if (
+    !s.project ||
+    s.page !== 'chat' ||
+    !['fix', 'performance', 'security', 'feature'].includes(
+      s.change?.kind || s.changeSeed?.kind || 'feature',
+    )
+  )
     return null;
   const guide = s.projectInstructions;
   const error = s.resourceErrors['default instructions'];

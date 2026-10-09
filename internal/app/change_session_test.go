@@ -78,6 +78,30 @@ func changeProvider(t *testing.T, response func() string) *httptest.Server {
 	return server
 }
 
+func TestChangeMessageUsesSelectedProfileAndItsConsent(t *testing.T) {
+	var calls atomic.Int32
+	server := changeProvider(t, func() string {
+		calls.Add(1)
+		return `{"explanation":"Document the behavior.","changes":[{"path":"README.md","content":"# Behavior\nReturns the result.\n"}]}`
+	})
+	service, _ := newSemanticAnalysisService(t, server.URL, 0)
+	service.runtimes.bug.effective.RemoteProvider = true
+	session := openChangeFixture(t, service, "README.md")
+	request := ChangeMessageRequest{ChangeIdentity: changeIdentity(session), Message: "Document the behavior.", Profile: "unknown"}
+	if _, err := service.SendChangeMessage(context.Background(), session.ID, request); err == nil || calls.Load() != 0 {
+		t.Fatal("unknown profile dispatched")
+	}
+	request.Profile = "bug"
+	if _, err := service.SendChangeMessage(context.Background(), session.ID, request); err == nil || calls.Load() != 0 {
+		t.Fatal("selected remote profile dispatched without consent")
+	}
+	request.ConfirmRemoteProvider = true
+	proposal, err := service.SendChangeMessage(context.Background(), session.ID, request)
+	if err != nil || proposal.ContextManifest.Scope != "bug" || calls.Load() != 1 {
+		t.Fatalf("selected profile ignored: %+v, %v", proposal, err)
+	}
+}
+
 func TestChangeGenerationHistoryAndRevision(t *testing.T) {
 	var calls atomic.Int32
 	server := changeProvider(t, func() string {

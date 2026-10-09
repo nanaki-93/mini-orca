@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"go/format"
 	"os"
@@ -191,7 +190,8 @@ func (s *Service) ReviewChange(ctx context.Context, id string, identity ChangeId
 }
 
 func (s *Service) RepairChangeMessage(ctx context.Context, id string, request ChangeMessageRequest) (*ChangeSession, error) {
-	if err := s.RequireRemoteConfirmation(config.FunctionModelScope, request.ConfirmRemoteProvider); err != nil {
+	runtime, err := s.changeMessageRuntime(request)
+	if err != nil {
 		return nil, err
 	}
 	session, root, err := s.reserveChangeRepair(ctx, id, request.ChangeIdentity)
@@ -199,7 +199,7 @@ func (s *Service) RepairChangeMessage(ctx context.Context, id string, request Ch
 		return nil, err
 	}
 	request.Message = "Repair the current proposal without changing scope, acceptance criteria or pinned tests. Check evidence:\n" + changeCheckEvidence(session.Checks)
-	return s.generateChangeMessage(ctx, root, session, request)
+	return s.generateChangeWithRuntime(ctx, root, session, request, runtime)
 }
 
 func (s *Service) reserveChangeRepair(ctx context.Context, id string, identity ChangeIdentity) (*ChangeSession, string, error) {

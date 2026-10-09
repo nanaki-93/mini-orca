@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"net/http"
 	"net/http/httptest"
@@ -45,6 +47,29 @@ func workflowResponse(t *testing.T, handler http.HandlerFunc, method, path, id s
 	response := httptest.NewRecorder()
 	handler(response, request)
 	return response
+}
+
+func TestChangeHTTPSelectedProfile(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"explanation":"Document the behavior.","changes":[{"path":"README.md","content":"# Behavior\nReturns the result.\n"}]}`}}}})
+	}))
+	defer server.Close()
+	h := newChangeHandlerFixture(t, server.URL)
+	index, _ := h.manager.Index()
+	session, err := h.service.OpenChangeSession(context.Background(), app.ChangeCreateRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Title: "Document behavior", Kind: "fix", Paths: []string{"README.md"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := app.ChangeMessageRequest{ChangeIdentity: app.ChangeIdentity{ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, Revision: session.Revision, Hash: session.Hash}, Message: "Document behavior.", Profile: "unknown"}
+	if w := workflowResponse(t, h.Message, "POST", "/changes/id/messages", session.ID, request); w.Code < 400 {
+		t.Fatal("unknown model profile was accepted")
+	}
+	request.Profile = "analyze"
+	w := workflowResponse(t, h.Message, "POST", "/changes/id/messages", session.ID, request)
+	var proposal app.ChangeSession
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &proposal) != nil || proposal.ContextManifest.Scope != "analyze" {
+		t.Fatalf("profile selection = %d %s", w.Code, w.Body)
+	}
 }
 
 func TestChangeHTTPInstructionProposalRequiresChecksReviewAndConfirmation(t *testing.T) {

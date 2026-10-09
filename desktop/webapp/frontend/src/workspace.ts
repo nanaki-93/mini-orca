@@ -37,6 +37,14 @@ export interface Confirmation {
   details?: string[];
   destructive?: boolean;
 }
+export interface FixPreparationContext {
+  models: M.ModelCatalog;
+  trust: M.ExecutionTrust;
+}
+export interface FixApproval extends FixPreparationContext {
+  allowRemote: boolean;
+  allowExecution: boolean;
+}
 export interface State {
   page: Page;
   busy: string;
@@ -216,6 +224,13 @@ export function canApplyChange(s: State) {
 
 export const activeChangeWorkflow = (change?: M.ChangeSession) =>
   !!change?.workflow && ['running', 'canceling'].includes(change.workflow.status);
+export function workflowSeed(seed: M.ChangeSeed): M.ChangeSeed {
+  const paths = [...seed.paths];
+  const source = paths.find((path) => path.endsWith('.go') && !path.endsWith('_test.go'));
+  if (source && paths.length < 8 && !paths.some((path) => path.endsWith('_test.go')))
+    paths.push(source.replace(/\.go$/, '_test.go'));
+  return { ...seed, paths };
+}
 export function workflowReviewable(change: M.ChangeSession) {
   const flow = change.workflow;
   return (
@@ -1349,11 +1364,7 @@ export class Workspace {
     void this.loadChangeHistory();
   }
   seedWorkflow(seed: M.ChangeSeed) {
-    const paths = [...seed.paths];
-    const source = paths.find((path) => path.endsWith('.go') && !path.endsWith('_test.go'));
-    if (source && paths.length < 8 && !paths.some((path) => path.endsWith('_test.go')))
-      paths.push(source.replace(/\.go$/, '_test.go'));
-    this.seedChange({ ...seed, paths });
+    this.seedChange(workflowSeed(seed));
   }
   async loadFeatures() {
     if (!this.state.project) return;
@@ -1683,7 +1694,53 @@ export class Workspace {
     }
     return remote;
   }
-  async startChangeWorkflow(seed: M.ChangeSeed, models: M.ChangeWorkflowModels) {
+  async readFixPreparation(): Promise<FixPreparationContext> {
+    const epoch = this.epoch;
+    const [models, trust] = await Promise.all([
+      this.api.get<M.ModelCatalog>('/api/models/current'),
+      this.api.get<M.ExecutionTrust>(`${current}/execution-trust`, {
+        project_revision: this.identity().project_revision,
+      }),
+    ]);
+    if (epoch !== this.epoch || projectKey(trust) !== projectKey(this.state.project))
+      throw new Error('Project changed. Refresh fix preparation.');
+    return { models, trust };
+  }
+  private async authorizeFix(profiles: string[], approval: FixApproval) {
+    const epoch = this.epoch,
+      operation = this.operation;
+    const latest = await this.readFixPreparation();
+    if (epoch !== this.epoch || operation !== this.operation) return null;
+    if (
+      projectKey(latest.trust) !== projectKey(approval.trust) ||
+      JSON.stringify(latest.trust.commands) !== JSON.stringify(approval.trust.commands) ||
+      profiles.some(
+        (profile) =>
+          !latest.models.scopes[profile] ||
+          JSON.stringify(latest.models.scopes[profile]) !==
+            JSON.stringify(approval.models.scopes[profile]),
+      )
+    )
+      throw new Error('Preparation changed. Review the current models and permissions.');
+    const remote = [...new Set(profiles.filter((p) => latest.models.scopes[p].remote_provider))];
+    if (remote.length && !approval.allowRemote)
+      throw new Error('Allow sending the selected file context to the displayed providers.');
+    if (!latest.trust.trusted) {
+      if (!approval.allowExecution)
+        throw new Error('Allow project tests before preparing the fix.');
+      if (epoch !== this.epoch) return null;
+      await this.api.post(`${current}/execution-trust`, {
+        project_revision: latest.trust.project_revision,
+        confirm: true,
+      });
+    }
+    return remote;
+  }
+  async startChangeWorkflow(
+    seed: M.ChangeSeed,
+    models: M.ChangeWorkflowModels,
+    approval?: FixApproval,
+  ) {
     await this.act('Start workflow', async () => {
       if (activeChangeWorkflow(this.state.change))
         throw new Error('Finish or cancel the active workflow.');
@@ -1691,8 +1748,10 @@ export class Workspace {
         throw new Error('Include a Go test path (_test.go) in Files to change.');
       const epoch = this.epoch,
         operation = this.operation;
-      const profiles = await this.confirmWorkflow(seed, models);
-      if (profiles === null || !(await this.trust(true))) return;
+      const profiles = approval
+        ? await this.authorizeFix(Object.values(models), approval)
+        : await this.confirmWorkflow(seed, models);
+      if (profiles === null || (!approval && !(await this.trust(true)))) return;
       if (epoch !== this.epoch || operation !== this.operation) return;
       let change = this.state.change;
       if (!change) {
@@ -1747,23 +1806,31 @@ export class Workspace {
         this.set({ change: next });
     });
   }
-  private async requestChangeMessage(message: string, repair = false) {
+  private async requestChangeMessage(
+    message: string,
+    repair = false,
+    profile = 'function',
+    approval?: FixApproval,
+  ) {
     const change = this.state.change;
     if (!change || change.freshness !== 'current' || change.state !== 'draft')
       throw new Error('Start a fresh conversation for this source.');
     const identity = this.changeIdentity(change);
     const epoch = this.epoch;
     const operation = this.operation;
-    const confirmed = await this.confirmModel(
-      'function',
-      repair ? 'Repair proposal' : 'Prepare proposal',
-      change.kind === 'security',
-      change.targets.map((target) => target.path),
-    );
+    const confirmed = approval
+      ? ((await this.authorizeFix([profile], approval))?.includes(profile) ?? null)
+      : await this.confirmModel(
+          profile,
+          repair ? 'Repair proposal' : 'Prepare proposal',
+          change.kind === 'security',
+          change.targets.map((target) => target.path),
+        );
     if (confirmed === null) return false;
+    if (epoch !== this.epoch || operation !== this.operation) return false;
     const next = await this.api.post<M.ChangeSession>(
       `${current}/changes/${encodeURIComponent(change.id)}/messages`,
-      { ...identity, message, repair, confirm_remote_provider: confirmed },
+      { ...identity, message, repair, profile, confirm_remote_provider: confirmed },
     );
     if (
       epoch !== this.epoch ||
@@ -1809,7 +1876,12 @@ export class Workspace {
     this.set({ change: checked });
     return true;
   }
-  async prepareChange(seed: M.ChangeSeed, tests: boolean) {
+  async prepareChange(
+    seed: M.ChangeSeed,
+    tests: boolean,
+    profile = 'function',
+    approval?: FixApproval,
+  ) {
     await this.act('Prepare change', async () => {
       if (!seed.message.trim()) throw new Error('Describe the change.');
       if (!this.state.change) {
@@ -1828,7 +1900,7 @@ export class Workspace {
           throw new Error('Conversation belongs to another project revision.');
         this.set({ change, page: 'chat' });
       }
-      if (!(await this.requestChangeMessage(seed.message))) return;
+      if (!(await this.requestChangeMessage(seed.message, false, profile, approval))) return;
       if (!(await this.requestChangeChecks(tests))) return;
       for (
         let attempt = 0;
@@ -1844,7 +1916,8 @@ export class Workspace {
           )
         )
           break;
-        if (!(await this.requestChangeMessage('Repair failed checks.', true))) return;
+        if (!(await this.requestChangeMessage('Repair failed checks.', true, profile, approval)))
+          return;
         if (!(await this.requestChangeChecks(tests))) return;
       }
       this.set({

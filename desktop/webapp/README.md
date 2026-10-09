@@ -63,10 +63,14 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   Failed feature discovery leaves other analysis results available.
 - **Bugs**, **Performance** and **Security** show searchable results and their
   evidence, with the exact file, declaration and line, cause and proposed solution.
-  **Review fix plan** opens an app-guided task; **Prepare fix** starts it after
-  any required consent. Task type, title, scope, model assignments, checks and the
-  generated request are read-only. Go fixes include a regression test path and use
-  the configured Function, Bug and Analyze profiles for creation, testing and review.
+  Choose creation, testing and review models in the finding detail, then select
+  **Prepare fix**. Remote destinations and any required project-test permission
+  appear inline. Preparation starts directly without a plan page or popup.
+  Task type, title, file scope, checks and the generated request stay app-guided.
+  Go fixes include a regression test path; Markdown-only fixes use the selected
+  creation profile. **Go to file** opens the source without starting a fix.
+  **Analyze stale files** refreshes only outdated files and preserves results for
+  unchanged files, whose freshness follows their content and applicable guidance.
   Select a file in **Files to change** to inspect its read-only diff. Selecting files
   never generates, checks or applies a proposal. Findings and performance hypotheses
   keep their reported confidence; the app does not invent a missing cause or solution.
@@ -115,7 +119,7 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   creates a manual proposal in Chat with the same explicit **Accept changes** action.
   Agents use applicable root and directory guidance by default for analysis,
   explanations, suggestions, creation, testing and review, honoring context exclusions.
-  The workspace shows its instruction status and **Create AGENTS.md** opens the
+  Fix and feature implementation pages show instruction status; **Create AGENTS.md** opens the
   root instruction wizard when no root guide exists. Guidance changes invalidate
   affected AI reports and proposals; navigation alone never requests a model.
 - After Apply, **Verify applied change** checks the applied file identities and
