@@ -732,7 +732,10 @@ Messages, checks, review, Apply and Undo carry `project_id`, `project_revision`,
 default `function`) and optional `repair`. Consent applies to the selected profile. Repair requires current failed
 checks and consumes one of three durable attempts. Checks accept `run_tests` and
 `run_lint`; once requested those checks remain required. Go is formatted before
-proposal publication where parseable. Source parsing/formatting checks are always
+proposal publication where parseable. Unchanged targets and Go rewrites that only
+differ in formatting are omitted from the proposal. File diffs align unchanged
+lines between separate edits; whitespace inside literals and Markdown remains
+visible when it changes. Source parsing/formatting checks are always
 required; code tests/vet run only with current execution trust in a copied workspace
 using fixed argv. New test files are tested against the base and candidate, and a
 reviewed regression proof stays pinned through repair. Passing parser checks alone

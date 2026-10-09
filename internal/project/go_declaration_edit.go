@@ -398,7 +398,7 @@ func normalizeRequestedImports(imports []string) ([]string, error) {
 }
 
 func validateGoDeclarationComposition(path, original, composed string, edit GoDeclarationEdit, requestedImports []string) DeclarationValidation {
-	validation := DeclarationValidation{ScopeMode: "symbol_plus_imports", Diff: buildUnifiedDiff(path, original, composed)}
+	validation := DeclarationValidation{ScopeMode: "symbol_plus_imports", Diff: BuildUnifiedDiff(path, original, composed)}
 	fset := token.NewFileSet()
 	before, err := parser.ParseFile(fset, path, original, parser.ParseComments)
 	if err != nil {
