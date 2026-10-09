@@ -61,27 +61,31 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   of file analysis, gets at least ten minutes (or the selected model's longer
   timeout), honors file exclusions and reuses completed ideas on resume.
   Failed feature discovery leaves other analysis results available.
-- **Bugs**, **Performance** and **Security** show searchable results and their
-  evidence, with the exact file, declaration and line, cause and proposed solution.
-  Finding actions, including **Mark as fixed**, sit in the header alongside the
-  location and state; there is no separate Source panel.
-  Creation, testing and review model cards sit above the finding details and use
-  the same searchable picker as Analysis. Choose each agent’s model, then select
-  **Prepare fix** to start immediately. File scope, remote destinations and project
-  checks appear beside the action; selecting it authorizes those operations and,
-  for Security findings, the Security fix. Changed destinations or project revisions
-  require fresh preparation.
-  The fix page keeps the cause separate from the generated solution and places
-  workflow failures and requested corrections under **Proposed solution**.
-  Task type, file scope, checks and the request stay app-guided, without a separate
-  plan card or request editor.
+- **Bugs**, **Performance** and **Security** keep searchable findings on their category
+  pages. **Open fix** opens a dedicated page with the exact file, declaration and
+  line, a short proposed solution, and scoped preparation. No findings list appears
+  on the fix page. **Details** contains the full cause, provenance, confidence,
+  evidence and triage actions, including **Mark as fixed**; **Full explanation**
+  reveals longer solutions.
+  **Models** expands the creation, testing and review model pickers.
+  **Prepare fix** starts generation and checks. File scope, remote destinations
+  and project checks appear beside the action; selecting it authorizes those
+  operations and, for Security findings, the Security fix. Changed destinations
+  or project revisions require fresh preparation.
   Go fixes include a regression test path; Markdown-only fixes use the selected
-  creation profile. **Go to file** opens the source without starting a fix.
+  creation profile. **Go to file** opens source without starting a fix.
   **Analyze stale files** refreshes only outdated files and preserves results for
   unchanged files, whose freshness follows their content and applicable guidance.
-  Select a file in **Files to change** to inspect its read-only diff. Selecting files
-  never generates, checks or applies a proposal. Findings and performance hypotheses
-  keep their reported confidence; the app does not invent a missing cause or solution.
+  The generated fix opens on **Changes**, with full-width read-only file diffs.
+  **Checks** contains diagnostics, captured workflow stages and model review.
+  **Details** contains cause, scope, instructions, models, regeneration and history.
+  **Review next file** advances through the diffs; **Apply N files** becomes available
+  after every changed file has been viewed and the existing check/review guards pass.
+  Regeneration clears the viewed-file state. Tabs and file selection never generate,
+  check or apply a proposal. Failures and requested corrections stay visible above
+  the diff. Performance remains unmeasured without benchmark evidence.
+  Apply records review for that exact revision and retains post-Apply verification
+  and guarded Undo. It does not automatically mark the finding fixed.
 - **Features** uses project goals to suggest advisory new capabilities. Searches
   use the same extended deadline as feature discovery in Analysis. New ideas
   accumulate alongside existing ones, retaining prior triage decisions, and
@@ -104,7 +108,7 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   Failed tests or requested changes block approval. A successful run displays read-only diffs and waits for **Accept changes**. Performance remains unmeasured unless
   actual benchmark evidence is available. Interrupted runs need an explicit new
   run; the workflow never resumes provider calls from history automatically.
-  Describe a task or use **Prepare fix** on a finding. Generation checks the proposal and can repair failed checks up to three times.
+  Describe a task here, or use the dedicated fix workflow from a finding. Generation checks the proposal and can repair failed checks up to three times.
   Read the displayed file diffs, then select **Accept changes** once. This records
   review and applies only that revision; failed review, a replacement proposal or
   navigation while review is pending prevents Apply. With a captured `_test.go`

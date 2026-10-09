@@ -64,6 +64,13 @@ function App() {
     () => localStorage.getItem('mini-orca:sidebar-collapsed') === 'true',
   );
   const main = useRef<HTMLElement>(null);
+  const changeKind = s.change?.kind || s.changeSeed?.kind;
+  const activePage =
+    s.page === 'chat' && ['fix', 'performance', 'security'].includes(changeKind || '')
+      ? changeKind === 'fix'
+        ? 'bugs'
+        : changeKind
+      : s.page;
   useEffect(() => {
     void w.start();
     const focus = () => void w.refreshFile();
@@ -108,7 +115,7 @@ function App() {
         title={sidebarCollapsed ? label : undefined}
         disabled={!s.project && !['project', 'models'].includes(page)}
         aria-current={
-          s.page === page ||
+          activePage === page ||
           (page === 'analysis' && s.page === 'analysis-preview') ||
           (page === 'editor' && editorPages.includes(s.page))
             ? 'page'
@@ -126,7 +133,7 @@ function App() {
       </button>
     ));
   const title =
-    [...mainNav, ...utilityNav].find(([page]) => page === s.page)?.[1] ||
+    [...mainNav, ...utilityNav].find(([page]) => page === activePage)?.[1] ||
     s.page
       .split('-')
       .map((word) => word[0].toUpperCase() + word.slice(1))
@@ -185,11 +192,13 @@ function App() {
             </span>
             <Icon name="chevrons" />
           </button>
-          <div className="nav-label">Workspace</div>
-          <nav aria-label="Workspaces">{nav(mainNav)}</nav>
-          <div className="sidebar-bottom">
-            <div className="nav-label">Tools</div>
-            <nav aria-label="Tools">{nav(utilityNav)}</nav>
+          <div className="sidebar-navigation">
+            <div className="nav-label">Workspace</div>
+            <nav aria-label="Workspaces">{nav(mainNav)}</nav>
+            <div className="sidebar-bottom">
+              <div className="nav-label">Tools</div>
+              <nav aria-label="Tools">{nav(utilityNav)}</nav>
+            </div>
           </div>
           <button
             className="sidebar-toggle"
@@ -243,7 +252,7 @@ function App() {
               </div>
             )}
             <div className="page" data-accent={s.page}>
-              <ProjectGuidance s={s} />
+              {activePage === s.page && <ProjectGuidance s={s} />}
               {s.page !== 'chat' && s.change?.workflow && s.change.state === 'draft' && (
                 <Notice>
                   <div className="row between wrap" aria-live="polite">

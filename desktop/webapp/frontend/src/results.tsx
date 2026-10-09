@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type * as M from './models';
 import { workspace as w, activeChangeWorkflow, workflowSeed, type State } from './workspace';
 import { FixPreparation } from './fix-preparation';
+import { FixSteps } from './fix-workspace';
+import { SolutionExcerpt } from './fix-solution';
 import { WorkflowModels, defaultWorkflowModels } from './change-workflow';
 import { StaleAnalysisButton } from './analysis';
 import {
@@ -114,6 +116,13 @@ export function Results({ s }: { s: State }) {
   const [severity, setSeverity] = useState('');
   const [selected, setSelected] = useState<string>();
   const [limit, setLimit] = useState(100);
+  const view = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selected) {
+      view.current?.focus();
+      document.getElementById('main')?.scrollTo(0, 0);
+    }
+  }, [selected]);
   const rows = results
     ? [
         ...(results.semantic || []).map(semantic),
@@ -148,7 +157,17 @@ export function Results({ s }: { s: State }) {
   const fixDisabled = !!s.busy || activeChangeWorkflow(s.change) || detail?.freshness === 'stale';
   if (detail)
     return (
-      <div className="workspace-page results-page results-detail">
+      <div
+        ref={view}
+        tabIndex={-1}
+        className="workspace-page results-page results-detail guided-fix"
+      >
+        <div className="row between wrap fix-back">
+          <Button icon="back" onClick={() => setSelected(undefined)}>
+            All findings
+          </Button>
+          <span className="small muted">Prepare a fix</span>
+        </div>
         <Heading
           variant="intro"
           title={detail.title}
@@ -158,12 +177,9 @@ export function Results({ s }: { s: State }) {
                 {detail.path}
                 {detail.line ? `:${detail.line}` : ''}
               </span>
-              <span>
-                <span>{detail.symbol || 'File-level finding'}</span> · {human(detail.kind)}
-              </span>
+              <span>{detail.symbol || 'File-level finding'}</span>
               <span className="row wrap">
                 <Badge value={detail.severity} />
-                <Badge value={detail.confidence} tone="violet" />
                 <span aria-label="Finding state">
                   <Badge value={detail.status} />
                 </span>
@@ -175,71 +191,77 @@ export function Results({ s }: { s: State }) {
             </span>
           }
         >
-          <Button icon="back" onClick={() => setSelected(undefined)}>
-            All findings
-          </Button>
           <StaleAnalysisButton s={s} />
           <Button
+            icon="code"
             disabled={!!s.busy}
             onClick={() => void w.openFile(detail.path, detail.symbol, detail.task)}
           >
             Go to file
           </Button>
-          {detail.finding && (
-            <>
-              <Button
-                disabled={!!s.busy}
-                onClick={() =>
-                  void w.triage(
-                    detail.finding!,
-                    detail.status === 'dismissed' ? 'open' : 'dismissed',
-                  )
-                }
-              >
-                {detail.status === 'dismissed' ? 'Reopen' : 'Dismiss'}
-              </Button>
-              <Button
-                icon="check"
-                disabled={!!s.busy || detail.status === 'fixed'}
-                onClick={() => void w.triage(detail.finding!, 'fixed')}
-              >
-                Mark as fixed
-              </Button>
-            </>
-          )}
         </Heading>
-        {seed && detail.path && (
-          <Panel title="Agent models" className="fix-models">
-            <WorkflowModels
-              s={s}
-              value={s.workflowModels || s.change?.workflow?.models || defaultWorkflowModels}
-              disabled={fixDisabled}
-              creationOnly={!seed.paths.some((path) => path.endsWith('_test.go'))}
-            />
-          </Panel>
+        <FixSteps step="prepare" />
+        {detail.freshness === 'stale' && (
+          <Notice>This finding is stale. Refresh its analysis before preparing a fix.</Notice>
         )}
-        <div className="grid two-columns results-detail-layout">
-          <div className="stack">
-            <Panel title="Cause" className="fix-explanation">
-              <p className="small muted">Reported finding · {human(detail.confidence)}</p>
-              <Prose
-                text={
-                  detail.cause ||
-                  'The saved finding does not include a cause. Review the evidence before preparing a fix.'
-                }
-              />
+        {category === 'performance' && (
+          <Notice>Performance unmeasured; tests do not establish a speedup.</Notice>
+        )}
+        <Panel title="Proposed solution" className="fix-explanation fix-solution">
+          <SolutionExcerpt
+            text={
+              detail.solution ||
+              'No remediation was supplied. Review the generated solution before Apply.'
+            }
+          />
+        </Panel>
+        {seed && detail.path && (
+          <>
+            <Panel className="fix-models">
+              <Disclosure title="Models">
+                <WorkflowModels
+                  s={s}
+                  value={s.workflowModels || s.change?.workflow?.models || defaultWorkflowModels}
+                  disabled={fixDisabled}
+                  creationOnly={!seed.paths.some((path) => path.endsWith('_test.go'))}
+                />
+              </Disclosure>
             </Panel>
-            <Panel title="Proposed solution" className="fix-explanation">
+            <FixPreparation key={detail.key} s={s} seed={seed} disabled={fixDisabled} />
+          </>
+        )}
+        <Disclosure title="Details">
+          <div className="stack results-detail-layout">
+            <Panel title="Cause" className="fix-explanation">
+              <p className="small muted">
+                {human(detail.kind)} · Reported confidence: {human(detail.confidence)}
+              </p>
               <Prose
                 text={
-                  detail.solution ||
-                  'No remediation was supplied. The fix agent will explain its proposed solution before Apply.'
+                  detail.cause || 'No cause was saved. Review the evidence before preparing a fix.'
                 }
               />
-              {category === 'performance' && (
-                <p className="small muted">
-                  A performance hypothesis; any improvement needs measurement.
-                </p>
+              {detail.finding && (
+                <div className="actions section-gap">
+                  <Button
+                    disabled={!!s.busy}
+                    onClick={() =>
+                      void w.triage(
+                        detail.finding!,
+                        detail.status === 'dismissed' ? 'open' : 'dismissed',
+                      )
+                    }
+                  >
+                    {detail.status === 'dismissed' ? 'Reopen' : 'Dismiss'}
+                  </Button>
+                  <Button
+                    icon="check"
+                    disabled={!!s.busy || detail.status === 'fixed'}
+                    onClick={() => void w.triage(detail.finding!, 'fixed')}
+                  >
+                    Mark as fixed
+                  </Button>
+                </div>
               )}
             </Panel>
             {detail.text
@@ -268,14 +290,9 @@ export function Results({ s }: { s: State }) {
                 </Disclosure>
               </Panel>
             )}
-          </div>
-          <div className="stack">
-            {seed && detail.path && (
-              <FixPreparation key={detail.key} s={s} seed={seed} disabled={fixDisabled} />
-            )}
             <InsightCard insight={detail.insight} />
           </div>
-        </div>
+        </Disclosure>
       </div>
     );
   const reports = [

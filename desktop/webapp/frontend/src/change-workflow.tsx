@@ -47,7 +47,17 @@ const stageNames: Record<string, string> = {
   human_review: 'Human diff review',
 };
 
-export function WorkflowProgress({ s, showOutcome = true }: { s: State; showOutcome?: boolean }) {
+export function WorkflowProgress({
+  s,
+  showOutcome = true,
+  actionLabel = 'Accept changes',
+  showCancel = true,
+}: {
+  s: State;
+  showOutcome?: boolean;
+  actionLabel?: string;
+  showCancel?: boolean;
+}) {
   const workflow = s.change?.workflow;
   if (!workflow) return null;
   return (
@@ -95,9 +105,9 @@ export function WorkflowProgress({ s, showOutcome = true }: { s: State; showOutc
         </section>
       )}
       {workflow.status === 'awaiting_human_review' && s.change?.state === 'draft' && (
-        <Notice>Review the file differences, then select Accept changes.</Notice>
+        <Notice>Review the file differences, then select {actionLabel}.</Notice>
       )}
-      {activeChangeWorkflow(s.change) && (
+      {showCancel && activeChangeWorkflow(s.change) && (
         <div className="actions">
           <Button
             disabled={!!s.busy || workflow.status === 'canceling'}

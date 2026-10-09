@@ -1,5 +1,20 @@
 import type { State } from './workspace';
-import { BulletContent, Notice, Panel, Prose, human } from './ui';
+import { BulletContent, Disclosure, Notice, Panel, Prose, human } from './ui';
+
+export function SolutionExcerpt({ text }: { text: string }) {
+  const paragraph = text.split(/\n\s*\n/)[0];
+  const summary = paragraph.length > 240 ? `${paragraph.slice(0, 240).trimEnd()}…` : paragraph;
+  return (
+    <>
+      <Prose text={summary} />
+      {summary !== text && (
+        <Disclosure title="Full explanation">
+          <Prose text={text} />
+        </Disclosure>
+      )}
+    </>
+  );
+}
 
 function solutionText(text: string) {
   const source = text.trim();
@@ -28,9 +43,9 @@ export function FixSolution({ s }: { s: State }) {
   return (
     <Panel title="Proposed solution" className="fix-explanation fix-solution">
       {explanations?.length ? (
-        explanations.map((text, index) => <Prose key={index} text={text} />)
+        <SolutionExcerpt text={explanations[explanations.length - 1]} />
       ) : (
-        <Prose
+        <SolutionExcerpt
           text={
             s.changeSeed?.finding?.solution ||
             'Review the generated explanation and file differences below. The proposed correction is subject to tests and your review.'
@@ -48,10 +63,6 @@ export function FixSolution({ s }: { s: State }) {
       <BulletContent
         title="Checks needing attention"
         items={checks?.map((check) => `${check.name}: ${human(check.state)}`)}
-      />
-      <BulletContent
-        title="Acceptance criteria"
-        items={change?.acceptance_criteria || s.changeSeed?.acceptance_criteria}
       />
     </Panel>
   );

@@ -1117,12 +1117,6 @@ async function resultsListLayout(page) {
 async function resultsDetailLayout(page) {
   const workspace = page.locator('.results-detail');
   await headingContainment(workspace.locator('.page-heading--intro'));
-  for (const region of [
-    workspace,
-    workspace.locator('.results-detail-layout'),
-    ...(await workspace.locator('.results-detail-layout > .stack').all()),
-  ])
-    assert.equal(await region.evaluate((element) => getComputedStyle(element).gap), '20px');
   const overflowing = await page
     .locator(
       '#main, .page, .results-detail, .results-detail .panel, .results-detail .panel-head, .results-detail .panel-body, .results-detail .stack, .results-detail .key-values, .results-detail .key-values dd, .results-detail .prose, .results-detail .disclosure-body, .results-detail li',
@@ -1137,26 +1131,16 @@ async function resultsDetailLayout(page) {
     [],
     'Complete detail evidence and anchors wrap inside their panels',
   );
-  const [evidence, source] = await Promise.all(
-    (await workspace.locator('.results-detail-layout > .stack').all()).map((stack) =>
-      stack.boundingBox(),
-    ),
+  assert.equal(
+    await workspace.locator('.result-row').count(),
+    0,
+    'A fix page never repeats the findings list',
   );
-  if (source.x > evidence.x + 1) {
-    assert.ok(Math.abs(source.y - evidence.y) <= 1, 'Evidence and source columns align');
-    assert.ok(Math.abs(source.x - evidence.x - evidence.width - 20) <= 1);
-  } else {
-    assert.ok(Math.abs(source.y - evidence.y - evidence.height - 20) <= 1);
-    assert.ok(
-      Math.abs(source.width - evidence.width) <= 1,
-      'Compact evidence stacks at full width',
-    );
-  }
-  if (page.viewportSize().width === 800) assert.ok(Math.abs(source.x - evidence.x) <= 1);
-  if (page.viewportSize().width === 1440) assert.ok(source.x > evidence.x + 1);
   for (const panel of await workspace.locator('.panel').all()) {
+    if (!(await panel.isVisible())) continue;
     const bounds = await panel.boundingBox();
     for (const action of await panel.getByRole('button').all()) {
+      if (!(await action.isVisible())) continue;
       const box = await action.boundingBox();
       assert.ok(box && box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
       assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
@@ -2107,6 +2091,8 @@ try {
         .count(),
       0,
     );
+    await page.locator('.result-row').first().click();
+    await page.locator('summary').getByText('Details', { exact: true }).click();
     await page.getByText(/AI analysis/).waitFor();
     await nav(page, 'Features');
     await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
@@ -7677,7 +7663,7 @@ try {
       }
     }
   });
-  await test('Selected findings retain complete evidence, Summary treatment and passive detail controls', async () => {
+  await test('Selected findings retain complete evidence in optional details with passive controls', async () => {
     for (const variant of [
       'bugs-semantic',
       'performance-typed',
@@ -7691,7 +7677,6 @@ try {
       const { page, close } = await pageFor({ findingDetail: variant, trusted: true });
       try {
         await idle(page);
-        const referenceIntro = await introductionTreatment(page.locator('.summary-hero'));
         const referencePanel = await panelTreatment(
           page.locator('.summary-details > .panel').first(),
         );
@@ -7751,38 +7736,39 @@ try {
         );
         await page.locator('.result-row').press('Enter');
         const workspace = page.locator('.results-detail');
+        assert.equal(
+          await workspace.getByRole('heading', { name: 'Cause', exact: true }).isVisible(),
+          false,
+        );
+        await workspace.locator('summary').getByText('Details', { exact: true }).click();
+        const fullExplanation = workspace
+          .locator('summary')
+          .getByText('Full explanation', { exact: true });
+        if (await fullExplanation.count()) await fullExplanation.click();
         const panel = (title) =>
           workspace
             .locator('.panel')
             .filter({ has: page.getByRole('heading', { name: title, exact: true }) });
-        assert.deepEqual(
-          await introductionTreatment(workspace.locator('.page-heading--intro')),
-          referenceIntro,
-        );
         assert.deepEqual(await panelTreatment(panel('Cause')), referencePanel);
         assert.equal(await panel('Source').count(), 0);
         assert.equal(await workspace.locator('h1').innerText(), expected.title);
-        if (!['suggested', 'ai_suggestion'].includes(expected.confidence))
-          assert.equal(
-            await workspace.locator('.page-heading .badge').nth(1).innerText(),
-            expected.confidence.replaceAll('_', ' '),
-          );
+        assert.ok(
+          (await panel('Cause').innerText()).includes(expected.confidence.replaceAll('_', ' ')),
+        );
         for (const [title, content] of expected.text)
           assert.equal(
             await panel(title)
               .locator('.prose')
+              .last()
               .evaluate((element) => element.textContent),
             content.replace(/\n\s*\n/g, ''),
           );
         const metadata = workspace.locator('.results-detail-meta');
         assert.equal(await metadata.locator('.path').innerText(), `${expected.path}:5`);
         assert.ok((await metadata.innerText()).includes(expected.symbol));
-        assert.ok((await metadata.innerText()).includes(expected.source));
+        assert.ok((await panel('Cause').innerText()).includes(expected.source));
         if (semantic)
-          await workspace
-            .locator('.page-heading')
-            .getByRole('button', { name: 'Mark as fixed', exact: true })
-            .waitFor();
+          await workspace.getByRole('button', { name: 'Mark as fixed', exact: true }).waitFor();
         assert.equal(
           await panel('Engineering insight')
             .locator('.prose')
@@ -7952,6 +7938,7 @@ try {
         );
         await page.locator('.busy-strip').waitFor();
         await page.locator('.result-row').click();
+        await workspace.locator('summary').getByText('Details', { exact: true }).click();
         for (const label of [
           'Go to file',
           'Prepare fix',
@@ -7990,6 +7977,7 @@ try {
     try {
       await nav(page, 'Bugs');
       await page.locator('.result-row').click();
+      await page.locator('summary').getByText('Details', { exact: true }).click();
       const initialWrites = await page.evaluate(
         () => window.fixture.requests.filter((r) => r.method !== 'GET').length,
       );
