@@ -59,7 +59,7 @@ function semantic(f: M.Finding): ResultRow {
     cause: [...new Set([f.message, f.evidence].filter(Boolean))].join('\n\n'),
     solution:
       f.task_spec?.acceptance_criteria.join('\n') ||
-      'A solution has not been established yet. The fix agent will investigate this finding and explain its proposed correction before you apply it.',
+      'No solution yet. Prepare a fix to review the proposed changes.',
   };
 }
 function performance(report: M.PerformanceReport): ResultRow[] {

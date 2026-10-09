@@ -3190,8 +3190,12 @@ dialog.model-picker {
 .guided-fix .fix-solution .prose > p:first-child {
   margin-top: 0;
 }
-.guided-fix .fix-models > .panel-body {
+.guided-fix .fix-models > .panel-pad {
   padding: 0 16px;
+}
+.guided-fix .fix-models > .panel-pad > details {
+  margin: 0;
+  border: 0;
 }
 .guided-fix .fix-preparation .panel-head {
   background: var(--raised);
