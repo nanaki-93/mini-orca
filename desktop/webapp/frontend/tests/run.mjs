@@ -4287,9 +4287,9 @@ try {
         assert.equal(request[0].body.post_apply_hash, 'applied-hash');
         assert.equal(request[0].body.project_revision, 'revision-2');
         const after = await writes();
-        await surface.getByRole('button', { name: 'Open source', exact: true }).click();
+        await surface.getByRole('button', { name: 'Go to file', exact: true }).click();
         await idle(page);
-        assert.deepEqual(await writes(), after, 'Open source is passive');
+        assert.deepEqual(await writes(), after, 'Go to file is passive');
         assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
       } finally {
         await page
@@ -7686,7 +7686,7 @@ try {
       const category = variant.split('-')[0];
       const name = category[0].toUpperCase() + category.slice(1);
       const semantic = variant.endsWith('-semantic');
-      const { page, close } = await pageFor({ findingDetail: variant });
+      const { page, close } = await pageFor({ findingDetail: variant, trusted: true });
       try {
         await idle(page);
         const referenceIntro = await introductionTreatment(page.locator('.summary-hero'));
@@ -7698,23 +7698,20 @@ try {
             const state = window.fixture.state;
             const row = semantic ? state.finding : state[category].findings[0];
             const text = semantic
-              ? [
-                  ['Finding', row.message],
-                  ['Evidence', row.evidence],
-                ]
+              ? [['Cause', [...new Set([row.message, row.evidence].filter(Boolean))].join('\n\n')]]
               : category === 'performance'
                 ? [
-                    ['Observed pattern', row.observed_pattern],
+                    ['Cause', row.observed_pattern],
                     ['Workload', row.workload_conditions],
-                    ['Recommendation', row.recommendation],
+                    ['Proposed solution', row.recommendation],
                     ['Tradeoff', row.tradeoff],
                     ['Verification', row.verification_plan],
                   ]
                 : [
-                    ['Observed condition', row.observed_condition],
+                    ['Cause', row.observed_condition],
                     ['Evidence', row.evidence_kind],
                     ['Preconditions & unknowns', row.preconditions_or_unknowns],
-                    ['Remediation', row.remediation],
+                    ['Proposed solution', row.remediation],
                     ['Verification', row.verification_idea],
                     ['Rule', row.rule],
                     ['CWE', row.cwe],
@@ -7829,9 +7826,8 @@ try {
               );
               for (const label of [
                 'All findings',
-                'Open source',
+                'Go to file',
                 'Prepare fix',
-                'Review fix plan',
                 ...(semantic ? ['Dismiss', 'Mark fixed'] : []),
               ])
                 assert.equal(
@@ -7873,13 +7869,13 @@ try {
         await idle(page);
         await page.locator('.result-row').click();
         await workspace.locator('.results-state').getByText('stale', { exact: true }).waitFor();
-        for (const label of ['Prepare fix', 'Review fix plan'])
+        for (const label of ['Prepare fix'])
           assert.equal(
             await workspace.getByRole('button', { name: label, exact: true }).isDisabled(),
             true,
           );
         assert.equal(
-          await workspace.getByRole('button', { name: 'Open source', exact: true }).isEnabled(),
+          await workspace.getByRole('button', { name: 'Go to file', exact: true }).isEnabled(),
           true,
         );
         await resultsDetailLayout(page);
@@ -7918,7 +7914,7 @@ try {
         );
         assert.equal(
           await workspace.getByRole('button', { name: 'Review fix plan', exact: true }).count(),
-          1,
+          0,
         );
         await workspace.getByText('File-level finding', { exact: true }).waitFor();
         if (!semantic && category === 'security')
@@ -7950,9 +7946,8 @@ try {
         await page.locator('.busy-strip').waitFor();
         await page.locator('.result-row').click();
         for (const label of [
-          'Open source',
+          'Go to file',
           'Prepare fix',
-          'Review fix plan',
           ...(semantic ? ['Dismiss', 'Mark fixed'] : []),
         ])
           assert.equal(
@@ -8023,7 +8018,7 @@ try {
     }
   });
   await test('Finding source inspection and guided fix planning remain distinct from generation', async () => {
-    for (const action of ['Open source', 'Review fix plan']) {
+    for (const action of ['Go to file']) {
       const { page, close } = await pageFor();
       try {
         await nav(page, 'Bugs');
@@ -8032,12 +8027,7 @@ try {
           window.fixture.requests.filter((r) => r.method !== 'GET'),
         );
         await page.getByRole('button', { name: action, exact: true }).click();
-        if (action === 'Open source')
-          await page.getByLabel('Read-only source', { exact: true }).waitFor();
-        else {
-          await page.getByText('App-generated request', { exact: true }).click();
-          await page.getByLabel('Change request', { exact: true }).waitFor();
-        }
+        await page.getByLabel('Read-only source', { exact: true }).waitFor();
         await idle(page);
         assert.deepEqual(
           await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),

@@ -20,6 +20,7 @@ import {
   BulletContent,
   KeyValues,
 } from './ui';
+import { FixPreparation } from './fix-preparation';
 import type { ChangeSession } from './models';
 
 export function ChangeWorkspace({ s }: { s: State }) {
@@ -62,9 +63,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
     acceptance_criteria: change?.acceptance_criteria || s.changeSeed?.acceptance_criteria || [],
   };
   const running = activeChangeWorkflow(change);
-  const models = guided
-    ? change?.workflow?.models || defaultWorkflowModels
-    : s.workflowModels || change?.workflow?.models || defaultWorkflowModels;
+  const models = s.workflowModels || change?.workflow?.models || defaultWorkflowModels;
   const useAgents =
     taskKind !== 'instructions' &&
     (!!change?.workflow || seed.paths.some((path) => path.endsWith('_test.go')));
@@ -100,11 +99,11 @@ export function ChangeWorkspace({ s }: { s: State }) {
             disabled={!!s.busy || !sourcePath}
             onClick={() => void w.openFile(sourcePath, finding?.symbol || '')}
           >
-            Inspect source
+            Go to file
           </Button>
         ) : (
           <Go page="editor" icon="code">
-            Inspect source
+            Go to file
           </Go>
         )}
         <Button disabled={!!s.busy || running} onClick={() => w.newChange()}>
@@ -373,63 +372,58 @@ export function ChangeWorkspace({ s }: { s: State }) {
                 />
               </>
             )}
-            {guided ? (
-              <>
-                <p className="small muted">
-                  The app sets the task, file scope, agent models and checks from this finding.
-                  Generation prepares a diff; Apply requires your acceptance.
-                </p>
-                {useAgents && (
-                  <Disclosure title="Agent models">
-                    <WorkflowModels s={s} value={models} disabled readOnly />
-                  </Disclosure>
-                )}
-              </>
-            ) : useAgents ? (
-              <Disclosure title="Agent models">
-                <WorkflowModels s={s} value={models} disabled={blocked} />
-              </Disclosure>
-            ) : (
-              <label className="checkbox-line">
-                <input
-                  type="checkbox"
-                  checked={tests}
-                  disabled={blocked || change?.kind === 'instructions'}
-                  onChange={(e) => setTests(e.target.checked)}
-                />
-                Run project tests after generation
-              </label>
-            )}
+            {!guided &&
+              (useAgents ? (
+                <Disclosure title="Agent models">
+                  <WorkflowModels s={s} value={models} disabled={blocked} />
+                </Disclosure>
+              ) : (
+                <label className="checkbox-line">
+                  <input
+                    type="checkbox"
+                    checked={tests}
+                    disabled={blocked || change?.kind === 'instructions'}
+                    onChange={(e) => setTests(e.target.checked)}
+                  />
+                  Run project tests after generation
+                </label>
+              ))}
             <p className="small muted">
               {useAgents
                 ? 'Creation, tests and agent review run automatically.'
                 : 'Generation and checks run automatically. Include a _test.go path to use separate testing and review agents.'}
             </p>
-            <div className="actions section-gap">
-              <Button
-                tone="primary"
-                icon="sparkles"
-                disabled={
-                  blocked ||
-                  !request.trim() ||
-                  !paths.trim() ||
-                  !title.trim() ||
-                  (useAgents && !s.models)
-                }
-                onClick={() =>
-                  void (useAgents
-                    ? w.startChangeWorkflow(seed, models)
-                    : w.prepareChange(seed, guided || tests))
-                }
-              >
-                {guided
-                  ? change?.changes.length
-                    ? 'Regenerate fix'
-                    : 'Run fix'
-                  : 'Generate changes'}
-              </Button>
-            </div>
+            {!guided && (
+              <div className="actions section-gap">
+                <Button
+                  tone="primary"
+                  icon="sparkles"
+                  disabled={
+                    blocked ||
+                    !request.trim() ||
+                    !paths.trim() ||
+                    !title.trim() ||
+                    (useAgents && !s.models)
+                  }
+                  onClick={() =>
+                    void (useAgents
+                      ? w.startChangeWorkflow(seed, models)
+                      : w.prepareChange(seed, tests))
+                  }
+                >
+                  Generate changes
+                </Button>
+              </div>
+            )}
           </Panel>
+          {guided && (
+            <FixPreparation
+              s={s}
+              seed={seed}
+              disabled={blocked || !request.trim() || !paths.trim() || !title.trim()}
+              label={change?.changes.length ? 'Regenerate fix' : 'Prepare fix'}
+            />
+          )}
           <Panel className="chat-history">
             <Disclosure title="Local history">
               {!s.changeHistory ? (

@@ -728,7 +728,8 @@ but deletes and other languages are unavailable. A manual instruction proposal a
 
 Messages, checks, review, Apply and Undo carry `project_id`, `project_revision`,
 `revision` and `hash`; the session ID is in the route. Messages add `message`,
-`confirm_remote_provider` and optional `repair`. Repair requires current failed
+`confirm_remote_provider`, optional `profile` (`analyze`, `bug`, or `function`,
+default `function`) and optional `repair`. Consent applies to the selected profile. Repair requires current failed
 checks and consumes one of three durable attempts. Checks accept `run_tests` and
 `run_lint`; once requested those checks remain required. Go is formatted before
 proposal publication where parseable. Source parsing/formatting checks are always

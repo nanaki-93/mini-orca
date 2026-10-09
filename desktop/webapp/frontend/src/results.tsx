@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type * as M from './models';
 import { workspace as w, activeChangeWorkflow, type State } from './workspace';
-import { defaultWorkflowModels } from './change-workflow';
+import { FixPreparation } from './fix-preparation';
 import { StaleAnalysisButton } from './analysis';
 import {
   Badge,
@@ -51,13 +51,10 @@ function semantic(f: M.Finding): ResultRow {
     status: f.status,
     kind: ['suggested', 'ai_suggestion'].includes(f.confidence) ? 'AI analysis' : f.source,
     insight: f.engineering_insight,
-    text: [
-      ['Finding', f.message],
-      ['Evidence', f.evidence],
-    ],
+    text: [],
     finding: f,
     task: f.task_spec,
-    cause: f.evidence || f.message,
+    cause: [...new Set([f.message, f.evidence].filter(Boolean))].join('\n\n'),
     solution:
       f.task_spec?.acceptance_criteria.join('\n') ||
       'A solution has not been established yet. The fix agent will investigate this finding and explain its proposed correction before you apply it.',
@@ -79,9 +76,7 @@ function performance(report: M.PerformanceReport): ResultRow[] {
     cause: f.observed_pattern,
     solution: f.recommendation,
     text: [
-      ['Observed pattern', f.observed_pattern],
       ['Workload', f.workload_conditions],
-      ['Recommendation', f.recommendation],
       ['Tradeoff', f.tradeoff],
       ['Verification', f.verification_plan],
     ],
@@ -103,10 +98,8 @@ function security(report: M.SecurityReport): ResultRow[] {
     cause: f.observed_condition,
     solution: f.remediation,
     text: [
-      ['Observed condition', f.observed_condition],
       ['Evidence', f.evidence_kind],
       ['Preconditions & unknowns', f.preconditions_or_unknowns],
-      ['Remediation', f.remediation],
       ['Verification', f.verification_idea],
       ['Rule', f.rule],
       ['CWE', f.cwe || ''],
@@ -176,32 +169,8 @@ export function Results({ s }: { s: State }) {
             disabled={!!s.busy}
             onClick={() => void w.openFile(detail.path, detail.symbol, detail.task)}
           >
-            Open source
+            Go to file
           </Button>
-          {detail.path && (
-            <Button
-              disabled={!!s.busy || activeChangeWorkflow(s.change) || detail.freshness === 'stale'}
-              onClick={() => w.seedWorkflow(fixSeed(detail))}
-            >
-              Review fix plan
-            </Button>
-          )}
-          {detail.path && (
-            <Button
-              tone="primary"
-              disabled={!!s.busy || activeChangeWorkflow(s.change) || detail.freshness === 'stale'}
-              onClick={() => {
-                w.seedWorkflow(fixSeed(detail));
-                const seed = w.state.changeSeed;
-                if (seed)
-                  void (seed.paths.some((path) => path.endsWith('_test.go'))
-                    ? w.startChangeWorkflow(seed, defaultWorkflowModels)
-                    : w.prepareChange(seed, true));
-              }}
-            >
-              Prepare fix
-            </Button>
-          )}
         </Heading>
         <div className="grid two-columns results-detail-layout">
           <div className="stack">
@@ -255,6 +224,16 @@ export function Results({ s }: { s: State }) {
             )}
           </div>
           <div className="stack">
+            {detail.path && (
+              <FixPreparation
+                key={detail.key}
+                s={s}
+                seed={fixSeed(detail)}
+                disabled={
+                  !!s.busy || activeChangeWorkflow(s.change) || detail.freshness === 'stale'
+                }
+              />
+            )}
             <Panel title="Source" className="results-detail-source">
               <KeyValues
                 values={[
@@ -501,7 +480,7 @@ export function Results({ s }: { s: State }) {
             <Disclosure key={f.id} title={f.title}>
               <Prose text={f.message} />
               <Button onClick={() => void w.openFile(f.location.path, f.location.symbol)}>
-                Open source
+                Go to file
               </Button>
             </Disclosure>
           ))}

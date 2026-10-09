@@ -344,7 +344,7 @@ export function installFixture(options = {}) {
           },
         }
       : {},
-    trusted: false,
+    trusted: !!options.trusted,
     changes: {},
     changeReceipt: null,
     features: {

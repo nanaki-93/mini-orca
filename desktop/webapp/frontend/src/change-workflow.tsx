@@ -1,6 +1,6 @@
 import { activeChangeWorkflow, workspace as w, type State } from './workspace';
 import type { ChangeWorkflowModels } from './models';
-import { Badge, BulletContent, Button, KeyValues, Notice, Panel, Prose, human } from './ui';
+import { Badge, BulletContent, Button, Notice, Panel, Prose, human } from './ui';
 
 export const defaultWorkflowModels: ChangeWorkflowModels = {
   create: 'function',
@@ -12,27 +12,19 @@ export function WorkflowModels({
   s,
   value,
   disabled,
-  readOnly = false,
+  creationOnly = false,
 }: {
   s: State;
   value: ChangeWorkflowModels;
   disabled: boolean;
-  readOnly?: boolean;
+  creationOnly?: boolean;
 }) {
-  const roles = [
+  const allRoles = [
     ['create', 'Creation model'],
     ['test', 'Testing model'],
     ['review', 'Review model'],
   ] as const;
-  if (readOnly)
-    return (
-      <KeyValues
-        values={roles.map(([key, label]) => [
-          label,
-          `${s.models?.scopes[value[key]]?.model || 'Model unavailable'} · ${value[key]}`,
-        ])}
-      />
-    );
+  const roles = creationOnly ? allRoles.slice(0, 1) : allRoles;
   const choices = Object.entries(s.models?.scopes || {});
   return (
     <fieldset className="workflow-models" disabled={disabled}>
@@ -58,10 +50,12 @@ export function WorkflowModels({
           </label>
         ))}
       </div>
-      <p className="small muted">
-        The testing model writes tests. The daemon runs go test ./... in an isolated copy. Profiles
-        use the providers configured for this daemon.
-      </p>
+      {!creationOnly && (
+        <p className="small muted">
+          The testing model writes tests. The daemon runs go test ./... in an isolated copy.
+          Profiles use the providers configured for this daemon.
+        </p>
+      )}
     </fieldset>
   );
 }

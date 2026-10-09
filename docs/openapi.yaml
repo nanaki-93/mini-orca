@@ -2231,6 +2231,7 @@ components:
         - type: object
           properties:
             message: {type: string, maxLength: 8192}
+            profile: {type: string, enum: [analyze, bug, function], default: function}
             confirm_remote_provider: {type: boolean}
             repair: {type: boolean}
     ChangeCheckRequest:

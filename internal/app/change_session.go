@@ -11,7 +11,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -252,7 +251,8 @@ func (s *Service) SendChangeMessage(ctx context.Context, id string, request Chan
 	if strings.TrimSpace(request.Message) == "" || len(request.Message) > 8192 {
 		return nil, fmt.Errorf("provide a message of at most 8192 bytes")
 	}
-	if err := s.RequireRemoteConfirmation(config.FunctionModelScope, request.ConfirmRemoteProvider); err != nil {
+	runtime, err := s.changeMessageRuntime(request)
+	if err != nil {
 		return nil, err
 	}
 	session, root, err := s.loadChangeForAction(ctx, id, request.ChangeIdentity)
@@ -265,11 +265,19 @@ func (s *Service) SendChangeMessage(ctx context.Context, id string, request Chan
 	if request.Repair {
 		return nil, fmt.Errorf("run current proposal checks before requesting repair")
 	}
-	return s.generateChangeMessage(ctx, root, session, request)
+	return s.generateChangeWithRuntime(ctx, root, session, request, runtime)
 }
 
-func (s *Service) generateChangeMessage(ctx context.Context, root string, session *ChangeSession, request ChangeMessageRequest) (*ChangeSession, error) {
-	return s.generateChangeWithRuntime(ctx, root, session, request, s.runtimes.function)
+func (s *Service) changeMessageRuntime(request ChangeMessageRequest) (modelRuntime, error) {
+	profile := request.Profile
+	if profile == "" {
+		profile = "function"
+	}
+	runtime, ok := s.runtimes.forScope(profile)
+	if !ok {
+		return modelRuntime{}, fmt.Errorf("choose a configured analyze, bug or function profile")
+	}
+	return runtime, requireModelRuntimeConfirmation(runtime, request.ConfirmRemoteProvider)
 }
 
 func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, session *ChangeSession, request ChangeMessageRequest, runtime modelRuntime) (*ChangeSession, error) {

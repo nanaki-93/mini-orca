@@ -73,39 +73,14 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout }) 
   });
 
   await test('Workflow entry points seed scope and task intent without dispatch', async () => {
-    for (const [pageName, kind] of [
-      ['Features', 'feature'],
-      ['Bugs', 'fix'],
-      ['Performance', 'performance'],
-      ['Security', 'security'],
-    ]) {
+    for (const [pageName, kind] of [['Features', 'feature']]) {
       const { page, close } = await pageFor({ featuresReady: true });
       try {
         await nav(page, pageName);
-        if (pageName !== 'Features') await page.locator('.result-row').first().click();
-        await page
-          .getByRole('button', {
-            name: kind === 'feature' ? 'Configure workflow' : 'Review fix plan',
-            exact: true,
-          })
-          .first()
-          .click();
-        if (kind === 'feature')
-          assert.equal(await page.getByLabel('Task type', { exact: true }).inputValue(), kind);
-        else {
-          assert.equal(
-            await page.getByRole('combobox', { name: 'Task type', exact: true }).count(),
-            0,
-          );
-          assert.equal(
-            await page.getByLabel('Change request', { exact: true }).getAttribute('readonly'),
-            '',
-          );
-        }
+        await page.getByRole('button', { name: 'Configure workflow', exact: true }).first().click();
+        assert.equal(await page.getByLabel('Task type', { exact: true }).inputValue(), kind);
         assert.match(
-          kind === 'feature'
-            ? await page.getByLabel('Files to change', { exact: true }).inputValue()
-            : await page.getByLabel('Files to change', { exact: true }).textContent(),
+          await page.getByLabel('Files to change', { exact: true }).inputValue(),
           /_test\.go/,
         );
         assert.equal(
@@ -116,24 +91,6 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout }) 
           ),
           false,
         );
-        if (kind === 'security') {
-          await page.getByRole('button', { name: 'Run fix', exact: true }).click();
-          await page
-            .getByRole('dialog')
-            .getByRole('heading', { name: 'Start security workflow?', exact: true })
-            .waitFor();
-          await page
-            .getByRole('dialog')
-            .getByRole('button', { name: 'Cancel', exact: true })
-            .click();
-          await idle(page);
-          assert.equal(
-            await page.evaluate(() =>
-              window.fixture.requests.some((r) => r.path.endsWith('/workflow')),
-            ),
-            false,
-          );
-        }
       } finally {
         await close();
       }

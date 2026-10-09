@@ -32,7 +32,7 @@ export function Receipt({ s }: { s: State }) {
         }
         detail={r?.audit?.target_path}
       >
-        {r && <Go page="editor">Open source</Go>}
+        {r && <Go page="editor">Go to file</Go>}
         {r?.undo_available && (
           <Button icon="undo" disabled={!!s.busy || s.uncertain} onClick={() => void w.undo()}>
             Undo change

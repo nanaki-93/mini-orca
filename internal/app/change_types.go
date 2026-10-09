@@ -92,6 +92,7 @@ type ChangeIdentity struct {
 
 type ChangeMessageRequest struct {
 	ChangeIdentity
+	Profile               string `json:"profile,omitempty"`
 	Message               string `json:"message"`
 	ConfirmRemoteProvider bool   `json:"confirm_remote_provider"`
 	Repair                bool   `json:"repair,omitempty"`
