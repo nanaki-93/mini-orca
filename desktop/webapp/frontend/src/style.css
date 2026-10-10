@@ -3176,6 +3176,26 @@ dialog.model-picker {
   color: var(--accent);
   font-weight: 600;
 }
+.guided-fix .fix-cause {
+  background: var(--panel);
+  border-left: 3px solid var(--section-color);
+}
+.guided-fix .fix-cause > .panel-head {
+  padding: 16px 18px 0;
+  border: 0;
+}
+.guided-fix .fix-cause > .panel-head h2 {
+  color: var(--text);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.guided-fix .fix-cause > .panel-body {
+  padding: 10px 18px 18px;
+}
+.guided-fix .fix-cause .prose {
+  font-size: 1rem;
+  line-height: 1.65;
+}
 .guided-fix .fix-solution {
   background: transparent;
   border: 0;
@@ -3187,12 +3207,13 @@ dialog.model-picker {
 }
 .guided-fix .fix-solution > .panel-head h2 {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   font-weight: 500;
 }
 .guided-fix .fix-solution > .panel-body {
   padding: 8px 0 0;
 }
+.guided-fix .fix-cause .prose > p:first-child,
 .guided-fix .fix-solution .prose > p:first-child {
   margin-top: 0;
 }

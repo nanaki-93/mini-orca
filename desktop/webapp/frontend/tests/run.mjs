@@ -7677,9 +7677,6 @@ try {
       const { page, close } = await pageFor({ findingDetail: variant, trusted: true });
       try {
         await idle(page);
-        const referencePanel = await panelTreatment(
-          page.locator('.summary-details > .panel').first(),
-        );
         const expected = await page.evaluate(
           ({ category, semantic }) => {
             const state = window.fixture.state;
@@ -7738,7 +7735,7 @@ try {
         const workspace = page.locator('.results-detail');
         assert.equal(
           await workspace.getByRole('heading', { name: 'Cause', exact: true }).isVisible(),
-          false,
+          true,
         );
         await workspace.locator('summary').getByText('Details', { exact: true }).click();
         const fullExplanation = workspace.getByRole('button', {
@@ -7750,7 +7747,12 @@ try {
           workspace
             .locator('.panel')
             .filter({ has: page.getByRole('heading', { name: title, exact: true }) });
-        assert.deepEqual(await panelTreatment(panel('Cause')), referencePanel);
+        const causeBox = await panel('Cause').boundingBox();
+        const solutionBox = await panel('Proposed solution').boundingBox();
+        assert.ok(
+          causeBox.y + causeBox.height <= solutionBox.y,
+          'The full cause leads the solution',
+        );
         assert.equal(await panel('Source').count(), 0);
         assert.equal(await workspace.locator('h1').innerText(), expected.title);
         assert.ok(
