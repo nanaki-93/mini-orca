@@ -10,7 +10,6 @@ import {
   Button,
   Disclosure,
   Empty,
-  Go,
   Heading,
   Icon,
   Notice,
@@ -19,48 +18,30 @@ import {
   human,
 } from './ui';
 
-export function Scan({ s }: { s: State }) {
+export function Tests({ s }: { s: State }) {
   return (
-    <div className="workspace-page scan-workspace">
-      <Heading
-        variant="intro"
-        title="Verified scan"
-        detail={
-          <>
+    <section className="workspace-page tests-workspace" aria-labelledby="project-tests-title">
+      <header className="page-heading">
+        <div>
+          <h2 id="project-tests-title">Tests</h2>
+          <p>
             {s.scan && (
-              <span className="scan-status">
+              <span className="test-status">
                 <StatusDot value={s.scan.status} />
                 <span>Status: {human(s.scan.status)}</span>
               </span>
             )}
-            Local phase evidence. Completion does not mean every phase passed or the project is
-            safe.
-          </>
-        }
-      >
-        <Go page="bugs">Findings</Go>
-        {s.scan?.status === 'running' ? (
-          <Button disabled={!!s.busy} onClick={() => void w.scanProject(true)}>
-            Cancel scan
-          </Button>
-        ) : (
-          <Button
-            disabled={!!s.busy}
-            tone="primary"
-            icon="play"
-            onClick={() => void w.scanProject()}
-          >
-            Run scan
-          </Button>
-        )}
-      </Heading>
+            Local check results. Review each phase for failures and diagnostics.
+          </p>
+        </div>
+      </header>
       {s.scan ? (
-        <div className="stack scan-phases">
+        <div className="stack test-phases">
           {s.scan.phases?.map((phase, i) => (
             <Panel
               title={phase.name}
               actions={
-                <span className="scan-status">
+                <span className="test-status">
                   <StatusDot value={phase.state} />
                   <span>{human(phase.state)}</span>
                 </span>
@@ -87,9 +68,13 @@ export function Scan({ s }: { s: State }) {
           {!s.scan.phases?.length && <Empty title="No phase evidence returned" />}
         </div>
       ) : (
-        <Empty title="No verified scan yet" icon="shield" />
+        <Empty
+          title="No test run yet"
+          detail="Use Run Tests in the top bar to run the project checks."
+          icon="circleCheck"
+        />
       )}
-    </div>
+    </section>
   );
 }
 function TerminalSession({ session, visible }: { session: TerminalUpdate; visible: boolean }) {

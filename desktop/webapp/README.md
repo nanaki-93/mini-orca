@@ -41,6 +41,10 @@ workspace. Escape closes them and restores focus. **Terminal** opens a bottom
 drawer from the status bar while keeping the workspace visible. The sidebar
 collapses to icons.
 
+- **Overview → Tests** shows each local check phase, command, status and output.
+  **Run Tests** beside the top-bar search starts the checks with explicit project
+  execution trust; it becomes **Cancel Tests** while they run. Viewing the results
+  never executes project code.
 - **Project** opens a saved project locally. **Import & analyze** creates a new
   overview, with explicit confirmation for a remote Analyze provider.
 - **Analysis** shows four analysis operations and their selected models.

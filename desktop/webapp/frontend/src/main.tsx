@@ -17,7 +17,7 @@ import { ChangeWorkspace } from './change-workspace';
 import { ChangeHistory } from './change-shared';
 import { Features } from './features';
 import { Instructions } from './instructions';
-import { Scan, TerminalWorkspace } from './tools';
+import { TerminalWorkspace } from './tools';
 import './style.css';
 import './studio.css';
 
@@ -199,7 +199,6 @@ function App() {
   else if (s.page === 'instructions') content = <Instructions s={s} />;
   else if (s.page === 'editor') content = <Editor s={s} />;
   else if (s.page === 'context') content = <Context s={s} />;
-  else if (s.page === 'scan') content = <Scan s={s} />;
   else if (s.page === 'search') content = <SearchPage s={s} />;
   else if (s.page === 'diagrams') content = <Diagrams s={s} />;
   return (
@@ -248,6 +247,13 @@ function App() {
             )}
           </nav>
           <div className="topbar-actions">
+            <Button
+              icon={s.scan?.status === 'running' ? 'close' : 'play'}
+              disabled={!s.project || !!s.busy}
+              onClick={() => void w.scanProject(s.scan?.status === 'running')}
+            >
+              {s.scan?.status === 'running' ? 'Cancel Tests' : 'Run Tests'}
+            </Button>
             <button
               className="search-trigger"
               onClick={() => void w.navigate('search')}

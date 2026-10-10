@@ -368,9 +368,6 @@ export function Results({ s }: { s: State }) {
         >
           Refresh
         </Button>
-        <Go page="scan" icon="shield">
-          Verified scan
-        </Go>
         <Go page="analysis" tone="primary">
           Analyze project
         </Go>
