@@ -16,24 +16,74 @@ import {
   Prose,
 } from './ui';
 
+function FileTree({
+  paths,
+  selected,
+  busy,
+  depth = 0,
+}: {
+  paths: string[];
+  selected?: string;
+  busy: boolean;
+  depth?: number;
+}) {
+  const folders = new Map<string, string[]>();
+  const leaves: string[] = [];
+  for (const path of paths) {
+    const parts = path.split('/');
+    if (parts.length > depth + 1) {
+      const name = parts[depth];
+      folders.set(name, [...(folders.get(name) || []), path]);
+    } else leaves.push(path);
+  }
+  return (
+    <>
+      {[...folders]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([name, children]) => (
+          <details className="explorer-folder" key={name} open={depth < 2}>
+            <summary>
+              <Icon name="folder" />
+              {name}
+            </summary>
+            <FileTree paths={children} selected={selected} busy={busy} depth={depth + 1} />
+          </details>
+        ))}
+      {leaves.map((path) => (
+        <button
+          key={path}
+          title={path}
+          disabled={busy}
+          className={`file-item ${selected === path ? 'active' : ''}`}
+          onClick={() => void w.openFile(path)}
+        >
+          <Icon name="file" />
+          {path.split('/').at(-1)}
+        </button>
+      ))}
+    </>
+  );
+}
 export function Editor({ s }: { s: State }) {
   const [filter, setFilter] = useState('');
   const [limit, setLimit] = useState(100);
+  const [opened, setOpened] = useState<string[]>(s.file ? [s.file.path] : []);
+  useEffect(() => {
+    if (s.file)
+      setOpened((paths) => (paths.includes(s.file!.path) ? paths : [...paths, s.file!.path]));
+  }, [s.file?.path]);
   const files = (s.index?.files || []).filter((file) =>
     file.path.toLowerCase().includes(filter.toLowerCase()),
   );
   return (
     <div className="workspace-page source-workspace">
-      <Heading variant="intro" title={s.file?.name || 'Source'} detail={s.file?.path}>
-        <Go page="search" icon="search">
-          Find file
-        </Go>
-      </Heading>
       <div className="editor-workspace">
-        <aside className="file-browser panel">
-          <div className="panel-head">
-            <h2>Files</h2>
-            <span className="muted small">{files.length}</span>
+        <aside className="file-browser" aria-label="Project files">
+          <div className="explorer-heading">
+            <strong>Explorer</strong>
+            <Go page="search" icon="search" tone="ghost">
+              Find
+            </Go>
           </div>
           <div className="browser-search">
             <input
@@ -46,32 +96,53 @@ export function Editor({ s }: { s: State }) {
               }}
             />
           </div>
+          <div className="explorer-project">{s.project?.name}</div>
           <div className="file-list">
-            {files.slice(0, limit).map((file) => (
-              <button
-                title={file.path}
-                key={file.path}
-                className={`file-item ${s.file?.path === file.path ? 'active' : ''}`}
-                disabled={!!s.busy}
-                onClick={() => void w.openFile(file.path)}
-              >
-                <Icon name="file" />
-                <span>
-                  <strong>{file.path.split('/').at(-1)}</strong>
-                  <small>
-                    {file.path.includes('/')
-                      ? file.path.slice(0, file.path.lastIndexOf('/'))
-                      : 'Project root'}
-                  </small>
-                </span>
-              </button>
-            ))}
+            {filter ? (
+              files.slice(0, limit).map((file) => (
+                <button
+                  key={file.path}
+                  title={file.path}
+                  className={`file-item ${s.file?.path === file.path ? 'active' : ''}`}
+                  disabled={!!s.busy}
+                  onClick={() => void w.openFile(file.path)}
+                >
+                  <Icon name="file" />
+                  <span>{file.path}</span>
+                </button>
+              ))
+            ) : (
+              <FileTree
+                paths={files.slice(0, limit).map((file) => file.path)}
+                selected={s.file?.path}
+                busy={!!s.busy}
+              />
+            )}
+            {!files.length && <p className="small muted">No matching files.</p>}
             {files.length > limit && (
               <Button onClick={() => setLimit(limit + 100)}>Show more</Button>
             )}
           </div>
+          <div className="explorer-footer">
+            <Icon name="lock" />
+            Read-only source
+          </div>
         </aside>
         <div className="editor-content">
+          <div className="source-filetabs" aria-label="Open files">
+            {opened.map((path) => (
+              <button
+                key={path}
+                className={s.file?.path === path ? 'active' : ''}
+                aria-pressed={s.file?.path === path}
+                disabled={!!s.busy}
+                onClick={() => void w.openFile(path)}
+              >
+                <Icon name="file" />
+                {path.split('/').at(-1)}
+              </button>
+            ))}
+          </div>
           {s.file ? (
             <>
               {s.fileStale && (
@@ -122,6 +193,7 @@ function DeclarationPicker({ s }: { s: State }) {
 }
 function Source({ s }: { s: State }) {
   const code = useRef<HTMLPreElement>(null);
+  const [prompt, setPrompt] = useState('');
   const symbol = s.symbols.find((value) => value.name === s.symbol);
   useEffect(() => {
     code.current?.querySelector('.selected-line')?.scrollIntoView({ block: 'nearest' });
@@ -129,16 +201,13 @@ function Source({ s }: { s: State }) {
   return (
     <div className="source-inspection">
       <div className="source-document">
-        <DeclarationPicker s={s} />
-        <div className="source-panel panel">
+        <div className="source-panel">
           <div className="code-header">
             <span className="row">
               <Icon name="lock" />
-              Read-only source
+              {s.file!.path}
             </span>
-            <span>
-              {s.file!.line_count} lines · {s.file!.language}
-            </span>
+            <Badge value="Read-only" />
           </div>
           {s.file!.binary ? (
             <Empty title="Binary file" />
@@ -158,7 +227,7 @@ function Source({ s }: { s: State }) {
             </pre>
           )}
         </div>
-        <div className="actions">
+        <div className="source-foot actions">
           <Button
             tone="primary"
             icon="sparkles"
@@ -181,18 +250,82 @@ function Source({ s }: { s: State }) {
           >
             Draft change in Chat
           </Button>
-          <Button disabled={!!s.busy || !s.symbol || s.fileStale} onClick={() => void w.explain()}>
-            Explain declaration
-          </Button>
-          <Button disabled={!!s.busy || s.fileStale} onClick={() => void w.analyzeFile()}>
-            Analyze file
-          </Button>
-          <Go page="security" icon="shield">
-            Security
-          </Go>
+          <span className="small muted">
+            {s.file!.line_count} lines · {s.file!.language}
+          </span>
         </div>
       </div>
       <aside className="source-context" aria-label="File insights">
+        <div className="row between">
+          <h2 className="row">
+            <Icon name="sparkles" />
+            Assistant
+          </h2>
+          <Go page="chat" tone="ghost" icon="arrow">
+            Chat
+          </Go>
+        </div>
+        <form
+          className="source-question"
+          onSubmit={(event) => {
+            event.preventDefault();
+            w.seedChange({
+              title: `Update ${s.file!.name}`,
+              kind: 'feature',
+              paths: [s.file!.path],
+              acceptance_criteria: [],
+              message: prompt,
+            });
+          }}
+        >
+          <textarea
+            aria-label="Ask about this file"
+            placeholder="Ask about this file…"
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+          />
+          <Button
+            tone="primary"
+            disabled={
+              !prompt.trim() ||
+              !!s.busy ||
+              s.fileStale ||
+              s.file!.binary ||
+              !/\.(go|md)$/.test(s.file!.path) ||
+              activeChangeWorkflow(s.change)
+            }
+            type="submit"
+          >
+            Continue in Chat
+          </Button>
+        </form>
+        {s.change && (
+          <div className="source-prepared">
+            <h3>Prepared change</h3>
+            <p>{s.change.title}</p>
+            <Go page="changes" icon="arrow">
+              Review changes
+            </Go>
+          </div>
+        )}
+        <Disclosure title="Inspect this file">
+          <DeclarationPicker s={s} />
+          <div className="actions">
+            {' '}
+            <Button
+              disabled={!!s.busy || !s.symbol || s.fileStale}
+              onClick={() => void w.explain()}
+            >
+              Explain declaration
+            </Button>
+            <Button disabled={!!s.busy || s.fileStale} onClick={() => void w.analyzeFile()}>
+              Analyze file
+            </Button>
+            <Go page="security" icon="shield">
+              Security
+            </Go>
+          </div>
+        </Disclosure>
         {s.explanation && (
           <Panel title={`About ${s.explanation.anchor.symbol}`}>
             <Prose text={s.explanation.summary} />

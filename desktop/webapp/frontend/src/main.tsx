@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { createRoot } from 'react-dom/client';
 import { workspace as w, canCancelOperation, type Page } from './workspace';
-import { Button, Heading, Icon, Modal, Notice, human } from './ui';
+import { Button, Heading, Icon, Modal, Notice, Overlay } from './ui';
 import { Summary, ProjectPage, Models, Diagrams, SearchPage } from './overview';
 import { Analysis, AnalysisFiles, AnalysisPreview, AnalysisRun } from './analysis';
 import { Results } from './results';
@@ -17,9 +17,9 @@ import { ChangeWorkspace } from './change-workspace';
 import { ChangeHistory } from './change-shared';
 import { Features } from './features';
 import { Instructions } from './instructions';
-import { ProjectGuidance } from './project-guidance';
 import { Scan, TerminalWorkspace } from './tools';
 import './style.css';
+import './studio.css';
 
 const mainNav: [Page, string, string][] = [
   ['summary', 'Overview', 'grid'],
@@ -58,7 +58,13 @@ const themes = [
   { id: 'midnight', name: 'Midnight', letter: 'M' },
 ] as const;
 function App() {
-  const s = useSyncExternalStore(w.subscribe, w.snapshot);
+  const live = useSyncExternalStore(w.subscribe, w.snapshot);
+  const lastPage = useRef<Page>(live.project ? 'summary' : 'welcome');
+  const overlay = ['search', 'project', 'terminal'].includes(live.page) && !!live.project;
+  if (!overlay) lastPage.current = live.page;
+  const s = overlay ? { ...live, page: lastPage.current } : live;
+  const closeOverlay = () => void w.navigate(lastPage.current);
+  const terminalOpen = live.page === 'terminal';
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('mini-orca:theme');
     return themes.find((choice) => choice.id === saved)?.id || 'dark';
@@ -68,9 +74,6 @@ function App() {
     () => localStorage.getItem('mini-orca:sidebar-collapsed') === 'true',
   );
   const main = useRef<HTMLElement>(null);
-  const changeKind = s.change?.kind || s.changeSeed?.kind;
-  const fixReview =
-    s.page === 'changes' && ['fix', 'performance', 'security'].includes(changeKind || '');
   const activePage = findingPages.some(([page]) => page === s.page)
     ? 'bugs'
     : ['analysis', 'analysis-preview', 'analysis-run'].includes(s.page)
@@ -257,9 +260,13 @@ function App() {
               <nav aria-label="Workspaces: Improve">{nav(improveNav)}</nav>
               <div className="sidebar-bottom">
                 <div className="nav-label">Project</div>
-                <nav aria-label="Tools">{nav(utilityNav)}</nav>
+                <nav aria-label="Tools">{nav(utilityNav.slice(0, 3))}</nav>
               </div>
             </div>
+            <nav className="sidebar-settings" aria-label="Settings">
+              {nav(utilityNav.slice(3))}
+            </nav>
+            <p className="sidebar-note">Local by default. You apply changes.</p>
             <button
               className="sidebar-toggle"
               aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -272,12 +279,7 @@ function App() {
             </button>
           </aside>
           <div className="app-body">
-            <main
-              id="main"
-              ref={main}
-              tabIndex={-1}
-              className={s.page === 'terminal' ? 'terminal-notices' : ''}
-            >
+            <main id="main" ref={main} tabIndex={-1} className={`studio-main studio-${s.page}`}>
               {s.busy && (
                 <div className="busy-strip" role="status">
                   <span className="spinner" />
@@ -289,18 +291,13 @@ function App() {
                   )}
                 </div>
               )}
+              {contextPages.some(([page]) => page === s.page) &&
+                sectionLinks(contextPages, 'Context sections')}
+              {analysisPages.some(([page]) => page === s.page) &&
+                sectionLinks(analysisPages, 'Analysis sections')}
+              {findingPages.some(([page]) => page === s.page) &&
+                sectionLinks(findingPages, 'Finding categories')}
               <div className="page" data-accent={s.page}>
-                {!fixReview && <ProjectGuidance s={s} />}
-                {!['chat', 'changes'].includes(s.page) &&
-                  s.change?.workflow &&
-                  s.change.state === 'draft' && (
-                    <Notice>
-                      <div className="row between wrap" aria-live="polite">
-                        <span>Agent workflow · {human(s.change.workflow.status)}</span>
-                        <Button onClick={() => void w.navigate('chat')}>View workflow</Button>
-                      </div>
-                    </Notice>
-                  )}
                 {s.error && <Notice error>{s.error}</Notice>}
                 {s.notice && <Notice>{s.notice}</Notice>}
                 {Object.entries(s.resourceErrors).map(([key, error]) => (
@@ -309,17 +306,23 @@ function App() {
                     {error}
                   </Notice>
                 ))}
-                {contextPages.some(([page]) => page === s.page) &&
-                  sectionLinks(contextPages, 'Context sections')}
-                {analysisPages.some(([page]) => page === s.page) &&
-                  sectionLinks(analysisPages, 'Analysis sections')}
-                {findingPages.some(([page]) => page === s.page) &&
-                  sectionLinks(findingPages, 'Finding categories')}
                 {content}
               </div>
             </main>
-            <div hidden={s.page !== 'terminal'} className="terminal-container">
-              <TerminalWorkspace s={s} visible={s.page === 'terminal'} />
+            <div
+              hidden={!terminalOpen}
+              className="terminal-container"
+              role="region"
+              aria-label="Terminal drawer"
+            >
+              <Button
+                className="terminal-close"
+                tone="ghost"
+                icon="close"
+                aria-label="Close terminal drawer"
+                onClick={closeOverlay}
+              />
+              <TerminalWorkspace s={live} visible={terminalOpen} />
             </div>
             <footer className="statusbar">
               <span className="row">
@@ -335,8 +338,8 @@ function App() {
                 <button
                   className="row"
                   disabled={!s.project}
-                  aria-pressed={s.page === 'terminal'}
-                  onClick={() => void w.navigate('terminal')}
+                  aria-expanded={terminalOpen}
+                  onClick={() => (terminalOpen ? closeOverlay() : void w.navigate('terminal'))}
                 >
                   <Icon name="terminal" />
                   Terminal
@@ -367,6 +370,16 @@ function App() {
           </div>
         </div>
       </div>
+      {live.page === 'search' && live.project && (
+        <Overlay title="Search files and commands" onClose={closeOverlay}>
+          <SearchPage s={live} />
+        </Overlay>
+      )}
+      {live.page === 'project' && live.project && (
+        <Overlay title="Switch project" onClose={closeOverlay}>
+          <ProjectPage s={live} />
+        </Overlay>
+      )}
       {s.confirmation && <Modal key={s.confirmation.title} />}
     </>
   );

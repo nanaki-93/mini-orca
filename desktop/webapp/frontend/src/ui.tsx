@@ -341,3 +341,44 @@ export function Modal() {
     </dialog>
   );
 }
+
+export function Overlay({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    ref.current?.showModal();
+    return () => {
+      if (previous?.isConnected) previous.focus();
+    };
+  }, []);
+  return (
+    <dialog
+      ref={ref}
+      className="studio-overlay"
+      aria-label={title}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+    >
+      <header className="overlay-heading">
+        <h2>{title}</h2>
+        <Button
+          aria-label={`Close ${title.toLowerCase()}`}
+          tone="ghost"
+          icon="close"
+          onClick={onClose}
+        />
+      </header>
+      {children}
+    </dialog>
+  );
+}
