@@ -6196,7 +6196,7 @@ try {
         assert.equal(await previous.isDisabled(), true);
         const before = await page.evaluate(() => window.fixture.requests.length);
         await next.press('Enter');
-        await pagination.getByText('11–20 of 101 findings', { exact: true }).waitFor();
+        await pagination.getByText('Page 2 of 11', { exact: true }).waitFor();
         assert.equal(await rows.first().locator('strong').innerText(), 'Saved finding 10');
         for (let index = 2; index < 11; index++) await next.click();
         assert.equal(await rows.count(), 1);
@@ -6206,7 +6206,6 @@ try {
         assert.equal(await rows.count(), 10);
         await pagination.getByText('Page 10 of 11', { exact: true }).waitFor();
         await page.getByLabel('Finding priority', { exact: true }).selectOption('low');
-        await pagination.getByText('1–10 of 50 findings', { exact: true }).waitFor();
         await pagination.getByText('Page 1 of 5', { exact: true }).waitFor();
         assert.equal(await rows.first().locator('strong').innerText(), 'Saved finding 1');
         await next.click();
@@ -6221,7 +6220,7 @@ try {
         assert.equal(await next.isDisabled(), true);
         await page.getByLabel('Filter findings', { exact: true }).fill('no match');
         assert.equal(await rows.count(), 0);
-        await pagination.getByText('0 matching findings', { exact: true }).waitFor();
+        await page.getByRole('heading', { name: 'No matching findings', exact: true }).waitFor();
         assert.equal(await previous.isDisabled(), true);
         assert.equal(await next.isDisabled(), true);
         await page.getByLabel('Filter findings', { exact: true }).fill('Saved finding');

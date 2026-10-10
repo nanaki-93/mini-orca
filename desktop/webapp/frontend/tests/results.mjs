@@ -118,6 +118,7 @@ export async function testResults({ test, pageFor, nav, idle, layout }) {
         window.fixture.requests.filter((r) => r.method !== 'GET'),
       );
       const pagination = page.getByRole('navigation', { name: 'Findings pagination' });
+      assert.equal(await pagination.getByText(/\d+–\d+ of \d+ findings/).count(), 0);
       const search = page.getByLabel('Filter findings', { exact: true });
       const priority = page.getByLabel('Finding priority', { exact: true });
       assert.deepEqual(await priority.locator('option').allTextContents(), [
@@ -130,7 +131,7 @@ export async function testResults({ test, pageFor, nav, idle, layout }) {
         true,
       );
       await pagination.getByRole('button', { name: 'Page 13', exact: true }).press('Enter');
-      await page.getByText('121–123 of 123 findings', { exact: true }).waitFor();
+      await page.getByText('Page 13 of 13', { exact: true }).waitFor();
       assert.equal(await pagination.getByRole('button', { name: 'Next page' }).isDisabled(), true);
       assert.equal(
         await pagination
@@ -139,7 +140,7 @@ export async function testResults({ test, pageFor, nav, idle, layout }) {
         'page',
       );
       await pagination.getByRole('button', { name: 'Page 11', exact: true }).click();
-      await page.getByText('101–110 of 123 findings', { exact: true }).waitFor();
+      await page.getByText('Page 11 of 13', { exact: true }).waitFor();
       for (const width of [1440, 700]) {
         await page.setViewportSize({ width, height: 900 });
         if (width === 700)
@@ -228,7 +229,7 @@ export async function testResults({ test, pageFor, nav, idle, layout }) {
         await page.getByLabel('Filter findings', { exact: true }).fill('Worker issue');
         await page.getByLabel('Finding priority', { exact: true }).selectOption('high');
         await page.getByRole('button', { name: 'Next page', exact: true }).click();
-        await page.getByText('11–20 of 23 findings', { exact: true }).waitFor();
+        await page.getByText('Page 2 of 3', { exact: true }).waitFor();
         const before = await page.evaluate(() =>
           window.fixture.requests.filter((r) => r.method !== 'GET'),
         );
@@ -253,7 +254,11 @@ export async function testResults({ test, pageFor, nav, idle, layout }) {
             .getAttribute('aria-current'),
           'page',
         );
-        await page.getByRole('button', { name: 'Manage models', exact: true }).click();
+        assert.equal(
+          await page.getByRole('button', { name: 'Manage models', exact: true }).count(),
+          0,
+        );
+        await nav(page, 'Models');
         await page.getByRole('button', { name: 'Back to workspace', exact: true }).click();
         await idle(page);
         await page.getByRole('heading', { name: 'Worker issue 10', exact: true }).waitFor();
@@ -295,7 +300,7 @@ export async function testResults({ test, pageFor, nav, idle, layout }) {
         await nav(page, name);
         await page.getByText('Page 2 of 3', { exact: true }).waitFor();
         await page.getByRole('button', { name: 'Next page', exact: true }).click();
-        await page.getByText('21–23 of 23 findings', { exact: true }).waitFor();
+        await page.getByText('Page 3 of 3', { exact: true }).waitFor();
         await page.evaluate((category) => {
           const results = window.fixture.state.results[category];
           results.semantic = results.semantic.slice(0, 1);
@@ -306,7 +311,11 @@ export async function testResults({ test, pageFor, nav, idle, layout }) {
         await page.getByText('Page 1 of 1', { exact: true }).waitFor();
         assert.equal(await page.locator('.result-row').count(), 1);
         await page.locator('.result-row').click();
-        await page.getByRole('button', { name: 'Manage models', exact: true }).click();
+        assert.equal(
+          await page.getByRole('button', { name: 'Manage models', exact: true }).count(),
+          0,
+        );
+        await nav(page, 'Models');
         await page.evaluate((category) => {
           window.fixture.state.results[category].semantic = [];
           window.fixture.state.results[category].saved_finding_count = 0;

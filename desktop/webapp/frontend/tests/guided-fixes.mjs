@@ -10,8 +10,7 @@ export async function testGuidedFixes({
   chooseModel: selectModel,
 }) {
   const openModels = async (page) => {
-    if (!(await page.locator('.models-workspace').isVisible()))
-      await page.getByRole('button', { name: 'Manage models', exact: true }).click();
+    if (!(await page.locator('.models-workspace').isVisible())) await nav(page, 'Models');
     await page.getByRole('heading', { name: 'Workflow models', exact: true }).waitFor();
   };
   const chooseModel = async (trigger, profile) => {

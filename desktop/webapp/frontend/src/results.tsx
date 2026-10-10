@@ -211,9 +211,6 @@ export function Results({ s }: { s: State }) {
         <Button icon="back" onClick={() => void w.navigate(category)}>
           All findings
         </Button>
-        <Go page="models" icon="layers">
-          Manage models
-        </Go>
       </div>
       <FixHeading
         title={detail.name}
@@ -578,16 +575,7 @@ export function Results({ s }: { s: State }) {
         )}
         <nav className="findings-pagination" aria-label="Findings pagination">
           <div className="pagination-summary small muted" role="status">
-            <span>
-              {filtered.length
-                ? `${offset + 1}–${Math.min(offset + pageSize, filtered.length)} of ${filtered.length} findings`
-                : s.run && !results && !unique.length
-                  ? 'Findings not loaded'
-                  : '0 matching findings'}
-            </span>
-            <span>
-              Page {page} of {pageCount}
-            </span>
+            Page {page} of {pageCount}
           </div>
           <div className="pagination-pages">
             <Button
