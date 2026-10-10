@@ -19,19 +19,11 @@ export type Page =
   | 'security'
   | 'editor'
   | 'context'
-  | 'assistant'
-  | 'new-declaration'
-  | 'draft'
-  | 'checks'
-  | 'review'
-  | 'receipt'
-  | 'benchmark'
   | 'terminal'
   | 'search'
   | 'models'
   | 'diagrams'
-  | 'scan'
-  | 'manifest';
+  | 'scan';
 export interface Confirmation {
   title: string;
   message: string;
@@ -73,19 +65,7 @@ export interface State {
   impact?: M.Impact;
   git?: M.GitStatus;
   securityReport?: M.SecurityReport;
-  draft?: M.Draft;
-  declaration: string;
-  imports: string;
-  dirty: boolean;
-  checks?: M.Checks;
-  session?: M.ChatSession;
-  messages: { role: string; content: string }[];
-  task?: M.TaskSpec;
-  reviewed: string;
-  receipt?: M.Receipt;
   uncertain: boolean;
-  benchmarkCatalog?: M.BenchmarkCatalog;
-  benchmark?: M.BenchmarkResult;
   scan?: M.Scan | null;
   confirmation?: Confirmation;
   terminals: M.TerminalUpdate[];
@@ -140,55 +120,14 @@ const initial = (): State => ({
   symbols: [],
   symbol: '',
   fileStale: true,
-  declaration: '',
-  imports: '',
-  dirty: false,
-  messages: [],
-  reviewed: '',
   uncertain: false,
   terminals: [],
   featureGenerationRequested: false,
 });
 const projectKey = (p?: M.ProjectIdentity) => (p ? `${p.project_id}:${p.project_revision}` : '');
 const fileKey = (s: State) => `${projectKey(s.project)}:${s.file?.path}:${s.file?.content_hash}`;
-export const candidateKey = (d?: M.Draft) =>
-  d ? `${projectKey(d)}:${d.id}:${d.revision}:${d.hash}:${d.base_file_hash}` : '';
 export const activeRun = (run?: M.AnalysisRun | null) =>
   !!run && ['queued', 'running', 'pausing', 'canceling'].includes(run.status);
-export function matchesCandidate(e: M.CandidateIdentity, d: M.Draft) {
-  return (
-    projectKey(e) === projectKey(d) &&
-    e.draft_id === d.id &&
-    e.draft_revision === d.revision &&
-    e.draft_hash === d.hash &&
-    e.base_file_hash === d.base_file_hash &&
-    e.target_path === d.target_path
-  );
-}
-export function currentDraft(s: State) {
-  return (
-    !!s.draft &&
-    !s.dirty &&
-    !s.fileStale &&
-    !s.uncertain &&
-    projectKey(s.draft) === projectKey(s.project) &&
-    s.draft.target_path === s.file?.path &&
-    s.draft.base_file_hash === s.file?.content_hash &&
-    s.draft.validation?.applicable === true
-  );
-}
-export function canApply(s: State) {
-  return (
-    currentDraft(s) &&
-    !!s.draft &&
-    !!s.checks &&
-    s.checks.applicable &&
-    matchesCandidate(s.checks, s.draft) &&
-    s.checks.candidate_hash === s.draft.candidate_hash &&
-    s.reviewed === candidateKey(s.draft)
-  );
-}
-
 export function canCancelOperation(label: string) {
   return (
     !!label &&
@@ -302,7 +241,7 @@ export class Workspace {
         this.set({ notice: 'Canceled.' });
       else this.fail(error);
       if (error instanceof ApiError && error.status === 409)
-        this.set({ fileStale: true, reviewed: '', preview: undefined });
+        this.set({ fileStale: true, preview: undefined });
     } finally {
       if (operation === this.operation) this.set({ busy: '' });
     }
@@ -391,17 +330,6 @@ export class Workspace {
     if (!path.trim()) return;
     await this.act(analyze ? 'Import project' : 'Open project', async () => {
       if (
-        this.state.draft &&
-        !(await this.confirm({
-          title: 'Switch project?',
-          message: 'Discard the current draft and close terminal sessions.',
-          accept: 'Switch project',
-          destructive: true,
-        }))
-      )
-        return;
-      if (
-        !this.state.draft &&
         this.state.terminals.length &&
         !(await this.confirm({
           title: 'Switch project?',
@@ -430,7 +358,7 @@ export class Workspace {
         project,
       };
       localStorage.setItem('mini-orca:last-project', project.path);
-      await native().SetUnsavedDraft(false);
+
       this.set({});
       await this.refreshProject();
     });
@@ -479,16 +407,6 @@ export class Workspace {
   }
   async reindex() {
     await this.act('Refresh project facts', async () => {
-      if (
-        this.state.draft &&
-        !(await this.confirm({
-          title: 'Refresh project?',
-          message: 'Discard the current draft and refresh file identities.',
-          accept: 'Refresh',
-          destructive: true,
-        }))
-      )
-        return;
       const index = await this.api.post<M.ProjectIndex>(`${current}/reindex`, {
         project_revision: this.identity().project_revision,
       });
@@ -497,9 +415,6 @@ export class Workspace {
       this.set({
         project: { ...this.state.project!, project_revision: index.project_revision },
         index,
-        draft: undefined,
-        checks: undefined,
-        reviewed: '',
         file: undefined,
         fileStale: true,
         change: this.state.change
@@ -507,19 +422,12 @@ export class Workspace {
           : undefined,
         results: {},
         preview: undefined,
-        receipt: undefined,
         uncertain: false,
-        dirty: false,
         context: undefined,
         explanation: undefined,
-        benchmark: undefined,
-        benchmarkCatalog: undefined,
-        session: undefined,
-        messages: [],
-        task: undefined,
         securityReport: undefined,
       });
-      await native().SetUnsavedDraft(false);
+
       await this.refreshProject();
     });
   }
@@ -527,14 +435,13 @@ export class Workspace {
     this.navigation++;
     this.set({ page, error: '' });
     if (page === 'analysis' && !this.state.availableModels) await this.loadAvailableModels();
-    if (['editor', 'draft', 'checks', 'review', 'assistant', 'benchmark'].includes(page))
-      await this.refreshFile();
+    if (page === 'editor') await this.refreshFile();
     if (['chat', 'changes', 'history'].includes(page)) await this.loadChangeHistory();
     if (page === 'features' || page === 'summary') await this.loadFeatures();
     if (page === 'instructions')
       await this.loadInstructions(this.state.instructionPreview?.path || 'AGENTS.md');
     if (['bugs', 'performance', 'security'].includes(page)) await this.loadResults(page);
-    if (page === 'context' || page === 'manifest') await this.inspectContext();
+    if (page === 'context') await this.inspectContext();
   }
   async loadAvailableModels() {
     const request = ++this.modelCatalogRequest;
@@ -759,16 +666,13 @@ export class Workspace {
       await this.loadResults(this.state.page);
     });
   }
-  async openFile(path: string, symbol = '', task?: M.TaskSpec) {
+  async openFile(path: string, symbol = '') {
     if (this.state.busy) return;
     if (this.state.file?.path === path) {
-      if (symbol && symbol !== this.state.symbol && this.state.draft && !(await this.discard()))
-        return;
-      this.set({ page: 'editor', symbol: symbol || this.state.symbol, task });
+      this.set({ page: 'editor', symbol: symbol || this.state.symbol });
       await this.refreshFile();
       return;
     }
-    if (this.state.draft && !(await this.discard())) return;
     const epoch = ++this.fileEpoch;
     this.set({
       file: undefined,
@@ -781,9 +685,6 @@ export class Workspace {
       impact: undefined,
       git: undefined,
       securityReport: undefined,
-      session: undefined,
-      messages: [],
-      task,
       page: 'editor',
       error: '',
     });
@@ -835,16 +736,12 @@ export class Workspace {
   }
   async selectSymbol(symbol: string) {
     if (this.state.busy) return;
-    if (symbol !== this.state.symbol && this.state.draft && !(await this.discard())) return;
     this.fileEpoch++;
     this.set({
       symbol,
       explanation: undefined,
       context: undefined,
       impact: undefined,
-      session: undefined,
-      messages: [],
-      task: undefined,
     });
   }
   refreshFile() {
@@ -865,10 +762,6 @@ export class Workspace {
           file,
           fileStale: stale,
           symbols: stale ? [] : indexed?.symbols || [],
-          reviewed: '',
-          checks: undefined,
-          benchmark: undefined,
-          benchmarkCatalog: undefined,
           explanation: undefined,
           fileAnalysis: undefined,
           context: undefined,
@@ -880,7 +773,7 @@ export class Workspace {
       }
     } catch (error) {
       if (epoch === this.fileEpoch) {
-        this.set({ fileStale: true, reviewed: '' });
+        this.set({ fileStale: true });
         this.fail(error);
       }
     }
@@ -986,7 +879,7 @@ export class Workspace {
         confirm_remote_provider: confirmed,
       });
       if (fileKey(this.state) === key && explanation.base_file_hash === target.base_file_hash)
-        this.set({ explanation, page: 'assistant' });
+        this.set({ explanation });
     });
   }
   async securityReview(ai: boolean) {
@@ -1012,188 +905,9 @@ export class Workspace {
       if (fileKey(this.state) === key) this.set({ securityReport, page: 'security' });
     });
   }
-  async generate(
-    message: string,
-    mode: 'replace_symbol' | 'create_symbol',
-    name: string,
-    repair = false,
-  ) {
-    await this.act(repair ? 'Repair draft' : 'Prepare draft', async () => {
-      if (!message.trim()) throw new Error('Describe the change.');
-      await this.refreshFile();
-      const target = this.target();
-      const key = fileKey(this.state);
-      if (
-        this.state.draft &&
-        (this.state.draft.target_symbol !== name || this.state.draft.mode !== mode) &&
-        !(await this.discard())
-      )
-        return;
-      const confirmed = await this.confirmModel('function', 'Prepare draft');
-      if (confirmed === null) return;
-      const old = this.state.session;
-      const session =
-        old &&
-        old.target_symbol === name &&
-        old.mode === mode &&
-        old.base_file_hash === target.base_file_hash
-          ? old
-          : await this.api.post<M.ChatSession>(`${current}/chat/sessions`, {
-              ...this.identity(),
-              base_file_hash: target.base_file_hash,
-              open_path: target.target_path,
-              mode,
-              target_symbol: name,
-              ...(this.state.task ? { task_spec: this.state.task } : {}),
-            });
-      if (
-        projectKey(session) !== projectKey(target) ||
-        session.base_file_hash !== target.base_file_hash ||
-        session.open_path !== target.target_path ||
-        session.target_symbol !== name ||
-        session.mode !== mode
-      )
-        throw new Error('Chat session does not match this declaration.');
-      const proposal = await this.api.post<M.Proposal>(
-        `${current}/chat/sessions/${encodeURIComponent(session.id)}/messages`,
-        {
-          message: message.trim(),
-          parent_draft_id: this.state.draft?.id || session.latest_draft_id || '',
-          confirm_remote_provider: confirmed,
-          repair,
-        },
-      );
-      if (fileKey(this.state) !== key) return;
-      const d = proposal.draft;
-      if (
-        proposal.session_id !== session.id ||
-        projectKey(d) !== projectKey(target) ||
-        d.base_file_hash !== target.base_file_hash ||
-        d.target_path !== target.target_path ||
-        d.target_symbol !== name ||
-        d.mode !== mode
-      )
-        throw new Error('The returned draft does not match this declaration.');
-      this.set({
-        session: { ...session, latest_draft_id: d.id },
-        draft: d,
-        declaration: d.declaration,
-        imports: (d.imports || []).join('\n'),
-        dirty: false,
-        checks: undefined,
-        reviewed: '',
-        benchmark: undefined,
-        benchmarkCatalog: undefined,
-        receipt: undefined,
-        context: proposal.context_manifest,
-        messages: [
-          ...this.state.messages,
-          { role: 'user', content: message },
-          proposal.assistant_message,
-        ],
-        page: 'draft',
-      });
-      await native().SetUnsavedDraft(true);
-    });
-  }
-  editDraft(declaration: string, imports: string) {
-    if (this.state.busy || !this.state.draft) return;
-    this.set({
-      declaration,
-      imports,
-      dirty: true,
-      checks: undefined,
-      reviewed: '',
-      benchmark: undefined,
-      benchmarkCatalog: undefined,
-    });
-  }
-  async discard() {
-    if (!this.state.draft) return true;
-    if (
-      !(await this.confirm({
-        title: 'Discard draft?',
-        message: `Discard the draft for ${this.state.draft.target_symbol}.`,
-        accept: 'Discard draft',
-        destructive: true,
-      }))
-    )
-      return false;
-    this.set({
-      draft: undefined,
-      dirty: false,
-      checks: undefined,
-      reviewed: '',
-      benchmark: undefined,
-      benchmarkCatalog: undefined,
-      session: undefined,
-      messages: [],
-      declaration: '',
-      imports: '',
-    });
-    await native().SetUnsavedDraft(false);
-    return true;
-  }
-  async validate() {
-    await this.act('Validate draft', async () => {
-      await this.refreshFile();
-      const t = this.target();
-      const d = this.state.draft;
-      if (!d || d.base_file_hash !== t.base_file_hash || projectKey(d) !== projectKey(t))
-        throw new Error('This draft is outdated.');
-      const updated = await this.api.request<M.Draft>(
-        'PATCH',
-        `${current}/drafts/${encodeURIComponent(d.id)}`,
-        {
-          project_revision: t.project_revision,
-          expected_revision: d.revision,
-          declaration: this.state.declaration,
-          imports: this.state.imports
-            .split('\n')
-            .map((s) => s.trim())
-            .filter(Boolean),
-        },
-      );
-      if (
-        updated.id !== d.id ||
-        updated.base_file_hash !== d.base_file_hash ||
-        projectKey(updated) !== projectKey(d)
-      )
-        throw new Error('Draft update returned a different target.');
-      this.set({
-        draft: updated,
-        dirty: false,
-        checks: undefined,
-        reviewed: '',
-        benchmark: undefined,
-        benchmarkCatalog: undefined,
-      });
-      const draft = await this.api.post<M.Draft>(
-        `${current}/drafts/${encodeURIComponent(updated.id)}/validate`,
-        { project_revision: t.project_revision, expected_revision: updated.revision },
-      );
-      if (candidateKey(draft) !== candidateKey(updated))
-        throw new Error('Validation belongs to an earlier draft.');
-      this.set({
-        draft,
-        declaration: draft.declaration,
-        imports: (draft.imports || []).join('\n'),
-      });
-    });
-  }
-  private draftParams() {
-    if (!currentDraft(this.state)) throw new Error('Validate the current draft first.');
-    const d = this.state.draft!;
-    return {
-      project_revision: d.project_revision,
-      expected_revision: d.revision,
-      expected_hash: d.hash,
-    };
-  }
-  private async trust(forChange = false): Promise<boolean> {
+  private async trust(): Promise<boolean> {
     const params = {
       project_revision: this.identity().project_revision,
-      task_test_name: forChange ? undefined : this.state.draft?.task_spec?.go_test_candidate?.name,
     };
     const trust = await this.api.get<M.ExecutionTrust>(`${current}/execution-trust`, params);
     if (trust.trusted) return true;
@@ -1211,148 +925,6 @@ export class Workspace {
       confirm: true,
     });
     return true;
-  }
-  async runChecks(lint: boolean, tests: boolean) {
-    await this.act('Run checks', async () => {
-      await this.refreshFile();
-      const params = this.draftParams();
-      const d = this.state.draft!;
-      if ((lint || tests || d.task_spec?.go_test_candidate) && !(await this.trust())) return;
-      this.set({ checks: undefined, reviewed: '' });
-      const checks = await this.api.post<M.Checks>(
-        `${current}/drafts/${encodeURIComponent(d.id)}/checks`,
-        { ...params, run_lint: lint, run_tests: tests },
-      );
-      if (!matchesCandidate(checks, d) || checks.candidate_hash !== d.candidate_hash)
-        throw new Error('Checks do not match this draft.');
-      this.set({ checks, page: 'checks' });
-    });
-  }
-  async review() {
-    await this.act('Prepare review', async () => {
-      await this.refreshFile();
-      this.draftParams();
-      this.set({ reviewed: candidateKey(this.state.draft), page: 'review' });
-    });
-  }
-  async apply() {
-    await this.act('Apply change', async () => {
-      await this.refreshFile();
-      if (!canApply(this.state))
-        throw new Error('Review the current draft and complete its required checks.');
-      const d = this.state.draft!;
-      const receipt = await this.writeSource('apply', {
-        draft_id: d.id,
-        draft_revision: d.revision,
-        draft_hash: d.hash,
-        project_id: d.project_id,
-        project_revision: d.project_revision,
-        base_file_hash: d.base_file_hash,
-        confirm: true,
-      });
-      this.acceptReceipt(receipt);
-      await native().SetUnsavedDraft(false);
-      await this.refreshProject();
-      await this.refreshFile();
-    });
-  }
-  private async writeSource(action: 'apply' | 'undo', body: object) {
-    try {
-      return await this.api.post<M.Receipt>(`${current}/${action}`, body);
-    } catch (error) {
-      if (!(error instanceof ApiError && error.status >= 400 && error.status < 500))
-        this.set({
-          uncertain: true,
-          reviewed: '',
-          checks: undefined,
-          notice:
-            'The source operation could not be confirmed. Refresh the project before continuing.',
-        });
-      throw error;
-    }
-  }
-  private acceptReceipt(receipt: M.Receipt) {
-    this.epoch++;
-    this.set({
-      receipt,
-      project: { ...this.state.project!, project_revision: receipt.project_revision },
-      index: receipt.index,
-      draft: undefined,
-      dirty: false,
-      checks: undefined,
-      reviewed: '',
-      session: undefined,
-      messages: [],
-      task: undefined,
-      benchmarkCatalog: undefined,
-      benchmark: undefined,
-      results: {},
-      preview: undefined,
-      context: undefined,
-      explanation: undefined,
-      fileAnalysis: undefined,
-      securityReport: undefined,
-      page: 'receipt',
-      notice: (receipt.warnings || []).join('\n'),
-    });
-  }
-  async undo() {
-    await this.act('Undo change', async () => {
-      const r = this.state.receipt;
-      if (!r?.undo_available || this.state.uncertain) throw new Error('Undo is unavailable.');
-      if (
-        !(await this.confirm({
-          title: 'Undo this change?',
-          message: r.audit?.target_path || 'Restore the source before the last Apply.',
-          accept: 'Undo change',
-          destructive: true,
-        }))
-      )
-        return;
-      const receipt = await this.writeSource('undo', {
-        ...this.identity(),
-        post_apply_hash: r.post_apply_hash,
-        confirm: true,
-      });
-      this.acceptReceipt(receipt);
-      await native().SetUnsavedDraft(false);
-      await this.refreshProject();
-      await this.refreshFile();
-    });
-  }
-  async benchmarks() {
-    await this.act('Find benchmarks', async () => {
-      await this.refreshFile();
-      const params = this.draftParams();
-      const d = this.state.draft!;
-      const catalog = await this.api.get<M.BenchmarkCatalog>(
-        `${current}/drafts/${encodeURIComponent(d.id)}/benchmarks`,
-        params,
-      );
-      if (!matchesCandidate(catalog, d)) throw new Error('Benchmark catalog is outdated.');
-      this.set({ benchmarkCatalog: catalog, page: 'benchmark' });
-    });
-  }
-  async compare(choice: M.BenchmarkChoice) {
-    await this.act('Compare benchmark', async () => {
-      await this.refreshFile();
-      const params = this.draftParams();
-      const d = this.state.draft!;
-      const catalog = this.state.benchmarkCatalog;
-      if (
-        !catalog ||
-        !matchesCandidate(catalog, d) ||
-        !catalog.benchmarks.some((c) => c.name === choice.name && c.scope === choice.scope)
-      )
-        throw new Error('Refresh the benchmark catalog.');
-      if (!(await this.trust())) return;
-      const benchmark = await this.api.post<M.BenchmarkResult>(
-        `${current}/drafts/${encodeURIComponent(d.id)}/benchmarks`,
-        { ...params, benchmark: choice.name, expected_scope: choice.scope },
-      );
-      if (!matchesCandidate(benchmark, d)) throw new Error('Benchmark result is outdated.');
-      this.set({ benchmark });
-    });
   }
   async scanProject(cancel = false) {
     await this.act(cancel ? 'Cancel scan' : 'Run verified scan', async () => {
@@ -1777,7 +1349,7 @@ export class Workspace {
       const profiles = preparation
         ? await this.authorizeFix(Object.values(models), preparation)
         : await this.confirmWorkflow(seed, models);
-      if (profiles === null || (!preparation && !(await this.trust(true)))) return;
+      if (profiles === null || (!preparation && !(await this.trust()))) return;
       if (epoch !== this.epoch || operation !== this.operation) return;
       let change = this.state.change;
       if (!change) {
@@ -1882,7 +1454,7 @@ export class Workspace {
     const operation = this.operation;
     if (
       (tests || change.check_options?.run_tests || change.check_options?.run_lint) &&
-      !(await this.trust(true))
+      !(await this.trust())
     )
       return false;
     this.set({ change: { ...change, checks: [], reviewed_hash: '' } });
@@ -2062,8 +1634,7 @@ export class Workspace {
         throw new Error('Resume the applied conversation and refresh its recovery status first.');
       const epoch = this.epoch,
         operation = this.operation;
-      if (change.changes.some((edit) => edit.path.endsWith('.go')) && !(await this.trust(true)))
-        return;
+      if (change.changes.some((edit) => edit.path.endsWith('.go')) && !(await this.trust())) return;
       if (epoch !== this.epoch || operation !== this.operation) return;
       const verification = await this.api.post<M.ChangeVerification>(
         `${current}/changes/${encodeURIComponent(change.id)}/verify`,
@@ -2163,8 +1734,6 @@ export class Workspace {
         ? { ...this.state.change, state: receipt.state, reviewed_hash: '' }
         : undefined,
       fileStale: true,
-      reviewed: '',
-      checks: undefined,
       results: {},
       preview: undefined,
       uncertain: !receipt.index,
@@ -2194,7 +1763,6 @@ export class Workspace {
     this.set({
       busy: '',
       notice: 'Canceled. Refresh status before retrying.',
-      reviewed: '',
       preview: undefined,
     });
   }

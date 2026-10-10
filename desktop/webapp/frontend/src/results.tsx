@@ -202,7 +202,7 @@ export function Results({ s }: { s: State }) {
           <Button
             icon="code"
             disabled={!!s.busy}
-            onClick={() => void w.openFile(detail.path, detail.symbol, detail.task)}
+            onClick={() => void w.openFile(detail.path, detail.symbol)}
           >
             Go to file
           </Button>

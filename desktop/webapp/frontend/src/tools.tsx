@@ -3,8 +3,8 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { errorMessage, native } from './api';
-import { currentDraft, workspace as w, type State } from './workspace';
-import type { BenchmarkSample, TerminalUpdate } from './models';
+import { workspace as w, type State } from './workspace';
+import type { TerminalUpdate } from './models';
 import {
   Badge,
   Button,
@@ -13,178 +13,12 @@ import {
   Go,
   Heading,
   Icon,
-  KeyValues,
   Notice,
   Panel,
-  Prose,
   StatusDot,
   human,
 } from './ui';
 
-export function Receipt({ s }: { s: State }) {
-  const r = s.receipt;
-  return (
-    <div className="workspace-page receipt-workspace">
-      <Heading
-        variant="intro"
-        title={
-          !r ? 'Change receipt' : r.audit?.action === 'undo' ? 'Change undone' : 'Change applied'
-        }
-        detail={r?.audit?.target_path}
-      >
-        {r && <Go page="editor">Go to file</Go>}
-        {r?.undo_available && (
-          <Button icon="undo" disabled={!!s.busy || s.uncertain} onClick={() => void w.undo()}>
-            Undo change
-          </Button>
-        )}
-      </Heading>
-      {!r ? (
-        <Empty title="No change receipt" />
-      ) : (
-        <>
-          <div className="grid two-columns">
-            <Panel title="Receipt">
-              <div className="receipt-mark">
-                <Icon name="circleCheck" />
-              </div>
-              <KeyValues
-                values={[
-                  ['Action', r.audit?.action],
-                  ['Outcome', r.audit?.outcome],
-                  ['File', r.audit?.target_path],
-                  [
-                    'Time',
-                    r.audit?.timestamp ? new Date(r.audit.timestamp).toLocaleString() : undefined,
-                  ],
-                  ['Undo', r.undo_available ? 'Available' : 'Unavailable'],
-                ]}
-              />
-            </Panel>
-            <Panel title="Audit">
-              <KeyValues
-                values={[
-                  ['Receipt', r.audit?.id],
-                  ['Before', r.audit?.before_hash],
-                  ['After', r.audit?.after_hash || r.post_apply_hash],
-                  ['Project revision', r.project_revision],
-                ]}
-              />
-            </Panel>
-          </div>
-          {(r.warnings || []).map((warning, i) => (
-            <Notice key={i}>{warning}</Notice>
-          ))}
-        </>
-      )}
-    </div>
-  );
-}
-function Samples({ samples, label }: { samples: BenchmarkSample[]; label: string }) {
-  if (!samples.length) return <p className="muted">No samples returned</p>;
-  return (
-    <div
-      className="table-wrap benchmark-samples"
-      role="region"
-      aria-label={`${label} measurements`}
-      tabIndex={0}
-    >
-      <table>
-        <thead>
-          <tr>
-            <th>Iterations</th>
-            <th>ns/op</th>
-            <th>B/op</th>
-            <th>allocs/op</th>
-          </tr>
-        </thead>
-        <tbody>
-          {samples.map((sample, i) => (
-            <tr key={i}>
-              <td>{sample.iterations.toLocaleString()}</td>
-              <td>{sample.ns_per_op.toLocaleString()}</td>
-              <td>{sample.bytes_per_op?.toLocaleString() ?? '—'}</td>
-              <td>{sample.allocs_per_op?.toLocaleString() ?? '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-export function Benchmark({ s }: { s: State }) {
-  const c = s.benchmarkCatalog;
-  const r = s.benchmark;
-  return (
-    <div className="workspace-page benchmark-workspace">
-      <Heading variant="intro" title="Benchmark comparison" detail={s.draft?.target_symbol}>
-        <Go page="checks">Back to checks</Go>
-        <Button
-          disabled={!!s.busy || !currentDraft(s)}
-          onClick={() => void w.benchmarks()}
-          icon="refresh"
-        >
-          Find benchmarks
-        </Button>
-      </Heading>
-      <Panel
-        title="Existing benchmarks"
-        actions={c && !c.available ? <Badge value="unavailable" /> : undefined}
-      >
-        {c?.reason && <Prose text={c.reason} />}
-        {c?.benchmarks?.map((choice) => (
-          <div className="list-row" key={`${choice.name}:${choice.scope}`}>
-            <span className="list-copy">
-              <strong>{choice.name}</strong>
-              <small className="mono">{choice.command.join(' ')}</small>
-            </span>
-            <Button
-              tone="primary small"
-              disabled={!!s.busy || !currentDraft(s) || !c.available}
-              onClick={() => void w.compare(choice)}
-            >
-              Compare
-            </Button>
-          </div>
-        ))}
-        {c && !c.benchmarks?.length && (
-          <Empty title={c.available ? 'No existing benchmarks' : 'Benchmark catalog unavailable'} />
-        )}
-        {!c && (
-          <Empty title={currentDraft(s) ? 'No benchmark catalog' : 'Draft validation required'} />
-        )}
-      </Panel>
-      {r && (
-        <section className="benchmark-comparison" aria-label="Measured comparison">
-          <div className="row between wrap benchmark-comparison-heading">
-            <h2>{r.benchmark}</h2>
-            <Badge value={r.status} />
-          </div>
-          {r.reason && <Notice>{r.reason}</Notice>}
-          <div className="grid equal-columns">
-            <Panel title="Before">
-              {r.base ? (
-                <Samples samples={r.base.samples} label="Before" />
-              ) : (
-                <p className="muted">No measurement</p>
-              )}
-            </Panel>
-            <Panel title="Candidate">
-              {r.candidate ? (
-                <Samples samples={r.candidate.samples} label="Candidate" />
-              ) : (
-                <p className="muted">No measurement</p>
-              )}
-            </Panel>
-          </div>
-          <Disclosure title="Command">
-            <pre>{r.command?.join(' ')}</pre>
-          </Disclosure>
-        </section>
-      )}
-    </div>
-  );
-}
 export function Scan({ s }: { s: State }) {
   return (
     <div className="workspace-page scan-workspace">

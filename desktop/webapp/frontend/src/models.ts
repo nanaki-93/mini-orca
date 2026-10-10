@@ -377,57 +377,6 @@ export interface Explanation extends ProjectIdentity {
   engineering_insight?: Insight;
   context_manifest: ContextManifest;
 }
-export interface Validation {
-  applicable: boolean;
-  scope_mode: string;
-  diagnostics: { code: string; message: string }[];
-  diff: {
-    old_path: string;
-    new_path: string;
-    lines: { kind: string; old_line: number; new_line: number; text: string }[];
-  };
-}
-export interface Draft extends ProjectIdentity {
-  id: string;
-  base_file_hash: string;
-  target_path: string;
-  mode: string;
-  target_symbol: string;
-  declaration: string;
-  imports: string[];
-  revision: number;
-  hash: string;
-  candidate_hash: string;
-  parent_draft_id?: string;
-  state: string;
-  validation?: Validation;
-  task_spec?: TaskSpec;
-  engineering_insight?: Insight;
-}
-export interface ChatSession extends ProjectIdentity {
-  id: string;
-  base_file_hash: string;
-  open_path: string;
-  mode: string;
-  target_symbol: string;
-  state: string;
-  latest_draft_id: string;
-  task_spec?: TaskSpec;
-  repair_count?: number;
-}
-export interface Proposal {
-  session_id: string;
-  draft: Draft;
-  assistant_message: { role: string; content: string };
-  context_manifest: ContextManifest;
-}
-export interface CandidateIdentity extends ProjectIdentity {
-  draft_id: string;
-  draft_revision: number;
-  draft_hash: string;
-  base_file_hash: string;
-  target_path: string;
-}
 export interface Check {
   name: string;
   required: boolean;
@@ -436,58 +385,9 @@ export interface Check {
   output: string;
   exit_code: number;
 }
-export interface Checks extends CandidateIdentity {
-  candidate_hash: string;
-  applicable: boolean;
-  checks: Check[];
-}
 export interface ExecutionTrust extends ProjectIdentity {
   trusted: boolean;
   commands: string[][];
-}
-export interface BenchmarkChoice {
-  name: string;
-  command: string[];
-  scope: string;
-}
-export interface BenchmarkCatalog extends CandidateIdentity {
-  available: boolean;
-  trusted: boolean;
-  reason?: string;
-  benchmarks: BenchmarkChoice[];
-}
-export interface BenchmarkSample {
-  iterations: number;
-  ns_per_op: number;
-  bytes_per_op?: number;
-  allocs_per_op?: number;
-}
-export interface BenchmarkResult extends CandidateIdentity {
-  benchmark: string;
-  scope: string;
-  status: string;
-  reason?: string;
-  command: string[];
-  base?: { samples: BenchmarkSample[] };
-  candidate?: { samples: BenchmarkSample[] };
-}
-export interface Receipt {
-  project_revision: string;
-  post_apply_hash: string;
-  undo_available: boolean;
-  audit?: {
-    id: string;
-    action: string;
-    target_path: string;
-    outcome: string;
-    timestamp: string;
-    before_hash: string;
-    after_hash: string;
-    project_id: string;
-    project_revision: string;
-  };
-  index?: ProjectIndex;
-  warnings?: string[];
 }
 export interface Scan extends ProjectIdentity {
   status: string;
@@ -523,7 +423,16 @@ export interface ChangeSession extends ProjectIdentity {
   state: string;
   freshness: string;
   targets: { path: string; hash: string; exists: boolean; content: string }[];
-  changes: { path: string; content: string; hash: string; diff: Validation['diff'] }[];
+  changes: {
+    path: string;
+    content: string;
+    hash: string;
+    diff: {
+      old_path: string;
+      new_path: string;
+      lines: { kind: string; old_line: number; new_line: number; text: string }[];
+    };
+  }[];
   messages: { role: string; content: string }[];
   checks: Check[];
   check_options?: { run_tests?: boolean; run_lint?: boolean };
