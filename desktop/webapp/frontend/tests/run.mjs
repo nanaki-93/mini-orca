@@ -364,7 +364,7 @@ async function headingContainment(heading) {
   const bounds = await heading.boundingBox();
   assert.ok(bounds, 'Heading is rendered');
   const parts = [
-    heading.locator('h1'),
+    heading.locator('h1, h2'),
     ...(await heading.locator('p').all()),
     ...(await heading.getByRole('button').all()),
   ];
@@ -473,12 +473,12 @@ async function studioContainment(surface) {
   checks++;
 }
 async function scanLayout(page) {
-  const surface = page.locator('.scan-workspace');
-  await headingContainment(surface.locator('.page-heading--intro'));
+  const surface = page.locator('.tests-workspace');
+  await headingContainment(surface.locator('.page-heading'));
 
   const overflow = await page
     .locator(
-      '#main, .page, .scan-workspace, .scan-phases, .scan-phases .panel, .scan-phases .panel-head, .scan-phases .panel-body, .scan-status, .scan-phases details, .scan-phases .disclosure-body, .scan-phases pre',
+      '#main, .page, .tests-workspace, .test-phases, .test-phases .panel, .test-phases .panel-head, .test-phases .panel-body, .test-status, .test-phases details, .test-phases .disclosure-body, .test-phases pre',
     )
     .evaluateAll((elements) =>
       elements
@@ -494,7 +494,7 @@ async function scanLayout(page) {
     const header = panel.locator('.panel-head');
     const bounds = await header.boundingBox();
     const title = await header.locator('h2').boundingBox();
-    const status = await header.locator('.scan-status').boundingBox();
+    const status = await header.locator('.test-status').boundingBox();
     for (const box of [title, status]) {
       assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
       assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
@@ -4844,7 +4844,7 @@ try {
     assert.equal(await page.locator('.source-filetabs button.active').innerText(), 'config.go');
     await close();
   });
-  await test('Verified scan retains every phase, truthful status and passive diagnostics across appearances', async () => {
+  await test('Overview tests retain every phase, truthful status and passive diagnostics across appearances', async () => {
     const command = ['go', 'test', `./internal/${'long-package/'.repeat(45)}`];
     const output = `Diagnostic: ${'LongDiagnostic'.repeat(100)}\nFinal diagnostic line.\n<script>window.scanInjected = true</script>`;
     const phases = [
@@ -4885,19 +4885,17 @@ try {
       const { page, close } = await pageFor({ scanReport: report });
       try {
         await nav(page, 'Bugs');
-        await page.getByRole('button', { name: 'Verified scan', exact: true }).click();
+        await nav(page, 'Overview');
         await idle(page);
-        const surface = page.locator('.scan-workspace');
-        const heading = surface.locator('.page-heading--intro');
-        const action = surface.getByRole('button', {
-          name: scenario === 'running' ? 'Cancel scan' : 'Run scan',
+        const surface = page.locator('.tests-workspace');
+        const heading = surface.locator('.page-heading');
+        const action = page.locator('.topbar').getByRole('button', {
+          name: scenario === 'running' ? 'Cancel Tests' : 'Run Tests',
           exact: true,
         });
         assert.equal(await action.isEnabled(), true);
         if (!report) {
-          await surface
-            .getByRole('heading', { name: 'No verified scan yet', exact: true })
-            .waitFor();
+          await surface.getByRole('heading', { name: 'No test run yet', exact: true }).waitFor();
         } else {
           assert.equal(
             await heading.getByText(`Status: ${report.status}`, { exact: true }).isVisible(),
@@ -4916,7 +4914,7 @@ try {
                 true,
               );
               assert.equal(
-                await panel.locator('.scan-status').textContent(),
+                await panel.locator('.test-status').textContent(),
                 phase.state.replaceAll('_', ' '),
               );
               if (phase.command?.length)
@@ -4999,7 +4997,7 @@ try {
                 .evaluate((button) => button.click());
           }
         }
-        await surface.getByRole('button', { name: 'Findings', exact: true }).click();
+        await nav(page, 'Bugs');
         await page.getByRole('heading', { name: 'Bugs', exact: true }).waitFor();
         assert.deepEqual(
           await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
@@ -5012,7 +5010,7 @@ try {
       }
     }
   });
-  await test('Verified scan keeps explicit execution trust, guarded Run/Cancel and busy controls', async () => {
+  await test('Run Tests keeps explicit execution trust, guarded Run/Cancel and busy controls', async () => {
     const path = '/api/projects/current/scan';
     const phases = [
       {
@@ -5026,9 +5024,8 @@ try {
     const { page, close } = await pageFor({ scanResult: { status: 'running', phases } });
     try {
       await nav(page, 'Bugs');
-      await page.getByRole('button', { name: 'Verified scan', exact: true }).click();
-      const surface = page.locator('.scan-workspace');
-      const run = surface.getByRole('button', { name: 'Run scan', exact: true });
+      const surface = page.locator('.tests-workspace');
+      const run = page.locator('.topbar').getByRole('button', { name: 'Run Tests', exact: true });
       const admissions = () =>
         page.evaluate(
           (path) => window.fixture.requests.filter((r) => r.path === path && r.method !== 'GET'),
@@ -5071,7 +5068,9 @@ try {
       });
       await idle(page);
       await surface.getByText('Status: running', { exact: true }).waitFor();
-      const cancel = surface.getByRole('button', { name: 'Cancel scan', exact: true });
+      const cancel = page
+        .locator('.topbar')
+        .getByRole('button', { name: 'Cancel Tests', exact: true });
       await page.evaluate((path) => {
         window.fixture.hold = `DELETE ${path}`;
       }, path);
@@ -5258,7 +5257,6 @@ try {
         ['Architecture', 'diagrams'],
         ['Terminal', 'terminal'],
         ['Models', 'models'],
-        ['Verified scan', 'scan'],
         ['Open project', 'project'],
       ]) {
         await page.keyboard.press('Control+k');
@@ -5310,8 +5308,8 @@ try {
       await layout(page, `${name.toLowerCase()}-detail`);
     }
     await nav(page, 'Bugs');
-    await page.getByRole('button', { name: 'Verified scan', exact: true }).click();
-    await page.getByRole('button', { name: 'Run scan', exact: true }).click();
+    await nav(page, 'Overview');
+    await page.getByRole('button', { name: 'Run Tests', exact: true }).click();
     await page
       .locator('dialog:not(.studio-overlay)')
       .getByRole('button', { name: 'Trust this project' })
@@ -5458,8 +5456,8 @@ try {
           name === 'Bugs' ? 'high' : 'medium',
         );
         if (name === 'Bugs') {
-          await page.getByRole('button', { name: 'Verified scan', exact: true }).click();
-          await page.getByRole('button', { name: 'Run scan', exact: true }).waitFor();
+          await nav(page, 'Overview');
+          await page.getByRole('button', { name: 'Run Tests', exact: true }).waitFor();
           await nav(page, name);
         }
         await page.getByRole('button', { name: 'Analyze project', exact: true }).click();

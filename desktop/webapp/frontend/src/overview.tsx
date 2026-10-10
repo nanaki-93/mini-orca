@@ -6,6 +6,7 @@ import {
   type State,
   type Page,
 } from './workspace';
+import { Tests } from './tools';
 import { ModelSelectors } from './analysis-models';
 import { WorkflowModels, defaultWorkflowModels } from './change-workflow';
 import {
@@ -126,9 +127,6 @@ export function ProjectPage({ s, compact = false }: { s: State; compact?: boolea
           </Panel>
           <Panel title="Tools">
             <div className="actions">
-              <Go page="scan" icon="shield">
-                Verified scan
-              </Go>
               <Go page="terminal" icon="terminal">
                 Terminal
               </Go>
@@ -330,6 +328,7 @@ export function Summary({ s }: { s: State }) {
           </Go>
         </section>
       </div>
+      <Tests s={s} />
       <div className="studio-scope-line">
         <span className="row">
           <Icon name="folder" />
@@ -581,7 +580,6 @@ export function SearchPage({ s }: { s: State }) {
     ['diagrams', 'Architecture', 'branch'],
     ['terminal', 'Terminal', 'terminal'],
     ['models', 'Models', 'sparkles'],
-    ['scan', 'Verified scan', 'shield'],
     ['project', 'Open project', 'folder'],
   ];
   return (

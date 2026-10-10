@@ -23,8 +23,7 @@ export type Page =
   | 'terminal'
   | 'search'
   | 'models'
-  | 'diagrams'
-  | 'scan';
+  | 'diagrams';
 export type FindingCategory = 'bugs' | 'performance' | 'security';
 export interface FindingListView {
   query: string;
@@ -972,7 +971,8 @@ export class Workspace {
     return true;
   }
   async scanProject(cancel = false) {
-    await this.act(cancel ? 'Cancel scan' : 'Run verified scan', async () => {
+    await this.act(cancel ? 'Cancel tests' : 'Run tests', async () => {
+      this.set({ page: 'summary' });
       const revision = { project_revision: this.identity().project_revision };
       if (!cancel && !(await this.trust())) return;
       const scan = cancel
@@ -981,7 +981,7 @@ export class Workspace {
             `${current}/scan?project_revision=${encodeURIComponent(revision.project_revision)}`,
           )
         : await this.api.post<M.Scan>(`${current}/scan`, revision);
-      this.set({ scan, page: 'scan' });
+      this.set({ scan });
     });
   }
   seedChange(seed: M.ChangeSeed) {
