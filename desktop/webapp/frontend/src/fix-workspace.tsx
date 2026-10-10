@@ -21,21 +21,6 @@ import {
   human,
 } from './ui';
 
-export function FixSteps({ step }: { step: 'prepare' | 'generate' | 'review' | 'applied' }) {
-  const stages = ['Finding', 'Generate & check', 'Review & apply'];
-  const current = step === 'prepare' ? 0 : step === 'generate' ? 1 : 2;
-  return (
-    <ol className="fix-steps" aria-label="Fix progress">
-      {stages.map((label, index) => (
-        <li key={label} aria-current={index === current ? 'step' : undefined}>
-          <Icon name={index < current || step === 'applied' ? 'check' : 'clock'} />
-          {label}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 export function FixWorkspace({ s }: { s: State }) {
   const change = s.change;
   const finding = s.changeSeed?.finding;
@@ -143,17 +128,6 @@ export function FixWorkspace({ s }: { s: State }) {
           Go to file
         </Button>
       </Heading>
-      <FixSteps
-        step={
-          change?.state === 'applied'
-            ? 'applied'
-            : running
-              ? 'generate'
-              : change?.changes.length
-                ? 'review'
-                : 'prepare'
-        }
-      />
       {change?.freshness === 'stale' && (
         <Notice>Source or guidance changed. Refresh the findings and start a new fix.</Notice>
       )}
@@ -161,25 +135,52 @@ export function FixWorkspace({ s }: { s: State }) {
         <Notice>Performance unmeasured; tests do not establish a speedup.</Notice>
       )}
       <ChangeOutcome s={s} />
-      <Panel title="Cause" className="fix-explanation fix-cause">
-        <Prose
-          text={
-            finding?.cause ||
-            seed.message ||
-            'No cause was saved. Review the original finding and source.'
-          }
-        />
-        <p className="small muted">
-          {finding ? `Reported finding · ${human(finding.confidence)}` : 'Saved finding context'}
-        </p>
-      </Panel>
-      <FixSolution s={s} />
+      {!change?.changes.length && (
+        <>
+          {' '}
+          <Panel title="Cause" className="fix-explanation fix-cause">
+            <Prose
+              text={
+                finding?.cause ||
+                seed.message ||
+                'No cause was saved. Review the original finding and source.'
+              }
+            />
+            <p className="small muted">
+              {finding
+                ? `Reported finding · ${human(finding.confidence)}`
+                : 'Saved finding context'}
+            </p>
+          </Panel>
+          <FixSolution s={s} />
+        </>
+      )}
       {change?.changes.length ? (
-        <FixReview
+        <ProposalReview
           key={`${change.project_id}:${change.project_revision}:${change.id}:${change.revision}:${change.hash}`}
           s={s}
           change={change}
-          details={details}
+          details={
+            <>
+              {' '}
+              <Panel title="Cause" className="fix-explanation fix-cause">
+                <Prose
+                  text={
+                    finding?.cause ||
+                    seed.message ||
+                    'No cause was saved. Review the original finding and source.'
+                  }
+                />
+                <p className="small muted">
+                  {finding
+                    ? `Reported finding · ${human(finding.confidence)}`
+                    : 'Saved finding context'}
+                </p>
+              </Panel>
+              <FixSolution s={s} />
+              {details}
+            </>
+          }
         />
       ) : (
         <>
@@ -206,14 +207,16 @@ export function FixWorkspace({ s }: { s: State }) {
   );
 }
 
-function FixReview({
+export function ProposalReview({
   s,
   change,
   details,
+  tests = true,
 }: {
   s: State;
   change: ChangeSession;
   details: ReactNode;
+  tests?: boolean;
 }) {
   const [tab, setTab] = useState('changes');
   const [path, setPath] = useState(change.changes[0].path);
@@ -245,7 +248,10 @@ function FixReview({
         panel="fix-review-content"
         items={[
           { id: 'changes', label: `Changes (${files.length})` },
-          { id: 'checks', label: `Checks${attention ? ` (${attention} need attention)` : ''}` },
+          {
+            id: 'checks',
+            label: `Checks${attention ? ` (${attention} need attention)` : ''}`,
+          },
           { id: 'details', label: 'Details' },
         ]}
       />
@@ -280,20 +286,76 @@ function FixReview({
                 visited: viewed.includes(file.path),
               }))}
             />
-            <div
-              ref={diff}
-              id="fix-file-diff"
-              role="tabpanel"
-              aria-labelledby={`fix-file-diff-tab-${files.indexOf(edit)}`}
-              className="change-files"
-            >
-              <ProposalDiff edit={edit} index={files.indexOf(edit)} total={files.length} />
+            <div className="studio-review-body">
+              <div
+                ref={diff}
+                id="fix-file-diff"
+                role="tabpanel"
+                aria-labelledby={`fix-file-diff-tab-${files.indexOf(edit)}`}
+                className="change-files"
+              >
+                <ProposalDiff edit={edit} index={files.indexOf(edit)} total={files.length} />
+              </div>
+              <aside className="review-evidence" aria-label="Review evidence">
+                <section>
+                  <h3>Checks & evidence</h3>
+                  {change.checks.length ? (
+                    change.checks.map((check, i) => (
+                      <div className="review-evidence-row" key={i}>
+                        <Icon name={check.state === 'passed' ? 'check' : 'warning'} />
+                        <span>{check.name}</span>
+                        <Badge value={check.state} />
+                      </div>
+                    ))
+                  ) : (
+                    <p className="small muted">No check evidence yet.</p>
+                  )}
+                  {change.workflow?.review && (
+                    <div className="review-evidence-row">
+                      <span>Model review</span>
+                      <Badge value={change.workflow.review.verdict} />
+                    </div>
+                  )}
+                  <Button tone="ghost" onClick={() => setTab('checks')}>
+                    Checks & details
+                  </Button>
+                </section>
+                <section>
+                  <h3>Review progress</h3>
+                  {files.map((file) => (
+                    <button
+                      className="review-file-progress"
+                      key={file.path}
+                      onClick={() => selectFile(file.path)}
+                    >
+                      <Icon name={viewed.includes(file.path) ? 'check' : 'file'} />
+                      <span>{file.path.split('/').at(-1)}</span>
+                      <small>{viewed.includes(file.path) ? 'Viewed' : 'Next'}</small>
+                    </button>
+                  ))}
+                  <progress aria-label="Files viewed" value={viewed.length} max={files.length} />
+                </section>
+                <section>
+                  <h3>Captured scope</h3>
+                  <p className="small muted">
+                    {change.targets.length} paths · Revision {change.revision}
+                  </p>
+                  <p className="small muted">
+                    {change.freshness === 'current'
+                      ? 'Current source snapshot'
+                      : human(change.freshness)}
+                  </p>
+                  <Button tone="ghost" onClick={() => setTab('details')}>
+                    Scope & instructions
+                  </Button>
+                </section>
+              </aside>
             </div>
           </>
         )}
         {tab === 'checks' && (
           <div className="stack">
-            <ChangeChecks s={s} />
+            <ChangeChecks s={s} tests={tests} />
             <WorkflowProgress s={s} actionLabel="Apply" showCancel={false} />
           </div>
         )}
