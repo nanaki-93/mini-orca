@@ -45,8 +45,8 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
       assert.equal(await page.getByLabel('Creation model', { exact: true }).count(), 0);
       await nav(page, 'Models');
       assert.equal(await page.getByLabel('Creation model', { exact: true }).isDisabled(), true);
-      await nav(page, 'Summary');
-      await page.getByRole('button', { name: 'View workflow', exact: true }).click();
+      await nav(page, 'Overview');
+      await page.getByRole('button', { name: 'Continue work', exact: true }).click();
       await page.evaluate(() => window.fixture.completeWorkflow());
       await page
         .getByText('Review the file differences, then select Accept changes.', {
@@ -62,6 +62,13 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
         false,
       );
       await layout(page, 'agent-workflow-human-review');
+      await nav(page, 'Changes');
+      assert.equal(
+        await page.getByRole('region', { name: 'Proposal review', exact: true }).isVisible(),
+        true,
+      );
+      assert.equal(await page.getByLabel('Change request', { exact: true }).isVisible(), false);
+      await layout(page, 'studio-changes-review');
       await page.getByRole('button', { name: 'Accept changes', exact: true }).click();
       await idle(page);
       assert.equal(
@@ -70,6 +77,18 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
         ),
         1,
       );
+      const writes = await page.evaluate(() =>
+        window.fixture.requests.filter((r) => r.method !== 'GET'),
+      );
+      await nav(page, 'History');
+      await page.getByRole('heading', { name: 'History', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Resume', exact: true }).waitFor();
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+        writes,
+        'History displays saved work without starting or applying changes',
+      );
+      await layout(page, 'studio-history-saved');
     } finally {
       await close();
     }
@@ -81,6 +100,9 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
       await prepare(page);
       await page.getByLabel('Task title', { exact: true }).fill('Bound request time');
       assert.equal(await page.getByLabel('Creation model', { exact: true }).count(), 0);
+      await nav(page, 'Changes');
+      await page.getByRole('region', { name: 'Proposal review', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Back to conversation', exact: true }).click();
       const writes = await page.evaluate(() =>
         window.fixture.requests.filter((r) => r.method !== 'GET'),
       );
@@ -215,7 +237,7 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
           true,
         );
         if (scenario === 'navigation') {
-          await nav(page, 'Summary');
+          await nav(page, 'Overview');
           await nav(page, 'Chat');
         }
         await page.evaluate((scenario) => {

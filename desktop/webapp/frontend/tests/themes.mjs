@@ -9,7 +9,7 @@ export async function testThemes({ test, pageFor, nav, idle, layout, contrast })
       const destinations = await sidebar
         .locator('.nav-link')
         .evaluateAll((links) => links.map((link) => link.getAttribute('aria-label')));
-      assert.equal(destinations.length, 14);
+      assert.equal(destinations.length, 18);
       const writes = await page.evaluate(() =>
         window.fixture.requests.filter((request) => request.method !== 'GET'),
       );
@@ -62,7 +62,7 @@ export async function testThemes({ test, pageFor, nav, idle, layout, contrast })
       );
       assert.equal(
         await sidebar
-          .getByRole('button', { name: 'Summary', exact: true })
+          .getByRole('button', { name: 'Overview', exact: true })
           .locator('span')
           .first()
           .isVisible(),

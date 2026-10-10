@@ -687,7 +687,7 @@ export async function testGuidedFixes({
   await test('Missing project instructions link to root creation without dispatch or source writes', async () => {
     const { page, close } = await pageFor({ instructionsMissing: true });
     try {
-      for (const name of ['Summary', 'Analysis', 'Bugs', 'Performance', 'Security']) {
+      for (const name of ['Overview', 'Analysis', 'Bugs', 'Performance', 'Security']) {
         await nav(page, name);
         assert.equal(await page.getByLabel('Default agent instructions').count(), 0);
       }

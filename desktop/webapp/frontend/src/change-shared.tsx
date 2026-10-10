@@ -108,7 +108,7 @@ export function ChangeHistory({ s }: { s: State }) {
   const running = activeChangeWorkflow(s.change);
   return (
     <Panel className="chat-history">
-      <Disclosure title="Local history">
+      <Disclosure title="Local history" open={s.page === 'history'}>
         {!s.changeHistory ? (
           <Empty title="History unavailable" />
         ) : s.changeHistory.length === 0 ? (

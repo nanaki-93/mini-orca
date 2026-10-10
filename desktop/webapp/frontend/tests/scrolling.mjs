@@ -70,7 +70,7 @@ export async function testScrolling({ test, pageFor, nav, idle, layout }) {
   await test('Content, sidebar and terminal boundaries do not scroll their host', async () => {
     for (const [route, selector] of [
       ['Instructions', '#main'],
-      ['Summary', '.sidebar'],
+      ['Overview', '.sidebar'],
       ['Terminal', '.terminal-container'],
     ]) {
       const { page, close } = await pageFor();
