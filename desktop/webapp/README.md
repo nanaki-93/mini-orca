@@ -242,10 +242,12 @@ Use **Collapse sidebar** below the navigation to keep only destination icons.
 Every destination keeps its accessible name and hover label; **Expand sidebar**
 restores labels and counts. The selected width is remembered across launches.
 
-The footer's **G**, **P** and **M** controls select Graphite, Porcelain and Midnight.
+The footer's **G**, **P**, **M** and **S** controls select Graphite, Porcelain,
+Midnight and Signal.
 The selected theme is remembered across launches. Graphite pairs warm charcoal
 with amber, Porcelain pairs ivory with forest green, and Midnight pairs navy with
-cyan. All three retain labeled success, warning and failure states. **Aa** enables
+cyan. Signal pairs black surfaces with red actions and yellow highlights.
+All themes retain labeled success, warning and failure states. **Aa** enables
 larger text. Theme changes are immediate; hover transitions respect the system's
 reduced-motion preference.
 

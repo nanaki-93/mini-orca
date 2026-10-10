@@ -3,7 +3,7 @@
 Prepared from the user-provided logo reference image. The transparent SVG symbol is a faithful **vector trace of the reference screenshot** (not an original editable design document); the original visible M/O geometry and orca eye are preserved. The original screenshot's antialiasing and gradients were simplified to solid theme colors for reliable UI rendering.
 
 The [desktop web client](../../desktop/webapp/README.md) uses this directory as
-its branding source. Its build copies the three theme marks and favicon into the
+its branding source. Its build copies the theme marks and favicon into the
 embedded frontend, and Wails creates the native macOS icon from the Graphite
 1024-pixel app-icon PNG. The remaining exports are available for other consumers.
 
@@ -15,6 +15,7 @@ embedded frontend, and Wails creates the native macOS icon from the Graphite
 - Windows packaged icon: `mini-orca.ico` (Graphite).
 - Browser tab: `favicon.png` (Graphite), and other sizes in `graphite/app-icon`.
 - Theme-aware UI: use `porcelain/` for light background and `midnight/` for blue background.
+- Signal UI header: `signal/ui/mo-mark.svg` preserves the mark geometry with red and yellow. This theme supplies a header SVG only; the packaged app icon remains Graphite.
 - `reference-extraction/mo-mark-source-colors.png` is the screenshot-based extraction to inspect source appearance; **prefer the SVG** for actual UI usage.
 - `*-24h.png` names mean the transparent mark PNG is **24 pixels high**; aspect ratio is preserved.
 
@@ -25,6 +26,7 @@ embedded frontend, and Wails creates the native macOS icon from the Graphite
 | Graphite | `#1C1F1B` | `#F5F1E8` | `#F8C274` |
 | Porcelain | `#F8F7F2` | `#164B3A` | `#346448` |
 | Midnight | `#0E243A` | `#EAF4FF` | `#78CDCF` |
+| Signal | `#151215` | `#FF5A61` | `#FFDC45` |
 
 ## Importing into web/HTMX UI (Go)
 

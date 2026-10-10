@@ -1,5 +1,12 @@
 import { strict as assert } from 'node:assert';
 
+const themes = [
+  ['dark', 'Graphite', 'G'],
+  ['light', 'Porcelain', 'P'],
+  ['midnight', 'Midnight', 'M'],
+  ['signal', 'Signal', 'S'],
+];
+
 export async function testThemes({ test, pageFor, nav, idle, layout, contrast }) {
   await test('Collapsible sidebar keeps every destination accessible and remembers its width', async () => {
     const { page, close } = await pageFor();
@@ -71,7 +78,7 @@ export async function testThemes({ test, pageFor, nav, idle, layout, contrast })
         'true',
       );
       await nav(page, 'Bugs');
-      for (const theme of ['Graphite', 'Porcelain', 'Midnight']) {
+      for (const [, theme] of themes) {
         await page.getByRole('button', { name: `${theme} theme`, exact: true }).click();
         await page.setViewportSize({ width: 800, height: 640 });
         await toggle.focus();
@@ -109,19 +116,18 @@ export async function testThemes({ test, pageFor, nav, idle, layout, contrast })
     }
   });
 
-  await test('G, P and M themes support keyboard selection and remember appearance', async () => {
+  await test('Theme selectors support keyboard selection and remember appearance', async () => {
     const { page, close } = await pageFor();
     try {
       await idle(page);
       const group = page.getByRole('group', { name: 'Theme', exact: true });
-      assert.deepEqual(await group.getByRole('button').allTextContents(), ['G', 'P', 'M']);
+      assert.deepEqual(
+        await group.getByRole('button').allTextContents(),
+        themes.map(([, , letter]) => letter),
+      );
       assert.equal(await group.getByRole('button', { pressed: true }).innerText(), 'G');
       const surfaces = [];
-      for (const [id, name, letter] of [
-        ['light', 'Porcelain', 'P'],
-        ['midnight', 'Midnight', 'M'],
-        ['dark', 'Graphite', 'G'],
-      ]) {
+      for (const [id, name, letter] of [...themes.slice(1), themes[0]]) {
         const writes = await page.evaluate(() =>
           window.fixture.requests.filter((request) => request.method !== 'GET'),
         );
@@ -132,6 +138,13 @@ export async function testThemes({ test, pageFor, nav, idle, layout, contrast })
         assert.equal(await button.evaluate((element) => element === document.activeElement), true);
         assert.equal(await group.getByRole('button', { pressed: true }).innerText(), letter);
         assert.equal(await page.locator('html').getAttribute('data-theme'), id);
+        const mark = page.locator('.brand-symbol');
+        await mark.evaluate((element) => element.decode());
+        assert.equal(
+          await mark.getAttribute('src'),
+          `/mo-mark-${name.toLowerCase().replaceAll(' ', '-')}.svg`,
+        );
+        assert.ok(await mark.evaluate((element) => element.naturalWidth > 0));
         surfaces.push(
           await page
             .locator('html')
@@ -165,6 +178,11 @@ export async function testThemes({ test, pageFor, nav, idle, layout, contrast })
           await layout(page, `theme-${id}-${width}`);
           if (large) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
         }
+        const action = page.getByRole('button', { name: 'Start a task', exact: true });
+        await action.hover();
+        await contrast(page, `${name} primary action hover`);
+        await action.focus();
+        await contrast(page, `${name} primary action focus`);
         assert.deepEqual(
           await page.evaluate(() =>
             window.fixture.requests.filter((request) => request.method !== 'GET'),
@@ -179,7 +197,7 @@ export async function testThemes({ test, pageFor, nav, idle, layout, contrast })
         assert.equal(await page.locator('html').getAttribute('data-theme'), id);
         assert.equal(await page.evaluate(() => localStorage.getItem('mini-orca:theme')), id);
       }
-      assert.equal(new Set(surfaces).size, 3, 'Each theme renders a distinct palette');
+      assert.equal(new Set(surfaces).size, themes.length, 'Each theme renders a distinct palette');
       await page.emulateMedia({ reducedMotion: 'reduce' });
       const task = page.getByRole('button', { name: 'Start a task', exact: true });
       await task.hover();
@@ -198,48 +216,50 @@ export async function testThemes({ test, pageFor, nav, idle, layout, contrast })
     }
   });
 
-  await test('Midnight keeps analysis, files, results and model selection readable', async () => {
-    const { page, close } = await pageFor();
-    try {
-      await idle(page);
-      const writes = await page.evaluate(() =>
-        window.fixture.requests.filter((request) => request.method !== 'GET'),
-      );
-      await page.getByRole('button', { name: 'Midnight theme', exact: true }).click();
-      await page.getByRole('button', { name: 'Larger text', exact: true }).click();
-      await page.setViewportSize({ width: 800, height: 1000 });
-      for (const name of [
-        'Analysis',
-        'Files',
-        'Last run',
-        'Bugs',
-        'Performance',
-        'Security',
-        'Chat',
-        'Source',
-        'Models',
-      ]) {
-        await nav(page, name);
+  for (const theme of ['Midnight', 'Signal']) {
+    await test(`${theme} keeps analysis, files, results and model selection readable`, async () => {
+      const { page, close } = await pageFor();
+      try {
         await idle(page);
-        await contrast(page, `${name} in Midnight`);
-        await layout(page, `midnight-${name.toLowerCase().replaceAll(' ', '-')}`);
-      }
-      await nav(page, 'Models');
-      await page.getByRole('button', { name: 'Bug analysis model', exact: true }).click();
-      await page.getByRole('dialog', { name: 'Choose a model' }).waitFor();
-      await contrast(page, 'Midnight model picker');
-      await layout(page, 'midnight-model-picker');
-      await page.keyboard.press('Escape');
-      assert.equal(await page.getByRole('dialog').count(), 0);
-      assert.deepEqual(
-        await page.evaluate(() =>
+        const writes = await page.evaluate(() =>
           window.fixture.requests.filter((request) => request.method !== 'GET'),
-        ),
-        writes,
-        'Appearance, navigation and model inspection remain passive',
-      );
-    } finally {
-      await close();
-    }
-  });
+        );
+        await page.getByRole('button', { name: `${theme} theme`, exact: true }).click();
+        await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        await page.setViewportSize({ width: 800, height: 1000 });
+        for (const name of [
+          'Analysis',
+          'Files',
+          'Last run',
+          'Bugs',
+          'Performance',
+          'Security',
+          'Chat',
+          'Source',
+          'Models',
+        ]) {
+          await nav(page, name);
+          await idle(page);
+          await contrast(page, `${name} in ${theme}`);
+          await layout(page, `${theme.toLowerCase()}-${name.toLowerCase().replaceAll(' ', '-')}`);
+        }
+        await nav(page, 'Models');
+        await page.getByRole('button', { name: 'Bug analysis model', exact: true }).click();
+        await page.getByRole('dialog', { name: 'Choose a model' }).waitFor();
+        await contrast(page, `${theme} model picker`);
+        await layout(page, `${theme.toLowerCase()}-model-picker`);
+        await page.keyboard.press('Escape');
+        assert.equal(await page.getByRole('dialog').count(), 0);
+        assert.deepEqual(
+          await page.evaluate(() =>
+            window.fixture.requests.filter((request) => request.method !== 'GET'),
+          ),
+          writes,
+          'Appearance, navigation and model inspection remain passive',
+        );
+      } finally {
+        await close();
+      }
+    });
+  }
 }
