@@ -78,7 +78,17 @@ export function AnalysisModelSummary({ s, value }: { s: State; value: AnalysisAs
             <Icon name={icon} />
             <div>
               <strong>{label}</strong>
-              <span className="small muted">{model?.model || 'Model unavailable'}</span>
+              <p className="small muted">
+                {
+                  {
+                    code: 'Find correctness and error-handling issues.',
+                    performance: 'Identify opportunities to measure.',
+                    security: 'Inspect security-sensitive paths.',
+                    features: 'Discover ideas from your project goals.',
+                  }[key]
+                }
+              </p>
+              <span className="analysis-assigned-model">{model?.model || 'Model unavailable'}</span>
             </div>
           </div>
         );
