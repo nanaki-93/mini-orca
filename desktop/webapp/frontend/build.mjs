@@ -5,6 +5,7 @@ import path from 'node:path';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const output = path.resolve(root, '../internal/assets/files');
+const branding = path.resolve(root, '../../../docs/icons');
 await mkdir(output, { recursive: true });
 await build({
   entryPoints: [path.join(root, 'src/main.tsx')],
@@ -17,6 +18,13 @@ await build({
   define: { 'process.env.NODE_ENV': '"production"' },
 });
 await copyFile(path.join(root, 'index.html'), path.join(output, 'index.html'));
+for (const theme of ['graphite', 'porcelain', 'midnight']) {
+  await copyFile(
+    path.join(branding, theme, 'ui/mo-mark.svg'),
+    path.join(output, `mo-mark-${theme}.svg`),
+  );
+}
+await copyFile(path.join(branding, 'favicon.png'), path.join(output, 'favicon.png'));
 const packages = [
   'react',
   'react-dom',

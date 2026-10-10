@@ -1,5 +1,9 @@
 # Mini-Orca logo
 
+This directory retains the earlier standalone logo concept. The desktop web
+client uses the [MO Orbit logo pack](../../docs/icons/README.md); see its
+[desktop guide](../webapp/README.md) for integration details.
+
 The mark combines an orca's dorsal fin and eye patch with three curved paths
 joining its body. The paths represent work converging under one orchestrator.
 The upward angle and charcoal/green palette keep the design away from the blue

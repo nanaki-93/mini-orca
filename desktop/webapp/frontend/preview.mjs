@@ -7,6 +7,8 @@ const types = {
   '.css': 'text/css',
   '.html': 'text/html',
   '.txt': 'text/plain',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
 };
 export function serve(port = 4392) {
   return new Promise((resolve) => {
