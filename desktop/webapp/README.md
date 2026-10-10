@@ -32,6 +32,11 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
 
 ## Workflow
 
+Project Studio groups everyday work into **Overview**, **Source**, **Chat** and
+**Changes**. **Improve** contains analysis and findings; **Project** contains
+architecture, instructions, context, terminal, models and history. The sidebar
+collapses to icons, and the global search opens with `⌘K` or `Ctrl+K`.
+
 - **Project** opens a saved project locally. **Import & analyze** creates a new
   overview, with explicit confirmation for a remote Analyze provider.
 - **Analysis** configures independent models for Bug analysis, Performance, Security
@@ -55,7 +60,7 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   unsuccessful or skipped steps; feature discovery has its own status.
   **Run details** reveals result counts, captured models, coverage, provider
   destinations and file diagnostics. Failures remain visible when details are
-  collapsed. Open result workspaces through the sidebar or **Summary**.
+  collapsed. Open result workspaces through the sidebar or **Overview**.
   Pausing/resuming retains captured model choices, including older runs that
   shared one Performance/Security choice. Feature discovery runs independently
   of file analysis, gets at least ten minutes (or the selected model's longer
@@ -101,10 +106,12 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
 - **Chat** captures up to eight explicit Go/Markdown paths, including new files.
   **Configure workflow** on a feature idea
   opens the captured task setup and suggests a test path. Choose a Creation,
-  Testing and Review model independently in **Agent models** at the top of the page,
-  then select **Generate changes**. These workflows use the configured profiles;
-  Analysis also offers Pi catalog models. The
-  choices reference the daemon's configured Function, Bug and Analyze profiles
+  Testing and Review model independently in **Workflow models** on the **Models**
+  page, then return to Chat and select **Generate changes**. **Manage models** opens
+  that page without losing the task title, file scope, request or test choice.
+  New conversations clear the previous draft. These workflows use configured
+  profiles; Analysis also offers Pi catalog models. The choices reference the
+  daemon's configured Function, Bug and Analyze profiles
   (the respective defaults); configure their actual providers/models in `config.yaml`.
   Include a `_test.go` path. The testing agent writes tests, then the daemon runs
   them in an isolated copy before the review agent evaluates the proposal.
@@ -114,14 +121,17 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   actual benchmark evidence is available. Interrupted runs need an explicit new
   run; the workflow never resumes provider calls from history automatically.
   Describe a task here, or use the dedicated fix workflow from a finding. Generation checks the proposal and can repair failed checks up to three times.
+  **Review changes** opens the dedicated **Changes** workspace with a full-width
+  read-only diff and check evidence. **Back to conversation** returns to Chat.
   Read the displayed file diffs, then select **Accept changes** once. This records
   review and applies only that revision; failed review, a replacement proposal or
   navigation while review is pending prevents Apply. With a captured `_test.go`
   path, creation, testing and agent review run automatically; otherwise generation
   uses the direct checked-proposal path.
   Requested tests remain required; execution trust and remote-provider consent
-  are separate. New revisions clear earlier review. Local history restores a
-  conversation without generation or inherited check/review authority.
+  are separate. New revisions clear earlier review. **History** lists saved work;
+  **Resume** restores a conversation without generation or inherited check/review
+  authority.
 - **Instructions** loads root or directory AGENTS.md and offers independent rules
   across eight sections following [AGENTS.md conventions](https://agents.md/):
   architecture, setup/build, code style, testing, security/data, UI/accessibility,
@@ -153,25 +163,30 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   Validate, run checks, inspect Review, then explicitly Apply. The receipt offers
   guarded Undo. Local edits invalidate prior checks. Returning to the editor or
   application rechecks the source; changed files need **Refresh facts**.
-- **Summary** links Bugs, Performance, Security and active Features counts to
+- **Overview** puts the current task or saved analysis in a **Continue work** or
+  **Your next step** band. Opening captured work does not generate or apply changes.
+  **Needs attention** links Bugs, Performance, Security and active Features counts to
   their workspaces. Feature details, estimated effort and triage stay in Features;
   unavailable or ungenerated counts remain unknown, and status indicators retain
-  stale/failure states. Matching **Architecture and Flow** and **Project Analysis**
-  cards open saved diagrams and the current analysis run; without a run, the
-  analysis card opens setup. The diagrams page keeps architecture, entry points
-  and project-flow charts together. Plain Mermaid reports and
+  stale/failure states. **Project activity** links **Architecture and Flow**, the
+  current **Project Analysis**, and recent saved tasks; without a run, analysis
+  opens setup. **Architecture** keeps architecture, entry points and project-flow
+  charts together. Plain Mermaid reports and
   Markdown-fenced charts render locally, with selectable source and a readable
   fallback for older prose or render failures.
 - **Context** shows included/excluded files, hashes and the provider destination.
-  **Models** reads configuration without probing a provider. Model-supplied links,
-  HTML and remote images are inert.
+  **Models** selects shared creation, testing and review profiles and reads
+  configuration without probing a provider. Active workflows keep their captured
+  models, and model choices are disabled until they finish or are canceled.
+  Model-supplied links, HTML and remote images are inert.
 - **Terminal** starts a shell only after an explicit action. Tabs keep running
   while hidden. Closing tabs, switching projects and exiting the app clean up
   their owned processes. A cleanup failure remains visible and blocks switching
   or closing. Terminal use never grants execution trust for checks or benchmarks.
 
-The interface remembers only the last project path, appearance and text size in
-webview storage. Private project-local `.mini-orca/changes/` metadata stores
+The interface remembers the last project path, appearance, text size and sidebar
+width in webview storage. Chat drafts remain in memory during navigation.
+Private project-local `.mini-orca/changes/` metadata stores
 conversations, source captures/proposals, goals, ideas and grouped recovery/check
 evidence. Consent and execution trust are not restored. History lists return
 summaries; chosen sessions expose their complete contents. Bounds are eight paths,
@@ -186,12 +201,11 @@ Every destination keeps its accessible name and hover label; **Expand sidebar**
 restores labels and counts. The selected width is remembered across launches.
 
 The footer's **G**, **P** and **M** controls select Graphite, Porcelain and Midnight.
-The selected theme is remembered across launches. Graphite uses charcoal surfaces,
-Porcelain uses light surfaces, and Midnight pairs navy surfaces with cyan actions.
-All three palettes use separate colors for actions, successful checks and analysis
-categories. The [interactive theme mockups](../../.mockups/production-ready/index.html)
-compare the three themes across Analysis, Files, Last run and change acceptance.
-Mockup data is illustrative and performs no work.
+The selected theme is remembered across launches. Graphite pairs warm charcoal
+with amber, Porcelain pairs ivory with forest green, and Midnight pairs navy with
+cyan. All three retain labeled success, warning and failure states. **Aa** enables
+larger text. Theme changes are immediate; hover transitions respect the system's
+reduced-motion preference.
 
 ## Implementation and checks
 

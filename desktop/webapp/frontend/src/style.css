@@ -1,30 +1,30 @@
 :root {
   color-scheme: dark;
-  --canvas: #101217;
-  --sidebar: #15171e;
-  --panel: #1b1e27;
-  --raised: #242936;
-  --hover: #303749;
-  --line: #3b4355;
-  --control-line: #788299;
-  --subtle-line: #2e3544;
-  --text: #f0f2fa;
-  --secondary: #c8d0e0;
-  --muted: #a9b4ca;
-  --accent: #b7a8ff;
-  --accent-hover: #cebefd;
-  --accent-text: #1b103a;
-  --accent-soft: #302844;
-  --green: #80ddb0;
-  --green-soft: #17382c;
-  --red: #ff9ca9;
-  --red-soft: #3d222d;
-  --amber: #f4ca80;
-  --amber-soft: #382d19;
-  --blue: #8ad7e8;
-  --blue-soft: #18343d;
-  --violet: #c4adff;
-  --violet-soft: #302746;
+  --canvas: #181a18;
+  --sidebar: #1c1f1b;
+  --panel: #22251f;
+  --raised: #2c3129;
+  --hover: #373f34;
+  --line: #41493c;
+  --control-line: #8a977f;
+  --subtle-line: #333a2f;
+  --text: #f3f4ec;
+  --secondary: #d0d6c9;
+  --muted: #b1bda7;
+  --accent: #e4c38b;
+  --accent-hover: #efdab3;
+  --accent-text: #302514;
+  --accent-soft: #393222;
+  --green: #93deb0;
+  --green-soft: #223c2c;
+  --red: #f9a3aa;
+  --red-soft: #40282c;
+  --amber: #ebc68a;
+  --amber-soft: #3b301f;
+  --blue: #9dd4e2;
+  --blue-soft: #253942;
+  --violet: #cab9eb;
+  --violet-soft: #352e46;
   --shadow: 0 24px 80px #0009;
   --section-color: var(--accent);
   --section-soft: var(--accent-soft);
@@ -38,31 +38,31 @@
 }
 :root[data-theme='light'] {
   color-scheme: light;
-  --canvas: #f4f6fa;
-  --sidebar: #ffffff;
-  --panel: #fff;
-  --raised: #ecf0f7;
-  --hover: #e2e8f2;
-  --line: #cbd4e3;
-  --control-line: #6f7e96;
-  --subtle-line: #dde3ed;
-  --text: #182238;
-  --secondary: #34435e;
-  --muted: #526078;
-  --accent: #5141b4;
-  --accent-hover: #403294;
-  --accent-text: #fff;
-  --accent-soft: #ede8ff;
-  --green: #146542;
-  --green-soft: #dff3e8;
-  --red: #aa2545;
-  --red-soft: #fbe4ec;
-  --amber: #825200;
-  --amber-soft: #fcf0cf;
-  --blue: #066878;
-  --blue-soft: #dff3f8;
-  --violet: #6349af;
-  --violet-soft: #eee7ff;
+  --canvas: #f7f6f2;
+  --sidebar: #f0f1eb;
+  --panel: #ffffff;
+  --raised: #edeee7;
+  --hover: #e1e5da;
+  --line: #cdd3c6;
+  --control-line: #77816e;
+  --subtle-line: #e1e5dc;
+  --text: #202a23;
+  --secondary: #414e42;
+  --muted: #54614f;
+  --accent: #346448;
+  --accent-hover: #2a503a;
+  --accent-text: #ffffff;
+  --accent-soft: #e5eee2;
+  --green: #286447;
+  --green-soft: #e3f1e5;
+  --red: #a33244;
+  --red-soft: #f9e7e8;
+  --amber: #7c571f;
+  --amber-soft: #f8efd8;
+  --blue: #235f79;
+  --blue-soft: #e3f0f5;
+  --violet: #674f92;
+  --violet-soft: #f0eaf7;
   --shadow: 0 24px 80px #172c2524;
 }
 :root[data-theme='midnight'] {
@@ -97,6 +97,9 @@
 :root.large-text {
   font-size: 17px;
 }
+:root.theme-changing * {
+  transition: none !important;
+}
 [data-accent='bugs'] {
   --section-color: var(--red);
   --section-soft: var(--red-soft);
@@ -119,8 +122,8 @@
 [data-accent='draft'],
 [data-accent='models'],
 [data-accent='features'] {
-  --section-color: var(--violet);
-  --section-soft: var(--violet-soft);
+  --section-color: var(--accent);
+  --section-soft: var(--accent-soft);
 }
 * {
   box-sizing: border-box;
@@ -148,6 +151,16 @@ textarea {
 button {
   cursor: pointer;
   color: inherit;
+}
+.button,
+.nav-link,
+.project-switcher,
+.sidebar-toggle,
+.search-trigger,
+.studio-history-row {
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
 }
 button:disabled {
   cursor: not-allowed;
@@ -1153,9 +1166,6 @@ pre {
 .metric-card:focus-visible {
   background: var(--raised);
 }
-.metric-card:hover {
-  transform: none;
-}
 .metric-label {
   display: flex;
   justify-content: space-between;
@@ -1418,11 +1428,14 @@ pre {
   border-left: 1px solid var(--line);
 }
 @media (prefers-reduced-motion: reduce) {
-  .metric-card {
+  .metric-card,
+  .button,
+  .nav-link,
+  .project-switcher,
+  .sidebar-toggle,
+  .search-trigger,
+  .studio-history-row {
     transition: none;
-  }
-  .metric-card:hover {
-    transform: none;
   }
 }
 .mini-metrics {

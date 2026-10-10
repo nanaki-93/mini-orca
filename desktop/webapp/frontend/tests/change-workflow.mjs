@@ -94,6 +94,36 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
     }
   });
 
+  await test('Project Studio History and Changes keep empty and unavailable states explicit', async () => {
+    for (const unavailable of [false, true]) {
+      const { page, close } = await pageFor({ changeHistoryReadFail: unavailable });
+      try {
+        const writes = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method !== 'GET'),
+        );
+        await page.setViewportSize({ width: 800, height: 640 });
+        await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        await nav(page, 'History');
+        await page.getByRole('heading', { name: 'History', exact: true }).waitFor();
+        if (unavailable)
+          await page.getByRole('heading', { name: 'History unavailable', exact: true }).waitFor();
+        else await page.getByText('No saved conversations.', { exact: true }).waitFor();
+        await layout(page, `studio-history-${unavailable ? 'unavailable' : 'empty'}`);
+        await nav(page, 'Changes');
+        await page.getByRole('heading', { name: 'No proposal yet', exact: true }).waitFor();
+        await page.getByRole('button', { name: 'Back to conversation', exact: true }).click();
+        await page.getByLabel('Change request', { exact: true }).waitFor();
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+          writes,
+          'Inspecting empty workspaces never generates or applies work',
+        );
+      } finally {
+        await close();
+      }
+    }
+  });
+
   await test('Chat retains its draft through Models and clears it for a new conversation', async () => {
     const { page, close } = await pageFor();
     try {

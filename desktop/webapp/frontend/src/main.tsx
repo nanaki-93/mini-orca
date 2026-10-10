@@ -88,8 +88,18 @@ function App() {
     };
   }, []);
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    const root = document.documentElement;
+    // Switch text and surfaces together; hover fades must not cross theme palettes.
+    root.classList.add('theme-changing');
+    root.dataset.theme = theme;
     localStorage.setItem('mini-orca:theme', theme);
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => root.classList.remove('theme-changing'));
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      root.classList.remove('theme-changing');
+    };
   }, [theme]);
   useEffect(() => {
     document.documentElement.classList.toggle('large-text', large);
