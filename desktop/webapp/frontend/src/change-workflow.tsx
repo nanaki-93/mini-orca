@@ -80,7 +80,7 @@ export function WorkflowProgress({
             </div>
             {stage.model && (
               <p className="small muted">
-                {stage.model.model} · {stage.model.profile} · {stage.model.provider_origin}
+                {stage.model.model} · Thinking: {stage.model.reasoning_effort || 'Default'}
               </p>
             )}
           </li>

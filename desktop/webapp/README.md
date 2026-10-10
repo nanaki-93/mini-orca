@@ -48,8 +48,8 @@ collapses to icons.
 - **Project** opens a saved project locally. **Import & analyze** creates a new
   overview, with explicit confirmation for a remote Analyze provider.
 - **Analysis** shows four analysis operations and their selected models.
-  **Manage models** opens **Models**, where independent choices for Bug analysis,
-  Performance, Security and feature discovery share the searchable model picker.
+  **Models** in the sidebar provides independent choices for Bug analysis,
+  Performance, Security and feature discovery in a searchable model picker.
   The catalog includes configured models and models available through the local
   Pi installation. **Refresh** reloads it; Pi discovery failures leave configured
   choices available. **Back to workspace** returns to the previous task or finding.
@@ -69,8 +69,8 @@ collapses to icons.
   **Last run** focuses on current progress and pause, continue or cancel controls.
   The progress bar and percentage count finished file-analysis steps, including
   unsuccessful or skipped steps; feature discovery has its own status.
-  **Run details** reveals result counts, captured models, coverage, provider
-  destinations and file diagnostics. Failures remain visible when details are
+  **Run details** reveals result counts, captured models, coverage and file
+  diagnostics. Failures remain visible when details are
   collapsed. Compact result rows open each category without losing run progress.
   Pausing/resuming retains captured model choices, including older runs that
   shared one Performance/Security choice. Feature discovery runs independently
@@ -94,7 +94,8 @@ collapses to icons.
   repeating the preview; **Show less** collapses it again.
   Creation, testing and review choices are shared with Chat and configured only
   on **Models**. **Manage models** preserves the selected finding so **Back to
-  workspace** returns to its detail. Model destinations remain visible in the pickers.
+  workspace** returns to its detail. Model selectors show the name and thinking
+  level; sharing destinations stay in consent previews.
   **Permissions & checks** expands sharing permissions, project
   check commands and preparation refresh. **Prepare fix** authorizes generation,
   isolated checks, remote sharing and Security intent when applicable. Changed destinations

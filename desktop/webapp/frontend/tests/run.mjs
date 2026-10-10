@@ -1139,7 +1139,7 @@ try {
       }
     }
   });
-  await test('Models retain configured scopes, complete destinations and Summary presentation', async () => {
+  await test('Models show names and thinking levels across configuration states', async () => {
     const metadata = {
       analyze: {
         model: `Analysis-${'LongModelName'.repeat(24)}`,
@@ -1191,23 +1191,19 @@ try {
             const panel = panels.nth(index);
 
             assert.equal(await panel.locator('h3').innerText(), metadata[scope].model);
-            assert.deepEqual(await panel.locator('dd').allTextContents(), [
-              metadata[scope].provider_origin,
-              metadata[scope].profile === null ? '—' : metadata[scope].profile || scope,
-              metadata[scope].reasoning_effort || 'Default',
-              metadata[scope].timeout === null ? '—' : '2m',
-            ]);
-            assert.equal(
-              await panel.locator('.badge').innerText(),
-              scope === 'bug' ? 'Local provider' : 'Remote provider',
-            );
             assert.equal(
               await panel
-                .locator('dd')
-                .first()
-                .evaluate((el) => getComputedStyle(el).userSelect === 'none'),
-              false,
+                .getByText(`Thinking: ${metadata[scope].reasoning_effort || 'Default'}`, {
+                  exact: true,
+                })
+                .count(),
+              1,
             );
+            assert.equal(
+              await panel.getByText(metadata[scope].provider_origin, { exact: true }).count(),
+              0,
+            );
+            assert.equal(await panel.locator('.badge, dd').count(), 0);
           }
         } else {
           await surface
@@ -2711,10 +2707,8 @@ try {
             const launch = page.locator('.analysis-launch');
             assert.deepEqual(await launch.getByRole('button').allTextContents(), [
               'View run',
-              'Files & scope',
               'Prepare analysis',
               'Repair analysis',
-              'Search more feature suggestions',
               'Refresh',
             ]);
             assert.equal(await launch.locator('.button.primary').innerText(), 'Prepare analysis');
@@ -2795,7 +2789,7 @@ try {
         }
         assert.equal(await page.getByRole('table').count(), 0);
         assert.equal(await page.getByLabel('Filter analysis files').count(), 0);
-        for (const action of ['Prepare analysis', 'Search more feature suggestions', 'Refresh'])
+        for (const action of ['Prepare analysis', 'Refresh'])
           assert.equal(await page.getByRole('button', { name: action, exact: true }).count(), 1);
       } finally {
         await close();
@@ -2936,7 +2930,7 @@ try {
         },
       })),
     };
-    const { page, close } = await pageFor({ availableModels });
+    const { page, close } = await pageFor({ availableModels, featuresReady: true });
     try {
       await nav(page, 'Models');
       const code = page.getByLabel('Bug analysis model', { exact: true });
@@ -2949,6 +2943,12 @@ try {
       const search = dialog.getByRole('combobox', { name: 'Search models' });
       assert.equal(await search.evaluate((element) => element === document.activeElement), true);
       assert.equal(await dialog.getByRole('option').count(), 3);
+      assert.deepEqual(await dialog.locator('.model-picker-option-copy').allTextContents(), [
+        'Gemini 3.8 FlashThinking: medium',
+        'GPT-5Thinking: Default',
+        'Qwen LocalThinking: Default',
+      ]);
+      assert.equal(await code.locator('small').innerText(), 'Thinking: medium');
       assert.doesNotMatch(
         await dialog.getByRole('listbox').innerText(),
         /\b(analyze|bug|feature|function)\b/i,
@@ -3036,7 +3036,7 @@ try {
         0,
       );
       await page.getByRole('button', { name: 'Back', exact: true }).click();
-      await nav(page, 'Analysis');
+      await nav(page, 'Features');
       await openGoals(page);
       await page
         .getByRole('button', { name: 'Search more feature suggestions', exact: true })
@@ -3082,7 +3082,7 @@ try {
       );
       await page.keyboard.press('Escape');
       assert.match(await code.getAttribute('title'), /Model unavailable/);
-      await nav(page, 'Analysis');
+      await nav(page, 'Features');
       await openGoals(page);
       await page
         .getByRole('button', { name: 'Search more feature suggestions', exact: true })
@@ -3184,7 +3184,7 @@ try {
       assert.equal(
         await duplicate.page
           .locator('.analysis-model-settings')
-          .getByText('OpenAI compatible · Remote', { exact: true })
+          .getByText('Thinking: medium', { exact: true })
           .count(),
         4,
       );
@@ -3287,12 +3287,7 @@ try {
         assert.equal(await control.isDisabled(), true);
       await nav(page, 'Analysis');
       await page.locator('.analysis-sections summary').click();
-      for (const name of [
-        'Prepare analysis',
-        'Repair analysis',
-        'Search more feature suggestions',
-        'Refresh',
-      ])
+      for (const name of ['Prepare analysis', 'Repair analysis', 'Refresh'])
         assert.equal(await page.getByRole('button', { name, exact: true }).isDisabled(), true);
       for (const control of [batch, budget, attempts, refresh])
         assert.equal(await control.isDisabled(), false, 'Limits remain editable while busy');
@@ -8532,88 +8527,30 @@ try {
       await close();
     }
   });
-  await test('Analysis screen repair and feature actions', async () => {
-    // 1. Without recovery
-    let result = await pageFor({ runStatus: 'completed' });
-    await nav(result.page, 'Analysis');
-    assert.equal(await result.page.getByRole('button', { name: 'Repair analysis' }).count(), 0);
-    await result.close();
-
-    // 2. With recovery
-    result = await pageFor({
-      runStatus: 'completed',
-      hasRecovery: true,
-      featuresReady: true,
-      featuresEmpty: true,
-      remote: true,
-    });
-    await nav(result.page, 'Analysis');
-    await result.page.getByRole('button', { name: 'Repair analysis' }).waitFor();
-    await result.page.getByRole('button', { name: 'Search more feature suggestions' }).waitFor();
-
-    // Check tooltip is not there when not busy
-    assert.equal(
-      await result.page
-        .getByRole('button', { name: 'Search more feature suggestions' })
-        .getAttribute('title'),
-      null,
-    );
-
-    // Make it busy by preparing a run and holding the request
-    await result.page.evaluate(() => {
-      window.fixture.hold = '/api/projects/current/analysis/preview';
-    });
-    await result.page.getByRole('button', { name: 'Prepare analysis' }).click();
-
-    // Check that Search button gets disabled and has tooltip
-    assert.equal(
-      await result.page
-        .getByRole('button', { name: 'Search more feature suggestions' })
-        .isDisabled(),
-      true,
-    );
-    assert.equal(
-      await result.page
-        .getByRole('button', { name: 'Search more feature suggestions' })
-        .getAttribute('title'),
-      'Cannot search while another operation is running.',
-    );
-
-    await result.page.evaluate(() => {
-      window.fixture.hold = undefined;
-      window.fixture.release();
-    });
-    await idle(result.page);
-    await result.page.getByRole('button', { name: 'Back' }).click();
-
-    // Test clicking Repair analysis
-    await result.page.getByRole('button', { name: 'Repair analysis' }).click();
-    await idle(result.page);
-    await result.page.getByRole('heading', { name: 'Repair analysis' }).waitFor();
-    let requests = await result.page.evaluate(() => window.fixture.requests);
-    let previewReq = requests.reverse().find((r) => r.path.endsWith('/analysis/preview'));
-    assert.equal(previewReq.body.recover_incomplete, true);
-
-    await result.page.getByRole('button', { name: 'Back' }).click();
-    await idle(result.page);
-
-    // Test clicking Search more feature suggestions
-    await result.page.getByRole('button', { name: 'Search more feature suggestions' }).click();
-    await result.page.getByText('Origin: Analysis').waitFor();
-    await result.page
-      .getByRole('dialog')
-      .getByRole('button', { name: 'Continue', exact: true })
-      .click();
-    await idle(result.page);
-
-    requests = await result.page.evaluate(() => window.fixture.requests);
-    const generateReq = requests.reverse().find((r) => r.path.endsWith('/features/generate'));
-    assert.equal(generateReq.body.profile, 'analyze');
-    assert.equal(typeof generateReq.body.analysis_selection_id, 'string');
-    assert.equal(generateReq.body.analysis_selection_id.startsWith('selection-'), true);
-    assert.equal(generateReq.body.confirm_remote_provider, true);
-
-    await result.close();
+  await test('Analysis keeps repair actions and removes redundant navigation and feature search', async () => {
+    for (const hasRecovery of [false, true]) {
+      const { page, close } = await pageFor({ runStatus: 'completed', hasRecovery });
+      try {
+        await nav(page, 'Analysis');
+        for (const name of ['Manage models', 'Files & scope', 'Search more feature suggestions'])
+          assert.equal(await page.getByRole('button', { name, exact: true }).count(), 0);
+        assert.equal(
+          await page.getByRole('button', { name: 'Repair analysis' }).count(),
+          hasRecovery ? 1 : 0,
+        );
+        if (hasRecovery) {
+          await page.getByRole('button', { name: 'Repair analysis' }).click();
+          await idle(page);
+          await page.getByRole('heading', { name: 'Repair analysis' }).waitFor();
+          const preview = await page.evaluate(() =>
+            window.fixture.requests.findLast((r) => r.path.endsWith('/analysis/preview')),
+          );
+          assert.equal(preview.body.recover_incomplete, true);
+        }
+      } finally {
+        await close();
+      }
+    }
   });
   assert.deepEqual(errors, []);
   await writeFile(

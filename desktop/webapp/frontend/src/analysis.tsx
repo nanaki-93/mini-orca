@@ -100,15 +100,7 @@ export function Analysis({ s }: { s: State }) {
         </Notice>
       )}
       <div className="stack analysis-sections">
-        <Panel
-          title="Analysis setup"
-          className="analysis-run-settings"
-          actions={
-            <Go page="models" icon="layers" tone="ghost small">
-              Manage models
-            </Go>
-          }
-        >
+        <Panel title="Analysis setup" className="analysis-run-settings">
           <p className="analysis-settings-intro">
             Analyze correctness, security, performance and feature opportunities.
           </p>
@@ -154,9 +146,6 @@ export function Analysis({ s }: { s: State }) {
           <Go page="analysis-run" icon="activity">
             View run
           </Go>
-          <Go page="analysis-files" icon="folder">
-            Files & scope
-          </Go>
           <StaleAnalysisButton s={s} />
           <Button
             tone="primary"
@@ -184,14 +173,6 @@ export function Analysis({ s }: { s: State }) {
           )}
         </div>
         <div className="actions heading-action-group">
-          <Button
-            icon="sparkles"
-            disabled={!!s.busy}
-            title={s.busy ? 'Cannot search while another operation is running.' : undefined}
-            onClick={() => void w.searchFeatures('Analysis', s.features?.goals || '')}
-          >
-            Search more feature suggestions
-          </Button>
           <Button
             disabled={!!s.busy}
             icon="refresh"
@@ -717,9 +698,6 @@ export function AnalysisRun({ s }: { s: State }) {
           </div>
           <Panel title="Captured models" className="analysis-run-models">
             <CapturedModels plan={run.plan} compact />
-            <Disclosure title="Provider details">
-              <CapturedModels plan={run.plan} />
-            </Disclosure>
           </Panel>
           <Disclosure title="File progress">
             <div className="scroll-list">
