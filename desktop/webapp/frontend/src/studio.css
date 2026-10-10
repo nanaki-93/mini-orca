@@ -204,14 +204,20 @@ svg.icon {
   align-items: center;
   margin-bottom: 18px;
 }
+.overlay-heading h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.overlay-heading > .button {
+  flex-shrink: 0;
+}
 .studio-overlay .page-heading {
   display: none;
 }
 .studio-overlay .project-workspace > .grid {
   display: block;
 }
-.studio-overlay .project-facts,
-.studio-overlay .project-workspace > .grid:last-child:not(:first-child) {
+.studio-overlay .project-facts {
   display: none;
 }
 .studio-overlay .project-opening {
@@ -713,6 +719,13 @@ svg.icon {
   padding: 20px 0;
   border-top: 1px solid var(--line);
 }
+.instruction-reading > .row {
+  flex-wrap: wrap;
+}
+.instruction-reading strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .instruction-reading .prose {
   padding-top: 16px;
   white-space: pre-wrap;
@@ -964,6 +977,10 @@ svg.icon {
   font-size: 0.92rem;
   color: var(--muted);
 }
+.feature-row .studio-row-copy {
+  grid-template-columns: minmax(0, 1fr);
+  overflow-wrap: anywhere;
+}
 .feature-detail {
   border: 0;
   background: none;
@@ -1137,7 +1154,7 @@ svg.icon {
 .studio-changes .fix-back {
   padding: 10px 28px 0;
 }
-.studio-changes .fix-heading {
+.studio-changes .guided-fix > .page-heading {
   padding: 16px 28px 24px;
 }
 .studio-changes .fix-kind-icon {
@@ -1145,7 +1162,7 @@ svg.icon {
   height: 34px;
   border-radius: 6px;
 }
-.studio-changes .fix-heading h1 {
+.studio-changes .guided-fix > .page-heading h1 {
   font-size: 1.45rem;
 }
 .studio-changes .guided-fix > .notice,
@@ -1332,16 +1349,20 @@ svg.icon {
 .studio-changes .chat-page {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  align-items: stretch;
   min-height: 100%;
 }
 .studio-changes .change-workspace--review {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   flex: 1;
 }
 .studio-changes .fix-review {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   flex: 1;
 }
 .studio-changes .fix-tab-content {
@@ -1370,4 +1391,19 @@ svg.icon {
 .chat-page > .project-guidance .button {
   font-size: 0.8rem;
   padding: 4px 6px;
+}
+.studio-overlay .analysis-preview .page-heading {
+  display: flex;
+  margin: 0;
+}
+.studio-overlay .analysis-preview .page-heading h1 {
+  font-size: 1.1rem;
+}
+.studio-overlay .analysis-preview-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+.studio-overlay .analysis-preview-layout > * {
+  min-width: 0;
 }

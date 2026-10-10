@@ -14,6 +14,7 @@ export async function testStudio({ test, pageFor, nav, idle, layout }) {
       await page.getByRole('button', { name: 'Search files and commands', exact: true }).click();
       const search = page.getByRole('dialog', { name: 'Search files and commands' });
       await search.waitFor();
+      await page.waitForFunction(() => document.activeElement?.id === 'search');
       await search.getByLabel('Search files and commands', { exact: true }).fill('no-such-file');
       await search.getByText('No matching files.', { exact: true }).waitFor();
       await page.keyboard.press('Escape');
@@ -28,6 +29,7 @@ export async function testStudio({ test, pageFor, nav, idle, layout }) {
       await page.getByRole('button', { name: 'Close terminal drawer' }).click();
       await page.getByRole('button', { name: /^Switch project/ }).click();
       await page.getByRole('dialog', { name: 'Switch project', exact: true }).waitFor();
+      assert.equal(await page.getByLabel('Project folder', { exact: true }).isVisible(), true);
       await page.keyboard.press('Escape');
       assert.equal(await page.locator('.source-code').innerText(), source);
       await layout(page, 'studio-source-canvas');
@@ -120,6 +122,12 @@ export async function testStudio({ test, pageFor, nav, idle, layout }) {
         2,
       );
       assert.equal(await page.getByRole('button', { name: /^Apply \d/ }).count(), 0);
+      const workspace = await page.locator('#main').boundingBox();
+      const review = await page.locator('.fix-review').boundingBox();
+      const footer = await page.locator('.fix-action-bar').boundingBox();
+      const status = await page.locator('.statusbar').boundingBox();
+      assert.ok(Math.abs(review.width - workspace.width) < 2, 'Review fills the workspace');
+      assert.ok(Math.abs(footer.y + footer.height - status.y) < 2, 'Apply stays at the bottom');
       await layout(page, 'studio-review-evidence');
       await page.getByRole('button', { name: 'Review next file', exact: true }).click();
       const apply = page.getByRole('button', { name: 'Apply 2 files', exact: true });

@@ -374,6 +374,7 @@ function App() {
       </div>
       {live.page === 'analysis-preview' && (
         <Overlay title="Analysis preview" onClose={closeOverlay}>
+          {live.error && <Notice error>{live.error}</Notice>}
           <AnalysisPreview s={live} />
         </Overlay>
       )}
@@ -384,6 +385,7 @@ function App() {
       )}
       {live.page === 'project' && live.project && (
         <Overlay title="Switch project" onClose={closeOverlay}>
+          {live.error && <Notice error>{live.error}</Notice>}
           <ProjectPage s={live} compact />
         </Overlay>
       )}

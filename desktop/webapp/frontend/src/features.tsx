@@ -146,7 +146,10 @@ export function Features({ s }: { s: State }) {
             className="field"
             aria-label="Filter feature suggestions"
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => {
+              setSelected(undefined);
+              setFilter(e.target.value);
+            }}
           >
             <option value="active">Active</option>
             <option value="saved">Saved</option>

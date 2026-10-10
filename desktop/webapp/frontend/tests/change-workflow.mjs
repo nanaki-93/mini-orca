@@ -1,4 +1,11 @@
 import { strict as assert } from 'node:assert';
+async function reviewAllFiles(page) {
+  for (const tab of await page
+    .getByRole('tablist', { name: 'Files to change', exact: true })
+    .getByRole('tab')
+    .all())
+    await tab.click();
+}
 
 export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, chooseModel }) {
   async function prepare(page) {
@@ -50,8 +57,9 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
       await page.evaluate(() => window.fixture.completeWorkflow());
       await page.getByRole('heading', { name: 'Ready for review', exact: true }).waitFor();
       await nav(page, 'Changes');
+      await reviewAllFiles(page);
       assert.equal(
-        await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
+        await page.getByRole('button', { name: /^Apply \d+ files?$/ }).isDisabled(),
         false,
       );
       assert.equal(
@@ -60,13 +68,14 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
       );
       await layout(page, 'agent-workflow-human-review');
       await nav(page, 'Changes');
+      await reviewAllFiles(page);
       assert.equal(
         await page.getByRole('region', { name: 'Proposal review', exact: true }).isVisible(),
         true,
       );
       assert.equal(await page.getByLabel('Change request', { exact: true }).isVisible(), false);
       await layout(page, 'studio-changes-review');
-      await page.getByRole('button', { name: 'Accept changes', exact: true }).click();
+      await page.getByRole('button', { name: /^Apply \d+ files?$/ }).click();
       await idle(page);
       assert.equal(
         await page.evaluate(
@@ -107,6 +116,7 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
         else await page.getByText('No saved conversations.', { exact: true }).waitFor();
         await layout(page, `studio-history-${unavailable ? 'unavailable' : 'empty'}`);
         await nav(page, 'Changes');
+        await reviewAllFiles(page);
         await page.getByRole('heading', { name: 'No proposal yet', exact: true }).waitFor();
         await page.getByRole('button', { name: 'Back to conversation', exact: true }).click();
         await page.getByLabel('Change request', { exact: true }).waitFor();
@@ -128,7 +138,8 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
       await page.getByLabel('Task title', { exact: true }).fill('Bound request time');
       assert.equal(await page.getByLabel('Creation model', { exact: true }).count(), 0);
       await nav(page, 'Changes');
-      await page.getByRole('region', { name: 'Proposal review', exact: true }).waitFor();
+      await reviewAllFiles(page);
+      await page.getByRole('heading', { name: 'No proposal yet', exact: true }).waitFor();
       await page.getByRole('button', { name: 'Back to conversation', exact: true }).click();
       const writes = await page.evaluate(() =>
         window.fixture.requests.filter((r) => r.method !== 'GET'),
@@ -198,6 +209,7 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
       const { page, close } = await pageFor({ featuresReady: true });
       try {
         await nav(page, pageName);
+        await page.locator('.feature-row').first().click();
         await page.getByRole('button', { name: 'Configure workflow', exact: true }).first().click();
         assert.equal(await page.getByLabel('Task type', { exact: true }).count(), 0);
         assert.match(
@@ -229,8 +241,9 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
         await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
         await trust(page);
         await nav(page, 'Changes');
+        await reviewAllFiles(page);
         assert.equal(
-          await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
+          await page.getByRole('button', { name: /^Apply \d+ files?$/ }).isDisabled(),
           true,
         );
         assert.equal(await page.evaluate(() => window.workflowExecuted === true), false);
@@ -290,12 +303,13 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
           if (scenario === 'review-failed') window.fixture.failures[window.fixture.hold] = 409;
         }, scenario);
         await nav(page, 'Changes');
-        await page.getByRole('button', { name: 'Accept changes', exact: true }).click();
+        await reviewAllFiles(page);
+        await page.getByRole('button', { name: /^Apply \d+ files?$/ }).click();
         await page.waitForFunction(() =>
           window.fixture.requests.some((r) => r.path.endsWith('/review')),
         );
         assert.equal(
-          await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
+          await page.getByRole('button', { name: /^Apply \d+ files?$/ }).isDisabled(),
           true,
         );
         if (scenario === 'navigation') {

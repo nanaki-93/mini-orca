@@ -49,7 +49,7 @@ export async function testGuidedFixes({
     try {
       await nav(page, 'Bugs');
       await page.locator('.result-row').first().click();
-      assert.equal(await page.locator('.result-row').count(), 0);
+      assert.equal(await page.locator('.result-row').count(), 1);
       assert.equal(
         await page.getByRole('heading', { name: 'Cause', exact: true }).isVisible(),
         true,
@@ -110,7 +110,13 @@ export async function testGuidedFixes({
         if (large) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
         const review = await page.locator('.fix-review').boundingBox();
         const diff = await page.locator('.fix-review .diff').boundingBox();
-        assert.ok(Math.abs(review.width - diff.width) < 2, 'The diff fills the fix workspace');
+        const evidence = await page.locator('.review-evidence').boundingBox();
+        assert.ok(
+          width > 1000
+            ? Math.abs(review.width - diff.width - evidence.width) < 2
+            : Math.abs(review.width - diff.width) < 2,
+          'The diff and evidence fill the review workspace',
+        );
         await next.scrollIntoViewIfNeeded();
         const action = await next.boundingBox();
         const footer = await page.locator('.statusbar').boundingBox();
@@ -320,7 +326,7 @@ export async function testGuidedFixes({
     }
   });
 
-  await test('Causes lead solutions without opening details before and after preparing a fix', async () => {
+  await test('Finding explanations remain readable in the review Details tab', async () => {
     for (const category of ['Bugs', 'Performance', 'Security']) {
       const { page, close } = await pageFor({ trusted: true });
       try {
@@ -334,6 +340,8 @@ export async function testGuidedFixes({
           const before = await page.evaluate(() =>
             window.fixture.requests.filter((request) => request.method !== 'GET'),
           );
+          if (!(await page.locator('.fix-cause').isVisible()))
+            await page.getByRole('tab', { name: 'Details', exact: true }).click();
           const cause = page.locator('.fix-cause');
           assert.equal(await cause.count(), 1);
           assert.equal(await cause.isVisible(), true);
@@ -351,19 +359,19 @@ export async function testGuidedFixes({
               await textSize.click();
             await cause.scrollIntoViewIfNeeded();
             const causeBox = await cause.boundingBox();
+            if (!(await page.locator('.fix-solution').isVisible()))
+              await page.getByRole('tab', { name: 'Details', exact: true }).click();
             const solution = page.locator('.fix-solution');
             const solutionBox = await solution.boundingBox();
             assert.ok(causeBox.y + causeBox.height <= solutionBox.y);
-            const headingSize = (panel) =>
-              panel.locator('h2').evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
-            assert.ok((await headingSize(cause)) > (await headingSize(solution)));
+            assert.ok(await cause.getByRole('heading', { name: 'Cause', exact: true }).isVisible());
             await layout(page, `cause-first-${category.toLowerCase()}-${stage}-${theme}`);
             await contrast(page, `${category} cause in ${theme}`);
           }
           if (stage === 'proposal') {
             for (const tab of ['Details', 'Changes (2)']) {
               await page.getByRole('tab', { name: tab, exact: true }).click();
-              assert.equal(await cause.isVisible(), true);
+              assert.equal(await cause.isVisible(), tab === 'Details');
             }
           }
           assert.deepEqual(
@@ -476,6 +484,8 @@ export async function testGuidedFixes({
           await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
           preparedWrites,
         );
+        if (!(await page.locator('.fix-solution').isVisible()))
+          await page.getByRole('tab', { name: 'Details', exact: true }).click();
         const solution = page.locator('.fix-solution');
         await solution
           .getByText('Return the context error and cover cancellation in a regression test.', {
@@ -509,6 +519,7 @@ export async function testGuidedFixes({
           review: 'analyze',
         });
         assert.equal(workflow.body.confirm_security, kind === 'security');
+        await page.getByRole('tab', { name: 'Changes (2)', exact: true }).click();
         for (const path of paths) {
           await files.getByRole('tab', { name: path, exact: true }).click();
           assert.equal(await page.locator('.chat-review .diff').count(), 1);
@@ -518,6 +529,8 @@ export async function testGuidedFixes({
         await page.keyboard.press('ArrowLeft');
         for (const width of [1440, 1000, 800]) {
           await page.setViewportSize({ width, height: 1000 });
+          if (!(await solution.isVisible()))
+            await page.getByRole('tab', { name: 'Details', exact: true }).click();
           await solution.scrollIntoViewIfNeeded();
           await layout(page, `guided-${kind}-${width}`);
           await contrast(page, `guided-${kind}-${width}`);
@@ -731,6 +744,8 @@ export async function testGuidedFixes({
         await page.locator('.result-row').first().click();
         await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
         await idle(page);
+        if (!(await page.locator('.fix-solution').isVisible()))
+          await page.getByRole('tab', { name: 'Details', exact: true }).click();
         const solution = page.locator('.fix-solution');
         await solution.getByText('Return the context error.', { exact: true }).first().waitFor();
         await solution.getByRole('button', { name: 'Full explanation', exact: true }).click();
@@ -774,6 +789,8 @@ export async function testGuidedFixes({
             await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
             await idle(page);
           }
+          if (!(await page.locator('.fix-solution').isVisible()))
+            await page.getByRole('tab', { name: 'Details', exact: true }).click();
           const solution = page.locator('.fix-solution');
           const before = await page.evaluate(() => window.fixture.requests.length);
           const expand = solution.getByRole('button', { name: 'Full explanation', exact: true });
@@ -817,6 +834,8 @@ export async function testGuidedFixes({
             await page.getByRole('button', { name: 'Apply 2 files', exact: true }).isDisabled(),
             true,
           );
+          if (!(await page.locator('.fix-solution').isVisible()))
+            await page.getByRole('tab', { name: 'Details', exact: true }).click();
           const solution = page.locator('.fix-solution');
           if (status === 'failed') {
             await solution
@@ -845,12 +864,16 @@ export async function testGuidedFixes({
           }
           for (const width of [1440, 800]) {
             await page.setViewportSize({ width, height: 1000 });
+            if (!(await solution.isVisible()))
+              await page.getByRole('tab', { name: 'Details', exact: true }).click();
             await solution.scrollIntoViewIfNeeded();
             await layout(page, `guided-${category.toLowerCase()}-${status}-${width}`);
             await contrast(page, `guided-${category.toLowerCase()}-${status}-${width}`);
           }
           await page.getByRole('button', { name: 'Larger text', exact: true }).click();
           await page.getByRole('button', { name: 'Porcelain theme', exact: true }).click();
+          if (!(await solution.isVisible()))
+            await page.getByRole('tab', { name: 'Details', exact: true }).click();
           await solution.scrollIntoViewIfNeeded();
           await layout(page, `guided-${category.toLowerCase()}-${status}-800-light-larger`);
           await contrast(page, `guided-${category.toLowerCase()}-${status}-800-light-larger`);

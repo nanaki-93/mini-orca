@@ -26,6 +26,7 @@ export async function testScrolling({ test, pageFor, nav, idle, layout }) {
       await nav(page, 'Instructions');
       await page.getByRole('button', { name: 'Load scope', exact: true }).click();
       await idle(page);
+      await page.getByText('Add project guidelines', { exact: true }).click();
       const main = page.locator('#main');
       for (const [width, height, larger] of [
         [1440, 1000, false],
