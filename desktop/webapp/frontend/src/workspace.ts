@@ -17,6 +17,7 @@ export type Page =
   | 'bugs'
   | 'performance'
   | 'security'
+  | 'finding'
   | 'editor'
   | 'context'
   | 'terminal'
@@ -24,6 +25,16 @@ export type Page =
   | 'models'
   | 'diagrams'
   | 'scan';
+export type FindingCategory = 'bugs' | 'performance' | 'security';
+export interface FindingListView {
+  query: string;
+  severity: string;
+  page: number;
+}
+export function findingCategory(s: Pick<State, 'page' | 'selectedFinding'>) {
+  if (s.page === 'finding') return s.selectedFinding?.category;
+  if (s.page === 'bugs' || s.page === 'performance' || s.page === 'security') return s.page;
+}
 export interface Confirmation {
   title: string;
   message: string;
@@ -49,7 +60,8 @@ export interface State {
   availableModels?: M.AvailableModels;
   modelsLoading?: boolean;
   modelsReturn?: Page;
-  selectedFinding?: { category: string; key: string };
+  selectedFinding?: { category: FindingCategory; key: string };
+  findingViews: Partial<Record<FindingCategory, FindingListView>>;
   findings?: M.Finding[];
   selection?: M.Selection;
   run?: M.AnalysisRun | null;
@@ -120,6 +132,7 @@ const initial = (): State => ({
   connected: false,
   version: '',
   results: {},
+  findingViews: {},
   resourceErrors: {},
   symbols: [],
   symbol: '',
@@ -444,8 +457,16 @@ export class Workspace {
         page === 'models' && this.state.page !== 'models'
           ? this.state.page
           : this.state.modelsReturn,
-      selectedFinding:
-        page === 'models' || this.state.page === 'models' ? this.state.selectedFinding : undefined,
+      selectedFinding: [
+        'finding',
+        'models',
+        'search',
+        'project',
+        'terminal',
+        'analysis-preview',
+      ].includes(page)
+        ? this.state.selectedFinding
+        : undefined,
     });
     if (['analysis', 'models'].includes(page) && !this.state.availableModels)
       await this.loadAvailableModels();
@@ -454,8 +475,13 @@ export class Workspace {
     if (page === 'features' || page === 'summary') await this.loadFeatures();
     if (page === 'instructions')
       await this.loadInstructions(this.state.instructionPreview?.path || 'AGENTS.md');
-    if (['bugs', 'performance', 'security'].includes(page)) await this.loadResults(page);
+    const category = findingCategory(this.state);
+    if (category) await this.loadResults(category);
     if (page === 'context') await this.inspectContext();
+  }
+  openFinding(category: FindingCategory, key: string) {
+    this.navigation++;
+    this.set({ page: 'finding', selectedFinding: { category, key }, error: '' });
   }
   async loadAvailableModels() {
     const request = ++this.modelCatalogRequest;
@@ -499,8 +525,8 @@ export class Workspace {
     );
     if (JSON.stringify(this.state.run) !== old) {
       await this.refreshProject();
-      if (['bugs', 'performance', 'security'].includes(this.state.page))
-        await this.loadResults(this.state.page);
+      const category = findingCategory(this.state);
+      if (category) await this.loadResults(category);
     }
     if (this.state.scan?.status === 'running') {
       await this.resource(
@@ -680,7 +706,8 @@ export class Workspace {
         status,
       });
       await this.refreshProject();
-      await this.loadResults(this.state.page);
+      const category = findingCategory(this.state);
+      if (category) await this.loadResults(category);
     });
   }
   async openFile(path: string, symbol = '') {
@@ -919,7 +946,8 @@ export class Workspace {
             }
           : { path: t.target_path, project_revision: t.project_revision },
       );
-      if (fileKey(this.state) === key) this.set({ securityReport, page: 'security' });
+      if (fileKey(this.state) === key)
+        this.set({ securityReport, page: 'security', selectedFinding: undefined });
     });
   }
   private async trust(): Promise<boolean> {

@@ -121,8 +121,8 @@ export async function testStudio({ test, pageFor, nav, idle, layout }) {
       await nav(page, 'Bugs');
       await page.locator('.result-row').first().click();
       await page.locator('.results-detail').waitFor();
-      assert.equal(await page.locator('.result-list').isVisible(), true);
-      await layout(page, 'studio-inline-finding');
+      assert.equal(await page.locator('.result-list').count(), 0);
+      await layout(page, 'studio-finding-page');
       await nav(page, 'Features');
       await page.locator('.feature-row').first().click();
       await page.getByRole('dialog').waitFor();

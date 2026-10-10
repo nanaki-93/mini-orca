@@ -1,6 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
 import type * as M from './models';
-import { workspace as w, activeChangeWorkflow, workflowSeed, type State } from './workspace';
+import {
+  workspace as w,
+  activeChangeWorkflow,
+  findingCategory,
+  workflowSeed,
+  type FindingCategory,
+  type FindingListView,
+  type State,
+} from './workspace';
 import { FixPreparation } from './fix-preparation';
 import { FixHeading } from './fix-workspace';
 import { SolutionExcerpt } from './fix-solution';
@@ -113,24 +121,8 @@ function security(report: M.SecurityReport): ResultRow[] {
     ],
   }));
 }
-export function Results({ s }: { s: State }) {
-  const category = s.page;
-  const kind =
-    category === 'performance' ? 'performance' : category === 'security' ? 'security' : 'fix';
+function resultRows(s: State, category: FindingCategory): ResultRow[] {
   const results = s.results[category];
-  const [query, setQuery] = useState('');
-  const [severity, setSeverity] = useState('');
-  const selected = s.selectedFinding?.category === category ? s.selectedFinding.key : undefined;
-  const setSelected = (key?: string) =>
-    w.set({ selectedFinding: key ? { category, key } : undefined });
-  const [limit, setLimit] = useState(100);
-  const view = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (selected) {
-      view.current?.focus();
-      view.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
-  }, [selected]);
   const rows = results
     ? [
         ...(results.semantic || []).map(semantic),
@@ -139,7 +131,23 @@ export function Results({ s }: { s: State }) {
       ]
     : (s.findings || []).filter((f) => f.category === category).map(semantic);
   if (category === 'security' && s.securityReport) rows.push(...security(s.securityReport));
-  const unique = [...new Map(rows.map((row) => [row.key, row])).values()];
+  return [...new Map(rows.map((row) => [row.key, row])).values()];
+}
+export function selectedResult(s: State) {
+  const selected = s.selectedFinding;
+  return selected && resultRows(s, selected.category).find((row) => row.key === selected.key);
+}
+const pageSize = 10;
+export function Results({ s }: { s: State }) {
+  const category = findingCategory(s) || 'bugs';
+  const kind =
+    category === 'performance' ? 'performance' : category === 'security' ? 'security' : 'fix';
+  const results = s.results[category];
+  const listView = s.findingViews[category] || { query: '', severity: '', page: 1 };
+  const { query, severity } = listView;
+  const updateView = (patch: Partial<FindingListView>) =>
+    w.set({ findingViews: { ...s.findingViews, [category]: { ...listView, ...patch } } });
+  const unique = resultRows(s, category);
   const filtered = unique.filter(
     (row) =>
       `${row.name} ${row.title} ${row.path} ${row.symbol}`
@@ -147,7 +155,13 @@ export function Results({ s }: { s: State }) {
         .includes(query.toLowerCase()) &&
       (!severity || row.severity === severity),
   );
-  const detail = unique.find((row) => row.key === selected);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const page = Math.min(listView.page, pageCount);
+  const offset = (page - 1) * pageSize;
+  useEffect(() => {
+    if (listView.page !== page) updateView({ page });
+  }, [listView.page, page]);
+  const detail = s.page === 'finding' ? selectedResult(s) : undefined;
   const fixSeed = (row: ResultRow): M.ChangeSeed => ({
     title: row.name,
     paths: [row.path],
@@ -166,14 +180,9 @@ export function Results({ s }: { s: State }) {
   const seed = detail ? workflowSeed(fixSeed(detail)) : undefined;
   const fixDisabled = !!s.busy || activeChangeWorkflow(s.change) || detail?.freshness === 'stale';
   const detailPanel = detail ? (
-    <div
-      ref={view}
-      tabIndex={-1}
-      className="workspace-page results-page results-detail guided-fix"
-      data-accent={category}
-    >
+    <div className="workspace-page results-page results-detail guided-fix" data-accent={category}>
       <div className="row between wrap fix-back">
-        <Button icon="back" onClick={() => setSelected(undefined)}>
+        <Button icon="back" onClick={() => void w.navigate(category)}>
           All findings
         </Button>
         <Go page="models" icon="layers">
@@ -295,11 +304,29 @@ export function Results({ s }: { s: State }) {
       </Disclosure>
     </div>
   ) : null;
+  if (s.page === 'finding')
+    return (
+      detailPanel || (
+        <div className="workspace-page results-page">
+          <Empty
+            title="Finding unavailable"
+            detail="This finding is no longer in the loaded results."
+          >
+            <Go page={category} icon="back">
+              All findings
+            </Go>
+          </Empty>
+        </div>
+      )
+    );
   const reports = [
     ...(results?.performance || [])
       .filter((r) => r.warning || !(r.findings || []).length)
       .map((r) => ({ key: `p:${r.path}`, path: r.path, status: r.status, reason: r.warning })),
-    ...(results?.security || [])
+    ...[
+      ...(results?.security || []),
+      ...(category === 'security' && s.securityReport ? [s.securityReport] : []),
+    ]
       .filter((r) => r.reason || !(r.findings || []).length)
       .map((r) => ({
         key: `s:${r.source}:${r.path}`,
@@ -341,11 +368,9 @@ export function Results({ s }: { s: State }) {
         >
           Refresh
         </Button>
-        {category === 'bugs' && (
-          <Go page="scan" icon="shield">
-            Verified scan
-          </Go>
-        )}
+        <Go page="scan" icon="shield">
+          Verified scan
+        </Go>
         <Go page="analysis" tone="primary">
           Analyze project
         </Go>
@@ -361,38 +386,54 @@ export function Results({ s }: { s: State }) {
           stale files to refresh them.
         </Notice>
       )}
-      {category === 'security' && s.file && (
-        <Panel title="Selected source" className="results-source">
-          <div className="row between wrap">
-            <span className="path results-source-path">{s.file.path}</span>
-            <div className="actions">
-              <Button
-                disabled={!!s.busy || s.fileStale}
-                onClick={() => void w.securityReview(false)}
-              >
-                Scan source
-              </Button>
-              <Button
-                disabled={!!s.busy || s.fileStale}
-                onClick={() => void w.securityReview(true)}
-              >
-                AI Security review
-              </Button>
-            </div>
-          </div>
-          {s.securityReport && (
-            <div className="section-gap">
-              <span className="results-state">
-                <StatusDot value={s.securityReport.status} label="Security" />
-                <span>{human(s.securityReport.status)}</span>
+      <Disclosure
+        title={
+          <>
+            <span>Analysis details</span>
+            {reports.length > 0 && (
+              <span className="small muted">
+                {' · '}
+                {reports.length} report notices (
+                {[...new Set(reports.map((r) => human(r.status)))].join(', ')})
               </span>
-              {s.securityReport.reason && (
-                <p className="small section-gap">{s.securityReport.reason}</p>
-              )}
+            )}
+            {!!results?.unclassified?.length && (
+              <span className="small muted">
+                {' '}
+                · {results.unclassified.length} unclassified suggestions
+              </span>
+            )}
+          </>
+        }
+      >
+        {!reports.length && !results?.unclassified?.length && (
+          <p className="muted">No additional report diagnostics are loaded.</p>
+        )}
+        {reports.map((report, index) => (
+          <div className="section-gap" key={`${report.key}:${index}`}>
+            <div className="row wrap">
+              <span className="path">{report.path}</span>
+              <span className="results-state">
+                <StatusDot value={report.status} />
+                <span>{human(report.status)}</span>
+              </span>
             </div>
-          )}
-        </Panel>
-      )}
+            {report.reason && <Prose text={report.reason} />}
+          </div>
+        ))}
+        {!!results?.unclassified?.length && (
+          <Panel title="Unclassified suggestions">
+            {results.unclassified.map((f) => (
+              <Disclosure key={f.id} title={f.title}>
+                <Prose text={f.message} />
+                <Button onClick={() => void w.openFile(f.location.path, f.location.symbol)}>
+                  Go to file
+                </Button>
+              </Disclosure>
+            ))}
+          </Panel>
+        )}
+      </Disclosure>
       <Panel title="Findings" className="results-findings">
         <div className="toolbar">
           <div className="input-wrap">
@@ -401,8 +442,7 @@ export function Results({ s }: { s: State }) {
               aria-label="Filter findings"
               value={query}
               onChange={(e) => {
-                setQuery(e.target.value);
-                setLimit(100);
+                updateView({ query: e.target.value, page: 1 });
               }}
               placeholder="Filter findings…"
             />
@@ -411,7 +451,7 @@ export function Results({ s }: { s: State }) {
             className="field compact"
             aria-label="Finding severity"
             value={severity}
-            onChange={(e) => setSeverity(e.target.value)}
+            onChange={(e) => updateView({ severity: e.target.value, page: 1 })}
           >
             <option value="">All impact levels</option>
             {[...new Set(unique.map((row) => row.severity))].filter(Boolean).map((value) => (
@@ -427,12 +467,11 @@ export function Results({ s }: { s: State }) {
           <span />
         </div>
         <div className="result-list">
-          {filtered.slice(0, limit).map((row) => (
+          {filtered.slice(offset, offset + pageSize).map((row) => (
             <button
               className="result-row"
               key={row.key}
-              aria-expanded={row.key === selected}
-              onClick={() => setSelected(row.key === selected ? undefined : row.key)}
+              onClick={() => w.openFinding(category, row.key)}
             >
               <span
                 className={`finding-mark ${['high', 'critical'].includes(row.severity) ? 'red' : row.severity === 'low' ? 'blue' : ''}`}
@@ -484,43 +523,27 @@ export function Results({ s }: { s: State }) {
             <Go page="analysis">Open analysis</Go>
           </Empty>
         )}
-        {filtered.length > limit && (
-          <Button className="section-gap" onClick={() => setLimit(limit + 100)}>
-            Show more
-          </Button>
-        )}
+        <nav className="findings-pagination" aria-label="Findings pagination">
+          <span className="small muted" role="status">
+            {filtered.length
+              ? `${offset + 1}–${Math.min(offset + pageSize, filtered.length)} of ${filtered.length} findings`
+              : s.run && !results && !unique.length
+                ? 'Findings not loaded'
+                : '0 matching findings'}
+          </span>
+          <div className="actions">
+            <Button disabled={page === 1} onClick={() => updateView({ page: page - 1 })}>
+              Previous page
+            </Button>
+            <span className="small">
+              Page {page} of {pageCount}
+            </span>
+            <Button disabled={page === pageCount} onClick={() => updateView({ page: page + 1 })}>
+              Next page
+            </Button>
+          </div>
+        </nav>
       </Panel>
-      {detailPanel}
-      {!!reports.length && (
-        <section aria-label="Report summaries" className="grid equal-columns results-reports">
-          {reports.map((report) => (
-            <Panel
-              key={report.key}
-              title={report.path}
-              actions={
-                <span className="results-state">
-                  <StatusDot value={report.status} />
-                  <span>{human(report.status)}</span>
-                </span>
-              }
-            >
-              {report.reason && <Prose text={report.reason} />}
-            </Panel>
-          ))}
-        </section>
-      )}
-      {!!results?.unclassified?.length && (
-        <Panel title="Unclassified suggestions">
-          {results.unclassified.map((f) => (
-            <Disclosure key={f.id} title={f.title}>
-              <Prose text={f.message} />
-              <Button onClick={() => void w.openFile(f.location.path, f.location.symbol)}>
-                Go to file
-              </Button>
-            </Disclosure>
-          ))}
-        </Panel>
-      )}
     </div>
   );
 }

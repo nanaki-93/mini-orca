@@ -7,11 +7,11 @@ import {
   type ReactNode,
 } from 'react';
 import { createRoot } from 'react-dom/client';
-import { workspace as w, canCancelOperation, type Page } from './workspace';
+import { workspace as w, canCancelOperation, findingCategory, type Page } from './workspace';
 import { Button, Heading, Icon, Modal, Notice, Overlay } from './ui';
 import { Summary, ProjectPage, Models, Diagrams, SearchPage } from './overview';
 import { Analysis, AnalysisFiles, AnalysisPreview, AnalysisRun } from './analysis';
-import { Results } from './results';
+import { Results, selectedResult } from './results';
 import { Editor, Context } from './editor';
 import { ChangeWorkspace } from './change-workspace';
 import { ChangeHistory } from './change-shared';
@@ -75,13 +75,17 @@ function App() {
     () => localStorage.getItem('mini-orca:sidebar-collapsed') === 'true',
   );
   const main = useRef<HTMLElement>(null);
-  const activePage = findingPages.some(([page]) => page === s.page)
-    ? 'bugs'
-    : ['analysis', 'analysis-preview', 'analysis-run'].includes(s.page)
-      ? 'analysis'
-      : contextPages.some(([page]) => page === s.page)
-        ? 'analysis-files'
-        : s.page;
+  const category = findingCategory(s);
+  const finding = s.page === 'finding' ? selectedResult(s) : undefined;
+  const categoryTitle = findingPages.find(([page]) => page === category)?.[1];
+  const activePage =
+    category || s.page === 'finding'
+      ? 'bugs'
+      : ['analysis', 'analysis-preview', 'analysis-run'].includes(s.page)
+        ? 'analysis'
+        : contextPages.some(([page]) => page === s.page)
+          ? 'analysis-files'
+          : s.page;
   useEffect(() => {
     void w.start();
     const focus = () => void w.refreshFile();
@@ -115,7 +119,7 @@ function App() {
   useEffect(() => {
     main.current?.focus();
     main.current?.scrollTo(0, 0);
-  }, [s.page]);
+  }, [s.page, finding?.key]);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !s.confirmation) {
@@ -177,8 +181,8 @@ function App() {
   else if (s.page === 'analysis-files') content = <AnalysisFiles s={s} />;
   else if (s.page === 'analysis-preview') content = <AnalysisPreview s={s} />;
   else if (s.page === 'analysis-run') content = <AnalysisRun s={s} />;
-  else if (['bugs', 'performance', 'security'].includes(s.page))
-    content = <Results s={s} key={s.page} />;
+  else if (category || s.page === 'finding')
+    content = <Results s={s} key={`${s.project.project_id}:${category}`} />;
   else if (s.page === 'chat' || s.page === 'changes') content = <ChangeWorkspace s={s} />;
   else if (s.page === 'history')
     content = (
@@ -216,11 +220,33 @@ function App() {
               mini-orca<span className="accent">.</span>
             </span>
           </button>
-          <div className="breadcrumbs">
+          <nav className="breadcrumbs" aria-label="Breadcrumb">
             <span className="muted">{s.project?.name || 'Mini-Orca'}</span>
-            <span className="muted">/</span>
-            <span>{title}</span>
-          </div>
+            <span className="muted" aria-hidden="true">
+              /
+            </span>
+            {category ? (
+              <>
+                <button onClick={() => void w.navigate('bugs')}>Findings</button>
+                <span className="muted" aria-hidden="true">
+                  /
+                </span>
+                {s.page === 'finding' ? (
+                  <>
+                    <button onClick={() => void w.navigate(category)}>{categoryTitle}</button>
+                    <span className="muted" aria-hidden="true">
+                      /
+                    </span>
+                    <span aria-current="page">{finding?.name || 'Finding unavailable'}</span>
+                  </>
+                ) : (
+                  <span aria-current="page">{categoryTitle}</span>
+                )}
+              </>
+            ) : (
+              <span aria-current="page">{title}</span>
+            )}
+          </nav>
           <div className="topbar-actions">
             <button
               className="search-trigger"

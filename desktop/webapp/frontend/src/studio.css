@@ -32,9 +32,8 @@ svg.icon {
   border-radius: 5px;
 }
 .topbar {
-  height: 46px;
   min-height: 46px;
-  padding: 0 16px;
+  padding: 6px 16px;
 }
 .brand {
   width: 190px;
@@ -521,7 +520,6 @@ svg.icon {
   .page {
     padding: 20px 16px;
   }
-  .breadcrumbs,
   .brand-name {
     display: none;
   }
@@ -910,9 +908,6 @@ svg.icon {
   border-bottom: 1px solid var(--line);
   background: none;
 }
-.result-row[aria-expanded='true'] {
-  background: var(--accent-soft);
-}
 .result-row .list-copy {
   flex: 1;
 }
@@ -932,19 +927,10 @@ svg.icon {
   font-size: 0.92rem;
   margin-top: 5px;
 }
-.results-detail {
-  padding: 20px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-}
 .results-detail .fix-kind-icon {
   width: 32px;
   height: 32px;
   border-radius: 6px;
-}
-.results-detail .page-heading h1 {
-  font-size: 1.2rem;
 }
 .results-detail .fix-cause {
   border: 0;

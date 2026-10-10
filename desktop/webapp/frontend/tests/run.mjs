@@ -8,6 +8,7 @@ import { testGuidedFixes } from './guided-fixes.mjs';
 import { testScrolling } from './scrolling.mjs';
 import { testThemes } from './themes.mjs';
 import { testStudio } from './studio.mjs';
+import { testResults } from './results.mjs';
 
 async function openFeature(page) {
   if (
@@ -100,6 +101,7 @@ const surfaceInventory = {
     ],
   },
   results: {
+    finding: ['detail', 'stale', 'unavailable', 'busy'],
     bugs: [
       'list',
       'detail',
@@ -983,6 +985,7 @@ try {
       : {}),
   });
   await testStudio({ test, pageFor, nav, idle, layout });
+  await testResults({ test, pageFor, nav, idle, layout });
   await testScrolling({ test, pageFor, nav, idle, layout });
   await testThemes({ test, pageFor, nav, idle, layout, contrast });
   await testChangeWorkflows({ test, pageFor, nav, idle, layout, chooseModel });
@@ -5389,7 +5392,7 @@ try {
         const pathText = await page.locator('.result-row .path').innerText();
         assert.ok(pathText.includes('very-long-directory-'.repeat(12)));
         assert.equal(await page.locator('.result-row small').innerText(), pathText);
-        assert.equal(await page.locator('.result-row').getAttribute('aria-expanded'), 'false');
+        assert.equal(await page.locator('.result-row').getAttribute('aria-expanded'), null);
         assert.doesNotMatch(await page.locator('.result-row').innerText(), /AI suggestion/i);
         const before = await page.evaluate(() =>
           window.fixture.requests.filter((r) => r.method !== 'GET'),
@@ -5408,13 +5411,14 @@ try {
               await resultsListLayout(page);
               assert.equal(await page.locator('.result-row strong').innerText(), title);
               assert.equal(await page.locator('.result-row .path').innerText(), pathText);
-              if (name === 'Security') {
-                for (const label of ['Scan source', 'AI Security review'])
-                  assert.equal(
-                    await page.getByRole('button', { name: label, exact: true }).isEnabled(),
-                    true,
-                  );
-              }
+              assert.equal(
+                await page.getByRole('heading', { name: 'Selected source', exact: true }).count(),
+                0,
+              );
+              assert.equal(
+                await page.getByRole('region', { name: 'Report summaries', exact: true }).count(),
+                0,
+              );
               await layout(
                 page,
                 `${name.toLowerCase()}-list-long-${width}-${theme}-${larger ? 'larger' : 'standard'}`,
@@ -6016,19 +6020,19 @@ try {
                 .getByText('stale', { exact: true })
                 .waitFor();
             }
+            const analysisDetails = workspace.locator('details').filter({
+              has: page.locator('summary').getByText('Analysis details', { exact: true }),
+            });
+            await analysisDetails.locator('summary').first().click();
             if (category !== 'bugs') {
-              const reports = workspace.getByRole('region', {
-                name: 'Report summaries',
-                exact: true,
-              });
-              await reports.getByText(/Report unavailable: complete diagnostic/).waitFor();
-              await reports
+              await analysisDetails.getByText(/Report unavailable: complete diagnostic/).waitFor();
+              await analysisDetails
                 .locator('.results-state')
                 .getByText(category === 'performance' ? 'failed' : 'unavailable', { exact: true })
                 .waitFor();
             }
             const beforeDisclosure = await page.evaluate(() => window.fixture.requests.length);
-            await workspace.locator('summary').press('Enter');
+            await workspace.locator('summary').last().press('Enter');
             await workspace
               .getByText('Historical evidence remains separate from category counts.', {
                 exact: true,
@@ -6071,11 +6075,11 @@ try {
         window.fixture.requests.filter((r) => r.method !== 'GET'),
       );
       await openSource(page);
-      await nav(page, 'Security');
       const actions = ['Scan source', 'AI Security review'].map((name) =>
         page.getByRole('button', { name, exact: true }),
       );
       for (const action of actions) assert.equal(await action.isEnabled(), true);
+      await nav(page, 'Security');
       const previousReads = await page.evaluate(
         () => window.fixture.requests.filter((r) => r.path.endsWith('/analysis/results')).length,
       );
@@ -6090,6 +6094,8 @@ try {
         previousReads,
       );
       await page.locator('.busy-strip').waitFor();
+      await nav(page, 'Source');
+      await page.locator('summary').getByText('Inspect this file', { exact: true }).click();
       for (const action of actions) assert.equal(await action.isDisabled(), true);
       await page.evaluate(() => {
         window.fixture.hold = '';
@@ -6102,14 +6108,12 @@ try {
       });
       await nav(page, 'Source');
       await page.locator('.notice').filter({ hasText: 'File evidence is outdated.' }).waitFor();
-      await nav(page, 'Security');
       for (const action of actions) assert.equal(await action.isDisabled(), true);
       await page.setViewportSize({ width: 800, height: 1000 });
       await page
         .getByRole('button', { name: 'Larger text', exact: true })
         .evaluate((button) => button.click());
-      await resultsListLayout(page);
-      await layout(page, 'security-list-selected-source-stale-800-dark-larger');
+      await layout(page, 'source-security-actions-stale-800-dark-larger');
       assert.deepEqual(
         await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
         before,
@@ -6174,24 +6178,51 @@ try {
         }, name.toLowerCase());
         await nav(page, name);
         await page.getByText('101 saved findings', { exact: true }).waitFor();
-        assert.equal(await page.locator('.result-row').count(), 100);
+        const rows = page.locator('.result-row');
+        const pagination = page.getByRole('navigation', { name: 'Findings pagination' });
+        const previous = pagination.getByRole('button', { name: 'Previous page' });
+        const next = pagination.getByRole('button', { name: 'Next page' });
+        assert.equal(await rows.count(), 10);
+        assert.equal(await previous.isDisabled(), true);
         const before = await page.evaluate(() => window.fixture.requests.length);
-        await page.getByRole('button', { name: 'Show more', exact: true }).click();
-        assert.equal(await page.locator('.result-row').count(), 101);
+        await next.press('Enter');
+        await pagination.getByText('11–20 of 101 findings', { exact: true }).waitFor();
+        assert.equal(await rows.first().locator('strong').innerText(), 'Saved finding 10');
+        for (let index = 2; index < 11; index++) await next.click();
+        assert.equal(await rows.count(), 1);
+        assert.equal(await rows.locator('strong').innerText(), 'Saved finding 100');
+        assert.equal(await next.isDisabled(), true);
+        await previous.click();
+        assert.equal(await rows.count(), 10);
+        await pagination.getByText('Page 10 of 11', { exact: true }).waitFor();
         await page.getByLabel('Finding severity', { exact: true }).selectOption('low');
-        assert.equal(await page.locator('.result-row').count(), 50);
+        await pagination.getByText('1–10 of 50 findings', { exact: true }).waitFor();
+        await pagination.getByText('Page 1 of 5', { exact: true }).waitFor();
+        assert.equal(await rows.first().locator('strong').innerText(), 'Saved finding 1');
+        await next.click();
         await page.getByLabel('Finding severity', { exact: true }).selectOption('');
+        await pagination.getByText('Page 1 of 11', { exact: true }).waitFor();
+        await next.click();
         await page
           .getByRole('textbox', { name: 'Filter findings', exact: true })
-          .fill('Saved finding');
-        assert.equal(
-          await page.locator('.result-row').count(),
-          100,
-          'Query changes reset pagination',
-        );
+          .fill('Saved finding 100');
+        assert.equal(await rows.count(), 1, 'Query changes reset pagination');
+        await pagination.getByText('Page 1 of 1', { exact: true }).waitFor();
+        assert.equal(await next.isDisabled(), true);
+        await page.getByLabel('Filter findings', { exact: true }).fill('no match');
+        assert.equal(await rows.count(), 0);
+        await pagination.getByText('0 matching findings', { exact: true }).waitFor();
+        assert.equal(await previous.isDisabled(), true);
+        assert.equal(await next.isDisabled(), true);
+        await page.getByLabel('Filter findings', { exact: true }).fill('Saved finding');
+        assert.equal(await rows.count(), 10);
         assert.equal(await page.evaluate(() => window.fixture.requests.length), before);
         await page.setViewportSize({ width: 800, height: 1000 });
         await resultsListLayout(page);
+        await next.scrollIntoViewIfNeeded();
+        const controls = await pagination.boundingBox();
+        const footer = await page.locator('.statusbar').boundingBox();
+        assert.ok(controls.y >= 0 && controls.y + controls.height <= footer.y);
         await layout(page, `${name.toLowerCase()}-list-pagination-800-dark-standard`);
       } finally {
         await close();
