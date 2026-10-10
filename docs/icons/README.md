@@ -16,7 +16,7 @@ embedded frontend, and Wails creates the native macOS icon from the Graphite
 - Browser tab: `favicon.png` (Graphite), and other sizes in `graphite/app-icon`.
 - Theme-aware UI: use `porcelain/` for light background and `midnight/` for blue background.
 - Signal UI header: `signal/ui/mo-mark.svg` preserves the mark geometry with red and yellow. This theme supplies a header SVG only; the packaged app icon remains Graphite.
-- Crimson Violet UI header: `crimson-violet/ui/mo-mark.svg` uses lilac and red, also as a header SVG only.
+- Crimson Violet UI header: `crimson-violet/ui/mo-mark.svg` uses lilac and green, also as a header SVG only.
 - `reference-extraction/mo-mark-source-colors.png` is the screenshot-based extraction to inspect source appearance; **prefer the SVG** for actual UI usage.
 - `*-24h.png` names mean the transparent mark PNG is **24 pixels high**; aspect ratio is preserved.
 
@@ -28,7 +28,7 @@ embedded frontend, and Wails creates the native macOS icon from the Graphite
 | Porcelain | `#F8F7F2` | `#164B3A` | `#346448` |
 | Midnight | `#0E243A` | `#EAF4FF` | `#78CDCF` |
 | Signal | `#151215` | `#FF5A61` | `#FFDC45` |
-| Crimson Violet | `#2B1645` | `#CCA6FF` | `#FF5A70` |
+| Crimson Violet | `#2B1645` | `#CCA6FF` | `#85E89D` |
 
 ## Importing into web/HTMX UI (Go)
 

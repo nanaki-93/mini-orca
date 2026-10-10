@@ -247,7 +247,7 @@ Porcelain, Midnight, Signal and Crimson Violet.
 The selected theme is remembered across launches. Graphite pairs warm charcoal
 with amber, Porcelain pairs ivory with forest green, and Midnight pairs navy with
 cyan. Signal pairs black surfaces with red actions and yellow highlights.
-Crimson Violet pairs deep purple surfaces with red actions and lilac highlights.
+Crimson Violet pairs deep purple surfaces with green actions and lilac highlights.
 All themes retain labeled success, warning and failure states. **Aa** enables
 larger text. Theme changes are immediate; hover transitions respect the system's
 reduced-motion preference.
