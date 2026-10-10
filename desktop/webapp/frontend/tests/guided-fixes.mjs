@@ -10,8 +10,7 @@ export async function testGuidedFixes({
   chooseModel: selectModel,
 }) {
   const openModels = async (page) => {
-    const summary = page.locator('.fix-models summary').first();
-    if ((await summary.locator('..').getAttribute('open')) === null) await summary.click();
+    await page.getByRole('heading', { name: 'Models for fixes', exact: true }).waitFor();
   };
   const chooseModel = async (trigger, profile) => {
     await openModels(trigger.page());
@@ -158,7 +157,7 @@ export async function testGuidedFixes({
     }
   });
 
-  await test('Finding models use the shared picker in a passive disclosure across layouts', async () => {
+  await test('Finding models share a passive picker above the detail across layouts', async () => {
     for (const category of ['Bugs', 'Performance', 'Security']) {
       const { page, close } = await pageFor({
         modelNames: { function: 'gpt-4.1', bug: 'gemini-2.5-pro', analyze: 'claude-sonnet-4' },
@@ -220,11 +219,12 @@ export async function testGuidedFixes({
         for (const width of [1440, 1000, 800]) {
           await page.setViewportSize({ width, height: 1000 });
           const modelBox = await models.boundingBox();
-          const detailBox = await page.locator('.fix-preparation').boundingBox();
+          const headingBox = await page.locator('.guided-fix .page-heading h1').boundingBox();
           assert.ok(
-            modelBox.y + modelBox.height <= detailBox.y,
-            'Model settings precede the scoped preparation action',
+            modelBox.y + modelBox.height <= headingBox.y,
+            'Shared model settings sit above the finding',
           );
+          assert.equal(await models.locator('details').count(), 0);
           await page.locator('#main').evaluate((element) => {
             element.scrollTop = 0;
           });
@@ -273,6 +273,42 @@ export async function testGuidedFixes({
         ),
         false,
       );
+    } finally {
+      await close();
+    }
+  });
+
+  await test('Shared fix models retain choices between categories and disable during generation', async () => {
+    const { page, close } = await pageFor({ workflowRunning: true, trusted: true });
+    try {
+      const before = await page.evaluate(() =>
+        window.fixture.requests.filter((request) => request.method !== 'GET'),
+      );
+      for (const category of ['Bugs', 'Performance', 'Security']) {
+        await nav(page, category);
+        await page.locator('.result-row').first().click();
+        const models = page.locator('.fix-models');
+        await models.getByRole('heading', { name: 'Models for fixes', exact: true }).waitFor();
+        const creation = models.getByRole('button', { name: 'Creation model', exact: true });
+        if (category === 'Bugs') await chooseModel(creation, 'bug');
+        assert.equal(await creation.getAttribute('value'), 'bug');
+        assert.equal(await creation.isEnabled(), true);
+        assert.equal(await page.locator('.fix-models').count(), 1);
+      }
+      assert.deepEqual(
+        await page.evaluate(() =>
+          window.fixture.requests.filter((request) => request.method !== 'GET'),
+        ),
+        before,
+      );
+      await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
+      await idle(page);
+      const creation = page.getByRole('button', { name: 'Creation model', exact: true });
+      assert.equal(await creation.getAttribute('value'), 'bug');
+      assert.equal(await creation.isDisabled(), true);
+      const models = await page.locator('.fix-models').boundingBox();
+      const heading = await page.locator('.guided-fix .page-heading h1').boundingBox();
+      assert.ok(models.y + models.height <= heading.y);
     } finally {
       await close();
     }

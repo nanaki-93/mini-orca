@@ -67,7 +67,9 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   on the fix page. **Details** contains the full cause, provenance, confidence,
   evidence and triage actions, including **Mark as fixed**; **Full explanation**
   reveals longer solutions.
-  **Models** expands the creation, testing and review model pickers.
+  **Models for fixes** sits above the finding and keeps creation, testing and review
+  choices shared across all three categories. Model destinations remain available
+  in the pickers.
   **Prepare fix** starts generation and checks. File scope, remote destinations
   and project checks appear beside the action; selecting it authorizes those
   operations and, for Security findings, the Security fix. Changed destinations
@@ -78,7 +80,7 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   unchanged files, whose freshness follows their content and applicable guidance.
   The generated fix opens on **Changes**, with full-width read-only file diffs.
   **Checks** contains diagnostics, captured workflow stages and model review.
-  **Details** contains cause, scope, instructions, models, regeneration and history.
+  **Details** contains cause, scope, instructions, regeneration and history.
   **Review next file** advances through the diffs; **Apply N files** becomes available
   after every changed file has been viewed and the existing check/review guards pass.
   Regeneration clears the viewed-file state. Tabs and file selection never generate,

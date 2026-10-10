@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ChangeSession, ChangeSeed } from './models';
 import { workspace as w, activeChangeWorkflow, canAcceptChange, type State } from './workspace';
-import { WorkflowModels, WorkflowProgress, defaultWorkflowModels } from './change-workflow';
+import { FixModels, WorkflowProgress } from './change-workflow';
 import { ChangeChecks, ChangeHistory, ChangeOutcome, ProposalDiff } from './change-shared';
 import { FixPreparation } from './fix-preparation';
 import { FixSolution } from './fix-solution';
@@ -58,7 +58,6 @@ export function FixWorkspace({ s }: { s: State }) {
     !!s.busy ||
     running ||
     (!!change && (change.state !== 'draft' || change.freshness !== 'current'));
-  const models = s.workflowModels || change?.workflow?.models || defaultWorkflowModels;
   const earlierExplanations =
     change?.messages.filter((entry) => entry.role === 'assistant').slice(0, -1) || [];
   const details = (
@@ -87,16 +86,6 @@ export function FixWorkspace({ s }: { s: State }) {
           ))}
         </Disclosure>
       )}
-      <Panel className="fix-models">
-        <Disclosure title="Models">
-          <WorkflowModels
-            s={s}
-            value={models}
-            disabled={blocked}
-            creationOnly={!seed.paths.some((path) => path.endsWith('_test.go'))}
-          />
-        </Disclosure>
-      </Panel>
       {change?.context_manifest && (
         <Panel className="chat-provider-context">
           <Disclosure title="Provider context">
@@ -130,6 +119,11 @@ export function FixWorkspace({ s }: { s: State }) {
   );
   return (
     <div className="workspace-page guided-fix" data-accent={category}>
+      <FixModels
+        s={s}
+        disabled={blocked}
+        creationOnly={!seed.paths.some((path) => path.endsWith('_test.go'))}
+      />
       <div className="row between wrap fix-back">
         <Go page={category} icon="back">
           All findings

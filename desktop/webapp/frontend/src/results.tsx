@@ -4,7 +4,7 @@ import { workspace as w, activeChangeWorkflow, workflowSeed, type State } from '
 import { FixPreparation } from './fix-preparation';
 import { FixSteps } from './fix-workspace';
 import { SolutionExcerpt } from './fix-solution';
-import { WorkflowModels, defaultWorkflowModels } from './change-workflow';
+import { FixModels } from './change-workflow';
 import { StaleAnalysisButton } from './analysis';
 import {
   Badge,
@@ -162,6 +162,13 @@ export function Results({ s }: { s: State }) {
         tabIndex={-1}
         className="workspace-page results-page results-detail guided-fix"
       >
+        {seed && detail.path && (
+          <FixModels
+            s={s}
+            disabled={fixDisabled}
+            creationOnly={!seed.paths.some((path) => path.endsWith('_test.go'))}
+          />
+        )}
         <div className="row between wrap fix-back">
           <Button icon="back" onClick={() => setSelected(undefined)}>
             All findings
@@ -216,19 +223,7 @@ export function Results({ s }: { s: State }) {
           />
         </Panel>
         {seed && detail.path && (
-          <>
-            <Panel className="fix-models">
-              <Disclosure title="Models">
-                <WorkflowModels
-                  s={s}
-                  value={s.workflowModels || s.change?.workflow?.models || defaultWorkflowModels}
-                  disabled={fixDisabled}
-                  creationOnly={!seed.paths.some((path) => path.endsWith('_test.go'))}
-                />
-              </Disclosure>
-            </Panel>
-            <FixPreparation key={detail.key} s={s} seed={seed} disabled={fixDisabled} />
-          </>
+          <FixPreparation key={detail.key} s={s} seed={seed} disabled={fixDisabled} />
         )}
         <Disclosure title="Details">
           <div className="stack results-detail-layout">
