@@ -125,10 +125,7 @@ svg.icon {
   min-height: 0;
 }
 .page {
-  max-width: 1040px;
   padding: 30px 34px;
-  margin: 0 auto;
-  width: 100%;
 }
 .workspace-page {
   gap: 22px;
@@ -282,7 +279,6 @@ svg.icon {
   margin-bottom: 6px;
 }
 .studio-editor > .page {
-  max-width: none;
   padding: 0;
   height: 100%;
 }
@@ -994,7 +990,6 @@ svg.icon {
   gap: 16px;
 }
 .studio-chat > .page {
-  max-width: 810px;
   height: 100%;
   padding: 28px 34px 20px;
 }
@@ -1137,7 +1132,6 @@ svg.icon {
   min-height: 65px;
 }
 .studio-changes > .page {
-  max-width: none;
   padding: 0;
   min-height: 100%;
 }

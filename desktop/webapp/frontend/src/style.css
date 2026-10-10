@@ -572,8 +572,7 @@ pre {
 }
 .page {
   padding: 30px 32px 40px;
-  max-width: 1440px;
-  margin: 0 auto;
+  width: 100%;
 }
 .page-heading {
   display: flex;
@@ -1396,9 +1395,7 @@ pre {
 }
 .change-workspace.change-workspace--compose {
   grid-template-columns: minmax(0, 1fr);
-  max-width: 920px;
   width: 100%;
-  margin-inline: auto;
 }
 .chat-scope-fields {
   display: grid;

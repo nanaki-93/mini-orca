@@ -1,6 +1,52 @@
 import { strict as assert } from 'node:assert';
 
 export async function testStudio({ test, pageFor, nav, idle, layout }) {
+  await test('Studio pages fill the available workspace width', async () => {
+    const { page, close } = await pageFor();
+    try {
+      for (const [width, height, larger] of [
+        [1920, 1080, false],
+        [900, 640, true],
+      ]) {
+        await page.setViewportSize({ width, height });
+        if (larger) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        for (const collapsed of [false, true]) {
+          if (collapsed)
+            await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click();
+          for (const [route, selector] of [
+            ['Overview', '.summary-dashboard'],
+            ['Analysis', '.analysis-setup'],
+            ['Chat', '.chat-composer'],
+            ['Source', '.source-workspace'],
+          ]) {
+            await nav(page, route);
+            await idle(page);
+            const workspace = await page.locator('#main').boundingBox();
+            const content = await page.locator('#main > .page').boundingBox();
+            const surface = await page.locator(selector).boundingBox();
+            const padding = await page.locator('#main > .page').evaluate((element) => {
+              const style = getComputedStyle(element);
+              return { left: parseFloat(style.paddingLeft), right: parseFloat(style.paddingRight) };
+            });
+            assert.ok(Math.abs(content.x - workspace.x) < 2, `${route}: no unused left band`);
+            assert.ok(
+              Math.abs(content.width - workspace.width) < 2,
+              `${route}: page fills the workspace`,
+            );
+            assert.ok(
+              Math.abs(surface.x - content.x - padding.left) < 2 &&
+                Math.abs(surface.width - content.width + padding.left + padding.right) < 2,
+              `${route}: working content fills the page inside its padding`,
+            );
+            await layout(page, `studio-full-width-${route.toLowerCase()}-${width}-${collapsed}`);
+          }
+        }
+        await page.getByRole('button', { name: 'Expand sidebar', exact: true }).click();
+      }
+    } finally {
+      await close();
+    }
+  });
   await test('Studio overlays and terminal preserve the source workspace', async () => {
     const { page, close } = await pageFor();
     try {
