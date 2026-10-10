@@ -22,9 +22,11 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
     const { page, close } = await pageFor({ remote: true, workflowRunning: true });
     try {
       await prepare(page);
+      await nav(page, 'Models');
       await chooseModel(page.getByLabel('Creation model', { exact: true }), 'bug');
       await chooseModel(page.getByLabel('Testing model', { exact: true }), 'function');
       await chooseModel(page.getByLabel('Review model', { exact: true }), 'analyze');
+      await nav(page, 'Chat');
       await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
       const consent = page.getByRole('dialog');
       await consent.getByText('internal/worker_test.go', { exact: true }).waitFor();
@@ -40,6 +42,8 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
         await page.getByRole('button', { name: 'New conversation', exact: true }).isDisabled(),
         true,
       );
+      assert.equal(await page.getByLabel('Creation model', { exact: true }).count(), 0);
+      await nav(page, 'Models');
       assert.equal(await page.getByLabel('Creation model', { exact: true }).isDisabled(), true);
       await nav(page, 'Summary');
       await page.getByRole('button', { name: 'View workflow', exact: true }).click();
@@ -66,6 +70,42 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
         ),
         1,
       );
+    } finally {
+      await close();
+    }
+  });
+
+  await test('Chat retains its draft through Models and clears it for a new conversation', async () => {
+    const { page, close } = await pageFor();
+    try {
+      await prepare(page);
+      await page.getByLabel('Task title', { exact: true }).fill('Bound request time');
+      assert.equal(await page.getByLabel('Creation model', { exact: true }).count(), 0);
+      const writes = await page.evaluate(() =>
+        window.fixture.requests.filter((r) => r.method !== 'GET'),
+      );
+      await page.getByRole('button', { name: 'Manage models', exact: true }).click();
+      await chooseModel(page.getByLabel('Creation model', { exact: true }), 'bug');
+      await nav(page, 'Chat');
+      assert.equal(
+        await page.getByLabel('Task title', { exact: true }).inputValue(),
+        'Bound request time',
+      );
+      assert.equal(
+        await page.getByLabel('Files to change', { exact: true }).inputValue(),
+        'internal/worker.go\ninternal/worker_test.go',
+      );
+      assert.equal(
+        await page.getByLabel('Change request', { exact: true }).inputValue(),
+        'Handle cancellation and cover its boundary cases.',
+      );
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+        writes,
+      );
+      await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+      assert.equal(await page.getByLabel('Change request', { exact: true }).inputValue(), '');
+      assert.equal(await page.getByLabel('Files to change', { exact: true }).inputValue(), '');
     } finally {
       await close();
     }

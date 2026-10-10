@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { workspace as w, canAcceptChange, activeChangeWorkflow, type State } from './workspace';
-import { WorkflowModels, WorkflowProgress, defaultWorkflowModels } from './change-workflow';
+import { WorkflowProgress, defaultWorkflowModels } from './change-workflow';
 import {
   Badge,
   Button,
@@ -28,19 +28,22 @@ export function ChangeWorkspace({ s }: { s: State }) {
 
 function ChatWorkspace({ s }: { s: State }) {
   const change = s.change;
-  const [title, setTitle] = useState('New feature');
-  const [paths, setPaths] = useState('');
-  const [message, setMessage] = useState('');
-  const [tests, setTests] = useState(true);
+  const draft =
+    s.chatDraft && s.chatDraft.sessionID === change?.id && s.chatDraft.seed === s.changeSeed
+      ? s.chatDraft
+      : {
+          sessionID: change?.id,
+          seed: s.changeSeed,
+          title: change?.title || s.changeSeed?.title || 'New feature',
+          paths: (change?.targets.map((target) => target.path) || s.changeSeed?.paths || []).join(
+            '\n',
+          ),
+          message: change ? '' : s.changeSeed?.message || '',
+          tests: change?.kind !== 'instructions',
+        };
+  const { title, paths, message, tests } = draft;
+  const update = (fields: Partial<typeof draft>) => w.setChatDraft({ ...draft, ...fields });
   const taskKind = change?.kind || s.changeSeed?.kind || 'feature';
-  useEffect(() => {
-    setTitle(change?.title || s.changeSeed?.title || 'New feature');
-    setPaths(
-      (change?.targets.map((target) => target.path) || s.changeSeed?.paths || []).join('\n'),
-    );
-    setMessage(change ? '' : s.changeSeed?.message || '');
-    setTests(change?.kind !== 'instructions');
-  }, [change?.id, s.changeSeed]);
   const seed = {
     title,
     paths: paths
@@ -70,15 +73,13 @@ function ChatWorkspace({ s }: { s: State }) {
         <Go page="editor" icon="code">
           Go to file
         </Go>
+        <Go page="models" icon="layers">
+          Manage models
+        </Go>
         <Button disabled={!!s.busy || running} onClick={() => w.newChange()}>
           New conversation
         </Button>
       </Heading>
-      {useAgents && (
-        <Panel title="Agent models" className="fix-models">
-          <WorkflowModels s={s} value={models} disabled={blocked} creationOnly={!useAgents} />
-        </Panel>
-      )}
       <ChangeOutcome s={s} />
       <div className="change-workspace">
         <section className="workspace-page chat-conversation" aria-label="Change conversation">
@@ -92,7 +93,7 @@ function ChatWorkspace({ s }: { s: State }) {
                 Task title
                 <input
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  onChange={(e) => update({ title: e.target.value })}
                   disabled={!!s.busy}
                   maxLength={200}
                 />
@@ -103,7 +104,7 @@ function ChatWorkspace({ s }: { s: State }) {
                   aria-label="Files to change"
                   className="chat-path-input"
                   value={paths}
-                  onChange={(e) => setPaths(e.target.value)}
+                  onChange={(e) => update({ paths: e.target.value })}
                   disabled={!!s.busy}
                   placeholder="internal/worker/process.go&#10;internal/worker/process_test.go"
                 />
@@ -117,7 +118,7 @@ function ChatWorkspace({ s }: { s: State }) {
                   disabled={!!s.busy}
                   onChange={(e) => {
                     if (e.target.value && !paths.split('\n').includes(e.target.value))
-                      setPaths([paths, e.target.value].filter(Boolean).join('\n'));
+                      update({ paths: [paths, e.target.value].filter(Boolean).join('\n') });
                   }}
                 >
                   <option value="">Choose a file…</option>
@@ -169,7 +170,7 @@ function ChatWorkspace({ s }: { s: State }) {
               id="chat-request"
               className="composer"
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => update({ message: e.target.value })}
               disabled={blocked}
               placeholder="Describe a new feature, fix, or improvement…"
             />
@@ -179,7 +180,7 @@ function ChatWorkspace({ s }: { s: State }) {
                   type="checkbox"
                   checked={tests}
                   disabled={blocked || change?.kind === 'instructions'}
-                  onChange={(e) => setTests(e.target.checked)}
+                  onChange={(e) => update({ tests: e.target.checked })}
                 />
                 Run project tests after generation
               </label>
