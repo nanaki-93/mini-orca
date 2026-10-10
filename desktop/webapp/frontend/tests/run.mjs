@@ -7,6 +7,7 @@ import { testChangeWorkflows } from './change-workflow.mjs';
 import { testGuidedFixes } from './guided-fixes.mjs';
 import { testScrolling } from './scrolling.mjs';
 import { testThemes } from './themes.mjs';
+import { testStudio } from './studio.mjs';
 
 let server;
 let url;
@@ -1313,6 +1314,7 @@ try {
       ? { channel: process.env.MINI_ORCA_TEST_BROWSER || 'chrome' }
       : {}),
   });
+  await testStudio({ test, pageFor, nav, idle, layout });
   await testScrolling({ test, pageFor, nav, idle, layout });
   await testThemes({ test, pageFor, nav, idle, layout, contrast });
   await testChangeWorkflows({ test, pageFor, nav, idle, layout, chooseModel });
