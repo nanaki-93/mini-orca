@@ -631,7 +631,7 @@ export async function testGuidedFixes({
         await idle(page);
         const solution = page.locator('.fix-solution');
         await solution.getByText('Return the context error.', { exact: true }).first().waitFor();
-        await solution.locator('summary').getByText('Full explanation', { exact: true }).click();
+        await solution.getByRole('button', { name: 'Full explanation', exact: true }).click();
         await solution
           .getByText('Failure remains when the caller ignores errors.', { exact: true })
           .waitFor();
@@ -642,6 +642,56 @@ export async function testGuidedFixes({
             exact: false,
           })
           .waitFor();
+      } finally {
+        await close();
+      }
+    }
+  });
+
+  await test('Solution previews expand in place without repeating text or making requests', async () => {
+    for (const category of ['Bugs', 'Performance', 'Security']) {
+      const opening = 'Keep the original cancellation error.';
+      const ending = 'Preserve the caller response and verify the boundary case.';
+      const text = `${opening} ${'Check the worker before processing. '.repeat(10)}\n\n${ending}`;
+      const { page, close } = await pageFor({ changeAssistantMessage: text, trusted: true });
+      try {
+        await page.evaluate(
+          ({ category, text }) => {
+            const state = window.fixture.state;
+            if (category === 'Bugs') state.finding.task_spec = { acceptance_criteria: [text] };
+            else if (category === 'Performance')
+              state.performance.findings[0].recommendation = text;
+            else state.security.findings[0].remediation = text;
+          },
+          { category, text },
+        );
+        await nav(page, category);
+        await page.locator('.result-row').first().click();
+        for (const stage of ['finding', 'proposal']) {
+          if (stage === 'proposal') {
+            await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
+            await idle(page);
+          }
+          const solution = page.locator('.fix-solution');
+          const before = await page.evaluate(() => window.fixture.requests.length);
+          const expand = solution.getByRole('button', { name: 'Full explanation', exact: true });
+          assert.equal(await expand.getAttribute('aria-expanded'), 'false');
+          const content = page.locator(`[id="${await expand.getAttribute('aria-controls')}"]`);
+          const preview = await content.innerText();
+          assert.ok(preview.startsWith(opening));
+          assert.ok(preview.endsWith('…'));
+          assert.equal(preview.includes(ending), false);
+          await expand.focus();
+          await page.keyboard.press('Enter');
+          const collapse = solution.getByRole('button', { name: 'Show less', exact: true });
+          assert.equal(await collapse.getAttribute('aria-expanded'), 'true');
+          assert.equal(await content.innerText(), text);
+          assert.equal((await solution.innerText()).split(opening).length - 1, 1);
+          assert.equal(await collapse.evaluate((el) => el === document.activeElement), true);
+          await page.keyboard.press('Space');
+          assert.equal(await content.innerText(), preview);
+          assert.equal(await page.evaluate(() => window.fixture.requests.length), before);
+        }
       } finally {
         await close();
       }
