@@ -14,6 +14,7 @@ import {
   Notice,
   Panel,
   Prose,
+  PriorityIcon,
 } from './ui';
 
 function FileTree({
@@ -362,7 +363,7 @@ function Source({ s }: { s: State }) {
                 key={i}
                 title={
                   <span className="row wrap">
-                    <Badge value={risk.severity} />
+                    <PriorityIcon value={risk.severity} />
                     {risk.summary}
                   </span>
                 }

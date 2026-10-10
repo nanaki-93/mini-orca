@@ -53,15 +53,7 @@ export function Go({
 }
 export const human = (text?: string) =>
   (text || 'Unavailable').replaceAll('_', ' ').replaceAll('-', ' ');
-export function StatusDot({
-  value,
-  label,
-  hideSuccess = false,
-}: {
-  value?: string;
-  label?: string;
-  hideSuccess?: boolean;
-}) {
+export function StatusDot({ value, label }: { value?: string; label?: string }) {
   const status = label ? `${label}: ${human(value)}` : human(value);
   const tone = [
     'fresh',
@@ -76,12 +68,12 @@ export function StatusDot({
     : ['failed', 'error'].includes(value || '')
       ? 'red'
       : 'yellow';
-  if (hideSuccess && tone === 'green') return null;
   return <span className={`status-dot ${tone}`} role="img" aria-label={status} title={status} />;
 }
 export function Badge({ value, tone }: { value?: string; tone?: string }) {
   if (['suggested', 'ai_suggestion'].includes(value || '')) return null;
-  if (['completed', 'completed_empty'].includes(value || '')) return <StatusDot value={value} />;
+  if (['fresh', 'stale', 'error', 'completed', 'completed_empty'].includes(value || ''))
+    return <StatusDot value={value} />;
   const style =
     tone ??
     ([
@@ -117,6 +109,22 @@ export function Badge({ value, tone }: { value?: string; tone?: string }) {
               ? 'violet'
               : '');
   return <span className={`badge ${style}`}>{human(value)}</span>;
+}
+export function PriorityIcon({ value }: { value: string }) {
+  const icon = {
+    critical: 'priorityHighest',
+    high: 'priorityHigh',
+    medium: 'priorityMedium',
+    low: 'priorityLow',
+    info: 'priorityLowest',
+  }[value];
+  if (!icon) return <Badge value={value} />;
+  const label = `Priority: ${human(value)}`;
+  return (
+    <span className={`priority-icon priority-${value}`} role="img" aria-label={label} title={label}>
+      <Icon name={icon} />
+    </span>
+  );
 }
 export function Heading({
   title,

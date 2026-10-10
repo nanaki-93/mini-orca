@@ -5673,7 +5673,10 @@ try {
         await page.getByRole('button', { name: 'Refresh', exact: true }).click();
         await idle(page);
         await page.locator('.result-row').click();
-        await workspace.locator('.results-state').getByText('stale', { exact: true }).waitFor();
+        await workspace
+          .locator('.results-state')
+          .getByRole('img', { name: 'Freshness: stale', exact: true })
+          .waitFor();
         for (const label of ['Prepare fix'])
           assert.equal(
             await workspace.getByRole('button', { name: label, exact: true }).isDisabled(),
@@ -6010,7 +6013,7 @@ try {
                 .waitFor();
               await workspace
                 .locator('.result-row .results-state')
-                .getByText('stale', { exact: true })
+                .getByRole('img', { name: 'Freshness: stale', exact: true })
                 .waitFor();
             }
             const analysisDetails = workspace.locator('details').filter({

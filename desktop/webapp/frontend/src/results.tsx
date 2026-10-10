@@ -26,6 +26,7 @@ import {
   Notice,
   Panel,
   Prose,
+  PriorityIcon,
   StatusDot,
   human,
 } from './ui';
@@ -197,7 +198,7 @@ export function Results({ s }: { s: State }) {
         kind={kind}
         metadata={
           <>
-            <Badge value={detail.severity} />
+            <PriorityIcon value={detail.severity} />
             {detail.status !== detail.freshness && (
               <span aria-label="Finding state">
                 <Badge value={detail.status} />
@@ -205,7 +206,6 @@ export function Results({ s }: { s: State }) {
             )}
             <span className="results-state">
               <StatusDot value={detail.freshness} label="Freshness" />
-              <span>{human(detail.freshness)}</span>
             </span>
           </>
         }
@@ -460,7 +460,7 @@ export function Results({ s }: { s: State }) {
         </div>
         <div className="findings-columns" aria-hidden="true">
           <span>Finding</span>
-          <span>Impact / freshness</span>
+          <span>Priority / freshness</span>
           <span />
         </div>
         <div className="result-list">
@@ -494,10 +494,9 @@ export function Results({ s }: { s: State }) {
                 </small>
               </span>
               <span className="result-badges">
-                <Badge value={row.severity} />
+                <PriorityIcon value={row.severity} />
                 <span className="results-state">
-                  <StatusDot value={row.freshness} label="Freshness" hideSuccess />
-                  <span>{human(row.freshness)}</span>
+                  <StatusDot value={row.freshness} label="Freshness" />
                 </span>
               </span>
               <span className="finding-open">
