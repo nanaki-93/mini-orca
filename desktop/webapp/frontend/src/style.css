@@ -127,6 +127,37 @@
   --violet-soft: #32213f;
   --shadow: 0 24px 80px #0009;
 }
+:root[data-theme='crimson-violet'] {
+  color-scheme: dark;
+  --canvas: #24113d;
+  --sidebar: #2b1645;
+  --panel: #361d51;
+  --raised: #3b224f;
+  --hover: #462c5b;
+  --line: #745285;
+  --control-line: #bda2d5;
+  --subtle-line: #513567;
+  --text: #f9edff;
+  --secondary: #e6cef2;
+  --muted: #d0b7df;
+  --accent: #ff5a70;
+  --accent-hover: #ff8597;
+  --accent-text: #2b0d17;
+  --accent-soft: #361827;
+  --highlight: #cca6ff;
+  --highlight-soft: #382252;
+  --green: #9ee6bd;
+  --green-soft: #18352b;
+  --red: #ffadbd;
+  --red-soft: #451f3b;
+  --amber: #f4cf88;
+  --amber-soft: #3c2b22;
+  --blue: #a5dcfa;
+  --blue-soft: #1e334e;
+  --violet: #cca6ff;
+  --violet-soft: #382252;
+  --shadow: 0 24px 80px #0009;
+}
 :root.large-text {
   font-size: 17px;
 }
@@ -2405,8 +2436,10 @@ summary .row {
   min-height: 34px;
   border-top: 1px solid var(--line);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 19px;
+  row-gap: 4px;
   padding: 4px 18px;
   color: var(--muted);
   font-size: 0.67rem;
@@ -2414,6 +2447,7 @@ summary .row {
 }
 .statusbar-end {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 14px;
   margin-left: auto;

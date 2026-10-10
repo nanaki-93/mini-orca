@@ -5,6 +5,7 @@ const themes = [
   ['light', 'Porcelain', 'P'],
   ['midnight', 'Midnight', 'M'],
   ['signal', 'Signal', 'S'],
+  ['crimson-violet', 'Crimson Violet', 'C'],
 ];
 
 export async function testThemes({ test, pageFor, nav, idle, layout, contrast }) {
@@ -168,6 +169,17 @@ export async function testThemes({ test, pageFor, nav, idle, layout, contrast })
             false,
             'All footer controls fit without clipping',
           );
+          assert.deepEqual(
+            await page
+              .locator('.statusbar-end > *')
+              .evaluateAll((controls) =>
+                controls
+                  .filter((control) => control.scrollWidth > control.clientWidth + 1)
+                  .map((control) => control.textContent.trim()),
+              ),
+            [],
+            'Footer action labels fit inside their controls',
+          );
           for (const control of await group.getByRole('button').all()) {
             const bounds = await control.boundingBox();
             assert.ok(bounds.width >= 24 && bounds.height >= 24);
@@ -216,7 +228,7 @@ export async function testThemes({ test, pageFor, nav, idle, layout, contrast })
     }
   });
 
-  for (const theme of ['Midnight', 'Signal']) {
+  for (const theme of ['Midnight', 'Signal', 'Crimson Violet']) {
     await test(`${theme} keeps analysis, files, results and model selection readable`, async () => {
       const { page, close } = await pageFor();
       try {
