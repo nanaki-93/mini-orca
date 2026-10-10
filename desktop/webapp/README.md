@@ -35,8 +35,11 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
 Project Studio has twelve destinations. **Overview**, **Source** and **Chat** are
 the main workspaces. **Improve** groups **Analysis**, **Findings**, **Features** and
 **Changes**; project tools include architecture, instructions, context, models and
-history. The project switcher opens project settings; **Terminal** lives in the
-status bar. The sidebar collapses to icons, and the global search opens with `‚åòK` or `Ctrl+K`.
+history. **Models** and **History** stay at the bottom of the sidebar. The project
+switcher and global search (`‚åòK` or `Ctrl+K`) open focused dialogs over the current
+workspace. Escape closes them and restores focus. **Terminal** opens a bottom
+drawer from the status bar while keeping the workspace visible. The sidebar
+collapses to icons.
 
 - **Project** opens a saved project locally. **Import & analyze** creates a new
   overview, with explicit confirmation for a remote Analyze provider.
@@ -55,23 +58,24 @@ status bar. The sidebar collapses to icons, and the global search opens with `‚å
   When a run is paused or interrupted, **Prepare continuation** on Analysis
   prepares the saved run with its captured settings and fresh consent. To use
   new settings, cancel the saved run in **Last run**, then prepare a new analysis.
-  Preparing a run captures scope and provider destinations. Starting it still
+  Preparing a run opens a preview dialog with captured scope and provider destinations. Starting it still
   confirms remote-provider sharing and Security review for that admission.
   **Last run** focuses on current progress and pause, continue or cancel controls.
   The progress bar and percentage count finished file-analysis steps, including
   unsuccessful or skipped steps; feature discovery has its own status.
   **Run details** reveals result counts, captured models, coverage, provider
   destinations and file diagnostics. Failures remain visible when details are
-  collapsed. Open result workspaces through the sidebar or **Overview**.
+  collapsed. Compact result rows open each category without losing run progress.
   Pausing/resuming retains captured model choices, including older runs that
   shared one Performance/Security choice. Feature discovery runs independently
   of file analysis, gets at least ten minutes (or the selected model's longer
   timeout), honors file exclusions and reuses completed ideas on resume.
   Failed feature discovery leaves other analysis results available.
-- **Findings** groups **Bugs**, **Performance** and **Security** in category tabs. **Open fix** opens a dedicated page with the exact file, declaration and
-  line, and scoped preparation. The full cause leads the page, followed by the
-  proposed solution, affected files and **Prepare fix** action. No findings list
-  appears on the fix page. Provenance and confidence stay with the cause;
+- **Findings** groups **Bugs**, **Performance** and **Security** in category tabs.
+  Selecting a finding opens its detail beneath the list, preserving filters and
+  the selected row. The exact file, declaration and line remain visible when available.
+  The full cause leads the detail, followed by the proposed solution, affected
+  files and **Prepare fix** action. Provenance and confidence stay with the cause;
   **Details** contains additional evidence and triage actions, including
   **Mark as fixed**. **Full explanation** expands the solution in place without
   repeating the preview; **Show less** collapses it again.
@@ -86,10 +90,10 @@ status bar. The sidebar collapses to icons, and the global search opens with `‚å
   creation profile. **Go to file** opens source without starting a fix.
   **Analyze stale files** refreshes only outdated files and preserves results for
   unchanged files, whose freshness follows their content and applicable guidance.
-  The generated fix opens on **Changes**, with full-width read-only file diffs.
-  **Checks** contains diagnostics, captured workflow stages and model review.
-  The cause remains visible above the solution while reviewing a fix.
-  **Details** contains scope, instructions and regeneration, with a link to **History**.
+  The generated fix opens on **Changes**, with file tabs, a read-only diff and
+  a check-evidence pane. **Checks** contains full diagnostics, captured workflow
+  stages and model review. **Details** contains the cause, solution, scope,
+  instructions and regeneration, with a link to **History**.
   **Review next file** advances through the diffs; **Apply N files** becomes available
   after every changed file has been viewed and the existing check/review guards pass.
   Regeneration clears the viewed-file state. Tabs and file selection never generate,
@@ -97,7 +101,8 @@ status bar. The sidebar collapses to icons, and the global search opens with `‚å
   the diff. Performance remains unmeasured without benchmark evidence.
   Apply records review for that exact revision and retains post-Apply verification
   and guarded Undo. It does not automatically mark the finding fixed.
-- **Features** uses project goals to suggest advisory new capabilities. Searches
+- **Features** presents advisory ideas as compact rows. Selecting a row opens
+  the complete idea in a dialog; **Project goals** expands goal editing and search. Searches
   use the same extended deadline as feature discovery in Analysis. New ideas
   accumulate alongside existing ones, retaining prior triage decisions, and
   duplicates are skipped. Ideas generated from previous
@@ -118,14 +123,15 @@ status bar. The sidebar collapses to icons, and the global search opens with `‚å
   them in an isolated copy before the review agent evaluates the proposal.
   The app shows each stage, captured models, check evidence and review findings;
   progress remains visible during navigation, and **Cancel workflow** stops work.
-  Failed tests or requested changes block approval. A successful run displays read-only diffs and waits for **Accept changes**. Performance remains unmeasured unless
+  Failed tests or requested changes block approval. A successful run displays read-only diffs and waits for explicit **Apply**. Performance remains unmeasured unless
   actual benchmark evidence is available. Interrupted runs need an explicit new
   run; the workflow never resumes provider calls from history automatically.
   Describe a task here, or use the dedicated fix workflow from a finding. Generation checks the proposal and can repair failed checks up to three times.
-  Chat keeps the conversation, scope and a compact proposal card together.
+  Chat centers the conversation, with compact task metadata, expandable scope
+  and a composer at the bottom. A compact proposal card links to review.
   **Review changes** opens **Changes**, with a read-only diff beside check evidence
   on wide windows. Compact windows stack these panes. **Back to conversation** returns to Chat.
-  Read the displayed file diffs, then select **Accept changes** once. This records
+  View every changed file, then select **Apply N files** in the review footer. This records
   review and applies only that revision; failed review, a replacement proposal or
   navigation while review is pending prevents Apply. With a captured `_test.go`
   path, creation, testing and agent review run automatically; otherwise generation
@@ -134,7 +140,9 @@ status bar. The sidebar collapses to icons, and the global search opens with `‚å
   are separate. New revisions clear earlier review. **History** lists saved work;
   **Resume** restores a conversation without generation or inherited check/review
   authority.
-- **Instructions** loads root or directory AGENTS.md and offers independent rules
+- **Instructions** opens as a readable guide. **Edit draft** switches to inline
+  editing; **Load scope** loads root or directory AGENTS.md. **Add project guidelines**
+  expands independent rules
   across eight sections following [AGENTS.md conventions](https://agents.md/):
   architecture, setup/build, code style, testing, security/data, UI/accessibility,
   documentation and handoff. The catalog matches indexed languages, build manifests
@@ -147,11 +155,11 @@ status bar. The sidebar collapses to icons, and the global search opens with `‚å
   inherited guides is disabled to avoid duplicates.
   Existing files are registered by reading them; inherited guides show their
   origins and scope. **Preview instruction diff**
-  opens a manual proposal in **Changes** with the same explicit **Accept changes** action.
+  opens a manual proposal in **Changes** with the same file review and explicit **Apply** action.
   Agents use applicable root and directory guidance by default for analysis,
   explanations, suggestions, creation, testing and review, honoring context exclusions.
   Fix and feature implementation pages show instruction status; **Create AGENTS.md** opens the
-  root instruction wizard when no root guide exists. Guidance changes invalidate
+  root instruction editor when no root guide exists. Guidance changes invalidate
   affected AI reports and proposals; navigation alone never requests a model.
 - After Apply, **Verify applied change** checks the applied file identities and
   runs Go tests/vet in a copied workspace with fresh execution trust. Markdown-only
@@ -160,7 +168,10 @@ status bar. The sidebar collapses to icons, and the global search opens with `‚å
   certify acceptance criteria or automatically mark original findings fixed.
   The latest unchanged grouped proposal offers **Undo proposal**; interrupted
   writes expose recovery state and guarded restoration.
-- **Source** shows selectable, read-only files and declaration navigation.
+- **Source** combines a folder explorer, open-file tabs and a selectable,
+  read-only source canvas with an assistant pane. **Inspect this file** expands
+  declaration navigation, explanations and file analysis. Asking about a file
+  seeds Chat with that file and the question without making a provider request.
   **Draft change in Chat** captures the selected file and declaration in a new task;
   it does not generate or write code. Chat produces checked proposals for the
   **Changes** workspace, where review, Apply and guarded Undo remain explicit.
@@ -172,7 +183,8 @@ status bar. The sidebar collapses to icons, and the global search opens with `‚å
   **Needs attention** links Bugs, Performance, Security and active Features counts to
   their workspaces. Feature details, estimated effort and triage stay in Features;
   unavailable or ungenerated counts remain unknown, and status indicators retain
-  stale/failure states. **Project activity** links **Architecture and Flow**, the
+  stale/failure states. **About this project** expands project facts, coverage and background.
+  **Project activity** links **Architecture and Flow**, the
   current **Project Analysis**, and recent saved tasks; without a run, analysis
   opens setup. **Architecture** keeps architecture, entry points and project-flow
   charts together. Plain Mermaid reports and

@@ -67,7 +67,7 @@ export async function testThemes({ test, pageFor, nav, idle, layout, contrast })
         await page
           .locator('.statusbar')
           .getByRole('button', { name: 'Terminal', exact: true })
-          .getAttribute('aria-pressed'),
+          .getAttribute('aria-expanded'),
         'true',
       );
       await nav(page, 'Bugs');

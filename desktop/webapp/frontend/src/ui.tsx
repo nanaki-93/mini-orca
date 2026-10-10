@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, type ReactNode, type ButtonHTMLAttributes } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+  type ButtonHTMLAttributes,
+} from 'react';
 import { renderMermaidSVG } from 'beautiful-mermaid';
 import { icons } from './icons';
 import type { Insight } from './models';
@@ -352,9 +359,10 @@ export function Overlay({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     ref.current?.showModal();
+    ref.current?.querySelector<HTMLElement>('[data-initial-focus]')?.focus();
     return () => {
       if (previous?.isConnected) previous.focus();
     };

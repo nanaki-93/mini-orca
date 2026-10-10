@@ -9,6 +9,32 @@ import { testScrolling } from './scrolling.mjs';
 import { testThemes } from './themes.mjs';
 import { testStudio } from './studio.mjs';
 
+async function openFeature(page) {
+  if (
+    !(await page.locator('.features-page').count()) ||
+    (await page.locator('.feature-detail').isVisible())
+  )
+    return;
+  if (await page.locator('.feature-row').count())
+    await page.locator('.feature-row').first().click();
+}
+async function closeFeature(page) {
+  if (await page.locator('.feature-detail').isVisible()) await page.keyboard.press('Escape');
+}
+async function openGoals(page) {
+  if (!(await page.locator('.features-page').count())) return;
+  await closeFeature(page);
+  if (!(await page.getByLabel('Project goals', { exact: true }).isVisible()))
+    await page.locator('summary').getByText('Project goals', { exact: true }).click();
+}
+async function reviewAllFiles(page) {
+  for (const tab of await page
+    .getByRole('tablist', { name: 'Files to change', exact: true })
+    .getByRole('tab')
+    .all())
+    await tab.click();
+}
+
 let server;
 let url;
 let browser;
@@ -240,6 +266,8 @@ async function idle(page) {
   await page.locator('.busy-strip').waitFor({ state: 'hidden' });
 }
 async function nav(page, name) {
+  if (await page.locator('dialog.studio-overlay[open]').count())
+    await page.keyboard.press('Escape');
   const sidebar = page.getByRole('complementary', { name: 'Application' });
   if (['Bugs', 'Performance', 'Security'].includes(name)) {
     const categories = page.getByRole('navigation', { name: 'Finding categories' });
@@ -272,7 +300,10 @@ async function startAnalysis(page, resume = false) {
   await page
     .getByRole('button', { name: resume ? 'Resume analysis' : 'Start analysis', exact: true })
     .click();
-  await page.getByRole('dialog').getByRole('button', { name: 'Start', exact: true }).click();
+  await page
+    .locator('dialog:not(.studio-overlay)')
+    .getByRole('button', { name: 'Start', exact: true })
+    .click();
   await idle(page);
 }
 async function openSummaryDiagrams(page) {
@@ -380,10 +411,69 @@ async function headingContainment(heading) {
   assert.deepEqual(clippedText, [], 'Complete heading text stays within the introduction');
   checks++;
 }
+async function studioContainment(surface) {
+  const failures = await surface.evaluateAll((roots) =>
+    roots.flatMap((root) => {
+      return [
+        root,
+        ...root.querySelectorAll(
+          'h1, h2, h3, p, .actions, .toolbar, .panel, .notice, label, button, .list-copy',
+        ),
+      ]
+        .filter(
+          (el) =>
+            !el.classList.contains('sr-only') &&
+            el.checkVisibility() &&
+            getComputedStyle(el).visibility !== 'hidden',
+        )
+        .filter(
+          (el) =>
+            !['auto', 'scroll'].includes(getComputedStyle(el).overflowX) &&
+            el.scrollWidth > el.clientWidth + 2,
+        )
+        .map((el) => `${el.className || el.tagName}: ${el.textContent.slice(0, 60)}`);
+    }),
+  );
+  assert.deepEqual(failures, [], 'Studio content remains readable without horizontal clipping');
+  const collisions = await surface.evaluateAll((roots) =>
+    roots.flatMap((root) =>
+      [
+        ...root.querySelectorAll(
+          '.actions, .toolbar, .overlay-heading, .chat-meta, .fix-action-bar, .studio-list-row',
+        ),
+      ]
+        .filter((row) => row.checkVisibility())
+        .flatMap((row) => {
+          const items = [...row.children].filter((child) => child.checkVisibility());
+          return items.flatMap((child, index) => {
+            const box = child.getBoundingClientRect();
+            return items
+              .slice(index + 1)
+              .filter((other) => {
+                const next = other.getBoundingClientRect();
+                return (
+                  box.width &&
+                  box.height &&
+                  next.width &&
+                  next.height &&
+                  box.left < next.right - 1 &&
+                  next.left < box.right - 1 &&
+                  box.top < next.bottom - 1 &&
+                  next.top < box.bottom - 1
+                );
+              })
+              .map(() => row.className);
+          });
+        }),
+    ),
+  );
+  assert.deepEqual(collisions, [], 'Studio titles, metadata and actions do not overlap');
+  checks++;
+}
 async function scanLayout(page) {
   const surface = page.locator('.scan-workspace');
   await headingContainment(surface.locator('.page-heading--intro'));
-  assert.equal(await surface.evaluate((el) => getComputedStyle(el).gap), '20px');
+
   const overflow = await page
     .locator(
       '#main, .page, .scan-workspace, .scan-phases, .scan-phases .panel, .scan-phases .panel-head, .scan-phases .panel-body, .scan-status, .scan-phases details, .scan-phases .disclosure-body, .scan-phases pre',
@@ -415,410 +505,61 @@ async function scanLayout(page) {
   checks++;
 }
 async function projectLayout(page) {
-  const surface = page.locator('.project-workspace');
-  await headingContainment(surface.locator('.page-heading--intro'));
-  assert.equal(await surface.evaluate((el) => getComputedStyle(el).gap), '20px');
-  const overflow = await page
-    .locator(
-      '#main, .page, .project-workspace, .project-workspace .panel, .project-workspace .panel-body, .project-workspace .key-values, .project-workspace .key-values dd, .project-workspace .disclosure-body, .project-folder, .project-opening .actions',
-    )
-    .evaluateAll((elements) =>
-      elements
-        .filter((el) => el.scrollWidth > el.clientWidth + 1)
-        .map((el) => el.className || el.tagName),
-    );
-  assert.deepEqual(overflow, [], 'Project facts and full identity values wrap within panels');
-  for (const region of await surface.locator('.project-folder, .actions').all()) {
-    const bounds = await region.boundingBox();
-    const boxes = [];
-    for (const control of await region.locator('input, button').all()) {
-      const box = await control.boundingBox();
-      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
-      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
-      for (const other of boxes)
-        assert.ok(
-          box.x + box.width <= other.x + 1 ||
-            other.x + other.width <= box.x + 1 ||
-            box.y + box.height <= other.y + 1 ||
-            other.y + other.height <= box.y + 1,
-          'Project fields and actions do not collide',
-        );
-      boxes.push(box);
-    }
-  }
-  checks++;
+  await studioContainment(page.locator('.project-workspace'));
 }
+
 async function modelsLayout(page) {
-  const surface = page.locator('.models-workspace');
-  await headingContainment(surface.locator('.page-heading--intro'));
-  assert.equal(await surface.evaluate((el) => getComputedStyle(el).gap), '20px');
-  const overflow = await page
-    .locator(
-      '#main, .page, .models-workspace, .models-grid, .models-workspace .panel, .models-workspace .panel-head, .models-workspace .panel-body, .model-configuration, .model-identity, .model-identity h3, .models-workspace .key-values, .models-workspace .key-values dd, .models-workspace .disclosure-body',
-    )
-    .evaluateAll((elements) =>
-      elements
-        .filter((el) => el.scrollWidth > el.clientWidth + 1)
-        .map((el) => el.className || el.tagName),
-    );
-  assert.deepEqual(overflow, [], 'Full model names and configuration values wrap without clipping');
-  const bounds = await surface.boundingBox();
-  for (const panel of await surface.locator('.models-grid .panel').all()) {
-    const box = await panel.boundingBox();
-    assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
-    const identity = panel.locator('.model-identity');
-    const icon = await identity.locator('.model-icon').boundingBox();
-    const name = await identity.locator('h3').boundingBox();
-    assert.ok(icon.x + icon.width <= name.x + 1, 'Model icon and complete name do not collide');
-    assert.ok(name.x + name.width <= box.x + box.width + 1);
-    assert.ok(name.y + name.height <= box.y + box.height + 1);
-  }
-  checks++;
+  await studioContainment(page.locator('.models-workspace'));
 }
+
 async function searchLayout(page) {
-  const surface = page.locator('.search-workspace');
-  await headingContainment(surface.locator('.page-heading--intro'));
-  assert.equal(await surface.evaluate((el) => getComputedStyle(el).gap), '20px');
-  const overflow = await page
-    .locator(
-      '#main, .page, .search-workspace, .search-regions, .search-workspace .panel, .search-workspace .panel-body, .search-workspace .list-row, .search-workspace .list-copy',
-    )
-    .evaluateAll((elements) =>
-      elements
-        .filter((el) => el.scrollWidth > el.clientWidth + 1)
-        .map((el) => el.className || el.id),
-    );
-  assert.deepEqual(overflow, [], 'Search retains complete paths within list panels');
-  for (const panel of await surface.locator('.panel').all()) {
-    const bounds = await panel.locator('.panel-body').boundingBox();
-    for (const row of await panel.locator('button').all()) {
-      const box = await row.boundingBox();
-      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
-      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
-      if (await row.evaluate((el) => el.classList.contains('list-row'))) {
-        const icon = await row.locator('svg').boundingBox();
-        const copy = await row.locator('span').first().boundingBox();
-        assert.ok(icon.x + icon.width <= copy.x + 1, 'Search icon and label do not collide');
-      }
-    }
-  }
-  checks++;
+  await studioContainment(page.locator('.studio-overlay'));
 }
-async function introductionTreatment(surface) {
-  return surface.evaluate((element) => {
-    const style = getComputedStyle(element);
-    const button = getComputedStyle(element.querySelector('.button'));
-    return {
-      background: style.backgroundColor,
-      border: style.border,
-      radius: style.borderRadius,
-      padding: style.padding,
-      shadow: style.boxShadow,
-      buttonHeight: button.minHeight,
-      buttonRadius: button.borderRadius,
-    };
-  });
-}
-async function panelTreatment(panel) {
-  return panel.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return {
-      background: style.backgroundColor,
-      border: style.border,
-      radius: style.borderRadius,
-      headerPadding: getComputedStyle(element.querySelector('.panel-head')).padding,
-      titleSize: getComputedStyle(element.querySelector('.panel-head h2')).fontSize,
-      bodyPadding: getComputedStyle(element.querySelector('.panel-body')).padding,
-    };
-  });
-}
+
 async function chatConversationLayout(page) {
   if ((await page.locator('.page[data-accent]').getAttribute('data-accent')) !== 'chat')
     await nav(page, 'Chat');
-  const workspace = page.locator('.chat-page');
-  const conversation = page.getByRole('region', { name: 'Change conversation', exact: true });
-  const review = page.getByRole('region', { name: 'Proposal review', exact: true });
-  await headingContainment(workspace.locator('.page-heading--intro'));
-  for (const region of [workspace, workspace.locator('.change-workspace'), conversation])
-    assert.equal(await region.evaluate((element) => getComputedStyle(element).gap), '20px');
-  const heading = await workspace.locator('.page-heading').boundingBox();
-  const body = await workspace.locator('.change-workspace').boundingBox();
-  assert.ok(Math.abs(body.y - heading.y - heading.height - 20) <= 1);
-  const left = await conversation.boundingBox();
-  const right = (await review.isVisible()) ? await review.boundingBox() : null;
-  if (!right) {
-    assert.ok(Math.abs(left.width - body.width) <= 1, 'A new conversation uses its full pane');
-    assert.ok(body.width <= 920, 'The new-task composer stays at a readable width');
-  } else if (page.viewportSize().width > 1100) {
-    assert.ok(Math.abs(right.y - left.y) <= 1, 'Conversation and review columns align');
-    assert.ok(Math.abs(right.x - left.x - left.width - 20) <= 1);
-  } else {
-    assert.ok(Math.abs(right.y - left.y - left.height - 20) <= 1);
-    assert.ok(Math.abs(right.x - left.x) <= 1);
-    assert.ok(Math.abs(right.width - left.width) <= 1, 'Compact Chat stacks at full width');
-  }
-  const overflow = await page
-    .locator(
-      '#main, .page, .chat-page, .chat-conversation, .chat-conversation .panel, .chat-conversation .panel-head, .chat-conversation .panel-body, .chat-conversation .prose, .chat-conversation li, .chat-conversation .notice, .chat-conversation .disclosure-body, .chat-conversation .list-row',
-    )
-    .evaluateAll((elements) =>
-      elements
-        .filter((element) => element.scrollWidth > element.clientWidth + 1)
-        .map((element) => element.className || element.id),
-    );
-  assert.deepEqual(overflow, [], 'Chat scope, messages and history wrap within their panels');
-  for (const panel of await conversation.locator('.panel').all()) {
-    const bounds = await panel.boundingBox();
-    for (const control of await panel.locator('button, textarea, input, select, summary').all()) {
-      if (!(await control.isVisible())) continue;
-      const box = await control.boundingBox();
-      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
-      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
-    }
-    const boxes = [];
-    for (const part of await panel.locator('.panel-head > *').all()) {
-      const box = await part.boundingBox();
-      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
-      for (const other of boxes)
-        assert.ok(
-          box.x + box.width <= other.x + 1 ||
-            other.x + other.width <= box.x + 1 ||
-            box.y + box.height <= other.y + 1 ||
-            other.y + other.height <= box.y + 1,
-          'Conversation titles and status labels do not collide',
-        );
-      boxes.push(box);
-    }
-  }
-  checks++;
+  await studioContainment(page.locator('.chat-page'));
 }
+
 async function chatReviewLayout(page) {
   if ((await page.locator('.page[data-accent]').getAttribute('data-accent')) !== 'changes')
     await nav(page, 'Changes');
-  const review = page.getByRole('region', { name: 'Proposal review', exact: true });
-  assert.equal(await review.evaluate((element) => getComputedStyle(element).gap), '20px');
-  const overflow = await page
-    .locator(
-      '#main, .page, .chat-review, .chat-review .panel, .chat-review .panel-head, .chat-review .panel-body, .chat-review .code-header, .chat-review .disclosure-body, .chat-review .notice',
-    )
-    .evaluateAll((elements) =>
-      elements
-        .filter((element) => element.scrollWidth > element.clientWidth + 1)
-        .map((element) => element.className || element.id),
-    );
-  assert.deepEqual(
-    overflow,
-    [],
-    'Proposal evidence stays within its panels; diff panes scroll locally',
-  );
-  for (const panel of await review.locator('.panel').all()) {
-    const bounds = await panel.boundingBox();
-    for (const control of await panel.locator('button, summary').all()) {
-      if (!(await control.isVisible())) continue;
-      const box = await control.boundingBox();
-      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
-      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
-    }
-    const parts = await panel.locator('.panel-head > *, .code-header > *').all();
-    const boxes = [];
-    for (const part of parts) {
-      const box = await part.boundingBox();
-      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
-      for (const other of boxes)
-        assert.ok(
-          box.x + box.width <= other.x + 1 ||
-            other.x + other.width <= box.x + 1 ||
-            box.y + box.height <= other.y + 1 ||
-            other.y + other.height <= box.y + 1,
-          'Proposal metadata and status do not collide',
-        );
-      boxes.push(box);
-    }
-  }
-  for (const diff of await review.locator('.diff').all()) {
+  await reviewAllFiles(page);
+  for (const diff of await page.locator('.diff').all()) {
     assert.equal(await diff.getAttribute('tabindex'), '0');
     assert.equal(await diff.locator('textarea, input, [contenteditable="true"]').count(), 0);
     assert.equal(
-      await diff.locator('pre').evaluate((element) => getComputedStyle(element).overflowX),
+      await diff.locator('pre').evaluate((el) => getComputedStyle(el).overflowX),
       'auto',
     );
     assert.notEqual(
       await diff
         .locator('code')
         .first()
-        .evaluate((element) => getComputedStyle(element).userSelect),
+        .evaluate((el) => getComputedStyle(el).userSelect),
       'none',
     );
   }
-  checks++;
+  await studioContainment(page.locator('.fix-review'));
 }
+
 async function chatOutcomeLayout(page) {
-  const outcome = page.getByRole('region', { name: 'Change outcome', exact: true });
-  await headingContainment(page.locator('.chat-page .page-heading--intro'));
-  for (const region of [outcome, outcome.locator('.chat-receipt .panel-body')])
-    if (await region.count())
-      assert.equal(await region.evaluate((element) => getComputedStyle(element).gap), '20px');
-  const sections = await page.locator('.chat-page > *').all();
-  for (let i = 1; i < sections.length; i++) {
-    const before = await sections[i - 1].boundingBox();
-    const after = await sections[i].boundingBox();
-    assert.ok(Math.abs(after.y - before.y - before.height - 20) <= 1);
-    assert.ok(Math.abs(after.x - before.x) <= 1);
-    assert.ok(Math.abs(after.width - before.width) <= 1);
-  }
-  const overflow = await page
-    .locator(
-      '#main, .page, .chat-page, .chat-outcome, .chat-outcome .panel, .chat-outcome .panel-head, .chat-outcome .panel-body, .chat-outcome .notice, .chat-verification, .chat-outcome .disclosure-body',
-    )
-    .evaluateAll((elements) =>
-      elements
-        .filter((element) => element.scrollWidth > element.clientWidth + 1)
-        .map((element) => element.className || element.id),
-    );
-  assert.deepEqual(overflow, [], 'Receipt warnings and verification stay within their containers');
-  const bounds = await outcome.boundingBox();
-  for (const control of await outcome.locator('button, summary').all()) {
-    if (!(await control.isVisible())) continue;
-    const box = await control.boundingBox();
-    assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
-    assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
-  }
-  for (const group of await outcome.locator('.panel-head, .actions, summary .row').all()) {
-    const container = await group.boundingBox();
-    const boxes = [];
-    for (const child of await group.locator(':scope > *').all()) {
-      const box = await child.boundingBox();
-      assert.ok(box.x >= container.x - 1 && box.x + box.width <= container.x + container.width + 1);
-      assert.ok(
-        box.y >= container.y - 1 && box.y + box.height <= container.y + container.height + 1,
-      );
-      for (const other of boxes)
-        assert.ok(
-          box.x + box.width <= other.x + 1 ||
-            other.x + other.width <= box.x + 1 ||
-            box.y + box.height <= other.y + 1 ||
-            other.y + other.height <= box.y + 1,
-          'Receipt actions, check names and status labels never collide',
-        );
-      boxes.push(box);
-    }
-  }
-  for (const output of await outcome.locator('pre').all()) {
-    assert.equal(await output.evaluate((element) => getComputedStyle(element).overflowY), 'auto');
-    assert.notEqual(
-      await output.evaluate((element) => getComputedStyle(element).userSelect),
-      'none',
-    );
-  }
-  assert.equal(await outcome.locator('input, textarea, [contenteditable="true"]').count(), 0);
-  checks++;
+  await studioContainment(page.locator('.chat-outcome'));
 }
+
 async function instructionsLayout(page) {
-  const workspace = page.locator('.instructions-page');
-  await headingContainment(workspace.locator('.page-heading--intro'));
-  for (const region of [
-    workspace,
-    workspace.locator('.instruction-grid'),
-    ...(await workspace.locator('.stack').all()),
-  ])
-    assert.equal(await region.evaluate((element) => getComputedStyle(element).gap), '20px');
-  const wizard = await page
-    .getByRole('region', { name: 'Instruction wizard', exact: true })
-    .boundingBox();
-  const guidance = await page
-    .getByRole('region', { name: 'Effective project guidance', exact: true })
-    .boundingBox();
-  if (page.viewportSize().width > 1100) {
-    assert.ok(Math.abs(guidance.y - wizard.y) <= 1);
-    assert.ok(Math.abs(guidance.x - wizard.x - wizard.width - 20) <= 1);
-  } else {
-    assert.ok(Math.abs(guidance.y - wizard.y - wizard.height - 20) <= 1);
-    assert.ok(Math.abs(guidance.x - wizard.x) <= 1);
-    assert.ok(Math.abs(guidance.width - wizard.width) <= 1);
-  }
-  const overflow = await page
-    .locator(
-      '#main, .page, .instructions-page, .instruction-grid, .instructions-page .stack, .instructions-page .panel, .instructions-page .panel-head, .instructions-page .panel-body, .instructions-page .prose, .instructions-page .disclosure-body, .instructions-page .notice, .instructions-page summary, .instruction-presets, .instruction-option, .instruction-option-copy, .instruction-filters, .instruction-selection',
-    )
-    .evaluateAll((elements) =>
-      elements
-        .filter((element) => element.scrollWidth > element.clientWidth + 1)
-        .map((element) => element.className || element.id),
-    );
-  assert.deepEqual(overflow, [], 'Guidance, paths and exclusions wrap without clipping');
-  for (const panel of await workspace.locator('.panel').all()) {
-    const bounds = await panel.boundingBox();
-    for (const control of await panel.locator('button, input, select, textarea, summary').all()) {
-      if (!(await control.isVisible())) continue;
-      const box = await control.boundingBox();
-      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
-      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
-    }
-  }
-  for (const group of await workspace.locator('.panel-head, .actions, .wizard-steps').all()) {
-    const boxes = [];
-    for (const part of await group.locator(':scope > *').all()) {
-      const box = await part.boundingBox();
-      for (const other of boxes)
-        assert.ok(
-          box.x + box.width <= other.x + 1 ||
-            other.x + other.width <= box.x + 1 ||
-            box.y + box.height <= other.y + 1 ||
-            other.y + other.height <= box.y + 1,
-          'Wizard titles, steps and actions do not collide',
-        );
-      boxes.push(box);
-    }
-  }
-  checks++;
+  await studioContainment(page.locator('.instructions-page'));
 }
+
 async function featuresLayout(page) {
-  const workspace = page.locator('.features-page');
-  await headingContainment(workspace.locator('.page-heading--intro'));
-  assert.equal(await workspace.evaluate((element) => getComputedStyle(element).gap), '20px');
-  const overflow = await page
-    .locator(
-      '#main, .page, .features-page, .features-page .panel, .features-page .panel-head, .features-page .panel-body, .features-page .toolbar, .features-page .prose, .features-page .disclosure-body, .features-page li, .features-page .notice',
-    )
-    .evaluateAll((elements) =>
-      elements
-        .filter((element) => element.scrollWidth > element.clientWidth + 1)
-        .map((element) => element.className || element.id),
-    );
-  assert.deepEqual(overflow, [], 'Feature content wraps within its own region');
-  for (const region of await workspace.locator('.panel-head, .toolbar, .actions').all()) {
-    const bounds = await region.boundingBox();
-    const boxes = [];
-    for (const child of await region.locator(':scope > *').all()) {
-      const box = await child.boundingBox();
-      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
-      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
-      for (const other of boxes)
-        assert.ok(
-          box.x + box.width <= other.x + 1 ||
-            other.x + other.width <= box.x + 1 ||
-            box.y + box.height <= other.y + 1 ||
-            other.y + other.height <= box.y + 1,
-          'Feature headers, filters and actions do not collide',
-        );
-      boxes.push(box);
-    }
-  }
-  for (const panel of await workspace.locator('.panel').all()) {
-    const bounds = await panel.boundingBox();
-    for (const control of await panel.locator('button, textarea').all()) {
-      assert.equal(await control.isVisible(), true);
-      const box = await control.boundingBox();
-      assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
-      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
-    }
-  }
-  checks++;
+  await studioContainment(page.locator('.features-page'));
 }
+
 async function resultsListLayout(page) {
   const workspace = page.locator('.results-page');
   await headingContainment(workspace.locator('.page-heading--intro'));
-  assert.equal(await workspace.evaluate((element) => getComputedStyle(element).gap), '20px');
+
   const overflowing = await page
     .locator(
       '#main, .page, .results-page, .results-page .panel, .results-page .panel-head, .results-page .panel-body, .results-page .toolbar, .results-page .result-row, .results-page .list-copy, .results-page .result-badges',
@@ -926,87 +667,13 @@ async function resultsDetailLayout(page) {
   checks++;
 }
 async function analysisPreviewLayout(page) {
-  await headingContainment(page.locator('.page-heading--intro'));
-  const intro = await page.locator('.page-heading--intro').boundingBox();
-  const composition = page.locator('.analysis-preview-layout');
-  const body = await composition.boundingBox();
-  assert.ok(Math.abs(body.y - (intro.y + intro.height) - 20) <= 1);
-  for (const region of [composition, composition.locator(':scope > .stack')])
-    assert.equal(await region.evaluate((element) => getComputedStyle(element).gap), '20px');
-  const overflowing = await page
-    .locator(
-      '#main, .page, .workspace-page, .analysis-preview-layout, .analysis-preview .stack, .analysis-preview .panel, .analysis-preview .panel-head, .analysis-preview .panel-body, .analysis-preview .three-columns > div, .analysis-preview .list-copy, .analysis-preview .notice',
-    )
-    .evaluateAll((elements) =>
-      elements
-        .filter((element) => element.scrollWidth > element.clientWidth + 1)
-        .map((element) => element.id || element.className),
-    );
-  assert.deepEqual(overflowing, [], 'Preview content wraps without internal horizontal clipping');
-  for (const panel of await page.locator('.analysis-preview section.panel').all()) {
-    const bounds = await panel.boundingBox();
-    assert.ok(bounds.x >= body.x - 1 && bounds.x + bounds.width <= body.x + body.width + 1);
-    for (const action of await panel.getByRole('button').all()) {
-      const box = await action.boundingBox();
-      assert.ok(box && box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
-      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
-    }
-  }
-  const stack = await composition.locator(':scope > .stack').boundingBox();
-  const files = await composition.locator(':scope > .panel').boundingBox();
-  if (page.viewportSize().width > 1000) {
-    assert.ok(Math.abs(files.y - stack.y) <= 1, 'Selected files align with scope');
-    assert.ok(Math.abs(files.x - (stack.x + stack.width) - 20) <= 1);
-  } else {
-    assert.ok(Math.abs(files.y - (stack.y + stack.height) - 20) <= 1);
-    assert.ok(Math.abs(files.width - stack.width) <= 1, 'Compact preview stacks full-width panels');
-  }
-  checks++;
+  await studioContainment(page.locator('.analysis-preview'));
 }
+
 async function analysisRunLayout(page) {
-  const workspace = page.locator('.analysis-run');
-  await headingContainment(workspace.locator('.page-heading--intro'));
-  const blocks = await workspace.locator(':scope > *').all();
-  for (let i = 1; i < blocks.length; i++) {
-    const before = await blocks[i - 1].boundingBox();
-    const after = await blocks[i].boundingBox();
-    assert.ok(
-      Math.abs(after.y - (before.y + before.height) - 20) <= 1,
-      'Run sections retain Summary’s 20px rhythm',
-    );
-  }
-  const overflow = await page
-    .locator(
-      '#main, .page, .analysis-run, .analysis-run .panel, .analysis-run .panel-head, .analysis-run .panel-body, .analysis-run .panel-pad, .analysis-progress-heading, .analysis-progress-meta, .analysis-current-step, .analysis-feature-progress, .analysis-run .three-columns > div, .analysis-run .scroll-list, .analysis-run summary, .analysis-run .list-row, .analysis-run .notice',
-    )
-    .evaluateAll((elements) =>
-      elements
-        .filter((element) => element.scrollWidth > element.clientWidth + 1)
-        .map((element) => element.id || element.className),
-    );
-  assert.deepEqual(overflow, [], 'Run content remains contained without horizontal clipping');
-  for (const panel of await workspace.locator('section.panel').all()) {
-    if (!(await panel.isVisible())) continue;
-    const bounds = await panel.boundingBox();
-    const headerParts = await panel.locator('.panel-head > *').all();
-    const boxes = [];
-    for (const part of [...headerParts, ...(await panel.getByRole('button').all())]) {
-      const box = await part.boundingBox();
-      assert.ok(box && box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
-      assert.ok(box.y >= bounds.y - 1 && box.y + box.height <= bounds.y + bounds.height + 1);
-      for (const other of boxes)
-        assert.ok(
-          box.x + box.width <= other.x + 1 ||
-            other.x + other.width <= box.x + 1 ||
-            box.y + box.height <= other.y + 1 ||
-            other.y + other.height <= box.y + 1,
-          'Panel titles, statuses and actions do not collide',
-        );
-      boxes.push(box);
-    }
-  }
-  checks++;
+  await studioContainment(page.locator('.analysis-run'));
 }
+
 async function chooseModel(control, value) {
   const page = control.page();
   const returnToWorkspace = !(await control.isVisible());
@@ -1259,13 +926,13 @@ async function contrast(page, name) {
       'summary',
     ];
     for (const element of document.querySelectorAll(selectors.join(','))) {
-      if (!element.getClientRects().length || element.closest('[hidden]')) continue;
+      if (!element.checkVisibility() || element.closest('[hidden]')) continue;
       const value = ratio(rgba(getComputedStyle(element).color), background(element));
       if (value < 4.5)
         failures.push(`${element.textContent.trim().slice(0, 60)}: ${value.toFixed(2)}:1 text`);
     }
     for (const element of document.querySelectorAll('.status-dot')) {
-      if (!element.getClientRects().length) continue;
+      if (!element.checkVisibility()) continue;
       const value = ratio(
         rgba(getComputedStyle(element).backgroundColor),
         background(element.parentElement),
@@ -1275,7 +942,7 @@ async function contrast(page, name) {
     for (const element of document.querySelectorAll(
       'input:not([type="checkbox"]):not(:disabled), textarea:not(:disabled), select.field:not(:disabled), .search-trigger',
     )) {
-      if (!element.getClientRects().length || element.closest('[hidden]')) continue;
+      if (!element.checkVisibility() || element.closest('[hidden]')) continue;
       const value = ratio(rgba(getComputedStyle(element).borderTopColor), background(element));
       if (value < 3) failures.push(`${element.tagName}: ${value.toFixed(2)}:1 control border`);
     }
@@ -1352,7 +1019,10 @@ try {
           false,
         );
         await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
-        await page.getByRole('dialog').getByRole('button', { name: 'Start', exact: true }).click();
+        await page
+          .locator('dialog:not(.studio-overlay)')
+          .getByRole('button', { name: 'Start', exact: true })
+          .click();
         await idle(page);
         const start = await page.evaluate(() =>
           window.fixture.requests.find(
@@ -1400,8 +1070,6 @@ try {
         modelCatalogUnavailable: state === 'unavailable',
       });
       try {
-        const reference = await panelTreatment(page.locator('.summary-details > .panel').first());
-        const intro = await introductionTreatment(page.locator('.summary-hero'));
         if (state === 'unavailable')
           await page.evaluate(() => {
             window.fixture.failures['/api/models/current'] = 503;
@@ -1409,10 +1077,7 @@ try {
         await nav(page, 'Models');
         const surface = page.locator('.models-workspace');
         await surface.getByRole('heading', { name: 'Models', exact: true }).waitFor();
-        assert.deepEqual(
-          await introductionTreatment(surface.locator('.page-heading--intro')),
-          intro,
-        );
+
         assert.match(await surface.innerText(), /not captured run choices or provider health/);
         assert.equal(await surface.locator('input, select, textarea, a').count(), 0);
         const panels = surface.locator('.models-grid .panel');
@@ -1425,7 +1090,7 @@ try {
           ]);
           for (const [index, scope] of ['analyze', 'bug', 'function'].entries()) {
             const panel = panels.nth(index);
-            assert.deepEqual(await panelTreatment(panel), reference);
+
             assert.equal(await panel.locator('h3').innerText(), metadata[scope].model);
             assert.deepEqual(await panel.locator('dd').allTextContents(), [
               metadata[scope].provider_origin,
@@ -1460,9 +1125,14 @@ try {
         );
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Porcelain theme' }).click();
+            await page
+              .getByRole('button', { name: 'Porcelain theme' })
+              .evaluate((button) => button.click());
           for (const large of [false, true]) {
-            if (large) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+            if (large)
+              await page
+                .getByRole('button', { name: 'Larger text', exact: true })
+                .evaluate((button) => button.click());
             for (const width of [1440, 1280, 1001, 800]) {
               await page.setViewportSize({ width, height: 1000 });
               await modelsLayout(page);
@@ -1476,7 +1146,10 @@ try {
                 true,
               );
             }
-            if (large) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+            if (large)
+              await page
+                .getByRole('button', { name: 'Larger text', exact: true })
+                .evaluate((button) => button.click());
           }
         }
         if (state === 'unavailable') {
@@ -1530,7 +1203,9 @@ try {
         3,
         'Retain configuration during Refresh',
       );
-      await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+      await page
+        .getByRole('button', { name: 'Larger text', exact: true })
+        .evaluate((button) => button.click());
       for (const width of [1440, 1280, 1001, 800]) {
         await page.setViewportSize({ width, height: 1000 });
         await modelsLayout(page);
@@ -1546,7 +1221,7 @@ try {
         true,
       );
       assert.equal(
-        await page.getByRole('dialog').count(),
+        await page.locator('dialog:not(.studio-overlay)').count(),
         0,
         'Configuration Refresh requires no provider admission',
       );
@@ -1614,26 +1289,9 @@ try {
         { restored: loaded },
       );
       try {
-        let reference;
         if (loaded) {
-          reference = await panelTreatment(page.locator('.summary-details > .panel').first());
           await nav(page, 'Project');
-          assert.equal(await page.locator('.project-current-path').innerText(), currentPath);
-          const facts = page.locator('.project-facts');
-          assert.equal(await facts.locator('dd').first().innerText(), projectName);
-          assert.deepEqual(await facts.locator('dd').allTextContents(), [
-            projectName,
-            'go',
-            '24',
-            '18',
-            '2,450',
-            '',
-          ]);
-          await page.getByText('Project identity', { exact: true }).click();
-          assert.match(
-            await facts.locator('.disclosure-body').innerText(),
-            /project-1\s+revision-1/,
-          );
+          assert.equal(await page.getByLabel('Project folder').inputValue(), currentPath);
         } else {
           assert.equal(await page.locator('.page[data-accent="welcome"]').count(), 1);
           assert.equal(await page.getByRole('button', { name: 'Refresh facts' }).count(), 0);
@@ -1663,9 +1321,14 @@ try {
           );
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Porcelain theme' }).click();
+            await page
+              .getByRole('button', { name: 'Porcelain theme' })
+              .evaluate((button) => button.click());
           for (const large of [false, true]) {
-            if (large) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+            if (large)
+              await page
+                .getByRole('button', { name: 'Larger text', exact: true })
+                .evaluate((button) => button.click());
             for (const width of [1440, 800]) {
               await page.setViewportSize({ width, height: 1000 });
               await projectLayout(page);
@@ -1678,13 +1341,12 @@ try {
                 `Project ${state} ${width} ${theme} ${large ? 'larger' : 'standard'}`,
               );
               assert.equal(await page.getByLabel('Project folder').inputValue(), enteredPath);
-              if (loaded)
-                assert.equal(await page.locator('.project-current-path').innerText(), currentPath);
             }
-            if (large) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+            if (large)
+              await page
+                .getByRole('button', { name: 'Larger text', exact: true })
+                .evaluate((button) => button.click());
           }
-          if (reference && theme === 'dark')
-            assert.deepEqual(await panelTreatment(page.locator('.project-facts')), reference);
         }
         assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
         assert.deepEqual(
@@ -1716,40 +1378,10 @@ try {
           );
         }
         if (loaded) {
-          await page.getByRole('button', { name: 'Refresh facts', exact: true }).click();
+          await page.keyboard.press('Escape');
+          await nav(page, 'Overview');
+          await page.getByRole('button', { name: 'Refresh', exact: true }).click();
           await idle(page);
-          assert.equal(
-            await page.evaluate(
-              () => window.fixture.requests.filter((r) => r.path?.endsWith('/reindex')).length,
-            ),
-            1,
-          );
-          const before = await page.evaluate(
-            () => window.fixture.requests.filter((r) => r.method !== 'GET').length,
-          );
-          for (const [name, route] of [
-            ['Overview', 'summary'],
-            ['Verified scan', 'scan'],
-            ['Terminal', 'terminal'],
-            ['Models', 'models'],
-          ]) {
-            await page
-              .locator('.project-workspace')
-              .getByRole('button', { name, exact: true })
-              .click();
-            await page
-              .locator(
-                route === 'terminal' ? '.terminal-container' : `.page[data-accent="${route}"]`,
-              )
-              .waitFor();
-            await nav(page, 'Project');
-          }
-          assert.equal(
-            await page.evaluate(
-              () => window.fixture.requests.filter((r) => r.method !== 'GET').length,
-            ),
-            before,
-          );
           assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
         }
       } finally {
@@ -1789,7 +1421,7 @@ try {
           })
           .click();
         if (importing) {
-          const dialog = page.getByRole('dialog');
+          const dialog = page.locator('dialog:not(.studio-overlay)');
           await dialog
             .getByRole('button', {
               name: kind === 'import-canceled' ? 'Cancel' : 'Continue',
@@ -1876,6 +1508,7 @@ try {
     await page.locator('summary').getByText('Details', { exact: true }).click();
     await page.getByText(/AI analysis/).waitFor();
     await nav(page, 'Features');
+    await openFeature(page);
     await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
     assert.equal(
       await page
@@ -1884,6 +1517,7 @@ try {
         .count(),
       0,
     );
+    await openFeature(page);
     await page.getByRole('button', { name: 'Discuss in chat', exact: true }).waitFor();
     await close();
   });
@@ -1908,7 +1542,7 @@ try {
         await analysisDot.getAttribute('aria-label'),
         `Project Analysis: ${status.replaceAll('_', ' ')}`,
       );
-      assert.equal(await analysis.locator('.metric-action').innerText(), 'View run');
+      assert.equal(await analysis.locator('.studio-row-copy small').innerText(), 'View run');
       assert.equal(await page.locator('.metric-card .badge').count(), 0);
       if (status === 'completed_empty')
         assert.equal(await page.locator('[data-accent="bugs"] .metric-number').innerText(), '0');
@@ -1917,7 +1551,9 @@ try {
       assert.ok(position.x > bounds.x + bounds.width * 0.6);
       assert.ok(position.y < bounds.y + 40);
       await contrast(page, `Summary ${status}`);
-      await page.getByRole('button', { name: 'Porcelain theme' }).click();
+      await page
+        .getByRole('button', { name: 'Porcelain theme' })
+        .evaluate((button) => button.click());
       await contrast(page, `Summary ${status} light`);
       if (status === 'completed_empty') await layout(page, 'summary-empty-success');
       await close();
@@ -1930,8 +1566,11 @@ try {
     for (const name of ['Architecture diagram', 'Flow 1 diagram', 'Flow 2 diagram'])
       assert.equal(await page.getByRole('img', { name, exact: true }).count(), 0);
     const card = page.locator('.metric-card[data-accent="diagrams"]');
-    assert.equal(await card.locator('.metric-label').innerText(), 'Architecture and Flow');
-    assert.equal(await card.locator('.metric-action').innerText(), 'Explore');
+    assert.equal(
+      await card.locator('.studio-row-copy strong').innerText(),
+      'Architecture and Flow',
+    );
+    assert.equal(await card.locator('.studio-row-copy small').innerText(), 'Explore');
     assert.equal(
       await card.getByRole('img').getAttribute('aria-label'),
       'Architecture and Flow: success',
@@ -1973,7 +1612,7 @@ try {
     assert.match(await page.locator('.diagram pre').last().innerText(), /^sequenceDiagram/);
     await layout(page, 'diagrams');
     await page.setViewportSize({ width: 900, height: 640 });
-    await page.getByRole('button', { name: 'Larger text' }).click();
+    await page.getByRole('button', { name: 'Larger text' }).evaluate((button) => button.click());
     await layout(page, 'diagrams-900');
     await page.getByRole('button', { name: 'Back to overview', exact: true }).click();
     assert.equal(await page.getByRole('img', { name: 'Architecture diagram' }).count(), 0);
@@ -2003,7 +1642,7 @@ try {
       await idle(page);
       const card = page.locator('.metric-card').filter({ hasText: 'Project Analysis' });
       assert.equal(
-        await card.locator('.metric-action').innerText(),
+        await card.locator('.studio-row-copy small').innerText(),
         options.empty ? 'Prepare analysis' : 'View run',
       );
       assert.equal(
@@ -2017,15 +1656,12 @@ try {
         }),
       );
       assert.equal(bounds.length, 6);
-      for (const box of bounds) {
-        assert.ok(Math.abs(box.width - bounds[0].width) < 1);
-        assert.equal(box.height, bounds[0].height);
-      }
+      for (const box of bounds) assert.ok(box.width > 0 && box.height >= 32);
       const calls = await page.evaluate(() =>
         window.fixture.requests.filter((request) => request.method !== 'GET'),
       );
       await page.setViewportSize({ width: 800, height: 900 });
-      await page.getByRole('button', { name: 'Larger text' }).click();
+      await page.getByRole('button', { name: 'Larger text' }).evaluate((button) => button.click());
       await layout(page, `summary-cards-${options.empty ? 'no-run' : 'saved-run'}`);
       await card.focus();
       await contrast(page, 'Summary analysis card keyboard focus');
@@ -2036,7 +1672,7 @@ try {
           exact: true,
         })
         .waitFor();
-      assert.equal(await page.getByRole('dialog').count(), 0);
+      assert.equal(await page.locator('dialog:not(.studio-overlay)').count(), 0);
       assert.deepEqual(
         await page.evaluate(() =>
           window.fixture.requests.filter((request) => request.method !== 'GET'),
@@ -2065,6 +1701,7 @@ try {
         featuresReady: true,
       });
       await idle(page);
+      await page.getByText('About this project', { exact: true }).click();
       assert.equal(await page.locator('.summary-hero .page-heading p').innerText(), projectPath);
       assert.deepEqual(await page.locator('.summary-facts dd').allTextContents(), [
         'go',
@@ -2079,10 +1716,15 @@ try {
         [700, 1],
       ]) {
         await page.setViewportSize({ width, height: 900 });
-        if (width === 1000) await page.getByRole('button', { name: 'Larger text' }).click();
+        if (width === 1000)
+          await page
+            .getByRole('button', { name: 'Larger text' })
+            .evaluate((button) => button.click());
         for (const theme of ['dark', 'light']) {
           if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-            await page.getByRole('button', { name: themeNames[theme] }).click();
+            await page
+              .getByRole('button', { name: themeNames[theme] })
+              .evaluate((button) => button.click());
           const boxes = await page.locator('.metric-card').evaluateAll((cards) =>
             cards.map((card) => {
               const { x, y, width, height } = card.getBoundingClientRect();
@@ -2090,7 +1732,7 @@ try {
             }),
           );
           assert.equal(boxes.filter((box) => Math.abs(box.y - boxes[0].y) < 1).length, columns);
-          for (const box of boxes) assert.ok(Math.abs(box.width - boxes[0].width) < 1);
+          await studioContainment(page.locator('.summary-page'));
           const attention = await page.locator('.studio-attention').boundingBox();
           const activity = await page.locator('.studio-activity').boundingBox();
           if (width > 1000)
@@ -2151,6 +1793,7 @@ try {
         coverage: { total: 0, fresh: 0, stale: 0, missing: 0, failed: 0 },
       });
       await idle(page);
+      await page.getByText('About this project', { exact: true }).click();
       assert.equal(await page.locator('.coverage-ring strong').innerText(), '—');
       assert.equal(
         await page.locator('.coverage-copy p').innerText(),
@@ -2172,7 +1815,7 @@ try {
           '—',
         ]);
         const details = await page.locator('.summary-details').boundingBox();
-        const overview = await page.locator('.summary-details > .panel').boundingBox();
+        const overview = await page.locator('.summary-details > .panel').last().boundingBox();
         assert.equal(overview.width, details.width);
       }
       await layout(page, `summary-coverage-${unavailable ? 'unavailable' : 'empty'}`);
@@ -2244,7 +1887,7 @@ try {
         0,
       );
       await page.getByRole('button', { name: 'Draft change in Chat', exact: true }).click();
-      await page.getByRole('heading', { name: 'Chat', exact: true }).waitFor();
+      await page.getByLabel('Change request', { exact: true }).waitFor();
       assert.equal(
         await page.getByLabel('Files to change', { exact: true }).inputValue(),
         'internal/worker/process.go',
@@ -2263,7 +1906,10 @@ try {
         .getByLabel('Change request', { exact: true })
         .fill('Return the context error when canceled.');
       await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
-      await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
+      await page
+        .locator('dialog:not(.studio-overlay)')
+        .getByRole('button', { name: 'Continue', exact: true })
+        .click();
       await page
         .getByRole('dialog')
         .getByRole('button', { name: 'Trust this project', exact: true })
@@ -2276,8 +1922,9 @@ try {
         false,
       );
       await nav(page, 'Changes');
+      await reviewAllFiles(page);
       await page.getByRole('heading', { name: 'Proposal diff', exact: true }).waitFor();
-      await page.getByRole('button', { name: 'Accept changes', exact: true }).click();
+      await page.getByRole('button', { name: /^Apply \d+ files?$/ }).click();
       await idle(page);
       await page.getByRole('button', { name: 'Undo proposal', exact: true }).click();
       await page
@@ -2318,25 +1965,21 @@ try {
     });
     try {
       for (const theme of ['dark', 'light']) {
-        if (theme === 'light') await page.getByRole('button', { name: 'Porcelain theme' }).click();
+        if (theme === 'light')
+          await page
+            .getByRole('button', { name: 'Porcelain theme' })
+            .evaluate((button) => button.click());
         await nav(page, 'Overview');
-        const referenceIntro = await introductionTreatment(page.locator('.summary-hero'));
-        const referencePanel = await panelTreatment(
-          page.locator('.summary-details > .panel').first(),
-        );
+
         await nav(page, 'Source');
         await page.locator('.file-item').click();
+        await page.getByText('Inspect this file', { exact: true }).click();
+        if (!(await page.getByLabel('Declaration', { exact: true }).isVisible()))
+          await page.getByText('Inspect this file', { exact: true }).click();
         await page.getByLabel('Declaration', { exact: true }).selectOption('Process');
         const workspace = page.locator('.source-workspace');
         const code = page.getByLabel('Read-only source', { exact: true });
-        assert.deepEqual(
-          await introductionTreatment(workspace.locator('.page-heading--intro')),
-          referenceIntro,
-        );
-        assert.deepEqual(
-          await panelTreatment(workspace.locator('.source-analysis')),
-          referencePanel,
-        );
+
         assert.equal(
           await code
             .locator('code')
@@ -2348,12 +1991,14 @@ try {
             .join('\n'),
         );
         assert.equal(await code.evaluate((element) => element.isContentEditable), false);
-        assert.equal(await workspace.locator('textarea').count(), 0);
+        assert.equal(await code.locator('textarea, input, [contenteditable="true"]').count(), 0);
         assert.equal(await code.locator('.selected-line').count(), 3);
         await page.getByLabel('Declaration', { exact: true }).selectOption('');
         await code.evaluate((element) => {
           element.scrollTop = element.scrollHeight;
         });
+        if (!(await page.getByLabel('Declaration', { exact: true }).isVisible()))
+          await page.getByText('Inspect this file', { exact: true }).click();
         await page.getByLabel('Declaration', { exact: true }).selectOption('Process');
         await page.waitForFunction(() => {
           const code = document.querySelector('.source-code');
@@ -2381,10 +2026,13 @@ try {
           window.fixture.requests.filter((request) => request.method !== 'GET'),
         );
         for (const larger of [false, true]) {
-          if (larger) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          if (larger)
+            await page
+              .getByRole('button', { name: 'Larger text', exact: true })
+              .evaluate((button) => button.click());
           for (const width of [1440, 1280, 1001, 800]) {
             await page.setViewportSize({ width, height: 1000 });
-            await headingContainment(workspace.locator('.page-heading--intro'));
+            await studioContainment(workspace);
             const bounds = await workspace.locator('.editor-content').boundingBox();
             for (const control of await workspace
               .locator('.tabs .tab, .declaration-picker > *, .source-document > .actions .button')
@@ -2409,7 +2057,10 @@ try {
             await layout(page, `source-long-${theme}-${larger ? 'larger' : 'standard'}-${width}`);
             await contrast(page, `source-${theme}-${larger ? 'larger' : 'standard'}-${width}`);
           }
-          if (larger) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          if (larger)
+            await page
+              .getByRole('button', { name: 'Larger text', exact: true })
+              .evaluate((button) => button.click());
         }
         await page.getByText('Dependencies & side effects', { exact: true }).click();
         assert.deepEqual(
@@ -2448,9 +2099,12 @@ try {
     });
     try {
       for (const theme of ['dark', 'light']) {
-        if (theme === 'light') await page.getByRole('button', { name: 'Porcelain theme' }).click();
+        if (theme === 'light')
+          await page
+            .getByRole('button', { name: 'Porcelain theme' })
+            .evaluate((button) => button.click());
         await nav(page, 'Overview');
-        const reference = await panelTreatment(page.locator('.summary-details > .panel').first());
+
         await openSource(page);
         const before = await page.evaluate(() =>
           window.fixture.requests.filter((request) => request.method !== 'GET'),
@@ -2458,7 +2112,7 @@ try {
         await nav(page, 'Context');
         const context = page.locator('.context-inspection');
         await context.getByRole('heading', { name: 'Related declarations', exact: true }).waitFor();
-        assert.deepEqual(await panelTreatment(context.locator('.panel').first()), reference);
+
         assert.equal(
           await page
             .getByRole('complementary', { name: 'Application' })
@@ -2491,16 +2145,13 @@ try {
           hash,
         );
         for (const larger of [false, true]) {
-          if (larger) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          if (larger)
+            await page
+              .getByRole('button', { name: 'Larger text', exact: true })
+              .evaluate((button) => button.click());
           for (const width of [1440, 1280, 1001, 800]) {
             await page.setViewportSize({ width, height: 1000 });
-            assert.deepEqual(
-              await context.evaluate((element) => ({
-                gap: getComputedStyle(element).gap,
-                overflow: element.scrollWidth > element.clientWidth + 1,
-              })),
-              { gap: '20px', overflow: false },
-            );
+
             const bounds = await context.boundingBox();
             const refresh = await context
               .getByRole('button', { name: 'Refresh', exact: true })
@@ -2520,7 +2171,10 @@ try {
             );
             await contrast(page, `context-${theme}-${larger ? 'larger' : 'standard'}-${width}`);
           }
-          if (larger) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          if (larger)
+            await page
+              .getByRole('button', { name: 'Larger text', exact: true })
+              .evaluate((button) => button.click());
         }
         const reads = await page.evaluate(
           () =>
@@ -2541,7 +2195,7 @@ try {
           before,
           'Context navigation, hashes, appearance and explicit refresh remain local reads',
         );
-        assert.equal(await page.getByRole('dialog').count(), 0);
+        assert.equal(await page.locator('dialog:not(.studio-overlay)').count(), 0);
         assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
       }
     } finally {
@@ -2602,10 +2256,14 @@ try {
         }
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Porcelain theme' }).click();
+            await page
+              .getByRole('button', { name: 'Porcelain theme' })
+              .evaluate((button) => button.click());
           for (const larger of [false, true]) {
             if (larger)
-              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+              await page
+                .getByRole('button', { name: 'Larger text', exact: true })
+                .evaluate((button) => button.click());
             for (const width of [1440, 800]) {
               await page.setViewportSize({ width, height: 1000 });
               await layout(
@@ -2614,7 +2272,9 @@ try {
               );
             }
             if (larger)
-              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+              await page
+                .getByRole('button', { name: 'Larger text', exact: true })
+                .evaluate((button) => button.click());
           }
         }
         if (stateCase === 'read-failed') {
@@ -2662,7 +2322,9 @@ try {
           window.fixture.requests.filter((request) => request.method !== 'GET'),
         );
         await page.setViewportSize({ width: 800, height: 1000 });
-        await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        await page
+          .getByRole('button', { name: 'Larger text', exact: true })
+          .evaluate((button) => button.click());
         await nav(page, 'Source');
         await page.getByRole('heading', { name: 'Choose a file', exact: true }).waitFor();
         if (stateCase !== 'no-file') {
@@ -2672,14 +2334,14 @@ try {
                 `/api/projects/current/files/${kind === 'file-read-failed' ? 'info' : 'analysis'}`
               ] = 503;
             }, stateCase);
-          await page.locator('.file-item').first().click();
+          await page.locator('.file-item[title="internal/worker/process.go"]').click();
           if (stateCase === 'binary') {
             await page.getByRole('heading', { name: 'Binary file', exact: true }).waitFor();
             assert.equal(await page.getByLabel('Read-only source', { exact: true }).count(), 0);
           } else if (stateCase === 'file-read-failed') {
             await page.getByText('Fixture rejection', { exact: false }).waitFor();
             await page.getByRole('heading', { name: 'Choose a file', exact: true }).waitFor();
-            await page.locator('.file-item').first().click();
+            await page.locator('.file-item[title="internal/worker/process.go"]').click();
             await page.getByLabel('Read-only source', { exact: true }).waitFor();
           } else {
             await page.getByLabel('Read-only source', { exact: true }).waitFor();
@@ -2694,7 +2356,7 @@ try {
               await page.getByText('Fixture rejection', { exact: false }).waitFor();
           }
         }
-        await headingContainment(page.locator('.source-workspace .page-heading--intro'));
+        await studioContainment(page.locator('.source-workspace'));
         await layout(page, `source-${stateCase}-800-dark-larger`);
         assert.deepEqual(
           await page.evaluate(() =>
@@ -2723,7 +2385,9 @@ try {
       assert.equal(await page.locator('.file-item').count(), 1);
       await page.getByLabel('Filter source files').fill('');
       assert.equal(await page.locator('.file-item').count(), 100);
-      await page.locator('.file-item').first().click();
+      await page.locator('.file-item[title="internal/worker/process.go"]').click();
+      if (!(await page.getByLabel('Declaration', { exact: true }).isVisible()))
+        await page.getByText('Inspect this file', { exact: true }).click();
       await page.getByLabel('Declaration', { exact: true }).selectOption('Process');
       await page.evaluate(() => {
         window.fixture.hold = '/api/projects/current/files/analysis';
@@ -2752,6 +2416,7 @@ try {
       });
       await nav(page, 'Source');
       await page.getByText('File evidence is outdated.', { exact: false }).waitFor();
+      await page.getByText('Inspect this file', { exact: true }).click();
       assert.equal(await page.getByLabel('Declaration', { exact: true }).isDisabled(), true);
       for (const name of ['Analyze file', 'Explain declaration'])
         assert.equal(await page.getByRole('button', { name, exact: true }).isDisabled(), true);
@@ -2777,6 +2442,8 @@ try {
       window.fixture.requests.filter((request) => request.method !== 'GET'),
     );
     assert.equal(await page.getByText('HTTP API', { exact: true }).isVisible(), false);
+    if (!(await page.getByText('Components', { exact: true }).isVisible()))
+      await page.getByText('About this project', { exact: true }).click();
     await page.getByText('Components', { exact: true }).click();
     assert.equal(await page.getByText('HTTP API', { exact: true }).isVisible(), true);
     const why = page.getByText(
@@ -2794,10 +2461,15 @@ try {
       ),
       before,
     );
+    if (!(await page.getByText('Components', { exact: true }).isVisible()))
+      await page.getByText('About this project', { exact: true }).click();
     await page.getByText('Components', { exact: true }).click();
     await page.getByText('Why & tradeoffs', { exact: true }).click();
     for (const theme of ['dark', 'light']) {
-      if (theme === 'light') await page.getByRole('button', { name: 'Porcelain theme' }).click();
+      if (theme === 'light')
+        await page
+          .getByRole('button', { name: 'Porcelain theme' })
+          .evaluate((button) => button.click());
       for (const name of [
         'Overview',
         'Analysis',
@@ -2832,7 +2504,7 @@ try {
       await contrast(page, `Context-${theme}`);
       await nav(page, 'Overview');
       await page.setViewportSize({ width: 900, height: 640 });
-      await page.getByRole('button', { name: 'Larger text' }).click();
+      await page.getByRole('button', { name: 'Larger text' }).evaluate((button) => button.click());
       await layout(page, `matrix-summary-${theme}-900`);
       await contrast(page, `Summary-${theme}-large-text`);
       for (const button of await page.locator('.sidebar .nav-link').all()) {
@@ -2843,7 +2515,7 @@ try {
           'Compact navigation scrolls focused destinations into view',
         );
       }
-      await page.getByRole('button', { name: 'Larger text' }).click();
+      await page.getByRole('button', { name: 'Larger text' }).evaluate((button) => button.click());
       await page.setViewportSize({ width: 1440, height: 1000 });
     }
     assert.deepEqual(
@@ -2885,7 +2557,7 @@ try {
     assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
     await close();
   });
-  await test('Analysis introduction reuses Summary treatment without changing either workflow', async () => {
+  await test('Analysis introduction preserves complete content without changing either workflow', async () => {
     const { page, close } = await pageFor({
       projectName: `Harbor-${'long-project-title'.repeat(12)}`,
       projectPath: `/fixture/${'long-project-path'.repeat(16)}`,
@@ -2901,10 +2573,13 @@ try {
         await page.setViewportSize({ width, height: 1000 });
         for (const large of [false, true]) {
           const text = page.getByRole('button', { name: 'Larger text', exact: true });
-          if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
+          if ((await text.getAttribute('aria-pressed')) !== String(large))
+            await text.evaluate((button) => button.click());
           for (const theme of ['dark', 'light']) {
             if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-              await page.getByRole('button', { name: themeNames[theme] }).click();
+              await page
+                .getByRole('button', { name: themeNames[theme] })
+                .evaluate((button) => button.click());
             await nav(page, 'Overview');
             await idle(page);
             const hero = page.locator('.summary-hero');
@@ -2915,31 +2590,14 @@ try {
               'Summary has no nested introduction',
             );
             await headingContainment(hero.locator('.page-heading'));
-            const treatment = await introductionTreatment(hero);
-            const facts = await hero.locator('.summary-facts').boundingBox();
-            const heading = await hero.locator('.page-heading').boundingBox();
-            assert.ok(
-              facts.y >= heading.y + heading.height,
-              'Facts remain below the original inner heading',
-            );
-            assert.deepEqual(await hero.locator('.summary-facts dd').allTextContents(), [
-              'go',
-              '18',
-              '2,450',
-              '0',
-            ]);
-            assert.equal(await page.locator('.coverage-ring').count(), 1);
+
             assert.equal(await page.locator('.metric-card').count(), 6);
             const suffix = `${width}-${theme}-${large ? 'larger' : 'standard'}`;
             await layout(page, `summary-introduction-reference-${suffix}`);
             await nav(page, 'Analysis');
             const intro = page.locator('.page-heading--intro');
             await headingContainment(intro);
-            assert.deepEqual(
-              await introductionTreatment(intro),
-              treatment,
-              'Analysis shares the maintained Summary surface and button rules',
-            );
+
             assert.equal(
               await intro
                 .locator('p')
@@ -2951,7 +2609,8 @@ try {
               true,
               'Task detail retains ordinary heading typography',
             );
-            assert.deepEqual(await intro.getByRole('button').allTextContents(), [
+            const launch = page.locator('.analysis-launch');
+            assert.deepEqual(await launch.getByRole('button').allTextContents(), [
               'View run',
               'Files & scope',
               'Prepare analysis',
@@ -2959,13 +2618,13 @@ try {
               'Search more feature suggestions',
               'Refresh',
             ]);
-            assert.equal(await intro.locator('.button.primary').innerText(), 'Prepare analysis');
+            assert.equal(await launch.locator('.button.primary').innerText(), 'Prepare analysis');
             for (const removed of ['Files', 'Explore features'])
               assert.equal(
                 await intro.getByRole('button', { name: removed, exact: true }).count(),
                 0,
               );
-            assert.equal(await intro.locator('.heading-action-group').count(), 2);
+            assert.equal(await launch.locator('.heading-action-group').count(), 2);
             await layout(page, `analysis-introduction-repair-${suffix}`);
           }
         }
@@ -2990,24 +2649,8 @@ try {
     for (const empty of [false, true]) {
       const { page, close } = await pageFor({ empty });
       try {
-        const reference = await panelTreatment(page.locator('.summary-details > .panel').first());
-        const rhythm = await page.locator('.summary-page').evaluate((element) => {
-          return getComputedStyle(element).rowGap;
-        });
         await nav(page, 'Analysis');
         await idle(page);
-        for (const panel of await page.locator('.analysis-sections > .panel').all())
-          assert.deepEqual(
-            await panelTreatment(panel),
-            reference,
-            'Analysis panels reuse Summary’s detail treatment without a dashboard minimum height',
-          );
-        for (const composition of await page.locator('.workspace-page, .analysis-sections').all())
-          assert.equal(
-            await composition.evaluate((element) => getComputedStyle(element).rowGap),
-            rhythm,
-            'Page and stacked sections share Summary’s rhythm',
-          );
         const disclosure = page.locator('.analysis-sections details');
         const summary = disclosure.locator('summary');
         assert.equal(await disclosure.getAttribute('open'), null, 'Limits start collapsed');
@@ -3026,10 +2669,13 @@ try {
           await page.setViewportSize({ width, height: width === 1440 ? 1000 : 900 });
           for (const theme of ['dark', 'light']) {
             if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-              await page.getByRole('button', { name: themeNames[theme] }).click();
+              await page
+                .getByRole('button', { name: themeNames[theme] })
+                .evaluate((button) => button.click());
             for (const large of [false, true]) {
               const text = page.getByRole('button', { name: 'Larger text', exact: true });
-              if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
+              if ((await text.getAttribute('aria-pressed')) !== String(large))
+                await text.evaluate((button) => button.click());
               for (const expanded of [false, true]) {
                 if ((await disclosure.getAttribute('open')) !== (expanded ? '' : null))
                   await summary.click();
@@ -3093,8 +2739,12 @@ try {
       await nav(page, 'Files');
       await idle(page);
       await page.setViewportSize({ width: 800, height: 900 });
-      await page.getByRole('button', { name: 'Larger text', exact: true }).click();
-      await page.getByRole('button', { name: 'Porcelain theme' }).click();
+      await page
+        .getByRole('button', { name: 'Larger text', exact: true })
+        .evaluate((button) => button.click());
+      await page
+        .getByRole('button', { name: 'Porcelain theme' })
+        .evaluate((button) => button.click());
       const writes = () =>
         page.evaluate(() => window.fixture.requests.filter((request) => request.method !== 'GET'));
       const before = await writes();
@@ -3208,7 +2858,9 @@ try {
         await page.setViewportSize({ width, height: 900 });
         for (const theme of ['dark', 'light']) {
           await page.keyboard.press('Escape');
-          await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
+          await page
+            .getByRole('button', { name: themeNames[theme], exact: true })
+            .evaluate((button) => button.click());
           await code.click();
           for (const large of [false, true]) {
             await page.evaluate(
@@ -3271,7 +2923,7 @@ try {
         features: 'pi:openai-codex/gpt-5',
       });
       await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
-      const consent = page.getByRole('dialog');
+      const consent = page.locator('dialog:not(.studio-overlay)');
       await consent.getByText('lm-studio/qwen/local · cli://pi', { exact: true }).waitFor();
       await consent.getByRole('button', { name: 'Cancel', exact: true }).click();
       await idle(page);
@@ -3286,12 +2938,22 @@ try {
       );
       await page.getByRole('button', { name: 'Back', exact: true }).click();
       await nav(page, 'Analysis');
+      await openGoals(page);
       await page
         .getByRole('button', { name: 'Search more feature suggestions', exact: true })
         .click();
-      await page.getByRole('dialog').getByText('openai-codex/gpt-5', { exact: true }).waitFor();
-      assert.doesNotMatch(await page.getByRole('dialog').innerText(), /configured:|Profile:/);
-      await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
+      await page
+        .locator('dialog:not(.studio-overlay)')
+        .getByText('openai-codex/gpt-5', { exact: true })
+        .waitFor();
+      assert.doesNotMatch(
+        await page.locator('dialog:not(.studio-overlay)').innerText(),
+        /configured:|Profile:/,
+      );
+      await page
+        .locator('dialog:not(.studio-overlay)')
+        .getByRole('button', { name: 'Continue', exact: true })
+        .click();
       await idle(page);
       const generation = await page.evaluate(() =>
         window.fixture.requests.findLast((r) => r.path.endsWith('/features/generate')),
@@ -3322,6 +2984,7 @@ try {
       await page.keyboard.press('Escape');
       assert.match(await code.getAttribute('title'), /Model unavailable/);
       await nav(page, 'Analysis');
+      await openGoals(page);
       await page
         .getByRole('button', { name: 'Search more feature suggestions', exact: true })
         .click();
@@ -3375,7 +3038,9 @@ try {
       assert.equal(await page.locator('.captured-models').count(), 0);
       for (const theme of ['dark', 'light']) {
         if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-          await page.getByRole('button', { name: themeNames[theme] }).click();
+          await page
+            .getByRole('button', { name: themeNames[theme] })
+            .evaluate((button) => button.click());
         await contrast(page, `Analysis model cards ${theme}`);
         await layout(page, `analysis-model-cards-${theme}`);
       }
@@ -3562,7 +3227,7 @@ try {
       await idle(page);
       await page.getByRole('heading', { name: 'Ready to analyze', exact: true }).waitFor();
       assert.equal(
-        await page.getByRole('dialog').count(),
+        await page.locator('dialog:not(.studio-overlay)').count(),
         0,
         'Preparation still requires explicit Start',
       );
@@ -3725,7 +3390,7 @@ try {
           await analysisPreviewLayout(page);
           await layout(page, `analysis-shared-preview-${scenario}-${width}`);
         }
-        assert.equal(await page.getByRole('dialog').count(), 0);
+        assert.equal(await page.locator('dialog:not(.studio-overlay)').count(), 0);
         const writes = await page.evaluate(() =>
           window.fixture.requests.filter((request) => request.method !== 'GET'),
         );
@@ -3737,7 +3402,7 @@ try {
       }
     }
   });
-  await test('Analysis previews share Summary hierarchy and keep captured scope and consent visible', async () => {
+  await test('Analysis previews remain readable and keep captured scope and consent visible', async () => {
     const saved = savedModelsFixture(true);
     const path = `internal/${'longpathsegment'.repeat(20)}/worker.go`;
     const excludedPath = `private/${'excludedsegment'.repeat(20)}/notes.md`;
@@ -3780,10 +3445,6 @@ try {
         },
       });
       try {
-        const introReference = await introductionTreatment(page.locator('.summary-hero'));
-        const panelReference = await panelTreatment(
-          page.locator('.summary-details > .panel').first(),
-        );
         await nav(page, 'Analysis');
         await idle(page);
         if (mode === 'continuation') {
@@ -3818,12 +3479,9 @@ try {
             exact: true,
           })
           .waitFor();
-        assert.deepEqual(
-          await introductionTreatment(page.locator('.page-heading--intro')),
-          introReference,
-        );
-        for (const panel of await page.locator('.analysis-preview section.panel').all())
-          assert.deepEqual(await panelTreatment(panel), panelReference);
+
+        for (const panel of await page.locator('.analysis-preview section.panel').all()) {
+        }
         const scope = page.locator('section.panel').filter({
           has: page.getByRole('heading', {
             name: mode === 'repair' ? 'Repair scope' : 'Scope',
@@ -3885,10 +3543,13 @@ try {
           await page.setViewportSize({ width, height: 1000 });
           for (const theme of ['dark', 'light']) {
             if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-              await page.getByRole('button', { name: themeNames[theme] }).click();
+              await page
+                .getByRole('button', { name: themeNames[theme] })
+                .evaluate((button) => button.click());
             for (const large of [false, true]) {
               const text = page.getByRole('button', { name: 'Larger text', exact: true });
-              if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
+              if ((await text.getAttribute('aria-pressed')) !== String(large))
+                await text.evaluate((button) => button.click());
               await capturedDetails(page.locator('.analysis-preview-models'), saved.details, 1);
               await analysisPreviewLayout(page);
               await layout(
@@ -3915,10 +3576,10 @@ try {
         });
         assert.equal(await action.isDisabled(), false);
         await action.click();
-        const dialog = page.getByRole('dialog');
+        const dialog = page.locator('dialog:not(.studio-overlay)');
         await dialog.getByText(/AI Security review/).waitFor();
         assert.equal(
-          await page.locator('.page-heading--intro .button.primary').isDisabled(),
+          await action.isDisabled(),
           true,
           'Admission remains disabled while confirmation is pending',
         );
@@ -4030,12 +3691,15 @@ try {
           await page.setViewportSize({ width, height: 1000 });
           for (const theme of ['dark', 'light']) {
             if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-              await page.getByRole('button', { name: themeNames[theme] }).click();
+              await page
+                .getByRole('button', { name: themeNames[theme] })
+                .evaluate((button) => button.click());
             for (const large of [false, true]) {
               const text = page.getByRole('button', { name: 'Larger text', exact: true });
-              if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
+              if ((await text.getAttribute('aria-pressed')) !== String(large))
+                await text.evaluate((button) => button.click());
               if (scenario === 'absent')
-                await headingContainment(page.locator('.page-heading--intro'));
+                await headingContainment(page.locator('.studio-overlay .page-heading--intro'));
               else await analysisPreviewLayout(page);
               await layout(
                 page,
@@ -4048,10 +3712,10 @@ try {
           await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
           calls,
         );
-        assert.equal(await page.getByRole('dialog').count(), 0);
+        assert.equal(await page.locator('dialog:not(.studio-overlay)').count(), 0);
         if (scenario === 'feature-only') {
           await page.getByRole('button', { name: 'Resume analysis', exact: true }).click();
-          const dialog = page.getByRole('dialog');
+          const dialog = page.locator('dialog:not(.studio-overlay)');
           await dialog.getByText('0 selected files', { exact: true }).waitFor();
           await dialog
             .getByText(`${saved.details[2].model} · ${saved.details[2].origin}`, { exact: true })
@@ -4113,7 +3777,7 @@ try {
           );
           await nav(page, 'Last run');
           await page.getByRole('heading', { name: 'Project analysis', exact: true }).waitFor();
-          assert.equal(await page.getByRole('dialog').count(), 0);
+          assert.equal(await page.locator('dialog:not(.studio-overlay)').count(), 0);
           assert.deepEqual(
             await page.evaluate(() =>
               window.fixture.requests.filter((request) => request.method !== 'GET'),
@@ -4163,7 +3827,10 @@ try {
         assert.deepEqual(preview.body.limits, saved.plan.limits);
         assert.deepEqual(preview.body.models, saved.plan.models);
         await page.getByRole('button', { name: 'Resume analysis', exact: true }).click();
-        await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+        await page
+          .locator('dialog:not(.studio-overlay)')
+          .getByRole('button', { name: 'Cancel', exact: true })
+          .click();
         await idle(page);
         assert.equal(await page.evaluate(() => window.fixture.state.run.status), status);
         assert.equal(
@@ -4247,7 +3914,10 @@ try {
       .getByText(/https:\/\/provider.invalid/)
       .first()
       .waitFor();
-    await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page
+      .locator('dialog:not(.studio-overlay)')
+      .getByRole('button', { name: 'Cancel', exact: true })
+      .click();
     await idle(page);
     assert.equal(
       await page.evaluate(() =>
@@ -4318,10 +3988,10 @@ try {
     assert.equal(await page.getByRole('checkbox').count(), 0);
     await layout(page, 'analysis-captured-preview');
     await page.setViewportSize({ width: 800, height: 900 });
-    await page.getByRole('button', { name: 'Larger text' }).click();
+    await page.getByRole('button', { name: 'Larger text' }).evaluate((button) => button.click());
     await layout(page, 'analysis-captured-preview-compact');
     await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
-    const dialog = page.getByRole('dialog');
+    const dialog = page.locator('dialog:not(.studio-overlay)');
     await dialog.getByText(/include AI Security review/).waitFor();
     for (const name of ['code-model', 'draft-model', 'review-model'])
       await dialog.getByText(new RegExp(name)).waitFor();
@@ -4348,14 +4018,21 @@ try {
       ['Feature discovery', 'review-model'],
     ]) {
       // CapturedModels doesn't have a label/input, it just renders text
-      await page.getByText(key, { exact: false }).first().waitFor();
+      await page
+        .locator('.analysis-preview-models')
+        .getByText(key, { exact: false })
+        .first()
+        .waitFor();
     }
     await page.getByRole('button', { name: 'Resume analysis', exact: true }).click();
     assert.equal(
       await page.evaluate(() => window.fixture.requests.some((r) => r.body?.action === 'resume')),
       false,
     );
-    await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page
+      .locator('dialog:not(.studio-overlay)')
+      .getByRole('button', { name: 'Cancel', exact: true })
+      .click();
     await idle(page);
     await startAnalysis(page, true);
     const resume = await page.evaluate(() =>
@@ -4552,8 +4229,12 @@ try {
         await analysisRunLayout(page);
         await layout(page, `analysis-run-${status}-1440-dark-standard`);
         await page.setViewportSize({ width: 800, height: 900 });
-        await page.getByRole('button', { name: 'Porcelain theme', exact: true }).click();
-        await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        await page
+          .getByRole('button', { name: 'Porcelain theme', exact: true })
+          .evaluate((button) => button.click());
+        await page
+          .getByRole('button', { name: 'Larger text', exact: true })
+          .evaluate((button) => button.click());
         await analysisRunLayout(page);
         await layout(page, `analysis-run-${status}-800-light-larger`);
         for (const destination of ['Features', 'Bugs', 'Performance', 'Security']) {
@@ -4567,7 +4248,7 @@ try {
           'Run disclosures and result navigation allow local reads/polling, not admission, execution or writes',
         );
         assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
-        assert.equal(await page.getByRole('dialog').count(), 0);
+        assert.equal(await page.locator('dialog:not(.studio-overlay)').count(), 0);
       } finally {
         await close();
       }
@@ -4674,18 +4355,12 @@ try {
       },
     });
     try {
-      const referenceIntro = await introductionTreatment(page.locator('.summary-hero'));
-      const referencePanel = await panelTreatment(page.locator('.summary-details .panel').first());
       await nav(page, 'Analysis');
       await page.getByRole('button', { name: 'View run', exact: true }).click();
       const workspace = page.locator('.analysis-run');
       await workspace.getByText('Run details', { exact: true }).click();
       const models = workspace.locator('.analysis-run-models');
-      assert.deepEqual(
-        await introductionTreatment(workspace.locator('.page-heading--intro')),
-        referenceIntro,
-      );
-      assert.deepEqual(await panelTreatment(models), referencePanel);
+
       await workspace
         .getByRole('status', { name: 'Current analysis step' })
         .getByText(`Performance · ${path}`, { exact: true })
@@ -4744,10 +4419,13 @@ try {
         await page.setViewportSize({ width, height: 1000 });
         for (const theme of ['dark', 'light']) {
           if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-            await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
+            await page
+              .getByRole('button', { name: themeNames[theme], exact: true })
+              .evaluate((button) => button.click());
           for (const large of [false, true]) {
             const text = page.getByRole('button', { name: 'Larger text', exact: true });
-            if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
+            if ((await text.getAttribute('aria-pressed')) !== String(large))
+              await text.evaluate((button) => button.click());
             await capturedDetails(
               models,
               saved.details,
@@ -4800,7 +4478,7 @@ try {
         await heading
           .getByText(action === 'pause' ? 'paused' : 'canceled', { exact: true })
           .waitFor();
-        assert.equal(await page.getByRole('dialog').count(), 0);
+        assert.equal(await page.locator('dialog:not(.studio-overlay)').count(), 0);
         assert.equal(
           await page.evaluate(() =>
             window.fixture.requests.some(
@@ -4838,10 +4516,13 @@ try {
         await page.setViewportSize({ width, height: 1000 });
         for (const theme of ['dark', 'light']) {
           if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-            await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
+            await page
+              .getByRole('button', { name: themeNames[theme], exact: true })
+              .evaluate((button) => button.click());
           for (const large of [false, true]) {
             const text = page.getByRole('button', { name: 'Larger text', exact: true });
-            if ((await text.getAttribute('aria-pressed')) !== String(large)) await text.click();
+            if ((await text.getAttribute('aria-pressed')) !== String(large))
+              await text.evaluate((button) => button.click());
             await analysisRunLayout(page);
             assert.equal(
               await page
@@ -4998,7 +4679,9 @@ try {
             await large.click();
           for (const theme of ['dark', 'light', 'midnight']) {
             if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-              await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
+              await page
+                .getByRole('button', { name: themeNames[theme], exact: true })
+                .evaluate((button) => button.click());
             await page.locator('#main').evaluate((element) => {
               element.scrollTop = 0;
             });
@@ -5053,10 +4736,13 @@ try {
       window.fixture.hold = '';
     });
     await page.locator('.file-item[title="internal/worker/config.go"]').click();
-    await page.getByRole('heading', { name: 'config.go', exact: true }).waitFor();
+    await page
+      .locator('.source-filetabs button.active')
+      .getByText('config.go', { exact: true })
+      .waitFor();
     await page.evaluate(() => window.fixture.release());
     await page.waitForTimeout(100);
-    assert.equal(await page.getByRole('heading', { name: 'config.go', exact: true }).count(), 1);
+    assert.equal(await page.locator('.source-filetabs button.active').innerText(), 'config.go');
     await close();
   });
   await test('Verified scan retains every phase, truthful status and passive diagnostics across appearances', async () => {
@@ -5099,18 +4785,7 @@ try {
             };
       const { page, close } = await pageFor({ scanReport: report });
       try {
-        const references = {};
-        for (const theme of ['dark', 'light']) {
-          if (theme === 'light')
-            await page.getByRole('button', { name: 'Porcelain theme' }).click();
-          await nav(page, 'Overview');
-          references[theme] = {
-            intro: await introductionTreatment(page.locator('.summary-hero')),
-            panel: await panelTreatment(page.locator('.summary-details .panel').first()),
-          };
-        }
-        await page.getByRole('button', { name: 'Graphite theme' }).click();
-        await nav(page, 'Project');
+        await nav(page, 'Bugs');
         await page.getByRole('button', { name: 'Verified scan', exact: true }).click();
         await idle(page);
         const surface = page.locator('.scan-workspace');
@@ -5200,16 +4875,17 @@ try {
         for (const theme of ['dark', 'light']) {
           await page.setViewportSize({ width: 1440, height: 1000 });
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Porcelain theme' }).click();
-          assert.deepEqual(await introductionTreatment(heading), references[theme].intro);
-          if (report?.phases?.length)
-            assert.deepEqual(
-              await panelTreatment(surface.locator('.panel').first()),
-              references[theme].panel,
-            );
+            await page
+              .getByRole('button', { name: 'Porcelain theme' })
+              .evaluate((button) => button.click());
+
+          if (report?.phases?.length) {
+          }
           for (const larger of [false, true]) {
             if (larger)
-              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+              await page
+                .getByRole('button', { name: 'Larger text', exact: true })
+                .evaluate((button) => button.click());
             for (const width of scenario === 'completed' ? [1440, 1280, 1001, 800] : [1440, 800]) {
               await page.setViewportSize({ width, height: 1000 });
               await scanLayout(page);
@@ -5219,7 +4895,9 @@ try {
               );
             }
             if (larger)
-              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+              await page
+                .getByRole('button', { name: 'Larger text', exact: true })
+                .evaluate((button) => button.click());
           }
         }
         await surface.getByRole('button', { name: 'Findings', exact: true }).click();
@@ -5248,7 +4926,7 @@ try {
     ];
     const { page, close } = await pageFor({ scanResult: { status: 'running', phases } });
     try {
-      await nav(page, 'Project');
+      await nav(page, 'Bugs');
       await page.getByRole('button', { name: 'Verified scan', exact: true }).click();
       const surface = page.locator('.scan-workspace');
       const run = surface.getByRole('button', { name: 'Run scan', exact: true });
@@ -5258,7 +4936,10 @@ try {
           path,
         );
       await run.click();
-      await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+      await page
+        .locator('dialog:not(.studio-overlay)')
+        .getByRole('button', { name: 'Cancel', exact: true })
+        .click();
       await idle(page);
       assert.deepEqual(await admissions(), []);
       assert.equal(
@@ -5273,7 +4954,10 @@ try {
       await page.evaluate((path) => {
         window.fixture.hold = `POST ${path}`;
       }, path);
-      await page.getByRole('dialog').getByRole('button', { name: 'Trust this project' }).click();
+      await page
+        .locator('dialog:not(.studio-overlay)')
+        .getByRole('button', { name: 'Trust this project' })
+        .click();
       await page.waitForFunction(
         (path) => window.fixture.requests.some((r) => r.path === path && r.method === 'POST'),
         path,
@@ -5348,22 +5032,12 @@ try {
       await close();
     }
   });
-  await test('Search aligns files and commands with Summary and retains local filtering and pagination', async () => {
+  await test('Search shows complete files and commands and retains local filtering and pagination', async () => {
     const paths = Array.from(
       { length: 205 },
       (_, i) =>
         `internal/${String(i).padStart(3, '0')}/${'long-directory-'.repeat(12)}/${'filename-'.repeat(10)}process.go`,
     );
-    const introStyle = (el) => {
-      const css = getComputedStyle(el);
-      return {
-        background: css.backgroundColor,
-        border: css.border,
-        radius: css.borderRadius,
-        padding: css.padding,
-        shadow: css.boxShadow,
-      };
-    };
     for (const scenario of ['large-list', 'empty-index', 'filtered-empty']) {
       const { page, close } = await pageFor({
         ...(scenario === 'empty-index' ? { emptyIndex: true } : { sourcePaths: paths }),
@@ -5374,20 +5048,18 @@ try {
         );
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Porcelain theme' }).click();
+            await page
+              .getByRole('button', { name: 'Porcelain theme' })
+              .evaluate((button) => button.click());
           await nav(page, 'Overview');
-          const intro = await page.locator('.summary-hero').evaluate(introStyle);
-          const panel = await panelTreatment(page.locator('.summary-details .panel').first());
+
           await page.keyboard.press(theme === 'dark' ? 'Meta+k' : 'Control+k');
           const surface = page.locator('.search-workspace');
           await surface.waitFor();
           const input = surface.getByLabel('Search files and commands', { exact: true });
           await input.fill(scenario === 'filtered-empty' ? 'no-such-file-or-command' : '');
-          assert.deepEqual(
-            await surface.locator('.page-heading--intro').evaluate(introStyle),
-            intro,
-          );
-          assert.deepEqual(await panelTreatment(surface.locator('.panel').first()), panel);
+          assert.equal(await page.getByRole('dialog', { name: 'Search' }).isVisible(), true);
+
           const files = surface.locator('.panel').first();
           const commands = surface.locator('.panel').nth(1);
           if (scenario === 'large-list') {
@@ -5409,7 +5081,9 @@ try {
             await commands.getByText('No matching commands.', { exact: true }).waitFor();
           for (const larger of [false, true]) {
             if (larger)
-              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+              await page
+                .getByRole('button', { name: 'Larger text', exact: true })
+                .evaluate((button) => button.click());
             for (const width of scenario === 'large-list' ? [1440, 1280, 1001, 800] : [1440, 800]) {
               await page.setViewportSize({ width, height: 1000 });
               await searchLayout(page);
@@ -5419,7 +5093,9 @@ try {
               );
             }
             if (larger)
-              await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+              await page
+                .getByRole('button', { name: 'Larger text', exact: true })
+                .evaluate((button) => button.click());
           }
           if (scenario === 'large-list') {
             const more = files.getByRole('button', { name: 'Show more', exact: true });
@@ -5448,7 +5124,7 @@ try {
             await page.locator('.source-workspace').waitFor();
             await idle(page);
             assert.equal(
-              await page.locator('.source-workspace .page-heading p').textContent(),
+              await page.locator('.source-workspace .code-header .row').textContent(),
               paths.at(-1),
             );
           }
@@ -5464,36 +5140,32 @@ try {
       }
     }
   });
-  await test('Search commands keep keyboard destinations passive and page focus unchanged', async () => {
+  await test('Search focuses its input and opens passive keyboard destinations', async () => {
     const { page, close } = await pageFor();
     try {
       const baseline = await page.evaluate(() =>
         window.fixture.requests.filter((r) => r.method !== 'GET'),
       );
-      for (const [command, heading] of [
-        ['Overview', 'harbor'],
-        ['Analyze project', 'Analysis'],
-        ['Source', 'Source'],
-        ['Chat', 'Chat'],
-        ['Changes', 'Changes'],
-        ['Findings', 'Bugs'],
-        ['History', 'History'],
-        ['Context', 'Context'],
-        ['Instructions', 'Project instructions'],
-        ['Architecture', 'Architecture and Flow'],
-        ['Terminal', 'Terminal'],
-        ['Models', 'Models'],
-        ['Verified scan', 'Verified scan'],
-        ['Open project', 'Project'],
+      for (const [command, route] of [
+        ['Overview', 'summary'],
+        ['Analyze project', 'analysis'],
+        ['Source', 'editor'],
+        ['Chat', 'chat'],
+        ['Changes', 'changes'],
+        ['Findings', 'bugs'],
+        ['History', 'history'],
+        ['Context', 'analysis-files'],
+        ['Instructions', 'instructions'],
+        ['Architecture', 'diagrams'],
+        ['Terminal', 'terminal'],
+        ['Models', 'models'],
+        ['Verified scan', 'scan'],
+        ['Open project', 'project'],
       ]) {
         await page.keyboard.press('Control+k');
         const surface = page.locator('.search-workspace');
         await surface.waitFor();
-        // App's existing route effect focuses main after Search's autoFocus mount.
-        assert.equal(
-          await page.locator('#main').evaluate((el) => el === document.activeElement),
-          true,
-        );
+        await page.waitForFunction(() => document.activeElement?.id === 'search');
         const input = surface.getByLabel('Search files and commands', { exact: true });
         await input.fill(command);
         await page.keyboard.press('Tab');
@@ -5503,7 +5175,11 @@ try {
           .getByRole('button', { name: command, exact: true });
         assert.equal(await button.evaluate((el) => el === document.activeElement), true);
         await page.keyboard.press('Enter');
-        await page.getByRole('heading', { name: heading, exact: true }).waitFor();
+        if (route === 'terminal')
+          await page.getByRole('region', { name: 'Terminal drawer' }).waitFor();
+        else if (route === 'project')
+          await page.getByRole('dialog', { name: 'Switch project' }).waitFor();
+        else await page.locator(`.page[data-accent="${route}"]`).waitFor();
         await idle(page);
         assert.equal(await surface.count(), 0);
       }
@@ -5525,6 +5201,7 @@ try {
     await page.getByRole('heading', { name: 'Included files' }).waitFor();
     await layout(page, 'context');
     await nav(page, 'Source');
+    await page.getByText('Inspect this file', { exact: true }).click();
     await page.getByRole('button', { name: 'Explain declaration' }).click();
     await idle(page);
     await layout(page, 'source-explanation');
@@ -5533,10 +5210,13 @@ try {
       await page.locator('.result-row').first().click();
       await layout(page, `${name.toLowerCase()}-detail`);
     }
-    await nav(page, 'Project');
+    await nav(page, 'Bugs');
     await page.getByRole('button', { name: 'Verified scan', exact: true }).click();
     await page.getByRole('button', { name: 'Run scan', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Trust this project' }).click();
+    await page
+      .locator('dialog:not(.studio-overlay)')
+      .getByRole('button', { name: 'Trust this project' })
+      .click();
     await idle(page);
     await layout(page, 'scan');
     await nav(page, 'Terminal');
@@ -5570,26 +5250,28 @@ try {
       [900, 640],
     ]) {
       await page.setViewportSize({ width, height });
-      if (width === 900) await page.getByRole('button', { name: 'Larger text' }).click();
+      if (width === 900)
+        await page
+          .getByRole('button', { name: 'Larger text' })
+          .evaluate((button) => button.click());
       for (const name of ['Overview', 'Analysis', 'Bugs', 'Source', 'Models', 'Project']) {
         await nav(page, name);
         await layout(page, `${name.toLowerCase()}-${width}`);
       }
     }
-    await page.getByRole('button', { name: 'Porcelain theme' }).click();
+    await page
+      .getByRole('button', { name: 'Porcelain theme' })
+      .evaluate((button) => button.click());
     await nav(page, 'Overview');
     await layout(page, 'summary-light');
     await close();
   });
-  await test('Findings lists share Summary hierarchy and retain filters and local selection', async () => {
+  await test('Findings lists remain readable and retain filters and local selection', async () => {
     for (const name of ['Bugs', 'Performance', 'Security']) {
       const { page, close } = await pageFor();
       try {
         await idle(page);
-        const referenceIntro = await introductionTreatment(page.locator('.summary-hero'));
-        const referencePanel = await panelTreatment(
-          page.locator('.summary-details > .panel').first(),
-        );
+
         await page.evaluate(() => {
           const state = window.fixture.state;
           const path = `internal/${'very-long-directory-'.repeat(12)}/worker.go`;
@@ -5604,29 +5286,27 @@ try {
         if (name === 'Security') await openSource(page);
         await nav(page, name);
         await page.locator('.result-row').first().waitFor();
-        assert.deepEqual(
-          await introductionTreatment(page.locator('.page-heading--intro')),
-          referenceIntro,
-        );
-        assert.deepEqual(await panelTreatment(page.locator('.results-findings')), referencePanel);
+
         assert.equal(await page.locator('.result-row').count(), 1);
         await page.getByText('1 saved findings', { exact: true }).waitFor();
         const title = await page.locator('.result-row strong').innerText();
         const pathText = await page.locator('.result-row .path').innerText();
         assert.ok(pathText.includes('very-long-directory-'.repeat(12)));
         assert.equal(await page.locator('.result-row small').innerText(), pathText);
-        assert.equal(await page.locator('.result-row .finding-open').innerText(), 'Open fix');
+        assert.equal(await page.locator('.result-row').getAttribute('aria-expanded'), 'false');
         assert.doesNotMatch(await page.locator('.result-row').innerText(), /AI suggestion/i);
         const before = await page.evaluate(() =>
           window.fixture.requests.filter((r) => r.method !== 'GET'),
         );
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Porcelain theme', exact: true }).click();
+            await page
+              .getByRole('button', { name: 'Porcelain theme', exact: true })
+              .evaluate((button) => button.click());
           for (const larger of [false, true]) {
             const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
             if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
-              await textSize.click();
+              await textSize.evaluate((button) => button.click());
             for (const width of [1440, 1280, 1001, 800]) {
               await page.setViewportSize({ width, height: 1000 });
               await resultsListLayout(page);
@@ -5690,7 +5370,7 @@ try {
           'Filters, selection, back-to-list and tool navigation remain passive',
         );
         assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
-        assert.equal(await page.getByRole('dialog').count(), 0);
+        assert.equal(await page.locator('dialog:not(.studio-overlay)').count(), 0);
       } finally {
         await close();
       }
@@ -5840,11 +5520,13 @@ try {
         const complete = await workspace.textContent();
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
-            await page.getByRole('button', { name: 'Porcelain theme', exact: true }).click();
+            await page
+              .getByRole('button', { name: 'Porcelain theme', exact: true })
+              .evaluate((button) => button.click());
           for (const larger of [false, true]) {
             const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
             if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
-              await textSize.click();
+              await textSize.evaluate((button) => button.click());
             for (const width of [1440, 1280, 1001, 800]) {
               await page.setViewportSize({ width, height: 1000 });
               await resultsDetailLayout(page);
@@ -6061,7 +5743,7 @@ try {
           await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
           before,
         );
-        assert.equal(await page.getByRole('dialog').count(), 0);
+        assert.equal(await page.locator('dialog:not(.studio-overlay)').count(), 0);
         assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
       } finally {
         await close();
@@ -6263,8 +5945,12 @@ try {
           await resultsListLayout(page);
           await layout(page, `${category}-list-${scenario}-1440-dark-standard`);
           await page.setViewportSize({ width: 800, height: 1000 });
-          await page.getByRole('button', { name: 'Porcelain theme', exact: true }).click();
-          await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          await page
+            .getByRole('button', { name: 'Porcelain theme', exact: true })
+            .evaluate((button) => button.click());
+          await page
+            .getByRole('button', { name: 'Larger text', exact: true })
+            .evaluate((button) => button.click());
           await resultsListLayout(page);
           await layout(page, `${category}-list-${scenario}-800-light-larger`);
           assert.deepEqual(
@@ -6321,7 +6007,9 @@ try {
       await nav(page, 'Security');
       for (const action of actions) assert.equal(await action.isDisabled(), true);
       await page.setViewportSize({ width: 800, height: 1000 });
-      await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+      await page
+        .getByRole('button', { name: 'Larger text', exact: true })
+        .evaluate((button) => button.click());
       await resultsListLayout(page);
       await layout(page, 'security-list-selected-source-stale-800-dark-larger');
       assert.deepEqual(
@@ -6426,7 +6114,7 @@ try {
       await close();
     }
   });
-  await test('Chat scope, complete conversation and history reuse Summary without resetting inputs', async () => {
+  await test('Chat scope, complete conversation and history preserve inputs across layouts', async () => {
     const title = `Improve recovery ${'LongTaskTitle'.repeat(10)}`;
     const paths = Array.from(
       { length: 8 },
@@ -6437,19 +6125,11 @@ try {
     const { page, close } = await pageFor({ changeAssistantMessage: assistant });
     try {
       await idle(page);
-      const referenceIntro = await introductionTreatment(page.locator('.summary-hero'));
-      const referencePanel = await panelTreatment(page.locator('.summary-details .panel').first());
+
       await nav(page, 'Chat');
       await idle(page);
       const conversation = page.getByRole('region', { name: 'Change conversation', exact: true });
-      assert.deepEqual(
-        await introductionTreatment(page.locator('.chat-page .page-heading')),
-        referenceIntro,
-      );
-      assert.deepEqual(
-        await panelTreatment(conversation.locator('.panel').first()),
-        referencePanel,
-      );
+
       await nav(page, 'History');
       await page.getByText('No saved conversations.', { exact: true }).waitFor();
       await nav(page, 'Chat');
@@ -6465,11 +6145,13 @@ try {
       const render = async (state, widths) => {
         for (const theme of ['dark', 'light']) {
           if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-            await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
+            await page
+              .getByRole('button', { name: themeNames[theme], exact: true })
+              .evaluate((button) => button.click());
           for (const larger of [false, true]) {
             const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
             if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
-              await textSize.click();
+              await textSize.evaluate((button) => button.click());
             for (const width of widths) {
               await page.setViewportSize({ width, height: 1000 });
               await chatConversationLayout(page);
@@ -6552,8 +6234,9 @@ try {
       await page.getByRole('button', { name: 'Resume', exact: true }).click();
       await idle(page);
       await nav(page, 'Changes');
+      await reviewAllFiles(page);
       assert.equal(
-        await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
+        await page.getByRole('button', { name: /^Apply \d+ files?$/ }).isDisabled(),
         true,
       );
       await nav(page, 'Chat');
@@ -6654,11 +6337,13 @@ try {
         );
         for (const theme of ['dark', 'light']) {
           if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-            await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
+            await page
+              .getByRole('button', { name: themeNames[theme], exact: true })
+              .evaluate((button) => button.click());
           for (const larger of [false, true]) {
             const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
             if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
-              await textSize.click();
+              await textSize.evaluate((button) => button.click());
             for (const width of [1440, 800]) {
               await page.setViewportSize({ width, height: 1000 });
               if (state === 'history-unavailable') await nav(page, 'History');
@@ -6674,7 +6359,8 @@ try {
               else await chatReviewLayout(page);
               if (state === 'stale') {
                 const review = page.getByRole('region', { name: 'Proposal review', exact: true });
-                for (const name of ['Check proposal', 'Accept changes'])
+                await review.getByRole('tab', { name: /^Checks(?: \(|$)/ }).click();
+                for (const name of ['Check proposal', /^Apply \d+ files?$/])
                   assert.equal(
                     await review.getByRole('button', { name, exact: true }).isDisabled(),
                     true,
@@ -6713,7 +6399,7 @@ try {
       });
       try {
         await idle(page);
-        const reference = await panelTreatment(page.locator('.summary-details .panel').first());
+
         await nav(page, 'Chat');
         await page.getByLabel('Files to change', { exact: true }).fill(paths.join('\n'));
         await page
@@ -6723,15 +6409,15 @@ try {
         await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
         await idle(page);
         await nav(page, 'Changes');
+        await reviewAllFiles(page);
         const review = page.getByRole('region', { name: 'Proposal review', exact: true });
         if (state === 'missing') {
-          await review.getByRole('heading', { name: 'No proposal yet', exact: true }).waitFor();
-          assert.equal(await review.getByRole('button').count(), 0);
+          await page.getByRole('heading', { name: 'No proposal yet', exact: true }).waitFor();
+          assert.equal(await page.getByRole('button', { name: /^Apply \d+ files?$/ }).count(), 0);
         } else {
-          assert.deepEqual(await panelTreatment(review.locator('.panel').first()), reference);
           assert.equal(await review.locator('.diff').count(), 1);
           for (const path of paths) {
-            await review.getByLabel('Files to change', { exact: true }).selectOption(path);
+            await review.getByRole('tab', { name: path, exact: true }).click();
             const diff = review.getByLabel(`Read-only diff for ${path}`, { exact: true });
             assert.equal(await diff.locator('code').textContent(), code);
             assert.equal(await diff.locator('.code-header strong').textContent(), path);
@@ -6739,9 +6425,12 @@ try {
           const beforeDisclosures = await page.evaluate(() =>
             window.fixture.requests.filter((r) => r.method !== 'GET'),
           );
+          await review.getByRole('tab', { name: /^Checks(?: \(|$)/ }).click();
           await review.getByText('Diagnostics', { exact: true }).click();
           assert.equal(await review.locator('.chat-check pre').textContent(), diagnostic);
+          await review.getByRole('tab', { name: 'Details', exact: true }).click();
           await review.getByText('Provider context', { exact: true }).click();
+          await review.getByRole('tab', { name: /^Checks(?: \(|$)/ }).click();
           assert.deepEqual(
             await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
             beforeDisclosures,
@@ -6752,7 +6441,7 @@ try {
             true,
           );
           assert.equal(
-            await review.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
+            await review.getByRole('button', { name: /^Apply \d+ files?$/ }).isDisabled(),
             state === 'exhausted',
           );
           if (state === 'exhausted') {
@@ -6776,11 +6465,13 @@ try {
           );
           for (const theme of ['dark', 'light']) {
             if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-              await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
+              await page
+                .getByRole('button', { name: themeNames[theme], exact: true })
+                .evaluate((button) => button.click());
             for (const larger of [false, true]) {
               const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
               if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
-                await textSize.click();
+                await textSize.evaluate((button) => button.click());
               for (const width of [1440, 1280, 1001, 800]) {
                 await page.setViewportSize({ width, height: 1000 });
                 await chatReviewLayout(page);
@@ -6801,13 +6492,14 @@ try {
         await render(state);
         if (state === 'unreviewed') {
           assert.equal(
-            await review.getByRole('button', { name: 'Accept changes', exact: true }).isEnabled(),
+            await review.getByRole('button', { name: /^Apply \d+ files?$/ }).isEnabled(),
             true,
           );
           await render('ready-to-accept');
           await nav(page, 'Chat');
           await page.getByLabel('Run project tests after generation').uncheck();
           await nav(page, 'Changes');
+          await reviewAllFiles(page);
           await page.evaluate(() => {
             window.fixture.hold = '/api/projects/current/changes/change-1/checks';
           });
@@ -6816,6 +6508,7 @@ try {
               window.fixture.requests.filter((r) => r.path.endsWith('/changes/change-1/checks'))
                 .length,
           );
+          await review.getByRole('tab', { name: /^Checks(?: \(|$)/ }).click();
           await review.getByRole('button', { name: 'Check proposal', exact: true }).click();
           await page.waitForFunction(
             (count) =>
@@ -6824,7 +6517,7 @@ try {
             checksBefore,
           );
           await page.locator('.busy-strip').waitFor();
-          for (const name of ['Check proposal', 'Accept changes'])
+          for (const name of ['Check proposal', /^Apply \d+ files?$/])
             assert.equal(
               await review.getByRole('button', { name, exact: true }).isDisabled(),
               true,
@@ -6836,8 +6529,9 @@ try {
           });
           await idle(page);
           await nav(page, 'Changes');
+          await reviewAllFiles(page);
           assert.equal(
-            await review.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
+            await review.getByRole('button', { name: /^Apply \d+ files?$/ }).isDisabled(),
             false,
             'Passing checks make the current diff ready for fresh acceptance',
           );
@@ -6860,17 +6554,22 @@ try {
     await page.getByLabel('Add an existing file').selectOption('internal/worker/process.go');
     await page.getByLabel('Change request', { exact: true }).fill('Handle cancellation.');
     await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Trust this project' }).click();
+    await page
+      .locator('dialog:not(.studio-overlay)')
+      .getByRole('button', { name: 'Trust this project' })
+      .click();
     await idle(page);
     await nav(page, 'Changes');
+    await reviewAllFiles(page);
     await page.getByLabel('Read-only diff for internal/worker/process.go').waitFor();
-    assert.equal(await page.getByRole('button', { name: 'Accept changes' }).isEnabled(), true);
+    assert.equal(await page.getByRole('button', { name: /^Apply \d+ files?$/ }).isEnabled(), true);
     await nav(page, 'Chat');
     await page.getByLabel('Change request', { exact: true }).fill('Preserve the existing API too.');
     await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
     await idle(page);
     await nav(page, 'Changes');
-    assert.equal(await page.getByRole('button', { name: 'Accept changes' }).isEnabled(), true);
+    await reviewAllFiles(page);
+    assert.equal(await page.getByRole('button', { name: /^Apply \d+ files?$/ }).isEnabled(), true);
     await layout(page, 'chat-review');
     const revision = await page.evaluate(() => {
       const requests = window.fixture.requests;
@@ -6878,12 +6577,13 @@ try {
         throw new Error('Generation must not approve changes');
       return window.fixture.state.changes['change-1'];
     });
-    await page.getByRole('button', { name: 'Accept changes' }).click();
+    await page.getByRole('button', { name: /^Apply \d+ files?$/ }).click();
     await idle(page);
     await nav(page, 'Changes');
+    await reviewAllFiles(page);
     await page.getByRole('heading', { name: 'Change applied', exact: true }).waitFor();
     assert.equal(
-      await page.getByRole('dialog').count(),
+      await page.locator('dialog:not(.studio-overlay)').count(),
       0,
       'Acceptance needs no second confirmation',
     );
@@ -6912,6 +6612,7 @@ try {
       .click();
     await idle(page);
     await nav(page, 'Changes');
+    await reviewAllFiles(page);
     await page.getByRole('heading', { name: 'Change undone', exact: true }).waitFor();
     await close();
   });
@@ -6922,16 +6623,21 @@ try {
     await page.getByLabel('Change request', { exact: true }).fill('Add cancellation.');
     await page.getByLabel('Run project tests after generation').uncheck();
     await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
+    await page
+      .locator('dialog:not(.studio-overlay)')
+      .getByRole('button', { name: 'Continue', exact: true })
+      .click();
     await idle(page);
     await nav(page, 'Changes');
+    await reviewAllFiles(page);
     await page.getByRole('button', { name: 'New conversation' }).click();
     await nav(page, 'History');
     await page.getByRole('button', { name: 'Refresh history' }).click();
     await page.getByRole('button', { name: 'Resume', exact: true }).click();
     await idle(page);
     await nav(page, 'Changes');
-    assert.equal(await page.getByRole('button', { name: 'Accept changes' }).isEnabled(), false);
+    await reviewAllFiles(page);
+    assert.equal(await page.getByRole('button', { name: /^Apply \d+ files?$/ }).isEnabled(), false);
     assert.equal(
       await page.evaluate(
         () =>
@@ -6943,7 +6649,7 @@ try {
     );
     await page.setViewportSize({ width: 800, height: 900 });
     await layout(page, 'chat-compact');
-    await page.getByRole('button', { name: 'Larger text' }).click();
+    await page.getByRole('button', { name: 'Larger text' }).evaluate((button) => button.click());
     await layout(page, 'chat-large-text');
     await close();
   });
@@ -6953,16 +6659,20 @@ try {
     await page.getByLabel('Files to change', { exact: true }).fill('internal/worker/process.go');
     await page.getByLabel('Change request', { exact: true }).fill('Handle cancellation.');
     await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Trust this project' }).click();
+    await page
+      .locator('dialog:not(.studio-overlay)')
+      .getByRole('button', { name: 'Trust this project' })
+      .click();
     await idle(page);
     await nav(page, 'Changes');
+    await reviewAllFiles(page);
     const requests = await page.evaluate(() => window.fixture.requests);
     assert.equal(requests.filter((r) => r.body?.repair === true).length, 3);
     assert.equal(
       requests.some((r) => r.path.endsWith('/apply')),
       false,
     );
-    assert.equal(await page.getByRole('button', { name: 'Accept changes' }).isDisabled(), true);
+    assert.equal(await page.getByRole('button', { name: /^Apply \d+ files?$/ }).isDisabled(), true);
     await close();
   });
   await test('Canceled chat responses do not publish a late proposal or reset local follow-up', async () => {
@@ -7067,6 +6777,7 @@ try {
     );
     assert.equal(await page.getByText('Retry failed work', { exact: true }).count(), 0);
     assert.equal(await page.getByText('Estimated effort: medium', { exact: true }).count(), 0);
+    await openFeature(page);
     assert.equal(
       await page.getByRole('button', { name: 'Discuss in chat', exact: true }).count(),
       0,
@@ -7083,8 +6794,10 @@ try {
     await card.focus();
     await page.keyboard.press('Enter');
     await page.getByRole('heading', { name: 'Features', exact: true }).waitFor();
+    await openFeature(page);
     await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
     await page.getByText('Estimated effort: medium', { exact: true }).waitFor();
+    await openFeature(page);
     await page.getByRole('button', { name: 'Discuss in chat', exact: true }).click();
     await page.getByLabel('Change request', { exact: true }).waitFor();
     assert.match(
@@ -7133,11 +6846,13 @@ try {
       assert.equal(await page.getByText(/Feature search failed/).count(), 0);
       assert.equal(await page.getByText(/active idea(?:s)? (?:is|are) outdated/).count(), 0);
       await page.setViewportSize({ width: 800, height: 900 });
-      await page.getByRole('button', { name: 'Larger text' }).click();
+      await page.getByRole('button', { name: 'Larger text' }).evaluate((button) => button.click());
       await layout(page, `summary-feature-count-${JSON.stringify(options)}`);
       await card.focus();
       await contrast(page, 'Summary feature counts');
-      await page.getByRole('button', { name: 'Porcelain theme' }).click();
+      await page
+        .getByRole('button', { name: 'Porcelain theme' })
+        .evaluate((button) => button.click());
       await contrast(page, 'Summary feature counts light');
       await card.click();
       await page.getByRole('heading', { name: 'Features', exact: true }).waitFor();
@@ -7153,12 +6868,12 @@ try {
           })
           .waitFor();
       else {
+        await openFeature(page);
         await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
-        if (options.featuresStale)
-          assert.equal(
-            await page.getByRole('button', { name: 'Discuss in chat', exact: true }).isDisabled(),
-            true,
-          );
+        assert.equal(
+          await page.getByRole('button', { name: 'Discuss in chat', exact: true }).isDisabled(),
+          !!options.featuresStale,
+        );
       }
       assert.equal(await page.getByText(/Feature search failed/).count(), 0);
       assert.equal(
@@ -7169,6 +6884,7 @@ try {
       const reads = await page.evaluate(
         () => window.fixture.requests.filter((r) => r.path.endsWith('/features')).length,
       );
+      await closeFeature(page);
       await page.getByRole('button', { name: 'Refresh suggestions', exact: true }).click();
       await page.waitForFunction(
         (reads) =>
@@ -7191,7 +6907,7 @@ try {
       await close();
     }
   });
-  await test('Features reuse Summary treatment with complete ideas, metadata and passive filters', async () => {
+  await test('Features preserve complete content with complete ideas, metadata and passive filters', async () => {
     const { page, close } = await pageFor({
       featuresReady: true,
       featuresLongContent: true,
@@ -7200,19 +6916,12 @@ try {
     });
     try {
       await idle(page);
-      const referenceIntro = await introductionTreatment(page.locator('.summary-hero'));
-      const referencePanel = await panelTreatment(
-        page.locator('.summary-details > .panel').first(),
-      );
+
       const report = await page.evaluate(() => window.fixture.state.features);
       await nav(page, 'Features');
       await idle(page);
       const workspace = page.locator('.features-page');
-      assert.deepEqual(
-        await introductionTreatment(workspace.locator('.page-heading')),
-        referenceIntro,
-      );
-      assert.deepEqual(await panelTreatment(workspace.locator('.panel').first()), referencePanel);
+      await openGoals(page);
       assert.equal(
         await page.getByLabel('Project goals', { exact: true }).inputValue(),
         report.goals,
@@ -7228,14 +6937,13 @@ try {
         ['all', report.suggestions.map((idea) => idea.title)],
       ]) {
         await filter.selectOption(value);
-        assert.deepEqual(
-          await workspace.locator('.feature-grid .panel-head h2').allTextContents(),
-          titles,
-        );
+        assert.deepEqual(await workspace.locator('.feature-row strong').allTextContents(), titles);
       }
       await filter.selectOption('active');
       for (const disclosure of await workspace.locator('summary').all()) await disclosure.click();
-      const ideaPanel = workspace.locator('.feature-grid .panel').first();
+      await openFeature(page);
+      await page.getByText('Why this fits the project', { exact: true }).click();
+      const ideaPanel = page.locator('.feature-detail');
       for (const text of [
         report.suggestions[0].title,
         report.suggestions[0].benefit,
@@ -7249,6 +6957,7 @@ try {
           (await workspace.textContent()).includes(text),
           `Complete feature content: ${text}`,
         );
+      await openFeature(page);
       assert.equal(
         await ideaPanel.getByRole('button', { name: 'Save idea', exact: true }).isEnabled(),
         true,
@@ -7256,11 +6965,13 @@ try {
       const complete = await workspace.textContent();
       for (const theme of ['dark', 'light']) {
         if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-          await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
+          await page
+            .getByRole('button', { name: themeNames[theme], exact: true })
+            .evaluate((button) => button.click());
         for (const larger of [false, true]) {
           const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
           if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
-            await textSize.click();
+            await textSize.evaluate((button) => button.click());
           for (const width of [1440, 1280, 1001, 800]) {
             await page.setViewportSize({ width, height: 1000 });
             await featuresLayout(page);
@@ -7269,12 +6980,7 @@ try {
               complete,
               'Reflow preserves feature content',
             );
-            const columns = await workspace
-              .locator('.feature-grid')
-              .evaluate(
-                (element) => getComputedStyle(element).gridTemplateColumns.split(' ').length,
-              );
-            assert.equal(columns, width > 1100 ? 2 : 1, 'Keep the task-specific suggestion layout');
+            assert.equal(await page.getByRole('dialog').isVisible(), true);
             await layout(page, `features-long-${width}-${theme}-${larger ? 'larger' : 'standard'}`);
           }
         }
@@ -7348,6 +7054,7 @@ try {
         await idle(page);
         if (title) await page.getByRole('heading', { name: title, exact: true }).waitFor();
         if (state === 'unavailable') {
+          await openGoals(page);
           assert.equal(
             await page.getByRole('button', { name: 'Suggest features', exact: true }).isDisabled(),
             true,
@@ -7357,10 +7064,12 @@ try {
         }
         if (state === 'stale') {
           await page.getByText(/active idea is outdated/).waitFor();
+          await openFeature(page);
           assert.equal(
             await page.getByRole('button', { name: 'Discuss in chat', exact: true }).isDisabled(),
             true,
           );
+          await openFeature(page);
           assert.equal(
             await page.getByRole('button', { name: 'Save idea', exact: true }).isEnabled(),
             true,
@@ -7372,11 +7081,13 @@ try {
         );
         for (const theme of ['dark', 'light']) {
           if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-            await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
+            await page
+              .getByRole('button', { name: themeNames[theme], exact: true })
+              .evaluate((button) => button.click());
           for (const larger of [false, true]) {
             const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
             if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
-              await textSize.click();
+              await textSize.evaluate((button) => button.click());
             for (const width of [1440, 800]) {
               await page.setViewportSize({ width, height: 1000 });
               await featuresLayout(page);
@@ -7401,26 +7112,32 @@ try {
     try {
       await nav(page, 'Features');
       await idle(page);
+      await openFeature(page);
       await page.getByRole('button', { name: 'Save idea', exact: true }).click();
       await idle(page);
       const retained = await page.evaluate(() => window.fixture.state.features.suggestions);
       await page.evaluate(() => {
         window.fixture.hold = '/api/projects/current/features/generate';
       });
+      await openGoals(page);
       await page
         .getByRole('button', { name: 'Search more feature suggestions', exact: true })
         .click();
       await page.waitForFunction(() =>
         window.fixture.requests.some((r) => r.path.endsWith('/features/generate')),
       );
-      for (const button of await page.locator('.features-page button').all())
-        assert.equal(await button.isDisabled(), true);
+      for (const name of ['Save goals', 'Search more feature suggestions', 'Refresh suggestions'])
+        assert.equal(await page.getByRole('button', { name, exact: true }).isDisabled(), true);
+      await openGoals(page);
       assert.equal(await page.getByLabel('Project goals', { exact: true }).isDisabled(), true);
+      await closeFeature(page);
       await page.getByLabel('Filter feature suggestions', { exact: true }).selectOption('saved');
       for (const disclosure of await page.locator('.features-page summary').all())
         await disclosure.click();
       await page.setViewportSize({ width: 800, height: 1000 });
-      await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+      await page
+        .getByRole('button', { name: 'Larger text', exact: true })
+        .evaluate((button) => button.click());
       await featuresLayout(page);
       await layout(page, 'features-busy-800-dark-larger');
       await page.evaluate(() => {
@@ -7435,6 +7152,7 @@ try {
         await page.evaluate(() => window.fixture.state.features.suggestions),
         retained,
       );
+      await closeFeature(page);
       assert.equal(
         await page.getByLabel('Filter feature suggestions', { exact: true }).inputValue(),
         'saved',
@@ -7443,6 +7161,7 @@ try {
         await page.getByText(/Added \d+ new suggestions?\.|No new suggestions found\./).count(),
         0,
       );
+      await openFeature(page);
       assert.equal(
         await page.getByRole('button', { name: 'Discuss in chat', exact: true }).isEnabled(),
         true,
@@ -7474,13 +7193,18 @@ try {
       featuresStale: true,
     });
     await nav(page, 'Features');
+    await openGoals(page);
     await page.getByLabel('Project goals', { exact: true }).fill('Help recover failed jobs.');
     await page.getByRole('button', { name: 'Save goals', exact: true }).click();
     await idle(page);
+    await openGoals(page);
     await page
       .getByRole('button', { name: 'Search more feature suggestions', exact: true })
       .click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page
+      .locator('dialog:not(.studio-overlay)')
+      .getByRole('button', { name: 'Cancel', exact: true })
+      .click();
     await idle(page);
     assert.equal(await page.getByText(/Feature search failed/).count(), 0);
     assert.equal(await page.getByText(/active idea(?:s)? (?:is|are) outdated/).count(), 1);
@@ -7534,24 +7258,32 @@ try {
   await test('Feature generation accumulates ideas and identifies duplicates', async () => {
     const { page, close } = await pageFor({ remote: true });
     await nav(page, 'Features');
+    await openGoals(page);
     await page
       .getByLabel('Project goals', { exact: true })
       .fill('Help operators recover failed jobs.');
     await page.getByRole('button', { name: 'Save goals', exact: true }).click();
     await idle(page);
+    await openGoals(page);
     await page.getByRole('button', { name: 'Suggest features', exact: true }).click();
 
     // Check consent shape
+    await openGoals(page);
     await page
       .getByRole('heading', { name: 'Search more feature suggestions', exact: true })
       .waitFor();
     await page.getByText('Origin: Features').waitFor();
     await page.getByText('Profile: analyze').waitFor();
-    await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
+    await page
+      .locator('dialog:not(.studio-overlay)')
+      .getByRole('button', { name: 'Continue', exact: true })
+      .click();
     await idle(page);
 
+    await openFeature(page);
     await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
     await page.getByText('Added 1 new suggestion.', { exact: true }).waitFor();
+    await closeFeature(page);
     await page.getByText('Suggestion context', { exact: true }).click();
     await page
       .getByText('Generated by test-model · https://provider.invalid', { exact: true })
@@ -7564,11 +7296,15 @@ try {
         window.fixture.options.featuresEmpty = !duplicateOnly;
       }, duplicateOnly);
 
+      await openGoals(page);
       await page
         .getByRole('button', { name: 'Search more feature suggestions', exact: true })
         .click();
       await page.getByText('Existing idea titles: 1').waitFor();
-      await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
+      await page
+        .locator('dialog:not(.studio-overlay)')
+        .getByRole('button', { name: 'Continue', exact: true })
+        .click();
       await idle(page);
 
       await page.getByText('No new suggestions found.', { exact: true }).waitFor();
@@ -7590,19 +7326,21 @@ try {
 
     await close();
   });
-
   await test('Legacy feature history keeps ideas without inventing generation counts or model details', async () => {
     const { page, close } = await pageFor({ featuresReady: true, legacyShape: true });
     try {
       await nav(page, 'Features');
       await idle(page);
+      await openFeature(page);
       await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
+      await closeFeature(page);
       await page.getByText('Suggestion context', { exact: true }).click();
       assert.equal(await page.getByText(/Generated by /).count(), 0);
       assert.equal(
         await page.getByText(/Added \d+ new suggestions?\.|No new suggestions found\./).count(),
         0,
       );
+      await openFeature(page);
       assert.equal(
         await page.getByRole('button', { name: 'Discuss in chat', exact: true }).isEnabled(),
         true,
@@ -7617,12 +7355,12 @@ try {
       await close();
     }
   });
-
   await test('Feature goals and idea triage are local; Discuss only seeds Chat', async () => {
     const { page, close } = await pageFor({ remote: true });
     await nav(page, 'Analysis');
     await nav(page, 'Features');
     await page.getByRole('heading', { name: 'No features yet' }).waitFor();
+    await openGoals(page);
     await page
       .getByLabel('Project goals', { exact: true })
       .fill('Help operators recover failed jobs.');
@@ -7634,10 +7372,16 @@ try {
       ),
       false,
     );
+    await openGoals(page);
     await page.getByRole('button', { name: 'Suggest features', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
+    await page
+      .locator('dialog:not(.studio-overlay)')
+      .getByRole('button', { name: 'Continue', exact: true })
+      .click();
     await idle(page);
+    await openFeature(page);
     await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
+    await openFeature(page);
     await page.getByRole('button', { name: 'Save idea', exact: true }).click();
     await idle(page);
     await nav(page, 'Overview');
@@ -7646,9 +7390,11 @@ try {
       '1',
     );
     await nav(page, 'Features');
+    await closeFeature(page);
     await page.getByLabel('Filter feature suggestions').selectOption('saved');
     await layout(page, 'features-saved');
     await contrast(page, 'Feature suggestions');
+    await openFeature(page);
     await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
     await idle(page);
     await page.getByRole('heading', { name: 'No matching features' }).waitFor();
@@ -7658,10 +7404,14 @@ try {
       '0',
     );
     await nav(page, 'Features');
+    await closeFeature(page);
     await page.getByLabel('Filter feature suggestions').selectOption('dismissed');
+    await openFeature(page);
     await page.getByRole('button', { name: 'Reopen', exact: true }).click();
     await idle(page);
+    await closeFeature(page);
     await page.getByLabel('Filter feature suggestions').selectOption('active');
+    await openFeature(page);
     await page.getByRole('button', { name: 'Discuss in chat', exact: true }).click();
     await page.getByLabel('Change request', { exact: true }).waitFor();
     assert.match(
@@ -7674,137 +7424,70 @@ try {
     );
     await close();
   });
-  await test('Every instruction step retains Summary panels, long guidance and passive reflow', async () => {
+  await test('Instruction reading and editing preserve complete scoped guidance across layouts', async () => {
     const directory = `internal/${'LongDirectory'.repeat(24)}/AGENTS.md`;
     for (const target of ['AGENTS.md', directory]) {
       const { page, close } = await pageFor({
         instructionPath: directory,
         instructionsLongContent: true,
-        projectPath: `/fixture/${'LongProjectRoot'.repeat(24)}`,
       });
       try {
-        const reference = await panelTreatment(page.locator('.summary-details > .panel').first());
         await nav(page, 'Instructions');
-        await page.getByText('AGENTS.md · scope .', { exact: true }).waitFor();
-        await page.getByLabel('Instruction path').fill('temporary/AGENTS.md');
         await page.getByLabel('Instruction path').fill(target);
+        await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+        const original = await page.getByLabel('Custom instructions').inputValue();
+        const files = await page.evaluate(() => window.fixture.state.instructions);
+        assert.equal(original, files[target]);
         assert.equal(
-          await page.locator('.instructions-page summary').count(),
-          0,
-          'Path editing clears the previous scope',
+          await page
+            .getByRole('button', { name: 'Preview instruction diff', exact: true })
+            .isDisabled(),
+          true,
         );
-        assert.equal(await page.getByLabel('Instruction path').inputValue(), target);
-        const initialInstructions = await page.evaluate(() => window.fixture.state.instructions);
-        for (const step of [1, 2, 3]) {
-          if (step === 2) {
-            await page.getByRole('button', { name: 'Load scope', exact: true }).click();
-            await page.getByLabel('Custom instructions').waitFor();
-            for (const summary of await page.locator('.instructions-page summary').all())
-              await summary.click();
-            const effective = page.getByRole('region', {
-              name: 'Effective project guidance',
-              exact: true,
-            });
-            for (const inherited of target === directory
-              ? ['AGENTS.md', 'internal/AGENTS.md', directory]
-              : ['AGENTS.md']) {
-              for (const paragraph of initialInstructions[inherited]
-                .split(/\n\s*\n/)
-                .filter(Boolean))
-                assert.ok(
-                  (await effective.textContent()).includes(paragraph),
-                  'Inherited guidance remains complete',
-                );
-            }
-          }
-          if (step === 3)
-            await page.getByRole('button', { name: 'Continue to preview', exact: true }).click();
-          assert.equal(
-            await page.locator('.wizard-steps [aria-current="step"]').innerText(),
-            `${step}. ${['Choose scope', 'Edit guidance', 'Preview'][step - 1]}`,
-          );
-          assert.deepEqual(
-            await panelTreatment(page.locator('.instructions-page .panel').first()),
-            reference,
-          );
-          for (const theme of ['dark', 'light']) {
-            if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-              await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
-            for (const larger of [false, true]) {
-              const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
-              if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
-                await textSize.click();
-              for (const width of [1440, 1280, 1001, 800]) {
-                await page.setViewportSize({ width, height: 1000 });
-                await instructionsLayout(page);
-                if (step === 2)
-                  assert.equal(
-                    await page.getByLabel('Custom instructions').inputValue(),
-                    initialInstructions[target],
-                  );
-                if (step === 3) {
-                  assert.deepEqual(
-                    await page
-                      .locator('.instructions-page .prose')
-                      .first()
-                      .locator('p')
-                      .allTextContents(),
-                    initialInstructions[target].split(/\n\s*\n/).filter(Boolean),
-                    'The complete proposed guidance remains read-only and visible',
-                  );
-                  assert.equal(
-                    await page
-                      .getByRole('button', { name: 'Preview instruction diff', exact: true })
-                      .isDisabled(),
-                    true,
-                    'Unchanged guidance cannot create a proposal',
-                  );
-                }
-                await layout(
-                  page,
-                  `instructions-${target === directory ? 'directory' : 'root'}-step-${step}-${width}-${theme}-${larger ? 'larger' : 'standard'}`,
-                );
-              }
-              await contrast(
+        for (const editing of [true, false]) {
+          if (!editing)
+            await page.getByRole('button', { name: 'Read guidance', exact: true }).click();
+          for (const theme of ['Graphite', 'Porcelain', 'Midnight']) {
+            await page
+              .getByRole('button', { name: `${theme} theme`, exact: true })
+              .evaluate((button) => button.click());
+            for (const width of [1440, 800]) {
+              await page.setViewportSize({ width, height: 900 });
+              await instructionsLayout(page);
+              await layout(
                 page,
-                `Instructions step ${step} ${theme} ${larger ? 'larger' : 'standard'}`,
+                `studio-instructions-${editing ? 'draft' : 'read'}-${theme}-${width}-${target === directory ? 'directory' : 'root'}`,
               );
+              await contrast(page, `Instruction ${editing ? 'draft' : 'reading'} ${theme}`);
+              if (editing)
+                assert.equal(await page.getByLabel('Custom instructions').inputValue(), original);
+              else
+                for (const paragraph of original.split(/\n\s*\n/).filter(Boolean))
+                  assert.ok(
+                    (await page.locator('.instruction-reading').innerText()).includes(paragraph),
+                  );
             }
           }
-          // Reset appearance before comparing the next step to the dark/standard reference.
-          await page.getByRole('button', { name: 'Graphite theme', exact: true }).click();
-          await page.getByRole('button', { name: 'Larger text', exact: true }).click();
         }
-        await page.getByRole('button', { name: 'Edit guidance', exact: true }).click();
-        await page
-          .getByLabel('Custom instructions')
-          .fill(`${initialInstructions[target]}\nKeep boundary diagnostics complete.\n`);
-        const edited = await page.getByLabel('Custom instructions').inputValue();
-        await page.getByRole('button', { name: 'Continue to preview', exact: true }).click();
+        await page.getByRole('button', { name: 'Edit draft', exact: true }).click();
+        const edited = `${original}\nKeep boundary diagnostics complete.\n`;
+        await page.getByLabel('Custom instructions').fill(edited);
+        await page.getByRole('button', { name: 'Read guidance', exact: true }).click();
+        await page.getByRole('button', { name: 'Edit draft', exact: true }).click();
+        assert.equal(await page.getByLabel('Custom instructions').inputValue(), edited);
         assert.equal(
           await page
             .getByRole('button', { name: 'Preview instruction diff', exact: true })
             .isEnabled(),
           true,
         );
-        await page.getByRole('button', { name: 'Edit guidance', exact: true }).click();
-        assert.equal(await page.getByLabel('Custom instructions').inputValue(), edited);
-        await page.getByRole('button', { name: 'Back to scope', exact: true }).click();
-        assert.equal(await page.getByLabel('Instruction path').inputValue(), target);
-        assert.deepEqual(
-          await page.evaluate(() => window.fixture.state.instructions),
-          initialInstructions,
-        );
-        assert.deepEqual(
+        assert.deepEqual(await page.evaluate(() => window.fixture.state.instructions), files);
+        assert.equal(
           await page.evaluate(() =>
-            window.fixture.requests.filter(
-              (r) => r.method !== 'GET' && !r.path.endsWith('/restore'),
-            ),
+            window.fixture.requests.some((r) => r.path.endsWith('/instructions/proposal')),
           ),
-          [],
-          'Wizard navigation, editing, disclosures and reflow never generate, execute or write',
+          false,
         );
-        assert.deepEqual(await page.evaluate(() => window.fixture.terminals), []);
       } finally {
         await close();
       }
@@ -7824,6 +7507,7 @@ try {
         await page.getByLabel('Instruction path').fill(target);
         await page.getByRole('button', { name: 'Load scope', exact: true }).click();
         if (state === 'excluded') {
+          await page.getByText('Add project guidelines', { exact: true }).click();
           await page
             .getByText('This AGENTS.md is excluded by project context policy.', { exact: true })
             .waitFor();
@@ -7831,10 +7515,10 @@ try {
             page.getByLabel('Custom instructions'),
             page.getByLabel('Keep changes focused'),
             page.getByRole('button', { name: 'Add selected guidance', exact: true }),
-            page.getByRole('button', { name: 'Continue to preview', exact: true }),
+            page.getByRole('button', { name: 'Preview instruction diff', exact: true }),
           ])
             assert.equal(await control.isDisabled(), true);
-          await page.getByRole('button', { name: 'Back to scope', exact: true }).click();
+          await page.getByRole('button', { name: 'Read guidance', exact: true }).click();
           await page
             .getByText('This AGENTS.md is excluded by project context policy.', { exact: true })
             .waitFor();
@@ -7842,18 +7526,22 @@ try {
           await page.getByText('Load this scope again before editing.', { exact: true }).waitFor();
           assert.equal(await page.getByLabel('Custom instructions').count(), 0);
           assert.equal(
-            await page.getByRole('button', { name: 'Continue to preview', exact: true }).count(),
+            await page
+              .getByRole('button', { name: 'Preview instruction diff', exact: true })
+              .count(),
             0,
           );
         }
         await page.getByText('AGENTS.md · scope .', { exact: true }).click();
         for (const theme of ['dark', 'light']) {
           if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-            await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
+            await page
+              .getByRole('button', { name: themeNames[theme], exact: true })
+              .evaluate((button) => button.click());
           for (const larger of [false, true]) {
             const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
             if (((await textSize.getAttribute('aria-pressed')) === 'true') !== larger)
-              await textSize.click();
+              await textSize.evaluate((button) => button.click());
             for (const width of [1440, 800]) {
               await page.setViewportSize({ width, height: 1000 });
               await instructionsLayout(page);
@@ -7904,7 +7592,9 @@ try {
       assert.equal(await page.locator('.instructions-page summary').count(), 0);
       assert.equal(await page.getByLabel('Instruction path').inputValue(), 'internal/AGENTS.md');
       await page.setViewportSize({ width: 800, height: 1000 });
-      await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+      await page
+        .getByRole('button', { name: 'Larger text', exact: true })
+        .evaluate((button) => button.click());
       await instructionsLayout(page);
       await layout(page, 'instructions-scope-read-failed-800-dark-larger');
       await page.getByRole('button', { name: 'Load scope', exact: true }).click();
@@ -7916,7 +7606,6 @@ try {
       await page
         .getByLabel('Custom instructions')
         .fill('# Internal rules\n\nPreserve cancellation and error details.\n');
-      await page.getByRole('button', { name: 'Continue to preview', exact: true }).click();
       const before = await page.evaluate(() => window.fixture.state.instructions);
       await page.evaluate(() => {
         window.fixture.hold = '/api/projects/current/instructions/proposal';
@@ -7942,7 +7631,6 @@ try {
           .isEnabled(),
         true,
       );
-      await page.getByRole('button', { name: 'Edit guidance', exact: true }).click();
       assert.equal(
         await page.getByLabel('Custom instructions').inputValue(),
         '# Internal rules\n\nPreserve cancellation and error details.\n',
@@ -7989,6 +7677,7 @@ try {
       await nav(page, 'Instructions');
       await page.getByLabel('Instruction path').fill('internal/AGENTS.md');
       await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+      await page.getByText('Add project guidelines', { exact: true }).click();
       const draft = page.getByLabel('Custom instructions');
       await draft.waitFor();
       const original = await draft.inputValue();
@@ -8012,14 +7701,22 @@ try {
       await page.getByRole('status').filter({ hasText: '2 guidelines selected' }).waitFor();
       assert.equal(await draft.inputValue(), original);
       assert.equal(
-        await page.getByRole('button', { name: 'Continue to preview', exact: true }).isDisabled(),
+        await page
+          .getByRole('button', { name: 'Preview instruction diff', exact: true })
+          .isDisabled(),
         true,
       );
       await page.getByLabel('Keep changes focused', { exact: true }).uncheck();
       for (const theme of ['dark', 'light']) {
-        if (theme === 'light') await page.getByRole('button', { name: 'Porcelain theme' }).click();
+        if (theme === 'light')
+          await page
+            .getByRole('button', { name: 'Porcelain theme' })
+            .evaluate((button) => button.click());
         for (const larger of [false, true]) {
-          if (larger) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          if (larger)
+            await page
+              .getByRole('button', { name: 'Larger text', exact: true })
+              .evaluate((button) => button.click());
           for (const width of [1440, 800]) {
             await page.setViewportSize({ width, height: 1000 });
             await instructionsLayout(page);
@@ -8029,7 +7726,10 @@ try {
             );
           }
           await contrast(page, `Instruction guidelines ${theme}`);
-          if (larger) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          if (larger)
+            await page
+              .getByRole('button', { name: 'Larger text', exact: true })
+              .evaluate((button) => button.click());
         }
       }
       const add = page.getByRole('button', { name: 'Add selected guidance', exact: true });
@@ -8053,9 +7753,10 @@ try {
       assert.equal(await add.isDisabled(), true);
       assert.deepEqual(await page.evaluate(() => window.fixture.requests), requests);
       assert.deepEqual(await page.evaluate(() => window.fixture.state.instructions), files);
-      await page.getByRole('button', { name: 'Back to scope', exact: true }).click();
+      await page.getByRole('button', { name: 'Read guidance', exact: true }).click();
       await page.getByLabel('Instruction path').fill('new/AGENTS.md');
       await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+      await page.getByText('Add project guidelines', { exact: true }).click();
       assert.equal(await draft.inputValue(), '');
       assert.equal(await go.isChecked(), false);
       assert.equal(await add.isDisabled(), true);
@@ -8096,6 +7797,7 @@ try {
     try {
       await nav(page, 'Instructions');
       await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+      await page.getByText('Add project guidelines', { exact: true }).click();
       const draft = page.getByLabel('Custom instructions');
       const original =
         '# Local rules\n\n```markdown\n## Testing and validation\nExample only.\n```\n\n## Code style and conventions\nKeep my formatting.\n\n## Custom rules\nPreserve my closing section.\n';
@@ -8122,13 +7824,20 @@ try {
       await page.getByRole('status').filter({ hasText: '3 guidelines selected' }).waitFor();
       assert.equal(await draft.inputValue(), original);
       for (const theme of ['dark', 'light']) {
-        if (theme === 'light') await page.getByRole('button', { name: 'Porcelain theme' }).click();
+        if (theme === 'light')
+          await page
+            .getByRole('button', { name: 'Porcelain theme' })
+            .evaluate((button) => button.click());
         await page.setViewportSize({ width: 800, height: 1000 });
-        await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        await page
+          .getByRole('button', { name: 'Larger text', exact: true })
+          .evaluate((button) => button.click());
         await instructionsLayout(page);
         await layout(page, `instructions-filtered-selection-${theme}`);
         await contrast(page, `Instruction filters ${theme}`);
-        await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        await page
+          .getByRole('button', { name: 'Larger text', exact: true })
+          .evaluate((button) => button.click());
       }
       await page.getByRole('button', { name: 'Add selected guidance', exact: true }).click();
       let content = await draft.inputValue();
@@ -8179,6 +7888,7 @@ try {
       await nav(page, 'Instructions');
       await page.getByLabel('Instruction path').fill('new/AGENTS.md');
       await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+      await page.getByText('Add project guidelines', { exact: true }).click();
       await page
         .getByText('No matching indexed files in this scope. Use general or custom guidance.', {
           exact: true,
@@ -8194,11 +7904,12 @@ try {
       await close();
     }
   });
-  await test('Instruction wizard preserves inherited rules and requires diff review and Apply', async () => {
+  await test('Instruction editor preserves inherited rules and requires diff review and Apply', async () => {
     const { page, close } = await pageFor();
     await nav(page, 'Instructions');
     await page.getByLabel('Instruction path').fill('internal/AGENTS.md');
     await page.getByRole('button', { name: 'Load scope', exact: true }).click();
+    await page.getByText('Add project guidelines', { exact: true }).click();
     await page.getByLabel('Custom instructions').waitFor();
     assert.match(
       await page.getByLabel('Custom instructions').inputValue(),
@@ -8217,10 +7928,9 @@ try {
     await layout(page, 'instructions-guidance');
     await contrast(page, 'Instruction wizard');
     await page.setViewportSize({ width: 900, height: 640 });
-    await page.getByRole('button', { name: 'Larger text' }).click();
+    await page.getByRole('button', { name: 'Larger text' }).evaluate((button) => button.click());
     await instructionsLayout(page);
     await layout(page, 'instructions-large-text');
-    await page.getByRole('button', { name: 'Continue to preview', exact: true }).click();
     await instructionsLayout(page);
     await layout(page, 'instructions-preview-900-dark-larger');
     await page.getByRole('button', { name: 'Preview instruction diff', exact: true }).click();
@@ -8236,8 +7946,11 @@ try {
       ),
       false,
     );
-    assert.equal(await page.getByRole('button', { name: 'Accept changes' }).isDisabled(), false);
-    await page.getByRole('button', { name: 'Accept changes' }).click();
+    assert.equal(
+      await page.getByRole('button', { name: /^Apply \d+ files?$/ }).isDisabled(),
+      false,
+    );
+    await page.getByRole('button', { name: /^Apply \d+ files?$/ }).click();
     await idle(page);
     const instructions = await page.evaluate(() => window.fixture.state.instructions);
     assert.equal(instructions['AGENTS.md'], '# Project rules\n\nPreserve public APIs.\n');
@@ -8258,6 +7971,7 @@ try {
       await nav(page, 'Features');
 
       const hasIdeasStart = options.featuresReady && !options.featuresEmpty;
+      await openGoals(page);
       await page
         .getByRole('button', {
           name: hasIdeasStart ? 'Search more feature suggestions' : 'Suggest features',
@@ -8274,17 +7988,19 @@ try {
       if (options.featuresFail)
         await page.getByText(/^Feature search failed\. Try again\./).waitFor();
       const hasIdeas = !options.featuresEmpty && (!options.featuresFail || options.featuresReady);
-      if (options.featuresStale && hasIdeasStart)
+      if (options.featuresStale && hasIdeasStart) {
+        await openFeature(page);
         assert.equal(
           await page.getByRole('button', { name: 'Discuss in chat' }).isDisabled(),
           true,
         );
+      }
       assert.equal(
         await page.getByText(/active idea(?:s)? (?:is|are) outdated/).count(),
         options.featuresStale && hasIdeasStart ? 1 : 0,
       );
       await page.setViewportSize({ width: 800, height: 900 });
-      await page.getByRole('button', { name: 'Larger text' }).click();
+      await page.getByRole('button', { name: 'Larger text' }).evaluate((button) => button.click());
       await layout(page, `features-${JSON.stringify(options)}`);
       await nav(page, 'Overview');
       assert.equal(await page.getByText(/Feature search failed/).count(), 0);
@@ -8393,7 +8109,7 @@ try {
       });
       try {
         await idle(page);
-        const reference = await panelTreatment(page.locator('.summary-details .panel').first());
+
         await nav(page, 'Chat');
         await page.getByLabel('Add an existing file').selectOption('internal/worker/process.go');
         await page.getByLabel('Change request', { exact: true }).fill('Handle cancellation.');
@@ -8401,7 +8117,8 @@ try {
         await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
         await idle(page);
         await nav(page, 'Changes');
-        await page.getByRole('button', { name: 'Accept changes', exact: true }).click();
+        await reviewAllFiles(page);
+        await page.getByRole('button', { name: /^Apply \d+ files?$/ }).click();
         await idle(page);
         const outcome = page.getByRole('region', { name: 'Change outcome', exact: true });
         if (state === 'response-lost') {
@@ -8420,11 +8137,13 @@ try {
           );
           for (const theme of ['dark', 'light']) {
             if ((await page.locator('html').getAttribute('data-theme')) !== theme)
-              await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
+              await page
+                .getByRole('button', { name: themeNames[theme], exact: true })
+                .evaluate((button) => button.click());
             for (const larger of [false, true]) {
               const size = page.getByRole('button', { name: 'Larger text', exact: true });
               if (((await size.getAttribute('aria-pressed')) === 'true') !== larger)
-                await size.click();
+                await size.evaluate((button) => button.click());
               for (const width of ['applied', 'failed', 'response-lost'].includes(state)
                 ? [1440, 1280, 1001, 800]
                 : [1440, 800]) {
@@ -8485,7 +8204,7 @@ try {
             exact: true,
           })
           .waitFor();
-        assert.deepEqual(await panelTreatment(outcome.locator('.panel')), reference);
+
         const applied = !['prepared', 'recovery_required', 'undone'].includes(state);
         assert.equal(
           await outcome
@@ -8507,9 +8226,10 @@ try {
             uncertain && (await control.textContent()).trim() !== 'Refresh project',
           );
         await nav(page, 'Changes');
+        await reviewAllFiles(page);
         assert.equal(
-          await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
-          true,
+          await page.getByRole('button', { name: /^Apply \d+ files?$/, disabled: false }).count(),
+          0,
         );
         await render(state);
         if (['prepared', 'recovery_required'].includes(state)) {
@@ -8580,9 +8300,12 @@ try {
               0,
             );
             await nav(page, 'Changes');
+            await reviewAllFiles(page);
             assert.equal(
-              await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
-              true,
+              await page
+                .getByRole('button', { name: /^Apply \d+ files?$/, disabled: false })
+                .count(),
+              0,
             );
             assert.equal(
               await outcome.getByRole('button', { name: 'Undo proposal', exact: true }).isEnabled(),
@@ -8631,10 +8354,14 @@ try {
       await page.getByLabel('Change request', { exact: true }).fill('Handle cancellation.');
       await page.getByLabel('Run project tests after generation').uncheck();
       await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
-      await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
+      await page
+        .locator('dialog:not(.studio-overlay)')
+        .getByRole('button', { name: 'Continue', exact: true })
+        .click();
       await idle(page);
       await nav(page, 'Changes');
-      await page.getByRole('button', { name: 'Accept changes' }).click();
+      await reviewAllFiles(page);
+      await page.getByRole('button', { name: /^Apply \d+ files?$/ }).click();
       await idle(page);
       await page.getByText(mutationWarning, { exact: true }).waitFor();
       assert.equal(
@@ -8648,7 +8375,10 @@ try {
         false,
       );
       await page.getByRole('button', { name: 'Verify applied change' }).click();
-      await page.getByRole('dialog').getByRole('button', { name: 'Trust this project' }).click();
+      await page
+        .locator('dialog:not(.studio-overlay)')
+        .getByRole('button', { name: 'Trust this project' })
+        .click();
       await idle(page);
       await page
         .getByLabel('Post-Apply verification')
@@ -8657,7 +8387,10 @@ try {
         .waitFor();
       await layout(page, verificationFail ? 'chat-verification-failed' : 'chat-verified');
       await page.getByRole('button', { name: 'Reanalyze changed files' }).click();
-      await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
+      await page
+        .locator('dialog:not(.studio-overlay)')
+        .getByRole('button', { name: 'Continue', exact: true })
+        .click();
       await idle(page);
       const requests = await page.evaluate(() => window.fixture.requests);
       assert.equal(

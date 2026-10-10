@@ -596,6 +596,7 @@ export function SearchPage({ s }: { s: State }) {
         <Icon name="search" />
         <input
           autoFocus
+          data-initial-focus
           id="search"
           value={query}
           onChange={(event) => {

@@ -365,7 +365,7 @@ export function AnalysisPreview({ s }: { s: State }) {
   const p = s.preview;
   if (!p)
     return (
-      <div className="workspace-page">
+      <div className="workspace-page analysis-preview">
         <Heading variant="intro" title="Analysis preview">
           <Go page="analysis">Back to analysis</Go>
         </Heading>

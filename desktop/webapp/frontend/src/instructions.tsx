@@ -287,9 +287,6 @@ export function Instructions({ s }: { s: State }) {
                     <Notice>Add selected guidance to the draft before continuing.</Notice>
                   )}
                   <div className="actions">
-                    <Button disabled={!!s.busy} onClick={() => setEditing(false)}>
-                      Read guidance
-                    </Button>
                     <Button
                       tone="primary"
                       disabled={

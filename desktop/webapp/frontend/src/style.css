@@ -2696,10 +2696,7 @@ dialog.model-picker {
 }
 
 .change-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
-  gap: 20px;
-  align-items: start;
+  min-width: 0;
 }
 .chat-page {
   min-width: 0;
@@ -2899,19 +2896,6 @@ dialog.model-picker {
   padding-bottom: 12px;
   border-bottom: 1px solid var(--line);
 }
-.instructions-page .wizard-steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
-  padding: 0;
-  list-style: none;
-  margin: 0;
-  color: var(--muted);
-}
-.instructions-page .wizard-steps [aria-current] {
-  color: var(--text);
-  font-weight: 600;
-}
 .instruction-text {
   width: 100%;
   min-height: 260px;
@@ -3062,15 +3046,6 @@ dialog.model-picker {
 .run-result-card:has([data-accent='features']) {
   --section-color: var(--violet);
 }
-.change-acceptance {
-  border-color: var(--accent);
-}
-.change-acceptance .panel-head {
-  background: var(--accent-soft);
-}
-.change-acceptance .panel-body > p {
-  margin-bottom: 14px;
-}
 
 .guided-fix {
   min-width: 0;
@@ -3096,30 +3071,6 @@ dialog.model-picker {
   min-height: 32px;
   padding: 5px 10px;
   font-size: 0.8rem;
-}
-.fix-steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 28px;
-  margin: 0;
-  padding: 12px 0;
-  border-block: 1px solid var(--line);
-  list-style: none;
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-.fix-steps li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.fix-steps .icon {
-  width: 15px;
-  height: 15px;
-}
-.fix-steps [aria-current='step'] {
-  color: var(--accent);
-  font-weight: 600;
 }
 .guided-fix .fix-cause {
   background: var(--panel);
@@ -3340,27 +3291,6 @@ dialog.model-picker {
 .chat-composer .composer {
   min-height: 112px;
 }
-.change-workspace--review > .chat-review {
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.42fr);
-  align-items: start;
-}
-.change-workspace--review .review-overview,
-.change-workspace--review .workflow-progress,
-.change-workspace--review .change-acceptance,
-.change-workspace--review .chat-provider-context {
-  grid-column: 1 / -1;
-}
-.review-overview {
-  min-width: 0;
-  gap: 12px;
-}
-.review-overview h2 {
-  font-size: 1rem;
-  margin: 0;
-}
-.review-overview p {
-  margin: 6px 0 0;
-}
 .source-document,
 .source-context {
   display: grid;
@@ -3374,11 +3304,6 @@ dialog.model-picker {
 }
 @media (max-width: 1250px) {
   .source-inspection {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-@media (max-width: 1100px) {
-  .change-workspace--review > .chat-review {
     grid-template-columns: minmax(0, 1fr);
   }
 }
