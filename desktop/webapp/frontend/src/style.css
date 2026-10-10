@@ -1628,9 +1628,6 @@ button.list-row:hover,
 .results-findings .toolbar .input-wrap {
   flex: 1 1 16rem;
 }
-.results-findings .toolbar .field {
-  flex: 0 1 14rem;
-}
 .results-findings .result-row {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr) auto 20px;
@@ -1673,10 +1670,94 @@ button.list-row:hover,
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  padding-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
 }
-.findings-pagination .actions {
+.pagination-summary {
+  display: grid;
+  gap: 3px;
+}
+.pagination-summary > :last-child {
+  font-size: 0.72rem;
+}
+.pagination-pages {
+  display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pagination-pages .button {
+  min-width: 34px;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-variant-numeric: tabular-nums;
+}
+.pagination-pages .button[aria-current='page'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 700;
+}
+.pagination-gap {
+  width: 20px;
+  text-align: center;
+  color: var(--muted);
+}
+.findings-toolbar {
+  gap: 10px;
+}
+.findings-search input {
+  padding-right: 40px;
+  min-height: 42px;
+  border-radius: 8px;
+}
+.findings-search .findings-search-clear {
+  position: absolute;
+  right: 5px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 5px;
+  border-radius: 5px;
+}
+.priority-filter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 1 12rem;
+  min-width: 0;
+  max-width: 100%;
+}
+.priority-filter select {
+  width: 100%;
+  appearance: none;
+  min-height: 42px;
+  padding: 10px 32px 10px 38px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.priority-filter[data-active='true'] select {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.priority-filter-icon {
+  position: absolute;
+  left: 10px;
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  pointer-events: none;
+}
+.priority-filter-icon .priority-icon {
+  width: 18px;
+}
+.priority-filter > .icon {
+  position: absolute;
+  right: 10px;
+  width: 14px;
+  color: var(--muted);
+  pointer-events: none;
 }
 .results-detail {
   container-type: inline-size;

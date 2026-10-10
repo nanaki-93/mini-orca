@@ -96,6 +96,104 @@ export async function testResults({ test, pageFor, nav, idle, layout }) {
       await close();
     }
   });
+  await test('Finding search, priority reset and numbered pagination remain local and keyboard accessible', async () => {
+    const { page, close } = await pageFor();
+    try {
+      await page.evaluate(() => {
+        const state = window.fixture.state;
+        state.results.bugs = {
+          semantic: Array.from({ length: 123 }, (_, index) => ({
+            ...state.finding,
+            id: `issue-${index}`,
+            title: `Issue ${index}`,
+            severity: index % 2 ? 'low' : 'high',
+          })),
+          performance: [],
+          security: [],
+          saved_finding_count: 123,
+        };
+      });
+      await nav(page, 'Bugs');
+      const before = await page.evaluate(() =>
+        window.fixture.requests.filter((r) => r.method !== 'GET'),
+      );
+      const pagination = page.getByRole('navigation', { name: 'Findings pagination' });
+      const search = page.getByLabel('Filter findings', { exact: true });
+      const priority = page.getByLabel('Finding priority', { exact: true });
+      assert.deepEqual(await priority.locator('option').allTextContents(), [
+        'All priorities',
+        'High',
+        'Low',
+      ]);
+      assert.equal(
+        await pagination.getByRole('button', { name: 'Previous page' }).isDisabled(),
+        true,
+      );
+      await pagination.getByRole('button', { name: 'Page 13', exact: true }).press('Enter');
+      await page.getByText('121–123 of 123 findings', { exact: true }).waitFor();
+      assert.equal(await pagination.getByRole('button', { name: 'Next page' }).isDisabled(), true);
+      assert.equal(
+        await pagination
+          .getByRole('button', { name: 'Page 13', exact: true })
+          .getAttribute('aria-current'),
+        'page',
+      );
+      await pagination.getByRole('button', { name: 'Page 11', exact: true }).click();
+      await page.getByText('101–110 of 123 findings', { exact: true }).waitFor();
+      for (const width of [1440, 700]) {
+        await page.setViewportSize({ width, height: 900 });
+        if (width === 700)
+          await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        for (const theme of ['Graphite', 'Porcelain', 'Midnight']) {
+          await page.getByRole('button', { name: `${theme} theme`, exact: true }).click();
+          await pagination.scrollIntoViewIfNeeded();
+          assert.equal(
+            await pagination.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+            true,
+          );
+          const bounds = await pagination.boundingBox();
+          for (const button of await pagination.getByRole('button').all()) {
+            const box = await button.boundingBox();
+            assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
+          }
+          await layout(page, `finding-pagination-${width}-${theme}`);
+        }
+      }
+      await search.fill('Issue 12');
+      await page.getByText('Page 1 of 1', { exact: true }).waitFor();
+      assert.equal(await page.locator('.result-row').count(), 4);
+      await priority.selectOption('low');
+      assert.equal(await page.locator('.result-row strong').innerText(), 'Issue 121');
+      await page.getByRole('button', { name: 'Reset filters', exact: true }).press('Enter');
+      assert.equal(await priority.inputValue(), '');
+      assert.equal(await search.inputValue(), '');
+      assert.equal(await search.evaluate((el) => el === document.activeElement), true);
+      await page.getByText('Page 1 of 13', { exact: true }).waitFor();
+      await search.fill('no match');
+      await page.getByRole('heading', { name: 'No matching findings', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Clear finding search', exact: true }).press('Enter');
+      assert.equal(await search.inputValue(), '');
+      assert.equal(await search.evaluate((el) => el === document.activeElement), true);
+      await search.fill('Issue 12');
+      await search.press('Escape');
+      assert.equal(await search.inputValue(), '');
+      assert.equal(await page.locator('.result-row').count(), 10);
+      await priority.selectOption('low');
+      const fieldBounds = await priority.boundingBox();
+      const arrowBounds = await page.locator('.priority-filter > .icon').boundingBox();
+      assert.ok(
+        arrowBounds.x > fieldBounds.x &&
+          arrowBounds.x + arrowBounds.width < fieldBounds.x + fieldBounds.width,
+      );
+      await layout(page, 'finding-search-active-priority');
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+        before,
+      );
+    } finally {
+      await close();
+    }
+  });
   await test('Finding pages preserve category pagination, breadcrumbs and local navigation', async () => {
     for (const name of ['Bugs', 'Security', 'Performance']) {
       const category = name.toLowerCase();
@@ -128,7 +226,7 @@ export async function testResults({ test, pageFor, nav, idle, layout }) {
           'The findings list is the final section, without a file list underneath',
         );
         await page.getByLabel('Filter findings', { exact: true }).fill('Worker issue');
-        await page.getByLabel('Finding severity', { exact: true }).selectOption('high');
+        await page.getByLabel('Finding priority', { exact: true }).selectOption('high');
         await page.getByRole('button', { name: 'Next page', exact: true }).click();
         await page.getByText('11–20 of 23 findings', { exact: true }).waitFor();
         const before = await page.evaluate(() =>
@@ -186,7 +284,7 @@ export async function testResults({ test, pageFor, nav, idle, layout }) {
           'Worker issue',
         );
         assert.equal(
-          await page.getByLabel('Finding severity', { exact: true }).inputValue(),
+          await page.getByLabel('Finding priority', { exact: true }).inputValue(),
           'high',
         );
         assert.equal(
