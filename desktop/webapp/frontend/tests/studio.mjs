@@ -99,4 +99,50 @@ export async function testStudio({ test, pageFor, nav, idle, layout }) {
       await close();
     }
   });
+  await test('Studio chat and changes share file-by-file review and explicit Apply', async () => {
+    const { page, close } = await pageFor({ trusted: true });
+    try {
+      await nav(page, 'Chat');
+      await page
+        .getByLabel('Files to change', { exact: true })
+        .fill('internal/worker.go\ninternal/worker_test.go');
+      await page
+        .getByLabel('Change request', { exact: true })
+        .fill('Handle cancellation with regression coverage.');
+      assert.equal(await page.getByLabel('Creation model', { exact: true }).count(), 0);
+      await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
+      await page.getByRole('heading', { name: 'Ready for review', exact: true }).waitFor();
+      await layout(page, 'studio-task-conversation');
+      await page.getByRole('button', { name: 'Open proposal', exact: true }).click();
+      await page.getByRole('complementary', { name: 'Review evidence' }).waitFor();
+      assert.equal(
+        await page.getByRole('tablist', { name: 'Files to change' }).getByRole('tab').count(),
+        2,
+      );
+      assert.equal(await page.getByRole('button', { name: /^Apply \d/ }).count(), 0);
+      await layout(page, 'studio-review-evidence');
+      await page.getByRole('button', { name: 'Review next file', exact: true }).click();
+      const apply = page.getByRole('button', { name: 'Apply 2 files', exact: true });
+      assert.equal(await apply.isEnabled(), true);
+      assert.equal(
+        await page.evaluate(() => window.fixture.requests.some((r) => r.path.endsWith('/apply'))),
+        false,
+      );
+      await apply.click();
+      await idle(page);
+      await page.getByRole('heading', { name: 'Change applied', exact: true }).waitFor();
+      assert.equal(
+        await page.evaluate(
+          () => window.fixture.requests.filter((r) => r.path.endsWith('/apply')).length,
+        ),
+        1,
+      );
+      for (const theme of ['Porcelain', 'Midnight']) {
+        await page.getByRole('button', { name: `${theme} theme`, exact: true }).click();
+        await layout(page, `studio-review-${theme.toLowerCase()}`);
+      }
+    } finally {
+      await close();
+    }
+  });
 }
