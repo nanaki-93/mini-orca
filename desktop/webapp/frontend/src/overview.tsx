@@ -151,7 +151,6 @@ export function Summary({ s }: { s: State }) {
     icon: string;
     count?: number | null;
     status?: string;
-    action?: string;
   }[] = [
     ...(
       [
@@ -187,24 +186,10 @@ export function Summary({ s }: { s: State }) {
             ? 'stale'
             : features?.status,
     },
-    {
-      page: 'diagrams',
-      title: 'Architecture and Flow',
-      icon: 'branch',
-      status: overview?.analysis.status || s.project!.ai_status,
-      action: 'Explore',
-    },
-    {
-      page: s.run ? 'analysis-run' : 'analysis',
-      title: 'Project Analysis',
-      icon: 'activity',
-      status: s.run?.status || (s.run === null ? 'not_run' : 'unavailable'),
-      action: s.run ? 'View run' : 'Prepare analysis',
-    },
   ];
   const currentWork = s.change || s.changeHistory?.find((entry) => entry.state === 'draft');
   const openWork = (id: string) => (s.change?.id === id ? w.navigate('chat') : w.viewChange(id));
-  const renderMetric = ({ page, title, icon, count, status, action }: (typeof metrics)[number]) => (
+  const renderMetric = ({ page, title, icon, count, status }: (typeof metrics)[number]) => (
     <button
       key={page}
       className="metric-card studio-list-row"
@@ -217,16 +202,15 @@ export function Summary({ s }: { s: State }) {
       <span className="studio-row-copy">
         <strong>{title}</strong>
         <small>
-          {action ||
-            (page === 'features'
-              ? 'Explore what to build next'
-              : page === 'performance'
-                ? 'Unmeasured model suggestions'
-                : 'Suggestions to investigate')}
+          {page === 'features'
+            ? 'Explore what to build next'
+            : page === 'performance'
+              ? 'Unmeasured model suggestions'
+              : 'Suggestions to investigate'}
         </small>
       </span>
       <StatusDot value={status} label={title} />
-      {!action && <span className="metric-number">{count ?? '—'}</span>}
+      <span className="metric-number">{count ?? '—'}</span>
       <Icon name="chevron" />
     </button>
   );
@@ -234,29 +218,61 @@ export function Summary({ s }: { s: State }) {
     <div className="summary-page">
       <div className="summary-hero">
         <span className="studio-eyebrow">Your project</span>
-        <Heading title={s.project!.name} detail={s.project!.path}>
-          <Button
-            icon="refresh"
-            disabled={!!s.busy}
-            onClick={() => void w.act('Refresh overview', () => w.refreshProject())}
-          >
-            Refresh
-          </Button>
-          <Go page="analysis" icon="activity">
-            Analyze project
-          </Go>
-          <Button
-            icon="plus"
-            tone="primary"
-            disabled={!!s.busy || activeChangeWorkflow(s.change)}
-            onClick={() => {
-              w.newChange();
-              void w.navigate('chat');
-            }}
-          >
-            Start a task
-          </Button>
-        </Heading>
+        <header className="page-heading">
+          <div>
+            <h1>{s.project!.name}</h1>
+            <div className="summary-description">
+              <StatusDot
+                value={overview?.analysis.status || s.project!.ai_status}
+                label="Overview"
+              />
+              <Prose text={overview?.analysis.purpose || s.project!.summary} />
+            </div>
+          </div>
+          <div className="actions">
+            <Button
+              icon="refresh"
+              disabled={!!s.busy}
+              onClick={() => void w.act('Refresh overview', () => w.refreshProject())}
+            >
+              Refresh
+            </Button>
+            <Go page="analysis" icon="activity">
+              Analyze project
+            </Go>
+            <Button
+              icon="plus"
+              tone="primary"
+              disabled={!!s.busy || activeChangeWorkflow(s.change)}
+              onClick={() => {
+                w.newChange();
+                void w.navigate('chat');
+              }}
+            >
+              Start a task
+            </Button>
+          </div>
+        </header>
+        <p className="summary-path">{s.project!.path}</p>
+        <dl className="summary-facts" aria-label="Project facts">
+          <div>
+            <dt>Project type</dt>
+            <dd className="summary-project-type">{s.project!.type}</dd>
+          </div>
+          <div>
+            <dt>Source files</dt>
+            <dd>{overview?.metrics.source_file_count ?? '—'}</dd>
+          </div>
+          <div>
+            <dt>Lines</dt>
+            <dd>{overview?.metrics.total_lines?.toLocaleString() ?? '—'}</dd>
+          </div>
+          <div>
+            <dt>Verified findings</dt>
+            <dd>{overview?.finding_counts.verified ?? '—'}</dd>
+          </div>
+        </dl>
+        {overview?.analysis.failure && <p className="error-text">{overview.analysis.failure}</p>}
       </div>
       <section className="studio-resume" aria-label="Continue work">
         <div>
@@ -301,32 +317,42 @@ export function Summary({ s }: { s: State }) {
         <section className="studio-attention" aria-label="Needs attention">
           <h2>Needs attention</h2>
           <p className="small muted">Model suggestions and ideas to investigate.</p>
-          <div className="metric-grid">{metrics.slice(0, 4).map(renderMetric)}</div>
+          <div className="metric-grid">{metrics.map(renderMetric)}</div>
         </section>
-        <section className="studio-activity" aria-label="Project activity">
-          <h2>Project activity</h2>
-          <div className="metric-grid">{metrics.slice(4).map(renderMetric)}</div>
-          {(s.changeHistory || []).slice(0, 2).map((entry) => (
-            <button
-              key={entry.id}
-              className="studio-history-row"
-              disabled={!!s.busy || (activeChangeWorkflow(s.change) && s.change?.id !== entry.id)}
-              onClick={() => void openWork(entry.id)}
-            >
-              <Icon name="chat" />
-              <span>
-                <strong>{entry.title}</strong>
-                <small>
-                  {entry.workflow_status || entry.state} · revision {entry.revision}
-                </small>
-              </span>
-              <Icon name="chevron" />
-            </button>
-          ))}
-          <Go page="history" tone="ghost small" icon="clock">
-            View history
-          </Go>
-        </section>
+        <Panel className="coverage-panel">
+          <div className="coverage-ring">
+            <svg viewBox="0 0 100 100" aria-hidden="true">
+              <circle className="ring-track" cx="50" cy="50" r="42" />
+              <circle
+                className="ring-mark"
+                cx="50"
+                cy="50"
+                r="42"
+                strokeDasharray={`${(percent || 0) * 2.64} 264`}
+              />
+            </svg>
+            <strong>{percent === null ? '—' : `${percent}%`}</strong>
+          </div>
+          <div className="coverage-copy">
+            <h2>Analysis coverage</h2>
+            <p>
+              {coverage
+                ? `${coverage.fresh} of ${coverage.total} files current`
+                : 'Not available yet'}
+            </p>
+          </div>
+          <div className="legend">
+            <span className={coverage && coverage.stale > 0 ? 'coverage-stale' : undefined}>
+              Outdated <strong>{coverage?.stale ?? '—'}</strong>
+            </span>
+            <span>
+              Missing <strong>{coverage?.missing ?? '—'}</strong>
+            </span>
+            <span className={coverage && coverage.failed > 0 ? 'coverage-failed' : undefined}>
+              Failed <strong>{coverage?.failed ?? '—'}</strong>
+            </span>
+          </div>
+        </Panel>
       </div>
       <Tests s={s} />
       <div className="studio-scope-line">
@@ -341,83 +367,6 @@ export function Summary({ s }: { s: State }) {
           Manage scope
         </Go>
       </div>
-      <Disclosure title="About this project">
-        <div className="summary-details">
-          {' '}
-          <dl className="summary-facts" aria-label="Project facts">
-            <div>
-              <dt>Project type</dt>
-              <dd className="summary-project-type">{s.project!.type}</dd>
-            </div>
-            <div>
-              <dt>Source files</dt>
-              <dd>{overview?.metrics.source_file_count ?? '—'}</dd>
-            </div>
-            <div>
-              <dt>Lines</dt>
-              <dd>{overview?.metrics.total_lines?.toLocaleString() ?? '—'}</dd>
-            </div>
-            <div>
-              <dt>Verified findings</dt>
-              <dd>{overview?.finding_counts.verified ?? '—'}</dd>
-            </div>
-          </dl>{' '}
-          <Panel className="coverage-panel">
-            <div className="coverage-ring">
-              <svg viewBox="0 0 100 100" aria-hidden="true">
-                <circle className="ring-track" cx="50" cy="50" r="42" />
-                <circle
-                  className="ring-mark"
-                  cx="50"
-                  cy="50"
-                  r="42"
-                  strokeDasharray={`${(percent || 0) * 2.64} 264`}
-                />
-              </svg>
-              <strong>{percent === null ? '—' : `${percent}%`}</strong>
-            </div>
-            <div className="coverage-copy">
-              <h2>Analysis coverage</h2>
-              <p>
-                {coverage
-                  ? `${coverage.fresh} of ${coverage.total} files current`
-                  : 'Not available yet'}
-              </p>
-            </div>
-            <div className="legend">
-              <span className={coverage && coverage.stale > 0 ? 'coverage-stale' : undefined}>
-                Outdated <strong>{coverage?.stale ?? '—'}</strong>
-              </span>
-              <span>
-                Missing <strong>{coverage?.missing ?? '—'}</strong>
-              </span>
-              <span className={coverage && coverage.failed > 0 ? 'coverage-failed' : undefined}>
-                Failed <strong>{coverage?.failed ?? '—'}</strong>
-              </span>
-            </div>
-          </Panel>
-          <Panel
-            title="Project overview"
-            actions={
-              <StatusDot
-                value={overview?.analysis.status || s.project!.ai_status}
-                label="Overview"
-              />
-            }
-          >
-            <Prose text={overview?.analysis.purpose || s.project!.summary} />
-            {overview?.analysis.failure && (
-              <p className="error-text">{overview.analysis.failure}</p>
-            )}
-            {!!overview?.analysis.components?.length && (
-              <Disclosure title="Components">
-                <BulletContent title="" items={overview.analysis.components} />
-              </Disclosure>
-            )}
-          </Panel>
-          <InsightCard insight={overview?.analysis.engineering_insight} />
-        </div>
-      </Disclosure>
     </div>
   );
 }
@@ -535,6 +484,12 @@ export function Diagrams({ s }: { s: State }) {
           )}
         </section>
         <aside className="architecture-notes">
+          {!!s.overview?.analysis.components?.length && (
+            <Panel title="Components">
+              <BulletContent title="" items={s.overview.analysis.components} />
+            </Panel>
+          )}
+          <InsightCard insight={s.overview?.analysis.engineering_insight} />
           <Panel title="Next steps">
             <BulletContent title="" items={s.overview?.analysis.next_steps} />
           </Panel>

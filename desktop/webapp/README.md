@@ -200,15 +200,15 @@ collapses to icons.
   Security without starting further analysis. The separate
   Assistant, declaration draft, Checks, Review, receipt and draft-benchmark screens
   have been retired from this client. Returning to Source rechecks file freshness.
-- **Overview** puts the current task or saved analysis in a **Continue work** or
-  **Your next step** band. Opening captured work does not generate or apply changes.
+- **Overview** shows the project description below its name and project stats
+  directly below its path, then puts the current task or saved analysis in a
+  **Continue work** or **Your next step** band. Opening captured work does not generate or apply changes.
   **Needs attention** links Bugs, Performance, Security and active Features counts to
   their workspaces. Feature details, estimated effort and triage stay in Features;
   unavailable or ungenerated counts remain unknown, and status indicators retain
-  stale/failure states. **About this project** expands project facts, coverage and background.
-  **Project activity** links **Architecture and Flow**, the
-  current **Project Analysis**, and recent saved tasks; without a run, analysis
-  opens setup. **Architecture** keeps architecture, entry points and project-flow
+  stale/failure states. Analysis coverage stays visible beside the findings summary,
+  stacking below it in compact windows. **Architecture** in the sidebar keeps
+  architecture, components, engineering insights, entry points and project-flow
   charts together. Plain Mermaid reports and
   Markdown-fenced charts render locally, with selectable source and a readable
   fallback for older prose or render failures.

@@ -550,7 +550,7 @@ svg.icon {
 }
 .summary-dashboard {
   display: grid;
-  grid-template-columns: 1.15fr 1fr;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
   gap: 28px;
 }
 .summary-page {
@@ -576,12 +576,10 @@ svg.icon {
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-.studio-attention,
-.studio-activity {
+.studio-attention {
   padding: 0;
 }
-.studio-attention > h2,
-.studio-activity > h2 {
+.studio-attention > h2 {
   font-size: 1.05rem;
 }
 .summary-dashboard .metric-grid {
@@ -627,9 +625,6 @@ svg.icon {
 .studio-list-row .metric-number {
   font-size: 1.3rem;
 }
-.studio-history-row {
-  padding: 15px 0;
-}
 .studio-scope-line {
   display: flex;
   justify-content: space-between;
@@ -639,15 +634,14 @@ svg.icon {
   color: var(--muted);
   font-size: 0.85rem;
 }
-.summary-details {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
+.summary-dashboard .coverage-panel > .panel-pad {
+  flex-wrap: wrap;
+  padding: 24px;
 }
-.summary-details .summary-facts {
-  margin: 0;
-  border: 0;
-  padding: 0;
+.summary-dashboard .coverage-panel .legend {
+  width: 100%;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
 }
 .models-workspace > .panel {
   border: 0;
