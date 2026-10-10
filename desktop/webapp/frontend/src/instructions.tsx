@@ -48,7 +48,7 @@ export function Instructions({ s }: { s: State }) {
   const [path, setPath] = useState(preview?.path || 'AGENTS.md');
   const [content, setContent] = useState(preview?.existing_content || '');
   const [selected, setSelected] = useState<string[]>([]);
-  const [step, setStep] = useState(1);
+  const [editing, setEditing] = useState(false);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
   useEffect(() => {
@@ -97,18 +97,15 @@ export function Instructions({ s }: { s: State }) {
       <Heading
         variant="intro"
         title="Project instructions"
-        detail="Load root or directory guidance, then review the proposal in Changes."
-      />
-      <ol className="wizard-steps" aria-label="Instruction wizard steps">
-        {['Choose scope', 'Edit guidance', 'Preview'].map((label, i) => (
-          <li key={label} aria-current={step === i + 1 ? 'step' : undefined}>
-            {i + 1}. {label}
-          </li>
-        ))}
-      </ol>
+        detail="The rules every analysis and change should follow."
+      >
+        <Button disabled={!!s.busy || !ready} onClick={() => setEditing(!editing)}>
+          {editing ? 'Read guidance' : 'Edit draft'}
+        </Button>
+      </Heading>
       <div className="instruction-grid">
-        <section className="stack" aria-label="Instruction wizard">
-          {step === 1 && (
+        <section className="stack" aria-label="Instruction draft">
+          {
             <Panel title="Choose instruction scope">
               <label className="block">
                 Project-relative AGENTS.md path
@@ -128,14 +125,27 @@ export function Instructions({ s }: { s: State }) {
                 tone="primary"
                 disabled={!!s.busy || !path.trim()}
                 onClick={async () => {
-                  if (await w.loadInstructions(path)) setStep(2);
+                  if (await w.loadInstructions(path)) setEditing(true);
                 }}
               >
                 Load scope
               </Button>
             </Panel>
+          }
+          {!editing && ready && (
+            <section className="instruction-reading">
+              <div className="row between">
+                <strong>{path}</strong>
+                <Badge value={preview?.exists ? 'Included' : 'New file'} />
+              </div>
+              <Prose
+                text={
+                  content || 'No instructions saved in this scope. Edit a draft to add guidance.'
+                }
+              />
+            </section>
           )}
-          {step === 2 && (
+          {editing && (
             <Panel
               title="Edit guidance"
               actions={<Badge value={preview?.exists ? 'existing file' : 'new file'} />}
@@ -145,117 +155,6 @@ export function Instructions({ s }: { s: State }) {
                 <Notice error>Load this scope again before editing.</Notice>
               ) : (
                 <>
-                  <p>
-                    Choose individual rules for your AGENTS.md. Sections cover architecture, setup,
-                    code style, testing, security and handoff. Project-specific choices use indexed
-                    source and build files in this scope; reindex after changing the project.
-                  </p>
-                  <p className="muted">
-                    {presets.length} choices across {categories.length} sections · {matched} matched
-                    to this scope. Common project rules are also available.
-                  </p>
-                  {!matched && (
-                    <Notice>
-                      No matching indexed files in this scope. Use general or custom guidance.
-                    </Notice>
-                  )}
-                  <div className="instruction-filters">
-                    <label className="block">
-                      Find guidelines
-                      <input
-                        className="field"
-                        type="search"
-                        value={query}
-                        disabled={!!s.busy}
-                        onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Search rules, stacks or file paths"
-                      />
-                    </label>
-                    <label className="block">
-                      AGENTS.md section
-                      <select
-                        className="field"
-                        aria-label="AGENTS.md section"
-                        value={category}
-                        disabled={!!s.busy}
-                        onChange={(e) => setCategory(e.target.value)}
-                      >
-                        <option value="">All sections</option>
-                        {categories.map((name) => (
-                          <option key={name} value={name}>
-                            {name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <div className="instruction-selection">
-                    <p role="status" className="muted">
-                      {pending.length} {pending.length === 1 ? 'guideline' : 'guidelines'} selected
-                      · {visible.length} shown
-                    </p>
-                    <div className="actions">
-                      <Button
-                        disabled={!!s.busy || excluded || !pending.length}
-                        onClick={() => {
-                          setContent(addGuidelines(content, pending));
-                          setSelected([]);
-                        }}
-                      >
-                        Add selected guidance
-                      </Button>
-                      <Button
-                        disabled={!!s.busy || !pending.length}
-                        onClick={() => setSelected([])}
-                      >
-                        Clear selection
-                      </Button>
-                    </div>
-                    {pending.length > 0 && (
-                      <p className="muted">Selected: {pending.map((p) => p.label).join(' · ')}</p>
-                    )}
-                  </div>
-                  {groups.length === 0 && (
-                    <Notice>No guidelines match these filters. Your selection is retained.</Notice>
-                  )}
-                  {groups.map((group) => (
-                    <fieldset className="instruction-presets" key={group.label}>
-                      <legend>{group.label}</legend>
-                      {group.items.map((preset) => (
-                        <label className="instruction-option" key={preset.id}>
-                          <input
-                            type="checkbox"
-                            aria-label={preset.label}
-                            aria-describedby={`guideline-${preset.id}`}
-                            disabled={!!s.busy || excluded || !!preset.present}
-                            checked={!preset.present && selected.includes(preset.id)}
-                            onChange={(e) =>
-                              setSelected(
-                                e.target.checked
-                                  ? [...selected, preset.id]
-                                  : selected.filter((id) => id !== preset.id),
-                              )
-                            }
-                          />
-                          <span className="instruction-option-copy" id={`guideline-${preset.id}`}>
-                            <strong>{preset.label}</strong>
-                            {preset.reason && <span className="muted">{preset.reason}</span>}
-                            {!!preset.evidence?.length && (
-                              <span className="path muted">{preset.evidence.join(' · ')}</span>
-                            )}
-                            <span>{preset.content}</span>
-                            {preset.present && (
-                              <span className="muted">
-                                {preset.present === path
-                                  ? 'Already in this draft'
-                                  : `Inherited from ${preset.present}`}
-                              </span>
-                            )}
-                          </span>
-                        </label>
-                      ))}
-                    </fieldset>
-                  ))}
                   <label className="block">
                     Guidance draft
                     <textarea
@@ -267,44 +166,147 @@ export function Instructions({ s }: { s: State }) {
                       placeholder="# Project instructions\n\nDescribe the rules agents should follow…"
                     />
                   </label>
+                  <Disclosure title="Add project guidelines">
+                    {' '}
+                    <p>
+                      Choose individual rules for your AGENTS.md. Sections cover architecture,
+                      setup, code style, testing, security and handoff. Project-specific choices use
+                      indexed source and build files in this scope; reindex after changing the
+                      project.
+                    </p>
+                    <p className="muted">
+                      {presets.length} choices across {categories.length} sections · {matched}{' '}
+                      matched to this scope. Common project rules are also available.
+                    </p>
+                    {!matched && (
+                      <Notice>
+                        No matching indexed files in this scope. Use general or custom guidance.
+                      </Notice>
+                    )}
+                    <div className="instruction-filters">
+                      <label className="block">
+                        Find guidelines
+                        <input
+                          className="field"
+                          type="search"
+                          value={query}
+                          disabled={!!s.busy}
+                          onChange={(e) => setQuery(e.target.value)}
+                          placeholder="Search rules, stacks or file paths"
+                        />
+                      </label>
+                      <label className="block">
+                        AGENTS.md section
+                        <select
+                          className="field"
+                          aria-label="AGENTS.md section"
+                          value={category}
+                          disabled={!!s.busy}
+                          onChange={(e) => setCategory(e.target.value)}
+                        >
+                          <option value="">All sections</option>
+                          {categories.map((name) => (
+                            <option key={name} value={name}>
+                              {name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <div className="instruction-selection">
+                      <p role="status" className="muted">
+                        {pending.length} {pending.length === 1 ? 'guideline' : 'guidelines'}{' '}
+                        selected · {visible.length} shown
+                      </p>
+                      <div className="actions">
+                        <Button
+                          disabled={!!s.busy || excluded || !pending.length}
+                          onClick={() => {
+                            setContent(addGuidelines(content, pending));
+                            setSelected([]);
+                          }}
+                        >
+                          Add selected guidance
+                        </Button>
+                        <Button
+                          disabled={!!s.busy || !pending.length}
+                          onClick={() => setSelected([])}
+                        >
+                          Clear selection
+                        </Button>
+                      </div>
+                      {pending.length > 0 && (
+                        <p className="muted">Selected: {pending.map((p) => p.label).join(' · ')}</p>
+                      )}
+                    </div>
+                    {groups.length === 0 && (
+                      <Notice>
+                        No guidelines match these filters. Your selection is retained.
+                      </Notice>
+                    )}
+                    {groups.map((group) => (
+                      <fieldset className="instruction-presets" key={group.label}>
+                        <legend>{group.label}</legend>
+                        {group.items.map((preset) => (
+                          <label className="instruction-option" key={preset.id}>
+                            <input
+                              type="checkbox"
+                              aria-label={preset.label}
+                              aria-describedby={`guideline-${preset.id}`}
+                              disabled={!!s.busy || excluded || !!preset.present}
+                              checked={!preset.present && selected.includes(preset.id)}
+                              onChange={(e) =>
+                                setSelected(
+                                  e.target.checked
+                                    ? [...selected, preset.id]
+                                    : selected.filter((id) => id !== preset.id),
+                                )
+                              }
+                            />
+                            <span className="instruction-option-copy" id={`guideline-${preset.id}`}>
+                              <strong>{preset.label}</strong>
+                              {preset.reason && <span className="muted">{preset.reason}</span>}
+                              {!!preset.evidence?.length && (
+                                <span className="path muted">{preset.evidence.join(' · ')}</span>
+                              )}
+                              <span>{preset.content}</span>
+                              {preset.present && (
+                                <span className="muted">
+                                  {preset.present === path
+                                    ? 'Already in this draft'
+                                    : `Inherited from ${preset.present}`}
+                                </span>
+                              )}
+                            </span>
+                          </label>
+                        ))}
+                      </fieldset>
+                    ))}
+                  </Disclosure>
                   {pending.length > 0 && (
                     <Notice>Add selected guidance to the draft before continuing.</Notice>
                   )}
                   <div className="actions">
-                    <Button disabled={!!s.busy} onClick={() => setStep(1)}>
-                      Back to scope
+                    <Button disabled={!!s.busy} onClick={() => setEditing(false)}>
+                      Read guidance
                     </Button>
                     <Button
                       tone="primary"
-                      disabled={!!s.busy || excluded || !proposed.trim() || pending.length > 0}
-                      onClick={() => setStep(3)}
+                      disabled={
+                        !!s.busy ||
+                        !ready ||
+                        excluded ||
+                        !proposed.trim() ||
+                        pending.length > 0 ||
+                        proposed === preview?.existing_content
+                      }
+                      onClick={() => void w.proposeInstructions(proposed)}
                     >
-                      Continue to preview
+                      Preview instruction diff
                     </Button>
                   </div>
                 </>
               )}
-            </Panel>
-          )}
-          {step === 3 && (
-            <Panel title="Instruction preview">
-              <strong className="path">{path}</strong>
-              <Prose text={proposed} />
-              {!ready && <Notice error>Load this scope again before editing.</Notice>}
-              <div className="actions">
-                <Button disabled={!!s.busy} onClick={() => setStep(2)}>
-                  Edit guidance
-                </Button>
-                <Button
-                  tone="primary"
-                  disabled={
-                    !!s.busy || !ready || excluded || proposed === preview?.existing_content
-                  }
-                  onClick={() => void w.proposeInstructions(proposed)}
-                >
-                  Preview instruction diff
-                </Button>
-              </div>
             </Panel>
           )}
         </section>

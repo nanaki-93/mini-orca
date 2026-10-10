@@ -282,6 +282,7 @@ async function openSummaryDiagrams(page) {
 async function openSource(page) {
   await nav(page, 'Source');
   await page.locator('.file-item[title="internal/worker/process.go"]').click();
+  await page.getByText('Inspect this file', { exact: true }).click();
   await page.getByLabel('Declaration', { exact: true }).selectOption('Process');
 }
 async function layout(page, name) {

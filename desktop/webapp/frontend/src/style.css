@@ -2088,33 +2088,10 @@ summary .row {
 .editor-content {
   min-width: 0;
 }
-.source-workspace .editor-workspace {
-  gap: 20px;
-}
-
-.source-workspace .editor-content,
-.source-inspection,
 .context-inspection {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
   min-width: 0;
-  align-content: start;
-}
-
-.source-workspace .browser-search {
-  padding-inline: 20px;
-}
-.source-workspace .file-browser {
-  min-width: 0;
-}
-.source-workspace .code-header {
-  flex-wrap: wrap;
-  padding: 14px 20px;
-}
-.source-workspace .code-header > * {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 .declaration-picker .symbol-picker {
   flex: 1 1 220px;
@@ -2146,22 +2123,6 @@ summary .row {
   flex: 1 1 12rem;
 }
 
-@media (max-width: 900px) {
-  .source-workspace .editor-workspace {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .source-workspace .file-browser {
-    position: static;
-  }
-  .source-workspace .file-list {
-    min-height: 0;
-    max-height: 200px;
-  }
-}
-.file-browser {
-  position: sticky;
-  top: 10px;
-}
 .browser-search {
   padding: 0 12px 14px;
 }

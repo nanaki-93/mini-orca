@@ -230,10 +230,6 @@ function App() {
               <span>Search files and commands</span>
               <kbd>⌘ K</kbd>
             </button>
-            <div className={`connection ${s.connected ? '' : 'offline'}`}>
-              <span className={`status-dot ${s.connected ? '' : 'offline'}`} />
-              {s.connected ? 'Daemon connected' : 'Daemon offline'}
-            </div>
           </div>
         </header>
         <div className="app-layout">
@@ -325,6 +321,11 @@ function App() {
               <TerminalWorkspace s={live} visible={terminalOpen} />
             </div>
             <footer className="statusbar">
+              {' '}
+              <div className={`connection ${s.connected ? '' : 'offline'}`}>
+                <span className={`status-dot ${s.connected ? '' : 'offline'}`} />
+                {s.connected ? 'Daemon connected' : 'Daemon offline'}
+              </div>
               <span className="row">
                 <Icon name={s.git?.available ? 'branch' : 'laptop'} />
                 {s.git?.available ? s.git.branch : 'Local workspace'}
@@ -377,7 +378,7 @@ function App() {
       )}
       {live.page === 'project' && live.project && (
         <Overlay title="Switch project" onClose={closeOverlay}>
-          <ProjectPage s={live} />
+          <ProjectPage s={live} compact />
         </Overlay>
       )}
       {s.confirmation && <Modal key={s.confirmation.title} />}
