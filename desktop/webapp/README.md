@@ -80,7 +80,8 @@ collapses to icons.
 - **Findings** groups **Bugs**, **Performance** and **Security** in category tabs. Each finding has a short content-based name, shared by its list row,
   detail heading and prepared fix. Older unnamed findings use a compact excerpt
   of their saved explanation. All three categories share the same list layout with
-  search, impact filtering and ten findings per page. Previous/Next controls show
+  search, impact filtering and ten findings per page. Priority arrows and colored
+  freshness indicators include tooltips and accessible names. Previous/Next controls show
   the visible range and page count; changing a filter returns to the first page.
   Report diagnostics and unclassified suggestions are in **Analysis details**
   above the list, with no separate file list below it.

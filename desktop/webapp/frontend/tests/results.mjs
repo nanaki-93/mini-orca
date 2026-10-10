@@ -47,6 +47,55 @@ export async function testResults({ test, pageFor, nav, idle, layout }) {
       }
     }
   });
+  await test('Finding priorities and freshness use named compact indicators', async () => {
+    const { page, close } = await pageFor();
+    try {
+      await page.evaluate(() => {
+        const state = window.fixture.state;
+        state.results.bugs = {
+          semantic: ['critical', 'high', 'medium', 'low', 'info'].map((severity, index) => ({
+            ...state.finding,
+            id: `priority-${index}`,
+            severity,
+            freshness: ['fresh', 'stale', 'error', 'fresh', 'fresh'][index],
+          })),
+          performance: [],
+          security: [],
+          saved_finding_count: 5,
+        };
+      });
+      await nav(page, 'Bugs');
+      const rows = page.locator('.result-row');
+      for (const [index, priority] of ['critical', 'high', 'medium', 'low', 'info'].entries()) {
+        const indicator = rows
+          .nth(index)
+          .getByRole('img', { name: `Priority: ${priority}`, exact: true });
+        assert.equal(await indicator.isVisible(), true);
+        assert.equal(await indicator.getAttribute('title'), `Priority: ${priority}`);
+        assert.equal(await indicator.innerText(), '');
+      }
+      for (const state of ['fresh', 'stale', 'error']) {
+        const dot = rows.getByRole('img', { name: `Freshness: ${state}`, exact: true }).first();
+        assert.equal(await dot.isVisible(), true);
+        assert.equal(await dot.getAttribute('title'), `Freshness: ${state}`);
+      }
+      for (const width of [1440, 700]) {
+        await page.setViewportSize({ width, height: 900 });
+        for (const theme of ['Graphite', 'Porcelain', 'Midnight']) {
+          await page.getByRole('button', { name: `${theme} theme`, exact: true }).click();
+          await layout(page, `finding-indicators-${width}-${theme}`);
+        }
+      }
+      await rows.nth(1).click();
+      await page.getByRole('img', { name: 'Freshness: stale', exact: true }).waitFor();
+      assert.equal(
+        await page.getByRole('button', { name: 'Prepare fix', exact: true }).isDisabled(),
+        true,
+      );
+    } finally {
+      await close();
+    }
+  });
   await test('Finding pages preserve category pagination, breadcrumbs and local navigation', async () => {
     for (const name of ['Bugs', 'Security', 'Performance']) {
       const category = name.toLowerCase();

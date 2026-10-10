@@ -1580,6 +1580,31 @@ button.list-row:hover,
   max-width: 35%;
   flex-shrink: 0;
 }
+.priority-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.priority-icon .icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.4;
+}
+.priority-critical,
+.priority-high {
+  color: var(--red);
+}
+.priority-medium {
+  color: var(--amber);
+}
+.priority-low,
+.priority-info {
+  color: var(--blue);
+}
 .results-state {
   display: inline-flex;
   align-items: center;
@@ -1608,7 +1633,7 @@ button.list-row:hover,
 }
 .results-findings .result-row {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) minmax(0, 12rem) 6rem;
+  grid-template-columns: 30px minmax(0, 1fr) auto 20px;
   gap: 16px;
   padding: 20px 12px;
   border-radius: 6px;
@@ -1636,6 +1661,8 @@ button.list-row:hover,
   height: 14px;
 }
 .results-findings .result-badges {
+  align-items: center;
+  gap: 12px;
   min-width: 0;
   max-width: none;
   justify-content: flex-start;
