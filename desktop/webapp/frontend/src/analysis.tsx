@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { activeRun, analysisSetupModels, workspace as w, type State } from './workspace';
-import { CapturedModels, ModelSelectors } from './analysis-models';
+import { CapturedModels, AnalysisModelSummary } from './analysis-models';
 import {
   Button,
   Disclosure,
@@ -145,23 +145,15 @@ export function Analysis({ s }: { s: State }) {
           title="Analysis setup"
           className="analysis-run-settings"
           actions={
-            <Button
-              icon="refresh"
-              tone="ghost small"
-              disabled={s.modelsLoading || !!s.busy}
-              onClick={() => void w.loadAvailableModels()}
-            >
-              Refresh models
-            </Button>
+            <Go page="models" icon="layers" tone="ghost small">
+              Manage models
+            </Go>
           }
         >
-          <p className="analysis-settings-intro">Choose a model for each operation.</p>
-          <ModelSelectors
-            s={s}
-            value={models}
-            disabled={!!s.busy}
-            onChange={(m) => w.setAnalysisSetup(m)}
-          />
+          <p className="analysis-settings-intro">
+            Analyze correctness, security, performance and feature opportunities.
+          </p>
+          <AnalysisModelSummary s={s} value={models} />
           <Disclosure title="Batch & request limits">
             <div className="form-grid analysis-settings-fields">
               {(

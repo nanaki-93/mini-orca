@@ -224,7 +224,7 @@ export async function testThemes({ test, pageFor, nav, idle, layout, contrast })
         await contrast(page, `${name} in Midnight`);
         await layout(page, `midnight-${name.toLowerCase().replaceAll(' ', '-')}`);
       }
-      await nav(page, 'Analysis');
+      await nav(page, 'Models');
       await page.getByRole('button', { name: 'Bug analysis model', exact: true }).click();
       await page.getByRole('dialog', { name: 'Choose a model' }).waitFor();
       await contrast(page, 'Midnight model picker');

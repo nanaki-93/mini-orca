@@ -1,6 +1,13 @@
 import { StaleAnalysisButton } from './analysis';
 import { useEffect, useState } from 'react';
-import { workspace as w, activeChangeWorkflow, type State, type Page } from './workspace';
+import {
+  workspace as w,
+  activeChangeWorkflow,
+  analysisSetupModels,
+  type State,
+  type Page,
+} from './workspace';
+import { ModelSelectors } from './analysis-models';
 import { WorkflowModels, defaultWorkflowModels } from './change-workflow';
 import {
   Badge,
@@ -404,17 +411,35 @@ export function Models({ s }: { s: State }) {
     <div className="workspace-page models-workspace">
       <Heading
         title="Models"
-        detail="Choose workflow models and inspect configured provider destinations."
+        detail="Choose models for analysis, creation, testing and review."
         variant="intro"
       >
         <Button
           icon="refresh"
           disabled={!!s.busy}
-          onClick={() => void w.act('Refresh models', () => w.connect())}
+          onClick={() => void w.act('Refresh models', () => w.loadAvailableModels())}
         >
           Refresh
         </Button>
       </Heading>
+      {s.modelsReturn && (
+        <div className="actions">
+          <Go page={s.modelsReturn} icon="back">
+            Back to workspace
+          </Go>
+        </div>
+      )}
+      <Panel title="Analysis models" className="analysis-model-settings">
+        <p className="small muted">
+          Used for the next analysis. Saved runs keep their captured models.
+        </p>
+        <ModelSelectors
+          s={s}
+          value={analysisSetupModels(s)}
+          disabled={!!s.busy}
+          onChange={(models) => w.setAnalysisSetup(models)}
+        />
+      </Panel>
       <Panel title="Workflow models" className="fix-models">
         <p className="small muted">
           Creation, testing and review choices for Chat and fixes. A running workflow keeps its
@@ -438,7 +463,7 @@ export function Models({ s }: { s: State }) {
               {
                 analyze: 'Project analysis',
                 bug: 'File & Security',
-                function: 'Declaration edits',
+                function: 'Creation & explanations',
               }[model.scope] || model.scope
             }
           >

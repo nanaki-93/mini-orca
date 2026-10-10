@@ -4,7 +4,6 @@ import { workspace as w, activeChangeWorkflow, workflowSeed, type State } from '
 import { FixPreparation } from './fix-preparation';
 import { FixSteps } from './fix-workspace';
 import { SolutionExcerpt } from './fix-solution';
-import { FixModels } from './change-workflow';
 import { StaleAnalysisButton } from './analysis';
 import {
   Badge,
@@ -114,7 +113,9 @@ export function Results({ s }: { s: State }) {
   const results = s.results[category];
   const [query, setQuery] = useState('');
   const [severity, setSeverity] = useState('');
-  const [selected, setSelected] = useState<string>();
+  const selected = s.selectedFinding?.category === category ? s.selectedFinding.key : undefined;
+  const setSelected = (key?: string) =>
+    w.set({ selectedFinding: key ? { category, key } : undefined });
   const [limit, setLimit] = useState(100);
   const view = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -162,18 +163,14 @@ export function Results({ s }: { s: State }) {
         tabIndex={-1}
         className="workspace-page results-page results-detail guided-fix"
       >
-        {seed && detail.path && (
-          <FixModels
-            s={s}
-            disabled={fixDisabled}
-            creationOnly={!seed.paths.some((path) => path.endsWith('_test.go'))}
-          />
-        )}
         <div className="row between wrap fix-back">
           <Button icon="back" onClick={() => setSelected(undefined)}>
             All findings
           </Button>
           <span className="small muted">Prepare a fix</span>
+          <Go page="models" icon="layers">
+            Manage models
+          </Go>
         </div>
         <Heading
           variant="intro"

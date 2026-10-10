@@ -3298,3 +3298,23 @@ dialog.model-picker {
 .guided-fix .chat-receipt {
   border-color: var(--green);
 }
+
+.analysis-model-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.analysis-model-summary .analysis-operation {
+  align-items: flex-start;
+}
+.analysis-model-summary .analysis-operation > div {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 900px) {
+  .analysis-model-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
