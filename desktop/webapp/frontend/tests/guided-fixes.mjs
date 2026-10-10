@@ -10,11 +10,14 @@ export async function testGuidedFixes({
   chooseModel: selectModel,
 }) {
   const openModels = async (page) => {
-    await page.getByRole('heading', { name: 'Models for fixes', exact: true }).waitFor();
+    if (!(await page.locator('.models-workspace').isVisible()))
+      await page.getByRole('button', { name: 'Manage models', exact: true }).click();
+    await page.getByRole('heading', { name: 'Workflow models', exact: true }).waitFor();
   };
   const chooseModel = async (trigger, profile) => {
     await openModels(trigger.page());
     await selectModel(trigger, profile);
+    await trigger.page().getByRole('button', { name: 'Back to workspace', exact: true }).click();
   };
   await test('Double-clicking the next file never turns review into Apply', async () => {
     const { page, close } = await pageFor({ trusted: true });
@@ -157,20 +160,22 @@ export async function testGuidedFixes({
     }
   });
 
-  await test('Finding models share a passive picker above the detail across layouts', async () => {
+  await test('Models centralizes passive analysis and fix pickers while preserving the open finding', async () => {
     for (const category of ['Bugs', 'Performance', 'Security']) {
       const { page, close } = await pageFor({
         modelNames: { function: 'gpt-4.1', bug: 'gemini-2.5-pro', analyze: 'claude-sonnet-4' },
         trusted: true,
       });
       try {
-        await nav(page, 'Analysis');
+        await nav(page, 'Models');
         const treatment = (card) =>
           card.evaluate((element) => {
             const style = getComputedStyle(element);
             return [style.padding, style.borderRadius, style.backgroundColor];
           });
-        const analysisStyle = await treatment(page.locator('.analysis-model-card').first());
+        const analysisStyle = await treatment(
+          page.locator('.analysis-model-settings .analysis-model-card').first(),
+        );
         await nav(page, category);
         await page.locator('.result-row').first().click();
         await openModels(page);
@@ -218,12 +223,6 @@ export async function testGuidedFixes({
         );
         for (const width of [1440, 1000, 800]) {
           await page.setViewportSize({ width, height: 1000 });
-          const modelBox = await models.boundingBox();
-          const headingBox = await page.locator('.guided-fix .page-heading h1').boundingBox();
-          assert.ok(
-            modelBox.y + modelBox.height <= headingBox.y,
-            'Shared model settings sit above the finding',
-          );
           assert.equal(await models.locator('details').count(), 0);
           await page.locator('#main').evaluate((element) => {
             element.scrollTop = 0;
@@ -233,6 +232,9 @@ export async function testGuidedFixes({
         await page.getByRole('button', { name: 'Larger text', exact: true }).click();
         await page.getByRole('button', { name: 'Porcelain theme', exact: true }).click();
         await layout(page, `finding-agents-${category.toLowerCase()}-800-light-larger`);
+        await page.getByRole('button', { name: 'Back to workspace', exact: true }).click();
+        assert.equal(await page.locator('.results-detail').isVisible(), true);
+        assert.equal(await page.getByLabel('Creation model', { exact: true }).count(), 0);
         assert.deepEqual(
           await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
           before,
@@ -264,6 +266,7 @@ export async function testGuidedFixes({
       await dialog.getByRole('button', { name: 'Refresh models', exact: true }).click();
       await dialog.getByRole('option').first().waitFor();
       await page.keyboard.press('Escape');
+      await page.getByRole('button', { name: 'Back to workspace', exact: true }).click();
       await page.getByRole('button', { name: 'Prepare fix', exact: true }).click({ trial: true });
       assert.equal(
         await page.evaluate(() =>
@@ -287,13 +290,15 @@ export async function testGuidedFixes({
       for (const category of ['Bugs', 'Performance', 'Security']) {
         await nav(page, category);
         await page.locator('.result-row').first().click();
+        await openModels(page);
         const models = page.locator('.fix-models');
-        await models.getByRole('heading', { name: 'Models for fixes', exact: true }).waitFor();
+        await models.getByRole('heading', { name: 'Workflow models', exact: true }).waitFor();
         const creation = models.getByRole('button', { name: 'Creation model', exact: true });
-        if (category === 'Bugs') await chooseModel(creation, 'bug');
+        if (category === 'Bugs') await selectModel(creation, 'bug');
         assert.equal(await creation.getAttribute('value'), 'bug');
         assert.equal(await creation.isEnabled(), true);
         assert.equal(await page.locator('.fix-models').count(), 1);
+        await page.getByRole('button', { name: 'Back to workspace', exact: true }).click();
       }
       assert.deepEqual(
         await page.evaluate(() =>
@@ -303,12 +308,10 @@ export async function testGuidedFixes({
       );
       await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
       await idle(page);
+      await openModels(page);
       const creation = page.getByRole('button', { name: 'Creation model', exact: true });
       assert.equal(await creation.getAttribute('value'), 'bug');
       assert.equal(await creation.isDisabled(), true);
-      const models = await page.locator('.fix-models').boundingBox();
-      const heading = await page.locator('.guided-fix .page-heading h1').boundingBox();
-      assert.ok(models.y + models.height <= heading.y);
     } finally {
       await close();
     }
@@ -456,6 +459,7 @@ export async function testGuidedFixes({
         await page.getByRole('tab', { name: 'Details', exact: true }).click();
         await openModels(page);
         assert.equal(await page.locator('.fix-models .analysis-model-trigger').count(), 3);
+        await page.getByRole('button', { name: 'Back to workspace', exact: true }).click();
         await page.getByRole('tab', { name: 'Changes (2)', exact: true }).click();
         assert.equal(await page.getByRole('checkbox').count(), 0);
         const files = page.getByRole('tablist', { name: 'Files to change', exact: true });

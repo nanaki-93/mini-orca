@@ -35,17 +35,17 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
 Project Studio has twelve destinations. **Overview**, **Source** and **Chat** are
 the main workspaces. **Improve** groups **Analysis**, **Findings**, **Features** and
 **Changes**; project tools include architecture, instructions, context, models and
-history. The project switcher opens project settings; **Terminal** lives in the status bar. The sidebar
-collapses to icons, and the global search opens with `⌘K` or `Ctrl+K`.
+history. The project switcher opens project settings; **Terminal** lives in the
+status bar. The sidebar collapses to icons, and the global search opens with `⌘K` or `Ctrl+K`.
 
 - **Project** opens a saved project locally. **Import & analyze** creates a new
   overview, with explicit confirmation for a remote Analyze provider.
-- **Analysis** configures independent models for Bug analysis, Performance, Security
-  and feature discovery. Compact icon buttons open a searchable model picker;
-  hover or keyboard focus identifies the selected model. Names and provider
-  locations remain visible inside the picker. The catalog includes configured
-  models and models available through the local Pi installation. **Refresh models**
-  reloads it; Pi discovery failures leave configured choices available.
+- **Analysis** shows four analysis operations and their selected models.
+  **Manage models** opens **Models**, where independent choices for Bug analysis,
+  Performance, Security and feature discovery share the searchable model picker.
+  The catalog includes configured models and models available through the local
+  Pi installation. **Refresh** reloads it; Pi discovery failures leave configured
+  choices available. **Back to workspace** returns to the previous task or finding.
   **Files** manages captured file selection, exclusions and per-file status.
   Unsaved selection and setup choices survive navigation between these pages;
   save file selections before preparing a run. Request limits remain in a disclosure;
@@ -74,9 +74,9 @@ collapses to icons, and the global search opens with `⌘K` or `Ctrl+K`.
   **Details** contains additional evidence and triage actions, including
   **Mark as fixed**. **Full explanation** expands the solution in place without
   repeating the preview; **Show less** collapses it again.
-  **Models for fixes** sits above the finding and keeps creation, testing and review
-  choices shared across all three categories. Model destinations remain available
-  in the pickers.
+  Creation, testing and review choices are shared with Chat and configured only
+  on **Models**. **Manage models** preserves the selected finding so **Back to
+  workspace** returns to its detail. Model destinations remain visible in the pickers.
   **Prepare fix** starts generation and checks. File scope, remote destinations
   and project checks appear beside the action; selecting it authorizes those
   operations and, for Security findings, the Security fix. Changed destinations
@@ -177,7 +177,8 @@ collapses to icons, and the global search opens with `⌘K` or `Ctrl+K`.
   Markdown-fenced charts render locally, with selectable source and a readable
   fallback for older prose or render failures.
 - **Context** shows included/excluded files, hashes and the provider destination.
-  **Models** selects shared creation, testing and review profiles and reads
+  **Models** selects analysis models and shared creation, testing and review
+  profiles, and reads
   configuration without probing a provider. Active workflows keep their captured
   models, and model choices are disabled until they finish or are canceled.
   Model-supplied links, HTML and remote images are inert.

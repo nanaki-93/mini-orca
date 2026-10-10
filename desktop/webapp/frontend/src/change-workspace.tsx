@@ -228,7 +228,7 @@ function ChatWorkspace({ s }: { s: State }) {
                 onClick={() =>
                   void (useAgents
                     ? w.startChangeWorkflow(seed, models)
-                    : w.prepareChange(seed, tests))
+                    : w.prepareChange(seed, tests, models.create))
                 }
               >
                 Generate changes

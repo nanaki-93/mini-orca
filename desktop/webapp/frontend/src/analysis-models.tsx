@@ -1,6 +1,6 @@
 import type { AnalysisPreview } from './models';
 import { type State, type AnalysisAssignments } from './workspace';
-import { Badge } from './ui';
+import { Badge, Icon } from './ui';
 import { AgentModel, ModelIcon } from './agent-model';
 
 const operations = [
@@ -62,6 +62,27 @@ export function ModelSelectors({
           onChange={(id) => onChange({ ...value, [operation.key]: id })}
         />
       ))}
+    </div>
+  );
+}
+
+export function AnalysisModelSummary({ s, value }: { s: State; value: AnalysisAssignments }) {
+  return (
+    <div className="analysis-model-summary">
+      {operations.map(({ key, label, icon }) => {
+        const model =
+          s.availableModels?.models.find((choice) => choice.id === value[key])?.model ||
+          s.models?.scopes[value[key]];
+        return (
+          <div className="analysis-operation" key={key}>
+            <Icon name={icon} />
+            <div>
+              <strong>{label}</strong>
+              <span className="small muted">{model?.model || 'Model unavailable'}</span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

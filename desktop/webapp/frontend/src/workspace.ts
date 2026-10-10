@@ -48,6 +48,8 @@ export interface State {
   models?: M.ModelCatalog;
   availableModels?: M.AvailableModels;
   modelsLoading?: boolean;
+  modelsReturn?: Page;
+  selectedFinding?: { category: string; key: string };
   findings?: M.Finding[];
   selection?: M.Selection;
   run?: M.AnalysisRun | null;
@@ -433,8 +435,18 @@ export class Workspace {
   }
   async navigate(page: Page) {
     this.navigation++;
-    this.set({ page, error: '' });
-    if (page === 'analysis' && !this.state.availableModels) await this.loadAvailableModels();
+    this.set({
+      page,
+      error: '',
+      modelsReturn:
+        page === 'models' && this.state.page !== 'models'
+          ? this.state.page
+          : this.state.modelsReturn,
+      selectedFinding:
+        page === 'models' || this.state.page === 'models' ? this.state.selectedFinding : undefined,
+    });
+    if (['analysis', 'models'].includes(page) && !this.state.availableModels)
+      await this.loadAvailableModels();
     if (page === 'editor') await this.refreshFile();
     if (['chat', 'changes', 'history'].includes(page)) await this.loadChangeHistory();
     if (page === 'features' || page === 'summary') await this.loadFeatures();

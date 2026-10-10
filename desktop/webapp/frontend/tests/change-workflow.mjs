@@ -163,6 +163,39 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
     }
   });
 
+  await test('Direct Chat proposals use the creation profile selected on Models', async () => {
+    const { page, close } = await pageFor({ trusted: true });
+    try {
+      await nav(page, 'Chat');
+      await page.getByLabel('Files to change', { exact: true }).fill('README.md');
+      await page
+        .getByLabel('Change request', { exact: true })
+        .fill('Clarify the setup instructions.');
+      await page.getByRole('button', { name: 'Manage models', exact: true }).click();
+      await chooseModel(page.getByLabel('Creation model', { exact: true }), 'bug');
+      await page.getByRole('button', { name: 'Back to workspace', exact: true }).click();
+      assert.equal(
+        await page.getByLabel('Files to change', { exact: true }).inputValue(),
+        'README.md',
+      );
+      await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
+      await idle(page);
+      const requests = await page.evaluate(() => window.fixture.requests);
+      assert.equal(
+        requests.find((request) => request.path.endsWith('/messages')).body.profile,
+        'bug',
+      );
+      assert.equal(
+        requests.some(
+          (request) => request.path.endsWith('/workflow') || request.path.endsWith('/apply'),
+        ),
+        false,
+      );
+    } finally {
+      await close();
+    }
+  });
+
   await test('Workflow entry points seed scope and task intent without dispatch', async () => {
     for (const [pageName, kind] of [['Features', 'feature']]) {
       const { page, close } = await pageFor({ featuresReady: true });
