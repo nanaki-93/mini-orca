@@ -9,6 +9,28 @@ export const defaultWorkflowModels: ChangeWorkflowModels = {
   review: 'analyze',
 };
 
+export function FixModels({
+  s,
+  disabled,
+  creationOnly,
+}: {
+  s: State;
+  disabled: boolean;
+  creationOnly: boolean;
+}) {
+  return (
+    <Panel title="Models for fixes" className="fix-models">
+      <p className="small muted">Shared across Bugs, Performance and Security.</p>
+      <WorkflowModels
+        s={s}
+        value={s.workflowModels || s.change?.workflow?.models || defaultWorkflowModels}
+        disabled={disabled}
+        creationOnly={creationOnly}
+      />
+    </Panel>
+  );
+}
+
 export function WorkflowModels({
   s,
   value,

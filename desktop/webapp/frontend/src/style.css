@@ -3035,6 +3035,12 @@ dialog.model-picker {
 .fix-models {
   container-type: inline-size;
 }
+.fix-models > .panel-body > p {
+  margin: 0 0 14px;
+}
+.fix-models .workflow-model-selectors {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+}
 .fix-permissions {
   margin-top: 16px;
   padding-top: 12px;
@@ -3189,13 +3195,6 @@ dialog.model-picker {
 }
 .guided-fix .fix-solution .prose > p:first-child {
   margin-top: 0;
-}
-.guided-fix .fix-models > .panel-pad {
-  padding: 0 16px;
-}
-.guided-fix .fix-models > .panel-pad > details {
-  margin: 0;
-  border: 0;
 }
 .guided-fix .fix-preparation .panel-head {
   background: var(--raised);
