@@ -32,9 +32,10 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
 
 ## Workflow
 
-Project Studio groups everyday work into **Overview**, **Source**, **Chat** and
-**Changes**. **Improve** contains analysis and findings; **Project** contains
-architecture, instructions, context, terminal, models and history. The sidebar
+Project Studio has twelve destinations. **Overview**, **Source** and **Chat** are
+the main workspaces. **Improve** groups **Analysis**, **Findings**, **Features** and
+**Changes**; project tools include architecture, instructions, context, models and
+history. The project switcher opens project settings; **Terminal** lives in the status bar. The sidebar
 collapses to icons, and the global search opens with `⌘K` or `Ctrl+K`.
 
 - **Project** opens a saved project locally. **Import & analyze** creates a new
@@ -66,8 +67,7 @@ collapses to icons, and the global search opens with `⌘K` or `Ctrl+K`.
   of file analysis, gets at least ten minutes (or the selected model's longer
   timeout), honors file exclusions and reuses completed ideas on resume.
   Failed feature discovery leaves other analysis results available.
-- **Bugs**, **Performance** and **Security** keep searchable findings on their category
-  pages. **Open fix** opens a dedicated page with the exact file, declaration and
+- **Findings** groups **Bugs**, **Performance** and **Security** in category tabs. **Open fix** opens a dedicated page with the exact file, declaration and
   line, and scoped preparation. The full cause leads the page, followed by the
   proposed solution, affected files and **Prepare fix** action. No findings list
   appears on the fix page. Provenance and confidence stay with the cause;
@@ -158,11 +158,13 @@ collapses to icons, and the global search opens with `⌘K` or `Ctrl+K`.
   certify acceptance criteria or automatically mark original findings fixed.
   The latest unchanged grouped proposal offers **Undo proposal**; interrupted
   writes expose recovery state and guarded restoration.
-- **Source** shows selectable read-only source. Choose a declaration or create a
-  new one, describe a change, and edit only the returned declaration/import draft.
-  Validate, run checks, inspect Review, then explicitly Apply. The receipt offers
-  guarded Undo. Local edits invalidate prior checks. Returning to the editor or
-  application rechecks the source; changed files need **Refresh facts**.
+- **Source** shows selectable, read-only files and declaration navigation.
+  **Draft change in Chat** captures the selected file and declaration in a new task;
+  it does not generate or write code. Chat produces checked proposals for the
+  **Changes** workspace, where review, Apply and guarded Undo remain explicit.
+  Explanations and file analysis remain available in Source. The separate
+  Assistant, declaration draft, Checks, Review, receipt and draft-benchmark screens
+  have been retired from this client. Returning to Source rechecks file freshness.
 - **Overview** puts the current task or saved analysis in a **Continue work** or
   **Your next step** band. Opening captured work does not generate or apply changes.
   **Needs attention** links Bugs, Performance, Security and active Features counts to

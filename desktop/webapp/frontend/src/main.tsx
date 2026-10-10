@@ -12,13 +12,13 @@ import { Button, Heading, Icon, Modal, Notice, human } from './ui';
 import { Summary, ProjectPage, Models, Diagrams, SearchPage } from './overview';
 import { Analysis, AnalysisFiles, AnalysisPreview, AnalysisRun } from './analysis';
 import { Results } from './results';
-import { Editor } from './editor';
+import { Editor, Context } from './editor';
 import { ChangeWorkspace } from './change-workspace';
 import { ChangeHistory } from './change-shared';
 import { Features } from './features';
 import { Instructions } from './instructions';
 import { ProjectGuidance } from './project-guidance';
-import { Benchmark, Scan, Receipt, TerminalWorkspace } from './tools';
+import { Scan, TerminalWorkspace } from './tools';
 import './style.css';
 
 const mainNav: [Page, string, string][] = [
@@ -48,16 +48,6 @@ const findingPages: [Page, string][] = [
   ['bugs', 'Bugs'],
   ['security', 'Security'],
   ['performance', 'Performance'],
-];
-const editorPages: Page[] = [
-  'editor',
-  'context',
-  'manifest',
-  'assistant',
-  'new-declaration',
-  'draft',
-  'checks',
-  'review',
 ];
 const themes = [
   { id: 'dark', name: 'Graphite', letter: 'G' },
@@ -145,10 +135,7 @@ function App() {
         aria-current={
           activePage === page ||
           (page === 'analysis' && s.page === 'analysis-preview') ||
-          (page === 'editor' &&
-            editorPages.includes(s.page) &&
-            !['context', 'manifest'].includes(s.page)) ||
-          (page === 'context' && s.page === 'manifest')
+          (page === 'editor' && s.page === 'editor')
             ? 'page'
             : undefined
         }
@@ -203,10 +190,9 @@ function App() {
     );
   else if (s.page === 'features') content = <Features s={s} />;
   else if (s.page === 'instructions') content = <Instructions s={s} />;
-  else if (editorPages.includes(s.page)) content = <Editor s={s} />;
-  else if (s.page === 'benchmark') content = <Benchmark s={s} />;
+  else if (s.page === 'editor') content = <Editor s={s} />;
+  else if (s.page === 'context') content = <Context s={s} />;
   else if (s.page === 'scan') content = <Scan s={s} />;
-  else if (s.page === 'receipt') content = <Receipt s={s} />;
   else if (s.page === 'search') content = <SearchPage s={s} />;
   else if (s.page === 'diagrams') content = <Diagrams s={s} />;
   return (
@@ -354,13 +340,7 @@ function App() {
                   <Icon name="terminal" />
                   Terminal
                 </button>
-                <span>
-                  {s.draft
-                    ? `Draft · ${s.dirty ? 'edited' : s.draft.state}`
-                    : s.version
-                      ? `Daemon ${s.version}`
-                      : ''}
-                </span>
+                <span>{s.version ? `Daemon ${s.version}` : ''}</span>
                 <div className="theme-switcher" role="group" aria-label="Theme">
                   {themes.map((choice) => (
                     <button
