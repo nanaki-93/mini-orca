@@ -11,6 +11,64 @@ import kotlinx.serialization.json.Json
 
 class ApiClientContractTest {
   @Test
+  fun semanticRiskTitlesDecodeWithLegacyReports() {
+    for (title in listOf("", "Missing input validation")) {
+      val field = if (title.isEmpty()) "" else "\"title\":\"$title\","
+      val report =
+          Json.decodeFromString<FileAnalysis>(
+              """{"path":"main.go","status":"fresh","risks":[{$field"severity":"high","summary":"Input reaches the operation unchecked."}]}""")
+      assertEquals(title, report.risks.single().title)
+      assertEquals("Input reaches the operation unchecked.", report.risks.single().summary)
+    }
+  }
+
+  @Test
+  fun staleFileAnalysisRetainsItsTargetThroughPreviewAndStart() {
+    val preview = analysisPreviewFixture().copy(staleOnly = true, stalePath = "dir/a b.go")
+    val run = analysisRunFixture().copy(plan = preview)
+    val requests = mutableListOf<String>()
+    val api =
+        ApiClient(
+            transport =
+                DaemonTransport { _, path, body ->
+                  requests.add(requireNotNull(body))
+                  if (path.endsWith("/preview"))
+                      TransportResponse(200, Json.encodeToString(preview))
+                  else TransportResponse(202, Json.encodeToString(run))
+                })
+    val captured =
+        api.previewAnalysis(
+            AnalysisPreviewRequest(
+                "project",
+                "revision",
+                "project",
+                false,
+                preview.limits,
+                staleOnly = true,
+                stalePath = "dir/a b.go"))
+    assertEquals(preview, captured)
+    assertEquals(
+        run,
+        api.startAnalysis(
+            AnalysisRunStartRequest(
+                captured.identity,
+                captured.previewId,
+                captured.limits,
+                captured.refresh,
+                AnalysisRunConfirmations(emptyList(), true),
+                staleOnly = captured.staleOnly,
+                stalePath = captured.stalePath)))
+    for (body in requests) {
+      assertContains(body, "\"stale_only\":true")
+      assertContains(body, "\"stale_path\":\"dir/a b.go\"")
+    }
+    assertEquals(
+        "",
+        Json.decodeFromString<AnalysisRunPreview>(Json.encodeToString(analysisPreviewFixture()))
+            .stalePath)
+  }
+
+  @Test
   fun analysisReportsRetainGuidanceIdentityAndDecodeLegacyReports() {
     for (fingerprint in listOf("", "sha256:guidance")) {
       val field =

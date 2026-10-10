@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Mini-Orca app icon</title>
+  <desc id="desc">An ivory orca and sage path on a charcoal rounded square.</desc>
+  <rect x="32" y="32" width="960" height="960" rx="224" fill="#181a18"/>
+  <g transform="translate(128 104) scale(3)">
+    <g transform="translate(4 0) rotate(-12 128 140)">
+      <g fill="none" stroke-linecap="round" stroke-width="18">
+        <path d="M31 105 C57 109 57 137 93 130" stroke="#f3f4ec"/>
+        <path d="M26 151 C54 169 76 164 101 146" stroke="#a8c5ad"/>
+        <path d="M40 194 C92 215 109 164 164 153" stroke="#f3f4ec"/>
+      </g>
+      <path fill="#f3f4ec" fill-rule="evenodd" d="M87 130 C89 120 91 112 96 107 C98 82 111 61 131 48 C125 69 127 84 135 93 C157 88 181 86 202 92 C224 98 239 112 237 128 C235 145 219 156 199 157 C177 158 162 147 141 150 C123 153 114 163 100 164 C86 164 79 148 87 130 Z M180 113 C185 105 197 103 207 108 C205 117 194 122 184 120 C180 119 178 116 180 113 Z"/>
+    </g>
+  </g>
+</svg>

@@ -230,7 +230,7 @@ func analysisMetadataReason(value string) bool {
 		return true
 	}
 	switch value {
-	case "The provider rejected the Performance response format.", analysisSelectionExclusion, analysisRetryExclusion, analysisRecoveryExclusion, analysisStaleExclusion, "Outside this compatibility queue.", "Not requested by this compatibility action.", "", "Excluded by source policy.", "Not a supported text source file.", "Source exceeds analyzer size limits.", "Not eligible for semantic source analysis.",
+	case "The provider rejected the Performance response format.", analysisSelectionExclusion, analysisRetryExclusion, analysisRecoveryExclusion, analysisStaleExclusion, analysisStalePathExclusion, "Outside this compatibility queue.", "Not requested by this compatibility action.", "", "Excluded by source policy.", "Not a supported text source file.", "Source exceeds analyzer size limits.", "Not eligible for semantic source analysis.",
 		"Passive security rules require a Go source file.", "The model for this stage is not configured.",
 		"Analysis stage could not complete.", "The stage needs an additional attempt allowance.", "The file is not eligible for this source analysis.",
 		"The report contains incomplete evidence; review its details.", "The model request or response failed. Other analysis results remain available.",
@@ -290,7 +290,7 @@ func validStoredAnalysisIdentity(run *AnalysisRun) bool {
 }
 
 func validStoredAnalysisIdentityPlan(plan *AnalysisRunPreview) bool {
-	if plan.StaleOnly && (plan.CompatibilityStage != "" || validateAnalysisSelectionOptions(plan.RecoverIncomplete, plan.Refresh, plan.RetryStaleFailed, plan.Features != nil, plan.StaleOnly) != nil) {
+	if validateAnalysisSelectionOptions(plan.RecoverIncomplete, plan.Refresh, plan.RetryStaleFailed, plan.Features != nil, plan.StaleOnly, plan.StalePath) != nil || plan.StaleOnly && plan.CompatibilityStage != "" {
 		return false
 	}
 	if plan.RetryStaleFailed && (plan.Refresh || plan.CompatibilityStage != "") {
@@ -312,6 +312,9 @@ func validateStoredAnalysisFiles(run *AnalysisRun) (int, error) {
 	total := 0
 	for i, file := range run.Files {
 		planned := run.Plan.Files[i]
+		if run.Plan.StalePath != "" && file.Path != run.Plan.StalePath {
+			return 0, errAnalysisRunCorrupt
+		}
 		if !validStoredAnalysisFile(file, planned) || i > 0 && run.Files[i-1].Path >= file.Path {
 			return 0, errAnalysisRunCorrupt
 		}

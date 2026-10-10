@@ -122,6 +122,7 @@ data class EngineeringInsight(
 data class Finding(
     val severity: String,
     val summary: String,
+    val title: String = "",
     @SerialName("task_spec") val taskSpec: BugTaskSpec? = null,
     @SerialName("engineering_insight") val engineeringInsight: EngineeringInsight? = null
 )
@@ -791,6 +792,7 @@ data class AnalysisPreviewRequest(
     @SerialName("retry_stale_failed") val retryStaleFailed: Boolean = false,
     val models: AnalysisModels? = null,
     @SerialName("stale_only") val staleOnly: Boolean = false,
+    @SerialName("stale_path") val stalePath: String = "",
 )
 
 @Serializable
@@ -851,6 +853,7 @@ data class AnalysisRunPreview(
     @SerialName("retry_stale_failed") val retryStaleFailed: Boolean = false,
     val models: AnalysisModels? = null,
     @SerialName("stale_only") val staleOnly: Boolean = false,
+    @SerialName("stale_path") val stalePath: String = "",
 )
 
 @Serializable
@@ -869,6 +872,7 @@ data class AnalysisRunStartRequest(
     @SerialName("retry_stale_failed") val retryStaleFailed: Boolean = false,
     val models: AnalysisModels? = null,
     @SerialName("stale_only") val staleOnly: Boolean = false,
+    @SerialName("stale_path") val stalePath: String = "",
 )
 
 @Serializable

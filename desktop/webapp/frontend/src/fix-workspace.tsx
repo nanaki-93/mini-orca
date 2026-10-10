@@ -6,6 +6,7 @@ import { ChangeChecks, ChangeOutcome, ProposalDiff } from './change-shared';
 import { FixPreparation } from './fix-preparation';
 import { FixSolution } from './fix-solution';
 import { ProjectGuidance } from './project-guidance';
+import { findingName } from './finding-name';
 import {
   Badge,
   BulletContent,
@@ -13,13 +14,58 @@ import {
   Disclosure,
   Empty,
   Go,
-  Heading,
   Icon,
   Notice,
   Panel,
   Prose,
   human,
 } from './ui';
+
+export function FixHeading({
+  title,
+  path,
+  symbol,
+  line,
+  kind,
+  metadata,
+  children,
+}: {
+  title: string;
+  path?: string;
+  symbol?: string;
+  line?: number;
+  kind: ChangeSeed['kind'];
+  metadata?: ReactNode;
+  children?: ReactNode;
+}) {
+  const label =
+    kind === 'performance' ? 'Performance fix' : kind === 'security' ? 'Security fix' : 'Bug fix';
+  return (
+    <header className="page-heading fix-heading">
+      <div className="fix-identity">
+        <span className="fix-kind-icon" role="img" aria-label={label} title={label}>
+          <Icon name={kind === 'performance' ? 'gauge' : kind === 'security' ? 'shield' : 'bug'} />
+        </span>
+        <div>
+          <h1>{title}</h1>
+          <p className="results-detail-meta">
+            {path && (
+              <span className="path">
+                {path}
+                {line ? `:${line}` : ''}
+              </span>
+            )}
+            <span className="row wrap">
+              {symbol && <span>{symbol}</span>}
+              {metadata}
+            </span>
+          </p>
+        </div>
+      </div>
+      <div className="actions">{children}</div>
+    </header>
+  );
+}
 
 export function FixWorkspace({ s }: { s: State }) {
   const change = s.change;
@@ -98,26 +144,18 @@ export function FixWorkspace({ s }: { s: State }) {
         <Go page={category} icon="back">
           All findings
         </Go>
-        <span className="small muted">
-          {kind === 'fix' ? 'Bug fix' : kind === 'performance' ? 'Performance fix' : 'Security fix'}
-        </span>
         <Go page="models" icon="layers">
           Manage models
         </Go>
       </div>
-      <Heading
-        title={seed.title}
-        detail={
-          <span className="results-detail-meta">
-            <span className="path">
-              {sourcePath || 'No file selected'}
-              {finding?.line ? `:${finding.line}` : ''}
-            </span>
-            <span className="row wrap">
-              <span>{finding?.symbol || 'File-level finding'}</span>
-              <Badge value={change?.freshness === 'stale' ? 'stale' : change?.state || 'draft'} />
-            </span>
-          </span>
+      <FixHeading
+        title={findingName(seed.title, finding?.cause)}
+        path={sourcePath}
+        symbol={finding?.symbol}
+        line={finding?.line}
+        kind={kind}
+        metadata={
+          <Badge value={change?.freshness === 'stale' ? 'stale' : change?.state || 'draft'} />
         }
       >
         <Button
@@ -127,7 +165,7 @@ export function FixWorkspace({ s }: { s: State }) {
         >
           Go to file
         </Button>
-      </Heading>
+      </FixHeading>
       {change?.freshness === 'stale' && (
         <Notice>Source or guidance changed. Refresh the findings and start a new fix.</Notice>
       )}
@@ -248,10 +286,7 @@ export function ProposalReview({
         panel="fix-review-content"
         items={[
           { id: 'changes', label: `Changes (${files.length})` },
-          {
-            id: 'checks',
-            label: `Checks${attention ? ` (${attention} need attention)` : ''}`,
-          },
+          { id: 'checks', label: `Checks${attention ? ` (${attention} need attention)` : ''}` },
           { id: 'details', label: 'Details' },
         ]}
       />

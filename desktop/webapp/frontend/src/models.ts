@@ -197,6 +197,7 @@ export interface AnalysisPreview {
   security_review_intent_required: boolean;
   retry_stale_failed?: boolean;
   stale_only?: boolean;
+  stale_path?: string;
   recover_incomplete?: boolean;
 }
 export interface Coverage {
@@ -356,6 +357,7 @@ export interface FileAnalysis extends ProjectIdentity {
   side_effects: string[];
   risks: {
     severity: string;
+    title?: string;
     summary: string;
     task_spec?: TaskSpec;
     engineering_insight?: Insight;

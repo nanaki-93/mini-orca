@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { ChangeSeed } from './models';
 import { workspace as w, workflowSeed, type FixPreparationContext, type State } from './workspace';
 import { defaultWorkflowModels } from './change-workflow';
-import { BulletContent, Button, Disclosure, Notice, Panel } from './ui';
+import { Button, Disclosure, Icon, Notice, Panel } from './ui';
 
 export function FixPreparation({
   s,
@@ -18,6 +18,7 @@ export function FixPreparation({
   const [context, setContext] = useState<FixPreparationContext>();
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
+  const permissionsID = useId();
   const modelKey = JSON.stringify(s.models?.scopes);
   useEffect(() => {
     let current = true;
@@ -40,46 +41,32 @@ export function FixPreparation({
   const models = s.workflowModels || s.change?.workflow?.models || defaultWorkflowModels;
   const profiles = useAgents ? Object.values(models) : [models.create];
   const ready = context && profiles.every((profile) => context.models.scopes[profile]);
-  const remote = [
-    ...new Set(
-      profiles.flatMap((profile) => {
-        const model = context?.models.scopes[profile];
-        return model?.remote_provider ? [`${model.model} · ${model.provider_origin}`] : [];
-      }),
-    ),
-  ];
+  const remote = profiles.some((profile) => context?.models.scopes[profile]?.remote_provider);
   return (
-    <Panel title="Prepare fix" className="fix-preparation">
+    <Panel className="fix-preparation">
       {error ? (
         <Notice error>{error}</Notice>
       ) : !context ? (
         <p>Loading models and permissions…</p>
       ) : (
         <>
-          <BulletContent title="Files in this fix" items={prepared.paths} />
-          <div className="fix-permissions small">
-            <p>
-              Selecting {label} authorizes {seed.kind === 'security' ? 'a Security fix and ' : ''}
-              project checks in an isolated copy.
-              {remote.length > 0 &&
-                ' It also shares these files and their instructions with the remote models below.'}
-            </p>
-            <BulletContent title="Remote destinations" items={remote} />
-            <Disclosure title="Project checks">
-              {context.trust.commands.map((argv, index) => (
-                <p key={index}>
-                  <code>{argv.join(' ')}</code>
-                </p>
-              ))}
-            </Disclosure>
-          </div>
+          <h2 className="fix-scope-title">Files in this fix</h2>
+          <ul className="fix-file-list">
+            {prepared.paths.map((path) => (
+              <li key={path}>
+                <Icon name="file" />
+                <span className="path">{path}</span>
+              </li>
+            ))}
+          </ul>
         </>
       )}
-      <div className="actions section-gap">
+      <div className="actions">
         <Button
           tone="primary"
           icon="sparkles"
           disabled={disabled || !ready}
+          aria-describedby={context ? permissionsID : undefined}
           onClick={() => {
             if (!context || !ready) return;
             if (s.page !== 'chat') w.seedChange(prepared);
@@ -90,9 +77,33 @@ export function FixPreparation({
         >
           {label}
         </Button>
-        <Button disabled={disabled} onClick={() => setRefresh((value) => value + 1)}>
-          Refresh preparation
-        </Button>
+      </div>
+      <div className="fix-checks">
+        <Disclosure title="Permissions & checks">
+          {context && (
+            <span id={permissionsID} className="small muted">
+              {seed.kind === 'security' && 'Security fix · '}
+              {remote && 'Shares files and instructions with selected remote models · '}
+              Runs isolated checks
+            </span>
+          )}
+          {context && (
+            <Disclosure title="Project checks">
+              {context.trust.commands.map((argv, index) => (
+                <p key={index}>
+                  <code>{argv.join(' ')}</code>
+                </p>
+              ))}
+            </Disclosure>
+          )}
+          <Button
+            icon="refresh"
+            disabled={disabled}
+            onClick={() => setRefresh((value) => value + 1)}
+          >
+            Refresh preparation
+          </Button>
+        </Disclosure>
       </div>
     </Panel>
   );

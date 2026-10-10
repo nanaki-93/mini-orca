@@ -141,7 +141,7 @@ Declaration explanation requests bind `project_id`, `project_revision`, `base_fi
 
 Explanation responses are transient. This route does not create chat sessions or drafts, persist chat or analysis history, run checks, or change Apply/Undo state. Cancellation, malformed provider output, and stale request identity return an error without publishing a result.
 
-Security review requests require `project_id`, `project_revision`, `base_file_hash`, `path`, and `confirm_remote_provider`; `symbol` is optional but must identify one exact atomic indexed declaration. The request uses the configured Analyze scope and requires fresh `confirm_remote_provider: true` before a non-loopback HTTP or CLI provider receives source. It sends at most 64 KiB of target source plus up to 32 KiB of applicable project instructions, and accepts at most 64 KiB of one strict JSON response with at most five advisory `model_suspicion` findings. The provider receives a strict `json_schema` response format with lowercase rule/category identifiers and file-specific path, line bounds and symbol choices. Provider rejection of structured output fails the stage without falling back to unconstrained output. Prompt version `security-file-v3` also requires source-free explanations and an empty findings array when no concrete security concern is supported, including documentation and ignore files. Earlier prompt versions remain readable but are stale for current reviews. The service rechecks project, revision, file hash, policy, focused declaration, and provider identity before delivery, after response, before caching, and before returning. Reports omit source, redact stored/returned prose, and reject meaningful source-line token sequences even when spacing or punctuation changes. Findings are advisory suspicions, and `completed_empty` means no findings were returned; it does not mean the file is secure. The route never runs suggested exploit code, scans, or project code; a configured CLI runs only as the model transport.
+Security review requests require `project_id`, `project_revision`, `base_file_hash`, `path`, and `confirm_remote_provider`; `symbol` is optional but must identify one exact atomic indexed declaration. The request uses the configured Analyze scope and requires fresh `confirm_remote_provider: true` before a non-loopback HTTP or CLI provider receives source. It sends at most 64 KiB of target source plus up to 32 KiB of applicable project instructions, and accepts at most 64 KiB of one strict JSON response with at most five advisory `model_suspicion` findings. The provider receives a strict `json_schema` response format with lowercase rule/category identifiers and file-specific path, line bounds and symbol choices. Provider rejection of structured output fails the stage without falling back to unconstrained output. Prompt version `security-file-v4` also requires source-free explanations and an empty findings array when no concrete security concern is supported, including documentation and ignore files. Earlier prompt versions remain readable but are stale for current reviews. The service rechecks project, revision, file hash, policy, focused declaration, and provider identity before delivery, after response, before caching, and before returning. Reports omit source, redact stored/returned prose, and reject meaningful source-line token sequences even when spacing or punctuation changes. Findings are advisory suspicions, and `completed_empty` means no findings were returned; it does not mean the file is secure. The route never runs suggested exploit code, scans, or project code; a configured CLI runs only as the model transport.
 
 ## Trusted local execution
 
@@ -414,7 +414,7 @@ identity includes scope, model, origin, reasoning, context/timeout/retry setting
 and prompt/rule versions. Cache availability is excluded from this stable identity:
 the run's own cache writes cannot invalidate its remaining queue. `preview_id`
 additionally binds current cache dispositions, remaining attempts/work and request
-bounds. Start echoes limits/refresh, `retry_stale_failed`, `stale_only`, `recover_incomplete`, `include_features`, `models` and both identities; the daemon recomputes
+bounds. Start echoes limits/refresh, `retry_stale_failed`, `stale_only`, `stale_path`, `recover_incomplete`, `include_features`, `models` and both identities; the daemon recomputes
 them before admission. A changed preflight yields 409 and requires a fresh preview.
 
 Preview and start accept optional `retry_stale_failed` (default false). When true,
@@ -435,6 +435,16 @@ stay cached. This option cannot be combined with `refresh`, `retry_stale_failed`
 `recover_incomplete` or `include_features`. It is bound to both admission
 fingerprints. Resume uses the captured option and file set; requesting it for a
 run without that option returns 409.
+
+With `stale_only`, optional `stale_path` narrows analysis to one exact
+project-relative path in the eligible saved selection. Invalid paths or using a
+target without `stale_only` return 400; unknown, excluded or ineligible targets
+return 409. A target without stale evidence yields an empty preview. The target
+is captured in the preview and both fingerprints; start must echo it and cannot
+drop or change it. Resume preserves the captured target when omitted and rejects
+a different target with 409. This does not change the saved file selection.
+Results outside the target remain available with their own freshness, while
+user and policy exclusions remain excluded.
 
 Preview and start also accept optional `recover_incomplete` (default false), which
 completes unfinished analysis without changing source code. Under the requested
@@ -561,7 +571,7 @@ Ranges spanning declarations remain valid file/line findings without a symbol
 label. Legacy responses containing a symbol still require that declaration to
 contain the complete range; invalid labels are never silently discarded. Provider
 rejection fails the stage without falling back to unconstrained output.
-The Performance prompt is `performance-file-v6`; older saved reports remain
+The Performance prompt is `performance-file-v7`; older saved reports remain
 readable but require refresh for current coverage. Failed Performance stages
 retain source-free explanations for malformed JSON, invalid fields or values,
 invalid anchors, and oversized responses. A terminal `partial`
@@ -611,6 +621,14 @@ and completed reports remain. Persistence failure stops dispatch before the next
 stage and exposes a recoverable operational failure.
 
 ### Category and cache compatibility
+
+`Finding.title` carries a short content-specific name. New semantic output
+(`file-analysis-v16`) requests a title for every risk; Performance
+(`performance-file-v7`) and AI Security (`security-file-v4`) request the same
+2–6 word names, at most 60 characters. File risks retain these names in
+`UnifiedFinding.title`; older risks without a title use their existing summary.
+The additive field leaves historical reports readable and finding IDs/triage
+unchanged. Reading saved results never generates titles with a provider call.
 
 `Finding.category` and `UnifiedFinding.category` use `bugs`, `performance` or
 `security`. They are independent of severity, confidence, source and the existing

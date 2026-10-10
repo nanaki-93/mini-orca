@@ -19,6 +19,80 @@ export async function testGuidedFixes({
     await selectModel(trigger, profile);
     await trigger.page().getByRole('button', { name: 'Back to workspace', exact: true }).click();
   };
+  await test('Finding names distinguish results in one file and preserve saved content', async () => {
+    for (const category of ['Bugs', 'Performance', 'Security']) {
+      const { page, close } = await pageFor();
+      try {
+        const titles = [
+          'Missing cancellation',
+          'Ignored write errors',
+          '   File analysis suggestion   ',
+          '',
+          'This operation repeatedly allocates large buffers during every request',
+          '界'.repeat(70),
+        ];
+        const names = [
+          'Missing cancellation',
+          'Ignored write errors',
+          'Unchecked input reaches the worker',
+          'Unchecked input reaches the worker',
+          'This operation repeatedly allocates large buffers…',
+          `${'界'.repeat(59)}…`,
+        ];
+        await page.evaluate(
+          ({ category, titles }) => {
+            const state = window.fixture.state;
+            const findings = titles.map((title, index) => ({
+              ...state.finding,
+              id: `named-${index}`,
+              title,
+              message: 'Unchecked input reaches the worker',
+              category: category.toLowerCase(),
+            }));
+            state.results[category.toLowerCase()] = {
+              semantic: findings,
+              performance: [],
+              security: [],
+            };
+          },
+          { category, titles },
+        );
+        await nav(page, category);
+        assert.deepEqual(await page.locator('.result-row strong').allTextContents(), names);
+        const filter = page.getByLabel('Filter findings', { exact: true });
+        for (const query of [names[4], 'during every request']) {
+          await filter.fill(query);
+          assert.deepEqual(await page.locator('.result-row strong').allTextContents(), [names[4]]);
+        }
+        await filter.fill('');
+        const before = await page.evaluate(() =>
+          window.fixture.requests.filter((request) => request.method !== 'GET'),
+        );
+        for (let index = 0; index < names.length; index++) {
+          await page.locator('.result-row').nth(index).press('Enter');
+          await page.getByRole('heading', { name: names[index], exact: true }).waitFor();
+          assert.equal(
+            await page.locator('.results-detail-meta .path').innerText(),
+            'internal/worker/process.go:5',
+          );
+          if (index >= 4) {
+            await page.locator('summary').getByText('Details', { exact: true }).click();
+            await page.getByText(titles[index], { exact: true }).waitFor();
+          }
+          await page.getByRole('button', { name: 'All findings', exact: true }).click();
+        }
+        assert.deepEqual(
+          await page.evaluate(() =>
+            window.fixture.requests.filter((request) => request.method !== 'GET'),
+          ),
+          before,
+        );
+      } finally {
+        await close();
+      }
+    }
+  });
+
   await test('Double-clicking the next file never turns review into Apply', async () => {
     const { page, close } = await pageFor({ trusted: true });
     try {
@@ -398,9 +472,14 @@ export async function testGuidedFixes({
         if (kind === 'fix')
           await page.evaluate(() => {
             window.fixture.state.finding.title = 'File analysis suggestion';
+            window.fixture.state.finding.location.symbol = '';
           });
         await nav(page, category);
+        const findingName = await page.locator('.result-row strong').first().innerText();
         await page.locator('.result-row').first().click();
+        await page.getByRole('heading', { name: findingName, exact: true }).waitFor();
+        assert.equal(await page.getByText('File analysis suggestion', { exact: true }).count(), 0);
+        assert.equal(await page.getByText('File-level finding', { exact: true }).count(), 0);
         assert.equal(
           await page.getByRole('heading', { name: 'Cause', exact: true }).isVisible(),
           true,
@@ -436,6 +515,8 @@ export async function testGuidedFixes({
         await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
         await idle(page);
         await page.getByRole('heading', { name: 'Proposal diff', exact: true }).waitFor();
+        await page.getByRole('heading', { name: findingName, exact: true }).waitFor();
+        assert.equal(await page.getByText('File-level finding', { exact: true }).count(), 0);
         assert.equal(await page.getByRole('dialog').count(), 0);
         const preparedWrites = await page.evaluate(() =>
           window.fixture.requests.filter((r) => r.method !== 'GET'),
@@ -468,6 +549,7 @@ export async function testGuidedFixes({
           0,
         );
         await page.getByRole('tab', { name: 'Details', exact: true }).click();
+        await page.locator('summary').getByText('Regenerate fix', { exact: true }).click();
         await openModels(page);
         assert.equal(await page.locator('.fix-models .analysis-model-trigger').count(), 3);
         await page.getByRole('button', { name: 'Back to workspace', exact: true }).click();
@@ -557,31 +639,79 @@ export async function testGuidedFixes({
     }
   });
 
-  await test('Guided fix shows scoped permissions and starts once without a confirmation popup', async () => {
+  await test('Guided fix prioritizes the finding and solution, with compact scoped permissions and passive settings', async () => {
     for (const category of ['Bugs', 'Performance', 'Security']) {
       const { page, close } = await pageFor({ remote: true });
       try {
         await nav(page, category);
+        const findingName = await page.locator('.result-row strong').first().innerText();
         await page.locator('.result-row').first().click();
-        await openModels(page);
-        await page.getByLabel('Creation model', { exact: true }).waitFor();
+        await page.getByRole('heading', { name: findingName, exact: true }).waitFor();
+        await page
+          .getByRole('img', {
+            name: category === 'Bugs' ? 'Bug fix' : `${category} fix`,
+            exact: true,
+          })
+          .waitFor();
         const preparation = page.locator('.fix-preparation');
         assert.equal(await preparation.getByRole('checkbox').count(), 0);
-        await preparation.getByText('Remote destinations', { exact: true }).waitFor();
+        assert.equal(
+          await preparation.getByText('Remote destinations', { exact: true }).count(),
+          0,
+        );
+        assert.equal(
+          await preparation.getByText('Selecting Prepare fix', { exact: false }).count(),
+          0,
+        );
         assert.equal(
           await preparation
-            .getByText('test-model · https://provider.invalid', { exact: true })
-            .count(),
-          1,
+            .getByRole('button', { name: 'Refresh preparation', exact: true })
+            .isVisible(),
+          false,
         );
-        if (category === 'Security')
+        assert.equal(
           await preparation
-            .getByText('Selecting Prepare fix authorizes a Security fix', {
-              exact: false,
-            })
-            .waitFor();
+            .getByRole('button', { name: 'Creation model', exact: true })
+            .isVisible(),
+          false,
+        );
+        assert.deepEqual(await preparation.locator('.fix-file-list li').allTextContents(), [
+          'internal/worker/process.go',
+          'internal/worker/process_test.go',
+        ]);
+        assert.equal(
+          await page.getByRole('button', { name: 'Creation model', exact: true }).count(),
+          0,
+        );
+        const prepare = page.getByRole('button', { name: 'Prepare fix', exact: true });
+        const permission = await prepare.getAttribute('aria-describedby');
+        assert.equal(await page.locator(`[id="${permission}"]`).isVisible(), false);
+        for (const [theme, width, height, large] of [
+          ['Graphite', 1440, 900, false],
+          ['Porcelain', 800, 700, true],
+        ]) {
+          await page.setViewportSize({ width, height });
+          await page.getByRole('button', { name: `${theme} theme`, exact: true }).click();
+          if (large) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          await prepare.scrollIntoViewIfNeeded();
+          const action = await prepare.boundingBox();
+          const solution = await page.locator('.fix-solution').boundingBox();
+          const footer = await page.locator('.statusbar').boundingBox();
+          assert.ok(solution.y + solution.height < action.y, 'The solution leads into the action');
+          assert.ok(
+            action.y + action.height <= footer.y,
+            'Prepare fix remains reachable without inline model controls',
+          );
+          await layout(page, `linear-fix-${category.toLowerCase()}-${theme.toLowerCase()}`);
+          await contrast(page, `Linear ${category} fix in ${theme}`);
+        }
         const before = await page.evaluate(() =>
           window.fixture.requests.filter((r) => r.method !== 'GET'),
+        );
+        await preparation.getByText('Permissions & checks', { exact: true }).click();
+        assert.equal(
+          await page.locator(`[id="${permission}"]`).innerText(),
+          `${category === 'Security' ? 'Security fix · ' : ''}Shares files and instructions with selected remote models · Runs isolated checks`,
         );
         await preparation.getByText('Project checks', { exact: true }).click();
         await preparation.getByText('go test ./...', { exact: true }).waitFor();
@@ -590,7 +720,6 @@ export async function testGuidedFixes({
           await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
           before,
         );
-        const prepare = page.getByRole('button', { name: 'Prepare fix', exact: true });
         await prepare.focus();
         await prepare.press('Enter');
         await idle(page);

@@ -532,6 +532,7 @@ export class Workspace {
     limits: M.Limits,
     refresh = false,
     models?: M.AnalysisModels,
+    stalePath?: string,
   ) {
     await this.act('Prepare analysis', async () => {
       const epoch = this.epoch;
@@ -547,6 +548,7 @@ export class Workspace {
         refresh: run?.plan.refresh || refresh,
         recover_incomplete: mode === 'repair',
         stale_only: mode === 'stale',
+        stale_path: stalePath,
         ...(run ? { resume_run: run.identity } : {}),
       });
       if (
@@ -622,6 +624,7 @@ export class Workspace {
             models: p.models,
             retry_stale_failed: p.retry_stale_failed || false,
             stale_only: p.stale_only || false,
+            stale_path: p.stale_path,
             recover_incomplete: p.recover_incomplete || false,
             confirmations,
           });

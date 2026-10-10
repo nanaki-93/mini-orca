@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import type * as M from './models';
 import { workspace as w, activeChangeWorkflow, workflowSeed, type State } from './workspace';
 import { FixPreparation } from './fix-preparation';
+import { FixHeading } from './fix-workspace';
 import { SolutionExcerpt } from './fix-solution';
 import { StaleAnalysisButton } from './analysis';
+import { findingName, findingTitle } from './finding-name';
 import {
   Badge,
   Button,
@@ -23,6 +25,7 @@ import {
 interface ResultRow {
   key: string;
   title: string;
+  name: string;
   path: string;
   symbol: string;
   line: number;
@@ -41,7 +44,8 @@ interface ResultRow {
 function semantic(f: M.Finding): ResultRow {
   return {
     key: `semantic:${f.id}`,
-    title: f.title || f.message,
+    title: findingTitle(f.title, f.message),
+    name: findingName(f.title, f.message),
     path: f.location.path,
     symbol: f.location.symbol,
     line: f.location.start_line,
@@ -64,6 +68,7 @@ function performance(report: M.PerformanceReport): ResultRow[] {
   return (report.findings || []).map((f) => ({
     key: `performance:${report.path}:${f.id}`,
     title: f.title,
+    name: findingName(f.title, f.observed_pattern),
     path: report.path,
     symbol: f.symbol,
     line: f.start_line,
@@ -86,6 +91,7 @@ function security(report: M.SecurityReport): ResultRow[] {
   return (report.findings || []).map((f) => ({
     key: `security:${report.path}:${report.source}:${f.id}`,
     title: f.title,
+    name: findingName(f.title, f.observed_condition),
     path: f.source_anchor.path || report.path,
     symbol: f.source_anchor.symbol,
     line: f.source_anchor.start_line,
@@ -109,6 +115,8 @@ function security(report: M.SecurityReport): ResultRow[] {
 }
 export function Results({ s }: { s: State }) {
   const category = s.page;
+  const kind =
+    category === 'performance' ? 'performance' : category === 'security' ? 'security' : 'fix';
   const results = s.results[category];
   const [query, setQuery] = useState('');
   const [severity, setSeverity] = useState('');
@@ -134,14 +142,16 @@ export function Results({ s }: { s: State }) {
   const unique = [...new Map(rows.map((row) => [row.key, row])).values()];
   const filtered = unique.filter(
     (row) =>
-      `${row.title} ${row.path} ${row.symbol}`.toLowerCase().includes(query.toLowerCase()) &&
+      `${row.name} ${row.title} ${row.path} ${row.symbol}`
+        .toLowerCase()
+        .includes(query.toLowerCase()) &&
       (!severity || row.severity === severity),
   );
   const detail = unique.find((row) => row.key === selected);
   const fixSeed = (row: ResultRow): M.ChangeSeed => ({
-    title: row.title.slice(0, 200),
+    title: row.name,
     paths: [row.path],
-    kind: category === 'performance' ? 'performance' : category === 'security' ? 'security' : 'fix',
+    kind,
     message: `Address this finding: ${row.title}\nLocation: ${row.path}${row.line ? `:${row.line}` : ''}${row.symbol ? ` (${row.symbol})` : ''}\nCause: ${row.cause}\nProposed solution: ${row.solution}\n${row.text.map(([label, text]) => `${label}: ${text}`).join('\n')}\nExplain only the proposed solution, including how each changed file addresses the finding. The cause is shown separately. Report unresolved failures or limitations. Preserve unrelated behavior.`,
     acceptance_criteria: row.task?.acceptance_criteria || [],
     finding: {
@@ -156,40 +166,42 @@ export function Results({ s }: { s: State }) {
   const seed = detail ? workflowSeed(fixSeed(detail)) : undefined;
   const fixDisabled = !!s.busy || activeChangeWorkflow(s.change) || detail?.freshness === 'stale';
   const detailPanel = detail ? (
-    <div ref={view} tabIndex={-1} className="workspace-page results-page results-detail guided-fix">
+    <div
+      ref={view}
+      tabIndex={-1}
+      className="workspace-page results-page results-detail guided-fix"
+      data-accent={category}
+    >
       <div className="row between wrap fix-back">
         <Button icon="back" onClick={() => setSelected(undefined)}>
           All findings
         </Button>
-        <span className="small muted">Prepare a fix</span>
         <Go page="models" icon="layers">
           Manage models
         </Go>
       </div>
-      <Heading
-        variant="intro"
-        title={detail.title}
-        detail={
-          <span className="results-detail-meta">
-            <span className="path">
-              {detail.path}
-              {detail.line ? `:${detail.line}` : ''}
-            </span>
-            <span>{detail.symbol || 'File-level finding'}</span>
-            <span className="row wrap">
-              <Badge value={detail.severity} />
+      <FixHeading
+        title={detail.name}
+        path={detail.path}
+        symbol={detail.symbol}
+        line={detail.line}
+        kind={kind}
+        metadata={
+          <>
+            <Badge value={detail.severity} />
+            {detail.status !== detail.freshness && (
               <span aria-label="Finding state">
                 <Badge value={detail.status} />
               </span>
-              <span className="results-state">
-                <StatusDot value={detail.freshness} label="Freshness" />
-                <span>{human(detail.freshness)}</span>
-              </span>
+            )}
+            <span className="results-state">
+              <StatusDot value={detail.freshness} label="Freshness" />
+              <span>{human(detail.freshness)}</span>
             </span>
-          </span>
+          </>
         }
       >
-        <StaleAnalysisButton s={s} />
+        {detail.freshness === 'stale' && <StaleAnalysisButton s={s} path={detail.path} />}
         <Button
           icon="code"
           disabled={!!s.busy}
@@ -197,7 +209,7 @@ export function Results({ s }: { s: State }) {
         >
           Go to file
         </Button>
-      </Heading>
+      </FixHeading>
       {detail.freshness === 'stale' && (
         <Notice>This finding is stale. Refresh its analysis before preparing a fix.</Notice>
       )}
@@ -205,6 +217,9 @@ export function Results({ s }: { s: State }) {
         <Notice>Performance unmeasured; tests do not establish a speedup.</Notice>
       )}
       <Panel title="Cause" className="fix-explanation fix-cause">
+        {detail.name !== detail.title && detail.title !== detail.cause && (
+          <Prose text={detail.title} />
+        )}
         <Prose
           text={detail.cause || 'No cause was saved. Review the evidence before preparing a fix.'}
         />
@@ -283,12 +298,7 @@ export function Results({ s }: { s: State }) {
   const reports = [
     ...(results?.performance || [])
       .filter((r) => r.warning || !(r.findings || []).length)
-      .map((r) => ({
-        key: `p:${r.path}`,
-        path: r.path,
-        status: r.status,
-        reason: r.warning,
-      })),
+      .map((r) => ({ key: `p:${r.path}`, path: r.path, status: r.status, reason: r.warning })),
     ...(results?.security || [])
       .filter((r) => r.reason || !(r.findings || []).length)
       .map((r) => ({
@@ -339,7 +349,6 @@ export function Results({ s }: { s: State }) {
         <Go page="analysis" tone="primary">
           Analyze project
         </Go>
-        <StaleAnalysisButton s={s} />
       </Heading>
       {results?.retained_files?.length ? (
         <Notice>
@@ -439,7 +448,7 @@ export function Results({ s }: { s: State }) {
                 />
               </span>
               <span className="list-copy">
-                <strong>{row.title}</strong>
+                <strong>{row.name}</strong>
                 <span className="finding-summary">{row.cause.split('\n')[0]}</span>
                 <small>
                   <span className="path">

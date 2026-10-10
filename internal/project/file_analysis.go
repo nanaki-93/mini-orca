@@ -44,6 +44,7 @@ func (category FindingCategory) Valid() bool {
 type Finding struct {
 	Category           FindingCategory     `json:"category,omitempty"`
 	Severity           string              `json:"severity"`
+	Title              string              `json:"title,omitempty"`
 	Summary            string              `json:"summary"`
 	TaskSpec           *BugTaskSpec        `json:"task_spec,omitempty"`
 	EngineeringInsight *EngineeringInsight `json:"engineering_insight,omitempty"`
