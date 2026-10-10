@@ -287,10 +287,26 @@ async function idle(page) {
   await page.locator('.busy-strip').waitFor({ state: 'hidden' });
 }
 async function nav(page, name) {
-  await page
-    .getByRole('navigation', { name: /Workspaces|Tools/ })
-    .getByRole('button', { name, exact: true })
-    .click();
+  const sidebar = page.getByRole('complementary', { name: 'Application' });
+  if (['Bugs', 'Performance', 'Security'].includes(name)) {
+    await sidebar.getByRole('button', { name: 'Findings', exact: true }).click();
+    await page
+      .getByRole('navigation', { name: 'Finding categories' })
+      .getByRole('button', { name, exact: true })
+      .click();
+  } else if (['Files', 'Last run'].includes(name)) {
+    await sidebar.getByRole('button', { name: 'Analysis', exact: true }).click();
+    await page
+      .getByRole('navigation', { name: 'Analysis sections' })
+      .getByRole('button', { name: name === 'Files' ? 'Files & scope' : name, exact: true })
+      .click();
+  } else if (name === 'Terminal') {
+    await page.locator('.statusbar').getByRole('button', { name, exact: true }).click();
+  } else if (name === 'Project') {
+    await sidebar.getByRole('button', { name: /^Switch project/ }).click();
+  } else {
+    await sidebar.getByRole('button', { name, exact: true }).click();
+  }
 }
 async function startAnalysis(page, resume = false) {
   await page
