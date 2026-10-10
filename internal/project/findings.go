@@ -352,7 +352,7 @@ func SuggestedFindingsForProject(report ProjectAnalysisReport) []UnifiedFinding 
 	}
 	findings := make([]UnifiedFinding, 0, len(report.Risks))
 	for _, risk := range report.Risks {
-		findings = append(findings, UnifiedFinding{Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: "Project analysis suggestion", Message: risk.Summary, OriginatingAnalysis: "project", EngineeringInsight: CloneEngineeringInsight(risk.EngineeringInsight)})
+		findings = append(findings, UnifiedFinding{Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: risk.Summary, Message: risk.Summary, OriginatingAnalysis: "project", EngineeringInsight: CloneEngineeringInsight(risk.EngineeringInsight)})
 	}
 	return findings
 }
@@ -365,6 +365,11 @@ func SuggestedFindingsForFile(analysis FileAnalysis) []UnifiedFinding {
 	}
 	findings := make([]UnifiedFinding, 0, len(analysis.Risks))
 	for _, risk := range analysis.Risks {
+		title := strings.TrimSpace(risk.Title)
+		if title == "" {
+			// Historical reports and providers without structured output may omit titles.
+			title = risk.Summary
+		}
 		location := FindingLocation{Path: analysis.Path}
 		if spec := risk.TaskSpec; spec != nil {
 			location.Symbol = spec.TargetSymbol
@@ -376,7 +381,7 @@ func SuggestedFindingsForFile(analysis FileAnalysis) []UnifiedFinding {
 				}
 			}
 		}
-		findings = append(findings, UnifiedFinding{Category: risk.Category, Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: "File analysis suggestion", Message: risk.Summary, FileHash: analysis.ContentHash, Location: location, OriginatingAnalysis: "file", TaskSpec: cloneBugTaskSpec(risk.TaskSpec), EngineeringInsight: CloneEngineeringInsight(risk.EngineeringInsight)})
+		findings = append(findings, UnifiedFinding{Category: risk.Category, Source: FindingSourceAI, Confidence: FindingConfidenceSuggested, Severity: risk.Severity, Title: title, Message: risk.Summary, FileHash: analysis.ContentHash, Location: location, OriginatingAnalysis: "file", TaskSpec: cloneBugTaskSpec(risk.TaskSpec), EngineeringInsight: CloneEngineeringInsight(risk.EngineeringInsight)})
 	}
 	return findings
 }

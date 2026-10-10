@@ -74,13 +74,29 @@ func analysisHandlerRequest(t *testing.T, handler http.HandlerFunc, method, targ
 
 func TestAnalysisHandlerStaleOnlyAdmission(t *testing.T) {
 	h, _, analysis, calls := newAnalysisHandlerFixture(t)
-	request := app.AnalysisPreviewRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Scope: app.AnalysisRunScopeProject, StaleOnly: true, Limits: app.AnalysisRunLimits{BatchFiles: 10, BudgetSeconds: 30, MaxAttemptsPerStage: 1}}
+	request := app.AnalysisPreviewRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, Scope: app.AnalysisRunScopeProject, StaleOnly: true, StalePath: "main.go", Limits: app.AnalysisRunLimits{BatchFiles: 10, BudgetSeconds: 30, MaxAttemptsPerStage: 1}}
 	w := analysisHandlerRequest(t, h.Preview, "POST", "/analysis/preview", request)
 	var preview app.AnalysisRunPreview
-	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &preview) != nil || !preview.StaleOnly || len(preview.Files) != 0 {
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &preview) != nil || !preview.StaleOnly || preview.StalePath != "main.go" || len(preview.Files) != 0 {
 		t.Fatalf("stale-only preview = %d %s", w.Code, w.Body)
 	}
-	start := app.AnalysisRunStartRequest{Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits, StaleOnly: true}
+	start := app.AnalysisRunStartRequest{Identity: preview.Identity, PreviewID: preview.PreviewID, Limits: preview.Limits, StaleOnly: true, StalePath: "main.go"}
+	for _, endpoint := range []string{"preview", "start"} {
+		for _, path := range []string{"../outside.go", "/absolute.go", "./main.go", "main.go\n", "main.go"} {
+			var payload map[string]any
+			value, handler := any(request), h.Preview
+			if endpoint == "start" {
+				value, handler = start, h.Start
+			}
+			data, _ := json.Marshal(value)
+			_ = json.Unmarshal(data, &payload)
+			payload["stale_path"] = path
+			payload["stale_only"] = path != "main.go"
+			if w := analysisHandlerRequest(t, handler, "POST", "/analysis/"+endpoint, payload); w.Code != http.StatusBadRequest {
+				t.Fatalf("%s with invalid target %q = %d %s", endpoint, path, w.Code, w.Body)
+			}
+		}
+	}
 	for _, flag := range []string{"refresh", "retry_stale_failed", "recover_incomplete", "include_features"} {
 		for _, endpoint := range []string{"preview", "start"} {
 			var payload map[string]any
@@ -100,7 +116,7 @@ func TestAnalysisHandlerStaleOnlyAdmission(t *testing.T) {
 		t.Fatalf("stale-only start = %d %s", w.Code, w.Body)
 	}
 	run := waitHandlerAnalysis(t, h, analysis, app.AnalysisRunUnavailable)
-	if run.Status != app.AnalysisRunUnavailable || !run.Plan.StaleOnly || calls.Load() != 0 {
+	if run.Status != app.AnalysisRunUnavailable || !run.Plan.StaleOnly || run.Plan.StalePath != "main.go" || calls.Load() != 0 {
 		t.Fatalf("empty stale-only run did not settle without requests: status=%s calls=%d", run.Status, calls.Load())
 	}
 }

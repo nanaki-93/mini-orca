@@ -2970,16 +2970,6 @@ dialog.model-picker {
 .fix-models .workflow-model-selectors {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
 }
-.fix-permissions {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  overflow-wrap: anywhere;
-}
-.fix-permissions > p {
-  margin-top: 0;
-}
 .fix-review-issues {
   margin-top: 16px;
   padding: 12px 16px;
@@ -3062,6 +3052,33 @@ dialog.model-picker {
 .guided-fix .page-heading h1 {
   font-size: 1.7rem;
   letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+.fix-heading {
+  flex-wrap: wrap;
+}
+.fix-identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex: 1 1 20rem;
+}
+.fix-identity > div {
+  min-width: 0;
+}
+.fix-kind-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  color: var(--section-color);
+  background: var(--section-soft);
+}
+.fix-kind-icon .icon {
+  width: 24px;
+  height: 24px;
 }
 .guided-fix .results-detail-meta {
   gap: 6px;
@@ -3113,16 +3130,50 @@ dialog.model-picker {
 .guided-fix .fix-solution .prose > p:first-child {
   margin-top: 0;
 }
-.guided-fix .fix-preparation .panel-head {
-  background: var(--raised);
+.fix-checks > details {
+  margin: 0;
 }
-.guided-fix .fix-preparation .panel-body {
+.guided-fix > details {
+  margin-top: 0;
+}
+.fix-checks > details > .disclosure-body {
   display: grid;
   gap: 12px;
 }
-.guided-fix .fix-preparation .content-section,
-.guided-fix .fix-preparation .section-gap {
-  margin-top: 0;
+.fix-checks .button {
+  justify-self: start;
+}
+.guided-fix .fix-preparation {
+  background: transparent;
+  border: 0;
+}
+.guided-fix .fix-preparation > .panel-pad {
+  display: grid;
+  gap: 14px;
+  padding: 0;
+}
+.fix-scope-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+.fix-file-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+}
+.fix-file-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+.fix-file-list .icon {
+  color: var(--muted);
 }
 .fix-review {
   min-width: 0;

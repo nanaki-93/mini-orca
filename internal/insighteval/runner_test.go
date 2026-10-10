@@ -1563,7 +1563,7 @@ func recoveryV2TestRoot(t *testing.T) (string, string) {
 	return root, base
 }
 
-// Prompt digests bind the reviewed categorized v14 prompt and provider metadata.
+// Prompt digests bind the reviewed v16 finding-title prompt and provider metadata.
 func TestFileAnalysisEvaluationAdapterPreservesPromptAndProvider(t *testing.T) {
 	source := "package fixture\nfunc Run() {}\n"
 	target := project.IndexFile{Path: "sample.go", Language: "Go", SizeBytes: int64(len(source)), ContentHash: "source-hash", Symbols: []project.SymbolInfo{{Name: "Run", Signature: "func Run()", Confidence: "exact", AtomicTarget: true}}}
@@ -1574,13 +1574,13 @@ func TestFileAnalysisEvaluationAdapterPreservesPromptAndProvider(t *testing.T) {
 		remote           bool
 		promptDigest     string
 	}{
-		{"http://127.0.0.1:1234/v1", "http://127.0.0.1:1234", false, "723a2c5f1fd303b680178e2755df14178059fafca32c6e162f59ca67708eec78"},
-		{"http://localhost:1234/v1", "http://localhost:1234", false, "b0287793626f4efe12d508b4b740b457248dc197fcd963b0cf09ddd3a48d5334"},
-		{"http://[::1]:1234/v1", "http://[::1]:1234", false, "1b933cbdd6d76bd5fd2d02a2d894c2750dfdc20f964fe701c28cdbb5cab78b8d"},
-		{"http://127.25.0.1/v1", "http://127.25.0.1", false, "5b384cee1b37d039beb40742689fcece8fa30c56206dec47bb4903447fdd61a7"},
-		{"https://user:credential@example.com/private-path?token=secret#private-fragment", "https://example.com", true, "4cb1ea7f084c88a0bd913457d99b8f309e86063c44b7e850580fb9701754709e"},
-		{"http://localhost.example/v1", "http://localhost.example", true, "5d57c4f07293493489678ac626109567dfdc0c85cd826959f16e28d39ac8f925"},
-		{"invalid endpoint", "", true, "4eba46f45a5dd91ae2ce329871a56ad39554e416549f3bdd00f4aac70e223a5b"},
+		{"http://127.0.0.1:1234/v1", "http://127.0.0.1:1234", false, "ecd00e5b274e04bec24eb0b45effef3f252b024db4e47e1c43c00ff1e8c9d5d8"},
+		{"http://localhost:1234/v1", "http://localhost:1234", false, "6d04a9203a6ee60af76c97b439e63393a76b0580484254d5e2de0f9f908c4e73"},
+		{"http://[::1]:1234/v1", "http://[::1]:1234", false, "bdecb8d1333dbd2eaa4883b6b754ab0e8459f0e2c94baf27fe27a7f9df350448"},
+		{"http://127.25.0.1/v1", "http://127.25.0.1", false, "b3a8b9aa76d957261fd6e0168bcd49a0a73b4d7b3bfdcbbc87753c9a88248ea7"},
+		{"https://user:credential@example.com/private-path?token=secret#private-fragment", "https://example.com", true, "c547b948dc2fc1e72bef13a80b0bd2ae3e050aaee4407a7b54f992dbafba8904"},
+		{"http://localhost.example/v1", "http://localhost.example", true, "08b1ef0b64bee488748a39046f037f52be22c34b72b74e4bc52e2dfc2304a522"},
+		{"invalid endpoint", "", true, "871c73862aba1fcec08ae54d75da11ba2be011f88fecbcefb6a68195fb7e8f72"},
 	} {
 		t.Run(test.endpoint, func(t *testing.T) {
 			profile := config.ModelProfile{Scope: config.BugModelScope, Model: "fixture-model", APIBaseURL: test.endpoint, APIKey: "private-api-key", ContextMaxTokens: 16384}
@@ -1598,8 +1598,9 @@ func TestFileAnalysisEvaluationAdapterPreservesPromptAndProvider(t *testing.T) {
 				}
 			}
 			got, err := app.PrepareFileAnalysisEvaluation(source, analysis, index, target, profile)
-			if err != nil || fmt.Sprintf("%x", sha256.Sum256([]byte(got))) != test.promptDigest {
-				t.Fatalf("evaluation prompt differs from reviewed v14 bytes: %v", err)
+			digest := fmt.Sprintf("%x", sha256.Sum256([]byte(got)))
+			if err != nil || digest != test.promptDigest {
+				t.Fatalf("evaluation prompt differs from reviewed v16 bytes: digest=%s err=%v", digest, err)
 			}
 		})
 	}

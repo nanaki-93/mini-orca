@@ -60,6 +60,8 @@ collapses to icons.
   new settings, cancel the saved run in **Last run**, then prepare a new analysis.
   Preparing a run opens a preview dialog with captured scope and provider destinations. Starting it still
   confirms remote-provider sharing and Security review for that admission.
+  **Analyze stale files** is available only in Analysis and refreshes outdated
+  files while preserving unchanged results and the saved file selection.
   **Last run** focuses on current progress and pause, continue or cancel controls.
   The progress bar and percentage count finished file-analysis steps, including
   unsuccessful or skipped steps; feature discovery has its own status.
@@ -71,25 +73,27 @@ collapses to icons.
   of file analysis, gets at least ten minutes (or the selected model's longer
   timeout), honors file exclusions and reuses completed ideas on resume.
   Failed feature discovery leaves other analysis results available.
-- **Findings** groups **Bugs**, **Performance** and **Security** in category tabs.
-  Selecting a finding opens its detail beneath the list, preserving filters and
-  the selected row. The exact file, declaration and line remain visible when available.
-  The full cause leads the detail, followed by the proposed solution, affected
-  files and **Prepare fix** action. Provenance and confidence stay with the cause;
+- **Findings** groups **Bugs**, **Performance** and **Security** in category tabs. Each finding has a short content-based name, shared by its list row,
+  detail heading and prepared fix. Older unnamed findings use a compact excerpt
+  of their saved explanation. Selecting a finding opens its detail beneath the list, preserving filters and
+  the selected row. Its name, category, exact path, line and declaration remain
+  visible when available. The full cause leads the page, followed
+  by the proposed solution, affected files and **Prepare fix** action. Provenance and confidence stay with the cause;
   **Details** contains additional evidence and triage actions, including
   **Mark as fixed**. **Full explanation** expands the solution in place without
   repeating the preview; **Show less** collapses it again.
   Creation, testing and review choices are shared with Chat and configured only
   on **Models**. **Manage models** preserves the selected finding so **Back to
   workspace** returns to its detail. Model destinations remain visible in the pickers.
-  **Prepare fix** starts generation and checks. File scope, remote destinations
-  and project checks appear beside the action; selecting it authorizes those
-  operations and, for Security findings, the Security fix. Changed destinations
+  **Permissions & checks** expands sharing permissions, project
+  check commands and preparation refresh. **Prepare fix** authorizes generation,
+  isolated checks, remote sharing and Security intent when applicable. Changed destinations
   or project revisions require fresh preparation.
   Go fixes include a regression test path; Markdown-only fixes use the selected
   creation profile. **Go to file** opens source without starting a fix.
-  **Analyze stale files** refreshes only outdated files and preserves results for
-  unchanged files, whose freshness follows their content and applicable guidance.
+  Stale finding details offer **Analyze stale file**, which prepares analysis only
+  for that finding's file. Preview and Start keep that target, and results for
+  other files remain available. Freshness follows content and applicable guidance.
   The generated fix opens on **Changes**, with file tabs, a read-only diff and
   a check-evidence pane. **Checks** contains full diagnostics, captured workflow
   stages and model review. **Details** contains the cause, solution, scope,

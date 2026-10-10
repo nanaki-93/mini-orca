@@ -31,6 +31,7 @@ func seedRetrySemanticReport(t *testing.T, s *Service, path, status string) {
 		t.Fatal(err)
 	}
 	report.Status = status
+	report.ContentHash = file.ContentHash
 	report.Purpose = "Describes the file."
 	if status == "stale" {
 		report.Status = "fresh"

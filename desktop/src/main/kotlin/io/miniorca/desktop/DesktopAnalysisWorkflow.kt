@@ -317,7 +317,9 @@ internal class DesktopAnalysisWorkflow(
                           preview.limits,
                           preview.refresh,
                           confirmations,
-                          preview.retryStaleFailed))
+                          preview.retryStaleFailed,
+                          staleOnly = preview.staleOnly,
+                          stalePath = preview.stalePath))
               else
                   api.controlAnalysis(
                       AnalysisRunControlRequest(

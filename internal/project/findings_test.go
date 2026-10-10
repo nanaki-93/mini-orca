@@ -38,12 +38,16 @@ func TestFindingClassificationPreservesLegacyIDsTriageAndProvenance(t *testing.T
 				t.Fatalf("legacy finding = %+v, %v", loaded, err)
 			}
 			analysis.Risks[0].Category = FindingCategorySecurity
+			analysis.Risks[0].Title = "Missing authorization"
 			reported := SuggestedFindingsForFile(analysis)
 			current, err := store.ReconcileSource(input, FindingSourceAI, reported)
 			if err != nil || len(current) != 1 {
 				t.Fatalf("classified reconciliation = %+v, %v", current, err)
 			}
 			got := current[0]
+			if got.Title != "Missing authorization" || got.Message != legacy.Message {
+				t.Fatalf("title update lost finding content: %+v", got)
+			}
 			if got.ID != legacy.ID || got.Status != status || got.Category != FindingCategorySecurity || got.Source != FindingSourceAI || got.Confidence != FindingConfidenceSuggested || got.Severity != "high" {
 				t.Fatalf("classification changed identity/triage/provenance: %+v", got)
 			}

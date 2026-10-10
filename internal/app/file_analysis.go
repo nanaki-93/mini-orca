@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	semanticAnalysisPromptVersion = "file-analysis-v15"
+	semanticAnalysisPromptVersion = "file-analysis-v16"
 	maxSemanticAnalysisBytes      = 64 * 1024
 	fileAnalysisInsightFieldCount = 4
 	fileAnalysisInsightMaxChars   = 250
@@ -81,10 +81,11 @@ const fileAnalysisResponseSchemaDocument = `{
     "risk":{
       "type":"object",
       "additionalProperties":false,
-      "required":["category","severity","summary"],
+      "required":["category","severity","title","summary"],
       "properties":{
         "category":{"enum":["bugs","performance","security"]},
         "severity":{"enum":["low","medium","high"]},
+        "title":{"type":"string","minLength":1,"maxLength":60},
         "summary":{"type":"string","minLength":1},
         "task_spec":{"anyOf":[{"$ref":"#/$defs/taskSpec"},{"type":"null"}]},
         "engineering_insight":{"$ref":"#/$defs/optionalInsight"}
@@ -112,6 +113,8 @@ const fileAnalysisInsightGuidance = "Ground selected-file behavior and engineeri
 	"Prefer one concise file-level insight where it is genuinely useful. Intentionally omit it for trivial code without a meaningful observable relationship or when the evidence cannot support a specific explanation; do not give generic tests or advice. Do not duplicate that lesson in risks or suggestions. "
 
 const fileAnalysisInsightSchema = "At every supported engineering_insight location (the top level, each risks[] item, and each suggestions[] item), either omit engineering_insight or use null, or provide exactly one object with exactly these four non-empty string fields and no other keys: mechanism, why_it_matters_here, tradeoff_or_failure_mode, and transferable_lesson. Each field is limited to 250 Unicode characters, intentionally keeping generated insight prose concise; the four fields together fit the parser's 1,000-normalized-rune budget. Shape: {\"mechanism\":\"...\",\"why_it_matters_here\":\"...\",\"tradeoff_or_failure_mode\":\"...\",\"transferable_lesson\":\"...\"}. Never use a string, array, or partial object. "
+
+const analysisFindingTitleGuidance = "Give each risk or finding a distinct, content-specific title of 2–6 words and at most 60 characters, such as 'Missing input validation' or 'Repeated allocations'. Name the concern itself; do not use a filename, a generic analysis label, or a full explanation as its title. "
 
 // EngineeringInsightPromptVersion returns the production selected-file prompt
 // identity used by evaluation; callers cannot supply an unrelated label.
@@ -152,6 +155,7 @@ type semanticAnalysisWireResponse struct {
 type semanticAnalysisFinding struct {
 	Category project.FindingCategory `json:"category"`
 	Severity string                  `json:"severity"`
+	Title    string                  `json:"title"`
 	Summary  string                  `json:"summary"`
 	TaskSpec json.RawMessage         `json:"task_spec"`
 	Insight  json.RawMessage         `json:"engineering_insight"`
@@ -413,7 +417,8 @@ func semanticPrompt(source string, analysis project.Analysis, index *project.Pro
 		return "", err
 	}
 	return "You summarize exactly one selected source file. Return one JSON object only; do not use Markdown or code fences. " +
-		"Required fields: purpose (string), responsibilities (string array), dependencies (string array), side_effects (string array), risks ({category,severity,summary,task_spec?,engineering_insight?} array), suggestions ({title,summary,target_symbol?,action?,engineering_insight?} array), symbol_explanations (object keyed only by supplied symbol names), engineering_insight? (see the shared engineering insight contract below). Keep each array to at most three concise items. " +
+		"Required fields: purpose (string), responsibilities (string array), dependencies (string array), side_effects (string array), risks ({category,severity,title,summary,task_spec?,engineering_insight?} array), suggestions ({title,summary,target_symbol?,action?,engineering_insight?} array), symbol_explanations (object keyed only by supplied symbol names), engineering_insight? (see the shared engineering insight contract below). Keep each array to at most three concise items. " +
+		analysisFindingTitleGuidance +
 		fileAnalysisInsightSchema + project.EngineeringInsightPromptInstructions +
 		"For symbol_explanations, copy keys verbatim from TARGET_FACTS.symbols[].name. Do not explain parameters, local variables, fields, imported names, or referenced types unless their exact name appears in that list. An empty object is valid. Risk severity must be low, medium, or high. " +
 		fileAnalysisInsightGuidance +
@@ -577,6 +582,7 @@ func parseSemanticRisks(risks []semanticAnalysisFinding, target project.IndexFil
 		finding := project.Finding{
 			Category:           risk.Category,
 			Severity:           strings.ToLower(strings.TrimSpace(risk.Severity)),
+			Title:              strings.Join(strings.Fields(risk.Title), " "),
 			Summary:            strings.TrimSpace(risk.Summary),
 			TaskSpec:           parseOptionalBugTaskSpec(risk.TaskSpec, target, source),
 			EngineeringInsight: diagnostics.parseInsight("risk", &index, risk.Insight),

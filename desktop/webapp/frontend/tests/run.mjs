@@ -634,7 +634,7 @@ async function resultsListLayout(page) {
 }
 async function resultsDetailLayout(page) {
   const workspace = page.locator('.results-detail');
-  await headingContainment(workspace.locator('.page-heading--intro'));
+  await headingContainment(workspace.locator('.page-heading'));
   const overflowing = await page
     .locator(
       '#main, .page, .results-detail, .results-detail .panel, .results-detail .panel-head, .results-detail .panel-body, .results-detail .stack, .results-detail .key-values, .results-detail .key-values dd, .results-detail .prose, .results-detail .disclosure-body, .results-detail li',
@@ -987,7 +987,7 @@ try {
   await testThemes({ test, pageFor, nav, idle, layout, contrast });
   await testChangeWorkflows({ test, pageFor, nav, idle, layout, chooseModel });
   await testGuidedFixes({ test, pageFor, nav, idle, layout, contrast, chooseModel });
-  await test('Analyze stale files is available across result pages without widening the selection', async () => {
+  await test('Analyze stale files is available only in Analysis without widening the selection', async () => {
     for (const category of ['Overview', 'Analysis', 'Bugs', 'Performance', 'Security']) {
       const stalePath = 'internal/worker/process.go';
       const { page, close } = await pageFor({
@@ -996,12 +996,17 @@ try {
       });
       try {
         await nav(page, category);
+        if (category !== 'Analysis') {
+          assert.equal(await page.getByRole('button', { name: /Analyze stale file/ }).count(), 0);
+          continue;
+        }
         await page.getByRole('button', { name: 'Analyze stale files (1)', exact: true }).click();
         await idle(page);
         const preview = await page.evaluate(() =>
           window.fixture.requests.find((r) => r.path.endsWith('/analysis/preview')),
         );
         assert.equal(preview.body.stale_only, true);
+        assert.equal(preview.body.stale_path, undefined);
         assert.equal(
           preview.body.models,
           undefined,
@@ -1030,11 +1035,102 @@ try {
           ),
         );
         assert.equal(start.body.stale_only, true);
+        assert.equal(start.body.stale_path, undefined);
         assert.equal(start.body.retry_stale_failed, false);
         assert.deepEqual(
           await page.evaluate(() => window.fixture.state.run.plan.files.map((file) => file.path)),
           [stalePath],
         );
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Analyze stale file appears only on stale details and targets that one file', async () => {
+    const stalePath = 'internal/worker/process.go';
+    for (const category of ['Bugs', 'Performance', 'Security']) {
+      const { page, close } = await pageFor({
+        stalePaths: [stalePath, 'internal/worker/config.go'],
+      });
+      try {
+        const writesBefore = await page.evaluate(
+          () => window.fixture.requests.filter((r) => r.method === 'POST').length,
+        );
+        await nav(page, category);
+        assert.equal(await page.getByRole('button', { name: /Analyze stale file/ }).count(), 0);
+        await page.locator('.result-row').first().click();
+        const action = page.getByRole('button', { name: 'Analyze stale file', exact: true });
+        assert.equal(await action.isEnabled(), true);
+        assert.equal(await page.getByRole('button', { name: /Analyze stale files/ }).count(), 0);
+        assert.equal(
+          await page.evaluate(
+            () => window.fixture.requests.filter((r) => r.method === 'POST').length,
+          ),
+          writesBefore,
+          'Opening a stale finding must not dispatch analysis',
+        );
+        await layout(page, `stale-file-${category.toLowerCase()}`);
+        await page.setViewportSize({ width: 980, height: 850 });
+        await page
+          .getByRole('button', { name: 'Larger text', exact: true })
+          .evaluate((button) => button.click());
+        await layout(page, `stale-file-${category.toLowerCase()}-compact-larger`);
+        await action.focus();
+        await page.keyboard.press('Enter');
+        await idle(page);
+        const preview = await page.evaluate(() =>
+          window.fixture.requests.find((r) => r.path.endsWith('/analysis/preview')),
+        );
+        assert.equal(preview.body.stale_only, true);
+        assert.equal(preview.body.stale_path, stalePath);
+        assert.equal(preview.body.refresh, false);
+        assert.equal(preview.body.include_features, false);
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.state.preview.files.map((file) => file.path)),
+          [stalePath],
+        );
+        assert.equal(
+          await page.evaluate(() =>
+            window.fixture.requests.some(
+              (r) => r.method === 'POST' && r.path.endsWith('/analysis/run'),
+            ),
+          ),
+          false,
+          'The single-file action still requires an explicit start',
+        );
+        await startAnalysis(page);
+        const start = await page.evaluate(() =>
+          window.fixture.requests.find(
+            (r) => r.method === 'POST' && r.path.endsWith('/analysis/run'),
+          ),
+        );
+        assert.equal(start.body.stale_only, true);
+        assert.equal(start.body.stale_path, stalePath);
+        assert.deepEqual(
+          await page.evaluate(() => window.fixture.state.run.plan.files.map((file) => file.path)),
+          [stalePath],
+        );
+        assert.equal(
+          await page.evaluate(() =>
+            window.fixture.requests.some(
+              (r) => r.method === 'POST' && r.path.endsWith('/analysis/selection'),
+            ),
+          ),
+          false,
+          'Targeting one file must not rewrite the saved selection',
+        );
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Fresh finding details do not offer stale analysis for other files', async () => {
+    for (const category of ['Bugs', 'Performance', 'Security']) {
+      const { page, close } = await pageFor({ stalePaths: ['internal/worker/config.go'] });
+      try {
+        await nav(page, category);
+        await page.locator('.result-row').first().click();
+        assert.equal(await page.getByRole('button', { name: /Analyze stale file/ }).count(), 0);
       } finally {
         await close();
       }
@@ -5467,7 +5563,8 @@ try {
           'The full cause leads the solution',
         );
         assert.equal(await panel('Source').count(), 0);
-        assert.equal(await workspace.locator('h1').innerText(), expected.title);
+        assert.equal(await workspace.locator('h1').innerText(), `Complete ${category} evidence…`);
+        assert.ok((await panel('Cause').innerText()).includes(expected.title));
         assert.ok(
           (await panel('Cause').innerText()).includes(expected.confidence.replaceAll('_', ' ')),
         );
@@ -5627,7 +5724,8 @@ try {
           await workspace.getByRole('button', { name: 'Review fix plan', exact: true }).count(),
           0,
         );
-        await workspace.getByText('File-level finding', { exact: true }).waitFor();
+        assert.equal(await workspace.getByText('File-level finding', { exact: true }).count(), 0);
+        assert.equal(await workspace.locator('h1').innerText(), `Complete ${category} evidence…`);
         if (!semantic && category === 'security')
           for (const title of ['CWE', 'Reference']) assert.equal(await panel(title).count(), 0);
         await resultsDetailLayout(page);

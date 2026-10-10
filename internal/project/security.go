@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	SecurityPromptVersion               = "security-file-v3"
+	SecurityPromptVersion               = "security-file-v4"
 	SecurityMaxSourceBytes              = 64 * 1024
 	maxSecurityOutputBytes              = 64 * 1024
 	maxSecurityFindings                 = 5

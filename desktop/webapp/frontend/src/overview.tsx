@@ -1,4 +1,3 @@
-import { StaleAnalysisButton } from './analysis';
 import { useEffect, useState } from 'react';
 import {
   workspace as w,
@@ -259,7 +258,6 @@ export function Summary({ s }: { s: State }) {
           >
             Start a task
           </Button>
-          <StaleAnalysisButton s={s} />
         </Heading>
       </div>
       <section className="studio-resume" aria-label="Continue work">

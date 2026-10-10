@@ -1508,6 +1508,7 @@ components:
       properties:
         category: {$ref: '#/components/schemas/FindingCategory'}
         severity: {type: string}
+        title: {type: string, description: Short content-specific name; older reports may omit it.}
         summary: {type: string}
         task_spec: {$ref: '#/components/schemas/BugTaskSpec'}
         engineering_insight: {$ref: '#/components/schemas/EngineeringInsight'}
@@ -1978,6 +1979,7 @@ components:
         scope: {type: string, enum: [project]}
         refresh: {type: boolean}
         stale_only: {type: boolean, default: false, description: Select only files with stale analysis; excludes unrelated failed or missing files. Incompatible with refresh, retry_stale_failed, recover_incomplete and include_features. Resume preserves the captured selection.}
+        stale_path: {type: string, maxLength: 4096, description: Optional exact project-relative file path to narrow stale_only analysis. Requires stale_only and an eligible saved selection target. Captured in both identities; start must echo it and resume preserves it. Other saved results remain available.}
         retry_stale_failed: {type: boolean, default: false, description: Select only files with stale or failed analysis; incompatible with refresh. Resume preserves the admitted selection.}
         recover_incomplete: {type: boolean, default: false, description: 'Select only files with recoverable unfinished stages (stale, failed, partial, missing, canceled, interrupted or unavailable with a configured model); current stages stay cached and no source changes. Incompatible with refresh, retry_stale_failed and include_features. On resume the captured plan decides it; true for a non-recovery run returns 409.'}
         limits: {$ref: '#/components/schemas/AnalysisRunLimits'}
@@ -2035,6 +2037,7 @@ components:
         scope: {type: string, enum: [project]}
         refresh: {type: boolean}
         stale_only: {type: boolean, default: false, description: Select only files with stale analysis; excludes unrelated failed or missing files. Incompatible with refresh, retry_stale_failed, recover_incomplete and include_features. Resume preserves the captured selection.}
+        stale_path: {type: string, maxLength: 4096, description: Optional exact project-relative file path to narrow stale_only analysis. Requires stale_only and an eligible saved selection target. Captured in both identities; start must echo it and resume preserves it. Other saved results remain available.}
         retry_stale_failed: {type: boolean, default: false, description: Select only files with stale or failed analysis; incompatible with refresh. Resume preserves the admitted selection.}
         recover_incomplete: {type: boolean, default: false, description: 'Select only files with recoverable unfinished stages (stale, failed, partial, missing, canceled, interrupted or unavailable with a configured model); current stages stay cached and no source changes. Incompatible with refresh, retry_stale_failed and include_features. On resume the captured plan decides it; true for a non-recovery run returns 409.'}
         limits: {$ref: '#/components/schemas/AnalysisRunLimits'}
@@ -2063,6 +2066,7 @@ components:
         limits: {$ref: '#/components/schemas/AnalysisRunLimits'}
         refresh: {type: boolean}
         stale_only: {type: boolean, default: false, description: Select only files with stale analysis; excludes unrelated failed or missing files. Incompatible with refresh, retry_stale_failed, recover_incomplete and include_features. Resume preserves the captured selection.}
+        stale_path: {type: string, maxLength: 4096, description: Optional exact project-relative file path to narrow stale_only analysis. Requires stale_only and an eligible saved selection target. Captured in both identities; start must echo it and resume preserves it. Other saved results remain available.}
         retry_stale_failed: {type: boolean, default: false, description: Select only files with stale or failed analysis; incompatible with refresh. Resume preserves the admitted selection.}
         recover_incomplete: {type: boolean, default: false, description: 'Select only files with recoverable unfinished stages (stale, failed, partial, missing, canceled, interrupted or unavailable with a configured model); current stages stay cached and no source changes. Incompatible with refresh, retry_stale_failed and include_features. On resume the captured plan decides it; true for a non-recovery run returns 409.'}
         confirmations: {$ref: '#/components/schemas/AnalysisRunConfirmations'}

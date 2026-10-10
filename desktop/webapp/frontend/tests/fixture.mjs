@@ -78,7 +78,7 @@ export function installFixture(options = {}) {
     location: { path: files[0].path, symbol: 'Process', start_line: 5, end_line: 7 },
     evidence: 'The loop never checks ctx.Err().',
     status: 'open',
-    freshness: 'fresh',
+    freshness: options.stalePaths?.includes(files[0].path) ? 'stale' : 'fresh',
     category: 'bugs',
     engineering_insight: insight,
   };
@@ -223,7 +223,7 @@ export function installFixture(options = {}) {
     ...identity,
     path: files[0].path,
     content_hash: files[0].content_hash,
-    status: 'success',
+    status: options.stalePaths?.includes(files[0].path) ? 'stale' : 'success',
     findings: [
       {
         id: 'perf-1',
@@ -247,7 +247,7 @@ export function installFixture(options = {}) {
     ...identity,
     path: files[0].path,
     content_hash: files[0].content_hash,
-    status: 'success',
+    status: options.stalePaths?.includes(files[0].path) ? 'stale' : 'success',
     source: 'rules',
     findings: [
       {
@@ -1049,8 +1049,11 @@ export function installFixture(options = {}) {
             }
             if (body.stale_only) {
               state.preview.stale_only = true;
-              state.preview.files = state.preview.files.filter((file) =>
-                options.stalePaths?.includes(file.path),
+              state.preview.stale_path = body.stale_path;
+              state.preview.files = state.preview.files.filter(
+                (file) =>
+                  options.stalePaths?.includes(file.path) &&
+                  (!body.stale_path || body.stale_path === file.path),
               );
             }
             // A continuation keeps the saved destinations, not today's configured providers.

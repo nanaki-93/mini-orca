@@ -98,7 +98,7 @@ func (s *Service) analysisSectionReader(run *AnalysisRun, category project.Findi
 	if omitted := analysisSelectionMode(run.Plan.RetryStaleFailed, run.Plan.RecoverIncomplete, run.Plan.StaleOnly).exclusion(); path == "" && omitted != "" {
 		retained := make(map[string]bool)
 		for _, file := range run.Plan.Excluded {
-			retained[file.Path] = file.Reason == omitted
+			retained[file.Path] = file.Reason == omitted || file.Reason == analysisStalePathExclusion
 		}
 		for _, file := range index.Files {
 			if !retained[file.Path] {

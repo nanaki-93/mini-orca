@@ -116,7 +116,7 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 	if err != nil {
 		return nil, err
 	}
-	preview := &AnalysisRunPreview{Models: cloneAnalysisModels(request.Models), CompatibilityStage: request.compatibilityStage, CompatibilityBudget: request.compatibilityBudget, RetryStaleFailed: request.RetryStaleFailed, StaleOnly: request.StaleOnly, RecoverIncomplete: request.RecoverIncomplete, SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
+	preview := &AnalysisRunPreview{Models: cloneAnalysisModels(request.Models), CompatibilityStage: request.compatibilityStage, CompatibilityBudget: request.compatibilityBudget, RetryStaleFailed: request.RetryStaleFailed, StaleOnly: request.StaleOnly, StalePath: request.StalePath, RecoverIncomplete: request.RecoverIncomplete, SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
 		Identity: AnalysisQueueIdentity{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, PolicyFingerprint: policy.Version(), ProviderFingerprint: fingerprint},
 		Files:    []AnalysisPlannedFile{}, Excluded: []AnalysisExcludedFile{}, Providers: providers}
 	root := s.manager.Root()
@@ -145,6 +145,10 @@ func captureAnalysisResumeOptions(request *AnalysisPreviewRequest, run *Analysis
 		return project.ErrRevisionConflict
 	}
 	request.StaleOnly = run.Plan.StaleOnly
+	if request.StalePath != "" && request.StalePath != run.Plan.StalePath {
+		return project.ErrRevisionConflict
+	}
+	request.StalePath = run.Plan.StalePath
 	request.compatibilityStage = run.Plan.CompatibilityStage
 	request.compatibilityBudget = run.Plan.CompatibilityBudget
 	request.IncludeFeatures = run.Plan.Features != nil

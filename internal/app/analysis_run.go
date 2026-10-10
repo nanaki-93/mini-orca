@@ -138,6 +138,7 @@ type AnalysisPreviewRequest struct {
 	IncludeFeatures     bool                 `json:"include_features,omitempty"`
 	RetryStaleFailed    bool                 `json:"retry_stale_failed,omitempty"`
 	StaleOnly           bool                 `json:"stale_only,omitempty"`
+	StalePath           string               `json:"stale_path,omitempty"`
 	RecoverIncomplete   bool                 `json:"recover_incomplete,omitempty"`
 	ProjectID           string               `json:"project_id"`
 	ProjectRevision     string               `json:"project_revision"`
@@ -156,7 +157,7 @@ func (request AnalysisPreviewRequest) Validate() error {
 	if request.RetryStaleFailed && request.Refresh {
 		return fmt.Errorf("stale/failed analysis cannot refresh fresh results")
 	}
-	if err := validateAnalysisSelectionOptions(request.RecoverIncomplete, request.Refresh, request.RetryStaleFailed, request.IncludeFeatures, request.StaleOnly); err != nil {
+	if err := validateAnalysisSelectionOptions(request.RecoverIncomplete, request.Refresh, request.RetryStaleFailed, request.IncludeFeatures, request.StaleOnly, request.StalePath); err != nil {
 		return err
 	}
 	if request.ProjectID == "" || request.ProjectRevision == "" || request.Scope != AnalysisRunScopeProject {
@@ -213,6 +214,7 @@ type AnalysisRunPreview struct {
 	Features                     *AnalysisFeaturePlan          `json:"features,omitempty"`
 	RetryStaleFailed             bool                          `json:"retry_stale_failed,omitempty"`
 	StaleOnly                    bool                          `json:"stale_only,omitempty"`
+	StalePath                    string                        `json:"stale_path,omitempty"`
 	RecoverIncomplete            bool                          `json:"recover_incomplete,omitempty"`
 	CompatibilityStage           AnalysisStage                 `json:"compatibility_stage,omitempty"`
 	CompatibilityBudget          time.Duration                 `json:"compatibility_budget_nanoseconds,omitempty"`
@@ -242,6 +244,7 @@ type AnalysisRunStartRequest struct {
 	IncludeFeatures   bool                     `json:"include_features,omitempty"`
 	RetryStaleFailed  bool                     `json:"retry_stale_failed,omitempty"`
 	StaleOnly         bool                     `json:"stale_only,omitempty"`
+	StalePath         string                   `json:"stale_path,omitempty"`
 	RecoverIncomplete bool                     `json:"recover_incomplete,omitempty"`
 	Identity          AnalysisQueueIdentity    `json:"identity"`
 	PreviewID         string                   `json:"preview_id"`
@@ -259,7 +262,7 @@ func (request AnalysisRunStartRequest) Validate() error {
 	if request.RetryStaleFailed && request.Refresh {
 		return fmt.Errorf("stale/failed analysis cannot refresh fresh results")
 	}
-	if err := validateAnalysisSelectionOptions(request.RecoverIncomplete, request.Refresh, request.RetryStaleFailed, request.IncludeFeatures, request.StaleOnly); err != nil {
+	if err := validateAnalysisSelectionOptions(request.RecoverIncomplete, request.Refresh, request.RetryStaleFailed, request.IncludeFeatures, request.StaleOnly, request.StalePath); err != nil {
 		return err
 	}
 	if err := request.Identity.Validate(); err != nil {
@@ -273,7 +276,10 @@ func (request AnalysisRunStartRequest) Validate() error {
 
 // Recovery completes unfinished file stages only. It never refreshes current
 // results, reinterprets the stale/failed retry contract or discovers features.
-func validateAnalysisSelectionOptions(recoverIncomplete, refresh, retryStaleFailed, includeFeatures, staleOnly bool) error {
+func validateAnalysisSelectionOptions(recoverIncomplete, refresh, retryStaleFailed, includeFeatures, staleOnly bool, stalePath string) error {
+	if stalePath != "" && (!staleOnly || !analysisMetadataPath(stalePath)) {
+		return fmt.Errorf("stale_path requires stale_only and a project-relative file path")
+	}
 	if staleOnly && (refresh || retryStaleFailed || recoverIncomplete || includeFeatures) {
 		return fmt.Errorf("stale-only analysis cannot be combined with refresh, retry_stale_failed, recover_incomplete or include_features")
 	}
@@ -495,7 +501,7 @@ func (s *Service) startAnalysisRunLocked(ctx context.Context, request AnalysisRu
 			return cloneAnalysisRun(c.run), errAnalysisRunBusy
 		}
 	}
-	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{Models: request.Models, IncludeFeatures: request.IncludeFeatures, ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: request.RetryStaleFailed, StaleOnly: request.StaleOnly, RecoverIncomplete: request.RecoverIncomplete, Refresh: request.Refresh, Limits: request.Limits, compatibilityStage: stage, compatibilityBudget: budget})
+	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{Models: request.Models, IncludeFeatures: request.IncludeFeatures, ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: request.RetryStaleFailed, StaleOnly: request.StaleOnly, StalePath: request.StalePath, RecoverIncomplete: request.RecoverIncomplete, Refresh: request.Refresh, Limits: request.Limits, compatibilityStage: stage, compatibilityBudget: budget})
 	if err != nil {
 		return nil, err
 	}
@@ -643,7 +649,7 @@ func (s *Service) resumeAnalysisRunLocked(ctx context.Context, request AnalysisR
 	if c.run.Plan.CompatibilityBudget > 0 && c.run.CompatibilityElapsed >= c.run.Plan.CompatibilityBudget {
 		return nil, fmt.Errorf("%w: performance job budget is exhausted; start a new job", project.ErrRevisionConflict)
 	}
-	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{ProjectID: c.run.Identity.ProjectID, ProjectRevision: c.run.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: c.run.Plan.RetryStaleFailed, StaleOnly: c.run.Plan.StaleOnly, RecoverIncomplete: c.run.Plan.RecoverIncomplete, Refresh: c.run.Plan.Refresh, Limits: c.run.Plan.Limits, ResumeRun: &request.Identity})
+	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{ProjectID: c.run.Identity.ProjectID, ProjectRevision: c.run.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: c.run.Plan.RetryStaleFailed, StaleOnly: c.run.Plan.StaleOnly, StalePath: c.run.Plan.StalePath, RecoverIncomplete: c.run.Plan.RecoverIncomplete, Refresh: c.run.Plan.Refresh, Limits: c.run.Plan.Limits, ResumeRun: &request.Identity})
 	if err != nil {
 		return nil, err
 	}

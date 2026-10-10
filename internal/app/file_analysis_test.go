@@ -63,7 +63,7 @@ func TestAnalyzeFileCachesStructuredOneFileSummary(t *testing.T) {
 			t.Fatalf("file analysis response format = %+v", request.ResponseFormat)
 		}
 		prompt = request.Messages[0].Content
-		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "fixture-model", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"purpose":"Runs the selected command.","responsibilities":["dispatches work"],"dependencies":["fmt"],"side_effects":["writes stdout"],"risks":[{"category":"bugs","severity":"High","summary":"No input validation."}],"suggestions":[{"title":"Validate input","summary":"Reject blank names.","target_symbol":"Run","action":"fix"}],"symbol_explanations":{"Run":"Dispatches the command."}}`}}}})
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "fixture-model", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"purpose":"Runs the selected command.","responsibilities":["dispatches work"],"dependencies":["fmt"],"side_effects":["writes stdout"],"risks":[{"category":"bugs","severity":"High","title":"Missing input validation","summary":"No input validation."}],"suggestions":[{"title":"Validate input","summary":"Reject blank names.","target_symbol":"Run","action":"fix"}],"symbol_explanations":{"Run":"Dispatches the command."}}`}}}})
 	}))
 	defer server.Close()
 	service, root := newSemanticAnalysisServiceWithHelper(t, server.URL, 0)
@@ -71,7 +71,7 @@ func TestAnalyzeFileCachesStructuredOneFileSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Status != project.AnalysisStatusFresh || result.Purpose == "" || len(result.Symbols) != 1 || result.SymbolExplanations["Run"] == "" || result.Model != "fixture-model" || len(result.Risks) != 1 || result.Risks[0].Severity != "high" {
+	if result.Status != project.AnalysisStatusFresh || result.Purpose == "" || len(result.Symbols) != 1 || result.SymbolExplanations["Run"] == "" || result.Model != "fixture-model" || len(result.Risks) != 1 || result.Risks[0].Severity != "high" || result.Risks[0].Title != "Missing input validation" {
 		t.Fatalf("analysis = %+v", result)
 	}
 	if strings.Contains(prompt, "helper secret") || !strings.Contains(prompt, "func Run") || !strings.Contains(prompt, "TARGET_SOURCE (the only source content supplied)") || !strings.Contains(prompt, "target_path copied exactly") || !strings.Contains(prompt, "target_symbol copied exactly") || !strings.Contains(prompt, "target_signature copied exactly") || !strings.Contains(prompt, "Do not use a symbol field") || !strings.Contains(prompt, "Ground selected-file behavior and engineering insights in TARGET_SOURCE") || !strings.Contains(prompt, "Default to tests that characterize current behavior") {
@@ -88,7 +88,7 @@ func TestAnalyzeFileCachesStructuredOneFileSummary(t *testing.T) {
 		t.Fatalf("index analysis status = %+v, want fresh", file)
 	}
 	second, err := service.AnalyzeFile(context.Background(), "main.go", false, false)
-	if err != nil || second.Status != project.AnalysisStatusFresh {
+	if err != nil || second.Status != project.AnalysisStatusFresh || len(second.Risks) != 1 || second.Risks[0].Title != "Missing input validation" {
 		t.Fatalf("cached analysis = %+v, %v", second, err)
 	}
 }
@@ -126,7 +126,7 @@ func TestSemanticAnalysisRequiresExplicitCategoryInSchemaAndParser(t *testing.T)
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			// Identical prose cannot supply a missing or different classification.
-			output := strings.Replace(validSemanticAnalysis, `"risks":[]`, `"risks":[{`+test.field+`"severity":"high","summary":"Slow insecure bug text does not classify itself."}]`, 1)
+			output := strings.Replace(validSemanticAnalysis, `"risks":[]`, `"risks":[{`+test.field+`"severity":"high","title":"Conditional concern","summary":"Slow insecure bug text does not classify itself."}]`, 1)
 			instance, err := jsonschema.UnmarshalJSON(strings.NewReader(output))
 			if err != nil {
 				t.Fatal(err)
@@ -199,7 +199,7 @@ func TestAnalyzeFileRefreshClassifiesLegacyCacheWithoutPassiveModelCalls(t *test
 		}
 	}
 	fresh, err := service.AnalyzeFile(context.Background(), "main.go", true, false)
-	if err != nil || fresh.Status != project.AnalysisStatusFresh || fresh.PromptVersion != "file-analysis-v15" || len(fresh.Risks) != 1 || fresh.Risks[0].Category != project.FindingCategorySecurity || calls.Load() != 1 {
+	if err != nil || fresh.Status != project.AnalysisStatusFresh || fresh.PromptVersion != "file-analysis-v16" || len(fresh.Risks) != 1 || fresh.Risks[0].Category != project.FindingCategorySecurity || calls.Load() != 1 {
 		t.Fatalf("explicit refresh = %+v, %v; calls=%d", fresh, err, calls.Load())
 	}
 	if _, err := service.CachedFileAnalysis("main.go"); err != nil || calls.Load() != 1 {
@@ -220,8 +220,12 @@ func TestFileAnalysisResponseSchemaRejectsInvalidOptionalObjects(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	valid := `{"purpose":"Summarizes one file.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","summary":"Conditional concern.","task_spec":{"schema_version":"1","target_path":"main.go","target_symbol":"Run","target_signature":"func Run()","acceptance_criteria":["Keep behavior."],"non_goals":[]},"engineering_insight":null}],"suggestions":[{"title":"Clarify behavior","summary":"Keep the call explicit.","action":"Use \\\"quoted\\\" text.","engineering_insight":{"mechanism":"Run calls one helper.","why_it_matters_here":"Run is the selected entry point.","tradeoff_or_failure_mode":"Changing call order can alter behavior.","transferable_lesson":"Exercise Run and verify call order."}}],"symbol_explanations":{"Run":"Runs the selected operation."}}`
+	valid := `{"purpose":"Summarizes one file.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","title":"Conditional concern","summary":"Conditional concern.","task_spec":{"schema_version":"1","target_path":"main.go","target_symbol":"Run","target_signature":"func Run()","acceptance_criteria":["Keep behavior."],"non_goals":[]},"engineering_insight":null}],"suggestions":[{"title":"Clarify behavior","summary":"Keep the call explicit.","action":"Use \\\"quoted\\\" text.","engineering_insight":{"mechanism":"Run calls one helper.","why_it_matters_here":"Run is the selected entry point.","tradeoff_or_failure_mode":"Changing call order can alter behavior.","transferable_lesson":"Exercise Run and verify call order."}}],"symbol_explanations":{"Run":"Runs the selected operation."}}`
 	invalid := map[string]string{
+		"missing risk title":    strings.Replace(valid, `"title":"Conditional concern",`, ``, 1),
+		"empty risk title":      strings.Replace(valid, `"title":"Conditional concern"`, `"title":""`, 1),
+		"non-string risk title": strings.Replace(valid, `"title":"Conditional concern"`, `"title":false`, 1),
+		"long risk title":       strings.Replace(valid, `"title":"Conditional concern"`, `"title":"`+strings.Repeat("界", 61)+`"`, 1),
 		"scalar insight":        strings.Replace(valid, `"engineering_insight":null`, `"engineering_insight":"advice"`, 1),
 		"partial insight":       strings.Replace(valid, `"mechanism":"Run calls one helper.","why_it_matters_here":"Run is the selected entry point.","tradeoff_or_failure_mode":"Changing call order can alter behavior.","transferable_lesson":"Exercise Run and verify call order."`, `"mechanism":"partial"`, 1),
 		"wrong nested type":     strings.Replace(valid, `"action":"Use \\\"quoted\\\" text."`, `"action":false`, 1),
@@ -238,6 +242,24 @@ func TestFileAnalysisResponseSchemaRejectsInvalidOptionalObjects(t *testing.T) {
 				t.Fatalf("invalid schema instance accepted: decode=%v", err)
 			}
 		})
+	}
+}
+
+func TestSemanticRiskTitlesPreserveLegacyContent(t *testing.T) {
+	for _, title := range []string{"", "Missing validation", "  Missing\n validation  "} {
+		output := strings.Replace(validSemanticAnalysis, `"risks":[]`, fmt.Sprintf(`"risks":[{"category":"bugs","severity":"high","title":%q,"summary":"Run accepts unchecked input."},{"category":"bugs","severity":"medium","summary":"Run ignores write errors."}]`, title), 1)
+		parsed, err := parseSemanticAnalysis(output, project.IndexFile{Path: "main.go"}, "package main")
+		if err != nil || len(parsed.Risks) != 2 {
+			t.Fatalf("parsed risks = %+v, %v", parsed.Risks, err)
+		}
+		findings := project.SuggestedFindingsForFile(project.FileAnalysis{Status: project.AnalysisStatusFresh, Risks: parsed.Risks})
+		wantTitle := "Missing validation"
+		if title == "" {
+			wantTitle = "Run accepts unchecked input."
+		}
+		if findings[0].Title != wantTitle || findings[0].Message != "Run accepts unchecked input." || findings[1].Title != "Run ignores write errors." {
+			t.Fatalf("adapted titles lost content: %+v", findings)
+		}
 	}
 }
 
@@ -260,7 +282,7 @@ func TestFileAnalysisResponseSchemaBoundsInsightFieldsAtEveryLocation(t *testing
 		return `{"mechanism":"` + field + `","why_it_matters_here":"` + field + `","tradeoff_or_failure_mode":"` + field + `","transferable_lesson":"` + field + `"}`
 	}
 	response := func(topLevel, risk, suggestion string) string {
-		return `{"purpose":"Summarizes one file.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","summary":"Conditional concern.","engineering_insight":` + risk + `}],"suggestions":[{"title":"Clarify behavior","summary":"Keep the call explicit.","engineering_insight":` + suggestion + `}],"symbol_explanations":{},"engineering_insight":` + topLevel + `}`
+		return `{"purpose":"Summarizes one file.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","title":"Conditional concern","summary":"Conditional concern.","engineering_insight":` + risk + `}],"suggestions":[{"title":"Clarify behavior","summary":"Keep the call explicit.","engineering_insight":` + suggestion + `}],"symbol_explanations":{},"engineering_insight":` + topLevel + `}`
 	}
 
 	atLimit := insight(fileAnalysisInsightMaxChars)
@@ -307,7 +329,7 @@ func TestFileAnalysisResponseSchemaBoundsInsightFieldsAtEveryLocation(t *testing
 func TestFileAnalysisOverLimitInsightsPreserveParents(t *testing.T) {
 	field := strings.Repeat("界", fileAnalysisInsightMaxChars+1)
 	overAggregateLimit := `{"mechanism":"` + field + `","why_it_matters_here":"` + field + `","tradeoff_or_failure_mode":"` + field + `","transferable_lesson":"` + field + `"}`
-	output := `{"purpose":"Summarizes one file.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","summary":"Conditional concern.","engineering_insight":` + overAggregateLimit + `}],"suggestions":[{"title":"Clarify behavior","summary":"Keep the call explicit.","engineering_insight":` + overAggregateLimit + `}],"symbol_explanations":{},"engineering_insight":` + overAggregateLimit + `}`
+	output := `{"purpose":"Summarizes one file.","responsibilities":[],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"low","title":"Conditional concern","summary":"Conditional concern.","engineering_insight":` + overAggregateLimit + `}],"suggestions":[{"title":"Clarify behavior","summary":"Keep the call explicit.","engineering_insight":` + overAggregateLimit + `}],"symbol_explanations":{},"engineering_insight":` + overAggregateLimit + `}`
 
 	parsed, err := parseSemanticAnalysis(output, project.IndexFile{Path: "main.go"}, "package main")
 	if err != nil || parsed.Purpose != "Summarizes one file." || len(parsed.Risks) != 1 || parsed.Risks[0].Summary != "Conditional concern." || len(parsed.Suggestions) != 1 || parsed.Suggestions[0].Title != "Clarify behavior" {
@@ -346,8 +368,8 @@ func TestCachedFileAnalysisMarksV11PromptResultsStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := EngineeringInsightPromptVersion(); got != "file-analysis-v15" {
-		t.Fatalf("file analysis prompt version = %q, want file-analysis-v15", got)
+	if got := EngineeringInsightPromptVersion(); got != "file-analysis-v16" {
+		t.Fatalf("file analysis prompt version = %q, want file-analysis-v16", got)
 	}
 	legacy := project.FileAnalysis{
 		SchemaVersion: "1", ProjectID: prepared.input.ProjectID, ProjectRevision: prepared.input.ProjectRevision,

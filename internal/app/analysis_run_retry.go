@@ -2,11 +2,13 @@ package app
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
 const analysisStaleExclusion = "No stale analysis for this file."
+const analysisStalePathExclusion = "Outside the selected stale file."
 const analysisRetryExclusion = "No stale or failed analysis for this file."
 const analysisRecoveryExclusion = "No incomplete analysis for this file."
 
@@ -96,6 +98,9 @@ func (s *Service) analysisStageConfigured(stage AnalysisStage, models *AnalysisM
 // Resume keeps the admitted file set even as this run replaces stale reports.
 // New starts recompute selection, so changed evidence invalidates an old preview.
 func (s *Service) scopeAnalysisRetryPreview(ctx context.Context, mode analysisScopedSelection, preview *AnalysisRunPreview, resume *AnalysisRunIdentity) error {
+	if err := scopeAnalysisStalePath(preview); err != nil {
+		return err
+	}
 	analysis, index, policy, err := s.performanceInputs()
 	if err != nil {
 		return err
@@ -133,6 +138,25 @@ func (s *Service) scopeAnalysisRetryPreview(ctx context.Context, mode analysisSc
 		} else {
 			preview.Excluded = append(preview.Excluded, AnalysisExcludedFile{Path: file.Path, Reason: mode.exclusion()})
 		}
+	}
+	preview.Files = selected
+	return nil
+}
+
+func scopeAnalysisStalePath(preview *AnalysisRunPreview) error {
+	if preview.StalePath == "" {
+		return nil
+	}
+	selected := []AnalysisPlannedFile{}
+	for _, file := range preview.Files {
+		if file.Path == preview.StalePath {
+			selected = append(selected, file)
+		} else {
+			preview.Excluded = append(preview.Excluded, AnalysisExcludedFile{Path: file.Path, Reason: analysisStalePathExclusion})
+		}
+	}
+	if len(selected) == 0 {
+		return fmt.Errorf("%w: stale file is not in the eligible saved selection", project.ErrRevisionConflict)
 	}
 	preview.Files = selected
 	return nil
