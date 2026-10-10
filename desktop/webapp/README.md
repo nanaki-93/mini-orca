@@ -75,8 +75,14 @@ collapses to icons.
   Failed feature discovery leaves other analysis results available.
 - **Findings** groups **Bugs**, **Performance** and **Security** in category tabs. Each finding has a short content-based name, shared by its list row,
   detail heading and prepared fix. Older unnamed findings use a compact excerpt
-  of their saved explanation. Selecting a finding opens its detail beneath the list, preserving filters and
-  the selected row. Its name, category, exact path, line and declaration remain
+  of their saved explanation. All three categories share the same list layout with
+  search, impact filtering and ten findings per page. Previous/Next controls show
+  the visible range and page count; changing a filter returns to the first page.
+  Report diagnostics and unclassified suggestions are in **Analysis details**
+  above the list, with no separate file list below it.
+  Selecting a finding opens a dedicated detail page. Breadcrumbs show
+  **Findings → category → finding**; the category breadcrumb or **All findings**
+  returns to the saved filters and page. Its name, category, exact path, line and declaration remain
   visible when available. The full cause leads the page, followed
   by the proposed solution, affected files and **Prepare fix** action. Provenance and confidence stay with the cause;
   **Details** contains additional evidence and triage actions, including
@@ -179,7 +185,9 @@ collapses to icons.
   **Draft change in Chat** captures the selected file and declaration in a new task;
   it does not generate or write code. Chat produces checked proposals for the
   **Changes** workspace, where review, Apply and guarded Undo remain explicit.
-  Explanations and file analysis remain available in Source. The separate
+  Explanations and file analysis remain available in Source. **Inspect this file**
+  also contains **Scan source** and **AI Security review**; their results open
+  Security without starting further analysis. The separate
   Assistant, declaration draft, Checks, Review, receipt and draft-benchmark screens
   have been retired from this client. Returning to Source rechecks file freshness.
 - **Overview** puts the current task or saved analysis in a **Continue work** or

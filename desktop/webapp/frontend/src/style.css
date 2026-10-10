@@ -507,13 +507,28 @@ pre {
   background: var(--sidebar);
 }
 .breadcrumbs {
+  flex: 1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 4px 10px;
   font-size: 0.83rem;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.breadcrumbs button {
+  border: 0;
+  background: transparent;
+  padding: 4px 0;
+  color: var(--muted);
+  font: inherit;
+}
+.breadcrumbs button:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+.breadcrumbs [aria-current='page'] {
+  min-width: 0;
 }
 .topbar-actions {
   display: flex;
@@ -1585,9 +1600,6 @@ button.list-row:hover,
 .results-page .button {
   overflow-wrap: anywhere;
 }
-.results-source-path {
-  flex: 1 1 16rem;
-}
 .results-findings {
   container-type: inline-size;
 }
@@ -1631,8 +1643,16 @@ button.list-row:hover,
   max-width: none;
   justify-content: flex-start;
 }
-.results-reports {
-  gap: 20px;
+.findings-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 20px;
+}
+.findings-pagination .actions {
+  align-items: center;
 }
 .results-detail {
   container-type: inline-size;

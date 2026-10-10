@@ -321,6 +321,12 @@ function Source({ s }: { s: State }) {
             <Button disabled={!!s.busy || s.fileStale} onClick={() => void w.analyzeFile()}>
               Analyze file
             </Button>
+            <Button disabled={!!s.busy || s.fileStale} onClick={() => void w.securityReview(false)}>
+              Scan source
+            </Button>
+            <Button disabled={!!s.busy || s.fileStale} onClick={() => void w.securityReview(true)}>
+              AI Security review
+            </Button>
             <Go page="security" icon="shield">
               Security
             </Go>

@@ -123,7 +123,7 @@ export async function testGuidedFixes({
     try {
       await nav(page, 'Bugs');
       await page.locator('.result-row').first().click();
-      assert.equal(await page.locator('.result-row').count(), 1);
+      assert.equal(await page.locator('.result-row').count(), 0);
       assert.equal(
         await page.getByRole('heading', { name: 'Cause', exact: true }).isVisible(),
         true,
