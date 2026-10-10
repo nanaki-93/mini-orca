@@ -1,16 +1,26 @@
+import { useId, useState } from 'react';
 import type { State } from './workspace';
-import { BulletContent, Disclosure, Notice, Panel, Prose, human } from './ui';
+import { BulletContent, Button, Notice, Panel, Prose, human } from './ui';
 
 export function SolutionExcerpt({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const contentID = useId();
   const paragraph = text.split(/\n\s*\n/)[0];
   const summary = paragraph.length > 240 ? `${paragraph.slice(0, 240).trimEnd()}…` : paragraph;
   return (
     <>
-      <Prose text={summary} />
+      <div id={contentID}>
+        <Prose text={expanded ? text : summary} />
+      </div>
       {summary !== text && (
-        <Disclosure title="Full explanation">
-          <Prose text={text} />
-        </Disclosure>
+        <Button
+          tone="ghost"
+          aria-expanded={expanded}
+          aria-controls={contentID}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? 'Show less' : 'Full explanation'}
+        </Button>
       )}
     </>
   );

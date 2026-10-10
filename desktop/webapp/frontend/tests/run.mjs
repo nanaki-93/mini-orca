@@ -7741,9 +7741,10 @@ try {
           false,
         );
         await workspace.locator('summary').getByText('Details', { exact: true }).click();
-        const fullExplanation = workspace
-          .locator('summary')
-          .getByText('Full explanation', { exact: true });
+        const fullExplanation = workspace.getByRole('button', {
+          name: 'Full explanation',
+          exact: true,
+        });
         if (await fullExplanation.count()) await fullExplanation.click();
         const panel = (title) =>
           workspace
