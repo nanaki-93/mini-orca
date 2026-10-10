@@ -21,7 +21,8 @@ make desktop-run
 
 `make desktop-build` (also `make web-build`) writes
 `desktop/webapp/build/bin/Mini-Orca.app`, with the canonical project release
-version and the desktop icon generated from maintained sources. The application can also be
+version and the Graphite app icon from [the logo pack](../../docs/icons/README.md).
+Wails generates the macOS icon bundle from its 1024-pixel PNG. The application can also be
 launched directly from that bundle after starting the daemon. `MINI_ORCA_URL`
 selects its daemon origin; the default is `http://127.0.0.1:9090`. Provider settings
 and credentials stay in the daemon's local `config.yaml`.
@@ -247,6 +248,11 @@ with amber, Porcelain pairs ivory with forest green, and Midnight pairs navy wit
 cyan. All three retain labeled success, warning and failure states. **Aa** enables
 larger text. Theme changes are immediate; hover transitions respect the system's
 reduced-motion preference.
+
+The header uses the matching theme's transparent MO mark beside the Mini-Orca
+name. The browser favicon uses the Graphite app icon. The frontend build copies
+these assets from `docs/icons/` into the embedded web assets; that directory is
+the maintained source for the installed branding.
 
 ## Implementation and checks
 

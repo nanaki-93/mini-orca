@@ -318,10 +318,10 @@ pre {
   text-align: left;
 }
 .brand-symbol {
-  color: var(--accent);
-  font-size: 23px;
-  transform: rotate(-30deg);
-  line-height: 1;
+  display: block;
+  flex-shrink: 0;
+  height: 28px;
+  width: auto;
 }
 .project-switcher {
   flex-shrink: 0;

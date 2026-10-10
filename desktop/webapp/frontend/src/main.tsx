@@ -53,9 +53,9 @@ const findingPages: [Page, string][] = [
   ['performance', 'Performance'],
 ];
 const themes = [
-  { id: 'dark', name: 'Graphite', letter: 'G' },
-  { id: 'light', name: 'Porcelain', letter: 'P' },
-  { id: 'midnight', name: 'Midnight', letter: 'M' },
+  { id: 'dark', name: 'Graphite', letter: 'G', mark: '/mo-mark-graphite.svg' },
+  { id: 'light', name: 'Porcelain', letter: 'P', mark: '/mo-mark-porcelain.svg' },
+  { id: 'midnight', name: 'Midnight', letter: 'M', mark: '/mo-mark-midnight.svg' },
 ] as const;
 function App() {
   const live = useSyncExternalStore(w.subscribe, w.snapshot);
@@ -70,6 +70,7 @@ function App() {
     const saved = localStorage.getItem('mini-orca:theme');
     return themes.find((choice) => choice.id === saved)?.id || 'dark';
   });
+  const appearance = themes.find((choice) => choice.id === theme) || themes[0];
   const [large, setLarge] = useState(localStorage.getItem('mini-orca:large') === 'true');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem('mini-orca:sidebar-collapsed') === 'true',
@@ -214,7 +215,7 @@ function App() {
             title={sidebarCollapsed ? 'Mini-Orca home' : undefined}
             onClick={() => void w.navigate(s.project ? 'summary' : 'welcome')}
           >
-            <span className="brand-symbol">◒</span>
+            <img className="brand-symbol" src={appearance.mark} alt="" width="41" height="28" />
             <span className="brand-name">
               mini-orca<span className="accent">.</span>
             </span>
