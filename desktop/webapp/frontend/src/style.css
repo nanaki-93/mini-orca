@@ -1673,13 +1673,6 @@ button.list-row:hover,
   padding-top: 18px;
   border-top: 1px solid var(--line);
 }
-.pagination-summary {
-  display: grid;
-  gap: 3px;
-}
-.pagination-summary > :last-child {
-  font-size: 0.72rem;
-}
 .pagination-pages {
   display: flex;
   align-items: center;

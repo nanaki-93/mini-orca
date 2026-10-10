@@ -82,7 +82,7 @@ collapses to icons.
   of their saved explanation. All three categories share the same list layout with
   search, priority filtering and ten findings per page. Priority arrows and colored
   freshness indicators include tooltips and accessible names. Numbered pages and
-  previous/next arrows show the visible range and page count. Search supports
+  previous/next arrows show the current page and page count. Search supports
   clearing with Escape; **Reset filters** clears search and priority together.
   Changing a filter returns to the first page.
   Report diagnostics and unclassified suggestions are in **Analysis details**
@@ -96,8 +96,8 @@ collapses to icons.
   **Mark as fixed**. **Full explanation** expands the solution in place without
   repeating the preview; **Show less** collapses it again.
   Creation, testing and review choices are shared with Chat and configured only
-  on **Models**. **Manage models** preserves the selected finding so **Back to
-  workspace** returns to its detail. Model selectors show the name and thinking
+  on **Models**. Opening **Models** from the sidebar preserves the selected finding so
+  **Back to workspace** returns to its detail. Model selectors show the name and thinking
   level; sharing destinations stay in consent previews.
   **Permissions & checks** expands sharing permissions, project
   check commands and preparation refresh. **Prepare fix** authorizes generation,

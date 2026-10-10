@@ -144,9 +144,6 @@ export function FixWorkspace({ s }: { s: State }) {
         <Go page={category} icon="back">
           All findings
         </Go>
-        <Go page="models" icon="layers">
-          Manage models
-        </Go>
       </div>
       <FixHeading
         title={findingName(seed.title, finding?.cause)}
