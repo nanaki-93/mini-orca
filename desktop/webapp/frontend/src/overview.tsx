@@ -1,6 +1,7 @@
 import { StaleAnalysisButton } from './analysis';
 import { useEffect, useState } from 'react';
-import { workspace as w, type State, type Page } from './workspace';
+import { workspace as w, activeChangeWorkflow, type State, type Page } from './workspace';
+import { WorkflowModels, defaultWorkflowModels } from './change-workflow';
 import {
   Badge,
   Button,
@@ -324,7 +325,7 @@ export function Models({ s }: { s: State }) {
     <div className="workspace-page models-workspace">
       <Heading
         title="Models"
-        detail="Current daemon configuration, not captured run choices or provider health."
+        detail="Choose workflow models and inspect configured provider destinations."
         variant="intro"
       >
         <Button
@@ -335,6 +336,21 @@ export function Models({ s }: { s: State }) {
           Refresh
         </Button>
       </Heading>
+      <Panel title="Workflow models" className="fix-models">
+        <p className="small muted">
+          Creation, testing and review choices for Chat and fixes. A running workflow keeps its
+          captured models.
+        </p>
+        <WorkflowModels
+          s={s}
+          value={s.workflowModels || s.change?.workflow?.models || defaultWorkflowModels}
+          disabled={!!s.busy || !s.models || activeChangeWorkflow(s.change)}
+        />
+      </Panel>
+      <h2>Configured profiles</h2>
+      <p className="small muted">
+        Current daemon configuration, not captured run choices or provider health.
+      </p>
       <div className="grid models-grid">
         {Object.values(s.models?.scopes || {}).map((model) => (
           <Panel

@@ -90,6 +90,7 @@ export interface State {
   chosenPath?: string;
   change?: M.ChangeSession;
   changeSeed?: M.ChangeSeed;
+  chatDraft?: ChatDraft;
   changeHistory?: M.ChangeHistoryEntry[];
   changeReceipt?: M.ChangeMutation | null;
   features?: M.FeatureReport;
@@ -102,6 +103,14 @@ export interface State {
   analysisRefresh?: boolean;
   analysisSelectionDraft?: { selectionID: string; excluded: string[] };
   workflowModels?: M.ChangeWorkflowModels;
+}
+export interface ChatDraft {
+  sessionID?: string;
+  seed?: M.ChangeSeed;
+  title: string;
+  paths: string;
+  message: string;
+  tests: boolean;
 }
 export type AnalysisAssignments = Required<
   Pick<M.AnalysisModels, 'code' | 'performance' | 'security' | 'features'>
@@ -1566,7 +1575,15 @@ export class Workspace {
   }
   newChange() {
     if (this.state.busy || activeChangeWorkflow(this.state.change)) return;
-    this.set({ change: undefined, changeSeed: undefined, changeReceipt: undefined });
+    this.set({
+      change: undefined,
+      changeSeed: undefined,
+      changeReceipt: undefined,
+      chatDraft: undefined,
+    });
+  }
+  setChatDraft(chatDraft: ChatDraft) {
+    this.set({ chatDraft });
   }
   async loadChangeHistory() {
     if (!this.state.project) return;
