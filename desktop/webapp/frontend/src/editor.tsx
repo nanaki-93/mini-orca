@@ -127,131 +127,135 @@ function Source({ s }: { s: State }) {
     code.current?.querySelector('.selected-line')?.scrollIntoView({ block: 'nearest' });
   }, [s.symbol]);
   return (
-    <div className="stack source-inspection">
-      <DeclarationPicker s={s} />
-      <div className="source-panel panel">
-        <div className="code-header">
-          <span className="row">
-            <Icon name="lock" />
-            Read-only source
-          </span>
-          <span>
-            {s.file!.line_count} lines · {s.file!.language}
-          </span>
-        </div>
-        {s.file!.binary ? (
-          <Empty title="Binary file" />
-        ) : (
-          <pre className="source-code" aria-label="Read-only source" tabIndex={0} ref={code}>
-            {s.file!.content.split('\n').map((line, i) => (
-              <span
-                className={`source-line ${symbol && i + 1 >= symbol.start_line && i + 1 <= symbol.end_line ? 'selected-line' : ''}`}
-                key={i}
-              >
-                <span className="line-number" aria-hidden="true">
-                  {i + 1}
-                </span>
-                <code>{line || ' '}</code>
-              </span>
-            ))}
-          </pre>
-        )}
-      </div>
-      <div className="actions">
-        <Button
-          tone="primary"
-          icon="sparkles"
-          disabled={
-            !!s.busy ||
-            s.fileStale ||
-            s.file!.binary ||
-            !/\.(go|md)$/.test(s.file!.path) ||
-            activeChangeWorkflow(s.change)
-          }
-          onClick={() =>
-            w.seedChange({
-              title: `Update ${s.symbol || s.file!.name}`,
-              kind: 'feature',
-              acceptance_criteria: [],
-              paths: [s.file!.path],
-              message: s.symbol ? `Update ${s.symbol}: ` : '',
-            })
-          }
-        >
-          Draft change in Chat
-        </Button>
-        <Button disabled={!!s.busy || !s.symbol || s.fileStale} onClick={() => void w.explain()}>
-          Explain declaration
-        </Button>
-        <Button disabled={!!s.busy || s.fileStale} onClick={() => void w.analyzeFile()}>
-          Analyze file
-        </Button>
-        <Go page="security" icon="shield">
-          Security
-        </Go>
-      </div>
-      {s.explanation && (
-        <Panel title={`About ${s.explanation.anchor.symbol}`}>
-          <Prose text={s.explanation.summary} />
-          <BulletContent title="Behavior" items={s.explanation.behavior} />
-          <Disclosure title="Inputs, outputs & side effects">
-            <BulletContent title="Inputs" items={s.explanation.inputs} />
-            <BulletContent title="Outputs" items={s.explanation.outputs} />
-            <BulletContent title="Side effects" items={s.explanation.side_effects} />
-            <BulletContent title="Errors" items={s.explanation.error_behavior} />
-          </Disclosure>
-          <InsightCard insight={s.explanation.engineering_insight} />
-        </Panel>
-      )}
-      {s.fileAnalysis && (
-        <Panel
-          className="source-analysis"
-          title="File analysis"
-          actions={<Badge value={s.fileAnalysis.status} />}
-        >
-          <Prose text={s.fileAnalysis.purpose || s.fileAnalysis.failure} />
-          <BulletContent title="Responsibilities" items={s.fileAnalysis.responsibilities} />
-          <Disclosure title="Dependencies & side effects">
-            <BulletContent title="Dependencies" items={s.fileAnalysis.dependencies} />
-            <BulletContent title="Side effects" items={s.fileAnalysis.side_effects} />
-          </Disclosure>
-          {(s.fileAnalysis.risks || []).map((risk, i) => (
-            <Disclosure
-              key={i}
-              title={
-                <span className="row wrap">
-                  <Badge value={risk.severity} />
-                  {risk.summary}
-                </span>
-              }
-            >
-              <InsightCard insight={risk.engineering_insight} />
-              {risk.task_spec && (
-                <Button
-                  disabled={!!s.busy || s.fileStale || activeChangeWorkflow(s.change)}
-                  onClick={() => {
-                    w.seedWorkflow({
-                      title: risk.summary,
-                      kind: 'fix',
-                      paths: [s.file!.path],
-                      message: risk.summary,
-                      acceptance_criteria: risk.task_spec!.acceptance_criteria,
-                    });
-                  }}
+    <div className="source-inspection">
+      <div className="source-document">
+        <DeclarationPicker s={s} />
+        <div className="source-panel panel">
+          <div className="code-header">
+            <span className="row">
+              <Icon name="lock" />
+              Read-only source
+            </span>
+            <span>
+              {s.file!.line_count} lines · {s.file!.language}
+            </span>
+          </div>
+          {s.file!.binary ? (
+            <Empty title="Binary file" />
+          ) : (
+            <pre className="source-code" aria-label="Read-only source" tabIndex={0} ref={code}>
+              {s.file!.content.split('\n').map((line, i) => (
+                <span
+                  className={`source-line ${symbol && i + 1 >= symbol.start_line && i + 1 <= symbol.end_line ? 'selected-line' : ''}`}
+                  key={i}
                 >
-                  Prepare change
-                </Button>
-              )}
+                  <span className="line-number" aria-hidden="true">
+                    {i + 1}
+                  </span>
+                  <code>{line || ' '}</code>
+                </span>
+              ))}
+            </pre>
+          )}
+        </div>
+        <div className="actions">
+          <Button
+            tone="primary"
+            icon="sparkles"
+            disabled={
+              !!s.busy ||
+              s.fileStale ||
+              s.file!.binary ||
+              !/\.(go|md)$/.test(s.file!.path) ||
+              activeChangeWorkflow(s.change)
+            }
+            onClick={() =>
+              w.seedChange({
+                title: `Update ${s.symbol || s.file!.name}`,
+                kind: 'feature',
+                acceptance_criteria: [],
+                paths: [s.file!.path],
+                message: s.symbol ? `Update ${s.symbol}: ` : '',
+              })
+            }
+          >
+            Draft change in Chat
+          </Button>
+          <Button disabled={!!s.busy || !s.symbol || s.fileStale} onClick={() => void w.explain()}>
+            Explain declaration
+          </Button>
+          <Button disabled={!!s.busy || s.fileStale} onClick={() => void w.analyzeFile()}>
+            Analyze file
+          </Button>
+          <Go page="security" icon="shield">
+            Security
+          </Go>
+        </div>
+      </div>
+      <aside className="source-context" aria-label="File insights">
+        {s.explanation && (
+          <Panel title={`About ${s.explanation.anchor.symbol}`}>
+            <Prose text={s.explanation.summary} />
+            <BulletContent title="Behavior" items={s.explanation.behavior} />
+            <Disclosure title="Inputs, outputs & side effects">
+              <BulletContent title="Inputs" items={s.explanation.inputs} />
+              <BulletContent title="Outputs" items={s.explanation.outputs} />
+              <BulletContent title="Side effects" items={s.explanation.side_effects} />
+              <BulletContent title="Errors" items={s.explanation.error_behavior} />
             </Disclosure>
-          ))}
-          {(s.fileAnalysis.suggestions || []).map((suggestion, i) => (
-            <Disclosure key={i} title={suggestion.title}>
-              <Prose text={suggestion.summary} />
+            <InsightCard insight={s.explanation.engineering_insight} />
+          </Panel>
+        )}
+        {s.fileAnalysis && (
+          <Panel
+            className="source-analysis"
+            title="File analysis"
+            actions={<Badge value={s.fileAnalysis.status} />}
+          >
+            <Prose text={s.fileAnalysis.purpose || s.fileAnalysis.failure} />
+            <BulletContent title="Responsibilities" items={s.fileAnalysis.responsibilities} />
+            <Disclosure title="Dependencies & side effects">
+              <BulletContent title="Dependencies" items={s.fileAnalysis.dependencies} />
+              <BulletContent title="Side effects" items={s.fileAnalysis.side_effects} />
             </Disclosure>
-          ))}
-        </Panel>
-      )}
-      <InsightCard insight={s.fileAnalysis?.engineering_insight} />
+            {(s.fileAnalysis.risks || []).map((risk, i) => (
+              <Disclosure
+                key={i}
+                title={
+                  <span className="row wrap">
+                    <Badge value={risk.severity} />
+                    {risk.summary}
+                  </span>
+                }
+              >
+                <InsightCard insight={risk.engineering_insight} />
+                {risk.task_spec && (
+                  <Button
+                    disabled={!!s.busy || s.fileStale || activeChangeWorkflow(s.change)}
+                    onClick={() => {
+                      w.seedWorkflow({
+                        title: risk.summary,
+                        kind: 'fix',
+                        paths: [s.file!.path],
+                        message: risk.summary,
+                        acceptance_criteria: risk.task_spec!.acceptance_criteria,
+                      });
+                    }}
+                  >
+                    Prepare change
+                  </Button>
+                )}
+              </Disclosure>
+            ))}
+            {(s.fileAnalysis.suggestions || []).map((suggestion, i) => (
+              <Disclosure key={i} title={suggestion.title}>
+                <Prose text={suggestion.summary} />
+              </Disclosure>
+            ))}
+          </Panel>
+        )}
+        <InsightCard insight={s.fileAnalysis?.engineering_insight} />
+      </aside>
     </div>
   );
 }

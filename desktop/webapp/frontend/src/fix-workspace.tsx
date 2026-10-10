@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ChangeSession, ChangeSeed } from './models';
 import { workspace as w, activeChangeWorkflow, canAcceptChange, type State } from './workspace';
 import { WorkflowProgress } from './change-workflow';
-import { ChangeChecks, ChangeHistory, ChangeOutcome, ProposalDiff } from './change-shared';
+import { ChangeChecks, ChangeOutcome, ProposalDiff } from './change-shared';
 import { FixPreparation } from './fix-preparation';
 import { FixSolution } from './fix-solution';
 import { ProjectGuidance } from './project-guidance';
@@ -97,7 +97,9 @@ export function FixWorkspace({ s }: { s: State }) {
           />
         </Disclosure>
       )}
-      <ChangeHistory s={s} />
+      <Go page="history" icon="clock">
+        Open history
+      </Go>
       <div className="actions">
         <Button disabled={!!s.busy || running} onClick={() => w.newChange()}>
           New conversation

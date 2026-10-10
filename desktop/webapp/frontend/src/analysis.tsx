@@ -89,6 +89,9 @@ export function Analysis({ s }: { s: State }) {
           <Go page="analysis-run" icon="activity">
             View run
           </Go>
+          <Go page="analysis-files" icon="folder">
+            Files & scope
+          </Go>
           <StaleAnalysisButton s={s} />
           <Button
             tone="primary"
@@ -191,7 +194,8 @@ export function Analysis({ s }: { s: State }) {
 
       {changed && (
         <Notice>
-          File selection has unsaved changes. <Go page="analysis-files">Save selection in Files</Go>
+          File selection has unsaved changes.{' '}
+          <Go page="analysis-files">Save selection in Context</Go>
         </Notice>
       )}
     </div>
@@ -215,7 +219,7 @@ export function AnalysisFiles({ s }: { s: State }) {
     <div className="workspace-page analysis-files">
       <Heading
         variant="intro"
-        title="Files"
+        title="Context"
         detail={`${s.selection?.files.filter((f) => !f.reason && !excluded.includes(f.path)).length ?? '—'} eligible files selected`}
       >
         <Go page="analysis" icon="activity">

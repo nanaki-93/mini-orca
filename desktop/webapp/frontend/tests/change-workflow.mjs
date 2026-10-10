@@ -48,11 +48,8 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
       await nav(page, 'Overview');
       await page.getByRole('button', { name: 'Continue work', exact: true }).click();
       await page.evaluate(() => window.fixture.completeWorkflow());
-      await page
-        .getByText('Review the file differences, then select Accept changes.', {
-          exact: true,
-        })
-        .waitFor();
+      await page.getByRole('heading', { name: 'Ready for review', exact: true }).waitFor();
+      await nav(page, 'Changes');
       assert.equal(
         await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
         false,
@@ -197,12 +194,12 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
   });
 
   await test('Workflow entry points seed scope and task intent without dispatch', async () => {
-    for (const [pageName, kind] of [['Features', 'feature']]) {
+    for (const pageName of ['Features']) {
       const { page, close } = await pageFor({ featuresReady: true });
       try {
         await nav(page, pageName);
         await page.getByRole('button', { name: 'Configure workflow', exact: true }).first().click();
-        assert.equal(await page.getByLabel('Task type', { exact: true }).inputValue(), kind);
+        assert.equal(await page.getByLabel('Task type', { exact: true }).count(), 0);
         assert.match(
           await page.getByLabel('Files to change', { exact: true }).inputValue(),
           /_test\.go/,
@@ -231,6 +228,7 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
         await prepare(page);
         await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
         await trust(page);
+        await nav(page, 'Changes');
         assert.equal(
           await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
           true,
@@ -291,6 +289,7 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
           window.fixture.hold = '/api/projects/current/changes/change-1/review';
           if (scenario === 'review-failed') window.fixture.failures[window.fixture.hold] = 409;
         }, scenario);
+        await nav(page, 'Changes');
         await page.getByRole('button', { name: 'Accept changes', exact: true }).click();
         await page.waitForFunction(() =>
           window.fixture.requests.some((r) => r.path.endsWith('/review')),

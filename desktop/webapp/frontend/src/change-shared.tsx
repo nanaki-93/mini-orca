@@ -107,42 +107,40 @@ export function ChangeOutcome({ s }: { s: State }) {
 export function ChangeHistory({ s }: { s: State }) {
   const running = activeChangeWorkflow(s.change);
   return (
-    <Panel className="chat-history">
-      <Disclosure title="Local history" open={s.page === 'history'}>
-        {!s.changeHistory ? (
-          <Empty title="History unavailable" />
-        ) : s.changeHistory.length === 0 ? (
-          <p>No saved conversations.</p>
-        ) : (
-          s.changeHistory.map((entry) => (
-            <div className="list-row" key={entry.id}>
-              <span className="list-copy">
-                <strong>{entry.title}</strong>
-                <small>
-                  {entry.workflow_status || entry.state} · revision {entry.revision}
-                </small>
-              </span>
-              <Button
-                disabled={!!s.busy || running}
-                onClick={() =>
-                  void (['running', 'canceling'].includes(entry.workflow_status || '')
-                    ? w.viewChange(entry.id)
-                    : w.resumeChange(entry.id))
-                }
-              >
-                {['running', 'canceling'].includes(entry.workflow_status || '')
-                  ? 'View workflow'
-                  : 'Resume'}
-              </Button>
-            </div>
-          ))
-        )}
-        <div className="actions section-gap">
-          <Button disabled={!!s.busy} onClick={() => void w.loadChangeHistory()}>
-            Refresh history
-          </Button>
-        </div>
-      </Disclosure>
+    <Panel className="chat-history" title="Saved conversations">
+      {!s.changeHistory ? (
+        <Empty title="History unavailable" />
+      ) : s.changeHistory.length === 0 ? (
+        <p>No saved conversations.</p>
+      ) : (
+        s.changeHistory.map((entry) => (
+          <div className="list-row" key={entry.id}>
+            <span className="list-copy">
+              <strong>{entry.title}</strong>
+              <small>
+                {entry.workflow_status || entry.state} · revision {entry.revision}
+              </small>
+            </span>
+            <Button
+              disabled={!!s.busy || running}
+              onClick={() =>
+                void (['running', 'canceling'].includes(entry.workflow_status || '')
+                  ? w.viewChange(entry.id)
+                  : w.resumeChange(entry.id))
+              }
+            >
+              {['running', 'canceling'].includes(entry.workflow_status || '')
+                ? 'View workflow'
+                : 'Resume'}
+            </Button>
+          </div>
+        ))
+      )}
+      <div className="actions section-gap">
+        <Button disabled={!!s.busy} onClick={() => void w.loadChangeHistory()}>
+          Refresh history
+        </Button>
+      </div>
     </Panel>
   );
 }

@@ -68,7 +68,7 @@ export async function testGuidedFixes({
       assert.equal(
         await page
           .getByRole('complementary', { name: 'Application' })
-          .getByRole('button', { name: 'Bugs', exact: true })
+          .getByRole('button', { name: 'Changes', exact: true })
           .getAttribute('aria-current'),
         'page',
       );
@@ -198,6 +198,8 @@ export async function testGuidedFixes({
           ['openai', 'gemini', 'claude'],
         );
         const creation = models.getByRole('button', { name: 'Creation model', exact: true });
+        assert.equal(await creation.getByText('gpt-4.1', { exact: true }).isVisible(), true);
+        assert.match(await creation.locator('small').innerText(), /Local/);
         await creation.focus();
         await creation.press('Enter');
         const dialog = page.getByRole('dialog', { name: 'Choose a model', exact: true });
@@ -209,6 +211,7 @@ export async function testGuidedFixes({
         await search.fill('gemini');
         await search.press('Enter');
         assert.equal(await creation.getAttribute('value'), 'bug');
+        assert.equal(await creation.getByText('gemini-2.5-pro', { exact: true }).isVisible(), true);
         assert.equal(
           await creation.evaluate((element) => element === document.activeElement),
           true,
@@ -450,7 +453,7 @@ export async function testGuidedFixes({
           ),
           'internal/worker/process.go',
         );
-        await nav(page, 'Chat');
+        await nav(page, 'Changes');
         assert.equal(await page.getByLabel('Change request', { exact: true }).count(), 0);
         assert.equal(
           await page.getByRole('combobox', { name: 'Task type', exact: true }).count(),

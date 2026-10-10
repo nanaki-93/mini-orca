@@ -46,7 +46,8 @@ status bar. The sidebar collapses to icons, and the global search opens with `‚å
   The catalog includes configured models and models available through the local
   Pi installation. **Refresh** reloads it; Pi discovery failures leave configured
   choices available. **Back to workspace** returns to the previous task or finding.
-  **Files** manages captured file selection, exclusions and per-file status.
+  **Context ‚Üí Files & scope** manages captured file selection, exclusions and
+  per-file status. **Analysis** keeps Setup and Last run together.
   Unsaved selection and setup choices survive navigation between these pages;
   save file selections before preparing a run. Request limits remain in a disclosure;
   new runs default to a 1,800-second (30-minute) file-analysis budget per batch.
@@ -88,7 +89,7 @@ status bar. The sidebar collapses to icons, and the global search opens with `‚å
   The generated fix opens on **Changes**, with full-width read-only file diffs.
   **Checks** contains diagnostics, captured workflow stages and model review.
   The cause remains visible above the solution while reviewing a fix.
-  **Details** contains scope, instructions, regeneration and history.
+  **Details** contains scope, instructions and regeneration, with a link to **History**.
   **Review next file** advances through the diffs; **Apply N files** becomes available
   after every changed file has been viewed and the existing check/review guards pass.
   Regeneration clears the viewed-file state. Tabs and file selection never generate,
@@ -121,8 +122,9 @@ status bar. The sidebar collapses to icons, and the global search opens with `‚å
   actual benchmark evidence is available. Interrupted runs need an explicit new
   run; the workflow never resumes provider calls from history automatically.
   Describe a task here, or use the dedicated fix workflow from a finding. Generation checks the proposal and can repair failed checks up to three times.
-  **Review changes** opens the dedicated **Changes** workspace with a full-width
-  read-only diff and check evidence. **Back to conversation** returns to Chat.
+  Chat keeps the conversation, scope and a compact proposal card together.
+  **Review changes** opens **Changes**, with a read-only diff beside check evidence
+  on wide windows. Compact windows stack these panes. **Back to conversation** returns to Chat.
   Read the displayed file diffs, then select **Accept changes** once. This records
   review and applies only that revision; failed review, a replacement proposal or
   navigation while review is pending prevents Apply. With a captured `_test.go`
@@ -145,7 +147,7 @@ status bar. The sidebar collapses to icons, and the global search opens with `‚å
   inherited guides is disabled to avoid duplicates.
   Existing files are registered by reading them; inherited guides show their
   origins and scope. **Preview instruction diff**
-  creates a manual proposal in Chat with the same explicit **Accept changes** action.
+  opens a manual proposal in **Changes** with the same explicit **Accept changes** action.
   Agents use applicable root and directory guidance by default for analysis,
   explanations, suggestions, creation, testing and review, honoring context exclusions.
   Fix and feature implementation pages show instruction status; **Create AGENTS.md** opens the
@@ -176,7 +178,9 @@ status bar. The sidebar collapses to icons, and the global search opens with `‚å
   charts together. Plain Mermaid reports and
   Markdown-fenced charts render locally, with selectable source and a readable
   fallback for older prose or render failures.
-- **Context** shows included/excluded files, hashes and the provider destination.
+- **Context** owns analysis file selection and exclusions. Its **Provider context**
+  view shows the selected source file‚Äôs included/excluded context, hashes and
+  provider destination.
   **Models** selects analysis models and shared creation, testing and review
   profiles, and reads
   configuration without probing a provider. Active workflows keep their captured

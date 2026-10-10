@@ -97,7 +97,7 @@ export function Instructions({ s }: { s: State }) {
       <Heading
         variant="intro"
         title="Project instructions"
-        detail="Load root or directory guidance, then preview changes for explicit review in Chat."
+        detail="Load root or directory guidance, then review the proposal in Changes."
       />
       <ol className="wizard-steps" aria-label="Instruction wizard steps">
         {['Choose scope', 'Edit guidance', 'Preview'].map((label, i) => (

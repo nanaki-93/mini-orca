@@ -7,16 +7,16 @@ The Wails/React desktop client talks to a Go daemon through a native bridge.
 ## Use it
 
 1. Open a local project and inspect its summary, files and symbols.
-2. Choose your file scope in **Files**, then select **Prepare analysis** in Analysis.
-   Assign Bug, Performance, Security and feature models independently. Review the inventory,
-   request bounds and model destinations, then confirm the displayed run.
+2. Choose your file scope in **Context → Files & scope**, then select **Prepare analysis**
+   in Analysis. Assign Bug, Performance, Security and feature models on **Models**.
+   Review the inventory, request bounds and model destinations, then confirm the displayed run.
    Analysis also checks for new feature suggestions using saved project goals.
-   Summary links category counts to Bugs, Performance, Security and Features.
+   Overview links category counts to Findings and Features.
 3. Use **Prepare fix** on a finding, or describe a feature in **Chat** with up to
    eight explicit Go/Markdown paths, including new files. **Generate changes**
    creates and checks a proposal, with at most three repairs of failed checks.
    Project tests require execution trust; preparation stops at diff review.
-4. Read all proposed diffs, then select **Accept changes** once to apply the
+4. Read all proposed diffs in **Changes**, then select **Accept changes** once to apply the
    displayed revision. Further chat revisions require fresh checks and acceptance.
    Guarded **Undo proposal** restores the latest unchanged grouped change.
 5. Use **Features** for goal-aware advisory ideas, with Save/Dismiss and a passive
@@ -24,19 +24,21 @@ The Wails/React desktop client talks to a Go daemon through a native bridge.
    add editable presets or custom text, and review the resulting instruction diff.
 6. After Apply, explicitly **Verify applied change** or **Reanalyze changed files**.
    Applied and verified results stay separate; original findings are not marked
-   fixed automatically. **Source** retains read-only inspection and the precise
-   declaration/import draft tools, including selected benchmark comparisons.
-7. Open **Terminal** and select **New terminal** for a local shell in the project.
+   fixed automatically. **Source** keeps read-only inspection, explanations and file
+   analysis. **Draft change in Chat** starts a task from the selected file or declaration.
+7. Open **Terminal** from the status bar and select **New terminal** for a local
+   shell in the project.
    Hiding it preserves the process; closing its tab ends it. **⌘K / Ctrl+K** opens
    file and command search.
 
-Bugs, Performance and Security offer search and impact filters over saved results.
+**Findings** groups Bugs, Performance and Security with search and impact filters
+over saved results.
 Pause waits for an active stage; Cancel stops further work. Resume uses a
 fresh preview and intent; completed or canceled runs need a new Start. The run coordinates specialized
 semantic, Performance, Security-rule, advisory Security and project-wide feature
 suggestion stages and can make
 multiple model requests. Security intent is explicit even with a local provider.
-Verified Go scans, focused checks and selected benchmarks remain separate trusted
+Verified Go scans and proposal checks remain separate trusted
 execution actions. Source hypotheses are not runtime measurements.
 
 Source changes always require approval. Mini-Orca does not automatically run
@@ -70,8 +72,8 @@ The daemon owns indexing, context exclusions, model requests and guarded source
 mutation. The desktop renders state and rejects stale asynchronous results.
 Three configured scopes serve project/Performance/Security analysis (`analyze`), file/bug
 analysis (`bug`) and change/declaration proposals/repairs (`function`).
-The Chat agent workflow can select these profiles independently for creation,
-test writing and model review, followed by a human review of the checked diffs.
+**Models** assigns these profiles independently for creation, test writing and
+model review in Chat and fixes, followed by human review of the checked diffs.
 Feature ideas and Bug/Performance/Security findings can seed the same workflow.
 
 Project-local `.mini-orca/` stores `index.json`, `project-analysis.json`,
@@ -102,7 +104,7 @@ authority; start a new run when they cannot be resumed. See the
 The web client remembers the last project path, theme and text size. Compose pane
 preferences remain separate. Terminal starts without launching a shell.
 Mini-Orca does not save terminal transcripts or send them to a model. Returning to
-Source/Review rechecks the selected file and invalidates stale evidence; reindex
+Source rechecks the selected file and invalidates stale evidence; reindex
 explicitly after adding, removing or renaming files in the terminal.
 
 ## Development and documentation
