@@ -144,6 +144,14 @@ export async function testThemes({ test, pageFor, nav, idle, layout, contrast })
         assert.equal(await page.evaluate(() => localStorage.getItem('mini-orca:theme')), id);
       }
       assert.equal(new Set(surfaces).size, 3, 'Each theme renders a distinct palette');
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      const task = page.getByRole('button', { name: 'Start a task', exact: true });
+      await task.hover();
+      assert.equal(
+        await task.evaluate((element) => getComputedStyle(element).transitionDuration),
+        '0s',
+        'Reduced motion disables hover transitions',
+      );
       await page.evaluate(() => localStorage.setItem('mini-orca:theme', 'unknown-theme'));
       await page.reload();
       await page.getByRole('heading', { name: 'harbor', exact: true }).waitFor();

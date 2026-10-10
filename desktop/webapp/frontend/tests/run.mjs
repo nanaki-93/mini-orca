@@ -4778,10 +4778,9 @@ try {
       for (const width of [1440, 800]) {
         await page.setViewportSize({ width, height: 900 });
         for (const theme of ['dark', 'light']) {
-          await page.evaluate(
-            (value) => document.documentElement.setAttribute('data-theme', value),
-            theme,
-          );
+          await page.keyboard.press('Escape');
+          await page.getByRole('button', { name: themeNames[theme], exact: true }).click();
+          await code.click();
           for (const large of [false, true]) {
             await page.evaluate(
               (value) => document.documentElement.classList.toggle('large-text', value),
@@ -8630,7 +8629,15 @@ try {
             for (const width of [1440, 800]) {
               await page.setViewportSize({ width, height: 1000 });
               await chatConversationLayout(page);
-              await chatReviewLayout(page);
+              if (state === 'history-unavailable')
+                assert.equal(
+                  await page
+                    .getByRole('region', { name: 'Proposal review', exact: true })
+                    .isVisible(),
+                  false,
+                  'A new conversation keeps the empty review pane out of the composer',
+                );
+              else await chatReviewLayout(page);
               if (state === 'stale') {
                 const review = page.getByRole('region', { name: 'Proposal review', exact: true });
                 for (const name of ['Check proposal', 'Accept changes'])
