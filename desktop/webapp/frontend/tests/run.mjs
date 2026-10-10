@@ -5168,7 +5168,7 @@ try {
           }
           assert.equal(
             await commands.locator('.list-row').count(),
-            scenario === 'filtered-empty' ? 0 : 14,
+            scenario === 'filtered-empty' ? 0 : 13,
           );
           if (scenario === 'filtered-empty')
             await commands.getByText('No matching commands.', { exact: true }).waitFor();
@@ -5427,16 +5427,30 @@ try {
         await layout(page, `${name.toLowerCase()}-list-filtered-empty-800-light-larger`);
         await filter.fill('worker.go');
         await page
-          .getByLabel('Finding severity', { exact: true })
-          .selectOption({ label: name === 'Bugs' ? 'high' : 'medium' });
+          .getByLabel('Finding priority', { exact: true })
+          .selectOption(name === 'Bugs' ? 'high' : 'medium');
         await filter.press('Tab');
         assert.equal(
           await page
-            .getByLabel('Finding severity', { exact: true })
+            .getByRole('button', { name: 'Clear finding search' })
+            .evaluate((el) => el === document.activeElement),
+          true,
+        );
+        await page.keyboard.press('Tab');
+        assert.equal(
+          await page
+            .getByLabel('Finding priority', { exact: true })
             .evaluate((element) => element === document.activeElement),
           true,
         );
-        await page.getByLabel('Finding severity', { exact: true }).press('Tab');
+        await page.getByLabel('Finding priority', { exact: true }).press('Tab');
+        assert.equal(
+          await page
+            .getByRole('button', { name: 'Reset filters' })
+            .evaluate((el) => el === document.activeElement),
+          true,
+        );
+        await page.keyboard.press('Tab');
         assert.equal(
           await page
             .locator('.result-row')
@@ -5447,7 +5461,7 @@ try {
         await page.getByRole('button', { name: 'All findings', exact: true }).click();
         assert.equal(await filter.inputValue(), 'worker.go');
         assert.equal(
-          await page.getByLabel('Finding severity', { exact: true }).inputValue(),
+          await page.getByLabel('Finding priority', { exact: true }).inputValue(),
           name === 'Bugs' ? 'high' : 'medium',
         );
         if (name === 'Bugs') {
@@ -5532,7 +5546,7 @@ try {
         const filter = page.getByRole('textbox', { name: 'Filter findings', exact: true });
         await filter.fill('process.go');
         await page
-          .getByLabel('Finding severity', { exact: true })
+          .getByLabel('Finding priority', { exact: true })
           .selectOption(semantic ? 'high' : 'medium');
         const before = await page.evaluate(() =>
           window.fixture.requests.filter((r) => r.method !== 'GET'),
@@ -5656,7 +5670,7 @@ try {
         await workspace.getByRole('button', { name: 'All findings', exact: true }).click();
         assert.equal(await filter.inputValue(), 'process.go');
         assert.equal(
-          await page.getByLabel('Finding severity', { exact: true }).inputValue(),
+          await page.getByLabel('Finding priority', { exact: true }).inputValue(),
           semantic ? 'high' : 'medium',
         );
         assert.deepEqual(
@@ -6191,12 +6205,12 @@ try {
         await previous.click();
         assert.equal(await rows.count(), 10);
         await pagination.getByText('Page 10 of 11', { exact: true }).waitFor();
-        await page.getByLabel('Finding severity', { exact: true }).selectOption('low');
+        await page.getByLabel('Finding priority', { exact: true }).selectOption('low');
         await pagination.getByText('1–10 of 50 findings', { exact: true }).waitFor();
         await pagination.getByText('Page 1 of 5', { exact: true }).waitFor();
         assert.equal(await rows.first().locator('strong').innerText(), 'Saved finding 1');
         await next.click();
-        await page.getByLabel('Finding severity', { exact: true }).selectOption('');
+        await page.getByLabel('Finding priority', { exact: true }).selectOption('');
         await pagination.getByText('Page 1 of 11', { exact: true }).waitFor();
         await next.click();
         await page

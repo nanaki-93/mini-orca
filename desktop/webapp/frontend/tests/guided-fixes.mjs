@@ -279,7 +279,7 @@ export async function testGuidedFixes({
         );
         const creation = models.getByRole('button', { name: 'Creation model', exact: true });
         assert.equal(await creation.getByText('gpt-4.1', { exact: true }).isVisible(), true);
-        assert.match(await creation.locator('small').innerText(), /Local/);
+        assert.equal(await creation.locator('small').innerText(), 'Thinking: medium');
         await creation.focus();
         await creation.press('Enter');
         const dialog = page.getByRole('dialog', { name: 'Choose a model', exact: true });
@@ -693,14 +693,14 @@ export async function testGuidedFixes({
           await page.setViewportSize({ width, height });
           await page.getByRole('button', { name: `${theme} theme`, exact: true }).click();
           if (large) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
-          await prepare.scrollIntoViewIfNeeded();
+          await prepare.evaluate((element) => element.scrollIntoView({ block: 'center' }));
           const action = await prepare.boundingBox();
           const solution = await page.locator('.fix-solution').boundingBox();
           const footer = await page.locator('.statusbar').boundingBox();
           assert.ok(solution.y + solution.height < action.y, 'The solution leads into the action');
           assert.ok(
             action.y + action.height <= footer.y,
-            'Prepare fix remains reachable without inline model controls',
+            `Prepare fix remains reachable without inline model controls (${category}, ${theme}): ${JSON.stringify({ action, footer })}`,
           );
           await layout(page, `linear-fix-${category.toLowerCase()}-${theme.toLowerCase()}`);
           await contrast(page, `Linear ${category} fix in ${theme}`);

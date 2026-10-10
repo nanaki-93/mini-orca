@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 import type * as M from './models';
 import {
   workspace as w,
@@ -146,6 +146,7 @@ export function Results({ s }: { s: State }) {
   const results = s.results[category];
   const listView = s.findingViews[category] || { query: '', severity: '', page: 1 };
   const { query, severity } = listView;
+  const search = useRef<HTMLInputElement>(null);
   const updateView = (patch: Partial<FindingListView>) =>
     w.set({ findingViews: { ...s.findingViews, [category]: { ...listView, ...patch } } });
   const unique = resultRows(s, category);
@@ -159,6 +160,30 @@ export function Results({ s }: { s: State }) {
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const page = Math.min(listView.page, pageCount);
   const offset = (page - 1) * pageSize;
+  const windowStart = Math.max(2, Math.min(page - 1, pageCount - 3));
+  const pageNumbers = [
+    ...new Set([
+      1,
+      ...Array.from(
+        { length: Math.min(3, Math.max(0, pageCount - 2)) },
+        (_, index) => windowStart + index,
+      ),
+      pageCount,
+    ]),
+  ];
+  const priorities = [...new Set([...unique.map((row) => row.severity), severity])]
+    .filter(Boolean)
+    .sort((a, b) => {
+      const order = ['critical', 'high', 'medium', 'low', 'info'];
+      return (
+        (order.indexOf(a) < 0 ? order.length : order.indexOf(a)) -
+          (order.indexOf(b) < 0 ? order.length : order.indexOf(b)) || a.localeCompare(b)
+      );
+    });
+  const clearSearch = () => {
+    updateView({ query: '', page: 1 });
+    search.current?.focus();
+  };
   useEffect(() => {
     if (listView.page !== page) updateView({ page });
   }, [listView.page, page]);
@@ -432,31 +457,63 @@ export function Results({ s }: { s: State }) {
         )}
       </Disclosure>
       <Panel title="Findings" className="results-findings">
-        <div className="toolbar">
-          <div className="input-wrap">
+        <div className="toolbar findings-toolbar">
+          <div className="input-wrap findings-search">
             <Icon name="search" />
             <input
+              ref={search}
               aria-label="Filter findings"
               value={query}
-              onChange={(e) => {
-                updateView({ query: e.target.value, page: 1 });
+              onChange={(e) => updateView({ query: e.target.value, page: 1 })}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape' && query) {
+                  e.preventDefault();
+                  clearSearch();
+                }
               }}
-              placeholder="Filter findings…"
+              placeholder="Search findings, files or symbols…"
             />
+            {query && (
+              <Button
+                className="findings-search-clear"
+                tone="ghost"
+                icon="close"
+                aria-label="Clear finding search"
+                title="Clear search (Esc)"
+                onClick={clearSearch}
+              />
+            )}
           </div>
-          <select
-            className="field compact"
-            aria-label="Finding severity"
-            value={severity}
-            onChange={(e) => updateView({ severity: e.target.value, page: 1 })}
-          >
-            <option value="">All impact levels</option>
-            {[...new Set(unique.map((row) => row.severity))].filter(Boolean).map((value) => (
-              <option key={value} value={value}>
-                {human(value)}
-              </option>
-            ))}
-          </select>
+          <div className="priority-filter" data-active={!!severity}>
+            <span className="priority-filter-icon" aria-hidden="true">
+              {severity ? <PriorityIcon value={severity} /> : <Icon name="filter" />}
+            </span>
+            <select
+              aria-label="Finding priority"
+              value={severity}
+              onChange={(e) => updateView({ severity: e.target.value, page: 1 })}
+            >
+              <option value="">All priorities</option>
+              {priorities.map((value) => (
+                <option key={value} value={value}>
+                  {human(value)[0].toUpperCase() + human(value).slice(1)}
+                </option>
+              ))}
+            </select>
+            <Icon name="down" />
+          </div>
+          {(query || severity) && (
+            <Button
+              tone="ghost small"
+              icon="undo"
+              onClick={() => {
+                updateView({ query: '', severity: '', page: 1 });
+                search.current?.focus();
+              }}
+            >
+              Reset filters
+            </Button>
+          )}
         </div>
         <div className="findings-columns" aria-hidden="true">
           <span>Finding</span>
@@ -520,23 +577,52 @@ export function Results({ s }: { s: State }) {
           </Empty>
         )}
         <nav className="findings-pagination" aria-label="Findings pagination">
-          <span className="small muted" role="status">
-            {filtered.length
-              ? `${offset + 1}–${Math.min(offset + pageSize, filtered.length)} of ${filtered.length} findings`
-              : s.run && !results && !unique.length
-                ? 'Findings not loaded'
-                : '0 matching findings'}
-          </span>
-          <div className="actions">
-            <Button disabled={page === 1} onClick={() => updateView({ page: page - 1 })}>
-              Previous page
-            </Button>
-            <span className="small">
+          <div className="pagination-summary small muted" role="status">
+            <span>
+              {filtered.length
+                ? `${offset + 1}–${Math.min(offset + pageSize, filtered.length)} of ${filtered.length} findings`
+                : s.run && !results && !unique.length
+                  ? 'Findings not loaded'
+                  : '0 matching findings'}
+            </span>
+            <span>
               Page {page} of {pageCount}
             </span>
-            <Button disabled={page === pageCount} onClick={() => updateView({ page: page + 1 })}>
-              Next page
-            </Button>
+          </div>
+          <div className="pagination-pages">
+            <Button
+              tone="ghost"
+              icon="chevronLeft"
+              aria-label="Previous page"
+              title="Previous page"
+              disabled={page === 1}
+              onClick={() => updateView({ page: page - 1 })}
+            />
+            {pageNumbers.map((number, index) => (
+              <Fragment key={number}>
+                {index > 0 && number > pageNumbers[index - 1] + 1 && (
+                  <span className="pagination-gap" aria-hidden="true">
+                    …
+                  </span>
+                )}
+                <Button
+                  tone="ghost"
+                  aria-label={`Page ${number}`}
+                  aria-current={number === page ? 'page' : undefined}
+                  onClick={() => updateView({ page: number })}
+                >
+                  {number}
+                </Button>
+              </Fragment>
+            ))}
+            <Button
+              tone="ghost"
+              icon="chevron"
+              aria-label="Next page"
+              title="Next page"
+              disabled={page === pageCount}
+              onClick={() => updateView({ page: page + 1 })}
+            />
           </div>
         </nav>
       </Panel>
