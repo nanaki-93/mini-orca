@@ -72,7 +72,6 @@ export function Analysis({ s }: { s: State }) {
   const limits = s.analysisLimits || defaults;
   const refresh = s.analysisRefresh || false;
   const models = analysisSetupModels(s);
-  const excluded = selectionPaths(s);
   const changed = selectionChanged(s);
   const continuation =
     s.run && ['paused', 'interrupted'].includes(s.run.status) ? s.run : undefined;
@@ -87,101 +86,88 @@ export function Analysis({ s }: { s: State }) {
   };
   return (
     <div className="workspace-page analysis-setup">
-      <Heading
-        variant="intro"
-        title="Analysis"
-        detail={`${s.selection?.files.filter((f) => !f.reason && !excluded.includes(f.path)).length ?? '—'} eligible files selected`}
-      ></Heading>
-
+      <Heading variant="intro" title="Analysis">
+        <Button
+          disabled={!!s.busy}
+          icon="refresh"
+          onClick={() => void w.act('Refresh files', () => w.refreshProject())}
+        >
+          Refresh
+        </Button>
+        <StaleAnalysisButton s={s} />
+        {hasRepair && (
+          <Button
+            icon="play"
+            disabled={!!s.busy || !s.selection || !s.models || activeRun(s.run)}
+            title="Repair does not change code. It re-attempts unfinished analysis work."
+            onClick={() => preview('repair')}
+          >
+            Repair analysis
+          </Button>
+        )}
+        <Button
+          tone="primary"
+          icon="play"
+          disabled={!!s.busy || (!continuation && (!s.selection || !s.models || activeRun(s.run)))}
+          onClick={() =>
+            continuation
+              ? void w.previewAnalysis('resume', continuation.plan.limits)
+              : preview('new')
+          }
+        >
+          {continuation ? 'Prepare continuation' : 'Prepare analysis'}
+        </Button>
+      </Heading>
       {continuation && (
         <Notice>
           Your saved analysis is {human(continuation.status)}. Continue with its captured settings,
           or cancel it in Last run before starting a new analysis.
         </Notice>
       )}
-      <div className="stack analysis-sections">
-        <Panel title="Analysis setup" className="analysis-run-settings">
-          <p className="analysis-settings-intro">
-            Analyze correctness, security, performance and feature opportunities.
-          </p>
-          <AnalysisModelSummary s={s} value={models} />
-          <Disclosure title="Batch & request limits">
-            <div className="form-grid analysis-settings-fields">
-              {(
-                [
-                  ['batch_files', 'Files per batch', 1, 500],
-                  ['budget_seconds', 'Time budget · seconds', 1, 3600],
-                  ['max_attempts_per_stage', 'Attempts per stage', 1, 4],
-                ] as const
-              ).map(([key, label, min, max]) => (
-                <label key={key}>
-                  <span>{label}</span>
-                  <input
-                    type="number"
-                    min={min}
-                    max={max}
-                    value={limits[key]}
-                    onChange={(e) =>
-                      w.set({ analysisLimits: { ...limits, [key]: Number(e.target.value) } })
-                    }
-                  />
-                </label>
-              ))}
-            </div>
-            <label className="checkbox-line">
+      <Panel className="analysis-run-settings">
+        <div className="form-grid analysis-settings-fields">
+          {(
+            [
+              ['batch_files', 'Files per batch', 1, 500, 'Maximum files in each batch.'],
+              ['budget_seconds', 'Time budget · seconds', 1, 3600, 'File-analysis time per batch.'],
+              [
+                'max_attempts_per_stage',
+                'Attempts per stage',
+                1,
+                4,
+                'Includes the first attempt and retries.',
+              ],
+            ] as const
+          ).map(([key, label, min, max, hint]) => (
+            <div className="analysis-setting" key={key}>
+              <label htmlFor={`analysis-${key}`}>{label}</label>
               <input
-                type="checkbox"
-                checked={refresh}
-                onChange={(e) => w.set({ analysisRefresh: e.target.checked })}
+                id={`analysis-${key}`}
+                aria-describedby={`analysis-${key}-hint`}
+                type="number"
+                min={min}
+                max={max}
+                value={limits[key]}
+                onChange={(e) =>
+                  w.set({ analysisLimits: { ...limits, [key]: Number(e.target.value) } })
+                }
               />
-              Refresh previously analyzed files
-            </label>
-          </Disclosure>
-        </Panel>
-      </div>
-
-      <div className="analysis-launch">
-        {' '}
-        <div className="actions heading-action-group">
-          <Go page="analysis-run" icon="activity">
-            View run
-          </Go>
-          <StaleAnalysisButton s={s} />
-          <Button
-            tone="primary"
-            icon="play"
-            disabled={
-              !!s.busy || (!continuation && (!s.selection || !s.models || activeRun(s.run)))
-            }
-            onClick={() =>
-              continuation
-                ? void w.previewAnalysis('resume', continuation.plan.limits)
-                : preview('new')
-            }
-          >
-            {continuation ? 'Prepare continuation' : 'Prepare analysis'}
-          </Button>
-          {hasRepair && (
-            <Button
-              icon="play"
-              disabled={!!s.busy || !s.selection || !s.models || activeRun(s.run)}
-              title="Repair does not change code. It re-attempts unfinished analysis work."
-              onClick={() => preview('repair')}
-            >
-              Repair analysis
-            </Button>
-          )}
+              <small id={`analysis-${key}-hint`} className="muted">
+                {hint}
+              </small>
+            </div>
+          ))}
         </div>
-        <div className="actions heading-action-group">
-          <Button
-            disabled={!!s.busy}
-            icon="refresh"
-            onClick={() => void w.act('Refresh files', () => w.refreshProject())}
-          >
-            Refresh
-          </Button>
-        </div>
-      </div>
+        <label className="checkbox-line analysis-refresh-option">
+          <input
+            type="checkbox"
+            checked={refresh}
+            onChange={(e) => w.set({ analysisRefresh: e.target.checked })}
+          />
+          Refresh previously analyzed files
+        </label>
+        <AnalysisModelSummary s={s} value={models} />
+      </Panel>
       {changed && (
         <Notice>
           File selection has unsaved changes.{' '}

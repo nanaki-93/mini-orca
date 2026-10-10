@@ -56,8 +56,10 @@ collapses to icons.
   **Context → Files & scope** manages captured file selection, exclusions and
   per-file status. **Analysis** keeps Setup and Last run together.
   Unsaved selection and setup choices survive navigation between these pages;
-  save file selections before preparing a run. Request limits remain in a disclosure;
-  new runs default to a 1,800-second (30-minute) file-analysis budget per batch.
+  save file selections before preparing a run. Batch size, time budget, attempts and
+  refresh options stay visible above the operation summaries. **Refresh** and
+  **Prepare analysis** sit at the top of the page. New runs default to a 1,800-second
+  (30-minute) file-analysis budget per batch.
   Continuations retain the saved run's limits.
   When a run is paused or interrupted, **Prepare continuation** on Analysis
   prepares the saved run with its captured settings and fresh consent. To use
