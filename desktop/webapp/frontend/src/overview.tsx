@@ -6,11 +6,11 @@ import {
   type State,
   type Page,
 } from './workspace';
+import { ModelIcon } from './agent-model';
 import { Tests } from './tools';
 import { ModelSelectors } from './analysis-models';
 import { WorkflowModels, defaultWorkflowModels } from './change-workflow';
 import {
-  Badge,
   Button,
   BulletContent,
   Disclosure,
@@ -484,22 +484,10 @@ export function Models({ s }: { s: State }) {
           >
             <div className="stack model-configuration">
               <div className="row model-identity">
-                <div className="model-icon">
-                  <Icon name={model.remote_provider ? 'cloud' : 'laptop'} />
-                </div>
+                <ModelIcon model={model} />
                 <h3>{model.model}</h3>
               </div>
-              <div>
-                <Badge value={model.remote_provider ? 'Remote provider' : 'Local provider'} />
-              </div>
-              <KeyValues
-                values={[
-                  ['Destination', model.provider_origin],
-                  ['Profile', model.profile],
-                  ['Reasoning', model.reasoning_effort || 'Default'],
-                  ['Timeout', model.timeout],
-                ]}
-              />
+              <p className="small muted">Thinking: {model.reasoning_effort || 'Default'}</p>
             </div>
           </Panel>
         ))}

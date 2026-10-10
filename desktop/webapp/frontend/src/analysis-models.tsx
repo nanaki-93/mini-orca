@@ -88,7 +88,10 @@ export function AnalysisModelSummary({ s, value }: { s: State; value: AnalysisAs
                   }[key]
                 }
               </p>
-              <span className="analysis-assigned-model">{model?.model || 'Model unavailable'}</span>
+              <span className="analysis-assigned-model">
+                {model?.model || 'Model unavailable'}
+                {model && ` · Thinking: ${model.reasoning_effort || 'Default'}`}
+              </span>
             </div>
           </div>
         );
@@ -121,8 +124,8 @@ export function CapturedModels({
               {!compact && spec && <Badge value={spec.remote_provider ? 'Remote' : 'Local'} />}
             </div>
             {!compact && spec && <div className="small muted">{spec.provider_origin}</div>}
-            {!compact && spec?.reasoning_effort && (
-              <div className="small muted">Thinking: {spec.reasoning_effort}</div>
+            {spec && (
+              <div className="small muted">Thinking: {spec.reasoning_effort || 'Default'}</div>
             )}
           </div>
         );

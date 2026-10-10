@@ -1074,9 +1074,6 @@ pre {
 .model-identity {
   align-items: flex-start;
 }
-.model-identity .model-icon {
-  flex-shrink: 0;
-}
 .model-identity h3 {
   min-width: 0;
   margin: 0;
@@ -2062,9 +2059,6 @@ summary .row {
     transition: none;
   }
 }
-.model-icon {
-  color: var(--violet);
-}
 
 .test-status {
   display: inline-flex;
@@ -2089,11 +2083,6 @@ summary .row {
 .test-phases pre {
   min-width: 0;
   margin: 0;
-}
-
-.model-icon svg {
-  width: 35px;
-  height: 35px;
 }
 
 .editor-workspace {

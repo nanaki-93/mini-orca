@@ -80,18 +80,6 @@ export function ModelIcon({ model }: { model?: Model }) {
   );
 }
 
-function choiceDescription(choice: ModelChoice) {
-  const source =
-    choice.source === 'pi'
-      ? `Pi · ${choice.provider}`
-      : choice.provider === 'openai'
-        ? 'OpenAI compatible'
-        : choice.provider;
-  const location =
-    choice.location === 'local' ? 'Local' : choice.location === 'remote' ? 'Remote' : 'CLI managed';
-  return `${source} · ${location}`;
-}
-
 function ModelPicker({
   s,
   label,
@@ -232,14 +220,7 @@ function ModelPicker({
             <ModelIcon model={choice.model} />
             <span className="model-picker-option-copy">
               <strong>{choice.name}</strong>
-              <span>
-                {configuredOnly ? `${choice.model.profile} · ` : ''}
-                {choiceDescription(choice)}
-                {choice.model.reasoning_effort
-                  ? ` · Thinking: ${choice.model.reasoning_effort}`
-                  : ''}
-              </span>
-              {choice.name !== choice.model.model && <small>{choice.model.model}</small>}
+              <span>Thinking: {choice.model.reasoning_effort || 'Default'}</span>
             </span>
             {choice.id === selected && <Icon name="check" />}
           </button>
@@ -305,11 +286,7 @@ export function AgentModel({
         value={value}
         aria-label={inputLabel}
         title={`${label}: ${selected?.name || model?.model || 'Model unavailable'}`}
-        aria-description={
-          selected
-            ? `${selected.name} · ${choiceDescription(selected)}`
-            : model?.model || 'Model unavailable'
-        }
+        aria-description={`Thinking: ${model?.reasoning_effort || 'Default'}`}
         aria-haspopup="dialog"
         disabled={disabled}
         onClick={() => setEditing(true)}
@@ -322,8 +299,8 @@ export function AgentModel({
               (s.availableModels || configuredOnly ? 'Model unavailable' : 'Choose a model')}
           </strong>
           <small>
-            {selected
-              ? choiceDescription(selected)
+            {model
+              ? `Thinking: ${model.reasoning_effort || 'Default'}`
               : s.modelsLoading
                 ? 'Loading model catalog…'
                 : 'Browse available models'}
