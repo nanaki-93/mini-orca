@@ -9,7 +9,20 @@ export async function testThemes({ test, pageFor, nav, idle, layout, contrast })
       const destinations = await sidebar
         .locator('.nav-link')
         .evaluateAll((links) => links.map((link) => link.getAttribute('aria-label')));
-      assert.equal(destinations.length, 18);
+      assert.deepEqual(destinations, [
+        'Overview',
+        'Source',
+        'Chat',
+        'Analysis',
+        'Findings',
+        'Features',
+        'Changes',
+        'Architecture',
+        'Instructions',
+        'Context',
+        'Models',
+        'History',
+      ]);
       const writes = await page.evaluate(() =>
         window.fixture.requests.filter((request) => request.method !== 'GET'),
       );
@@ -31,10 +44,33 @@ export async function testThemes({ test, pageFor, nav, idle, layout, contrast })
       await idle(page);
       assert.equal(
         await sidebar
-          .getByRole('button', { name: 'Bugs', exact: true })
+          .getByRole('button', { name: 'Findings', exact: true })
           .getAttribute('aria-current'),
         'page',
       );
+      await nav(page, 'Security');
+      assert.equal(
+        await sidebar
+          .getByRole('button', { name: 'Findings', exact: true })
+          .getAttribute('aria-current'),
+        'page',
+      );
+      await nav(page, 'Last run');
+      assert.equal(
+        await sidebar
+          .getByRole('button', { name: 'Analysis', exact: true })
+          .getAttribute('aria-current'),
+        'page',
+      );
+      await nav(page, 'Terminal');
+      assert.equal(
+        await page
+          .locator('.statusbar')
+          .getByRole('button', { name: 'Terminal', exact: true })
+          .getAttribute('aria-pressed'),
+        'true',
+      );
+      await nav(page, 'Bugs');
       for (const theme of ['Graphite', 'Porcelain', 'Midnight']) {
         await page.getByRole('button', { name: `${theme} theme`, exact: true }).click();
         await page.setViewportSize({ width: 800, height: 640 });

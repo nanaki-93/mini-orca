@@ -25,25 +25,29 @@ const mainNav: [Page, string, string][] = [
   ['summary', 'Overview', 'grid'],
   ['editor', 'Source', 'code'],
   ['chat', 'Chat', 'chat'],
-  ['changes', 'Changes', 'branch'],
 ];
 const improveNav: typeof mainNav = [
   ['analysis', 'Analysis', 'activity'],
-  ['analysis-files', 'Files', 'folder'],
-  ['analysis-run', 'Last run', 'clock'],
-  ['bugs', 'Bugs', 'bug'],
-  ['performance', 'Performance', 'gauge'],
-  ['security', 'Security', 'shield'],
+  ['bugs', 'Findings', 'bug'],
   ['features', 'Features', 'sparkles'],
+  ['changes', 'Changes', 'branch'],
 ];
 const utilityNav: [Page, string, string][] = [
   ['diagrams', 'Architecture', 'branch'],
   ['instructions', 'Instructions', 'file'],
   ['context', 'Context', 'layers'],
-  ['terminal', 'Terminal', 'terminal'],
   ['models', 'Models', 'layers'],
   ['history', 'History', 'clock'],
-  ['project', 'Project', 'folder'],
+];
+const analysisPages: [Page, string][] = [
+  ['analysis', 'Setup'],
+  ['analysis-files', 'Files & scope'],
+  ['analysis-run', 'Last run'],
+];
+const findingPages: [Page, string][] = [
+  ['bugs', 'Bugs'],
+  ['security', 'Security'],
+  ['performance', 'Performance'],
 ];
 const editorPages: Page[] = [
   'editor',
@@ -72,12 +76,19 @@ function App() {
   );
   const main = useRef<HTMLElement>(null);
   const changeKind = s.change?.kind || s.changeSeed?.kind;
-  const activePage =
+  const workspacePage =
     s.page === 'chat' && ['fix', 'performance', 'security'].includes(changeKind || '')
       ? changeKind === 'fix'
         ? 'bugs'
         : changeKind
       : s.page;
+  const activePage = findingPages.some(([page]) => page === workspacePage)
+    ? 'bugs'
+    : ['analysis', 'analysis-files', 'analysis-preview', 'analysis-run'].includes(
+          workspacePage || '',
+        )
+      ? 'analysis'
+      : workspacePage;
   useEffect(() => {
     void w.start();
     const focus = () => void w.refreshFile();
@@ -145,11 +156,6 @@ function App() {
       >
         <Icon name={icon} />
         <span>{label}</span>
-        {['bugs', 'performance', 'security'].includes(page) && (
-          <span className="nav-count">
-            {s.run?.sections.find((section) => section.category === page)?.finding_count ?? '—'}
-          </span>
-        )}
       </button>
     ));
   const title =
@@ -158,6 +164,20 @@ function App() {
       .split('-')
       .map((word) => word[0].toUpperCase() + word.slice(1))
       .join(' ');
+  const sectionLinks = (items: [Page, string][], label: string) => (
+    <nav className="tabs studio-sections" aria-label={label}>
+      {items.map(([page, name]) => (
+        <button
+          key={page}
+          className={`tab ${s.page === page ? 'active' : ''}`}
+          aria-current={s.page === page ? 'page' : undefined}
+          onClick={() => void w.navigate(page)}
+        >
+          {name}
+        </button>
+      ))}
+    </nav>
+  );
   let content: ReactNode;
   if (s.page === 'models') content = <Models s={s} />;
   else if (s.page === 'project' || s.page === 'welcome' || !s.project)
@@ -285,7 +305,7 @@ function App() {
                 </div>
               )}
               <div className="page" data-accent={s.page}>
-                {activePage === s.page && <ProjectGuidance s={s} />}
+                {workspacePage === s.page && <ProjectGuidance s={s} />}
                 {!['chat', 'changes'].includes(s.page) &&
                   s.change?.workflow &&
                   s.change.state === 'draft' && (
@@ -304,6 +324,10 @@ function App() {
                     {error}
                   </Notice>
                 ))}
+                {analysisPages.some(([page]) => page === s.page) &&
+                  sectionLinks(analysisPages, 'Analysis sections')}
+                {findingPages.some(([page]) => page === s.page) &&
+                  sectionLinks(findingPages, 'Finding categories')}
                 {content}
               </div>
             </main>
@@ -321,6 +345,15 @@ function App() {
                   : 'No project open'}
               </span>
               <div className="statusbar-end">
+                <button
+                  className="row"
+                  disabled={!s.project}
+                  aria-pressed={s.page === 'terminal'}
+                  onClick={() => void w.navigate('terminal')}
+                >
+                  <Icon name="terminal" />
+                  Terminal
+                </button>
                 <span>
                   {s.draft
                     ? `Draft · ${s.dirty ? 'edited' : s.draft.state}`
