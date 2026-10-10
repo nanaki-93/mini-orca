@@ -18,7 +18,7 @@ await build({
   define: { 'process.env.NODE_ENV': '"production"' },
 });
 await copyFile(path.join(root, 'index.html'), path.join(output, 'index.html'));
-for (const theme of ['graphite', 'porcelain', 'midnight', 'signal']) {
+for (const theme of ['graphite', 'porcelain', 'midnight', 'signal', 'crimson-violet']) {
   await copyFile(
     path.join(branding, theme, 'ui/mo-mark.svg'),
     path.join(output, `mo-mark-${theme}.svg`),
