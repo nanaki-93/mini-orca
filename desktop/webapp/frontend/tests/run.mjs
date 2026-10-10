@@ -706,9 +706,9 @@ async function analysisSections(page) {
   assert.ok(box.x >= bounds.x && box.x + box.width <= bounds.x + bounds.width + 1);
   checks++;
 }
-async function analysisSettingsFields(page, columns, expanded) {
+async function analysisSettingsFields(page) {
   const settings = page.locator('.analysis-run-settings');
-  for (const selector of ['.analysis-operation', ...(expanded ? ['input[type="number"]'] : [])]) {
+  for (const selector of ['.analysis-operation', 'input[type="number"]']) {
     const controls = settings.locator(selector);
     assert.equal(await controls.count(), selector.includes('operation') ? 4 : 3);
     const boxes = [];
@@ -834,7 +834,7 @@ async function capturedDetails(panel, expected) {
 async function analysisOverflow(page) {
   const overflowing = await page
     .locator(
-      '#main, .page, .workspace-page, .analysis-sections, .analysis-sections .panel, .analysis-sections .panel-head, .analysis-sections .panel-body, .workspace-page > .toolbar, .analysis-last-run .three-columns, .analysis-last-run .three-columns > div',
+      '#main, .page, .workspace-page, .analysis-run-settings, .analysis-run-settings .panel-pad, .analysis-settings-fields, .analysis-model-summary, .workspace-page > .toolbar, .analysis-last-run .three-columns, .analysis-last-run .three-columns > div',
     )
     .evaluateAll((elements) =>
       elements
@@ -895,7 +895,6 @@ async function contrast(page, name) {
       '.captured-model-name',
       '.analysis-operation strong',
       '.analysis-operation-description',
-      '.analysis-settings-intro',
       '.analysis-model-trigger small',
       '.model-picker-option-copy > span',
       '.model-picker-option-copy small',
@@ -2693,31 +2692,20 @@ try {
             const intro = page.locator('.page-heading--intro');
             await headingContainment(intro);
 
-            assert.equal(
-              await intro
-                .locator('p')
-                .evaluate(
-                  (detail) =>
-                    getComputedStyle(detail).fontFamily ===
-                    getComputedStyle(detail.parentElement.querySelector('h1')).fontFamily,
-                ),
-              true,
-              'Task detail retains ordinary heading typography',
-            );
-            const launch = page.locator('.analysis-launch');
-            assert.deepEqual(await launch.getByRole('button').allTextContents(), [
-              'View run',
-              'Prepare analysis',
-              'Repair analysis',
+            assert.equal(await intro.locator('p').count(), 0);
+            assert.deepEqual(await intro.getByRole('button').allTextContents(), [
               'Refresh',
+              'Repair analysis',
+              'Prepare analysis',
             ]);
-            assert.equal(await launch.locator('.button.primary').innerText(), 'Prepare analysis');
-            for (const removed of ['Files', 'Explore features'])
-              assert.equal(
-                await intro.getByRole('button', { name: removed, exact: true }).count(),
-                0,
-              );
-            assert.equal(await launch.locator('.heading-action-group').count(), 2);
+            assert.equal(await intro.locator('.button.primary').innerText(), 'Prepare analysis');
+            assert.equal(
+              await page.getByRole('button', { name: 'View run', exact: true }).count(),
+              0,
+            );
+            const headingBox = await intro.boundingBox();
+            const settingsBox = await page.locator('.analysis-run-settings').boundingBox();
+            assert.ok(headingBox.y + headingBox.height <= settingsBox.y);
             await layout(page, `analysis-introduction-repair-${suffix}`);
           }
         }
@@ -2738,15 +2726,18 @@ try {
       await close();
     }
   });
-  await test('Analysis setup shares Summary panel treatment and full-width section rhythm', async () => {
+  await test('Analysis keeps all options visible in one responsive section', async () => {
     for (const empty of [false, true]) {
       const { page, close } = await pageFor({ empty });
       try {
         await nav(page, 'Analysis');
         await idle(page);
-        const disclosure = page.locator('.analysis-sections details');
-        const summary = disclosure.locator('summary');
-        assert.equal(await disclosure.getAttribute('open'), null, 'Limits start collapsed');
+        assert.equal(await page.locator('.analysis-setup details').count(), 0);
+        assert.equal(await page.locator('.analysis-setup .panel').count(), 1);
+        assert.equal(
+          await page.getByRole('heading', { name: 'Analysis setup', exact: true }).count(),
+          0,
+        );
         for (const [label, value, min, max] of [
           ['Files per batch', '20', '1', '500'],
           ['Time budget · seconds', '1800', '1', '3600'],
@@ -2769,21 +2760,17 @@ try {
               const text = page.getByRole('button', { name: 'Larger text', exact: true });
               if ((await text.getAttribute('aria-pressed')) !== String(large))
                 await text.evaluate((button) => button.click());
-              for (const expanded of [false, true]) {
-                if ((await disclosure.getAttribute('open')) !== (expanded ? '' : null))
-                  await summary.click();
-                await analysisSections(page, !empty);
-                await analysisSettingsFields(
-                  page,
-                  width === 1440 || (width === 1280 && !large) ? 3 : 1,
-                  expanded,
-                );
-                await analysisOverflow(page);
-                await layout(
-                  page,
-                  `analysis-sections-${empty ? 'no-run' : 'saved-run'}-${width}-${theme}-${large ? 'large' : 'default'}-${expanded ? 'expanded' : 'collapsed'}`,
-                );
-              }
+              await analysisSections(page);
+              await analysisSettingsFields(page);
+              const fields = await page.locator('.analysis-settings-fields').boundingBox();
+              const operations = await page.locator('.analysis-model-summary').boundingBox();
+              assert.ok(fields.y + fields.height < operations.y);
+              await analysisOverflow(page);
+              await contrast(page, 'Analysis visible options');
+              await layout(
+                page,
+                `analysis-sections-${empty ? 'no-run' : 'saved-run'}-${width}-${theme}-${large ? 'large' : 'default'}`,
+              );
             }
           }
         }
@@ -2804,7 +2791,7 @@ try {
         await page.getByRole('button', { name: 'Prepare analysis', exact: true }).isDisabled(),
         true,
       );
-      await page.getByText('— eligible files selected', { exact: true }).waitFor();
+      assert.equal(await page.getByText(/eligible files selected/).count(), 0);
       await nav(page, 'Files');
       await page
         .getByRole('heading', { name: 'File selection unavailable', exact: true })
@@ -3239,38 +3226,30 @@ try {
       await chooseModel(review, 'bug');
       await chooseModel(features, 'function');
       await nav(page, 'Analysis');
-      const disclosure = page.locator('.analysis-sections details');
-      const summary = disclosure.locator('summary');
-      await summary.focus();
-      assert.equal(await summary.evaluate((control) => control === document.activeElement), true);
-      await contrast(page, 'Analysis limits disclosure keyboard focus');
-      await page.keyboard.press('Enter');
-      assert.notEqual(await disclosure.getAttribute('open'), null);
-      await page.keyboard.press('Tab');
       const batch = page.getByLabel('Files per batch', { exact: true });
       const budget = page.getByLabel('Time budget · seconds', { exact: true });
       const attempts = page.getByLabel('Attempts per stage', { exact: true });
       const refresh = page.getByLabel('Refresh previously analyzed files', { exact: true });
-      assert.equal(await batch.evaluate((control) => control === document.activeElement), true);
+      await batch.focus();
+      await contrast(page, 'Analysis batch field keyboard focus');
+      await page.keyboard.press('Tab');
+      assert.equal(await budget.evaluate((control) => control === document.activeElement), true);
       await batch.fill('37');
       await budget.fill('900');
       await attempts.fill('3');
       await refresh.check();
-      await summary.focus();
-      await page.keyboard.press('Space');
-      assert.equal(await disclosure.getAttribute('open'), null);
-      await page.keyboard.press('Enter');
-      assert.notEqual(await disclosure.getAttribute('open'), null);
+      await nav(page, 'Models');
+      await page.getByRole('button', { name: 'Back to workspace', exact: true }).click();
       assert.equal(await batch.inputValue(), '37');
       assert.equal(await budget.inputValue(), '900');
       assert.equal(await attempts.inputValue(), '3');
       assert.equal(await refresh.isChecked(), true);
-      await analysisSettingsFields(page, 3, true);
+      await analysisSettingsFields(page);
       await layout(page, 'analysis-settings-long-options-expanded');
       assert.deepEqual(
         await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
         before,
-        'Setup, limits and disclosure edits permit polling reads only',
+        'Setup and limit edits permit polling reads only',
       );
       assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
       await page.evaluate(() => {
@@ -3286,7 +3265,6 @@ try {
       for (const control of [code, review, security, features])
         assert.equal(await control.isDisabled(), true);
       await nav(page, 'Analysis');
-      await page.locator('.analysis-sections summary').click();
       for (const name of ['Prepare analysis', 'Repair analysis', 'Refresh'])
         assert.equal(await page.getByRole('button', { name, exact: true }).isDisabled(), true);
       for (const control of [batch, budget, attempts, refresh])
@@ -3363,7 +3341,7 @@ try {
         await page.getByRole('button', { name: 'Prepare analysis', exact: true }).isDisabled(),
         false,
       );
-      await analysisSettingsFields(page, 3, false);
+      await analysisSettingsFields(page);
     } finally {
       await close();
     }
@@ -3374,7 +3352,6 @@ try {
       await nav(page, 'Analysis');
       await chooseModel(page.getByLabel('Performance model', { exact: true }), 'function');
       await chooseModel(page.getByLabel('Security model', { exact: true }), 'bug');
-      await page.locator('.analysis-run-settings summary').click();
       await page.getByLabel('Files per batch', { exact: true }).fill('37');
       await nav(page, 'Files');
       await page.getByLabel('Include internal/worker/process.go', { exact: true }).uncheck();
@@ -3455,7 +3432,7 @@ try {
         const before = await page.evaluate(() =>
           window.fixture.requests.filter((request) => request.method !== 'GET'),
         );
-        await page.getByRole('button', { name: 'View run', exact: true }).click();
+        await nav(page, 'Last run');
         await page.getByRole('heading', { name: 'Project analysis', exact: true }).waitFor();
         await page.getByText('Run details', { exact: true }).click();
         const runPanel = page.locator('section.panel').filter({
@@ -3550,7 +3527,7 @@ try {
           );
           await chooseModel(page.getByLabel('Feature discovery model'), 'analyze');
           await nav(page, 'Analysis');
-          await page.getByRole('button', { name: 'View run', exact: true }).click();
+          await nav(page, 'Last run');
           await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
         } else {
           await chooseModel(page.getByLabel('Feature discovery model'), 'function');
@@ -3751,7 +3728,7 @@ try {
       try {
         await nav(page, 'Analysis');
         await idle(page);
-        await page.getByRole('button', { name: 'View run', exact: true }).click();
+        await nav(page, 'Last run');
         await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
         await idle(page);
         const calls = await page.evaluate(() =>
@@ -3838,7 +3815,7 @@ try {
       }
     }
   });
-  await test('Analysis last-run status preserves eligibility and passive View run navigation', async () => {
+  await test('Analysis last-run status preserves eligibility and passive Last run navigation', async () => {
     for (const status of ['running', 'paused', 'interrupted', 'failed', 'completed']) {
       for (const hasRecovery of [false, true]) {
         const { page, close } = await pageFor({ runStatus: status, hasRecovery });
@@ -3904,7 +3881,6 @@ try {
             { exact: true },
           )
           .waitFor();
-        await page.locator('.analysis-run-settings summary').click();
         await page.getByLabel('Time budget · seconds', { exact: true }).fill('1800');
         await chooseModel(page.getByLabel('Bug analysis model'), 'function');
         await layout(page, `analysis-setup-${status}-continuation`);
@@ -4001,7 +3977,13 @@ try {
       false,
     );
     await layout(page, 'analysis-preview');
-    assert.equal(await page.getByRole('checkbox').count(), 0);
+    assert.equal(
+      await page
+        .getByRole('dialog', { name: 'Analysis preview', exact: true })
+        .getByRole('checkbox')
+        .count(),
+      0,
+    );
     await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
     await page
       .getByRole('dialog')
@@ -4026,7 +4008,13 @@ try {
     await idle(page);
     await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
     await idle(page);
-    assert.equal(await page.getByRole('checkbox').count(), 0);
+    assert.equal(
+      await page
+        .getByRole('dialog', { name: 'Analysis preview', exact: true })
+        .getByRole('checkbox')
+        .count(),
+      0,
+    );
     assert.equal(
       await page.getByText("Resuming keeps this run's model choices.").isVisible(),
       true,
@@ -4079,7 +4067,13 @@ try {
     );
     assert.equal(previews.length, 1);
     assert.deepEqual(previews.at(-1).body.models, choices);
-    assert.equal(await page.getByRole('checkbox').count(), 0);
+    assert.equal(
+      await page
+        .getByRole('dialog', { name: 'Analysis preview', exact: true })
+        .getByRole('checkbox')
+        .count(),
+      0,
+    );
     await layout(page, 'analysis-captured-preview');
     await page.setViewportSize({ width: 800, height: 900 });
     await page.getByRole('button', { name: 'Larger text' }).evaluate((button) => button.click());
@@ -4174,7 +4168,7 @@ try {
     );
     assert.equal(await page.evaluate(() => window.fixture.state.run.features.status), 'running');
     await nav(page, 'Analysis');
-    await page.getByRole('button', { name: 'View run', exact: true }).click();
+    await nav(page, 'Last run');
     await page.evaluate(() => {
       window.fixture.state.run.status = 'partial';
       window.fixture.state.run.features.status = 'failed';
@@ -4238,7 +4232,7 @@ try {
       });
       try {
         await nav(page, 'Analysis');
-        await page.getByRole('button', { name: 'View run', exact: true }).click();
+        await nav(page, 'Last run');
         const workspace = page.locator('.analysis-run');
         const heading = workspace.locator('.page-heading--intro');
         await heading.getByText(status, { exact: true }).waitFor();
@@ -4450,7 +4444,7 @@ try {
     });
     try {
       await nav(page, 'Analysis');
-      await page.getByRole('button', { name: 'View run', exact: true }).click();
+      await nav(page, 'Last run');
       const workspace = page.locator('.analysis-run');
       await workspace.getByText('Run details', { exact: true }).click();
       const models = workspace.locator('.analysis-run-models');
@@ -4550,7 +4544,7 @@ try {
       const { page, close } = await pageFor({ runStatus: status });
       try {
         await nav(page, 'Analysis');
-        await page.getByRole('button', { name: 'View run', exact: true }).click();
+        await nav(page, 'Last run');
         const identity = await page.evaluate(() => {
           window.fixture.hold = '/api/projects/current/analysis/run/control';
           return window.fixture.state.run.identity;
@@ -4597,7 +4591,7 @@ try {
     const { page, close } = await pageFor({ runStatus: 'running' });
     try {
       await nav(page, 'Analysis');
-      await page.getByRole('button', { name: 'View run', exact: true }).click();
+      await nav(page, 'Last run');
       await page.evaluate(() => {
         window.fixture.state.run = null;
       });
@@ -4650,7 +4644,7 @@ try {
       window.fixture.state.run.files[0].stages[1].status = 'running';
     });
     await nav(page, 'Analysis');
-    await page.getByRole('button', { name: 'View run', exact: true }).click();
+    await nav(page, 'Last run');
     await page
       .getByRole('status', { name: 'Current analysis step' })
       .getByText('Performance · internal/worker/process.go', { exact: true })

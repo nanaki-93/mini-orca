@@ -724,9 +724,6 @@ pre {
   align-content: start;
   min-width: 0;
 }
-.analysis-sections {
-  grid-template-columns: minmax(0, 1fr);
-}
 .analysis-preview-layout,
 .analysis-preview-layout > .stack {
   gap: 20px;
@@ -739,17 +736,32 @@ pre {
 }
 .analysis-run-settings .analysis-settings-fields {
   grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
 }
-.analysis-run-settings .analysis-settings-fields > label {
-  min-width: 0;
+.analysis-setting {
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: 1fr auto auto;
+  gap: 8px;
+  min-width: 0;
   overflow-wrap: anywhere;
 }
-.analysis-settings-intro {
-  margin: 0 0 18px;
-  color: var(--secondary);
-  font-size: 0.88rem;
+.analysis-setting label {
+  color: var(--text);
+  font-weight: 600;
+}
+.analysis-setting input {
+  font-variant-numeric: tabular-nums;
+}
+.analysis-setting small {
+  font-size: 0.78rem;
+}
+.analysis-refresh-option {
+  margin: 22px 0;
+}
+@container (min-width: 40em) {
+  .analysis-run-settings .analysis-settings-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 .analysis-model-selectors {
   display: grid;
@@ -898,9 +910,6 @@ pre {
   .captured-models,
   .analysis-run-categories {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-  .analysis-run-settings .analysis-settings-fields {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 .run-result-summary {

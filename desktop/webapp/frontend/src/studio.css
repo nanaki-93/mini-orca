@@ -798,50 +798,34 @@ svg.icon {
   }
 }
 .analysis-setup .analysis-run-settings {
-  border: 0;
-  background: transparent;
+  background: var(--panel);
 }
-.analysis-setup .analysis-run-settings > .panel-head {
-  padding: 0 0 14px;
-  border: 0;
-}
-.analysis-setup .analysis-run-settings > .panel-body {
-  padding: 0;
-}
-.analysis-setup .analysis-settings-intro {
-  margin-bottom: 18px;
+.analysis-setup .analysis-run-settings > .panel-pad {
+  padding: 24px;
 }
 .analysis-model-summary {
-  gap: 14px;
+  gap: 20px 28px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
 }
 .analysis-model-summary .analysis-operation {
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  gap: 10px;
+  padding: 0;
+  gap: 12px;
+}
+.analysis-model-summary .analysis-operation > .icon {
+  margin-top: 3px;
+  color: var(--accent);
 }
 .analysis-model-summary .analysis-operation > div {
   flex: 1;
 }
+.analysis-model-summary p {
+  margin: 0;
+}
 .analysis-assigned-model {
   display: block;
-  border-top: 1px solid var(--line);
-  margin-top: 9px;
-  padding-top: 10px;
   font-size: 0.85rem;
-  color: var(--muted);
-}
-.analysis-launch {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  justify-content: space-between;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-}
-.analysis-launch .heading-action-group {
-  justify-content: flex-start;
+  color: var(--secondary);
 }
 .analysis-progress {
   background: transparent;
