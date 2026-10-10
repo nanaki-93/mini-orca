@@ -7,6 +7,8 @@ import {
   Disclosure,
   Empty,
   Heading,
+  Icon,
+  Overlay,
   Notice,
   Panel,
   Prose,
@@ -68,6 +70,7 @@ export function Features({ s }: { s: State }) {
   const report = s.features;
   const [goals, setGoals] = useState(report?.goals || '');
   const [filter, setFilter] = useState('active');
+  const [selected, setSelected] = useState<string>();
   useEffect(() => setGoals(report?.goals || ''), [report?.goals]);
   const suggestions = report?.suggestions.filter(
     (idea) =>
@@ -92,7 +95,7 @@ export function Features({ s }: { s: State }) {
           Refresh suggestions
         </Button>
       </Heading>
-      <Panel title="Project goals">
+      <Disclosure title="Project goals">
         <label className="block">
           Goals
           <textarea
@@ -120,7 +123,7 @@ export function Features({ s }: { s: State }) {
             {report?.suggestions?.length ? 'Search more feature suggestions' : 'Suggest features'}
           </Button>
         </div>
-      </Panel>
+      </Disclosure>
       <FeatureFailure s={s} />
       {s.featureGenerationRequested && report?.status === 'ready' && outcome && (
         <Notice>
@@ -159,62 +162,79 @@ export function Features({ s }: { s: State }) {
       ) : (
         <div className="feature-grid">
           {suggestions?.map((idea) => (
-            <Panel
-              key={idea.id}
-              title={idea.title}
-              actions={
-                <div className="actions">
-                  {idea.freshness === 'stale' && <Badge value="stale" />}
-                  <Badge value={idea.status} />
-                </div>
-              }
-            >
-              <Prose text={idea.benefit} />
-              <p className="small muted">Estimated effort: {idea.effort}</p>
-              <Disclosure title="Why this fits the project">
-                <Prose text={idea.evidence} />
-                <BulletContent title="Suggested file scope" items={idea.paths} />
-              </Disclosure>
-              <BulletContent title="Acceptance criteria" items={idea.acceptance_criteria} />
-              <div className="actions section-gap">
-                <Button
-                  disabled={
-                    !!s.busy || activeChangeWorkflow(s.change) || idea.freshness === 'stale'
-                  }
-                  onClick={() => w.discussFeature(idea, true)}
-                >
-                  Configure workflow
-                </Button>
-                <Button
-                  tone="primary"
-                  disabled={
-                    !!s.busy || activeChangeWorkflow(s.change) || idea.freshness === 'stale'
-                  }
-                  onClick={() => w.discussFeature(idea)}
-                >
-                  Discuss in chat
-                </Button>
-                <Button
-                  disabled={!!s.busy}
-                  onClick={() =>
-                    void w.setFeatureStatus(idea.id, idea.status === 'saved' ? 'open' : 'saved')
-                  }
-                >
-                  {idea.status === 'saved' ? 'Unsave' : 'Save idea'}
-                </Button>
-                <Button
-                  disabled={!!s.busy}
-                  onClick={() =>
-                    void w.setFeatureStatus(
-                      idea.id,
-                      idea.status === 'dismissed' ? 'open' : 'dismissed',
-                    )
-                  }
-                >
-                  {idea.status === 'dismissed' ? 'Reopen' : 'Dismiss'}
-                </Button>
-              </div>
-            </Panel>
+            <div key={idea.id}>
+              <button
+                className="studio-list-row feature-row"
+                onClick={() => setSelected(idea.id)}
+                aria-haspopup="dialog"
+              >
+                <span className="studio-row-icon">
+                  <Icon name="sparkles" />
+                </span>
+                <span className="studio-row-copy">
+                  <strong>{idea.title}</strong>
+                  <span>{idea.benefit}</span>
+                  <small>Estimated effort: {idea.effort} · Advisory</small>
+                </span>
+                {idea.freshness === 'stale' && <Badge value="stale" />}
+                <Badge value={idea.status} />
+                <Icon name="chevron" />
+              </button>
+              {selected === idea.id && (
+                <Overlay title={idea.title} onClose={() => setSelected(undefined)}>
+                  <Panel title={idea.title} className="feature-detail">
+                    <Prose text={idea.benefit} />
+                    <p className="small muted">Estimated effort: {idea.effort}</p>
+                    <Disclosure title="Why this fits the project">
+                      <Prose text={idea.evidence} />
+                      <BulletContent title="Suggested file scope" items={idea.paths} />
+                    </Disclosure>
+                    <BulletContent title="Acceptance criteria" items={idea.acceptance_criteria} />
+                    <div className="actions section-gap">
+                      <Button
+                        disabled={
+                          !!s.busy || activeChangeWorkflow(s.change) || idea.freshness === 'stale'
+                        }
+                        onClick={() => w.discussFeature(idea, true)}
+                      >
+                        Configure workflow
+                      </Button>
+                      <Button
+                        tone="primary"
+                        disabled={
+                          !!s.busy || activeChangeWorkflow(s.change) || idea.freshness === 'stale'
+                        }
+                        onClick={() => w.discussFeature(idea)}
+                      >
+                        Discuss in chat
+                      </Button>
+                      <Button
+                        disabled={!!s.busy}
+                        onClick={() =>
+                          void w.setFeatureStatus(
+                            idea.id,
+                            idea.status === 'saved' ? 'open' : 'saved',
+                          )
+                        }
+                      >
+                        {idea.status === 'saved' ? 'Unsave' : 'Save idea'}
+                      </Button>
+                      <Button
+                        disabled={!!s.busy}
+                        onClick={() =>
+                          void w.setFeatureStatus(
+                            idea.id,
+                            idea.status === 'dismissed' ? 'open' : 'dismissed',
+                          )
+                        }
+                      >
+                        {idea.status === 'dismissed' ? 'Reopen' : 'Dismiss'}
+                      </Button>
+                    </div>
+                  </Panel>
+                </Overlay>
+              )}
+            </div>
           ))}
         </div>
       )}

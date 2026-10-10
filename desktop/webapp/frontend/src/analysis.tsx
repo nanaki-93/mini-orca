@@ -79,63 +79,12 @@ export function Analysis({ s }: { s: State }) {
     void w.previewAnalysis(mode, limits, refresh, models);
   };
   return (
-    <div className="workspace-page">
+    <div className="workspace-page analysis-setup">
       <Heading
         variant="intro"
         title="Analysis"
         detail={`${s.selection?.files.filter((f) => !f.reason && !excluded.includes(f.path)).length ?? '—'} eligible files selected`}
-      >
-        <div className="actions heading-action-group">
-          <Go page="analysis-run" icon="activity">
-            View run
-          </Go>
-          <Go page="analysis-files" icon="folder">
-            Files & scope
-          </Go>
-          <StaleAnalysisButton s={s} />
-          <Button
-            tone="primary"
-            icon="play"
-            disabled={
-              !!s.busy || (!continuation && (!s.selection || !s.models || activeRun(s.run)))
-            }
-            onClick={() =>
-              continuation
-                ? void w.previewAnalysis('resume', continuation.plan.limits)
-                : preview('new')
-            }
-          >
-            {continuation ? 'Prepare continuation' : 'Prepare analysis'}
-          </Button>
-          {hasRepair && (
-            <Button
-              icon="play"
-              disabled={!!s.busy || !s.selection || !s.models || activeRun(s.run)}
-              title="Repair does not change code. It re-attempts unfinished analysis work."
-              onClick={() => preview('repair')}
-            >
-              Repair analysis
-            </Button>
-          )}
-        </div>
-        <div className="actions heading-action-group">
-          <Button
-            icon="sparkles"
-            disabled={!!s.busy}
-            title={s.busy ? 'Cannot search while another operation is running.' : undefined}
-            onClick={() => void w.searchFeatures('Analysis', s.features?.goals || '')}
-          >
-            Search more feature suggestions
-          </Button>
-          <Button
-            disabled={!!s.busy}
-            icon="refresh"
-            onClick={() => void w.act('Refresh files', () => w.refreshProject())}
-          >
-            Refresh
-          </Button>
-        </div>
-      </Heading>
+      ></Heading>
 
       {continuation && (
         <Notice>
@@ -192,6 +141,59 @@ export function Analysis({ s }: { s: State }) {
         </Panel>
       </div>
 
+      <div className="analysis-launch">
+        {' '}
+        <div className="actions heading-action-group">
+          <Go page="analysis-run" icon="activity">
+            View run
+          </Go>
+          <Go page="analysis-files" icon="folder">
+            Files & scope
+          </Go>
+          <StaleAnalysisButton s={s} />
+          <Button
+            tone="primary"
+            icon="play"
+            disabled={
+              !!s.busy || (!continuation && (!s.selection || !s.models || activeRun(s.run)))
+            }
+            onClick={() =>
+              continuation
+                ? void w.previewAnalysis('resume', continuation.plan.limits)
+                : preview('new')
+            }
+          >
+            {continuation ? 'Prepare continuation' : 'Prepare analysis'}
+          </Button>
+          {hasRepair && (
+            <Button
+              icon="play"
+              disabled={!!s.busy || !s.selection || !s.models || activeRun(s.run)}
+              title="Repair does not change code. It re-attempts unfinished analysis work."
+              onClick={() => preview('repair')}
+            >
+              Repair analysis
+            </Button>
+          )}
+        </div>
+        <div className="actions heading-action-group">
+          <Button
+            icon="sparkles"
+            disabled={!!s.busy}
+            title={s.busy ? 'Cannot search while another operation is running.' : undefined}
+            onClick={() => void w.searchFeatures('Analysis', s.features?.goals || '')}
+          >
+            Search more feature suggestions
+          </Button>
+          <Button
+            disabled={!!s.busy}
+            icon="refresh"
+            onClick={() => void w.act('Refresh files', () => w.refreshProject())}
+          >
+            Refresh
+          </Button>
+        </div>
+      </div>
       {changed && (
         <Notice>
           File selection has unsaved changes.{' '}
@@ -275,7 +277,19 @@ export function AnalysisFiles({ s }: { s: State }) {
           )}
         </div>
       </div>
-      <div className="panel table-wrap">
+      {s.change && (
+        <section className="context-task">
+          <h2>Current task · {s.change.targets.length} of 8 paths</h2>
+          {s.change.targets.map((target) => (
+            <div className="studio-list-row" key={target.path}>
+              <Icon name="file" />
+              <code>{target.path}</code>
+              <span className="muted">{target.exists ? 'Captured source' : 'New file'}</span>
+            </div>
+          ))}
+        </section>
+      )}
+      <div className="panel table-wrap context-files">
         <table>
           <thead>
             <tr>
@@ -617,6 +631,28 @@ export function AnalysisRun({ s }: { s: State }) {
           </div>
         )}
       </Panel>
+      <div className="run-category-list">
+        {run.sections.map((section) => (
+          <button
+            className="studio-list-row"
+            key={section.category}
+            onClick={() => void w.navigate(section.category as 'bugs' | 'performance' | 'security')}
+          >
+            <StatusDot value={section.status} />
+            <strong className="studio-row-copy">{human(section.category)}</strong>
+            <span>
+              {section.finding_count ?? '—'} suggestions · {human(section.status)}
+            </span>
+            <Icon name="chevron" />
+          </button>
+        ))}
+      </div>
+      <div className="actions">
+        <Go page="bugs" tone="primary" icon="arrow">
+          Open findings
+        </Go>
+        <Go page="features">Feature ideas</Go>
+      </div>
       <Disclosure title="Run details">
         <div className="stack analysis-run-details">
           <div className="grid analysis-run-categories">

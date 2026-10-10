@@ -67,4 +67,36 @@ export async function testStudio({ test, pageFor, nav, idle, layout }) {
       await close();
     }
   });
+  await test('Studio findings, feature dialogs and analysis preview keep context', async () => {
+    const { page, close } = await pageFor({ featuresReady: true });
+    try {
+      await nav(page, 'Bugs');
+      await page.locator('.result-row').first().click();
+      await page.locator('.results-detail').waitFor();
+      assert.equal(await page.locator('.result-list').isVisible(), true);
+      await layout(page, 'studio-inline-finding');
+      await nav(page, 'Features');
+      await page.locator('.feature-row').first().click();
+      await page.getByRole('dialog').waitFor();
+      await layout(page, 'studio-feature-dialog');
+      await page.keyboard.press('Escape');
+      await nav(page, 'Analysis');
+      await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+      const preview = page.getByRole('dialog', { name: 'Analysis preview', exact: true });
+      await preview.waitFor();
+      assert.equal(await page.locator('.analysis-setup').isVisible(), true);
+      await layout(page, 'studio-analysis-preview');
+      await page.keyboard.press('Escape');
+      assert.equal(
+        await page.evaluate(() =>
+          window.fixture.requests.some(
+            (r) => r.path.endsWith('/analysis/runs') && r.method === 'POST',
+          ),
+        ),
+        false,
+      );
+    } finally {
+      await close();
+    }
+  });
 }

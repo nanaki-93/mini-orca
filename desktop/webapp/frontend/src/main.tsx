@@ -60,7 +60,8 @@ const themes = [
 function App() {
   const live = useSyncExternalStore(w.subscribe, w.snapshot);
   const lastPage = useRef<Page>(live.project ? 'summary' : 'welcome');
-  const overlay = ['search', 'project', 'terminal'].includes(live.page) && !!live.project;
+  const overlay =
+    ['search', 'project', 'terminal', 'analysis-preview'].includes(live.page) && !!live.project;
   if (!overlay) lastPage.current = live.page;
   const s = overlay ? { ...live, page: lastPage.current } : live;
   const closeOverlay = () => void w.navigate(lastPage.current);
@@ -371,6 +372,11 @@ function App() {
           </div>
         </div>
       </div>
+      {live.page === 'analysis-preview' && (
+        <Overlay title="Analysis preview" onClose={closeOverlay}>
+          <AnalysisPreview s={live} />
+        </Overlay>
+      )}
       {live.page === 'search' && live.project && (
         <Overlay title="Search files and commands" onClose={closeOverlay}>
           <SearchPage s={live} />
