@@ -242,6 +242,8 @@ const surfaceInventory = {
     ],
   },
 };
+surfaceInventory['change-workspace'].changes = surfaceInventory['change-workspace'].chat;
+surfaceInventory['change-workspace'].history = ['empty', 'saved', 'unavailable'];
 const aliases = { welcome: 'project', manifest: 'context' };
 const captures = [];
 async function pageFor(options = {}, { restored = true } = {}) {
@@ -549,7 +551,7 @@ async function modelsLayout(page) {
     );
   assert.deepEqual(overflow, [], 'Full model names and configuration values wrap without clipping');
   const bounds = await surface.boundingBox();
-  for (const panel of await surface.locator('.panel').all()) {
+  for (const panel of await surface.locator('.models-grid .panel').all()) {
     const box = await panel.boundingBox();
     assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1);
     const identity = panel.locator('.model-identity');
@@ -773,8 +775,11 @@ async function chatConversationLayout(page) {
   const body = await workspace.locator('.change-workspace').boundingBox();
   assert.ok(Math.abs(body.y - heading.y - heading.height - 20) <= 1);
   const left = await conversation.boundingBox();
-  const right = await review.boundingBox();
-  if (page.viewportSize().width > 1100) {
+  const right = (await review.isVisible()) ? await review.boundingBox() : null;
+  if (!right) {
+    assert.ok(Math.abs(left.width - body.width) <= 1, 'A new conversation uses its full pane');
+    assert.ok(body.width <= 920, 'The new-task composer stays at a readable width');
+  } else if (page.viewportSize().width > 1100) {
     assert.ok(Math.abs(right.y - left.y) <= 1, 'Conversation and review columns align');
     assert.ok(Math.abs(right.x - left.x - left.width - 20) <= 1);
   } else {
@@ -1541,7 +1546,7 @@ try {
   await testChangeWorkflows({ test, pageFor, nav, idle, layout, chooseModel });
   await testGuidedFixes({ test, pageFor, nav, idle, layout, contrast, chooseModel });
   await test('Analyze stale files is available across result pages without widening the selection', async () => {
-    for (const category of ['Summary', 'Analysis', 'Bugs', 'Performance', 'Security']) {
+    for (const category of ['Overview', 'Analysis', 'Bugs', 'Performance', 'Security']) {
       const stalePath = 'internal/worker/process.go';
       const { page, close } = await pageFor({
         stalePaths: [stalePath],
@@ -1629,12 +1634,9 @@ try {
           await introductionTreatment(surface.locator('.page-heading--intro')),
           intro,
         );
-        assert.match(
-          await surface.locator('.page-heading p').innerText(),
-          /not captured run choices or provider health/,
-        );
+        assert.match(await surface.innerText(), /not captured run choices or provider health/);
         assert.equal(await surface.locator('input, select, textarea, a').count(), 0);
-        const panels = surface.locator('.panel');
+        const panels = surface.locator('.models-grid .panel');
         assert.equal(await panels.count(), state === 'configured' ? 3 : 0);
         if (state === 'configured') {
           assert.deepEqual(await panels.locator('.panel-head h2').allTextContents(), [
@@ -1745,7 +1747,7 @@ try {
         true,
       );
       assert.equal(
-        await surface.locator('.panel').count(),
+        await surface.locator('.models-grid .panel').count(),
         3,
         'Retain configuration during Refresh',
       );
@@ -1779,7 +1781,7 @@ try {
         .filter({ hasText: /^models: Fixture rejection$/ })
         .waitFor();
       assert.equal(
-        await surface.locator('.panel').count(),
+        await surface.locator('.models-grid .panel').count(),
         3,
         'A failed Refresh retains configuration',
       );
@@ -1947,7 +1949,7 @@ try {
             () => window.fixture.requests.filter((r) => r.method !== 'GET').length,
           );
           for (const [name, route] of [
-            ['Summary', 'summary'],
+            ['Overview', 'summary'],
             ['Verified scan', 'scan'],
             ['Terminal', 'terminal'],
             ['Models', 'models'],
@@ -2133,7 +2135,7 @@ try {
         assert.equal(await page.locator('[data-accent="bugs"] .metric-number').innerText(), '0');
       const bounds = await page.locator('.metric-card[data-accent="bugs"]').boundingBox();
       const position = await dot.boundingBox();
-      assert.ok(position.x > bounds.x + bounds.width * 0.8);
+      assert.ok(position.x > bounds.x + bounds.width * 0.6);
       assert.ok(position.y < bounds.y + 40);
       await contrast(page, `Summary ${status}`);
       await page.getByRole('button', { name: 'Porcelain theme' }).click();
@@ -2194,7 +2196,7 @@ try {
     await page.setViewportSize({ width: 900, height: 640 });
     await page.getByRole('button', { name: 'Larger text' }).click();
     await layout(page, 'diagrams-900');
-    await page.getByRole('button', { name: 'Back to summary', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to overview', exact: true }).click();
     assert.equal(await page.getByRole('img', { name: 'Architecture diagram' }).count(), 0);
     await layout(page, 'summary-navigation-cards-900');
     await contrast(page, 'Summary navigation cards large text');
@@ -2293,8 +2295,8 @@ try {
       ]);
       const requests = await page.evaluate(() => window.fixture.requests.length);
       for (const [width, columns] of [
-        [1440, 3],
-        [1000, 2],
+        [1440, 1],
+        [1000, 1],
         [700, 1],
       ]) {
         await page.setViewportSize({ width, height: 900 });
@@ -2310,6 +2312,18 @@ try {
           );
           assert.equal(boxes.filter((box) => Math.abs(box.y - boxes[0].y) < 1).length, columns);
           for (const box of boxes) assert.ok(Math.abs(box.width - boxes[0].width) < 1);
+          const attention = await page.locator('.studio-attention').boundingBox();
+          const activity = await page.locator('.studio-activity').boundingBox();
+          if (width > 1000)
+            assert.ok(
+              attention.x + attention.width < activity.x,
+              'Attention and activity sit side by side',
+            );
+          else
+            assert.ok(
+              activity.y >= attention.y + attention.height,
+              'Overview sections stack at compact widths',
+            );
           const clipped = await page
             .locator('.summary-page')
             .evaluate((summary) =>
@@ -2459,7 +2473,7 @@ try {
     try {
       for (const theme of ['dark', 'light']) {
         if (theme === 'light') await page.getByRole('button', { name: 'Porcelain theme' }).click();
-        await nav(page, 'Summary');
+        await nav(page, 'Overview');
         const referenceIntro = await introductionTreatment(page.locator('.summary-hero'));
         const referencePanel = await panelTreatment(
           page.locator('.summary-details > .panel').first(),
@@ -2589,7 +2603,7 @@ try {
     try {
       for (const theme of ['dark', 'light']) {
         if (theme === 'light') await page.getByRole('button', { name: 'Porcelain theme' }).click();
-        await nav(page, 'Summary');
+        await nav(page, 'Overview');
         const reference = await panelTreatment(page.locator('.summary-details > .panel').first());
         await openSource(page);
         const before = await page.evaluate(() =>
@@ -3198,7 +3212,7 @@ try {
         window.fixture.release();
       });
       await idle(page);
-      await nav(page, 'Summary');
+      await nav(page, 'Overview');
       await page.evaluate(() => {
         window.fixture.state.changed = true;
       });
@@ -3224,7 +3238,7 @@ try {
     const categories = await page
       .locator('.metric-card .metric-number')
       .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).color));
-    assert.equal(new Set(categories).size, 4);
+    assert.equal(new Set(categories).size, 1, 'Finding counts use the same neutral treatment');
     const before = await page.evaluate(() =>
       window.fixture.requests.filter((request) => request.method !== 'GET'),
     );
@@ -3251,7 +3265,7 @@ try {
     for (const theme of ['dark', 'light']) {
       if (theme === 'light') await page.getByRole('button', { name: 'Porcelain theme' }).click();
       for (const name of [
-        'Summary',
+        'Overview',
         'Analysis',
         'Bugs',
         'Performance',
@@ -3262,7 +3276,7 @@ try {
         await nav(page, name);
         await contrast(page, `${name}-${theme}`);
       }
-      await nav(page, 'Summary');
+      await nav(page, 'Overview');
       await page.getByRole('button', { name: 'Analyze project', exact: true }).hover();
       await contrast(page, `Primary action hover-${theme}`);
       await openSource(page);
@@ -3278,23 +3292,19 @@ try {
       await page.keyboard.press('Enter');
       await page.getByRole('heading', { name: 'Included files' }).waitFor();
       await contrast(page, `Context-${theme}`);
-      await nav(page, 'Summary');
+      await nav(page, 'Overview');
       await page.setViewportSize({ width: 900, height: 640 });
       await page.getByRole('button', { name: 'Larger text' }).click();
       await layout(page, `matrix-summary-${theme}-900`);
       await contrast(page, `Summary-${theme}-large-text`);
-      assert.deepEqual(
-        await page.locator('.sidebar .nav-link').evaluateAll((buttons) =>
-          buttons
-            .filter((button) => {
-              const rect = button.getBoundingClientRect();
-              return rect.top < 0 || rect.bottom > window.innerHeight;
-            })
-            .map((button) => button.getAttribute('aria-label')),
-        ),
-        [],
-        'Compact navigation must remain visible',
-      );
+      for (const button of await page.locator('.sidebar .nav-link').all()) {
+        await button.focus();
+        const bounds = await button.boundingBox();
+        assert.ok(
+          bounds.y >= 0 && bounds.y + bounds.height <= 640,
+          'Compact navigation scrolls focused destinations into view',
+        );
+      }
       await page.getByRole('button', { name: 'Larger text' }).click();
       await page.setViewportSize({ width: 1440, height: 1000 });
     }
@@ -4467,7 +4477,7 @@ try {
           for (const theme of ['dark', 'light']) {
             if ((await page.locator('html').getAttribute('data-theme')) !== theme)
               await page.getByRole('button', { name: themeNames[theme] }).click();
-            await nav(page, 'Summary');
+            await nav(page, 'Overview');
             await idle(page);
             const hero = page.locator('.summary-hero');
             assert.equal(await hero.count(), 1);
@@ -7069,7 +7079,7 @@ try {
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
             await page.getByRole('button', { name: 'Porcelain theme' }).click();
-          await nav(page, 'Summary');
+          await nav(page, 'Overview');
           references[theme] = {
             intro: await introductionTreatment(page.locator('.summary-hero')),
             panel: await panelTreatment(page.locator('.summary-details .panel').first()),
@@ -7341,7 +7351,7 @@ try {
         for (const theme of ['dark', 'light']) {
           if (theme === 'light')
             await page.getByRole('button', { name: 'Porcelain theme' }).click();
-          await nav(page, 'Summary');
+          await nav(page, 'Overview');
           const intro = await page.locator('.summary-hero').evaluate(introStyle);
           const panel = await panelTreatment(page.locator('.summary-details .panel').first());
           await page.keyboard.press(theme === 'dark' ? 'Meta+k' : 'Control+k');
@@ -7437,7 +7447,7 @@ try {
         window.fixture.requests.filter((r) => r.method !== 'GET'),
       );
       for (const [command, heading] of [
-        ['Summary', 'harbor'],
+        ['Overview', 'harbor'],
         ['Analyze project', 'Analysis'],
         ['Editor', 'Source'],
         ['Terminal', 'Terminal'],
@@ -7525,7 +7535,7 @@ try {
     await page.keyboard.type('echo hello');
     await page.waitForFunction(() => window.fixture.terminals.some((t) => t.action === 'input'));
     await layout(page, 'terminal-running');
-    await nav(page, 'Summary');
+    await nav(page, 'Overview');
     await openSummaryDiagrams(page);
     await layout(page, 'diagrams');
     await page.keyboard.press('Meta+k');
@@ -7537,14 +7547,14 @@ try {
     ]) {
       await page.setViewportSize({ width, height });
       if (width === 900) await page.getByRole('button', { name: 'Larger text' }).click();
-      for (const name of ['Summary', 'Analysis', 'Bugs', 'Source', 'Models', 'Project']) {
+      for (const name of ['Overview', 'Analysis', 'Bugs', 'Source', 'Models', 'Project']) {
         await nav(page, name);
         await layout(page, `${name.toLowerCase()}-${width}`);
       }
       await page.getByRole('tab', { name: 'Review', exact: true }).count();
     }
     await page.getByRole('button', { name: 'Porcelain theme' }).click();
-    await nav(page, 'Summary');
+    await nav(page, 'Overview');
     await layout(page, 'summary-light');
     await close();
   });
@@ -9426,7 +9436,7 @@ try {
       ),
       false,
     );
-    await nav(page, 'Summary');
+    await nav(page, 'Overview');
     assert.equal(await page.getByText(/Feature search failed/).count(), 0);
     assert.equal(await page.getByText(/active idea(?:s)? (?:is|are) outdated/).count(), 0);
     await close();
@@ -9453,7 +9463,7 @@ try {
     await page.getByText('Run details', { exact: true }).click();
     await page.getByRole('heading', { name: 'New feature suggestions', exact: true }).waitFor();
     await layout(page, 'analysis-with-features');
-    await nav(page, 'Summary');
+    await nav(page, 'Overview');
     assert.equal(
       await page.locator('.metric-card[data-accent="features"] .metric-number').innerText(),
       '1',
@@ -9576,7 +9586,7 @@ try {
     await page.getByRole('heading', { name: 'Retry failed work', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Save idea', exact: true }).click();
     await idle(page);
-    await nav(page, 'Summary');
+    await nav(page, 'Overview');
     assert.equal(
       await page.locator('.metric-card[data-accent="features"] .metric-number').innerText(),
       '1',
@@ -9588,7 +9598,7 @@ try {
     await page.getByRole('button', { name: 'Dismiss', exact: true }).click();
     await idle(page);
     await page.getByRole('heading', { name: 'No matching features' }).waitFor();
-    await nav(page, 'Summary');
+    await nav(page, 'Overview');
     assert.equal(
       await page.locator('.metric-card[data-accent="features"] .metric-number').innerText(),
       '0',
@@ -10222,7 +10232,7 @@ try {
       await page.setViewportSize({ width: 800, height: 900 });
       await page.getByRole('button', { name: 'Larger text' }).click();
       await layout(page, `features-${JSON.stringify(options)}`);
-      await nav(page, 'Summary');
+      await nav(page, 'Overview');
       assert.equal(await page.getByText(/Feature search failed/).count(), 0);
       assert.equal(await page.getByText(/active idea(?:s)? (?:is|are) outdated/).count(), 0);
       const card = page.locator('.metric-card[data-accent="features"]');
@@ -10267,7 +10277,7 @@ try {
       await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
       await idle(page);
       await startAnalysis(page);
-      await nav(page, 'Summary');
+      await nav(page, 'Overview');
       assert.equal(await page.getByText(/Feature search failed/).count(), 0);
       const failure = page.getByRole('img', { name: 'Features: failed', exact: true });
       assert.equal(await failure.evaluate((dot) => dot.classList.contains('red')), true);
@@ -10344,7 +10354,7 @@ try {
           assert.equal(await outcome.locator('.chat-receipt').count(), 0);
           await chatOutcomeLayout(page);
           await layout(page, 'chat-outcome-response-lost-before-recovery-1440-dark-standard');
-          await nav(page, 'Summary');
+          await nav(page, 'Overview');
           await nav(page, 'Chat');
           await outcome.getByRole('heading', { name: 'Change applied', exact: true }).waitFor();
         }

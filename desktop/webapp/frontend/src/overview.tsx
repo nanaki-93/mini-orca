@@ -96,7 +96,7 @@ export function ProjectPage({ s }: { s: State }) {
               <Button disabled={!!s.busy} onClick={() => void w.reindex()} icon="refresh">
                 Refresh facts
               </Button>
-              <Go page="summary">Summary</Go>
+              <Go page="summary">Overview</Go>
             </div>
             <Disclosure title="Project identity">
               <code>
@@ -198,6 +198,37 @@ export function Summary({ s }: { s: State }) {
       action: s.run ? 'View run' : 'Prepare analysis',
     },
   ];
+  const currentWork = s.change || s.changeHistory?.find((entry) => entry.state === 'draft');
+  const openWork = (id: string) => (s.change?.id === id ? w.navigate('chat') : w.viewChange(id));
+  const renderMetric = ({ page, title, icon, count, status, action }: (typeof metrics)[number]) => (
+    <button
+      key={page}
+      className="panel metric-card"
+      data-accent={page}
+      onClick={() => void w.navigate(page)}
+    >
+      <div className="metric-label">
+        <span className="row">
+          <span className="metric-icon">
+            <Icon name={icon} />
+          </span>
+          <span>{title}</span>
+        </span>
+        <StatusDot value={status} label={title} />
+      </div>
+      {action ? (
+        <div className="metric-action">
+          <span>{action}</span>
+          <Icon name="arrow" />
+        </div>
+      ) : (
+        <div className="metric-value">
+          <span className="metric-number">{count ?? '—'}</span>
+          <Icon name="arrow" />
+        </div>
+      )}
+    </button>
+  );
   return (
     <div className="summary-page">
       <div className="summary-hero">
@@ -209,9 +240,20 @@ export function Summary({ s }: { s: State }) {
           >
             Refresh
           </Button>
-          <Go page="analysis" icon="activity" tone="primary">
+          <Go page="analysis" icon="activity">
             Analyze project
           </Go>
+          <Button
+            icon="plus"
+            tone="primary"
+            disabled={!!s.busy || activeChangeWorkflow(s.change)}
+            onClick={() => {
+              w.newChange();
+              void w.navigate('chat');
+            }}
+          >
+            Start a task
+          </Button>
           <StaleAnalysisButton s={s} />
         </Heading>
         <dl className="summary-facts" aria-label="Project facts">
@@ -233,6 +275,45 @@ export function Summary({ s }: { s: State }) {
           </div>
         </dl>
       </div>
+      <section className="studio-resume" aria-label="Continue work">
+        <div>
+          <span className="studio-eyebrow">
+            {currentWork ? 'Continue your work' : 'Your next step'}
+          </span>
+          <h2>
+            {currentWork?.title ||
+              (s.run ? 'Explore your project analysis' : 'What would you like to build?')}
+          </h2>
+          <p>
+            {currentWork
+              ? 'Open the captured conversation, files and evidence.'
+              : s.run
+                ? 'Inspect the saved results, then choose what to work on.'
+                : 'Describe a task and choose its file scope. Every change starts with your review.'}
+          </p>
+          {currentWork && (
+            <span className="small muted">
+              {('workflow_status' in currentWork && currentWork.workflow_status) ||
+                ('workflow' in currentWork && currentWork.workflow?.status) ||
+                currentWork.state}
+            </span>
+          )}
+        </div>
+        {currentWork ? (
+          <Button
+            icon="arrow"
+            tone="primary"
+            disabled={!!s.busy}
+            onClick={() => void openWork(currentWork.id)}
+          >
+            Continue work
+          </Button>
+        ) : (
+          <Go page={s.run ? 'analysis-run' : 'chat'} icon="arrow" tone="primary">
+            {s.run ? 'View results' : 'Start a task'}
+          </Go>
+        )}
+      </section>
       <div className="summary-dashboard">
         <Panel className="coverage-panel">
           <div className="coverage-ring">
@@ -268,37 +349,35 @@ export function Summary({ s }: { s: State }) {
             </span>
           </div>
         </Panel>
-        <div className="metric-grid">
-          {metrics.map(({ page, title, icon, count, status, action }) => (
+        <section className="studio-attention" aria-label="Needs attention">
+          <h2>Needs attention</h2>
+          <p className="small muted">Model suggestions and ideas to investigate.</p>
+          <div className="metric-grid">{metrics.slice(0, 4).map(renderMetric)}</div>
+        </section>
+        <section className="studio-activity" aria-label="Project activity">
+          <h2>Project activity</h2>
+          <div className="metric-grid">{metrics.slice(4).map(renderMetric)}</div>
+          {(s.changeHistory || []).slice(0, 2).map((entry) => (
             <button
-              key={page}
-              className="panel metric-card"
-              data-accent={page}
-              onClick={() => void w.navigate(page)}
+              key={entry.id}
+              className="studio-history-row"
+              disabled={!!s.busy || (activeChangeWorkflow(s.change) && s.change?.id !== entry.id)}
+              onClick={() => void openWork(entry.id)}
             >
-              <div className="metric-label">
-                <span className="row">
-                  <span className="metric-icon">
-                    <Icon name={icon} />
-                  </span>
-                  <span>{title}</span>
-                </span>
-                <StatusDot value={status} label={title} />
-              </div>
-              {action ? (
-                <div className="metric-action">
-                  <span>{action}</span>
-                  <Icon name="arrow" />
-                </div>
-              ) : (
-                <div className="metric-value">
-                  <span className="metric-number">{count ?? '—'}</span>
-                  <Icon name="arrow" />
-                </div>
-              )}
+              <Icon name="chat" />
+              <span>
+                <strong>{entry.title}</strong>
+                <small>
+                  {entry.workflow_status || entry.state} · revision {entry.revision}
+                </small>
+              </span>
+              <Icon name="chevron" />
             </button>
           ))}
-        </div>
+          <Go page="history" tone="ghost small" icon="clock">
+            View history
+          </Go>
+        </section>
       </div>
       <div className="summary-details">
         <Panel
@@ -400,7 +479,7 @@ export function Diagrams({ s }: { s: State }) {
   return (
     <>
       <Heading title="Architecture and Flow">
-        <Go page="summary">Back to summary</Go>
+        <Go page="summary">Back to overview</Go>
       </Heading>
       <div className="stack">
         <Panel title="Architecture">
@@ -436,7 +515,7 @@ export function SearchPage({ s }: { s: State }) {
     file.path.toLowerCase().includes(query.toLowerCase()),
   );
   const commands: [Page, string, string][] = [
-    ['summary', 'Summary', 'grid'],
+    ['summary', 'Overview', 'grid'],
     ['analysis', 'Analyze project', 'activity'],
     ['editor', 'Editor', 'code'],
     ['terminal', 'Terminal', 'terminal'],

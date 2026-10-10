@@ -8,12 +8,13 @@ import {
 } from 'react';
 import { createRoot } from 'react-dom/client';
 import { workspace as w, canCancelOperation, type Page } from './workspace';
-import { Button, Icon, Modal, Notice, human } from './ui';
+import { Button, Heading, Icon, Modal, Notice, human } from './ui';
 import { Summary, ProjectPage, Models, Diagrams, SearchPage } from './overview';
 import { Analysis, AnalysisFiles, AnalysisPreview, AnalysisRun } from './analysis';
 import { Results } from './results';
 import { Editor } from './editor';
 import { ChangeWorkspace } from './change-workspace';
+import { ChangeHistory } from './change-shared';
 import { Features } from './features';
 import { Instructions } from './instructions';
 import { ProjectGuidance } from './project-guidance';
@@ -21,7 +22,12 @@ import { Benchmark, Scan, Receipt, TerminalWorkspace } from './tools';
 import './style.css';
 
 const mainNav: [Page, string, string][] = [
-  ['summary', 'Summary', 'grid'],
+  ['summary', 'Overview', 'grid'],
+  ['editor', 'Source', 'code'],
+  ['chat', 'Chat', 'chat'],
+  ['changes', 'Changes', 'branch'],
+];
+const improveNav: typeof mainNav = [
   ['analysis', 'Analysis', 'activity'],
   ['analysis-files', 'Files', 'folder'],
   ['analysis-run', 'Last run', 'clock'],
@@ -29,13 +35,14 @@ const mainNav: [Page, string, string][] = [
   ['performance', 'Performance', 'gauge'],
   ['security', 'Security', 'shield'],
   ['features', 'Features', 'sparkles'],
-  ['chat', 'Chat', 'chat'],
 ];
 const utilityNav: [Page, string, string][] = [
-  ['editor', 'Source', 'code'],
+  ['diagrams', 'Architecture', 'branch'],
   ['instructions', 'Instructions', 'file'],
+  ['context', 'Context', 'layers'],
   ['terminal', 'Terminal', 'terminal'],
   ['models', 'Models', 'layers'],
+  ['history', 'History', 'clock'],
   ['project', 'Project', 'folder'],
 ];
 const editorPages: Page[] = [
@@ -117,7 +124,10 @@ function App() {
         aria-current={
           activePage === page ||
           (page === 'analysis' && s.page === 'analysis-preview') ||
-          (page === 'editor' && editorPages.includes(s.page))
+          (page === 'editor' &&
+            editorPages.includes(s.page) &&
+            !['context', 'manifest'].includes(s.page)) ||
+          (page === 'context' && s.page === 'manifest')
             ? 'page'
             : undefined
         }
@@ -133,7 +143,7 @@ function App() {
       </button>
     ));
   const title =
-    [...mainNav, ...utilityNav].find(([page]) => page === activePage)?.[1] ||
+    [...mainNav, ...improveNav, ...utilityNav].find(([page]) => page === activePage)?.[1] ||
     s.page
       .split('-')
       .map((word) => word[0].toUpperCase() + word.slice(1))
@@ -149,7 +159,18 @@ function App() {
   else if (s.page === 'analysis-run') content = <AnalysisRun s={s} />;
   else if (['bugs', 'performance', 'security'].includes(s.page))
     content = <Results s={s} key={s.page} />;
-  else if (s.page === 'chat') content = <ChangeWorkspace s={s} />;
+  else if (s.page === 'chat' || s.page === 'changes') content = <ChangeWorkspace s={s} />;
+  else if (s.page === 'history')
+    content = (
+      <div className="workspace-page">
+        <Heading
+          title="History"
+          detail="Restore saved work without generating or applying changes."
+          variant="intro"
+        />
+        <ChangeHistory s={s} />
+      </div>
+    );
   else if (s.page === 'features') content = <Features s={s} />;
   else if (s.page === 'instructions') content = <Instructions s={s} />;
   else if (editorPages.includes(s.page)) content = <Editor s={s} />;
@@ -164,10 +185,7 @@ function App() {
         Skip to content
       </a>
       <div className="app-window">
-        <aside
-          className={`sidebar${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}
-          aria-label="Application"
-        >
+        <header className="topbar">
           <button
             className="brand"
             aria-label="Mini-Orca home"
@@ -179,140 +197,150 @@ function App() {
               mini-orca<span className="accent">.</span>
             </span>
           </button>
-          <button
-            className="project-switcher"
-            aria-label={`Switch project · ${s.project?.name || 'Open a project'}`}
-            title={sidebarCollapsed ? s.project?.name || 'Open a project' : undefined}
-            onClick={() => void w.navigate('project')}
-          >
-            <span className="project-avatar">{s.project?.name?.[0]?.toUpperCase() || '+'}</span>
-            <span className="project-label">
-              <strong>{s.project?.name || 'Open a project'}</strong>
-              {s.project && <small>{s.project.type.toUpperCase()}</small>}
-            </span>
-            <Icon name="chevrons" />
-          </button>
-          <div className="sidebar-navigation">
-            <div className="nav-label">Workspace</div>
-            <nav aria-label="Workspaces">{nav(mainNav)}</nav>
-            <div className="sidebar-bottom">
-              <div className="nav-label">Tools</div>
-              <nav aria-label="Tools">{nav(utilityNav)}</nav>
+          <div className="breadcrumbs">
+            <span className="muted">{s.project?.name || 'Mini-Orca'}</span>
+            <span className="muted">/</span>
+            <span>{title}</span>
+          </div>
+          <div className="topbar-actions">
+            <button
+              className="search-trigger"
+              onClick={() => void w.navigate('search')}
+              aria-label="Search files and commands"
+            >
+              <Icon name="search" />
+              <span>Search files and commands</span>
+              <kbd>⌘ K</kbd>
+            </button>
+            <div className={`connection ${s.connected ? '' : 'offline'}`}>
+              <span className={`status-dot ${s.connected ? '' : 'offline'}`} />
+              {s.connected ? 'Daemon connected' : 'Daemon offline'}
             </div>
           </div>
-          <button
-            className="sidebar-toggle"
-            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-expanded={!sidebarCollapsed}
-            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+        </header>
+        <div className="app-layout">
+          <aside
+            className={`sidebar${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}
+            aria-label="Application"
           >
-            <Icon name="sidebar" />
-            <span>Collapse sidebar</span>
-          </button>
-        </aside>
-        <div className="app-body">
-          <header className="topbar">
-            <div className="breadcrumbs">
-              <span className="muted">{s.project?.name || 'Mini-Orca'}</span>
-              <span className="muted">/</span>
-              <span>{title}</span>
-            </div>
-            <div className="topbar-actions">
-              <button
-                className="search-trigger"
-                onClick={() => void w.navigate('search')}
-                aria-label="Search files and commands"
-              >
-                <Icon name="search" />
-                <span>Search</span>
-                <kbd>⌘ K</kbd>
-              </button>
-              <div className={`connection ${s.connected ? '' : 'offline'}`}>
-                <span className={`status-dot ${s.connected ? '' : 'offline'}`} />
-                {s.connected ? 'Daemon connected' : 'Daemon offline'}
-              </div>
-            </div>
-          </header>
-          <main
-            id="main"
-            ref={main}
-            tabIndex={-1}
-            className={s.page === 'terminal' ? 'terminal-notices' : ''}
-          >
-            {s.busy && (
-              <div className="busy-strip" role="status">
-                <span className="spinner" />
-                {s.busy}…
-                {canCancelOperation(s.busy) && (
-                  <Button tone="ghost small" onClick={() => void w.cancel()}>
-                    Cancel
-                  </Button>
-                )}
-              </div>
-            )}
-            <div className="page" data-accent={s.page}>
-              {activePage === s.page && <ProjectGuidance s={s} />}
-              {s.page !== 'chat' && s.change?.workflow && s.change.state === 'draft' && (
-                <Notice>
-                  <div className="row between wrap" aria-live="polite">
-                    <span>Agent workflow · {human(s.change.workflow.status)}</span>
-                    <Button onClick={() => void w.navigate('chat')}>View workflow</Button>
-                  </div>
-                </Notice>
-              )}
-              {s.error && <Notice error>{s.error}</Notice>}
-              {s.notice && <Notice>{s.notice}</Notice>}
-              {Object.entries(s.resourceErrors).map(([key, error]) => (
-                <Notice error key={key}>
-                  <strong>{key}: </strong>
-                  {error}
-                </Notice>
-              ))}
-              {content}
-            </div>
-          </main>
-          <div hidden={s.page !== 'terminal'} className="terminal-container">
-            <TerminalWorkspace s={s} visible={s.page === 'terminal'} />
-          </div>
-          <footer className="statusbar">
-            <span className="row">
-              <Icon name={s.git?.available ? 'branch' : 'laptop'} />
-              {s.git?.available ? s.git.branch : 'Local workspace'}
-            </span>
-            <span>
-              {s.project ? `${s.project.source_file_count ?? '—'} source files` : 'No project open'}
-            </span>
-            <div className="statusbar-end">
-              <span>
-                {s.draft
-                  ? `Draft · ${s.dirty ? 'edited' : s.draft.state}`
-                  : s.version
-                    ? `Daemon ${s.version}`
-                    : ''}
+            <button
+              className="project-switcher"
+              aria-label={`Switch project · ${s.project?.name || 'Open a project'}`}
+              title={sidebarCollapsed ? s.project?.name || 'Open a project' : undefined}
+              onClick={() => void w.navigate('project')}
+            >
+              <span className="project-avatar">{s.project?.name?.[0]?.toUpperCase() || '+'}</span>
+              <span className="project-label">
+                <strong>{s.project?.name || 'Open a project'}</strong>
+                {s.project && <small>{s.project.type.toUpperCase()}</small>}
               </span>
-              <div className="theme-switcher" role="group" aria-label="Theme">
-                {themes.map((choice) => (
-                  <button
-                    key={choice.id}
-                    aria-label={`${choice.name} theme`}
-                    aria-pressed={theme === choice.id}
-                    title={`${choice.name} (${choice.letter})`}
-                    onClick={() => setTheme(choice.id)}
-                  >
-                    {choice.letter}
-                  </button>
-                ))}
+              <Icon name="chevrons" />
+            </button>
+            <div className="sidebar-navigation">
+              <nav aria-label="Workspaces">{nav(mainNav)}</nav>
+              <div className="nav-label">Improve</div>
+              <nav aria-label="Workspaces: Improve">{nav(improveNav)}</nav>
+              <div className="sidebar-bottom">
+                <div className="nav-label">Project</div>
+                <nav aria-label="Tools">{nav(utilityNav)}</nav>
               </div>
-              <button
-                aria-label="Larger text"
-                aria-pressed={large}
-                onClick={() => setLarge(!large)}
-              >
-                Aa
-              </button>
             </div>
-          </footer>
+            <button
+              className="sidebar-toggle"
+              aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-expanded={!sidebarCollapsed}
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+            >
+              <Icon name="sidebar" />
+              <span>Collapse sidebar</span>
+            </button>
+          </aside>
+          <div className="app-body">
+            <main
+              id="main"
+              ref={main}
+              tabIndex={-1}
+              className={s.page === 'terminal' ? 'terminal-notices' : ''}
+            >
+              {s.busy && (
+                <div className="busy-strip" role="status">
+                  <span className="spinner" />
+                  {s.busy}…
+                  {canCancelOperation(s.busy) && (
+                    <Button tone="ghost small" onClick={() => void w.cancel()}>
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              )}
+              <div className="page" data-accent={s.page}>
+                {activePage === s.page && <ProjectGuidance s={s} />}
+                {!['chat', 'changes'].includes(s.page) &&
+                  s.change?.workflow &&
+                  s.change.state === 'draft' && (
+                    <Notice>
+                      <div className="row between wrap" aria-live="polite">
+                        <span>Agent workflow · {human(s.change.workflow.status)}</span>
+                        <Button onClick={() => void w.navigate('chat')}>View workflow</Button>
+                      </div>
+                    </Notice>
+                  )}
+                {s.error && <Notice error>{s.error}</Notice>}
+                {s.notice && <Notice>{s.notice}</Notice>}
+                {Object.entries(s.resourceErrors).map(([key, error]) => (
+                  <Notice error key={key}>
+                    <strong>{key}: </strong>
+                    {error}
+                  </Notice>
+                ))}
+                {content}
+              </div>
+            </main>
+            <div hidden={s.page !== 'terminal'} className="terminal-container">
+              <TerminalWorkspace s={s} visible={s.page === 'terminal'} />
+            </div>
+            <footer className="statusbar">
+              <span className="row">
+                <Icon name={s.git?.available ? 'branch' : 'laptop'} />
+                {s.git?.available ? s.git.branch : 'Local workspace'}
+              </span>
+              <span>
+                {s.project
+                  ? `${s.project.source_file_count ?? '—'} source files`
+                  : 'No project open'}
+              </span>
+              <div className="statusbar-end">
+                <span>
+                  {s.draft
+                    ? `Draft · ${s.dirty ? 'edited' : s.draft.state}`
+                    : s.version
+                      ? `Daemon ${s.version}`
+                      : ''}
+                </span>
+                <div className="theme-switcher" role="group" aria-label="Theme">
+                  {themes.map((choice) => (
+                    <button
+                      key={choice.id}
+                      aria-label={`${choice.name} theme`}
+                      aria-pressed={theme === choice.id}
+                      title={`${choice.name} (${choice.letter})`}
+                      onClick={() => setTheme(choice.id)}
+                    >
+                      {choice.letter}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  aria-label="Larger text"
+                  aria-pressed={large}
+                  onClick={() => setLarge(!large)}
+                >
+                  Aa
+                </button>
+              </div>
+            </footer>
+          </div>
         </div>
       </div>
       {s.confirmation && <Modal key={s.confirmation.title} />}

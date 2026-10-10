@@ -5,6 +5,8 @@ export type Page =
   | 'features'
   | 'instructions'
   | 'chat'
+  | 'changes'
+  | 'history'
   | 'welcome'
   | 'summary'
   | 'project'
@@ -527,7 +529,7 @@ export class Workspace {
     if (page === 'analysis' && !this.state.availableModels) await this.loadAvailableModels();
     if (['editor', 'draft', 'checks', 'review', 'assistant', 'benchmark'].includes(page))
       await this.refreshFile();
-    if (page === 'chat') await this.loadChangeHistory();
+    if (['chat', 'changes', 'history'].includes(page)) await this.loadChangeHistory();
     if (page === 'features' || page === 'summary') await this.loadFeatures();
     if (page === 'instructions')
       await this.loadInstructions(this.state.instructionPreview?.path || 'AGENTS.md');
@@ -1983,7 +1985,7 @@ export class Workspace {
   async acceptChange() {
     await this.act('Apply change', async () => {
       const change = this.state.change;
-      if (!change || this.state.page !== 'chat' || !canAcceptChange(this.state))
+      if (!change || !['chat', 'changes'].includes(this.state.page) || !canAcceptChange(this.state))
         throw new Error('The displayed proposal needs current passing checks and model review.');
       const epoch = this.epoch;
       const operation = this.operation;
@@ -1998,7 +2000,7 @@ export class Workspace {
         epoch !== this.epoch ||
         operation !== this.operation ||
         navigation !== this.navigation ||
-        this.state.page !== 'chat' ||
+        !['chat', 'changes'].includes(this.state.page) ||
         this.state.change?.id !== change.id ||
         this.state.change.revision !== change.revision ||
         this.state.change.hash !== change.hash

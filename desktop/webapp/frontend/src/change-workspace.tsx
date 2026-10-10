@@ -28,6 +28,7 @@ export function ChangeWorkspace({ s }: { s: State }) {
 
 function ChatWorkspace({ s }: { s: State }) {
   const change = s.change;
+  const reviewOnly = s.page === 'changes';
   const draft =
     s.chatDraft && s.chatDraft.sessionID === change?.id && s.chatDraft.seed === s.changeSeed
       ? s.chatDraft
@@ -66,8 +67,12 @@ function ChatWorkspace({ s }: { s: State }) {
   return (
     <div className="chat-page">
       <Heading
-        title="Chat"
-        detail="Describe a change. Review the generated diff and accept when it is ready."
+        title={reviewOnly ? 'Changes' : 'Chat'}
+        detail={
+          reviewOnly
+            ? 'Review the captured files and check evidence before applying.'
+            : 'Describe a change. Review the generated diff and accept when it is ready.'
+        }
         variant="intro"
       >
         <Go page="editor" icon="code">
@@ -76,59 +81,78 @@ function ChatWorkspace({ s }: { s: State }) {
         <Go page="models" icon="layers">
           Manage models
         </Go>
-        <Button disabled={!!s.busy || running} onClick={() => w.newChange()}>
+        <Go page={reviewOnly ? 'chat' : 'changes'} icon={reviewOnly ? 'chat' : 'branch'}>
+          {reviewOnly ? 'Back to conversation' : 'Review changes'}
+        </Go>
+        <Button
+          disabled={!!s.busy || running}
+          onClick={() => {
+            w.newChange();
+            void w.navigate('chat');
+          }}
+        >
           New conversation
         </Button>
       </Heading>
       <ChangeOutcome s={s} />
-      <div className="change-workspace">
-        <section className="workspace-page chat-conversation" aria-label="Change conversation">
+      <div
+        className={`change-workspace${reviewOnly ? ' change-workspace--review' : !change ? ' change-workspace--compose' : ''}`}
+      >
+        <section
+          hidden={reviewOnly}
+          className="workspace-page chat-conversation"
+          aria-label="Change conversation"
+        >
           {!change ? (
             <Panel title="Task and file scope">
-              <label className="block">
-                Task type
-                <input className="field" aria-label="Task type" value={taskKind} readOnly />
-              </label>
-              <label className="block">
-                Task title
-                <input
-                  value={title}
-                  onChange={(e) => update({ title: e.target.value })}
-                  disabled={!!s.busy}
-                  maxLength={200}
-                />
-              </label>
-              <label className="block">
-                Files to change (one path per line)
-                <textarea
-                  aria-label="Files to change"
-                  className="chat-path-input"
-                  value={paths}
-                  onChange={(e) => update({ paths: e.target.value })}
-                  disabled={!!s.busy}
-                  placeholder="internal/worker/process.go&#10;internal/worker/process_test.go"
-                />
-              </label>
-              <label className="block">
-                Add an existing file
-                <select
-                  className="field"
-                  aria-label="Add an existing file"
-                  value=""
-                  disabled={!!s.busy}
-                  onChange={(e) => {
-                    if (e.target.value && !paths.split('\n').includes(e.target.value))
-                      update({ paths: [paths, e.target.value].filter(Boolean).join('\n') });
-                  }}
-                >
-                  <option value="">Choose a file…</option>
-                  {s.index?.files
-                    .filter((file) => !file.binary && /\.(go|md)$/.test(file.path))
-                    .map((file) => (
-                      <option key={file.path}>{file.path}</option>
-                    ))}
-                </select>
-              </label>
+              <div className="chat-scope-fields">
+                <label className="block">
+                  Task type
+                  <input className="field" aria-label="Task type" value={taskKind} readOnly />
+                </label>
+                <label className="block">
+                  Task title
+                  <input
+                    value={title}
+                    onChange={(e) => update({ title: e.target.value })}
+                    disabled={!!s.busy}
+                    maxLength={200}
+                  />
+                </label>
+              </div>
+              <div className="chat-scope-files">
+                <label className="block">
+                  Files to change (one path per line)
+                  <textarea
+                    aria-label="Files to change"
+                    className="chat-path-input"
+                    value={paths}
+                    onChange={(e) => update({ paths: e.target.value })}
+                    disabled={!!s.busy}
+                    placeholder="internal/worker/process.go&#10;internal/worker/process_test.go"
+                  />
+                </label>
+                <label className="block">
+                  Add an existing file
+                  <select
+                    className="field"
+                    aria-label="Add an existing file"
+                    value=""
+                    disabled={!!s.busy}
+                    onChange={(e) => {
+                      if (e.target.value && !paths.split('\n').includes(e.target.value))
+                        update({ paths: [paths, e.target.value].filter(Boolean).join('\n') });
+                    }}
+                  >
+                    <option value="">Choose a file…</option>
+                    {s.index?.files
+                      .filter((file) => !file.binary && /\.(go|md)$/.test(file.path))
+                      .map((file) => (
+                        <option key={file.path}>{file.path}</option>
+                      ))}
+                  </select>
+                </label>
+              </div>
               <p className="small muted">Up to 8 Go/Markdown files, including new files.</p>
             </Panel>
           ) : (
@@ -213,7 +237,11 @@ function ChatWorkspace({ s }: { s: State }) {
           </Panel>
           <ChangeHistory s={s} />
         </section>
-        <section className="workspace-page chat-review" aria-label="Proposal review">
+        <section
+          hidden={!reviewOnly && !change}
+          className="workspace-page chat-review"
+          aria-label="Proposal review"
+        >
           <WorkflowProgress s={s} />
           {change?.changes.length ? (
             <>
