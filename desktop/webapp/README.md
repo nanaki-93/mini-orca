@@ -63,10 +63,12 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   Failed feature discovery leaves other analysis results available.
 - **Bugs**, **Performance** and **Security** keep searchable findings on their category
   pages. **Open fix** opens a dedicated page with the exact file, declaration and
-  line, a short proposed solution, and scoped preparation. No findings list appears
-  on the fix page. **Details** contains the full cause, provenance, confidence,
-  evidence and triage actions, including **Mark as fixed**; **Full explanation**
-  reveals longer solutions.
+  line, and scoped preparation. The full cause leads the page, followed by the
+  proposed solution, affected files and **Prepare fix** action. No findings list
+  appears on the fix page. Provenance and confidence stay with the cause;
+  **Details** contains additional evidence and triage actions, including
+  **Mark as fixed**. **Full explanation** expands the solution in place without
+  repeating the preview; **Show less** collapses it again.
   **Models for fixes** sits above the finding and keeps creation, testing and review
   choices shared across all three categories. Model destinations remain available
   in the pickers.
@@ -80,7 +82,8 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
   unchanged files, whose freshness follows their content and applicable guidance.
   The generated fix opens on **Changes**, with full-width read-only file diffs.
   **Checks** contains diagnostics, captured workflow stages and model review.
-  **Details** contains cause, scope, instructions, regeneration and history.
+  The cause remains visible above the solution while reviewing a fix.
+  **Details** contains scope, instructions, regeneration and history.
   **Review next file** advances through the diffs; **Apply N files** becomes available
   after every changed file has been viewed and the existing check/review guards pass.
   Regeneration clears the viewed-file state. Tabs and file selection never generate,

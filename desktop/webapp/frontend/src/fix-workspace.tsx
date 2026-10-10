@@ -63,18 +63,6 @@ export function FixWorkspace({ s }: { s: State }) {
   const details = (
     <div className="stack fix-details">
       <ProjectGuidance s={s} />
-      <Panel title="Cause" className="fix-explanation">
-        <p className="small muted">
-          {finding ? `Reported finding · ${human(finding.confidence)}` : 'Saved finding context'}
-        </p>
-        <Prose
-          text={
-            finding?.cause ||
-            seed.message ||
-            'No cause was saved. Review the original finding and source.'
-          }
-        />
-      </Panel>
       <Panel title="Scope">
         <BulletContent title="Captured files" items={seed.paths} />
         <BulletContent title="Acceptance criteria" items={seed.acceptance_criteria} />
@@ -173,6 +161,18 @@ export function FixWorkspace({ s }: { s: State }) {
         <Notice>Performance unmeasured; tests do not establish a speedup.</Notice>
       )}
       <ChangeOutcome s={s} />
+      <Panel title="Cause" className="fix-explanation fix-cause">
+        <Prose
+          text={
+            finding?.cause ||
+            seed.message ||
+            'No cause was saved. Review the original finding and source.'
+          }
+        />
+        <p className="small muted">
+          {finding ? `Reported finding · ${human(finding.confidence)}` : 'Saved finding context'}
+        </p>
+      </Panel>
       <FixSolution s={s} />
       {change?.changes.length ? (
         <FixReview

@@ -49,7 +49,7 @@ export async function testGuidedFixes({
       assert.equal(await page.locator('.result-row').count(), 0);
       assert.equal(
         await page.getByRole('heading', { name: 'Cause', exact: true }).isVisible(),
-        false,
+        true,
       );
       await page.getByRole('button', { name: 'Collapse sidebar' }).click();
       await layout(page, 'dedicated-fix-prepare');
@@ -314,6 +314,65 @@ export async function testGuidedFixes({
     }
   });
 
+  await test('Causes lead solutions without opening details before and after preparing a fix', async () => {
+    for (const category of ['Bugs', 'Performance', 'Security']) {
+      const { page, close } = await pageFor({ trusted: true });
+      try {
+        await nav(page, category);
+        await page.locator('.result-row').first().click();
+        for (const stage of ['finding', 'proposal']) {
+          if (stage === 'proposal') {
+            await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
+            await idle(page);
+          }
+          const before = await page.evaluate(() =>
+            window.fixture.requests.filter((request) => request.method !== 'GET'),
+          );
+          const cause = page.locator('.fix-cause');
+          assert.equal(await cause.count(), 1);
+          assert.equal(await cause.isVisible(), true);
+          assert.equal(await cause.locator('details').count(), 0);
+          assert.ok((await cause.locator('.prose').innerText()).length > 0);
+          for (const [theme, width, large] of [
+            ['Graphite', 1440, false],
+            ['Porcelain', 800, true],
+            ['Midnight', 1024, false],
+          ]) {
+            await page.setViewportSize({ width, height: 900 });
+            await page.getByRole('button', { name: `${theme} theme`, exact: true }).click();
+            const textSize = page.getByRole('button', { name: 'Larger text', exact: true });
+            if ((await textSize.getAttribute('aria-pressed')) !== String(large))
+              await textSize.click();
+            await cause.scrollIntoViewIfNeeded();
+            const causeBox = await cause.boundingBox();
+            const solution = page.locator('.fix-solution');
+            const solutionBox = await solution.boundingBox();
+            assert.ok(causeBox.y + causeBox.height <= solutionBox.y);
+            const headingSize = (panel) =>
+              panel.locator('h2').evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+            assert.ok((await headingSize(cause)) > (await headingSize(solution)));
+            await layout(page, `cause-first-${category.toLowerCase()}-${stage}-${theme}`);
+            await contrast(page, `${category} cause in ${theme}`);
+          }
+          if (stage === 'proposal') {
+            for (const tab of ['Details', 'Changes (2)']) {
+              await page.getByRole('tab', { name: tab, exact: true }).click();
+              assert.equal(await cause.isVisible(), true);
+            }
+          }
+          assert.deepEqual(
+            await page.evaluate(() =>
+              window.fixture.requests.filter((request) => request.method !== 'GET'),
+            ),
+            before,
+          );
+        }
+      } finally {
+        await close();
+      }
+    }
+  });
+
   await test('Guided fixes preserve cause, solution and scope with a passive file diff selector', async () => {
     for (const [category, kind] of [
       ['Bugs', 'fix'],
@@ -330,7 +389,7 @@ export async function testGuidedFixes({
         await page.locator('.result-row').first().click();
         assert.equal(
           await page.getByRole('heading', { name: 'Cause', exact: true }).isVisible(),
-          false,
+          true,
         );
         await page.locator('summary').getByText('Details', { exact: true }).click();
         await page.getByRole('heading', { name: 'Cause', exact: true }).waitFor();

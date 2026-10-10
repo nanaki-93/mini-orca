@@ -214,6 +214,14 @@ export function Results({ s }: { s: State }) {
         {category === 'performance' && (
           <Notice>Performance unmeasured; tests do not establish a speedup.</Notice>
         )}
+        <Panel title="Cause" className="fix-explanation fix-cause">
+          <Prose
+            text={detail.cause || 'No cause was saved. Review the evidence before preparing a fix.'}
+          />
+          <p className="small muted">
+            {human(detail.kind)} · Reported confidence: {human(detail.confidence)}
+          </p>
+        </Panel>
         <Panel title="Proposed solution" className="fix-explanation fix-solution">
           <SolutionExcerpt
             text={
@@ -227,16 +235,8 @@ export function Results({ s }: { s: State }) {
         )}
         <Disclosure title="Details">
           <div className="stack results-detail-layout">
-            <Panel title="Cause" className="fix-explanation">
-              <p className="small muted">
-                {human(detail.kind)} · Reported confidence: {human(detail.confidence)}
-              </p>
-              <Prose
-                text={
-                  detail.cause || 'No cause was saved. Review the evidence before preparing a fix.'
-                }
-              />
-              {detail.finding && (
+            {detail.finding && (
+              <Panel title="Finding actions">
                 <div className="actions section-gap">
                   <Button
                     disabled={!!s.busy}
@@ -257,8 +257,8 @@ export function Results({ s }: { s: State }) {
                     Mark as fixed
                   </Button>
                 </div>
-              )}
-            </Panel>
+              </Panel>
+            )}
             {detail.text
               .filter(([, content]) => content)
               .map(([title, content]) => (
