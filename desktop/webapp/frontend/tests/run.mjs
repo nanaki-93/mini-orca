@@ -309,7 +309,7 @@ async function startAnalysis(page, resume = false) {
   await idle(page);
 }
 async function openSummaryDiagrams(page) {
-  await page.locator('.metric-card[data-accent="diagrams"]').click();
+  await nav(page, 'Architecture');
   await page.getByRole('heading', { name: 'Architecture and Flow', exact: true }).waitFor();
 }
 async function openSource(page) {
@@ -901,7 +901,8 @@ async function contrast(page, name) {
       '.metric-label',
       '.metric-number',
       '.metric-action',
-      '.summary-hero .page-heading p',
+      '.summary-path',
+      '.summary-description',
       '.summary-facts dt',
       '.summary-facts dd',
       '.coverage-ring strong',
@@ -1629,14 +1630,6 @@ try {
       const dot = page.locator('[data-accent="bugs"] .status-dot');
       assert.equal(await dot.getAttribute('class'), `status-dot ${tone}`);
       assert.equal(await dot.getAttribute('aria-label'), `Bugs: ${status.replaceAll('_', ' ')}`);
-      const analysis = page.locator('.metric-card[data-accent="analysis-run"]');
-      const analysisDot = analysis.getByRole('img');
-      assert.equal(await analysisDot.getAttribute('class'), `status-dot ${tone}`);
-      assert.equal(
-        await analysisDot.getAttribute('aria-label'),
-        `Project Analysis: ${status.replaceAll('_', ' ')}`,
-      );
-      assert.equal(await analysis.locator('.studio-row-copy small').innerText(), 'View run');
       assert.equal(await page.locator('.metric-card .badge').count(), 0);
       if (status === 'completed_empty')
         assert.equal(await page.locator('[data-accent="bugs"] .metric-number').innerText(), '0');
@@ -1653,23 +1646,16 @@ try {
       await close();
     }
   });
-  await test('Summary diagram card opens all saved charts and entry points locally', async () => {
+  await test('Architecture navigation opens all saved charts and entry points locally', async () => {
     const { page, close } = await pageFor();
     await idle(page);
     const requests = await page.evaluate(() => window.fixture.requests.length);
     for (const name of ['Architecture diagram', 'Flow 1 diagram', 'Flow 2 diagram'])
       assert.equal(await page.getByRole('img', { name, exact: true }).count(), 0);
-    const card = page.locator('.metric-card[data-accent="diagrams"]');
-    assert.equal(
-      await card.locator('.studio-row-copy strong').innerText(),
-      'Architecture and Flow',
-    );
-    assert.equal(await card.locator('.studio-row-copy small').innerText(), 'Explore');
-    assert.equal(
-      await card.getByRole('img').getAttribute('aria-label'),
-      'Architecture and Flow: success',
-    );
-    assert.equal(await page.locator('.metric-card').count(), 6);
+    const card = page
+      .getByRole('complementary', { name: 'Application' })
+      .getByRole('button', { name: 'Architecture', exact: true });
+    assert.equal(await page.locator('.metric-card').count(), 4);
     assert.equal(await page.getByText('Show architecture and flow', { exact: true }).count(), 0);
     assert.equal(await page.getByRole('heading', { name: 'Architecture', exact: true }).count(), 0);
     assert.equal(
@@ -1730,26 +1716,25 @@ try {
     assert.equal(await page.evaluate(() => window.fixture.terminals.length), 0);
     await close();
   });
-  await test('Summary analysis card opens the saved run or setup without starting work', async () => {
+  await test('Overview analysis actions open setup or saved results without starting work', async () => {
     for (const options of [{}, { empty: true }]) {
       const { page, close } = await pageFor(options);
       await idle(page);
-      const card = page.locator('.metric-card').filter({ hasText: 'Project Analysis' });
       assert.equal(
-        await card.locator('.studio-row-copy small').innerText(),
-        options.empty ? 'Prepare analysis' : 'View run',
+        await page.getByRole('region', { name: 'Project activity', exact: true }).count(),
+        0,
       );
-      assert.equal(
-        await card.getByRole('img').getAttribute('aria-label'),
-        `Project Analysis: ${options.empty ? 'not run' : 'completed'}`,
-      );
+      assert.equal(await page.getByText('About this project', { exact: true }).count(), 0);
+      const card = options.empty
+        ? page.getByRole('button', { name: 'Analyze project', exact: true })
+        : page.getByRole('button', { name: 'View results', exact: true });
       const bounds = await page.locator('.metric-card').evaluateAll((cards) =>
         cards.map((card) => {
           const { width, height } = card.getBoundingClientRect();
           return { width, height };
         }),
       );
-      assert.equal(bounds.length, 6);
+      assert.equal(bounds.length, 4);
       for (const box of bounds) assert.ok(box.width > 0 && box.height >= 32);
       const calls = await page.evaluate(() =>
         window.fixture.requests.filter((request) => request.method !== 'GET'),
@@ -1795,8 +1780,14 @@ try {
         featuresReady: true,
       });
       await idle(page);
-      await page.getByText('About this project', { exact: true }).click();
-      assert.equal(await page.locator('.summary-hero .page-heading p').innerText(), projectPath);
+      assert.equal(await page.locator('.summary-path').innerText(), projectPath);
+      assert.equal(await page.locator('.summary-description .prose').innerText(), projectSummary);
+      assert.equal(
+        await page
+          .locator('.summary-path')
+          .evaluate((el) => el.nextElementSibling.matches('.summary-facts')),
+        true,
+      );
       assert.deepEqual(await page.locator('.summary-facts dd').allTextContents(), [
         'go',
         '18',
@@ -1828,15 +1819,15 @@ try {
           assert.equal(boxes.filter((box) => Math.abs(box.y - boxes[0].y) < 1).length, columns);
           await studioContainment(page.locator('.summary-page'));
           const attention = await page.locator('.studio-attention').boundingBox();
-          const activity = await page.locator('.studio-activity').boundingBox();
+          const coverage = await page.locator('.coverage-panel').boundingBox();
           if (width > 1000)
             assert.ok(
-              attention.x + attention.width < activity.x,
-              'Attention and activity sit side by side',
+              attention.x + attention.width < coverage.x,
+              'Findings and coverage sit side by side',
             );
           else
             assert.ok(
-              activity.y >= attention.y + attention.height,
+              coverage.y >= attention.y + attention.height,
               'Overview sections stack at compact widths',
             );
           const clipped = await page
@@ -1844,7 +1835,7 @@ try {
             .evaluate((summary) =>
               [
                 ...summary.querySelectorAll(
-                  'button, h1, .page-heading p, dt, dd, .metric-label, .metric-value, .metric-action',
+                  'button, h1, .summary-path, .summary-description, dt, dd, .metric-label, .metric-value, .metric-action',
                 ),
               ]
                 .filter((element) => element.scrollWidth > element.clientWidth + 1)
@@ -1870,7 +1861,7 @@ try {
           }
         }
       }
-      await page.getByText('Components', { exact: true }).click();
+      await nav(page, 'Architecture');
       await page.getByText('Worker pool', { exact: true }).waitFor();
       await page.getByText('Why & tradeoffs', { exact: true }).click();
       await page
@@ -1887,7 +1878,6 @@ try {
         coverage: { total: 0, fresh: 0, stale: 0, missing: 0, failed: 0 },
       });
       await idle(page);
-      await page.getByText('About this project', { exact: true }).click();
       assert.equal(await page.locator('.coverage-ring strong').innerText(), '—');
       assert.equal(
         await page.locator('.coverage-copy p').innerText(),
@@ -1908,9 +1898,6 @@ try {
           '—',
           '—',
         ]);
-        const details = await page.locator('.summary-details').boundingBox();
-        const overview = await page.locator('.summary-details > .panel').last().boundingBox();
-        assert.equal(overview.width, details.width);
       }
       await layout(page, `summary-coverage-${unavailable ? 'unavailable' : 'empty'}`);
       await close();
@@ -2536,9 +2523,7 @@ try {
       window.fixture.requests.filter((request) => request.method !== 'GET'),
     );
     assert.equal(await page.getByText('HTTP API', { exact: true }).isVisible(), false);
-    if (!(await page.getByText('Components', { exact: true }).isVisible()))
-      await page.getByText('About this project', { exact: true }).click();
-    await page.getByText('Components', { exact: true }).click();
+    await nav(page, 'Architecture');
     assert.equal(await page.getByText('HTTP API', { exact: true }).isVisible(), true);
     const why = page.getByText(
       'Workers otherwise keep consuming resources after their caller has left.',
@@ -2555,9 +2540,6 @@ try {
       ),
       before,
     );
-    if (!(await page.getByText('Components', { exact: true }).isVisible()))
-      await page.getByText('About this project', { exact: true }).click();
-    await page.getByText('Components', { exact: true }).click();
     await page.getByText('Why & tradeoffs', { exact: true }).click();
     for (const theme of ['dark', 'light']) {
       if (theme === 'light')
@@ -2685,7 +2667,7 @@ try {
             );
             await headingContainment(hero.locator('.page-heading'));
 
-            assert.equal(await page.locator('.metric-card').count(), 6);
+            assert.equal(await page.locator('.metric-card').count(), 4);
             const suffix = `${width}-${theme}-${large ? 'larger' : 'standard'}`;
             await layout(page, `summary-introduction-reference-${suffix}`);
             await nav(page, 'Analysis');
@@ -6900,7 +6882,7 @@ try {
     await idle(page);
     const card = page.locator('.metric-card[data-accent="features"]');
     assert.equal(await card.locator('.metric-number').innerText(), '1');
-    assert.equal(await page.locator('.metric-card').count(), 6);
+    assert.equal(await page.locator('.metric-card').count(), 4);
     assert.equal(await page.getByRole('heading', { name: 'Findings', exact: true }).count(), 0);
     assert.equal(await page.locator('.list-row').count(), 0);
     assert.equal(
