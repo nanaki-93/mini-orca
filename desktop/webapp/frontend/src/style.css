@@ -15,6 +15,8 @@
   --accent-hover: #efdab3;
   --accent-text: #302514;
   --accent-soft: #393222;
+  --highlight: var(--accent);
+  --highlight-soft: var(--accent-soft);
   --green: #93deb0;
   --green-soft: #223c2c;
   --red: #f9a3aa;
@@ -94,6 +96,37 @@
   --violet-soft: #2e2b4d;
   --shadow: 0 24px 80px #0009;
 }
+:root[data-theme='signal'] {
+  color-scheme: dark;
+  --canvas: #0d0d10;
+  --sidebar: #151215;
+  --panel: #201a1d;
+  --raised: #2b2227;
+  --hover: #372b31;
+  --line: #514047;
+  --control-line: #b298a3;
+  --subtle-line: #3a2c33;
+  --text: #fff1ec;
+  --secondary: #e3cfd3;
+  --muted: #c9b7ba;
+  --accent: #ff5a61;
+  --accent-hover: #ff8589;
+  --accent-text: #210b0e;
+  --accent-soft: #35191e;
+  --highlight: #ffdc45;
+  --highlight-soft: #302a16;
+  --green: #96deb3;
+  --green-soft: #183227;
+  --red: #ffacb5;
+  --red-soft: #3f2029;
+  --amber: #ffdc45;
+  --amber-soft: #302a16;
+  --blue: #9dd9ea;
+  --blue-soft: #17333d;
+  --violet: #d5b6ef;
+  --violet-soft: #32213f;
+  --shadow: 0 24px 80px #0009;
+}
 :root.large-text {
   font-size: 17px;
 }
@@ -171,7 +204,7 @@ textarea:focus-visible,
 summary:focus-visible,
 pre:focus-visible,
 .diff:focus-visible {
-  outline: 3px solid var(--accent);
+  outline: 3px solid var(--highlight);
   outline-offset: 3px;
 }
 ::selection {
@@ -248,7 +281,7 @@ pre {
   color: var(--muted);
 }
 .accent {
-  color: var(--accent);
+  color: var(--highlight);
 }
 .error-text {
   color: var(--red);
@@ -1904,9 +1937,9 @@ input[type='checkbox'] {
   color: var(--text);
 }
 .tab.active {
-  color: var(--accent);
-  background: var(--accent-soft);
-  border-bottom-color: var(--accent);
+  color: var(--highlight);
+  background: var(--highlight-soft);
+  border-bottom-color: var(--highlight);
   font-weight: 600;
 }
 
@@ -2396,8 +2429,8 @@ summary .row {
 }
 .statusbar button:hover,
 .statusbar button[aria-pressed='true'] {
-  color: var(--accent);
-  background: var(--accent-soft);
+  color: var(--highlight);
+  background: var(--highlight-soft);
 }
 .theme-switcher {
   display: flex;
@@ -2411,7 +2444,7 @@ summary .row {
   font-weight: 650;
 }
 .theme-switcher button[aria-pressed='true'] {
-  box-shadow: inset 0 -2px var(--accent);
+  box-shadow: inset 0 -2px var(--highlight);
 }
 .statusbar svg {
   width: 14px;

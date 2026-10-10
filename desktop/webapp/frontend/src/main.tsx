@@ -56,6 +56,7 @@ const themes = [
   { id: 'dark', name: 'Graphite', letter: 'G', mark: '/mo-mark-graphite.svg' },
   { id: 'light', name: 'Porcelain', letter: 'P', mark: '/mo-mark-porcelain.svg' },
   { id: 'midnight', name: 'Midnight', letter: 'M', mark: '/mo-mark-midnight.svg' },
+  { id: 'signal', name: 'Signal', letter: 'S', mark: '/mo-mark-signal.svg' },
 ] as const;
 function App() {
   const live = useSyncExternalStore(w.subscribe, w.snapshot);

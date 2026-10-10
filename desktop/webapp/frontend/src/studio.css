@@ -181,8 +181,8 @@ svg.icon {
   background: transparent;
 }
 .studio-sections .tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+  color: var(--highlight);
+  border-bottom-color: var(--highlight);
   background: none;
 }
 .studio-overlay {
