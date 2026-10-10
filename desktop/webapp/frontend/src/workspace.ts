@@ -110,6 +110,8 @@ export function analysisSetupModels(s: State): AnalysisAssignments {
     features: resolve(setup.features),
   };
 }
+const changePage = (kind: string): Page =>
+  ['fix', 'performance', 'security'].includes(kind) ? 'changes' : 'chat';
 const initial = (): State => ({
   page: 'welcome',
   busy: '',
@@ -957,7 +959,7 @@ export class Workspace {
       changeSeed: seed,
       change: undefined,
       changeReceipt: undefined,
-      page: 'chat',
+      page: changePage(seed.kind),
       error: '',
     });
     void this.loadChangeHistory();
@@ -1155,13 +1157,14 @@ export class Workspace {
         change.targets[0].path !== preview.path
       )
         throw new Error('Instruction proposal belongs to another scope.');
-      this.set({ change, changeSeed: undefined, changeReceipt: undefined, page: 'chat' });
+      this.set({ change, changeSeed: undefined, changeReceipt: undefined, page: 'changes' });
       await this.requestChangeChecks(false);
     });
   }
   newChange() {
     if (this.state.busy || activeChangeWorkflow(this.state.change)) return;
     this.set({
+      page: 'chat',
       change: undefined,
       changeSeed: undefined,
       changeReceipt: undefined,
@@ -1233,7 +1236,7 @@ export class Workspace {
       (change) => {
         if (change.id !== id || projectKey(change) !== projectKey(this.state.project))
           throw new Error('Workflow belongs to another project revision.');
-        this.set({ change, changeSeed: undefined, page: 'chat' });
+        this.set({ change, changeSeed: undefined, page: changePage(change.kind) });
       },
       () =>
         epoch === this.epoch &&
@@ -1375,7 +1378,7 @@ export class Workspace {
         if (epoch !== this.epoch || operation !== this.operation) return;
         if (projectKey(change) !== projectKey(this.state.project))
           throw new Error('Conversation belongs to another project revision.');
-        this.set({ change, page: 'chat' });
+        this.set({ change, page: changePage(change.kind) });
       }
       const id = change.id;
       try {
@@ -1393,7 +1396,12 @@ export class Workspace {
           return;
         if (next.id !== id || projectKey(next) !== projectKey(change) || !next.workflow)
           throw new Error('Workflow identity does not match this conversation.');
-        this.set({ change: next, changeReceipt: undefined, workflowModels: models, page: 'chat' });
+        this.set({
+          change: next,
+          changeReceipt: undefined,
+          workflowModels: models,
+          page: changePage(next.kind),
+        });
       } catch (error) {
         if (epoch === this.epoch && this.state.change?.id === id) await this.viewChange(id);
         throw error;
@@ -1509,7 +1517,7 @@ export class Workspace {
         if (epoch !== this.epoch || operation !== this.operation) return;
         if (projectKey(change) !== projectKey(this.state.project))
           throw new Error('Conversation belongs to another project revision.');
-        this.set({ change, page: 'chat' });
+        this.set({ change, page: changePage(change.kind) });
       }
       if (!(await this.requestChangeMessage(seed.message, false, profile, preparation))) return;
       if (!(await this.requestChangeChecks(tests))) return;
@@ -1563,7 +1571,7 @@ export class Workspace {
       if (epoch !== this.epoch || operation !== this.operation) return;
       if (change.project_id !== this.state.project?.project_id)
         throw new Error('History belongs to another project.');
-      this.set({ change, changeSeed: undefined, page: 'chat' });
+      this.set({ change, changeSeed: undefined, page: changePage(change.kind) });
     });
   }
   async acceptChange() {

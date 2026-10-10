@@ -241,17 +241,24 @@ async function idle(page) {
 async function nav(page, name) {
   const sidebar = page.getByRole('complementary', { name: 'Application' });
   if (['Bugs', 'Performance', 'Security'].includes(name)) {
-    await sidebar.getByRole('button', { name: 'Findings', exact: true }).click();
-    await page
-      .getByRole('navigation', { name: 'Finding categories' })
-      .getByRole('button', { name, exact: true })
-      .click();
-  } else if (['Files', 'Last run'].includes(name)) {
+    const categories = page.getByRole('navigation', { name: 'Finding categories' });
+    const entering = !(await categories.isVisible());
+    if (entering) await sidebar.getByRole('button', { name: 'Findings', exact: true }).click();
+    if (!entering || name !== 'Bugs')
+      await categories.getByRole('button', { name, exact: true }).click();
+  } else if (name === 'Last run') {
     await sidebar.getByRole('button', { name: 'Analysis', exact: true }).click();
     await page
       .getByRole('navigation', { name: 'Analysis sections' })
-      .getByRole('button', { name: name === 'Files' ? 'Files & scope' : name, exact: true })
+      .getByRole('button', { name, exact: true })
       .click();
+  } else if (['Files', 'Context'].includes(name)) {
+    await sidebar.getByRole('button', { name: 'Context', exact: true }).click();
+    if (name === 'Context')
+      await page
+        .getByRole('navigation', { name: 'Context sections' })
+        .getByRole('button', { name: 'Provider context', exact: true })
+        .click();
   } else if (name === 'Terminal') {
     await page.locator('.statusbar').getByRole('button', { name, exact: true }).click();
   } else if (name === 'Project') {
@@ -524,6 +531,8 @@ async function panelTreatment(panel) {
   });
 }
 async function chatConversationLayout(page) {
+  if ((await page.locator('.page[data-accent]').getAttribute('data-accent')) !== 'chat')
+    await nav(page, 'Chat');
   const workspace = page.locator('.chat-page');
   const conversation = page.getByRole('region', { name: 'Change conversation', exact: true });
   const review = page.getByRole('region', { name: 'Proposal review', exact: true });
@@ -582,6 +591,8 @@ async function chatConversationLayout(page) {
   checks++;
 }
 async function chatReviewLayout(page) {
+  if ((await page.locator('.page[data-accent]').getAttribute('data-accent')) !== 'changes')
+    await nav(page, 'Changes');
   const review = page.getByRole('region', { name: 'Proposal review', exact: true });
   assert.equal(await review.evaluate((element) => getComputedStyle(element).gap), '20px');
   const overflow = await page
@@ -2373,7 +2384,7 @@ try {
             await headingContainment(workspace.locator('.page-heading--intro'));
             const bounds = await workspace.locator('.editor-content').boundingBox();
             for (const control of await workspace
-              .locator('.tabs .tab, .declaration-picker > *, .source-inspection > .actions .button')
+              .locator('.tabs .tab, .declaration-picker > *, .source-document > .actions .button')
               .all()) {
               if (!(await control.isVisible())) continue;
               const box = await control.boundingBox();
@@ -2810,6 +2821,10 @@ try {
       );
       await contrast(page, `Context keyboard focus-${theme}`);
       await contextLink.press('Enter');
+      await page
+        .getByRole('navigation', { name: 'Context sections' })
+        .getByRole('button', { name: 'Provider context', exact: true })
+        .click();
       await page.getByRole('heading', { name: 'Included files' }).waitFor();
       await contrast(page, `Context-${theme}`);
       await nav(page, 'Overview');
@@ -2935,6 +2950,7 @@ try {
             );
             assert.deepEqual(await intro.getByRole('button').allTextContents(), [
               'View run',
+              'Files & scope',
               'Prepare analysis',
               'Repair analysis',
               'Search more feature suggestions',
@@ -5384,7 +5400,7 @@ try {
           }
           assert.equal(
             await commands.locator('.list-row').count(),
-            scenario === 'filtered-empty' ? 0 : 7,
+            scenario === 'filtered-empty' ? 0 : 14,
           );
           if (scenario === 'filtered-empty')
             await commands.getByText('No matching commands.', { exact: true }).waitFor();
@@ -5454,7 +5470,14 @@ try {
       for (const [command, heading] of [
         ['Overview', 'harbor'],
         ['Analyze project', 'Analysis'],
-        ['Editor', 'Source'],
+        ['Source', 'Source'],
+        ['Chat', 'Chat'],
+        ['Changes', 'Changes'],
+        ['Findings', 'Bugs'],
+        ['History', 'History'],
+        ['Context', 'Context'],
+        ['Instructions', 'Project instructions'],
+        ['Architecture', 'Architecture and Flow'],
         ['Terminal', 'Terminal'],
         ['Models', 'Models'],
         ['Verified scan', 'Verified scan'],
@@ -6049,6 +6072,10 @@ try {
         const { page, close } = await pageFor();
         try {
           await idle(page);
+          if (scenario === 'read-failed' && category !== 'bugs') {
+            await nav(page, 'Bugs');
+            await idle(page);
+          }
           const before = await page.evaluate(() =>
             window.fixture.requests.filter((r) => r.method !== 'GET'),
           );
@@ -6420,8 +6447,9 @@ try {
         await panelTreatment(conversation.locator('.panel').first()),
         referencePanel,
       );
-      await page.getByText('Local history', { exact: true }).click();
+      await nav(page, 'History');
       await page.getByText('No saved conversations.', { exact: true }).waitFor();
+      await nav(page, 'Chat');
       const prepare = conversation.getByRole('button', { name: 'Generate changes', exact: true });
       assert.equal(await prepare.isDisabled(), true);
       await page.getByLabel('Task title', { exact: true }).fill(title);
@@ -6477,9 +6505,7 @@ try {
                   await messages.nth(1).locator('.prose pre').textContent(),
                   `// ${'long_code_'.repeat(70)}\n`,
                 );
-                assert.ok(
-                  (await conversation.locator('.chat-history').textContent()).includes(title),
-                );
+                assert.equal(await conversation.locator('.chat-history').count(), 0);
               }
               assert.equal(await prepare.isEnabled(), true);
               await layout(
@@ -6510,20 +6536,24 @@ try {
         'Existing identity effect clears the first submitted request',
       );
       await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+      await nav(page, 'History');
       await page.getByRole('button', { name: 'Refresh history', exact: true }).click();
-      await conversation
+      await page
+        .locator('.chat-history')
         .locator('.list-row')
         .getByRole('button', { name: 'Resume', exact: true })
         .waitFor();
       const generated = await page.evaluate(
         () => window.fixture.requests.filter((r) => r.path.endsWith('/messages')).length,
       );
-      await conversation.getByRole('button', { name: 'Resume', exact: true }).click();
+      await page.getByRole('button', { name: 'Resume', exact: true }).click();
       await idle(page);
+      await nav(page, 'Changes');
       assert.equal(
         await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
         true,
       );
+      await nav(page, 'Chat');
       assert.equal(
         await page.getByLabel('Run project tests after generation', { exact: true }).isChecked(),
         true,
@@ -6561,7 +6591,7 @@ try {
       try {
         await nav(page, 'Chat');
         await idle(page);
-        await page.getByText('Local history', { exact: true }).click();
+        await nav(page, 'History');
         if (state === 'history-unavailable') {
           await page.getByRole('heading', { name: 'History unavailable', exact: true }).waitFor();
           assert.equal(
@@ -6569,6 +6599,7 @@ try {
             true,
           );
         } else {
+          await nav(page, 'Chat');
           await page
             .getByLabel('Add an existing file', { exact: true })
             .selectOption('internal/worker/process.go');
@@ -6590,6 +6621,7 @@ try {
             await page.evaluate(() => {
               window.fixture.state.changed = true;
             });
+            await nav(page, 'History');
             await page.getByRole('button', { name: 'Refresh history', exact: true }).click();
             await page.getByRole('button', { name: 'Resume', exact: true }).click();
             await idle(page);
@@ -6626,7 +6658,8 @@ try {
               await textSize.click();
             for (const width of [1440, 800]) {
               await page.setViewportSize({ width, height: 1000 });
-              await chatConversationLayout(page);
+              if (state === 'history-unavailable') await nav(page, 'History');
+              else await chatConversationLayout(page);
               if (state === 'history-unavailable')
                 assert.equal(
                   await page
@@ -6686,6 +6719,7 @@ try {
         await page.getByLabel('Run project tests after generation', { exact: true }).uncheck();
         await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
         await idle(page);
+        await nav(page, 'Changes');
         const review = page.getByRole('region', { name: 'Proposal review', exact: true });
         if (state === 'missing') {
           await review.getByRole('heading', { name: 'No proposal yet', exact: true }).waitFor();
@@ -6768,7 +6802,9 @@ try {
             true,
           );
           await render('ready-to-accept');
+          await nav(page, 'Chat');
           await page.getByLabel('Run project tests after generation').uncheck();
+          await nav(page, 'Changes');
           await page.evaluate(() => {
             window.fixture.hold = '/api/projects/current/changes/change-1/checks';
           });
@@ -6796,6 +6832,7 @@ try {
             window.fixture.release();
           });
           await idle(page);
+          await nav(page, 'Changes');
           assert.equal(
             await review.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
             false,
@@ -6822,11 +6859,14 @@ try {
     await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Trust this project' }).click();
     await idle(page);
+    await nav(page, 'Changes');
     await page.getByLabel('Read-only diff for internal/worker/process.go').waitFor();
     assert.equal(await page.getByRole('button', { name: 'Accept changes' }).isEnabled(), true);
+    await nav(page, 'Chat');
     await page.getByLabel('Change request', { exact: true }).fill('Preserve the existing API too.');
     await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
     await idle(page);
+    await nav(page, 'Changes');
     assert.equal(await page.getByRole('button', { name: 'Accept changes' }).isEnabled(), true);
     await layout(page, 'chat-review');
     const revision = await page.evaluate(() => {
@@ -6837,6 +6877,7 @@ try {
     });
     await page.getByRole('button', { name: 'Accept changes' }).click();
     await idle(page);
+    await nav(page, 'Changes');
     await page.getByRole('heading', { name: 'Change applied', exact: true }).waitFor();
     assert.equal(
       await page.getByRole('dialog').count(),
@@ -6867,6 +6908,7 @@ try {
       .getByRole('button', { name: 'Undo proposal', exact: true })
       .click();
     await idle(page);
+    await nav(page, 'Changes');
     await page.getByRole('heading', { name: 'Change undone', exact: true }).waitFor();
     await close();
   });
@@ -6879,11 +6921,13 @@ try {
     await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
     await idle(page);
+    await nav(page, 'Changes');
     await page.getByRole('button', { name: 'New conversation' }).click();
-    await page.getByText('Local history', { exact: true }).click();
+    await nav(page, 'History');
     await page.getByRole('button', { name: 'Refresh history' }).click();
     await page.getByRole('button', { name: 'Resume', exact: true }).click();
     await idle(page);
+    await nav(page, 'Changes');
     assert.equal(await page.getByRole('button', { name: 'Accept changes' }).isEnabled(), false);
     assert.equal(
       await page.evaluate(
@@ -6908,6 +6952,7 @@ try {
     await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Trust this project' }).click();
     await idle(page);
+    await nav(page, 'Changes');
     const requests = await page.evaluate(() => window.fixture.requests);
     assert.equal(requests.filter((r) => r.body?.repair === true).length, 3);
     assert.equal(
@@ -6942,11 +6987,12 @@ try {
       ]) {
         if (await control.isVisible()) assert.equal(await control.isDisabled(), true);
       }
-      await page.getByText('Local history', { exact: true }).click();
+      await nav(page, 'History');
       assert.equal(
         await page.getByRole('button', { name: 'Refresh history', exact: true }).isDisabled(),
         true,
       );
+      await nav(page, 'Chat');
       for (const width of [1440, 800]) {
         await page.setViewportSize({ width, height: 1000 });
         await chatConversationLayout(page);
@@ -8351,6 +8397,7 @@ try {
         await page.getByLabel('Run project tests after generation').uncheck();
         await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
         await idle(page);
+        await nav(page, 'Changes');
         await page.getByRole('button', { name: 'Accept changes', exact: true }).click();
         await idle(page);
         const outcome = page.getByRole('region', { name: 'Change outcome', exact: true });
@@ -8456,6 +8503,7 @@ try {
             await control.isDisabled(),
             uncertain && (await control.textContent()).trim() !== 'Refresh project',
           );
+        await nav(page, 'Changes');
         assert.equal(
           await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
           true,
@@ -8528,6 +8576,7 @@ try {
               await outcome.getByText('Write outcome unknown.', { exact: true }).count(),
               0,
             );
+            await nav(page, 'Changes');
             assert.equal(
               await page.getByRole('button', { name: 'Accept changes', exact: true }).isDisabled(),
               true,
@@ -8581,6 +8630,7 @@ try {
       await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
       await page.getByRole('dialog').getByRole('button', { name: 'Continue', exact: true }).click();
       await idle(page);
+      await nav(page, 'Changes');
       await page.getByRole('button', { name: 'Accept changes' }).click();
       await idle(page);
       await page.getByText(mutationWarning, { exact: true }).waitFor();

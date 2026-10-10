@@ -4,7 +4,7 @@ import { Button, Icon } from './ui';
 export function ProjectGuidance({ s }: { s: State }) {
   if (
     !s.project ||
-    s.page !== 'chat' ||
+    !['chat', 'changes'].includes(s.page) ||
     !['fix', 'performance', 'security', 'feature'].includes(
       s.change?.kind || s.changeSeed?.kind || 'feature',
     )

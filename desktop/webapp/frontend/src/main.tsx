@@ -35,14 +35,17 @@ const improveNav: typeof mainNav = [
 const utilityNav: [Page, string, string][] = [
   ['diagrams', 'Architecture', 'branch'],
   ['instructions', 'Instructions', 'file'],
-  ['context', 'Context', 'layers'],
+  ['analysis-files', 'Context', 'layers'],
   ['models', 'Models', 'layers'],
   ['history', 'History', 'clock'],
 ];
 const analysisPages: [Page, string][] = [
   ['analysis', 'Setup'],
-  ['analysis-files', 'Files & scope'],
   ['analysis-run', 'Last run'],
+];
+const contextPages: [Page, string][] = [
+  ['analysis-files', 'Files & scope'],
+  ['context', 'Provider context'],
 ];
 const findingPages: [Page, string][] = [
   ['bugs', 'Bugs'],
@@ -66,19 +69,15 @@ function App() {
   );
   const main = useRef<HTMLElement>(null);
   const changeKind = s.change?.kind || s.changeSeed?.kind;
-  const workspacePage =
-    s.page === 'chat' && ['fix', 'performance', 'security'].includes(changeKind || '')
-      ? changeKind === 'fix'
-        ? 'bugs'
-        : changeKind
-      : s.page;
-  const activePage = findingPages.some(([page]) => page === workspacePage)
+  const fixReview =
+    s.page === 'changes' && ['fix', 'performance', 'security'].includes(changeKind || '');
+  const activePage = findingPages.some(([page]) => page === s.page)
     ? 'bugs'
-    : ['analysis', 'analysis-files', 'analysis-preview', 'analysis-run'].includes(
-          workspacePage || '',
-        )
+    : ['analysis', 'analysis-preview', 'analysis-run'].includes(s.page)
       ? 'analysis'
-      : workspacePage;
+      : contextPages.some(([page]) => page === s.page)
+        ? 'analysis-files'
+        : s.page;
   useEffect(() => {
     void w.start();
     const focus = () => void w.refreshFile();
@@ -291,7 +290,7 @@ function App() {
                 </div>
               )}
               <div className="page" data-accent={s.page}>
-                {workspacePage === s.page && <ProjectGuidance s={s} />}
+                {!fixReview && <ProjectGuidance s={s} />}
                 {!['chat', 'changes'].includes(s.page) &&
                   s.change?.workflow &&
                   s.change.state === 'draft' && (
@@ -310,6 +309,8 @@ function App() {
                     {error}
                   </Notice>
                 ))}
+                {contextPages.some(([page]) => page === s.page) &&
+                  sectionLinks(contextPages, 'Context sections')}
                 {analysisPages.some(([page]) => page === s.page) &&
                   sectionLinks(analysisPages, 'Analysis sections')}
                 {findingPages.some(([page]) => page === s.page) &&

@@ -315,7 +315,7 @@ export function AgentModel({
         onClick={() => setEditing(true)}
       >
         <ModelIcon model={model} />
-        <span className="sr-only">
+        <span className="analysis-model-choice">
           <strong>
             {selected?.name ||
               model?.model ||

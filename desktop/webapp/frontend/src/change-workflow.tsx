@@ -102,9 +102,11 @@ export function WorkflowProgress({
           </p>
         </section>
       )}
-      {workflow.status === 'awaiting_human_review' && s.change?.state === 'draft' && (
-        <Notice>Review the file differences, then select {actionLabel}.</Notice>
-      )}
+      {showOutcome &&
+        workflow.status === 'awaiting_human_review' &&
+        s.change?.state === 'draft' && (
+          <Notice>Review the file differences, then select {actionLabel}.</Notice>
+        )}
       {showCancel && activeChangeWorkflow(s.change) && (
         <div className="actions">
           <Button

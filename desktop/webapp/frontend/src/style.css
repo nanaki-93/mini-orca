@@ -742,10 +742,13 @@ pre {
   grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
+.analysis-model-settings {
+  container-type: inline-size;
+}
 .analysis-model-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
   gap: 12px;
   min-width: 0;
   padding: 15px;
@@ -766,6 +769,10 @@ pre {
   font-size: 0.86rem;
   font-weight: 600;
 }
+.analysis-model-card .analysis-operation {
+  display: flex;
+  align-items: center;
+}
 .analysis-operation-icons {
   display: flex;
   color: var(--section-color);
@@ -779,14 +786,29 @@ pre {
 .analysis-model-trigger {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  flex-shrink: 0;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  min-height: 56px;
+  padding: 10px;
+  text-align: left;
   border: 1px solid var(--control-line);
   border-radius: 10px;
   background: var(--panel);
   color: var(--text);
+}
+.analysis-model-choice {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.analysis-model-choice strong {
+  font-size: 0.84rem;
+}
+.analysis-model-choice small {
+  color: var(--muted);
+  font-size: 0.72rem;
 }
 .analysis-model-trigger:hover:not(:disabled) {
   border-color: var(--section-color);
@@ -1380,7 +1402,7 @@ pre {
 }
 .chat-scope-fields {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 .chat-scope-files {
@@ -2820,16 +2842,13 @@ dialog.model-picker {
   font-family: var(--mono);
   font-size: 0.78rem;
 }
-.chat-history .panel-pad,
 .chat-provider-context .panel-pad {
   padding: 0 20px;
 }
-.chat-history details,
 .chat-provider-context details {
   margin-top: 0;
   border-top: 0;
 }
-.chat-history summary,
 .chat-provider-context summary {
   padding: 14px 0;
   font-size: 0.98rem;
@@ -3004,7 +3023,7 @@ dialog.model-picker {
   margin: 0 0 14px;
 }
 .fix-models .workflow-model-selectors {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
 }
 .fix-permissions {
   margin-top: 16px;
@@ -3315,6 +3334,90 @@ dialog.model-picker {
 }
 @media (max-width: 900px) {
   .analysis-model-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.studio-sections {
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.chat-proposal .panel-body > .row {
+  gap: 18px;
+}
+.chat-proposal p {
+  margin: 6px 0 0;
+}
+
+/* Keep conversation, source and review focused on their primary content. */
+.chat-conversation .chat-task,
+.chat-conversation .chat-message {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.chat-conversation .chat-task .panel-head,
+.chat-conversation .chat-message .panel-head {
+  border: 0;
+  padding: 0 0 8px;
+}
+.chat-conversation .chat-task .panel-body,
+.chat-conversation .chat-message .panel-body {
+  padding: 0 0 16px;
+}
+.chat-conversation .chat-task .panel-body {
+  border-bottom: 1px solid var(--line);
+}
+.chat-file-scope .bullet-content {
+  margin: 0;
+}
+.chat-file-scope .bullet-content ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+}
+.chat-composer .composer {
+  min-height: 112px;
+}
+.change-workspace--review > .chat-review {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.42fr);
+  align-items: start;
+}
+.change-workspace--review .review-overview,
+.change-workspace--review .workflow-progress,
+.change-workspace--review .change-acceptance,
+.change-workspace--review .chat-provider-context {
+  grid-column: 1 / -1;
+}
+.review-overview {
+  min-width: 0;
+  gap: 12px;
+}
+.review-overview h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+.review-overview p {
+  margin: 6px 0 0;
+}
+.source-document,
+.source-context {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  align-content: start;
+}
+.source-inspection {
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.6fr);
+  align-items: start;
+}
+@media (max-width: 1250px) {
+  .source-inspection {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 1100px) {
+  .change-workspace--review > .chat-review {
     grid-template-columns: minmax(0, 1fr);
   }
 }
