@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"sync"
 
+	"github.com/nanaki-93/mini-orca/v2/desktop/webapp/internal/appicon"
 	"github.com/nanaki-93/mini-orca/v2/desktop/webapp/internal/assets"
 	"github.com/nanaki-93/mini-orca/v2/desktop/webapp/internal/bridge"
 	"github.com/wailsapp/wails/v2"
@@ -91,13 +93,22 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	icon, err := fs.ReadFile(files, "app-icon.png")
+	if err != nil {
+		return fmt.Errorf("read desktop application icon: %w", err)
+	}
 	app := &Desktop{client: client}
 	return wails.Run(&options.App{
 		Title: "Mini-Orca", Width: 1440, Height: 920, MinWidth: 900, MinHeight: 640,
 		BackgroundColour: options.NewRGB(19, 22, 25),
 		AssetServer:      &assetserver.Options{Assets: files},
-		OnStartup:        func(ctx context.Context) { app.ctx = ctx },
-		OnBeforeClose:    app.beforeClose, Bind: []interface{}{app},
+		OnStartup: func(ctx context.Context) {
+			app.ctx = ctx
+			if err := appicon.Set(icon); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+			}
+		},
+		OnBeforeClose: app.beforeClose, Bind: []interface{}{app},
 		Mac: &mac.Options{TitleBar: mac.TitleBarDefault()},
 	})
 }

@@ -39,6 +39,7 @@ export const icons: Record<string, string> = {
   play: '<path d="m7 4 14 8-14 8V4Z"/>',
   pause: '<path d="M8 4v16M16 4v16"/>',
   stop: '<rect x="5" y="5" width="14" height="14" rx="2"/>',
+  trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/>',
   close: '<path d="m6 6 12 12M6 18 18 6"/>',
   plus: '<path d="M12 4v16M4 12h16"/>',
   minus: '<path d="M4 12h16"/>',

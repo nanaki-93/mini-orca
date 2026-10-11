@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import type { ChangeSeed } from './models';
 import { workspace as w, workflowSeed, type FixPreparationContext, type State } from './workspace';
 import { defaultWorkflowModels } from './change-workflow';
-import { Button, Disclosure, Icon, Notice, Panel } from './ui';
+import { Button, Icon, Notice, Panel } from './ui';
 
 export function FixPreparation({
   s,
@@ -61,6 +61,13 @@ export function FixPreparation({
           </ul>
         </>
       )}
+      {context && (
+        <p id={permissionsID} className="small muted fix-preparation-note">
+          {seed.kind === 'security' && 'Security fix · '}
+          {remote && 'Shares files and instructions with selected remote models · '}
+          Runs isolated checks
+        </p>
+      )}
       <div className="actions">
         <Button
           tone="primary"
@@ -78,33 +85,11 @@ export function FixPreparation({
           {label}
         </Button>
       </div>
-      <div className="fix-checks">
-        <Disclosure title="Permissions & checks">
-          {context && (
-            <span id={permissionsID} className="small muted">
-              {seed.kind === 'security' && 'Security fix · '}
-              {remote && 'Shares files and instructions with selected remote models · '}
-              Runs isolated checks
-            </span>
-          )}
-          {context && (
-            <Disclosure title="Project checks">
-              {context.trust.commands.map((argv, index) => (
-                <p key={index}>
-                  <code>{argv.join(' ')}</code>
-                </p>
-              ))}
-            </Disclosure>
-          )}
-          <Button
-            icon="refresh"
-            disabled={disabled}
-            onClick={() => setRefresh((value) => value + 1)}
-          >
-            Refresh preparation
-          </Button>
-        </Disclosure>
-      </div>
+      {(error || (context && !ready)) && (
+        <Button icon="refresh" disabled={disabled} onClick={() => setRefresh((value) => value + 1)}>
+          Refresh preparation
+        </Button>
+      )}
     </Panel>
   );
 }
