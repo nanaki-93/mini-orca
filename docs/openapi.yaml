@@ -142,6 +142,28 @@ paths:
         '200': {description: Current guarded result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeMutationResult'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/changes/{sessionID}/commit:
+    parameters:
+      - {in: path, name: sessionID, required: true, schema: {type: string}}
+    post:
+      tags: [Chat]
+      description: Retry a failed commit of the latest applied proposal without reapplying source.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeApplyRequest'}}}}
+      responses:
+        '200': {description: Applied source and separate commit outcome, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeMutationResult'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/git/repository:
+    get:
+      tags: [Projects]
+      description: Read repository identity and working-tree state without executing project code.
+      parameters:
+        - {in: query, name: project_id, required: true, schema: {type: string}}
+        - {in: query, name: project_revision, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Current Git repository, content: {application/json: {schema: {$ref: '#/components/schemas/GitRepository'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/undo:
     parameters:
       - {in: path, name: sessionID, required: true, schema: {type: string}}
@@ -2252,6 +2274,9 @@ components:
           required: [confirm]
           properties:
             confirm: {type: boolean, enum: [true]}
+            head: {type: string, description: Reviewed Git HEAD for Apply and Commit}
+            branch: {type: string, description: Reviewed local branch}
+            commit_message: {type: string, maxLength: 4096, description: Supplying this opts into Apply and Commit; limit is 4096 UTF-8 bytes}
     ChangeWorkflowModels:
       type: object
       additionalProperties: false
@@ -2311,6 +2336,8 @@ components:
       type: object
       required: [id, project_id, project_revision, kind, title, revision, hash, state, freshness, targets, changes, messages, checks]
       properties:
+        git: {$ref: '#/components/schemas/GitIdentity'}
+        commit: {$ref: '#/components/schemas/ChangeCommit'}
         schema_version: {type: integer, enum: [1]}
         id: {type: string}
         project_id: {type: string}
@@ -2363,6 +2390,7 @@ components:
     ChangeMutationResult:
       type: object
       properties:
+        commit: {$ref: '#/components/schemas/ChangeCommit'}
         session_id: {type: string}
         project_id: {type: string}
         project_revision: {type: string}
@@ -2377,6 +2405,7 @@ components:
       description: Local conversation summary; use a guarded selected read or resume for contents.
       required: [id, project_id, project_revision, kind, title, revision, hash, state, freshness, updated_at]
       properties:
+        commit: {$ref: '#/components/schemas/ChangeCommit'}
         id: {type: string}
         project_id: {type: string}
         project_revision: {type: string}
@@ -2525,3 +2554,34 @@ components:
         generation_id: {type: string}
         added_count: {type: integer, minimum: 0, maximum: 5}
         duplicate_count: {type: integer, minimum: 0, maximum: 5}
+    GitIdentity:
+      type: object
+      required: [head, branch]
+      properties:
+        head: {type: string}
+        branch: {type: string}
+    ChangeCommit:
+      allOf:
+        - {$ref: '#/components/schemas/GitIdentity'}
+        - type: object
+          required: [state, message]
+          properties:
+            state: {type: string, enum: [pending, failed, committed]}
+            message: {type: string}
+            oid: {type: string}
+            error: {type: string}
+    GitRepository:
+      allOf:
+        - {$ref: '#/components/schemas/GitIdentity'}
+        - type: object
+          required: [project_id, project_revision, available, root, at_root, dirty, conflicts]
+          properties:
+            project_id: {type: string}
+            project_revision: {type: string}
+            available: {type: boolean}
+            root: {type: string}
+            at_root: {type: boolean}
+            dirty: {type: boolean}
+            merge_head: {type: string}
+            operation: {type: string}
+            conflicts: {type: array, items: {type: string}}

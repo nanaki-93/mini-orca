@@ -41,6 +41,8 @@ type ChangeSession struct {
 	Instructions       map[string]string       `json:"instructions"`
 	PolicyFingerprint  string                  `json:"policy_fingerprint"`
 	WorkspaceHash      string                  `json:"workspace_hash"`
+	Git                *GitIdentity            `json:"git,omitempty"`
+	Commit             *ChangeCommit           `json:"commit,omitempty"`
 	Revision           int64                   `json:"revision"`
 	Hash               string                  `json:"hash"`
 	State              string                  `json:"state"`
@@ -61,17 +63,18 @@ type ChangeSession struct {
 // Listing summaries keeps a full history within the native response bound;
 // source and conversation contents are returned only for the chosen session.
 type ChangeHistoryEntry struct {
-	ID              string    `json:"id"`
-	ProjectID       string    `json:"project_id"`
-	ProjectRevision string    `json:"project_revision"`
-	Kind            string    `json:"kind"`
-	Title           string    `json:"title"`
-	Revision        int64     `json:"revision"`
-	Hash            string    `json:"hash"`
-	State           string    `json:"state"`
-	Freshness       string    `json:"freshness"`
-	WorkflowStatus  string    `json:"workflow_status,omitempty"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID              string        `json:"id"`
+	ProjectID       string        `json:"project_id"`
+	ProjectRevision string        `json:"project_revision"`
+	Kind            string        `json:"kind"`
+	Title           string        `json:"title"`
+	Revision        int64         `json:"revision"`
+	Hash            string        `json:"hash"`
+	State           string        `json:"state"`
+	Freshness       string        `json:"freshness"`
+	WorkflowStatus  string        `json:"workflow_status,omitempty"`
+	Commit          *ChangeCommit `json:"commit,omitempty"`
+	UpdatedAt       time.Time     `json:"updated_at"`
 }
 
 type ChangeCreateRequest struct {
@@ -110,7 +113,9 @@ type ChangeCheckRequest struct {
 
 type ChangeApplyRequest struct {
 	ChangeIdentity
-	Confirm bool `json:"confirm"`
+	GitIdentity
+	Confirm       bool   `json:"confirm"`
+	CommitMessage string `json:"commit_message,omitempty"`
 }
 
 type ChangeMutationResult struct {
@@ -123,4 +128,5 @@ type ChangeMutationResult struct {
 	Index           *project.ProjectIndex `json:"index,omitempty"`
 	Warnings        []string              `json:"warnings"`
 	Verification    *ChangeVerification   `json:"verification,omitempty"`
+	Commit          *ChangeCommit         `json:"commit,omitempty"`
 }

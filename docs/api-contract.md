@@ -76,6 +76,8 @@ untrusted networks.
 | GET | `/api/projects/current/files/info` | Read safe selected-file information for project-relative `path`. |
 | GET | `/api/projects/current/files/symbols` | List atomic targets in one selected eligible file. |
 | GET | `/api/projects/current/impact` | Read advisory source-free impact references for one file or symbol. |
+| GET | `/api/projects/current/git/repository` | Read guarded repository identity, branch and working-tree state. |
+| POST | `/api/projects/current/changes/{sessionID}/commit` | Retry the latest failed proposal commit without reapplying source. |
 | GET | `/api/projects/current/git` | Read target-file Git availability, branch, and status. |
 | GET | `/api/projects/current/files/analysis` | Read cached semantic analysis for one selected file and revision. |
 | POST | `/api/projects/current/files/analysis` | Explicitly analyze exactly one selected file. |
@@ -758,6 +760,28 @@ required; code tests/vet run only with current execution trust in a copied works
 using fixed argv. New test files are tested against the base and candidate, and a
 reviewed regression proof stays pinned through repair. Passing parser checks alone
 does not establish runtime correctness. Apply and Undo require `confirm: true`.
+
+Apply optionally accepts `commit_message` (non-empty, at most 4096 UTF-8 bytes),
+`head` and `branch` to apply and commit the reviewed paths. Git-backed sessions
+capture branch/HEAD in addition to source identity; a branch switch or external
+commit invalidates the proposal. Git mutations require opening the repository or
+worktree root on a local branch with an initial commit and no merge/rebase in progress.
+Existing schema-1 history without Git identity remains readable; current request
+Git identity and existing source guards still apply when committing it.
+
+The commit uses a private index, raw reviewed blobs, `git commit-tree` and a
+compare-and-swap branch update. Unrelated staged/untracked content is excluded;
+pre-existing edits or staging on proposal paths block Apply & Commit before any
+source writes. This operation skips hooks, attribute filters and signing. Git
+identity comes from normal Git configuration. No push or remote request occurs.
+The optional `commit` object on mutation receipts, sessions and history records
+`state` (`pending`, `failed`, `committed`), message, original branch/HEAD, candidate
+`oid` and any error. A failed commit leaves source applied. Retry via
+`POST /api/projects/current/changes/{sessionID}/commit` carries current project
+identity, proposal hash, `confirm: true` and an editable `commit_message` and
+rechecks source and Git identity. A recorded candidate is reconciled after an
+interruption before retry is offered; ambiguous outcomes stay pending.
+Undo restores source as working-tree changes and does not rewrite commit history.
 
 Every proposal revision clears earlier checks/review. Apply uses current-session
 authority and rechecks source, policy, instruction and whole check-workspace hashes.

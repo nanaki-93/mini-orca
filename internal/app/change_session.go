@@ -39,6 +39,10 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 	if err := captureChangeScope(root, session, request.Paths); err != nil {
 		return nil, err
 	}
+	session.Git, err = captureChangeGit(ctx, root)
+	if err != nil {
+		return nil, err
+	}
 	_, manifest, err := changeContext(root, session)
 	if err != nil {
 		return nil, err
@@ -116,6 +120,9 @@ func (s *Service) verifyChangeCurrent(ctx context.Context, root string, session 
 	}
 	if s.manager.Root() != root || index.ProjectID != session.ProjectID || index.ProjectRevision != session.ProjectRevision {
 		return project.ErrRevisionConflict
+	}
+	if err := verifyChangeGit(ctx, root, session.Git); err != nil {
+		return err
 	}
 	policy, err := project.NewContextPolicy(root)
 	if err != nil {

@@ -140,6 +140,8 @@ func newHTTPMux(
 
 	chatHandler := handlers.NewChatHandler(application)
 	changeHandler := handlers.NewChangeHandler(application, projectManager)
+	gitHandler := handlers.NewGitHandler(application)
+	mux.HandleFunc("GET /api/projects/current/git/repository", gitHandler.Repository)
 	mux.HandleFunc("GET /api/projects/current/changes", changeHandler.List)
 	mux.HandleFunc("POST /api/projects/current/changes", changeHandler.Open)
 	mux.HandleFunc("GET /api/projects/current/changes/recovery", changeHandler.Recovery)
@@ -151,6 +153,7 @@ func newHTTPMux(
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/workflow/cancel", changeHandler.CancelWorkflow)
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/review", changeHandler.Review)
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/apply", changeHandler.Apply)
+	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/commit", changeHandler.Commit)
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/undo", changeHandler.Undo)
 	mux.HandleFunc("POST /api/projects/current/changes/{sessionID}/verify", changeHandler.Verify)
 	mux.HandleFunc("GET /api/projects/current/instructions", changeHandler.Instructions)

@@ -19,6 +19,7 @@ type changeJournal struct {
 	PostWorkspaceHash string              `json:"post_workspace_hash"`
 	Warnings          []string            `json:"warnings,omitempty"`
 	Verification      *ChangeVerification `json:"verification,omitempty"`
+	Commit            *ChangeCommit       `json:"commit,omitempty"`
 }
 
 func writeChangeJournal(root string, journal *changeJournal) error {
@@ -61,6 +62,9 @@ func readChangeJournal(root string) (*changeJournal, error) {
 	if decoder.Decode(new(any)) != io.EOF || journal.Version != 1 || validateStoredChange(journal.Session) != nil {
 		return nil, fmt.Errorf("invalid change recovery journal")
 	}
+	if journal.Commit != nil && journal.Commit.State == "pending" {
+		reconcileChangeCommit(context.Background(), root, journal.Commit)
+	}
 	return &journal, nil
 }
 
@@ -91,6 +95,10 @@ func (s *Service) applyChangeWithWriter(ctx context.Context, id string, request 
 		return nil, fmt.Errorf("recover the pending change before applying another proposal")
 	}
 	journal := &changeJournal{Version: 1, Session: *session, State: "prepared"}
+	journal.Commit, err = preflightChangeCommit(ctx, root, session, request)
+	if err != nil {
+		return nil, err
+	}
 	if err := writeChangeJournal(root, journal); err != nil {
 		return nil, fmt.Errorf("save recovery journal; source was not changed: %w", err)
 	}
@@ -101,6 +109,9 @@ func (s *Service) applyChangeWithWriter(ctx context.Context, id string, request 
 		return s.failedChangeMutation(root, journal, previous, err)
 	}
 	journal.State = "applied"
+	if journal.Commit != nil {
+		finishChangeCommit(ctx, root, journal)
+	}
 	return s.completeChangeMutation(root, journal, nil), nil
 }
 
@@ -239,6 +250,9 @@ func (s *Service) UndoChange(ctx context.Context, id string, request ChangeApply
 	if !matchesChangeUndo(journal, index, id, request) {
 		return nil, project.ErrRevisionConflict
 	}
+	if err := verifyCommittedChange(ctx, root, journal); err != nil {
+		return nil, err
+	}
 	if journal.State == "applied" && journal.PostWorkspaceHash != "" {
 		if err := (benchmarkFixture{fingerprint: journal.PostWorkspaceHash}).verifyCurrent(ctx, root); err != nil {
 			return nil, err
@@ -266,6 +280,7 @@ func matchesChangeUndo(journal *changeJournal, index *project.ProjectIndex, id s
 
 func (s *Service) completeChangeMutation(root string, journal *changeJournal, warnings []string) *ChangeMutationResult {
 	result := &ChangeMutationResult{SessionID: journal.Session.ID, ProjectID: journal.Session.ProjectID, ProjectRevision: journal.Session.ProjectRevision, State: journal.State, Hash: journal.Session.Hash, UndoAvailable: journal.State != "undone", Warnings: append([]string{}, warnings...)}
+	result.Commit, journal.Session.Commit = journal.Commit, journal.Commit
 	s.clearExecutionTrust()
 	index, err := s.reindexActiveProject()
 	if err != nil {
@@ -311,5 +326,5 @@ func (s *Service) ChangeRecovery() (*ChangeMutationResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ChangeMutationResult{SessionID: journal.Session.ID, ProjectID: journal.Session.ProjectID, ProjectRevision: index.ProjectRevision, State: journal.State, Hash: journal.Session.Hash, UndoAvailable: journal.State != "undone", Warnings: append([]string{}, journal.Warnings...), Verification: verification}, nil
+	return &ChangeMutationResult{SessionID: journal.Session.ID, ProjectID: journal.Session.ProjectID, ProjectRevision: index.ProjectRevision, State: journal.State, Hash: journal.Session.Hash, UndoAvailable: journal.State != "undone", Warnings: append([]string{}, journal.Warnings...), Verification: verification, Commit: journal.Commit}, nil
 }

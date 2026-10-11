@@ -128,6 +128,14 @@ func (h *ChangeHandler) Undo(w http.ResponseWriter, r *http.Request) {
 	value, err := h.service.UndoChange(r.Context(), r.PathValue("sessionID"), request)
 	respondWorkflow(w, value, err)
 }
+func (h *ChangeHandler) Commit(w http.ResponseWriter, r *http.Request) {
+	var request app.ChangeApplyRequest
+	if !decodeWorkflowBody(w, r, &request) {
+		return
+	}
+	value, err := h.service.RetryChangeCommit(r.Context(), r.PathValue("sessionID"), request)
+	respondWorkflow(w, value, err)
+}
 func (h *ChangeHandler) Recovery(w http.ResponseWriter, r *http.Request) {
 	if !guardedWorkflowRead(w, r, h.manager) {
 		return
