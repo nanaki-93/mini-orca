@@ -86,6 +86,7 @@ func TestGitWorktreeCreationIsolationAndGuards(t *testing.T) {
 func TestGitBranchSwitchRejectsDirtyAndCheckedOutBranches(t *testing.T) {
 	service, root, request := gitWorkflowFixture(t)
 	testGit(t, root, "branch", "other")
+	testGit(t, root, "tag", "other")
 	request.TargetBranch = "other"
 	if err := os.WriteFile(filepath.Join(root, "user.txt"), []byte("user work"), 0644); err != nil {
 		t.Fatal(err)

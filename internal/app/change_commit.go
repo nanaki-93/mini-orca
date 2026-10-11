@@ -61,6 +61,9 @@ func cleanGitTarget(ctx context.Context, root, head string, target *ChangeTarget
 		if tracked == "" {
 			return fmt.Errorf("%s has pre-existing uncommitted content; commit it or prepare the fix in a new worktree", target.Path)
 		}
+		if !strings.HasPrefix(tracked, gitFileMode(target.Mode)+" ") {
+			return fmt.Errorf("%s has a pre-existing executable-bit change; commit it before applying", target.Path)
+		}
 		original, err := gitRead(ctx, root, "show", head+":"+target.Path)
 		if err != nil {
 			return err
@@ -156,10 +159,7 @@ func stageReviewedGitFile(ctx context.Context, root, index string, edit ChangeEd
 	if err != nil {
 		return err
 	}
-	mode := "100644"
-	if current.Mode&0111 != 0 {
-		mode = "100755"
-	}
+	mode := gitFileMode(current.Mode)
 	_, err = gitCommand(ctx, root, index, nil, "update-index", "--add", "--cacheinfo", mode, strings.TrimSpace(blob), edit.Path)
 	return err
 }
@@ -254,4 +254,11 @@ func writeReviewedGitTree(ctx context.Context, root string, session *ChangeSessi
 		}
 	}
 	return gitCommand(ctx, root, index, nil, "write-tree")
+}
+
+func gitFileMode(mode uint32) string {
+	if mode&0111 != 0 {
+		return "100755"
+	}
+	return "100644"
 }
