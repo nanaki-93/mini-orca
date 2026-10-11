@@ -1600,7 +1600,6 @@ try {
       0,
     );
     await page.locator('.result-row').first().click();
-    await page.locator('summary').getByText('Details', { exact: true }).click();
     await page.getByText(/AI analysis/).waitFor();
     await nav(page, 'Features');
     await openFeature(page);
@@ -3116,8 +3115,28 @@ try {
       await chooseModel(page.getByLabel('Performance model', { exact: true }), 'bug');
       await chooseModel(page.getByLabel('Feature discovery model', { exact: true }), 'analyze');
       assert.deepEqual(await families(), ['claude', 'openai', 'gemini', 'gemini']);
+      await nav(page, 'Analysis');
+      const summary = page.locator('.analysis-model-summary');
+      assert.deepEqual(await summary.locator('strong').allTextContents(), [
+        'Bug analysis',
+        'Performance',
+        'Security',
+        'Feature discovery',
+      ]);
+      assert.equal(await summary.locator('.analysis-operation > .icon').count(), 4);
+      assert.equal(await summary.locator('p').count(), 0);
+      assert.deepEqual(
+        await summary
+          .locator('.analysis-assigned-model .analysis-model-icon')
+          .evaluateAll((icons) => icons.map((icon) => icon.dataset.family)),
+        ['claude', 'openai', 'gemini', 'gemini'],
+      );
+      assert.deepEqual(
+        await summary.locator('.analysis-assigned-model > span:last-child').allTextContents(),
+        ['claude-opus-4', 'gpt-5', 'gemini-2.5-flash', 'gemini-2.5-flash'],
+      );
       await nav(page, 'Last run');
-      await page.getByText('Run details', { exact: true }).click();
+      await page.getByRole('heading', { name: 'Run details', exact: true }).waitFor();
       await capturedDetails(page.locator('.analysis-run-models'), saved.details);
       await nav(page, 'Models');
       assert.deepEqual(
@@ -3416,7 +3435,7 @@ try {
         );
         await nav(page, 'Last run');
         await page.getByRole('heading', { name: 'Project analysis', exact: true }).waitFor();
-        await page.getByText('Run details', { exact: true }).click();
+        await page.getByRole('heading', { name: 'Run details', exact: true }).waitFor();
         const runPanel = page.locator('section.panel').filter({
           has: page.getByRole('heading', { name: 'Captured models', exact: true }),
         });
@@ -4118,7 +4137,7 @@ try {
     await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
     await idle(page);
     await startAnalysis(page);
-    await page.getByText('Run details', { exact: true }).click();
+    await page.getByRole('heading', { name: 'Run details', exact: true }).waitFor();
     await page
       .getByRole('heading', { name: 'New feature suggestions', exact: true })
       .locator('..')
@@ -4259,17 +4278,16 @@ try {
           'Analysis setup',
           'Open results',
           'Open feature suggestions',
+          'Open findings',
+          'Feature ideas',
         ])
           assert.equal(
             await workspace.getByRole('button', { name: removed, exact: true }).count(),
             0,
           );
-        const runDetails = workspace.locator(':scope > details');
-        assert.equal(await runDetails.getAttribute('open'), null);
-        await analysisRunLayout(page);
-        await layout(page, `analysis-run-${status}-collapsed-1440-dark-standard`);
-        await runDetails.locator(':scope > summary').press('Enter');
-        assert.equal(await runDetails.getAttribute('open'), '');
+        const runDetails = workspace.getByRole('region', { name: 'Run details', exact: true });
+        assert.equal(await runDetails.isVisible(), true);
+        assert.equal(await workspace.locator(':scope > details').count(), 0);
         const features = workspace.locator('section.panel').filter({
           has: page.getByRole('heading', { name: 'New feature suggestions', exact: true }),
         });
@@ -4290,12 +4308,9 @@ try {
         const before = await page.evaluate(() =>
           window.fixture.requests.filter((r) => r.method !== 'GET'),
         );
-        const fileProgress = workspace.locator('.analysis-run-details > details');
-        await fileProgress.locator(':scope > summary').click();
-        const disclosure = fileProgress.locator('details').first();
-        await disclosure.locator('summary').press('Enter');
-        assert.equal(await disclosure.getAttribute('open'), '');
-        await disclosure.getByText('completed', { exact: true }).first().waitFor();
+        const failedFiles = workspace.locator('.analysis-failed-files');
+        await failedFiles.getByText('No file failures reported.', { exact: true }).waitFor();
+        assert.equal(await failedFiles.locator('details').count(), 0);
         await analysisRunLayout(page);
         await layout(page, `analysis-run-${status}-1440-dark-standard`);
         await page.setViewportSize({ width: 800, height: 900 });
@@ -4322,6 +4337,87 @@ try {
       } finally {
         await close();
       }
+    }
+  });
+  await test('Analysis run lists only failed files and updates the list with live progress', async () => {
+    const statuses = [
+      'completed',
+      'partial',
+      'pending',
+      'running',
+      'unavailable',
+      'skipped',
+      'canceled',
+      'interrupted',
+      'stale',
+      'failed',
+    ];
+    const { page, close } = await pageFor({
+      runStatus: 'running',
+      runOverride: {
+        files: statuses.map((status) => ({
+          path: `internal/${status}.go`,
+          content_hash: status,
+          language: 'go',
+          stages: [
+            {
+              stage: 'semantic',
+              status,
+              attempts: 1,
+              cached: false,
+              finding_count: null,
+              reason: `${status} diagnostic`,
+            },
+            {
+              stage: 'performance',
+              status,
+              attempts: 1,
+              cached: false,
+              finding_count: null,
+              reason: `${status} performance diagnostic`,
+            },
+          ],
+        })),
+      },
+    });
+    try {
+      await nav(page, 'Last run');
+      const files = page.locator('.analysis-failed-files');
+      const writes = await page.evaluate(() =>
+        window.fixture.requests.filter((r) => r.method !== 'GET'),
+      );
+      assert.deepEqual(await files.locator('.analysis-file-path').allTextContents(), [
+        'internal/failed.go',
+      ]);
+      const failure = files.locator('details');
+      await failure.locator('summary').press('Enter');
+      await failure.getByText('failed diagnostic', { exact: true }).waitFor();
+      await failure.getByText('failed performance diagnostic', { exact: true }).waitFor();
+      await page.evaluate(() => {
+        for (const file of window.fixture.state.run.files) {
+          for (const stage of file.stages) {
+            if (file.path === 'internal/failed.go') stage.status = 'completed';
+            if (file.path === 'internal/running.go') stage.status = 'failed';
+          }
+        }
+      });
+      await files.getByText('internal/running.go', { exact: true }).waitFor();
+      assert.deepEqual(await files.locator('.analysis-file-path').allTextContents(), [
+        'internal/running.go',
+      ]);
+      await page.evaluate(() => {
+        for (const file of window.fixture.state.run.files)
+          for (const stage of file.stages) stage.status = 'completed';
+      });
+      await files.getByText('No file failures reported.', { exact: true }).waitFor();
+      assert.equal(await files.locator('details').count(), 0);
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+        writes,
+        'Viewing file failures does not dispatch work or mutate source',
+      );
+    } finally {
+      await close();
     }
   });
   await test('Analysis run long evidence retains independent progress and unknown versus zero counts', async () => {
@@ -4428,7 +4524,7 @@ try {
       await nav(page, 'Analysis');
       await nav(page, 'Last run');
       const workspace = page.locator('.analysis-run');
-      await workspace.getByText('Run details', { exact: true }).click();
+      await workspace.getByRole('heading', { name: 'Run details', exact: true }).waitFor();
       const models = workspace.locator('.analysis-run-models');
 
       await workspace
@@ -4469,9 +4565,8 @@ try {
         true,
       );
       assert.equal(await featurePanel.locator('details').count(), 1);
-      const fileProgress = workspace.locator('.analysis-run-details > details');
-      await fileProgress.locator(':scope > summary').click();
-      const disclosure = fileProgress.locator('details').first();
+      const failedFiles = workspace.locator('.analysis-failed-files');
+      const disclosure = failedFiles.locator('details').first();
       await disclosure.locator('summary').press('Enter');
       await disclosure.getByText(stageReason, { exact: true }).first().waitFor();
       await disclosure.getByText('1 attempts · cached', { exact: true }).waitFor();
@@ -4705,7 +4800,10 @@ try {
         );
         const progress = workspace.getByRole('progressbar', { name: 'File analysis progress' });
         const percent = workspace.locator('.analysis-progress-percent');
-        assert.equal(await workspace.locator(':scope > details').getAttribute('open'), null);
+        assert.equal(
+          await workspace.getByRole('region', { name: 'Run details' }).isVisible(),
+          true,
+        );
         assert.equal(await progress.count(), scenario.total > 0 ? 1 : 0);
         assert.equal(await percent.count(), scenario.total > 0 ? 1 : 0);
         if (scenario.total > 0) {
@@ -5459,7 +5557,7 @@ try {
       }
     }
   });
-  await test('Selected findings retain complete evidence in optional details with passive controls', async () => {
+  await test('Selected findings show complete evidence and top actions with passive controls', async () => {
     for (const variant of [
       'bugs-semantic',
       'performance-typed',
@@ -5530,10 +5628,27 @@ try {
         await page.locator('.result-row').press('Enter');
         const workspace = page.locator('.results-detail');
         assert.equal(
+          await workspace.locator('summary').getByText('Details', { exact: true }).count(),
+          0,
+        );
+        assert.equal(await workspace.getByText('Permissions & checks', { exact: true }).count(), 0);
+        if (semantic) {
+          const cause = await workspace.locator('.fix-cause').boundingBox();
+          for (const name of ['Delete', 'Mark as fixed']) {
+            const action = workspace.getByRole('button', { name, exact: true });
+            const bounds = await action.boundingBox();
+            assert.ok(bounds.y + bounds.height < cause.y, `${name} stays above the cause`);
+            await action.focus();
+            assert.equal(
+              await action.evaluate((element) => element === document.activeElement),
+              true,
+            );
+          }
+        }
+        assert.equal(
           await workspace.getByRole('heading', { name: 'Cause', exact: true }).isVisible(),
           true,
         );
-        await workspace.locator('summary').getByText('Details', { exact: true }).click();
         const fullExplanation = workspace.getByRole('button', {
           name: 'Full explanation',
           exact: true,
@@ -5623,7 +5738,7 @@ try {
                 'All findings',
                 'Go to file',
                 'Prepare fix',
-                ...(semantic ? ['Dismiss', 'Mark as fixed'] : []),
+                ...(semantic ? ['Delete', 'Mark as fixed'] : []),
               ])
                 assert.equal(
                   await workspace.getByRole('button', { name: label, exact: true }).isEnabled(),
@@ -5744,11 +5859,10 @@ try {
         );
         await page.locator('.busy-strip').waitFor();
         await page.locator('.result-row').click();
-        await workspace.locator('summary').getByText('Details', { exact: true }).click();
         for (const label of [
           'Go to file',
           'Prepare fix',
-          ...(semantic ? ['Dismiss', 'Mark as fixed'] : []),
+          ...(semantic ? ['Delete', 'Mark as fixed'] : []),
         ])
           assert.equal(
             await workspace.getByRole('button', { name: label, exact: true }).isDisabled(),
@@ -5783,12 +5897,11 @@ try {
     try {
       await nav(page, 'Bugs');
       await page.locator('.result-row').click();
-      await page.locator('summary').getByText('Details', { exact: true }).click();
       const initialWrites = await page.evaluate(
         () => window.fixture.requests.filter((r) => r.method !== 'GET').length,
       );
       for (const [label, status] of [
-        ['Dismiss', 'dismissed'],
+        ['Delete', 'dismissed'],
         ['Reopen', 'open'],
         ['Mark as fixed', 'fixed'],
       ]) {
@@ -7352,7 +7465,7 @@ try {
     const start = requests.find((r) => r.path.endsWith('/analysis/run') && r.method === 'POST');
     assert.equal(start.body.include_features, true);
     assert.deepEqual(start.body.confirmations.provider_ids, ['code-bug', 'review-analyze']);
-    await page.getByText('Run details', { exact: true }).click();
+    await page.getByRole('heading', { name: 'Run details', exact: true }).waitFor();
     await page.getByRole('heading', { name: 'New feature suggestions', exact: true }).waitFor();
     await layout(page, 'analysis-with-features');
     await nav(page, 'Overview');

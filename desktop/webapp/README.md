@@ -22,7 +22,11 @@ make desktop-run
 `make desktop-build` (also `make web-build`) writes
 `desktop/webapp/build/bin/Mini-Orca.app`, with the canonical project release
 version and the Graphite app icon from [the logo pack](../../docs/icons/README.md).
-Wails generates the macOS icon bundle from its 1024-pixel PNG. The application can also be
+Wails generates the macOS icon bundle from its 1024-pixel PNG. The host also sets
+its Dock icon from the embedded PNG at startup, avoiding stale bundle-icon caches
+after local rebuilds. `make desktop-run`
+launches the app bundle through macOS so its Dock icon is registered, inherits
+the shell environment, and waits until the app closes. The application can also be
 launched directly from that bundle after starting the daemon. `MINI_ORCA_URL`
 selects its daemon origin; the default is `http://127.0.0.1:9090`. Provider settings
 and credentials stay in the daemon's local `config.yaml`.
@@ -72,9 +76,9 @@ collapses to icons.
   **Last run** focuses on current progress and pause, continue or cancel controls.
   The progress bar and percentage count finished file-analysis steps, including
   unsuccessful or skipped steps; feature discovery has its own status.
-  **Run details** reveals result counts, captured models, coverage and file
-  diagnostics. Failures remain visible when details are
-  collapsed. Compact result rows open each category without losing run progress.
+  **Run details** stays visible with result counts, captured models and coverage.
+  **Files with failures** lists only files with a failed analysis stage; expand a
+  file for its stage diagnostics. Compact result rows open each category without losing run progress.
   Pausing/resuming retains captured model choices, including older runs that
   shared one Performance/Security choice. Feature discovery runs independently
   of file analysis, gets at least ten minutes (or the selected model's longer
@@ -95,15 +99,17 @@ collapses to icons.
   returns to the saved filters and page. Its name, category, exact path, line and declaration remain
   visible when available. The full cause leads the page, followed
   by the proposed solution, affected files and **Prepare fix** action. Provenance and confidence stay with the cause;
-  **Details** contains additional evidence and triage actions, including
-  **Mark as fixed**. **Full explanation** expands the solution in place without
+  **Delete** and **Mark as fixed** stay at the top. Delete uses the recoverable
+  dismissed state; **Reopen** restores it. Additional evidence and acceptance
+  criteria stay visible below the fix preparation. **Full explanation** expands the solution in place without
   repeating the preview; **Show less** collapses it again.
   Creation, testing and review choices are shared with Chat and configured only
   on **Models**. Opening **Models** from the sidebar preserves the selected finding so
   **Back to workspace** returns to its detail. Model selectors show the name and thinking
   level; sharing destinations stay in consent previews.
-  **Permissions & checks** expands sharing permissions, project
-  check commands and preparation refresh. **Prepare fix** authorizes generation,
+  A short note beside **Prepare fix** identifies remote sharing and isolated checks.
+  **Refresh preparation** appears when loading fails or a selected model is unavailable.
+  **Prepare fix** authorizes generation,
   isolated checks, remote sharing and Security intent when applicable. Changed destinations
   or project revisions require fresh preparation.
   Go fixes include a regression test path; Markdown-only fixes use the selected

@@ -37,7 +37,8 @@ case "$action" in
     go run ./cmd/assets
     go run github.com/wailsapp/wails/v2/cmd/wails@v2.16.0 build -s -skipbindings -platform darwin/arm64
     if [ "$action" = run ]; then
-      exec "$web_root/build/bin/Mini-Orca.app/Contents/MacOS/mini-orca-desktop"
+      # Launch the bundle through macOS so the Dock resolves its packaged icon.
+      exec open -W -n "$web_root/build/bin/Mini-Orca.app"
     fi
     ;;
 esac

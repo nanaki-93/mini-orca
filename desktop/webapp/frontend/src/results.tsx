@@ -211,6 +211,27 @@ export function Results({ s }: { s: State }) {
         <Button icon="back" onClick={() => void w.navigate(category)}>
           All findings
         </Button>
+        {detail.finding && (
+          <div className="actions finding-actions">
+            <Button
+              icon={detail.status === 'dismissed' ? 'undo' : 'trash'}
+              tone={detail.status === 'dismissed' ? 'default' : 'danger'}
+              disabled={!!s.busy}
+              onClick={() =>
+                void w.triage(detail.finding!, detail.status === 'dismissed' ? 'open' : 'dismissed')
+              }
+            >
+              {detail.status === 'dismissed' ? 'Reopen' : 'Delete'}
+            </Button>
+            <Button
+              icon="check"
+              disabled={!!s.busy || detail.status === 'fixed'}
+              onClick={() => void w.triage(detail.finding!, 'fixed')}
+            >
+              Mark as fixed
+            </Button>
+          </div>
+        )}
       </div>
       <FixHeading
         title={detail.name}
@@ -220,7 +241,10 @@ export function Results({ s }: { s: State }) {
         kind={kind}
         metadata={
           <>
-            <PriorityIcon value={detail.severity} />
+            <span className="finding-priority">
+              <PriorityIcon value={detail.severity} />
+              <span>{human(detail.severity)} priority</span>
+            </span>
             {detail.status !== detail.freshness && (
               <span aria-label="Finding state">
                 <Badge value={detail.status} />
@@ -269,61 +293,35 @@ export function Results({ s }: { s: State }) {
       {seed && detail.path && (
         <FixPreparation key={detail.key} s={s} seed={seed} disabled={fixDisabled} />
       )}
-      <Disclosure title="Details">
-        <div className="stack results-detail-layout">
-          {detail.finding && (
-            <Panel title="Finding actions">
-              <div className="actions section-gap">
-                <Button
-                  disabled={!!s.busy}
-                  onClick={() =>
-                    void w.triage(
-                      detail.finding!,
-                      detail.status === 'dismissed' ? 'open' : 'dismissed',
-                    )
-                  }
-                >
-                  {detail.status === 'dismissed' ? 'Reopen' : 'Dismiss'}
-                </Button>
-                <Button
-                  icon="check"
-                  disabled={!!s.busy || detail.status === 'fixed'}
-                  onClick={() => void w.triage(detail.finding!, 'fixed')}
-                >
-                  Mark as fixed
-                </Button>
-              </div>
+      <div className="stack results-detail-layout">
+        {detail.text
+          .filter(([, content]) => content)
+          .map(([title, content]) => (
+            <Panel title={title} key={title}>
+              <Prose text={content} />
             </Panel>
-          )}
-          {detail.text
-            .filter(([, content]) => content)
-            .map(([title, content]) => (
-              <Panel title={title} key={title}>
-                <Prose text={content} />
-              </Panel>
-            ))}
-          {detail.task && (
-            <Panel title="Acceptance criteria">
+          ))}
+        {detail.task && (
+          <Panel title="Acceptance criteria">
+            <ul>
+              {detail.task.acceptance_criteria.map((item, i) => (
+                <li key={i}>{item}</li>
+              ))}
+            </ul>
+            <Disclosure title="Scope">
               <ul>
-                {detail.task.acceptance_criteria.map((item, i) => (
+                {detail.task.non_goals?.map((item, i) => (
                   <li key={i}>{item}</li>
                 ))}
               </ul>
-              <Disclosure title="Scope">
-                <ul>
-                  {detail.task.non_goals?.map((item, i) => (
-                    <li key={i}>{item}</li>
-                  ))}
-                </ul>
-                {detail.task.go_test_candidate && (
-                  <pre tabIndex={0}>{detail.task.go_test_candidate.content}</pre>
-                )}
-              </Disclosure>
-            </Panel>
-          )}
-          <InsightCard insight={detail.insight} />
-        </div>
-      </Disclosure>
+              {detail.task.go_test_candidate && (
+                <pre tabIndex={0}>{detail.task.go_test_candidate.content}</pre>
+              )}
+            </Disclosure>
+          </Panel>
+        )}
+        <InsightCard insight={detail.insight} />
+      </div>
     </div>
   ) : null;
   if (s.page === 'finding')

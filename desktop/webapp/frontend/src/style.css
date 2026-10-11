@@ -997,9 +997,6 @@ pre {
 .analysis-run > .notice {
   margin-bottom: 0;
 }
-.analysis-run > details {
-  margin-top: 0;
-}
 .analysis-run-details {
   gap: 20px;
 }
@@ -3280,18 +3277,8 @@ dialog.model-picker {
 .guided-fix .fix-solution .prose > p:first-child {
   margin-top: 0;
 }
-.fix-checks > details {
-  margin: 0;
-}
 .guided-fix > details {
   margin-top: 0;
-}
-.fix-checks > details > .disclosure-body {
-  display: grid;
-  gap: 12px;
-}
-.fix-checks .button {
-  justify-self: start;
 }
 .guided-fix .fix-preparation {
   background: transparent;

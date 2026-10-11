@@ -75,7 +75,6 @@ export async function testGuidedFixes({
             'internal/worker/process.go:5',
           );
           if (index >= 4) {
-            await page.locator('summary').getByText('Details', { exact: true }).click();
             await page.getByText(titles[index], { exact: true }).waitFor();
           }
           await page.getByRole('button', { name: 'All findings', exact: true }).click();
@@ -483,7 +482,6 @@ export async function testGuidedFixes({
           await page.getByRole('heading', { name: 'Cause', exact: true }).isVisible(),
           true,
         );
-        await page.locator('summary').getByText('Details', { exact: true }).click();
         await page.getByRole('heading', { name: 'Cause', exact: true }).waitFor();
         await page.getByRole('heading', { name: 'Proposed solution', exact: true }).waitFor();
         assert.ok((await page.locator('.results-detail-meta').innerText()).includes('process.go'));
@@ -684,7 +682,7 @@ export async function testGuidedFixes({
         );
         const prepare = page.getByRole('button', { name: 'Prepare fix', exact: true });
         const permission = await prepare.getAttribute('aria-describedby');
-        assert.equal(await page.locator(`[id="${permission}"]`).isVisible(), false);
+        assert.equal(await page.locator(`[id="${permission}"]`).isVisible(), true);
         for (const [theme, width, height, large] of [
           ['Graphite', 1440, 900, false],
           ['Porcelain', 800, 700, true],
@@ -692,6 +690,10 @@ export async function testGuidedFixes({
           await page.setViewportSize({ width, height });
           await page.getByRole('button', { name: `${theme} theme`, exact: true }).click();
           if (large) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          await page
+            .getByRole('button', { name: 'All findings', exact: true })
+            .scrollIntoViewIfNeeded();
+          await layout(page, `finding-header-${category.toLowerCase()}-${theme.toLowerCase()}`);
           await prepare.evaluate((element) => element.scrollIntoView({ block: 'center' }));
           const action = await prepare.boundingBox();
           const solution = await page.locator('.fix-solution').boundingBox();
@@ -707,13 +709,11 @@ export async function testGuidedFixes({
         const before = await page.evaluate(() =>
           window.fixture.requests.filter((r) => r.method !== 'GET'),
         );
-        await preparation.getByText('Permissions & checks', { exact: true }).click();
+        assert.equal(await preparation.locator('details').count(), 0);
         assert.equal(
           await page.locator(`[id="${permission}"]`).innerText(),
           `${category === 'Security' ? 'Security fix · ' : ''}Shares files and instructions with selected remote models · Runs isolated checks`,
         );
-        await preparation.getByText('Project checks', { exact: true }).click();
-        await preparation.getByText('go test ./...', { exact: true }).waitFor();
         await chooseModel(page.getByLabel('Creation model', { exact: true }), 'bug');
         assert.deepEqual(
           await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
@@ -785,6 +785,44 @@ export async function testGuidedFixes({
       assert.equal(
         requests.find((r) => r.path.endsWith('/messages')).body.confirm_remote_provider,
         true,
+      );
+    } finally {
+      await close();
+    }
+  });
+
+  await test('Failed fix preparation can be retried without a permissions disclosure', async () => {
+    const { page, close } = await pageFor();
+    try {
+      await nav(page, 'Bugs');
+      const before = await page.evaluate(() =>
+        window.fixture.requests.filter((request) => request.method !== 'GET'),
+      );
+      await page.evaluate(() => {
+        window.fixture.failures['/api/projects/current/execution-trust'] = 503;
+      });
+      await page.locator('.result-row').first().click();
+      const preparation = page.locator('.fix-preparation');
+      const retry = preparation.getByRole('button', { name: 'Refresh preparation', exact: true });
+      await retry.waitFor();
+      assert.equal(await preparation.locator('details').count(), 0);
+      assert.equal(
+        await preparation.getByRole('button', { name: 'Prepare fix', exact: true }).isDisabled(),
+        true,
+      );
+      await page.evaluate(() => {
+        delete window.fixture.failures['/api/projects/current/execution-trust'];
+      });
+      await retry.click();
+      await preparation
+        .getByRole('button', { name: 'Prepare fix', exact: true })
+        .click({ trial: true });
+      assert.equal(await retry.count(), 0);
+      assert.deepEqual(
+        await page.evaluate(() =>
+          window.fixture.requests.filter((request) => request.method !== 'GET'),
+        ),
+        before,
       );
     } finally {
       await close();

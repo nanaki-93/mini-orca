@@ -31,6 +31,15 @@ fi
 ''')
         self.executable("gofmt", '#!/bin/sh\nprintf "%s" "${WEB_TEST_FORMAT:-}"\n')
         self.executable("uname", '#!/bin/sh\nif [ "$1" = -s ]; then printf "%s\\n" "${WEB_TEST_OS:-Darwin}"; else printf "arm64\\n"; fi\n')
+        self.executable("open", '''#!/bin/sh
+printf 'open\\n' >> "$WEB_TEST_LOG"
+printf '%s\\n' "$@" >> "$WEB_TEST_LOG"
+printf 'MINI_ORCA_URL=%s\\n' "${MINI_ORCA_URL:-}" >> "$WEB_TEST_LOG"
+if [ "${WEB_TEST_FAIL:-}" = open ]; then
+  printf 'bundle launch failed\\n' >&2
+  exit 8
+fi
+''')
         (self.bin / "dirname").symlink_to(shutil.which("dirname"))
 
     def executable(self, name, content):
@@ -74,6 +83,20 @@ fi
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("macOS arm64", result.stderr)
         self.assertFalse(any(call.startswith("go ") for call in calls))
+
+    def test_run_launches_the_bundle_and_waits_with_the_configured_origin(self):
+        result, calls = self.run_helper("run", MINI_ORCA_URL="http://127.0.0.1:9191")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls[-5:], [
+            "open", "-W", "-n", str(self.root / "desktop/webapp/build/bin/Mini-Orca.app"),
+            "MINI_ORCA_URL=http://127.0.0.1:9191",
+        ])
+        self.assertIn("go run ./cmd/assets", calls)
+
+    def test_bundle_launch_failure_keeps_diagnostic_and_exit_status(self):
+        result, _ = self.run_helper("run", WEB_TEST_FAIL="open")
+        self.assertEqual(result.returncode, 8)
+        self.assertIn("bundle launch failed", result.stderr)
 
     def test_invalid_action_has_no_tool_side_effect(self):
         result, calls = self.run_helper("install-system-tools")

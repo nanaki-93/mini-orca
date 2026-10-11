@@ -25,6 +25,10 @@ for (const theme of ['graphite', 'porcelain', 'midnight', 'signal', 'crimson-vio
   );
 }
 await copyFile(path.join(branding, 'favicon.png'), path.join(output, 'favicon.png'));
+await copyFile(
+  path.join(branding, 'graphite/app-icon/app-icon-1024.png'),
+  path.join(output, 'app-icon.png'),
+);
 const packages = [
   'react',
   'react-dom',
