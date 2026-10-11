@@ -130,7 +130,7 @@ func populateGitWorktree(ctx context.Context, root string, tree *GitWorktree) {
 }
 
 func readGitBranches(ctx context.Context, root string, trees []GitWorktree) ([]GitBranch, error) {
-	output, err := gitRead(ctx, root, "for-each-ref", "--format=%(refname:short)%00%(objectname)", "refs/heads/")
+	output, err := gitRead(ctx, root, "for-each-ref", "--format=%(refname)%00%(objectname)", "refs/heads/")
 	if err != nil {
 		return nil, err
 	}
@@ -143,9 +143,9 @@ func readGitBranches(ctx context.Context, root string, trees []GitWorktree) ([]G
 		if !ok {
 			return nil, fmt.Errorf("invalid Git branch record")
 		}
-		branch := GitBranch{Name: name, Head: head}
+		branch := GitBranch{Name: strings.TrimPrefix(name, "refs/heads/"), Head: head}
 		for _, tree := range trees {
-			if tree.Branch == name {
+			if tree.Branch == branch.Name {
 				branch.WorktreePath = tree.Path
 			}
 		}

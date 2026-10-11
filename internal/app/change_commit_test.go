@@ -113,7 +113,7 @@ func TestChangeCommitFailureCanRetryWithoutApplyingAgain(t *testing.T) {
 }
 
 func TestChangeCommitRejectsDirtyTargetAndChangedBranch(t *testing.T) {
-	for _, mode := range []string{"dirty", "staged", "branch", "head"} {
+	for _, mode := range []string{"dirty", "staged", "mode", "branch", "head"} {
 		t.Run(mode, func(t *testing.T) {
 			server := changeProvider(t, func() string { return groupedChangeResponse })
 			service, root := newSemanticAnalysisService(t, server.URL, 0)
@@ -124,6 +124,14 @@ func TestChangeCommitRejectsDirtyTargetAndChangedBranch(t *testing.T) {
 				}
 				if mode == "staged" {
 					testGit(t, root, "add", "main.go")
+				}
+				if _, err := service.Reindex(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if mode == "mode" {
+				if err := os.Chmod(filepath.Join(root, "main.go"), 0755); err != nil {
+					t.Fatal(err)
 				}
 				if _, err := service.Reindex(); err != nil {
 					t.Fatal(err)
