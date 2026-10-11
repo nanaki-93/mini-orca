@@ -431,6 +431,34 @@ export function installFixture(options = {}) {
     source,
     changed: false,
   };
+  // Existing workflow cases use a non-Git project. Git cases opt into repository state.
+  state.git = {
+    available: !!options.git,
+    at_root: true,
+    root: project.path,
+    head: 'head-main',
+    branch: options.gitBranch || 'main',
+    dirty: !!options.gitDirty,
+    conflicts: [],
+  };
+  state.gitWorktrees = [
+    {
+      path: project.path,
+      head: state.git.head,
+      branch: state.git.branch,
+      current: true,
+      dirty: state.git.dirty,
+      completed: [],
+    },
+    {
+      path: `${project.path}-fix`,
+      head: 'head-fix',
+      branch: 'codex/fix',
+      current: false,
+      dirty: false,
+      completed: [{ id: 'completed-fix', title: 'Handle cancellation', state: 'applied' }],
+    },
+  ];
   const requests = [],
     terminals = [],
     failures = {
@@ -509,6 +537,92 @@ export function installFixture(options = {}) {
           const pathFile =
             state.files.find((f) => f.path === (url.searchParams.get('path') || body?.path)) ||
             state.files[0];
+          const repository = () => ({ ...rev, ...state.git });
+          if (path === '/api/projects/current/git/repository') return response(repository());
+          if (path === '/api/projects/current/git/workspace')
+            return response({
+              ...repository(),
+              branches: [
+                { name: state.git.branch, head: state.git.head, worktree_path: state.git.root },
+                { name: 'feature/other', head: 'head-other' },
+                { name: 'codex/fix', head: 'head-fix', worktree_path: `${project.path}-fix` },
+              ],
+              worktrees: state.gitWorktrees.map((tree) =>
+                tree.path === state.project.path
+                  ? { ...tree, ...state.git, path: tree.path, current: true }
+                  : { ...tree, current: false },
+              ),
+            });
+          if (path === '/api/projects/current/git/worktrees') {
+            if (options.gitCreateFailure)
+              return response({ state: 'failed', error: 'Branch already exists.', warnings: [] });
+            state.gitWorktrees.push({
+              path: body.path,
+              branch: body.target_branch,
+              head: body.head,
+              current: false,
+              dirty: false,
+              completed: [],
+            });
+            return response({
+              state: 'created',
+              path: body.path,
+              repository: repository(),
+              warnings: [],
+            });
+          }
+          if (path === '/api/projects/current/git/merge-preview')
+            return response({
+              target: { head: body.head, branch: body.branch },
+              source: { head: body.source_head, branch: 'codex/fix' },
+              path: body.path,
+              commits: 'a1b2c3d Handle cancellation',
+              diff: 'diff --git a/internal/worker/process.go b/internal/worker/process.go\n- return nil\n+ return ctx.Err()\n',
+            });
+          if (
+            [
+              '/api/projects/current/git/switch',
+              '/api/projects/current/git/merge',
+              '/api/projects/current/git/abort-merge',
+            ].includes(path)
+          ) {
+            let outcome = 'switched';
+            if (path.endsWith('/switch')) {
+              state.git.branch = body.target_branch;
+              state.git.head = 'head-other';
+            }
+            if (path.endsWith('/merge')) {
+              outcome = options.gitMergeConflict ? 'conflicts' : 'merged';
+              if (options.gitMergeConflict) {
+                state.git.merge_head = body.source_head;
+                state.git.conflicts = ['internal/worker/process.go'];
+                state.git.dirty = true;
+              } else state.git.head = body.source_head;
+            }
+            if (path.endsWith('/abort-merge')) {
+              outcome = 'aborted';
+              state.git.merge_head = '';
+              state.git.conflicts = [];
+              state.git.dirty = false;
+            }
+            state.project.project_revision = `revision-${outcome}`;
+            state.trusted = false;
+            return response({
+              state: outcome,
+              repository: { ...repository(), project_revision: state.project.project_revision },
+              index: {
+                ...identity,
+                project_revision: state.project.project_revision,
+                files: state.files,
+              },
+              warnings: [],
+              ...(outcome === 'conflicts'
+                ? {
+                    error: 'Merge conflicts occurred. Resolve the listed files or abort the merge.',
+                  }
+                : {}),
+            });
+          }
           if (path === '/api/projects/current/changes/recovery')
             return response(
               options.recoveryDropsWarnings && state.changeReceipt
@@ -685,6 +799,7 @@ export function installFixture(options = {}) {
               repair_attempts: 0,
               context_manifest: context,
             };
+            if (options.git) change.git = { head: state.git.head, branch: state.git.branch };
             state.changes[change.id] = change;
             return response(change);
           }
@@ -721,6 +836,7 @@ export function installFixture(options = {}) {
               repair_attempts: 0,
               context_manifest: context,
             };
+            if (options.git) change.git = { head: state.git.head, branch: state.git.branch };
             state.changes[change.id] = change;
             return response(change);
           }
@@ -888,6 +1004,17 @@ export function installFixture(options = {}) {
               );
               return response(state.changeReceipt.verification);
             }
+            if (action === 'commit') {
+              state.changeReceipt.commit = {
+                ...state.changeReceipt.commit,
+                state: 'committed',
+                message: body.commit_message,
+                oid: 'commit-retry',
+                error: '',
+              };
+              state.git.head = 'commit-retry';
+              return response(state.changeReceipt);
+            }
             if (action === 'apply' || action === 'undo') {
               state.trusted = false;
               change.state =
@@ -918,6 +1045,18 @@ export function installFixture(options = {}) {
                 warnings:
                   action === 'apply' && options.mutationWarning ? [options.mutationWarning] : [],
               };
+              if (action === 'apply' && body.commit_message) {
+                state.changeReceipt.commit = {
+                  head: body.head,
+                  branch: body.branch,
+                  message: body.commit_message,
+                  state: options.gitCommitFailure ? 'failed' : 'committed',
+                  ...(options.gitCommitFailure
+                    ? { error: 'Configure a Git author before retrying.' }
+                    : { oid: 'commit-applied' }),
+                };
+                if (!options.gitCommitFailure) state.git.head = 'commit-applied';
+              }
               if (action === 'apply' && options.changeMutationResponseLost)
                 throw new Error('Apply response lost after source mutation');
               return response(state.changeReceipt);
@@ -952,8 +1091,31 @@ export function installFixture(options = {}) {
                 ? {}
                 : { analyze: model('analyze'), bug: model('bug'), function: model('function') },
             });
-          if (path === '/api/projects/restore' || path === '/api/projects/import')
+          if (path === '/api/projects/restore' || path === '/api/projects/import') {
+            if (options.git && body.project_path !== state.project.path) {
+              const tree = state.gitWorktrees.find((tree) => tree.path === body.project_path);
+              if (tree) {
+                identity.project_id = 'project-worktree';
+                state.project = {
+                  ...state.project,
+                  ...identity,
+                  path: tree.path,
+                  name: tree.path.split('/').at(-1),
+                };
+                state.git = {
+                  ...state.git,
+                  root: tree.path,
+                  branch: tree.branch,
+                  head: tree.head,
+                  dirty: false,
+                };
+                state.trusted = false;
+                state.changes = {};
+                state.changeReceipt = null;
+              }
+            }
             return response(state.project);
+          }
           if (path.endsWith('/overview') && options.overviewReadFail)
             return {
               status: 503,

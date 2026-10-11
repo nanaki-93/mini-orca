@@ -25,6 +25,7 @@ export async function testThemes({ test, pageFor, nav, idle, layout, contrast })
         'Findings',
         'Features',
         'Changes',
+        'Git / Worktrees',
         'Architecture',
         'Instructions',
         'Context',

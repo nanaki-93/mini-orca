@@ -1,11 +1,26 @@
+import { useState } from 'react';
+import { CommitDialog } from './git-controls';
 import { workspace as w, activeChangeWorkflow, changeChecksPassed, type State } from './workspace';
 import type { ChangeSession } from './models';
 import { Badge, Button, Disclosure, Empty, Notice, Panel } from './ui';
 
 export function ChangeOutcome({ s }: { s: State }) {
   const change = s.change;
+  const [retrying, setRetrying] = useState(false);
   return (
     <>
+      {retrying && s.changeReceipt?.commit && (
+        <CommitDialog
+          s={s}
+          title="Retry commit"
+          message={s.changeReceipt.commit.message}
+          onClose={() => setRetrying(false)}
+          onCommit={(message) => {
+            setRetrying(false);
+            void w.retryChangeCommit(message);
+          }}
+        />
+      )}
       {(s.uncertain || s.changeReceipt) && (
         <section className="workspace-page chat-outcome" aria-label="Change outcome">
           {s.uncertain && (
@@ -31,6 +46,31 @@ export function ChangeOutcome({ s }: { s: State }) {
               }
               actions={<Badge value={s.changeReceipt.state} />}
             >
+              {s.changeReceipt.commit && (
+                <Notice
+                  error={
+                    s.changeReceipt.commit.state !== 'committed' || !!s.changeReceipt.commit.error
+                  }
+                >
+                  <strong>
+                    {s.changeReceipt.commit.state === 'committed'
+                      ? `Committed ${s.changeReceipt.commit.oid?.slice(0, 7)} on ${s.changeReceipt.commit.branch}`
+                      : s.changeReceipt.commit.state === 'failed'
+                        ? 'Files applied. Commit failed.'
+                        : 'Commit outcome needs inspection.'}
+                  </strong>
+                  <p>{s.changeReceipt.commit.error || s.changeReceipt.commit.message}</p>
+                  {s.changeReceipt.commit.state === 'failed' &&
+                    s.changeReceipt.state === 'applied' && (
+                      <Button disabled={!!s.busy || s.uncertain} onClick={() => setRetrying(true)}>
+                        Retry commit
+                      </Button>
+                    )}
+                  {s.changeReceipt.commit.state === 'pending' && (
+                    <p>Refresh Git status and inspect the branch history before retrying.</p>
+                  )}
+                </Notice>
+              )}
               {s.changeReceipt.state === 'applied' && (
                 <>
                   <p className="small muted">Acceptance criteria still need review.</p>

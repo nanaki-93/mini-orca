@@ -1,3 +1,4 @@
+import { CommitDialog } from './git-controls';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ChangeSession, ChangeSeed } from './models';
 import { workspace as w, activeChangeWorkflow, canAcceptChange, type State } from './workspace';
@@ -254,6 +255,7 @@ export function ProposalReview({
   tests?: boolean;
 }) {
   const [tab, setTab] = useState('changes');
+  const [committing, setCommitting] = useState(false);
   const [path, setPath] = useState(change.changes[0].path);
   const [viewed, setViewed] = useState<string[]>([path]);
   const [focusDiff, setFocusDiff] = useState(false);
@@ -276,6 +278,18 @@ export function ProposalReview({
   };
   return (
     <section className="fix-review chat-review" aria-label="Proposal review">
+      {committing && (
+        <CommitDialog
+          s={s}
+          title="Apply & Commit"
+          message={change.title}
+          onClose={() => setCommitting(false)}
+          onCommit={(message) => {
+            setCommitting(false);
+            void w.acceptChange(message);
+          }}
+        />
+      )}
       <FixTabs
         label="Fix review"
         selected={tab}
@@ -429,14 +443,25 @@ export function ProposalReview({
             <Button
               tone="primary"
               icon="check"
-              disabled={!!s.busy || !ready || !!next}
+              disabled={
+                !!s.busy ||
+                !ready ||
+                !!next ||
+                !s.repository ||
+                !!s.resourceErrors.Git ||
+                (s.repository.available &&
+                  (!s.repository.at_root || !s.repository.branch || !s.repository.head))
+              }
               onClick={(event) => {
                 // The preceding click may have advanced the last file at this same position.
                 if (event.detail > 1) return;
-                void w.acceptChange();
+                if (s.repository?.available) setCommitting(true);
+                else void w.acceptChange();
               }}
             >
-              Apply {files.length} {files.length === 1 ? 'file' : 'files'}
+              {s.repository?.available
+                ? 'Apply & Commit'
+                : `Apply ${files.length} ${files.length === 1 ? 'file' : 'files'}`}
             </Button>
           )}
         </div>

@@ -253,15 +253,26 @@ func TestCancellationBeforeDispatchDoesNotStartNetworkWork(t *testing.T) {
 }
 
 func TestBridgeSharedChangeRoutesRemainAllowlisted(t *testing.T) {
+	if allowedRequest("GET", "/api/projects/current/git/merge", "") {
+		t.Fatal("allowed a mutation route as a read")
+	}
 	for _, request := range [][3]string{
 		{"GET", "/api/projects/current/changes?project_id=p&project_revision=r", ""},
 		{"GET", "/api/projects/current/changes/recovery", ""},
+		{"GET", "/api/projects/current/git/repository?project_id=p&project_revision=r", ""},
+		{"GET", "/api/projects/current/git/workspace?project_id=p&project_revision=r", ""},
+		{"POST", "/api/projects/current/git/worktrees", "{}"},
+		{"POST", "/api/projects/current/git/switch", "{}"},
+		{"POST", "/api/projects/current/git/merge-preview", "{}"},
+		{"POST", "/api/projects/current/git/merge", "{}"},
+		{"POST", "/api/projects/current/git/abort-merge", "{}"},
 		{"GET", "/api/projects/current/changes/change-id", ""},
 		{"GET", "/api/projects/current/instructions?path=AGENTS.md", ""},
 		{"GET", "/api/projects/current/features", ""},
 		{"POST", "/api/projects/current/changes", "{}"},
 		{"POST", "/api/projects/current/changes/change-id/messages", "{}"},
 		{"POST", "/api/projects/current/changes/change-id/apply", "{}"},
+		{"POST", "/api/projects/current/changes/change-id/commit", "{}"},
 		{"POST", "/api/projects/current/changes/change-id/verify", "{}"},
 		{"POST", "/api/projects/current/changes/change-id/workflow", "{}"},
 		{"POST", "/api/projects/current/changes/change-id/workflow/cancel", "{}"},
@@ -273,7 +284,7 @@ func TestBridgeSharedChangeRoutesRemainAllowlisted(t *testing.T) {
 			t.Errorf("blocked workflow request: %v", request)
 		}
 	}
-	for _, path := range []string{"/api/projects/current/changes/id/run", "/api/projects/current/instructions/write", "/api/projects/current/changes/id/delete"} {
+	for _, path := range []string{"/api/projects/current/changes/id/run", "/api/projects/current/instructions/write", "/api/projects/current/changes/id/delete", "/api/projects/current/git/push", "/api/projects/current/git/reset"} {
 		if allowedRequest("POST", path, "{}") {
 			t.Errorf("allowed unsupported operation: %s", path)
 		}

@@ -7,6 +7,7 @@ export type Page =
   | 'chat'
   | 'changes'
   | 'history'
+  | 'git'
   | 'welcome'
   | 'summary'
   | 'project'
@@ -44,6 +45,7 @@ export interface Confirmation {
 export interface FixPreparationContext {
   models: M.ModelCatalog;
   trust: M.ExecutionTrust;
+  repository: M.GitRepository;
 }
 export interface State {
   page: Page;
@@ -77,6 +79,10 @@ export interface State {
   context?: M.ContextManifest;
   impact?: M.Impact;
   git?: M.GitStatus;
+  repository?: M.GitRepository;
+  gitWorkspace?: M.GitWorkspace;
+  gitPreview?: M.GitMergePreview;
+  gitResult?: M.GitMutation;
   securityReport?: M.SecurityReport;
   uncertain: boolean;
   scan?: M.Scan | null;
@@ -379,9 +385,225 @@ export class Workspace {
       await this.refreshProject();
     });
   }
+  async refreshRepository() {
+    if (!this.state.project) return;
+    await this.resource(
+      'Git',
+      () => this.api.get<M.GitRepository>(`${current}/git/repository`, this.identity()),
+      (repository) => {
+        if (projectKey(repository) !== projectKey(this.state.project))
+          throw new Error('Git status belongs to another project.');
+        const change = this.state.change;
+        const stale =
+          change?.state === 'draft' &&
+          change.git &&
+          (change.git.head !== repository.head || change.git.branch !== repository.branch);
+        this.set({
+          repository,
+          ...(stale ? { change: { ...change, freshness: 'stale', reviewed_hash: '' } } : {}),
+        });
+      },
+    );
+  }
+  async loadGitWorkspace() {
+    await this.resource(
+      'Git / Worktrees',
+      () => this.api.get<M.GitWorkspace>(`${current}/git/workspace`, this.identity()),
+      (gitWorkspace) => {
+        if (projectKey(gitWorkspace) !== projectKey(this.state.project))
+          throw new Error('Git workspace changed. Refresh it.');
+        const preview = this.state.gitPreview;
+        this.set({
+          gitWorkspace,
+          repository: gitWorkspace,
+          gitPreview:
+            preview?.target.head === gitWorkspace.head &&
+            preview.target.branch === gitWorkspace.branch
+              ? preview
+              : undefined,
+        });
+      },
+    );
+  }
+  async previewGitMerge(tree: M.GitWorktree) {
+    await this.act('Preview merge', async () => {
+      const repository = this.state.gitWorkspace;
+      if (!repository) return;
+      const epoch = this.epoch,
+        navigation = this.navigation;
+      const gitPreview = await this.api.post<M.GitMergePreview>(`${current}/git/merge-preview`, {
+        ...this.identity(),
+        head: repository.head,
+        branch: repository.branch,
+        path: tree.path,
+        source_head: tree.head,
+      });
+      if (epoch !== this.epoch || navigation !== this.navigation) return;
+      if (
+        gitPreview.target.head !== repository.head ||
+        gitPreview.source.head !== tree.head ||
+        gitPreview.path !== tree.path
+      )
+        throw new Error('The merge preview changed. Refresh Git status.');
+      this.set({ gitPreview });
+    });
+  }
+  async gitAction(action: 'switch' | 'merge' | 'abort-merge', targetBranch?: string) {
+    await this.act('Update Git workspace', async () => {
+      const repository = this.state.gitWorkspace;
+      const preview = this.state.gitPreview;
+      if (!repository || this.state.resourceErrors['Git / Worktrees'])
+        throw new Error('Refresh Git status first.');
+      if (
+        action === 'merge' &&
+        (!preview ||
+          preview.target.head !== repository.head ||
+          preview.target.branch !== repository.branch)
+      )
+        throw new Error('Review the current merge diff first.');
+      const epoch = this.epoch,
+        navigation = this.navigation;
+      const title =
+        action === 'switch'
+          ? `Switch to ${targetBranch}?`
+          : action === 'merge'
+            ? `Merge ${preview!.source.branch} into ${repository.branch}?`
+            : 'Abort this merge?';
+      const message =
+        action === 'abort-merge'
+          ? 'Discard conflict-resolution edits and restore the state before the merge.'
+          : 'Prepared fixes will need fresh checks and review.';
+      if (
+        !(await this.confirm({
+          title,
+          message: `${message} Trust this project for local execution: Git filters and merge drivers may run; approved project checks may also execute. Open terminal sessions will close.`,
+          accept:
+            action === 'switch'
+              ? 'Switch branch'
+              : action === 'merge'
+                ? 'Merge into current branch'
+                : 'Abort merge',
+          destructive: action === 'abort-merge',
+        }))
+      )
+        return;
+      if (epoch !== this.epoch || navigation !== this.navigation) return;
+      await this.api.post(`${current}/execution-trust`, {
+        project_revision: repository.project_revision,
+        confirm: true,
+      });
+      for (const terminal of this.state.terminals) await native().CloseTerminal(terminal.id);
+      this.set({ terminals: [] });
+      if (epoch !== this.epoch || navigation !== this.navigation) return;
+      let result: M.GitMutation;
+      try {
+        result = await this.api.post<M.GitMutation>(`${current}/git/${action}`, {
+          ...this.identity(),
+          head: repository.head,
+          branch: repository.branch,
+          confirm: true,
+          confirm_execution: true,
+          ...(action === 'switch'
+            ? { target_branch: targetBranch }
+            : action === 'merge'
+              ? { path: preview!.path, source_head: preview!.source.head }
+              : { merge_head: repository.merge_head }),
+        });
+      } catch (error) {
+        if (!(error instanceof ApiError))
+          this.set({ uncertain: true, gitPreview: undefined, gitResult: undefined });
+        throw error;
+      }
+      if (epoch !== this.epoch) return;
+      this.epoch++;
+      this.fileEpoch++;
+      this.set({
+        project: {
+          ...this.state.project!,
+          project_revision: result.index?.project_revision || repository.project_revision,
+        },
+        index: result.index,
+        repository: result.repository,
+        gitResult: result,
+        gitPreview: undefined,
+        change: undefined,
+        changeSeed: undefined,
+        changeReceipt: undefined,
+        results: {},
+        preview: undefined,
+        fileStale: true,
+        uncertain: !result.index,
+      });
+      await this.refreshProject();
+      await this.loadGitWorkspace();
+    });
+  }
+  async prepareFixInWorktree(
+    seed: M.ChangeSeed,
+    models: M.ChangeWorkflowModels,
+    preparation: FixPreparationContext,
+    branch: string,
+    path: string,
+  ) {
+    let created: string | undefined;
+    const originalProject = projectKey(this.state.project);
+    await this.act('Create worktree', async () => {
+      const epoch = this.epoch;
+      const profiles = seed.paths.some((path) => path.endsWith('_test.go'))
+        ? Object.values(models)
+        : [models.create];
+      const latest = await this.checkedFixPreparation(profiles, preparation);
+      if (!latest || epoch !== this.epoch) return;
+      await this.api.post(`${current}/execution-trust`, {
+        project_revision: latest.trust.project_revision,
+        confirm: true,
+      });
+      const result = await this.api.post<M.GitMutation>(`${current}/git/worktrees`, {
+        ...this.identity(),
+        head: preparation.repository.head,
+        branch: preparation.repository.branch,
+        target_branch: branch,
+        path,
+        confirm: true,
+        confirm_execution: true,
+      });
+      if (epoch !== this.epoch) return;
+      this.set({ gitResult: result });
+      if (result.state !== 'created' || result.error || !result.path)
+        throw new Error(
+          `${result.error || 'Worktree creation failed.'}${result.path ? ` Path: ${result.path}` : ''}`,
+        );
+      created = result.path;
+    });
+    if (!created || projectKey(this.state.project) !== originalProject || this.state.busy) return;
+    await this.openProject(created, false);
+    if (this.state.project?.path !== created || this.state.error || this.state.busy) return;
+    this.seedChange(seed);
+    let fresh: FixPreparationContext;
+    try {
+      fresh = await this.readFixPreparation();
+      if (
+        Object.values(models).some(
+          (profile) =>
+            JSON.stringify(fresh.models.scopes[profile]) !==
+            JSON.stringify(preparation.models.scopes[profile]),
+        )
+      )
+        throw new Error(
+          'Models changed. Review preparation in the new worktree before continuing.',
+        );
+    } catch (error) {
+      this.fail(error);
+      return;
+    }
+    if (seed.paths.some((value) => value.endsWith('_test.go')))
+      await this.startChangeWorkflow(seed, models, fresh);
+    else await this.prepareChange(seed, true, models.create, fresh);
+  }
   async refreshProject() {
     const identity = this.identity();
     await Promise.all([
+      this.refreshRepository(),
       this.loadFeatures(),
       this.loadChangeHistory(),
       this.loadProjectInstructions(),
@@ -469,6 +691,7 @@ export class Workspace {
     });
     if (['analysis', 'models'].includes(page) && !this.state.availableModels)
       await this.loadAvailableModels();
+    if (page === 'git') await this.loadGitWorkspace();
     if (page === 'editor') await this.refreshFile();
     if (['chat', 'changes', 'history'].includes(page)) await this.loadChangeHistory();
     if (page === 'features' || page === 'summary') await this.loadFeatures();
@@ -516,6 +739,7 @@ export class Workspace {
       this.set({ connected: false });
       return;
     }
+    if (!activeChangeWorkflow(this.state.change)) await this.refreshRepository();
     const old = JSON.stringify(this.state.run);
     await this.resource(
       'run',
@@ -1337,16 +1561,17 @@ export class Workspace {
   }
   async readFixPreparation(): Promise<FixPreparationContext> {
     const epoch = this.epoch;
-    const [models, trust] = await Promise.all([
+    const [models, trust, repository] = await Promise.all([
       this.api.get<M.ModelCatalog>('/api/models/current'),
       this.api.get<M.ExecutionTrust>(`${current}/execution-trust`, {
         project_revision: this.identity().project_revision,
       }),
+      this.api.get<M.GitRepository>(`${current}/git/repository`, this.identity()),
     ]);
     if (epoch !== this.epoch || projectKey(trust) !== projectKey(this.state.project))
       throw new Error('Project changed. Refresh fix preparation.');
-    this.set({ models });
-    return { models, trust };
+    this.set({ models, repository });
+    return { models, trust, repository };
   }
   private async checkedFixPreparation(profiles: string[], preparation: FixPreparationContext) {
     const epoch = this.epoch,
@@ -1355,6 +1580,8 @@ export class Workspace {
     if (epoch !== this.epoch || operation !== this.operation) return null;
     if (
       projectKey(latest.trust) !== projectKey(preparation.trust) ||
+      latest.repository.head !== preparation.repository.head ||
+      latest.repository.branch !== preparation.repository.branch ||
       JSON.stringify(latest.trust.commands) !== JSON.stringify(preparation.trust.commands) ||
       profiles.some(
         (profile) =>
@@ -1605,7 +1832,7 @@ export class Workspace {
       this.set({ change, changeSeed: undefined, page: changePage(change.kind) });
     });
   }
-  async acceptChange() {
+  async acceptChange(commitMessage?: string) {
     await this.act('Apply change', async () => {
       const change = this.state.change;
       if (!change || !['chat', 'changes'].includes(this.state.page) || !canAcceptChange(this.state))
@@ -1642,8 +1869,32 @@ export class Workspace {
         );
       this.set({ change: reviewed });
       if (!canApplyChange(this.state)) throw new Error('The proposal is no longer ready to apply.');
-      const receipt = await this.writeChangeSource(change.id, 'apply', identity);
+      const repository = this.state.repository;
+      if (!repository || this.state.resourceErrors.Git)
+        throw new Error('Refresh Git status before applying.');
+      if (repository.available && !commitMessage?.trim())
+        throw new Error('Enter a commit message.');
+      const receipt = await this.writeChangeSource(change.id, 'apply', {
+        ...identity,
+        ...(repository.available
+          ? { head: repository.head, branch: repository.branch, commit_message: commitMessage }
+          : {}),
+      });
       await this.acceptChangeMutation(receipt);
+    });
+  }
+  async retryChangeCommit(message: string) {
+    await this.act('Retry commit', async () => {
+      const receipt = this.state.changeReceipt;
+      if (!receipt || receipt.commit?.state !== 'failed' || this.state.uncertain)
+        throw new Error('Refresh commit recovery first.');
+      const result = await this.writeChangeSource(receipt.session_id, 'commit', {
+        ...this.identity(),
+        revision: this.state.change?.revision || 0,
+        hash: receipt.hash,
+        commit_message: message,
+      });
+      await this.acceptChangeMutation(result);
     });
   }
   async undoChange() {
@@ -1656,7 +1907,9 @@ export class Workspace {
           title: 'Restore the previous files?',
           message:
             receipt.state === 'applied'
-              ? 'Undo the latest unchanged proposal.'
+              ? receipt.commit?.state === 'committed'
+                ? 'Restore the previous files as uncommitted changes. The Git commit stays in history.'
+                : 'Undo the latest unchanged proposal.'
               : 'Recover the interrupted grouped change.',
           accept: 'Undo proposal',
           destructive: true,
@@ -1757,7 +2010,11 @@ export class Workspace {
         });
     });
   }
-  private async writeChangeSource(id: string, action: 'apply' | 'undo', identity: object) {
+  private async writeChangeSource(
+    id: string,
+    action: 'apply' | 'undo' | 'commit',
+    identity: object,
+  ) {
     try {
       return await this.api.post<M.ChangeMutation>(
         `${current}/changes/${encodeURIComponent(id)}/${action}`,

@@ -401,6 +401,53 @@ export interface GitStatus {
   file_state: string;
   diff_state: string;
 }
+export interface GitIdentity {
+  head: string;
+  branch: string;
+}
+export interface GitRepository extends GitIdentity, ProjectIdentity {
+  available: boolean;
+  root: string;
+  at_root: boolean;
+  dirty: boolean;
+  merge_head?: string;
+  operation?: string;
+  conflicts: string[];
+}
+export interface GitWorktree extends GitIdentity {
+  path: string;
+  current: boolean;
+  locked: boolean;
+  prunable: boolean;
+  dirty?: boolean;
+  completed: ChangeHistoryEntry[];
+  error?: string;
+}
+export interface GitWorkspace extends GitRepository {
+  branches: { name: string; head: string; worktree_path?: string }[];
+  worktrees: GitWorktree[];
+}
+export interface GitMergePreview {
+  target: GitIdentity;
+  source: GitIdentity;
+  path: string;
+  diff: string;
+  commits: string;
+}
+export interface GitMutation {
+  state: string;
+  path?: string;
+  repository?: GitRepository;
+  index?: ProjectIndex;
+  error?: string;
+  warnings: string[];
+}
+export interface ChangeCommit extends GitIdentity {
+  state: 'pending' | 'failed' | 'committed';
+  message: string;
+  oid?: string;
+  error?: string;
+}
 export interface Impact {
   target_path: string;
   target_symbol: string;
@@ -416,6 +463,8 @@ export interface TerminalUpdate {
 }
 
 export interface ChangeSession extends ProjectIdentity {
+  git?: GitIdentity;
+  commit?: ChangeCommit;
   id: string;
   kind: string;
   title: string;
@@ -473,6 +522,7 @@ export interface ChangeWorkflow {
   updated_at: string;
 }
 export interface ChangeMutation extends ProjectIdentity {
+  commit?: ChangeCommit;
   session_id: string;
   state: string;
   hash: string;
