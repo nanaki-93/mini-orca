@@ -1,0 +1,173 @@
+0 verbose cli /home/jules/.nvm/versions/node/v22.22.1/bin/node /home/jules/.nvm/versions/node/v22.22.1/bin/npm
+1 info using npm@11.11.0
+2 info using node@v22.22.1
+3 silly config load:file:/home/jules/.nvm/versions/node/v22.22.1/lib/node_modules/npm/npmrc
+4 silly config load:file:/app/desktop/webapp/frontend/.npmrc
+5 silly config load:file:/home/jules/.npmrc
+6 silly config load:file:/home/jules/.nvm/versions/node/v22.22.1/etc/npmrc
+7 verbose title npm ci
+8 verbose argv "ci" "--no-fund"
+9 verbose logfile logs-max:10 dir:/app/build/npm-cache/_logs/2026-10-11T16_44_40_121Z-
+10 verbose logfile /app/build/npm-cache/_logs/2026-10-11T16_44_40_121Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:2197815296 maxSize:549453824 maxEntrySize:274726912
+13 silly idealTree buildDeps
+14 http fetch GET 200 https://registry.npmjs.org/npm 369ms
+15 silly reify moves {}
+16 silly audit bulk request {
+16 silly audit   '@esbuild/aix-ppc64': [ '0.28.2' ],
+16 silly audit   '@esbuild/android-arm': [ '0.28.2' ],
+16 silly audit   '@esbuild/android-arm64': [ '0.28.2' ],
+16 silly audit   '@esbuild/android-x64': [ '0.28.2' ],
+16 silly audit   '@esbuild/darwin-arm64': [ '0.28.2' ],
+16 silly audit   '@esbuild/darwin-x64': [ '0.28.2' ],
+16 silly audit   '@esbuild/freebsd-arm64': [ '0.28.2' ],
+16 silly audit   '@esbuild/freebsd-x64': [ '0.28.2' ],
+16 silly audit   '@esbuild/linux-arm': [ '0.28.2' ],
+16 silly audit   '@esbuild/linux-arm64': [ '0.28.2' ],
+16 silly audit   '@esbuild/linux-ia32': [ '0.28.2' ],
+16 silly audit   '@esbuild/linux-loong64': [ '0.28.2' ],
+16 silly audit   '@esbuild/linux-mips64el': [ '0.28.2' ],
+16 silly audit   '@esbuild/linux-ppc64': [ '0.28.2' ],
+16 silly audit   '@esbuild/linux-riscv64': [ '0.28.2' ],
+16 silly audit   '@esbuild/linux-s390x': [ '0.28.2' ],
+16 silly audit   '@esbuild/linux-x64': [ '0.28.2' ],
+16 silly audit   '@esbuild/netbsd-arm64': [ '0.28.2' ],
+16 silly audit   '@esbuild/netbsd-x64': [ '0.28.2' ],
+16 silly audit   '@esbuild/openbsd-arm64': [ '0.28.2' ],
+16 silly audit   '@esbuild/openbsd-x64': [ '0.28.2' ],
+16 silly audit   '@esbuild/openharmony-arm64': [ '0.28.2' ],
+16 silly audit   '@esbuild/sunos-x64': [ '0.28.2' ],
+16 silly audit   '@esbuild/win32-arm64': [ '0.28.2' ],
+16 silly audit   '@esbuild/win32-ia32': [ '0.28.2' ],
+16 silly audit   '@esbuild/win32-x64': [ '0.28.2' ],
+16 silly audit   '@playwright/test': [ '1.56.1' ],
+16 silly audit   '@types/react': [ '19.3.0' ],
+16 silly audit   '@types/react-dom': [ '19.3.0' ],
+16 silly audit   '@typescript/typescript-aix-ppc64': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-darwin-arm64': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-darwin-x64': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-freebsd-arm64': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-freebsd-x64': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-linux-arm': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-linux-arm64': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-linux-loong64': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-linux-mips64el': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-linux-ppc64': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-linux-riscv64': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-linux-s390x': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-linux-x64': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-netbsd-arm64': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-netbsd-x64': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-openbsd-arm64': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-openbsd-x64': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-sunos-x64': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-win32-arm64': [ '7.0.2' ],
+16 silly audit   '@typescript/typescript-win32-x64': [ '7.0.2' ],
+16 silly audit   '@xterm/addon-fit': [ '0.11.0' ],
+16 silly audit   '@xterm/xterm': [ '6.0.0' ],
+16 silly audit   'beautiful-mermaid': [ '1.1.3' ],
+16 silly audit   csstype: [ '3.2.3' ],
+16 silly audit   elkjs: [ '0.11.1' ],
+16 silly audit   entities: [ '7.0.1' ],
+16 silly audit   esbuild: [ '0.28.2' ],
+16 silly audit   fsevents: [ '2.3.2' ],
+16 silly audit   playwright: [ '1.56.1' ],
+16 silly audit   'playwright-core': [ '1.56.1' ],
+16 silly audit   prettier: [ '3.9.9' ],
+16 silly audit   react: [ '19.3.0' ],
+16 silly audit   'react-dom': [ '19.3.0' ],
+16 silly audit   scheduler: [ '0.28.0' ],
+16 silly audit   typescript: [ '7.0.2' ]
+16 silly audit }
+17 http cache typescript@https://registry.npmjs.org/typescript/-/typescript-7.0.2.tgz 0ms (cache hit)
+18 http cache scheduler@https://registry.npmjs.org/scheduler/-/scheduler-0.28.0.tgz 0ms (cache hit)
+19 http cache react-dom@https://registry.npmjs.org/react-dom/-/react-dom-19.3.0.tgz 0ms (cache hit)
+20 http cache react@https://registry.npmjs.org/react/-/react-19.3.0.tgz 0ms (cache hit)
+21 http cache playwright-core@https://registry.npmjs.org/playwright-core/-/playwright-core-1.56.1.tgz 0ms (cache hit)
+22 http cache playwright@https://registry.npmjs.org/playwright/-/playwright-1.56.1.tgz 0ms (cache hit)
+23 http cache esbuild@https://registry.npmjs.org/esbuild/-/esbuild-0.28.2.tgz 0ms (cache hit)
+24 http cache elkjs@https://registry.npmjs.org/elkjs/-/elkjs-0.11.1.tgz 0ms (cache hit)
+25 http cache csstype@https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz 0ms (cache hit)
+26 http cache prettier@https://registry.npmjs.org/prettier/-/prettier-3.9.9.tgz 0ms (cache hit)
+27 http cache entities@https://registry.npmjs.org/entities/-/entities-7.0.1.tgz 0ms (cache hit)
+28 http cache beautiful-mermaid@https://registry.npmjs.org/beautiful-mermaid/-/beautiful-mermaid-1.1.3.tgz 0ms (cache hit)
+29 http cache @xterm/xterm@https://registry.npmjs.org/@xterm/xterm/-/xterm-6.0.0.tgz 0ms (cache hit)
+30 http cache @typescript/typescript-linux-x64@https://registry.npmjs.org/@typescript/typescript-linux-x64/-/typescript-linux-x64-7.0.2.tgz 0ms (cache hit)
+31 http cache @xterm/addon-fit@https://registry.npmjs.org/@xterm/addon-fit/-/addon-fit-0.11.0.tgz 0ms (cache hit)
+32 http cache @types/react-dom@https://registry.npmjs.org/@types/react-dom/-/react-dom-19.3.0.tgz 0ms (cache hit)
+33 http cache @types/react@https://registry.npmjs.org/@types/react/-/react-19.3.0.tgz 0ms (cache hit)
+34 http cache @playwright/test@https://registry.npmjs.org/@playwright/test/-/test-1.56.1.tgz 0ms (cache hit)
+35 http cache @esbuild/linux-x64@https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.28.2.tgz 0ms (cache hit)
+36 silly tarball no local data for typescript@https://registry.npmjs.org/typescript/-/typescript-7.0.2.tgz. Extracting by manifest.
+37 silly tarball no local data for scheduler@https://registry.npmjs.org/scheduler/-/scheduler-0.28.0.tgz. Extracting by manifest.
+38 silly tarball no local data for react-dom@https://registry.npmjs.org/react-dom/-/react-dom-19.3.0.tgz. Extracting by manifest.
+39 silly tarball no local data for react@https://registry.npmjs.org/react/-/react-19.3.0.tgz. Extracting by manifest.
+40 silly tarball no local data for playwright-core@https://registry.npmjs.org/playwright-core/-/playwright-core-1.56.1.tgz. Extracting by manifest.
+41 silly tarball no local data for playwright@https://registry.npmjs.org/playwright/-/playwright-1.56.1.tgz. Extracting by manifest.
+42 silly tarball no local data for esbuild@https://registry.npmjs.org/esbuild/-/esbuild-0.28.2.tgz. Extracting by manifest.
+43 silly tarball no local data for elkjs@https://registry.npmjs.org/elkjs/-/elkjs-0.11.1.tgz. Extracting by manifest.
+44 silly tarball no local data for csstype@https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz. Extracting by manifest.
+45 silly tarball no local data for prettier@https://registry.npmjs.org/prettier/-/prettier-3.9.9.tgz. Extracting by manifest.
+46 silly tarball no local data for entities@https://registry.npmjs.org/entities/-/entities-7.0.1.tgz. Extracting by manifest.
+47 silly tarball no local data for beautiful-mermaid@https://registry.npmjs.org/beautiful-mermaid/-/beautiful-mermaid-1.1.3.tgz. Extracting by manifest.
+48 silly tarball no local data for @xterm/xterm@https://registry.npmjs.org/@xterm/xterm/-/xterm-6.0.0.tgz. Extracting by manifest.
+49 silly tarball no local data for @typescript/typescript-linux-x64@https://registry.npmjs.org/@typescript/typescript-linux-x64/-/typescript-linux-x64-7.0.2.tgz. Extracting by manifest.
+50 silly tarball no local data for @xterm/addon-fit@https://registry.npmjs.org/@xterm/addon-fit/-/addon-fit-0.11.0.tgz. Extracting by manifest.
+51 silly tarball no local data for @types/react-dom@https://registry.npmjs.org/@types/react-dom/-/react-dom-19.3.0.tgz. Extracting by manifest.
+52 silly tarball no local data for @types/react@https://registry.npmjs.org/@types/react/-/react-19.3.0.tgz. Extracting by manifest.
+53 silly tarball no local data for @playwright/test@https://registry.npmjs.org/@playwright/test/-/test-1.56.1.tgz. Extracting by manifest.
+54 silly tarball no local data for @esbuild/linux-x64@https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.28.2.tgz. Extracting by manifest.
+55 http fetch POST 200 https://registry.npmjs.org/-/npm/v1/security/advisories/bulk 100ms
+56 silly audit report {}
+57 http fetch GET 200 https://registry.npmjs.org/@types/react-dom/-/react-dom-19.3.0.tgz 858ms (cache miss)
+58 http fetch GET 200 https://registry.npmjs.org/@xterm/addon-fit/-/addon-fit-0.11.0.tgz 862ms (cache miss)
+59 http fetch GET 200 https://registry.npmjs.org/@playwright/test/-/test-1.56.1.tgz 890ms (cache miss)
+60 http fetch GET 200 https://registry.npmjs.org/scheduler/-/scheduler-0.28.0.tgz 938ms (cache miss)
+61 http fetch GET 200 https://registry.npmjs.org/esbuild/-/esbuild-0.28.2.tgz 968ms (cache miss)
+62 http fetch GET 200 https://registry.npmjs.org/@types/react/-/react-19.3.0.tgz 1121ms (cache miss)
+63 http fetch GET 200 https://registry.npmjs.org/react/-/react-19.3.0.tgz 1193ms (cache miss)
+64 http fetch GET 200 https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz 1280ms (cache miss)
+65 http fetch GET 200 https://registry.npmjs.org/entities/-/entities-7.0.1.tgz 2070ms (cache miss)
+66 http fetch GET 200 https://registry.npmjs.org/elkjs/-/elkjs-0.11.1.tgz 2088ms (cache miss)
+67 http fetch GET 200 https://registry.npmjs.org/react-dom/-/react-dom-19.3.0.tgz 2152ms (cache miss)
+68 http fetch GET 200 https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.28.2.tgz 2317ms (cache miss)
+69 http fetch GET 200 https://registry.npmjs.org/prettier/-/prettier-3.9.9.tgz 2337ms (cache miss)
+70 http fetch GET 200 https://registry.npmjs.org/playwright/-/playwright-1.56.1.tgz 2519ms (cache miss)
+71 http fetch GET 200 https://registry.npmjs.org/beautiful-mermaid/-/beautiful-mermaid-1.1.3.tgz 2666ms (cache miss)
+72 http fetch GET 200 https://registry.npmjs.org/@xterm/xterm/-/xterm-6.0.0.tgz 2743ms (cache miss)
+73 http fetch GET 200 https://registry.npmjs.org/typescript/-/typescript-7.0.2.tgz 2995ms (cache miss)
+74 http fetch GET 200 https://registry.npmjs.org/@typescript/typescript-linux-x64/-/typescript-linux-x64-7.0.2.tgz 3042ms (cache miss)
+75 http fetch GET 200 https://registry.npmjs.org/playwright-core/-/playwright-core-1.56.1.tgz 3054ms (cache miss)
+76 info run esbuild@0.28.2 postinstall node_modules/esbuild node install.js
+77 info run esbuild@0.28.2 postinstall { code: 0, signal: null }
+78 silly ADD node_modules/typescript
+79 silly ADD node_modules/scheduler
+80 silly ADD node_modules/react-dom
+81 silly ADD node_modules/react
+82 silly ADD node_modules/prettier
+83 silly ADD node_modules/playwright-core
+84 silly ADD node_modules/playwright
+85 silly ADD node_modules/esbuild
+86 silly ADD node_modules/entities
+87 silly ADD node_modules/elkjs
+88 silly ADD node_modules/csstype
+89 silly ADD node_modules/beautiful-mermaid
+90 silly ADD node_modules/@xterm/xterm
+91 silly ADD node_modules/@xterm/addon-fit
+92 silly ADD node_modules/@typescript/typescript-linux-x64
+93 silly ADD node_modules/@types/react-dom
+94 silly ADD node_modules/@types/react
+95 silly ADD node_modules/@playwright/test
+96 silly ADD node_modules/@esbuild/linux-x64
+97 verbose cwd /app/desktop/webapp/frontend
+98 verbose os Linux 6.8.0
+99 verbose node v22.22.1
+100 verbose npm  v11.11.0
+101 notice
+101 notice New minor version of npm available! 11.11.0 -> 11.21.0
+101 notice Changelog: https://github.com/npm/cli/releases/tag/v11.21.0
+101 notice To update run: npm install -g npm@11.21.0
+101 notice  { force: true, [Symbol(proc-log.meta)]: true }
+102 verbose exit 0
+103 info ok

@@ -36,8 +36,8 @@ const improveNav: typeof mainNav = [
 const utilityNav: [Page, string, string][] = [
   ['diagrams', 'Architecture', 'branch'],
   ['instructions', 'Instructions', 'file'],
-  ['git', 'Git & Worktrees', 'branch'],
   ['analysis-files', 'Context', 'layers'],
+  ['git', 'Git & Worktrees', 'branch'],
   ['models', 'Models', 'layers'],
   ['history', 'History', 'clock'],
 ];
@@ -300,11 +300,11 @@ function App() {
               <nav aria-label="Workspaces: Improve">{nav(improveNav)}</nav>
               <div className="sidebar-bottom">
                 <div className="nav-label">Project</div>
-                <nav aria-label="Tools">{nav(utilityNav.slice(0, 3))}</nav>
+                <nav aria-label="Tools">{nav(utilityNav.slice(0, 4))}</nav>
               </div>
             </div>
             <nav className="sidebar-settings" aria-label="Settings">
-              {nav(utilityNav.slice(3))}
+              {nav(utilityNav.slice(4))}
             </nav>
             <p className="sidebar-note">Local by default. You apply changes.</p>
             <button
