@@ -37,14 +37,14 @@ There is no browser-accessible proxy, CORS exception or command-execution endpoi
 
 ## Workflow
 
-Project Studio has twelve destinations. **Overview**, **Source** and **Chat** are
+Project Studio has thirteen destinations. **Overview**, **Source** and **Chat** are
 the main workspaces. **Improve** groups **Analysis**, **Findings**, **Features** and
-**Changes**; project tools include architecture, instructions, context, models and
-history. **Models** and **History** stay at the bottom of the sidebar. The project
-switcher and global search (`⌘K` or `Ctrl+K`) open focused dialogs over the current
-workspace. Escape closes them and restores focus. **Terminal** opens a bottom
-drawer from the status bar while keeping the workspace visible. The sidebar
-collapses to icons.
+**Changes**; project tools include Git / Worktrees, architecture, instructions,
+context, models and history. **Models** and **History** stay at the bottom of the
+sidebar. The project switcher and global search (`⌘K` or `Ctrl+K`) open focused
+dialogs over the current workspace. Escape closes them and restores focus.
+**Terminal** opens a bottom drawer from the status bar while keeping the workspace
+visible. The sidebar collapses to icons.
 
 - **Overview → Tests** shows each local check phase, command, status and output.
   **Run Tests** beside the top-bar search starts the checks with explicit project
@@ -109,8 +109,12 @@ collapses to icons.
   level; sharing destinations stay in consent previews.
   A short note beside **Prepare fix** identifies remote sharing and isolated checks.
   **Refresh preparation** appears when loading fails or a selected model is unavailable.
-  **Prepare fix** authorizes generation,
-  isolated checks, remote sharing and Security intent when applicable. Changed destinations
+  In a Git repository, **Prepare fix** opens workspace selection: use the current
+  branch or create a worktree with an editable branch name and absolute path.
+  Creation starts from the displayed commit; uncommitted files stay in the original
+  workspace. It then opens the worktree and captures a fresh fix there. The final
+  preparation action authorizes generation, isolated checks, remote sharing and
+  Security intent when applicable. Changed destinations
   or project revisions require fresh preparation.
   Go fixes include a regression test path; Markdown-only fixes use the selected
   creation profile. **Go to file** opens source without starting a fix.
@@ -121,13 +125,29 @@ collapses to icons.
   a check-evidence pane. **Checks** contains full diagnostics, captured workflow
   stages and model review. **Details** contains the cause, solution, scope,
   instructions and regeneration, with a link to **History**.
-  **Review next file** advances through the diffs; **Apply N files** becomes available
+  **Review next file** advances through the diffs; **Apply & Commit** becomes available
   after every changed file has been viewed and the existing check/review guards pass.
+  Its commit message starts with the fix title and is editable before confirmation.
+  Only reviewed files enter the commit; unrelated staged changes remain staged.
+  Pre-existing edits on the same paths must be committed first or prepared in a
+  fresh worktree. Hooks and signing are skipped; nothing is pushed. Non-Git
+  projects retain **Apply N files**. A failed commit leaves the files applied and
+  offers **Retry commit**, which does not apply them again.
   Regeneration clears the viewed-file state. Tabs and file selection never generate,
   check or apply a proposal. Failures and requested corrections stay visible above
   the diff. Performance remains unmeasured without benchmark evidence.
   Apply records review for that exact revision and retains post-Apply verification
-  and guarded Undo. It does not automatically mark the finding fixed.
+  and guarded Undo. Undo restores files as working-tree changes while retaining
+  any Git commit. It does not automatically mark the finding fixed.
+- The active branch appears directly beneath the project name in the sidebar.
+  Selecting it opens **Git / Worktrees**, also available in the Project navigation.
+  The branch switcher lists local branches and identifies those checked out in
+  other worktrees. Switch and merge require clean working trees, explicit execution
+  trust, and confirmation; active terminals close and prepared evidence is cleared.
+  Worktrees list their completed committed fixes. **Merge into Current Branch**
+  first shows incoming commits and a read-only diff. Conflicts remain visible with
+  their paths and an **Abort merge** action; abort discards conflict resolutions.
+  There is no separate new-workflow sidebar action: creation starts at **Prepare fix**.
 - **Features** presents advisory ideas as compact rows. Selecting a row opens
   the complete idea in a dialog; **Project goals** expands goal editing and search. Searches
   use the same extended deadline as feature discovery in Analysis. New ideas
@@ -158,8 +178,9 @@ collapses to icons.
   and a composer at the bottom. A compact proposal card links to review.
   **Review changes** opens **Changes**, with a read-only diff beside check evidence
   on wide windows. Compact windows stack these panes. **Back to conversation** returns to Chat.
-  View every changed file, then select **Apply N files** in the review footer. This records
-  review and applies only that revision; failed review, a replacement proposal or
+  View every changed file, then select **Apply & Commit** in the review footer
+  (**Apply N files** for non-Git projects). This records review and applies only
+  that revision; failed review, a replacement proposal or
   navigation while review is pending prevents Apply. With a captured `_test.go`
   path, creation, testing and agent review run automatically; otherwise generation
   uses the direct checked-proposal path.

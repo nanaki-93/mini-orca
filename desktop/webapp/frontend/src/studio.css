@@ -1421,3 +1421,105 @@ svg.icon {
 .studio-overlay .analysis-preview-layout > * {
   min-width: 0;
 }
+
+.project-branch {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  margin: -20px 18px 16px 46px;
+  padding: 3px 0;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  text-align: left;
+  font-size: 12px;
+}
+.project-branch span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-branch .icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.sidebar-collapsed .project-branch {
+  margin: -8px auto 12px;
+}
+.sidebar-collapsed .project-branch span {
+  display: none;
+}
+.git-branch-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.git-branch-row > div {
+  min-width: 0;
+}
+.git-branch-row .path {
+  overflow-wrap: anywhere;
+}
+.git-branch-name {
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+.git-switcher {
+  align-items: flex-end;
+}
+.git-switcher .git-branch-control {
+  min-width: 220px;
+  flex: 1;
+}
+.git-worktrees {
+  display: grid;
+  gap: 16px;
+}
+.git-worktree {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  min-width: 0;
+}
+.git-worktree h3 {
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+.git-merge-diff {
+  max-height: 42vh;
+  overflow: auto;
+  white-space: pre;
+}
+.git-workspace-options {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  padding: 16px;
+}
+.git-workspace-options label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.git-workspace-options input {
+  width: auto;
+}
+
+.git-branch-control label {
+  display: block;
+  margin-bottom: 8px;
+}
+.compact-stack {
+  gap: 8px;
+}
+.git-workspace-options input[type='radio'] {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}

@@ -1,3 +1,4 @@
+import { testGitWorkflows } from './git-workflows.mjs';
 import { chromium } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -47,6 +48,7 @@ const themeNames = { dark: 'Graphite theme', light: 'Porcelain theme', midnight:
 // Planned presentation states, not an attestation of coverage. Captures below record
 // what actually ran; each owner extends its cases as its surfaces are migrated.
 const surfaceInventory = {
+  git: { git: ['branches', 'worktrees', 'merge preview', 'conflicts', 'large text'] },
   overview: {
     summary: ['reference', 'empty', 'unavailable', 'stale', 'failed', 'long identity'],
     welcome: ['no project', 'offline', 'opening', 'open failed'],
@@ -984,6 +986,7 @@ try {
       ? { channel: process.env.MINI_ORCA_TEST_BROWSER || 'chrome' }
       : {}),
   });
+  await testGitWorkflows({ test, pageFor, nav, idle, layout });
   await testStudio({ test, pageFor, nav, idle, layout });
   await testResults({ test, pageFor, nav, idle, layout });
   await testScrolling({ test, pageFor, nav, idle, layout });

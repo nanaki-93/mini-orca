@@ -1,3 +1,4 @@
+import { GitWorkspace } from './git-workspace';
 import {
   Component,
   useEffect,
@@ -33,6 +34,7 @@ const improveNav: typeof mainNav = [
   ['changes', 'Changes', 'branch'],
 ];
 const utilityNav: [Page, string, string][] = [
+  ['git', 'Git / Worktrees', 'branch'],
   ['diagrams', 'Architecture', 'branch'],
   ['instructions', 'Instructions', 'file'],
   ['analysis-files', 'Context', 'layers'],
@@ -96,7 +98,10 @@ function App() {
           : s.page;
   useEffect(() => {
     void w.start();
-    const focus = () => void w.refreshFile();
+    const focus = () => {
+      void w.refreshFile();
+      void w.refreshRepository();
+    };
     window.addEventListener('focus', focus);
     return () => {
       w.stop();
@@ -184,6 +189,7 @@ function App() {
   if (s.page === 'models') content = <Models s={s} />;
   else if (s.page === 'project' || s.page === 'welcome' || !s.project)
     content = <ProjectPage s={s} />;
+  else if (s.page === 'git') content = <GitWorkspace s={s} />;
   else if (s.page === 'summary') content = <Summary s={s} />;
   else if (s.page === 'analysis') content = <Analysis s={s} />;
   else if (s.page === 'analysis-files') content = <AnalysisFiles s={s} />;
@@ -287,21 +293,39 @@ function App() {
               <span className="project-avatar">{s.project?.name?.[0]?.toUpperCase() || '+'}</span>
               <span className="project-label">
                 <strong>{s.project?.name || 'Open a project'}</strong>
-                {s.project && <small>{s.project.type.toUpperCase()}</small>}
               </span>
               <Icon name="chevrons" />
             </button>
+            {s.project && (
+              <button
+                className="project-branch"
+                title={s.repository?.head || 'Git status'}
+                aria-label={`Current branch: ${s.repository?.branch || 'unavailable'}. Open Git / Worktrees`}
+                onClick={() => void w.navigate('git')}
+              >
+                <Icon name="branch" />
+                <span>
+                  {s.resourceErrors.Git
+                    ? 'Git unavailable'
+                    : !s.repository
+                      ? 'Loading branch…'
+                      : !s.repository.available
+                        ? 'No Git repository'
+                        : s.repository.branch || 'Detached HEAD'}
+                </span>
+              </button>
+            )}
             <div className="sidebar-navigation">
               <nav aria-label="Workspaces">{nav(mainNav)}</nav>
               <div className="nav-label">Improve</div>
               <nav aria-label="Workspaces: Improve">{nav(improveNav)}</nav>
               <div className="sidebar-bottom">
                 <div className="nav-label">Project</div>
-                <nav aria-label="Tools">{nav(utilityNav.slice(0, 3))}</nav>
+                <nav aria-label="Tools">{nav(utilityNav.slice(0, 4))}</nav>
               </div>
             </div>
             <nav className="sidebar-settings" aria-label="Settings">
-              {nav(utilityNav.slice(3))}
+              {nav(utilityNav.slice(4))}
             </nav>
             <p className="sidebar-note">Local by default. You apply changes.</p>
             <button
@@ -368,8 +392,8 @@ function App() {
                 {s.connected ? 'Daemon connected' : 'Daemon offline'}
               </div>
               <span className="row">
-                <Icon name={s.git?.available ? 'branch' : 'laptop'} />
-                {s.git?.available ? s.git.branch : 'Local workspace'}
+                <Icon name="laptop" />
+                Local workspace
               </span>
               <span>
                 {s.project

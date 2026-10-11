@@ -1,3 +1,4 @@
+import { WorktreePreparation } from './git-controls';
 import { useEffect, useId, useState } from 'react';
 import type { ChangeSeed } from './models';
 import { workspace as w, workflowSeed, type FixPreparationContext, type State } from './workspace';
@@ -17,6 +18,7 @@ export function FixPreparation({
 }) {
   const [context, setContext] = useState<FixPreparationContext>();
   const [error, setError] = useState('');
+  const [choosingWorkspace, setChoosingWorkspace] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const permissionsID = useId();
   const modelKey = JSON.stringify(s.models?.scopes);
@@ -42,8 +44,28 @@ export function FixPreparation({
   const profiles = useAgents ? Object.values(models) : [models.create];
   const ready = context && profiles.every((profile) => context.models.scopes[profile]);
   const remote = profiles.some((profile) => context?.models.scopes[profile]?.remote_provider);
+  const begin = (workspace?: { branch: string; path: string }) => {
+    if (!context || !ready) return;
+    setChoosingWorkspace(false);
+    if (workspace) {
+      void w.prepareFixInWorktree(prepared, models, context, workspace.branch, workspace.path);
+      return;
+    }
+    if (s.page !== 'chat') w.seedChange(prepared);
+    void (useAgents
+      ? w.startChangeWorkflow(prepared, models, context)
+      : w.prepareChange(prepared, true, models.create, context));
+  };
   return (
     <Panel className="fix-preparation">
+      {choosingWorkspace && (
+        <WorktreePreparation
+          s={{ ...s, changeSeed: prepared }}
+          onClose={() => setChoosingWorkspace(false)}
+          onPrepare={begin}
+          remote={remote}
+        />
+      )}
       {error ? (
         <Notice error>{error}</Notice>
       ) : !context ? (
@@ -76,10 +98,8 @@ export function FixPreparation({
           aria-describedby={context ? permissionsID : undefined}
           onClick={() => {
             if (!context || !ready) return;
-            if (s.page !== 'chat') w.seedChange(prepared);
-            void (useAgents
-              ? w.startChangeWorkflow(prepared, models, context)
-              : w.prepareChange(prepared, true, models.create, context));
+            if (context.repository.available) setChoosingWorkspace(true);
+            else begin();
           }}
         >
           {label}
