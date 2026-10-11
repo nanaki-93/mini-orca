@@ -401,6 +401,26 @@ export interface GitStatus {
   file_state: string;
   diff_state: string;
 }
+
+export interface GitBranchInfo {
+  name: string;
+  is_current: boolean;
+}
+
+export interface GitWorktreeInfo {
+  path: string;
+  head: string;
+  branch: string;
+  is_bare: boolean;
+  is_detached: boolean;
+  is_main: boolean;
+}
+
+export interface GitMergeResult {
+  success: boolean;
+  conflict: boolean;
+  message: string;
+}
 export interface Impact {
   target_path: string;
   target_symbol: string;

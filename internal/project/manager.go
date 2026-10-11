@@ -199,6 +199,30 @@ func (m *Manager) GitStatus(relative string) (GitStatus, error) {
 	return ReadGitStatus(m.Root(), relative), nil
 }
 
+func (m *Manager) ListGitBranches() ([]GitBranchInfo, error) {
+	return ListGitBranches(m.Root())
+}
+
+func (m *Manager) SwitchGitBranch(branch string) error {
+	return SwitchGitBranch(m.Root(), branch)
+}
+
+func (m *Manager) CommitGitChanges(message string) (string, error) {
+	return CommitGitChanges(m.Root(), message)
+}
+
+func (m *Manager) ListGitWorktrees() ([]GitWorktreeInfo, error) {
+	return ListGitWorktrees(m.Root())
+}
+
+func (m *Manager) CreateGitWorktree(path, branchName string) error {
+	return CreateGitWorktree(m.Root(), path, branchName)
+}
+
+func (m *Manager) MergeGitWorktree(sourceBranch string) (GitMergeResult, error) {
+	return MergeGitWorktree(m.Root(), sourceBranch)
+}
+
 // IndexedFile returns one active-project file after canonical-path and policy
 // checks. The final lock check prevents a file from a previously active project
 // being returned after a concurrent import or reindex.

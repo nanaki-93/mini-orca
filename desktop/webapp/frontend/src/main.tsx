@@ -18,6 +18,7 @@ import { ChangeHistory } from './change-shared';
 import { Features } from './features';
 import { Instructions } from './instructions';
 import { TerminalWorkspace } from './tools';
+import { GitWorkspace } from './git-workspace';
 import './style.css';
 import './studio.css';
 
@@ -35,6 +36,7 @@ const improveNav: typeof mainNav = [
 const utilityNav: [Page, string, string][] = [
   ['diagrams', 'Architecture', 'branch'],
   ['instructions', 'Instructions', 'file'],
+  ['git', 'Git & Worktrees', 'branch'],
   ['analysis-files', 'Context', 'layers'],
   ['models', 'Models', 'layers'],
   ['history', 'History', 'clock'],
@@ -208,6 +210,7 @@ function App() {
   else if (s.page === 'editor') content = <Editor s={s} />;
   else if (s.page === 'context') content = <Context s={s} />;
   else if (s.page === 'search') content = <SearchPage s={s} />;
+  else if (s.page === 'git') content = <GitWorkspace s={s} />;
   else if (s.page === 'diagrams') content = <Diagrams s={s} />;
   return (
     <>

@@ -343,6 +343,97 @@ func (h *ProjectHandler) GitStatus(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSON(w, http.StatusOK, status)
 }
 
+type gitBranchSwitchRequest struct {
+	Branch string `json:"branch"`
+}
+
+type gitCommitRequest struct {
+	Message string `json:"message"`
+}
+
+type gitWorktreeCreateRequest struct {
+	Path       string `json:"path"`
+	BranchName string `json:"branch_name"`
+}
+
+type gitWorktreeMergeRequest struct {
+	SourceBranch string `json:"source_branch"`
+}
+
+func (h *ProjectHandler) ListGitBranches(w http.ResponseWriter, r *http.Request) {
+	branches, err := h.manager.ListGitBranches()
+	if err != nil {
+		writeProjectError(w, "List git branches failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, struct {
+		Branches []project.GitBranchInfo `json:"branches"`
+	}{Branches: branches})
+}
+
+func (h *ProjectHandler) SwitchGitBranch(w http.ResponseWriter, r *http.Request) {
+	var request gitBranchSwitchRequest
+	if !decodeStrictJSON(w, r, &request, "invalid git branch switch request", "Provide branch.") {
+		return
+	}
+	if err := h.manager.SwitchGitBranch(request.Branch); err != nil {
+		writeProjectError(w, "Switch git branch failed", err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *ProjectHandler) CommitGitChanges(w http.ResponseWriter, r *http.Request) {
+	var request gitCommitRequest
+	if !decodeStrictJSON(w, r, &request, "invalid git commit request", "Provide message.") {
+		return
+	}
+	out, err := h.manager.CommitGitChanges(request.Message)
+	if err != nil {
+		writeProjectError(w, "Git commit failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, struct {
+		Output string `json:"output"`
+	}{Output: out})
+}
+
+func (h *ProjectHandler) ListGitWorktrees(w http.ResponseWriter, r *http.Request) {
+	worktrees, err := h.manager.ListGitWorktrees()
+	if err != nil {
+		writeProjectError(w, "List git worktrees failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, struct {
+		Worktrees []project.GitWorktreeInfo `json:"worktrees"`
+	}{Worktrees: worktrees})
+}
+
+func (h *ProjectHandler) CreateGitWorktree(w http.ResponseWriter, r *http.Request) {
+	var request gitWorktreeCreateRequest
+	if !decodeStrictJSON(w, r, &request, "invalid git worktree create request", "Provide path and branch_name.") {
+		return
+	}
+	if err := h.manager.CreateGitWorktree(request.Path, request.BranchName); err != nil {
+		writeProjectError(w, "Create git worktree failed", err)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (h *ProjectHandler) MergeGitWorktree(w http.ResponseWriter, r *http.Request) {
+	var request gitWorktreeMergeRequest
+	if !decodeStrictJSON(w, r, &request, "invalid git worktree merge request", "Provide source_branch.") {
+		return
+	}
+	result, err := h.manager.MergeGitWorktree(request.SourceBranch)
+	if err != nil && !result.Conflict {
+		writeProjectError(w, "Merge git worktree failed", err)
+		return
+	}
+	api.WriteJSON(w, http.StatusOK, result)
+}
+
 // Reindex refreshes deterministic facts without contacting the model.
 func (h *ProjectHandler) Reindex(w http.ResponseWriter, r *http.Request) {
 	var request reindexRequest

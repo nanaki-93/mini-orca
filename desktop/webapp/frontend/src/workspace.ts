@@ -23,6 +23,7 @@ export type Page =
   | 'terminal'
   | 'search'
   | 'models'
+  | 'git'
   | 'diagrams';
 export type FindingCategory = 'bugs' | 'performance' | 'security';
 export interface FindingListView {
@@ -77,6 +78,8 @@ export interface State {
   context?: M.ContextManifest;
   impact?: M.Impact;
   git?: M.GitStatus;
+  gitBranches?: M.GitBranchInfo[];
+  gitWorktrees?: M.GitWorktreeInfo[];
   securityReport?: M.SecurityReport;
   uncertain: boolean;
   scan?: M.Scan | null;
@@ -341,6 +344,67 @@ export class Workspace {
       if (path) this.set({ page: 'project', chosenPath: path });
     });
   }
+  async listGitBranches() {
+    await this.resource(
+      'git branches',
+      () => this.api.get<{ branches: M.GitBranchInfo[] }>(`${current}/git/branches`),
+      (res) => this.set({ gitBranches: res.branches || [] }),
+    );
+  }
+  async switchGitBranch(branch: string) {
+    await this.act('Switch git branch', async () => {
+      await this.api.post(`${current}/git/branches/switch`, { branch });
+      await this.reindex();
+      await this.listGitBranches();
+    });
+  }
+  async commitGitChanges(message: string) {
+    await this.act('Commit changes', async () => {
+      await this.api.post<{ output: string }>(`${current}/git/commit`, { message });
+      await this.refreshProject();
+      this.set({ notice: 'Git commit created successfully.' });
+    });
+  }
+  async listGitWorktrees() {
+    await this.resource(
+      'git worktrees',
+      () => this.api.get<{ worktrees: M.GitWorktreeInfo[] }>(`${current}/git/worktrees`),
+      (res) => this.set({ gitWorktrees: res.worktrees || [] }),
+    );
+  }
+  async createGitWorktree(path: string, branchName: string) {
+    let resolvedPath = path;
+    await this.act('Create worktree', async () => {
+      await this.api.post(`${current}/git/worktrees`, { path, branch_name: branchName });
+      await this.listGitWorktrees();
+      const wt = this.state.gitWorktrees?.find(
+        (w) => w.branch === branchName || w.path.endsWith(path.replace(/^\.\.\//, '')),
+      );
+      if (wt) resolvedPath = wt.path;
+      this.set({ notice: `Worktree created at ${resolvedPath} on branch ${branchName}` });
+    });
+    if (resolvedPath) {
+      await this.openProject(resolvedPath, false, true);
+    }
+  }
+  async mergeGitWorktree(sourceBranch: string) {
+    let result: M.GitMergeResult | undefined;
+    await this.act('Merge worktree branch', async () => {
+      result = await this.api.post<M.GitMergeResult>(`${current}/git/worktrees/merge`, {
+        source_branch: sourceBranch,
+      });
+      if (result.conflict) {
+        this.set({
+          error: `Merge conflicts detected while merging ${sourceBranch}. Please review and resolve conflicts.`,
+        });
+      } else if (result.success) {
+        this.set({ notice: `Successfully merged ${sourceBranch} into current branch.` });
+      }
+      await this.refreshProject();
+    });
+    return result;
+  }
+
   async openProject(path: string, analyze: boolean, explicit = true) {
     if (explicit) this.explicitProjectAction = true;
     if (!path.trim()) return;

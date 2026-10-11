@@ -253,6 +253,8 @@ export function ProposalReview({
   details: ReactNode;
   tests?: boolean;
 }) {
+  const [commitMessage, setCommitMessage] = useState(change.title || 'Apply fix');
+  const [shouldCommit, setShouldCommit] = useState(false);
   const [tab, setTab] = useState('changes');
   const [path, setPath] = useState(change.changes[0].path);
   const [viewed, setViewed] = useState<string[]>([path]);
@@ -426,18 +428,44 @@ export function ProposalReview({
               Review next file
             </Button>
           ) : (
-            <Button
-              tone="primary"
-              icon="check"
-              disabled={!!s.busy || !ready || !!next}
-              onClick={(event) => {
-                // The preceding click may have advanced the last file at this same position.
-                if (event.detail > 1) return;
-                void w.acceptChange();
-              }}
-            >
-              Apply {files.length} {files.length === 1 ? 'file' : 'files'}
-            </Button>
+            <div className="row wrap align-center">
+              <label className="row small muted" style={{ gap: '0.5rem', marginRight: '0.5rem' }}>
+                <input
+                  type="checkbox"
+                  checked={shouldCommit}
+                  onChange={(e) => setShouldCommit(e.target.checked)}
+                />
+                Commit after Apply
+              </label>
+              {shouldCommit && (
+                <input
+                  type="text"
+                  className="field"
+                  style={{ width: '220px', marginRight: '0.5rem' }}
+                  value={commitMessage}
+                  onChange={(e) => setCommitMessage(e.target.value)}
+                  placeholder="Commit message..."
+                />
+              )}
+              <Button
+                tone="primary"
+                icon="check"
+                disabled={!!s.busy || !ready || !!next}
+                onClick={(event) => {
+                  if (event.detail > 1) return;
+                  void (async () => {
+                    await w.acceptChange();
+                    if (shouldCommit && commitMessage.trim()) {
+                      await w.commitGitChanges(commitMessage.trim());
+                    }
+                  })();
+                }}
+              >
+                {shouldCommit
+                  ? 'Apply & Commit'
+                  : `Apply ${files.length} ${files.length === 1 ? 'file' : 'files'}`}
+              </Button>
+            </div>
           )}
         </div>
       )}
