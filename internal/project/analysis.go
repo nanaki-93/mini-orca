@@ -169,6 +169,19 @@ func projectAnalysisResponseFailure(ctx context.Context, response *llm.ChatRespo
 	}
 }
 
+// StoreLocalInventory makes a newly created workspace reopenable without an
+// import-time provider request. The absent interpretation stays unavailable.
+func (a *Analyzer) StoreLocalInventory(ctx context.Context, root string) error {
+	analysis, err := a.scan(ctx, root)
+	if err != nil {
+		return err
+	}
+	report := newProjectAnalysisReportWithProvenance(analysis.ProjectID, analysis.ProjectRevision, a.model, a.profile, a.scope, a.providerOrigin, a.reasoningEffort)
+	report.Status = ProjectAnalysisStatusUnavailable
+	report.Failure = "This worktree has not been analyzed. Run project analysis to create its report."
+	return StoreProjectAnalysisReport(analysis.Path, report)
+}
+
 // Restore reloads deterministic facts and the persisted project interpretation
 // without contacting a model or rewriting project artifacts.
 func (a *Analyzer) Restore(root string) (*Analysis, error) {

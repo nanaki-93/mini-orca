@@ -1,0 +1,236 @@
+package app
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func gitWorkflowFixture(t *testing.T) (*Service, string, GitMutationRequest) {
+	t.Helper()
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	initializeChangeGit(t, service, root)
+	return service, service.manager.Root(), trustedGitRequest(t, service)
+}
+func trustedGitRequest(t *testing.T, service *Service) GitMutationRequest {
+	t.Helper()
+	index, err := service.manager.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository, err := service.GitRepository(context.Background(), index.ProjectID, index.ProjectRevision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.TrustProjectExecution(index.ProjectRevision, true); err != nil {
+		t.Fatal(err)
+	}
+	return GitMutationRequest{GitIdentity: repository.GitIdentity, ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Confirm: true, ConfirmExecution: true}
+}
+func createWorkflowWorktree(t *testing.T, service *Service, request GitMutationRequest) string {
+	t.Helper()
+	request.TargetBranch = "codex/fix"
+	request.Path = filepath.Join(t.TempDir(), "fix")
+	result, err := service.CreateGitWorktree(context.Background(), request)
+	if err != nil || result.State != "created" {
+		t.Fatalf("create worktree: %+v %v", result, err)
+	}
+	return result.Path
+}
+
+func TestGitWorktreeCreationIsolationAndGuards(t *testing.T) {
+	service, root, request := gitWorkflowFixture(t)
+	original, _ := os.ReadFile(filepath.Join(root, "main.go"))
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n// uncommitted user work\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	path := createWorkflowWorktree(t, service, request)
+	restored, err := service.RestoreProject(path)
+	if err != nil || restored.Path != path || restored.AIStatus != "unavailable" {
+		t.Fatalf("new worktree cannot reopen without a model: %+v %v", restored, err)
+	}
+	created, _ := os.ReadFile(filepath.Join(path, "main.go"))
+	if string(created) != string(original) {
+		t.Fatal("worktree copied dirty source")
+	}
+	if service.manager.Root() != root {
+		t.Fatal("creation silently switched project")
+	}
+	workspace, err := service.GitWorkspace(context.Background(), request.ProjectID, request.ProjectRevision)
+	if err != nil || len(workspace.Worktrees) != 2 {
+		t.Fatalf("worktrees: %+v %v", workspace, err)
+	}
+	for _, invalid := range []GitMutationRequest{
+		{TargetBranch: "../bad", Path: filepath.Join(t.TempDir(), "bad")},
+		{TargetBranch: "codex/inside", Path: filepath.Join(root, "nested")},
+		{TargetBranch: "codex/existing", Path: root},
+		{TargetBranch: "codex/fix", Path: filepath.Join(t.TempDir(), "duplicate")},
+	} {
+		invalid.GitIdentity = request.GitIdentity
+		invalid.ProjectID, invalid.ProjectRevision = request.ProjectID, request.ProjectRevision
+		invalid.Confirm, invalid.ConfirmExecution = true, true
+		if _, err := service.CreateGitWorktree(context.Background(), invalid); err == nil {
+			t.Fatalf("accepted invalid request: %+v", invalid)
+		}
+	}
+	request.ConfirmExecution = false
+	request.Path = filepath.Join(t.TempDir(), "unconfirmed")
+	request.TargetBranch = "codex/unconfirmed"
+	if _, err := service.CreateGitWorktree(context.Background(), request); err == nil {
+		t.Fatal("created without execution consent")
+	}
+}
+
+func TestGitBranchSwitchRejectsDirtyAndCheckedOutBranches(t *testing.T) {
+	service, root, request := gitWorkflowFixture(t)
+	testGit(t, root, "branch", "other")
+	request.TargetBranch = "other"
+	if err := os.WriteFile(filepath.Join(root, "user.txt"), []byte("user work"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SwitchGitBranch(context.Background(), request); err == nil {
+		t.Fatal("switched dirty tree")
+	}
+	if err := os.Remove(filepath.Join(root, "user.txt")); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.SwitchGitBranch(context.Background(), request)
+	if err != nil || result.State != "switched" || result.Repository.Branch != "other" || result.Index == nil {
+		t.Fatalf("switch: %+v %v", result, err)
+	}
+	trust, trustErr := service.ExecutionTrust(result.Index.ProjectRevision, "")
+	if trustErr != nil || trust.Trusted {
+		t.Fatal("switch retained execution trust")
+	}
+	request = trustedGitRequest(t, service)
+	path := createWorkflowWorktree(t, service, request)
+	request.TargetBranch = "codex/fix"
+	result, err = service.SwitchGitBranch(context.Background(), request)
+	if err != nil || result.State != "failed" || result.Repository.Branch != "other" {
+		t.Fatalf("checked-out branch: %+v %v (%s)", result, err, path)
+	}
+}
+
+func TestGitMergePreviewSuccessAndConflictRecovery(t *testing.T) {
+	for _, conflict := range []bool{false, true} {
+		t.Run(map[bool]string{false: "success", true: "conflict"}[conflict], func(t *testing.T) {
+			service, root, request := gitWorkflowFixture(t)
+			path := createWorkflowWorktree(t, service, request)
+			if err := os.WriteFile(filepath.Join(path, "main.go"), []byte("package main\nfunc Run() { println(\"worktree\") }\n"), 0644); err != nil {
+				t.Fatal(err)
+			}
+			testGit(t, path, "add", "main.go")
+			testGit(t, path, "commit", "-m", "Worktree fix")
+			if conflict {
+				if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc Run() { println(\"current\") }\n"), 0644); err != nil {
+					t.Fatal(err)
+				}
+				testGit(t, root, "add", "main.go")
+				testGit(t, root, "commit", "-m", "Current branch change")
+				if _, err := service.Reindex(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			request = trustedGitRequest(t, service)
+			request.Path, request.SourceHead = path, testGit(t, path, "rev-parse", "HEAD")
+			preview, err := service.PreviewGitMerge(context.Background(), request)
+			if err != nil || !strings.Contains(preview.Diff, "worktree") || preview.Target.Head != request.Head {
+				t.Fatalf("preview: %+v %v", preview, err)
+			}
+			testGit(t, path, "commit", "--allow-empty", "-m", "New source commit")
+			if _, err := service.MergeGitWorktree(context.Background(), request); err == nil {
+				t.Fatal("merged a source head that changed after review")
+			}
+			request.SourceHead = testGit(t, path, "rev-parse", "HEAD")
+			result, err := service.MergeGitWorktree(context.Background(), request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !conflict {
+				if result.State != "merged" || result.Repository.Head != request.SourceHead {
+					t.Fatalf("merge: %+v", result)
+				}
+				return
+			}
+			if result.State != "conflicts" || len(result.Repository.Conflicts) != 1 || result.Repository.MergeHead == "" {
+				t.Fatalf("conflict hidden: %+v", result)
+			}
+			request = trustedGitRequest(t, service)
+			request.MergeHead = result.Repository.MergeHead
+			result, err = service.AbortGitMerge(context.Background(), request)
+			if err != nil || result.State != "aborted" || result.Repository.MergeHead != "" || len(result.Repository.Conflicts) != 0 {
+				t.Fatalf("abort: %+v %v", result, err)
+			}
+			restored, _ := os.ReadFile(filepath.Join(root, "main.go"))
+			if !strings.Contains(string(restored), "current") {
+				t.Fatal("abort lost pre-merge source")
+			}
+		})
+	}
+}
+
+func TestPassiveGitStatusDoesNotExecuteFilters(t *testing.T) {
+	service, root, request := gitWorkflowFixture(t)
+	marker := filepath.Join(root, "filter-ran")
+	if err := os.WriteFile(filepath.Join(root, ".gitattributes"), []byte("*.go filter=unsafe\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	testGit(t, root, "config", "filter.unsafe.clean", "touch '"+marker+"'; cat")
+	testGit(t, root, "config", "filter.unsafe.required", "true")
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n// modified\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.GitRepository(context.Background(), request.ProjectID, request.ProjectRevision); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("passive status executed filter")
+	}
+}
+
+func TestGitWorktreeRequiresExecutionTrust(t *testing.T) {
+	service, root, request := gitWorkflowFixture(t)
+	service.clearExecutionTrust()
+	request.Path, request.TargetBranch = filepath.Join(t.TempDir(), "blocked"), "codex/blocked"
+	if _, err := service.CreateGitWorktree(context.Background(), request); err == nil {
+		t.Fatal("worktree bypassed project execution trust")
+	}
+	trees, err := readGitWorktrees(context.Background(), root)
+	if err != nil || len(trees) != 1 {
+		t.Fatalf("untrusted request created a worktree: %+v %v", trees, err)
+	}
+}
+
+func TestGitWorktreeListsCompletedFixes(t *testing.T) {
+	server := changeProvider(t, func() string { return groupedChangeResponse })
+	service, root := newSemanticAnalysisService(t, server.URL, 0)
+	initializeChangeGit(t, service, root)
+	path := createWorkflowWorktree(t, service, trustedGitRequest(t, service))
+	analysis, err := service.RestoreProject(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.RestoreActiveProject(path, analysis); err != nil {
+		t.Fatal(err)
+	}
+	session := approveChangeFixture(t, service, prepareChangeFixture(t, service, "main.go", "docs/change.md"))
+	receipt, err := service.ApplyChange(context.Background(), session.ID, ChangeApplyRequest{ChangeIdentity: changeIdentity(session), GitIdentity: *session.Git, Confirm: true, CommitMessage: session.Title})
+	if err != nil || receipt.Commit.State != "committed" {
+		t.Fatalf("worktree apply: %+v %v", receipt, err)
+	}
+	workspace, err := service.GitWorkspace(context.Background(), receipt.ProjectID, receipt.ProjectRevision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tree := range workspace.Worktrees {
+		if tree.Path == path {
+			if len(tree.Completed) != 1 || tree.Completed[0].ID != session.ID {
+				t.Fatalf("missing completed fix: %+v", tree)
+			}
+			return
+		}
+	}
+	t.Fatal("active worktree missing")
+}
