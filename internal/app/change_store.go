@@ -160,6 +160,7 @@ func listChangeSessions(root string) ([]ChangeHistoryEntry, error) {
 			return nil, err
 		}
 		entry := ChangeHistoryEntry{ID: session.ID, ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, Kind: session.Kind, Title: session.Title, Revision: session.Revision, Hash: session.Hash, State: session.State, Freshness: session.Freshness, UpdatedAt: session.UpdatedAt}
+		entry.Commit = session.Commit
 		if session.Workflow != nil {
 			entry.WorkflowStatus = session.Workflow.Status
 		}
