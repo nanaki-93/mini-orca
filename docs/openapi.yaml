@@ -153,6 +153,62 @@ paths:
         '200': {description: Applied source and separate commit outcome, content: {application/json: {schema: {$ref: '#/components/schemas/ChangeMutationResult'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/git/workspace:
+    get:
+      tags: [Projects]
+      description: List local branches and worktrees, including their completed committed fixes and per-worktree errors.
+      parameters:
+        - {in: query, name: project_id, required: true, schema: {type: string}}
+        - {in: query, name: project_revision, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Git workspace, content: {application/json: {schema: {$ref: '#/components/schemas/GitWorkspace'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/git/worktrees:
+    post:
+      tags: [Projects]
+      description: Create a new branch and worktree at an unused absolute path; does not activate it.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationRequest'}}}}
+      responses:
+        '200': {description: Observed Git outcome, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/git/switch:
+    post:
+      tags: [Projects]
+      description: Switch to an existing local branch with a clean working tree.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationRequest'}}}}
+      responses:
+        '200': {description: Observed Git outcome, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/git/merge-preview:
+    post:
+      tags: [Projects]
+      description: Preview incoming commits and a read-only diff without running filters or merging.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationRequest'}}}}
+      responses:
+        '200': {description: Observed Git outcome, content: {application/json: {schema: {$ref: '#/components/schemas/GitMergePreview'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/git/merge:
+    post:
+      tags: [Projects]
+      description: Merge the reviewed committed worktree head into the current clean branch.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationRequest'}}}}
+      responses:
+        '200': {description: Observed Git outcome, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/git/abort-merge:
+    post:
+      tags: [Projects]
+      description: Abort the identified merge, discarding conflict-resolution edits.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationRequest'}}}}
+      responses:
+        '200': {description: Observed Git outcome, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/git/repository:
     get:
       tags: [Projects]
@@ -2585,3 +2641,64 @@ components:
             merge_head: {type: string}
             operation: {type: string}
             conflicts: {type: array, items: {type: string}}
+    GitMutationRequest:
+      allOf:
+        - {$ref: '#/components/schemas/GitIdentity'}
+        - type: object
+          required: [project_id, project_revision]
+          properties:
+            project_id: {type: string}
+            project_revision: {type: string}
+            confirm: {type: boolean, description: Required true for mutations}
+            confirm_execution: {type: boolean, description: Required true for mutations in addition to current project execution trust}
+            target_branch: {type: string, description: New branch for worktrees; existing local branch for switch}
+            path: {type: string, description: Absolute new worktree path or selected merge source path}
+            source_head: {type: string, description: Reviewed source worktree HEAD for merge and preview}
+            merge_head: {type: string, description: Identified MERGE_HEAD for abort}
+    GitMutationResult:
+      type: object
+      required: [state, warnings]
+      properties:
+        state: {type: string, enum: [created, switched, merged, conflicts, aborted, failed]}
+        path: {type: string}
+        repository: {$ref: '#/components/schemas/GitRepository'}
+        index: {$ref: '#/components/schemas/ProjectIndex'}
+        error: {type: string}
+        warnings: {type: array, items: {type: string}}
+    GitMergePreview:
+      type: object
+      required: [target, source, path, diff, commits]
+      properties:
+        target: {$ref: '#/components/schemas/GitIdentity'}
+        source: {$ref: '#/components/schemas/GitIdentity'}
+        path: {type: string}
+        diff: {type: string}
+        commits: {type: string}
+    GitWorkspace:
+      allOf:
+        - {$ref: '#/components/schemas/GitRepository'}
+        - type: object
+          required: [branches, worktrees]
+          properties:
+            branches:
+              type: array
+              items:
+                type: object
+                properties:
+                  name: {type: string}
+                  head: {type: string}
+                  worktree_path: {type: string}
+            worktrees:
+              type: array
+              items:
+                allOf:
+                  - {$ref: '#/components/schemas/GitIdentity'}
+                  - type: object
+                    properties:
+                      path: {type: string}
+                      current: {type: boolean}
+                      locked: {type: boolean}
+                      prunable: {type: boolean}
+                      dirty: {type: boolean, description: Omitted when status cannot be read}
+                      completed: {type: array, items: {$ref: '#/components/schemas/ChangeHistoryEntry'}}
+                      error: {type: string}

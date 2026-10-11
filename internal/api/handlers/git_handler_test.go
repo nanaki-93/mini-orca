@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
@@ -28,6 +30,20 @@ func TestGitRepositoryRequiresCurrentProject(t *testing.T) {
 		var repository app.GitRepository
 		if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &repository) != nil || repository.Available || repository.ProjectID != index.ProjectID {
 			t.Fatalf("non-Git response: %d %s", response.Code, response.Body)
+		}
+	}
+}
+
+func TestGitMutationsRejectUnconfirmedAndUnknownFields(t *testing.T) {
+	fixture := newChangeHandlerFixture(t, "http://127.0.0.1:1")
+	handler := NewGitHandler(fixture.service)
+	for _, action := range []http.HandlerFunc{handler.CreateWorktree, handler.Switch, handler.Merge, handler.AbortMerge} {
+		for _, body := range []string{`{}`, `{"confirm":true,"shell":"rm"}`, `{} {}`} {
+			response := httptest.NewRecorder()
+			action(response, httptest.NewRequest("POST", "/git", strings.NewReader(body)))
+			if response.Code < 400 {
+				t.Fatalf("accepted unsupported mutation: %s", body)
+			}
 		}
 	}
 }

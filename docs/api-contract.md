@@ -76,6 +76,12 @@ untrusted networks.
 | GET | `/api/projects/current/files/info` | Read safe selected-file information for project-relative `path`. |
 | GET | `/api/projects/current/files/symbols` | List atomic targets in one selected eligible file. |
 | GET | `/api/projects/current/impact` | Read advisory source-free impact references for one file or symbol. |
+| GET | `/api/projects/current/git/workspace` | Read local branches, worktrees and committed fix history. |
+| POST | `/api/projects/current/git/worktrees` | Create a new branch and worktree from the displayed HEAD. |
+| POST | `/api/projects/current/git/switch` | Switch a clean project to an existing local branch. |
+| POST | `/api/projects/current/git/merge-preview` | Preview the selected worktree's incoming commits and diff. |
+| POST | `/api/projects/current/git/merge` | Merge the reviewed worktree HEAD into the current clean branch. |
+| POST | `/api/projects/current/git/abort-merge` | Abort the identified merge and discard conflict resolutions. |
 | GET | `/api/projects/current/git/repository` | Read guarded repository identity, branch and working-tree state. |
 | POST | `/api/projects/current/changes/{sessionID}/commit` | Retry the latest failed proposal commit without reapplying source. |
 | GET | `/api/projects/current/git` | Read target-file Git availability, branch, and status. |
@@ -923,3 +929,40 @@ Unavailable or ungenerated counts remain unknown; a successful empty report
 shows zero. Stale and failed reports retain their status indicators and any
 available saved counts. Features keeps the full ideas, estimated effort, error
 details and passive handoff to Chat.
+
+## Git and worktrees
+
+Repository/workspace reads require current `project_id` and `project_revision`.
+`available: false` represents a non-Git directory; a detached branch or unborn
+HEAD stays distinguishable from read failures. Worktree status failures have an
+`error` and omit `dirty`; unknown status is never treated as clean. Lists are
+bounded to 100 worktrees. Completed entries are applied, committed change history.
+Passive status/diff reads disable configured clean/process filters, external diff
+commands and text conversion; they do not grant project execution trust.
+
+Git mutations carry that project identity and the displayed `head`/`branch`,
+`confirm: true` and `confirm_execution: true`. They also require existing execution
+trust for the current project revision, since checkout filters and merge drivers
+can execute project code. Hooks, signing, editors and credential prompts are
+suppressed. Switch/merge/abort cancel prepared jobs, invalidate review/execution
+trust and reindex even after a Git command fails. A command failure can leave
+source changes; its receipt preserves `error`, observed repository status and
+index/warnings. Transport failures require status/recovery refresh before retry.
+
+Creation adds `target_branch` and an unused absolute `path` whose parent exists
+outside all current worktrees. It runs `git worktree add` from the captured HEAD;
+uncommitted content is not copied. It stores a local inventory marked AI-unavailable, then returns the path without
+changing the active project. The desktop then uses the existing project restore route, which closes
+terminals and activates the worktree. A fresh proposal captures that project's
+paths, identity, instructions and execution/provider consent; old review evidence
+is not transferred. Branch switching takes an existing `target_branch`; dirty
+worktrees and branches checked out elsewhere block the switch.
+
+Merge preview and merge take the selected worktree `path` and `source_head`.
+Preview returns source/target identities, incoming commits and a bounded read-only
+diff; it requires no execution trust and never merges. After review, merge
+rechecks both heads and requires both worktrees clean. Merge conflicts return
+`state: conflicts`, `repository.merge_head` and `repository.conflicts` instead of
+success. Resolve them using ordinary Git tools, or explicitly abort by sending
+the displayed `merge_head`; abort discards conflict-resolution edits. No merge,
+branch switch, worktree removal or push happens automatically.

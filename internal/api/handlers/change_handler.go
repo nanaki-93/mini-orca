@@ -118,6 +118,10 @@ func (h *ChangeHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	value, err := h.service.ApplyChange(r.Context(), r.PathValue("sessionID"), request)
+	if request.CommitMessage != "" || request.Head != "" {
+		respondGit(w, value, err)
+		return
+	}
 	respondWorkflow(w, value, err)
 }
 func (h *ChangeHandler) Undo(w http.ResponseWriter, r *http.Request) {
@@ -134,7 +138,7 @@ func (h *ChangeHandler) Commit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	value, err := h.service.RetryChangeCommit(r.Context(), r.PathValue("sessionID"), request)
-	respondWorkflow(w, value, err)
+	respondGit(w, value, err)
 }
 func (h *ChangeHandler) Recovery(w http.ResponseWriter, r *http.Request) {
 	if !guardedWorkflowRead(w, r, h.manager) {
