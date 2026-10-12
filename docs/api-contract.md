@@ -81,7 +81,7 @@ untrusted networks.
 | POST | `/api/projects/current/git/worktrees` | Create a new branch and worktree from the displayed HEAD. |
 | POST | `/api/projects/current/git/switch` | Switch a clean project to an existing local branch. |
 | POST | `/api/projects/current/git/merge-preview` | Preview the selected worktree's incoming commits and diff. |
-| POST | `/api/projects/current/git/merge` | Merge the reviewed worktree HEAD into the current clean branch. |
+| POST | `/api/projects/current/git/merge` | Merge the reviewed worktree HEAD into the current clean branch, then remove the merged worktree. |
 | POST | `/api/projects/current/git/abort-merge` | Abort the identified merge and discard conflict resolutions. |
 | GET | `/api/projects/current/git/repository` | Read guarded repository identity, branch and working-tree state. |
 | POST | `/api/projects/current/changes/{sessionID}/commit` | Retry the latest failed proposal commit without reapplying source. |
@@ -983,5 +983,15 @@ diff; it requires no execution trust and never merges. After review, merge
 rechecks both heads and requires both worktrees clean. Merge conflicts return
 `state: conflicts`, `repository.merge_head` and `repository.conflicts` instead of
 success. Resolve them using ordinary Git tools, or explicitly abort by sending
-the displayed `merge_head`; abort discards conflict-resolution edits. No merge,
-branch switch, worktree removal or push happens automatically.
+the displayed `merge_head`; abort discards conflict-resolution edits.
+
+After a successful merge, the daemon stops the source implementation worker,
+rechecks the source identity and clean state, verifies its commit is in the current
+branch, and removes the source checkout with `git worktree remove` without force.
+The source branch is retained. Private `.mini-orca/` task history is locally
+ignored for removal and deleted with the checkout. Checkouts containing another
+registered worktree are retained. Conflicted, failed and aborted merges never
+remove the source. Successful removal returns `removed_worktree` with its absolute
+path, allowing the desktop to close the implementation and stop polling it. If
+cleanup fails, the merge remains `state: merged` and `warnings` explains why the
+worktree remains; `removed_worktree` is omitted. No push happens automatically.

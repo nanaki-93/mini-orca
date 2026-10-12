@@ -341,6 +341,9 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
       const { page, close } = await pageFor({ git: true, gitMergeConflict: conflict });
       try {
         await nav(page, 'Git / Worktrees');
+        await page.getByRole('button', { name: 'View implementations', exact: true }).click();
+        await idle(page);
+        await nav(page, 'Git / Worktrees');
         await page.getByRole('button', { name: 'Merge into Current Branch', exact: true }).click();
         await idle(page);
         const preview = page.getByRole('dialog', { name: 'Review worktree merge', exact: true });
@@ -359,6 +362,7 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
           .click();
         await idle(page);
         if (conflict) {
+          assert.equal(await page.locator('.git-worktree').count(), 2);
           await page
             .locator('.git-conflicts')
             .getByText('internal/worker/process.go', { exact: true })
@@ -372,11 +376,106 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
           await idle(page);
           assert.equal(await page.locator('.git-conflicts').count(), 0);
           await page.getByText('Git operation: aborted', { exact: true }).waitFor();
-        } else await page.getByText('Git operation: merged', { exact: true }).waitFor();
+          assert.equal(await page.locator('.git-worktree').count(), 2);
+        } else {
+          await page.getByText('Git operation: merged', { exact: true }).waitFor();
+          await page
+            .getByText('Removed worktree: /fixture/harbor-fix. The branch is kept.', {
+              exact: true,
+            })
+            .waitFor();
+          assert.equal(await page.locator('.git-worktree').count(), 1);
+          assert.equal(
+            await page.getByRole('option', { name: 'codex/fix', exact: true }).isEnabled(),
+            true,
+          );
+        }
+        await nav(page, 'Changes');
+        assert.equal(
+          await page.getByRole('button', { name: 'View implementation', exact: true }).count(),
+          conflict ? 1 : 0,
+        );
       } finally {
         await close();
       }
     });
+  await test('Git cleanup failure keeps the merged worktree and its implementation visible', async () => {
+    const { page, close } = await pageFor({ git: true, gitCleanupFailure: true });
+    try {
+      await nav(page, 'Git / Worktrees');
+      await page.getByRole('button', { name: 'View implementations', exact: true }).click();
+      await idle(page);
+      await nav(page, 'Git / Worktrees');
+      await page.getByRole('button', { name: 'Merge into Current Branch', exact: true }).click();
+      await idle(page);
+      await page
+        .getByRole('dialog', { name: 'Review worktree merge', exact: true })
+        .getByRole('button', { name: 'Merge into current branch', exact: true })
+        .click();
+      const confirmation = page.getByRole('dialog', {
+        name: 'Merge codex/fix into main?',
+        exact: true,
+      });
+      await confirmation
+        .getByText(/source worktree directory and its local task history will be deleted/)
+        .waitFor();
+      await confirmation
+        .getByRole('button', { name: 'Merge into current branch', exact: true })
+        .click();
+      await idle(page);
+      await page.getByText('Git operation: merged', { exact: true }).waitFor();
+      await page
+        .getByText(/Merge completed, but worktree .* was not removed: checkout is locked/)
+        .waitFor();
+      assert.equal(await page.locator('.git-worktree').count(), 2);
+      await nav(page, 'Changes');
+      assert.equal(
+        await page.getByRole('button', { name: 'View implementation', exact: true }).count(),
+        1,
+      );
+    } finally {
+      await close();
+    }
+  });
+  await test('Git refresh closes removed implementations after a lost merge response', async () => {
+    const { page, close } = await pageFor({ git: true });
+    try {
+      await nav(page, 'Git / Worktrees');
+      await page.getByRole('button', { name: 'View implementations', exact: true }).click();
+      await idle(page);
+      await nav(page, 'Git / Worktrees');
+      await page.getByRole('button', { name: 'Merge into Current Branch', exact: true }).click();
+      await idle(page);
+      await page.evaluate(() => {
+        const original = window.go.main.Desktop.Request;
+        window.go.main.Desktop.Request = async (...args) => {
+          const result = await original(...args);
+          if (args[2] === '/api/projects/current/git/merge') throw new Error('Response lost');
+          return result;
+        };
+      });
+      await page
+        .getByRole('dialog', { name: 'Review worktree merge', exact: true })
+        .getByRole('button', { name: 'Merge into current branch', exact: true })
+        .click();
+      await page
+        .getByRole('dialog', { name: 'Merge codex/fix into main?', exact: true })
+        .getByRole('button', { name: 'Merge into current branch', exact: true })
+        .click();
+      await idle(page);
+      await page.getByText('Git outcome unknown.', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Refresh project', exact: true }).click();
+      await idle(page);
+      assert.equal(await page.locator('.git-worktree').count(), 1);
+      await nav(page, 'Changes');
+      assert.equal(
+        await page.getByRole('button', { name: 'View implementation', exact: true }).count(),
+        0,
+      );
+    } finally {
+      await close();
+    }
+  });
   await test('Git dirty state blocks switch and merge while creation errors stop preparation', async () => {
     const { page, close } = await pageFor({ git: true, gitDirty: true, gitCreateFailure: true });
     try {

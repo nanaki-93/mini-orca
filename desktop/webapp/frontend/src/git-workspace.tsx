@@ -54,6 +54,9 @@ export function GitWorkspace({ s }: { s: State }) {
                   : `Git operation: ${s.gitResult.state}`}
               </strong>
               {s.gitResult.error && <p>{s.gitResult.error}</p>}
+              {s.gitResult.removed_worktree && (
+                <p>Removed worktree: {s.gitResult.removed_worktree}. The branch is kept.</p>
+              )}
               {s.gitResult.warnings.map((warning) => (
                 <p key={warning}>{warning}</p>
               ))}
@@ -240,7 +243,8 @@ export function GitWorkspace({ s }: { s: State }) {
           </p>
           <p className="small muted">
             Incoming changes since the common ancestor. Git will merge these with your current
-            branch.
+            branch. After a successful merge, the source worktree and its local task history are
+            deleted, and its implementation closes. The branch is kept.
           </p>
           <h3>Incoming commits</h3>
           <pre tabIndex={0}>{s.gitPreview.commits || 'No new commits.'}</pre>
