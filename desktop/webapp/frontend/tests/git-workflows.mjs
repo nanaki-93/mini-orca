@@ -10,8 +10,7 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
   const review = async (page) => {
     await idle(page);
     await page.getByRole('button', { name: 'Review next file', exact: true }).click();
-    await page.getByRole('button', { name: 'Apply & Commit', exact: true }).press('Enter');
-    return page.getByRole('dialog', { name: 'Apply & Commit', exact: true });
+    return page.locator('.fix-review');
   };
   const posts = (page) =>
     page.evaluate(() => window.fixture.requests.filter((request) => request.method === 'POST'));
@@ -59,6 +58,7 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
           const buttons = row.getByRole('button');
           assert.deepEqual(await buttons.allTextContents(), [
             'View implementation',
+            'Preview diff',
             'Discard change',
             'Merge into current branch',
           ]);
@@ -75,7 +75,7 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
         }
         const buttons = rows.first().getByRole('button');
         await buttons.nth(0).focus();
-        for (let i = 1; i < 3; i++) {
+        for (let i = 1; i < 4; i++) {
           await page.keyboard.press('Tab');
           assert.equal(
             await buttons.nth(i).evaluate((button) => button === document.activeElement),
@@ -243,49 +243,42 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
         await close();
       }
     });
-  await test('Git Apply and Commit edits the message and cancellation writes nothing', async () => {
+  await test('Git Apply and Commit executes directly with an optional editable message', async () => {
     const { page, close } = await pageFor({ git: true, trusted: true });
     try {
-      let dialog = await prepare(page);
+      const preparation = await prepare(page);
       const before = await posts(page);
-      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await preparation.getByRole('button', { name: 'Cancel', exact: true }).click();
       assert.deepEqual(await posts(page), before);
       await page.getByRole('button', { name: 'Prepare fix', exact: true }).click();
-      await dialog
+      await preparation
         .getByRole('button', { name: 'Prepare in current workspace', exact: true })
         .click();
-      dialog = await review(page);
-      assert.ok(
-        (await dialog.getByLabel('Commit message', { exact: true }).inputValue()).length > 0,
+      const proposal = await review(page);
+      assert.equal(await proposal.getByLabel('Commit message', { exact: true }).isVisible(), false);
+      await proposal.locator('summary').filter({ hasText: 'Commit message' }).click();
+      const message = proposal.getByLabel('Commit message', { exact: true });
+      assert.ok((await message.inputValue()).length > 0);
+      await message.fill('');
+      assert.equal(
+        await proposal.getByRole('button', { name: 'Apply & Commit', exact: true }).isDisabled(),
+        true,
       );
-      await dialog
-        .getByLabel('Commit message', { exact: true })
-        .fill('fix: propagate cancellation');
+      await message.fill('fix: propagate cancellation');
       await layout(page, 'git-commit-review');
-      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
       assert.equal(
         (await posts(page)).some((r) => r.path.endsWith('/apply')),
         false,
       );
-      await page.getByRole('button', { name: 'Apply & Commit', exact: true }).click();
-      await dialog
-        .getByLabel('Commit message', { exact: true })
-        .fill('fix: propagate cancellation');
-      await dialog.getByRole('button', { name: 'Apply & Commit', exact: true }).click();
+      await proposal.getByRole('button', { name: 'Apply & Commit', exact: true }).press('Enter');
       await idle(page);
+      assert.equal(await page.getByRole('dialog').count(), 0);
       await page.getByText('Committed commit- on main', { exact: true }).waitFor();
-      assert.equal(
-        await page
-          .getByText('Source or guidance changed. Refresh the findings and start a new fix.', {
-            exact: true,
-          })
-          .count(),
-        0,
-      );
-      const apply = (await posts(page)).find((r) => r.path.endsWith('/apply'));
-      assert.equal(apply.body.commit_message, 'fix: propagate cancellation');
-      assert.equal(apply.body.head, 'head-main');
-      assert.equal(apply.body.branch, 'main');
+      const applied = (await posts(page)).filter((r) => r.path.endsWith('/apply'));
+      assert.equal(applied.length, 1);
+      assert.equal(applied[0].body.commit_message, 'fix: propagate cancellation');
+      assert.equal(applied[0].body.head, 'head-main');
+      assert.equal(applied[0].body.branch, 'main');
     } finally {
       await close();
     }
@@ -298,11 +291,13 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
         .getByRole('button', { name: 'Prepare in current workspace', exact: true })
         .click();
       const dialog = await review(page);
+      const title = await page.evaluate(() => Object.values(window.fixture.state.changes)[0].title);
       await dialog.getByRole('button', { name: 'Apply & Commit', exact: true }).click();
       await idle(page);
       await page.getByText('Files applied. Commit failed.', { exact: true }).waitFor();
-      await page.getByRole('button', { name: 'Retry commit', exact: true }).click();
-      const retry = page.getByRole('dialog', { name: 'Retry commit', exact: true });
+      assert.equal(await page.getByRole('dialog').count(), 0);
+      const retry = page.locator('.chat-outcome');
+      await retry.locator('summary').filter({ hasText: 'Commit message' }).click();
       await retry
         .getByLabel('Commit message', { exact: true })
         .fill('fix: retry after Git identity setup');
@@ -310,7 +305,13 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
       await idle(page);
       const requests = await posts(page);
       assert.equal(requests.filter((r) => r.path.endsWith('/apply')).length, 1);
+      assert.equal(requests.find((r) => r.path.endsWith('/apply')).body.commit_message, title);
       assert.equal(requests.filter((r) => r.path.endsWith('/commit')).length, 1);
+      assert.equal(
+        requests.find((r) => r.path.endsWith('/commit')).body.commit_message,
+        'fix: retry after Git identity setup',
+      );
+      assert.equal(await page.getByRole('dialog').count(), 0);
       assert.equal(requests.filter((r) => r.path.endsWith('/review')).length, 1);
     } finally {
       await close();
@@ -489,14 +490,14 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
     }
   });
   for (const conflict of [false, true])
-    await test(`Git merge ${conflict ? 'conflicts and abort remain visible' : 'previews before merging'}`, async () => {
+    await test(`Git merge ${conflict ? 'conflicts and abort remain visible' : 'runs directly with an optional preview'}`, async () => {
       const { page, close } = await pageFor({ git: true, gitMergeConflict: conflict });
       try {
         await nav(page, 'Git / Worktrees');
         await page.getByRole('button', { name: 'View implementation', exact: true }).click();
         await idle(page);
         await nav(page, 'Git / Worktrees');
-        await page.getByRole('button', { name: 'Merge into current branch', exact: true }).click();
+        await page.getByRole('button', { name: 'Preview diff', exact: true }).click();
         await idle(page);
         const preview = page.getByRole('dialog', { name: 'Review worktree merge', exact: true });
         await preview.getByText('Incoming commits', { exact: true }).waitFor();
@@ -508,11 +509,12 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
         await preview
           .getByRole('button', { name: 'Merge into current branch', exact: true })
           .click();
-        await page
-          .getByRole('dialog', { name: 'Merge codex/fix into main?', exact: true })
-          .getByRole('button', { name: 'Merge into current branch', exact: true })
-          .click();
         await idle(page);
+        assert.equal(await page.getByRole('dialog').count(), 0);
+        const mutations = (await posts(page)).filter((r) => r.path.endsWith('/git/merge'));
+        assert.equal(mutations.length, 1);
+        assert.equal(mutations[0].body.source_head, 'head-fix');
+        assert.equal(mutations[0].body.confirm_execution, true);
         if (conflict) {
           assert.equal(await page.locator('.git-worktree').count(), 0);
           await page
@@ -601,21 +603,7 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
         await nav(page, 'Git / Worktrees');
         await page.getByRole('button', { name: 'Merge into current branch', exact: true }).click();
         await idle(page);
-        await page
-          .getByRole('dialog', { name: 'Review worktree merge', exact: true })
-          .getByRole('button', { name: 'Merge into current branch', exact: true })
-          .click();
-        const confirmation = page.getByRole('dialog', {
-          name: 'Merge codex/fix into main?',
-          exact: true,
-        });
-        await confirmation
-          .getByText(/findings linked to the committed fixes will be marked Done/)
-          .waitFor();
-        await confirmation
-          .getByRole('button', { name: 'Merge into current branch', exact: true })
-          .click();
-        await idle(page);
+        assert.equal(await page.getByRole('dialog').count(), 0);
         for (const category of ['Bugs', 'Performance', 'Security']) {
           await nav(page, category);
           assert.equal(
@@ -663,21 +651,7 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
       await nav(page, 'Git / Worktrees');
       await page.getByRole('button', { name: 'Merge into current branch', exact: true }).click();
       await idle(page);
-      await page
-        .getByRole('dialog', { name: 'Review worktree merge', exact: true })
-        .getByRole('button', { name: 'Merge into current branch', exact: true })
-        .click();
-      const confirmation = page.getByRole('dialog', {
-        name: 'Merge codex/fix into main?',
-        exact: true,
-      });
-      await confirmation
-        .getByText(/source worktree directory and its local task history will be deleted/)
-        .waitFor();
-      await confirmation
-        .getByRole('button', { name: 'Merge into current branch', exact: true })
-        .click();
-      await idle(page);
+      assert.equal(await page.getByRole('dialog').count(), 0);
       await page.getByText('Git operation: merged', { exact: true }).waitFor();
       await page
         .getByText(/Merge completed, but worktree .* was not removed: checkout is locked/)
@@ -699,7 +673,7 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
       await page.getByRole('button', { name: 'View implementation', exact: true }).click();
       await idle(page);
       await nav(page, 'Git / Worktrees');
-      await page.getByRole('button', { name: 'Merge into current branch', exact: true }).click();
+      await page.getByRole('button', { name: 'Preview diff', exact: true }).click();
       await idle(page);
       await page.evaluate(() => {
         const original = window.go.main.Desktop.Request;
@@ -711,10 +685,6 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
       });
       await page
         .getByRole('dialog', { name: 'Review worktree merge', exact: true })
-        .getByRole('button', { name: 'Merge into current branch', exact: true })
-        .click();
-      await page
-        .getByRole('dialog', { name: 'Merge codex/fix into main?', exact: true })
         .getByRole('button', { name: 'Merge into current branch', exact: true })
         .click();
       await idle(page);
@@ -750,6 +720,88 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
       await close();
     }
   });
+  await test('Git direct merge rejects stale previews and late navigation without mutation', async () => {
+    for (const scenario of ['navigate', 'head', 'branch', 'failure']) {
+      const { page, close } = await pageFor({ git: true });
+      try {
+        await nav(page, 'Git / Worktrees');
+        await page.evaluate((scenario) => {
+          if (scenario === 'navigate')
+            window.fixture.hold = '/api/projects/current/git/merge-preview';
+          else if (scenario === 'failure')
+            window.fixture.failures['/api/projects/current/git/merge-preview'] = 409;
+          else {
+            const original = window.go.main.Desktop.Request;
+            window.go.main.Desktop.Request = async (...args) => {
+              const response = await original(...args);
+              if (args[2] === '/api/projects/current/git/merge-preview') {
+                const preview = JSON.parse(response.body);
+                preview.source[scenario] = 'changed';
+                return { ...response, body: JSON.stringify(preview) };
+              }
+              return response;
+            };
+          }
+        }, scenario);
+        await page.getByRole('button', { name: 'Merge into current branch', exact: true }).click();
+        if (scenario === 'navigate') {
+          await page.waitForFunction(() =>
+            window.fixture.requests.some((r) => r.path.endsWith('/git/merge-preview')),
+          );
+          await nav(page, 'Overview');
+          await page.evaluate(() => window.fixture.release());
+        }
+        await idle(page);
+        assert.equal(await page.getByRole('dialog').count(), 0);
+        const requests = await posts(page);
+        assert.equal(
+          requests.some(
+            (r) => r.path.endsWith('/git/merge') || r.path.endsWith('/execution-trust'),
+          ),
+          false,
+        );
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Git direct merge suppresses duplicate clicks while capturing the current heads', async () => {
+    const { page, close } = await pageFor({ git: true });
+    try {
+      await nav(page, 'Git / Worktrees');
+      await page.evaluate(() => {
+        window.fixture.hold = '/api/projects/current/git/merge-preview';
+      });
+      const merge = page.getByRole('button', { name: 'Merge into current branch', exact: true });
+      await merge.evaluate((button) => {
+        button.click();
+        button.click();
+      });
+      await page.waitForFunction(() =>
+        window.fixture.requests.some((r) => r.path.endsWith('/git/merge-preview')),
+      );
+      assert.equal(await merge.isDisabled(), true);
+      assert.equal(await page.getByRole('dialog').count(), 0);
+      assert.equal(
+        await page
+          .locator('.busy-strip')
+          .getByRole('button', { name: 'Cancel', exact: true })
+          .count(),
+        0,
+      );
+      await page.evaluate(() => window.fixture.release());
+      await idle(page);
+      const requests = await posts(page);
+      assert.equal(requests.filter((r) => r.path.endsWith('/git/merge-preview')).length, 1);
+      assert.equal(requests.filter((r) => r.path.endsWith('/git/merge')).length, 1);
+      const mutation = requests.find((r) => r.path.endsWith('/git/merge'));
+      assert.equal(mutation.body.head, 'head-main');
+      assert.equal(mutation.body.source_head, 'head-fix');
+      assert.equal(mutation.body.confirm_execution, true);
+    } finally {
+      await close();
+    }
+  });
   await test('Git late merge preview cannot reopen after navigation', async () => {
     const { page, close } = await pageFor({ git: true });
     try {
@@ -757,7 +809,7 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
       await page.evaluate(() => {
         window.fixture.hold = '/api/projects/current/git/merge-preview';
       });
-      await page.getByRole('button', { name: 'Merge into current branch', exact: true }).click();
+      await page.getByRole('button', { name: 'Preview diff', exact: true }).click();
       await nav(page, 'Overview');
       await page.evaluate(() => window.fixture.release());
       await idle(page);

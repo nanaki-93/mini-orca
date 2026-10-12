@@ -161,6 +161,9 @@ export function canCancelOperation(label: string) {
     ![
       'Apply change',
       'Undo change',
+      'Retry commit',
+      'Update Git workspace',
+      'Discard worktree',
       'Import project',
       'Open project',
       'Choose project',
@@ -450,52 +453,57 @@ export class Workspace {
       if (!repository) return;
       const epoch = this.epoch,
         navigation = this.navigation;
-      const gitPreview = await this.api.post<M.GitMergePreview>(`${current}/git/merge-preview`, {
-        ...this.identity(),
-        head: repository.head,
-        branch: repository.branch,
-        path: tree.path,
-        source_head: tree.head,
-      });
+      const gitPreview = await this.readGitMergePreview(tree, repository);
       if (epoch !== this.epoch || navigation !== this.navigation) return;
-      if (
-        gitPreview.target.head !== repository.head ||
-        gitPreview.source.head !== tree.head ||
-        gitPreview.path !== tree.path
-      )
-        throw new Error('The merge preview changed. Refresh Git status.');
       this.set({ gitPreview });
     });
   }
-  async gitAction(action: 'merge' | 'abort-merge') {
+  private async readGitMergePreview(tree: M.GitWorktree, repository: M.GitWorkspace) {
+    const preview = await this.api.post<M.GitMergePreview>(`${current}/git/merge-preview`, {
+      ...this.identity(),
+      head: repository.head,
+      branch: repository.branch,
+      path: tree.path,
+      source_head: tree.head,
+    });
+    if (
+      preview.target.head !== repository.head ||
+      preview.target.branch !== repository.branch ||
+      preview.source.head !== tree.head ||
+      preview.source.branch !== tree.branch ||
+      preview.path !== tree.path
+    )
+      throw new Error('The merge preview changed. Refresh Git status.');
+    return preview;
+  }
+  async gitAction(action: 'merge' | 'abort-merge', tree?: M.GitWorktree) {
     await this.act('Update Git workspace', async () => {
       const repository = this.state.gitWorkspace;
-      const preview = this.state.gitPreview;
-      if (!repository || this.state.resourceErrors['Git / Worktrees'])
+      if (!repository || this.state.resourceErrors['Git / Worktrees'] || this.state.uncertain)
         throw new Error('Refresh Git status first.');
+      const epoch = this.epoch,
+        navigation = this.navigation;
+      const preview =
+        action === 'merge' && tree
+          ? await this.readGitMergePreview(tree, repository)
+          : this.state.gitPreview;
+      if (epoch !== this.epoch || navigation !== this.navigation) return;
       if (
         action === 'merge' &&
         (!preview ||
           preview.target.head !== repository.head ||
-          preview.target.branch !== repository.branch)
+          preview.target.branch !== repository.branch ||
+          !preview.commits.trim())
       )
-        throw new Error('Review the current merge diff first.');
-      const epoch = this.epoch,
-        navigation = this.navigation;
-      const title =
-        action === 'merge'
-          ? `Merge ${preview!.source.branch} into ${repository.branch}?`
-          : 'Abort this merge?';
-      const message =
-        action === 'abort-merge'
-          ? 'Discard conflict-resolution edits and restore the state before the merge.'
-          : 'After a successful merge, findings linked to the committed fixes will be marked Done. The source worktree directory and its local task history will be deleted, and its implementation will close. The branch is kept. Prepared fixes will need fresh checks and review.';
+        throw new Error('No current changes to merge. Refresh Git status.');
       if (
+        action === 'abort-merge' &&
         !(await this.confirm({
-          title,
-          message: `${message} Trust this project for local execution: Git filters and merge drivers may run; approved project checks may also execute. Open terminal sessions will close.`,
-          accept: action === 'merge' ? 'Merge into current branch' : 'Abort merge',
-          destructive: action === 'abort-merge',
+          title: 'Abort this merge?',
+          message:
+            'Discard conflict-resolution edits and restore the state before this merge. Open terminal sessions will close.',
+          accept: 'Abort merge',
+          destructive: true,
         }))
       )
         return;
@@ -504,6 +512,7 @@ export class Workspace {
         project_revision: repository.project_revision,
         confirm: true,
       });
+      if (epoch !== this.epoch || navigation !== this.navigation) return;
       for (const terminal of this.state.terminals) await native().CloseTerminal(terminal.id);
       this.set({ terminals: [] });
       if (epoch !== this.epoch || navigation !== this.navigation) return;
@@ -1963,6 +1972,11 @@ export class Workspace {
       const operation = this.operation;
       const navigation = this.navigation;
       const identity = this.changeIdentity(change);
+      const repository = this.state.repository;
+      const message = (commitMessage ?? change.title).trim();
+      if (!repository || this.state.resourceErrors.Git)
+        throw new Error('Refresh Git status before applying.');
+      if (repository.available && !message) throw new Error('Enter a commit message.');
       // One explicit acceptance records review and applies only the displayed revision.
       const reviewed = await this.api.post<M.ChangeSession>(
         `${current}/changes/${encodeURIComponent(change.id)}/review`,
@@ -1991,15 +2005,10 @@ export class Workspace {
         );
       this.set({ change: reviewed });
       if (!canApplyChange(this.state)) throw new Error('The proposal is no longer ready to apply.');
-      const repository = this.state.repository;
-      if (!repository || this.state.resourceErrors.Git)
-        throw new Error('Refresh Git status before applying.');
-      if (repository.available && !commitMessage?.trim())
-        throw new Error('Enter a commit message.');
       const receipt = await this.writeChangeSource(change.id, 'apply', {
         ...identity,
         ...(repository.available
-          ? { head: repository.head, branch: repository.branch, commit_message: commitMessage }
+          ? { head: repository.head, branch: repository.branch, commit_message: message }
           : {}),
       });
       await this.acceptChangeMutation(receipt);

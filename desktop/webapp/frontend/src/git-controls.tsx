@@ -1,65 +1,29 @@
 import { useId, useState } from 'react';
 import type { State } from './workspace';
-import { Button, Overlay } from './ui';
+import { Button, Disclosure, Overlay } from './ui';
 
-export function CommitDialog({
-  s,
-  title,
-  message: initialMessage,
-  onClose,
-  onCommit,
+export function CommitMessage({
+  message,
+  onChange,
+  disabled,
 }: {
-  s: State;
-  title: string;
   message: string;
-  onClose: () => void;
-  onCommit: (message: string) => void;
+  onChange: (message: string) => void;
+  disabled: boolean;
 }) {
-  const [message, setMessage] = useState(initialMessage);
   const messageID = useId();
   return (
-    <Overlay title={title} onClose={onClose}>
-      <form
-        className="stack"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (message.trim()) onCommit(message.trim());
-        }}
-      >
-        <p>
-          {title === 'Retry commit'
-            ? 'Commit the already applied files'
-            : 'Apply the reviewed files and commit them'}{' '}
-          on{' '}
-          <strong>
-            {title === 'Retry commit' ? s.changeReceipt?.commit?.branch : s.repository?.branch}
-          </strong>
-          .
-        </p>
-        <div className="stack compact-stack">
-          <label htmlFor={messageID}>Commit message</label>
-          <textarea
-            id={messageID}
-            data-initial-focus
-            value={message}
-            maxLength={4096}
-            rows={3}
-            onChange={(event) => setMessage(event.target.value)}
-          />
-        </div>
-        <p className="small muted">
-          Only the reviewed files are included. Hooks and signing are skipped. Nothing is pushed.
-        </p>
-        <div className="actions end">
-          <Button type="button" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" tone="primary" disabled={!!s.busy || !message.trim()}>
-            {title}
-          </Button>
-        </div>
-      </form>
-    </Overlay>
+    <Disclosure title="Commit message">
+      <label htmlFor={messageID}>Commit message</label>
+      <textarea
+        id={messageID}
+        value={message}
+        maxLength={4096}
+        rows={2}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </Disclosure>
   );
 }
 

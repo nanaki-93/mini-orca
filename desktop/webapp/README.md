@@ -135,7 +135,8 @@ visible. The sidebar collapses to icons.
   instructions and regeneration, with a link to **History**.
   **Review next file** advances through the diffs; **Apply & Commit** becomes available
   after every changed file has been viewed and the existing check/review guards pass.
-  Its commit message starts with the fix title and is editable before confirmation.
+  It executes immediately using the fix title as the commit message. Expand
+  **Commit message** to edit it before applying.
   Only reviewed files enter the commit; unrelated staged changes remain staged.
   Pre-existing edits on the same paths must be committed first or prepared in a
   fresh worktree. Hooks and signing are skipped; nothing is pushed. Non-Git
@@ -156,13 +157,14 @@ visible. The sidebar collapses to icons.
   changing the selected project. **Discard change** confirms removal of the clean
   checkout and its local task history without merging; the branch and committed
   changes are kept. Discard rechecks the source identity and never forces deletion.
-  **Merge into current branch**
-  first shows incoming commits and a read-only diff. After a successful merge, the
+  **Merge into current branch** executes immediately after validating the current
+  source and target heads. **Preview diff** optionally shows incoming commits and a
+  read-only diff. After a successful merge, the
   source worktree directory and its local task history are deleted, its implementation
   closes, and its branch is kept. Cleanup never forces removal of uncommitted changes;
   a warning explains when the merge succeeded but the worktree could not be removed.
-  Merge requires explicit execution trust and confirmation; active terminals close
-  and prepared evidence is cleared. Eligibility does not predict merge conflicts.
+  The Merge action authorizes local Git execution; active terminals close and
+  prepared evidence is cleared. Eligibility does not predict merge conflicts.
   Conflicts remain visible with their paths and an **Abort merge** action; abort
   discards conflict resolutions.
   There is no separate new-workflow sidebar action: creation starts at **Prepare fix**.
