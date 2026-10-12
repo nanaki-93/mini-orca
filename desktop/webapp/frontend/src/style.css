@@ -541,14 +541,6 @@ pre {
 .sidebar-collapsed .sidebar-toggle > .icon {
   transform: rotate(180deg);
 }
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  display: inline-block;
-  background: var(--green);
-  flex-shrink: 0;
-}
 .status-dot.offline {
   background: var(--red);
 }
@@ -1065,6 +1057,7 @@ pre {
   color: var(--violet);
 }
 .status-dot {
+  background: var(--green);
   display: inline-block;
   width: 9px;
   height: 9px;
@@ -1080,6 +1073,27 @@ pre {
 .status-dot.red {
   background: var(--red);
 }
+.status-dot[data-active='true'] {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  flex-basis: 14px;
+  color: var(--blue);
+  background: transparent;
+}
+.loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  color: var(--muted);
+}
+.badge .spinner {
+  width: 12px;
+  height: 12px;
+  margin-right: 5px;
+}
+
 .summary-page,
 .chat-page,
 .workspace-page,
@@ -2419,7 +2433,8 @@ summary .row {
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 2px solid var(--accent);
+  border: 2px solid currentColor;
+  flex-shrink: 0;
   border-right-color: transparent;
   border-radius: 50%;
   animation: spin 1s linear infinite;

@@ -309,7 +309,7 @@ export function ProposalReview({
                     ? 'Generation and checks in progress'
                     : 'Resolve checks and review before applying'}
               </span>
-              <span className="small muted">Revision {change.revision} · Read-only</span>
+              <span className="small muted">Read-only diff</span>
             </div>
             <h2 className="sr-only">Proposal diff</h2>
             <FixTabs
@@ -333,60 +333,6 @@ export function ProposalReview({
               >
                 <ProposalDiff edit={edit} index={files.indexOf(edit)} total={files.length} />
               </div>
-              <aside className="review-evidence" aria-label="Review evidence">
-                <section>
-                  <h3>Checks & evidence</h3>
-                  {change.checks.length ? (
-                    change.checks.map((check, i) => (
-                      <div className="review-evidence-row" key={i}>
-                        <Icon name={check.state === 'passed' ? 'check' : 'warning'} />
-                        <span>{check.name}</span>
-                        <Badge value={check.state} />
-                      </div>
-                    ))
-                  ) : (
-                    <p className="small muted">No check evidence yet.</p>
-                  )}
-                  {change.workflow?.review && (
-                    <div className="review-evidence-row">
-                      <span>Model review</span>
-                      <Badge value={change.workflow.review.verdict} />
-                    </div>
-                  )}
-                  <Button tone="ghost" onClick={() => setTab('checks')}>
-                    Checks & details
-                  </Button>
-                </section>
-                <section>
-                  <h3>Review progress</h3>
-                  {files.map((file) => (
-                    <button
-                      className="review-file-progress"
-                      key={file.path}
-                      onClick={() => selectFile(file.path)}
-                    >
-                      <Icon name={viewed.includes(file.path) ? 'check' : 'file'} />
-                      <span>{file.path.split('/').at(-1)}</span>
-                      <small>{viewed.includes(file.path) ? 'Viewed' : 'Next'}</small>
-                    </button>
-                  ))}
-                  <progress aria-label="Files viewed" value={viewed.length} max={files.length} />
-                </section>
-                <section>
-                  <h3>Captured scope</h3>
-                  <p className="small muted">
-                    {change.targets.length} paths · Revision {change.revision}
-                  </p>
-                  <p className="small muted">
-                    {change.freshness === 'current'
-                      ? 'Current source snapshot'
-                      : human(change.freshness)}
-                  </p>
-                  <Button tone="ghost" onClick={() => setTab('details')}>
-                    Scope & instructions
-                  </Button>
-                </section>
-              </aside>
             </div>
           </>
         )}
@@ -437,6 +383,7 @@ export function ProposalReview({
             <Button
               tone="primary"
               icon="check"
+              loading={s.busy === 'Apply change'}
               disabled={
                 !!s.busy ||
                 !ready ||

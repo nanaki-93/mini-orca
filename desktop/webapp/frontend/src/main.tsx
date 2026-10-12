@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { createRoot } from 'react-dom/client';
 import { workspace as w, canCancelOperation, findingCategory, type Page } from './workspace';
-import { Button, Heading, Icon, Modal, Notice, Overlay } from './ui';
+import { Button, Heading, Icon, Modal, Notice, Overlay, Spinner } from './ui';
 import { Summary, ProjectPage, Models, Diagrams, SearchPage } from './overview';
 import { Analysis, AnalysisFiles, AnalysisPreview, AnalysisRun } from './analysis';
 import { Results, selectedResult } from './results';
@@ -352,7 +352,7 @@ function App() {
             <main id="main" ref={main} tabIndex={-1} className={`studio-main studio-${s.page}`}>
               {s.busy && (
                 <div className="busy-strip" role="status">
-                  <span className="spinner" />
+                  <Spinner />
                   {s.busy}…
                   {canCancelOperation(s.busy) && (
                     <Button tone="ghost small" onClick={() => void w.cancel()}>

@@ -283,6 +283,38 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
       await close();
     }
   });
+  await test('Git Apply shows pending progress and prevents duplicate submission', async () => {
+    const { page, close } = await pageFor({ git: true, trusted: true });
+    try {
+      const preparation = await prepare(page);
+      await preparation
+        .getByRole('button', { name: 'Prepare in current workspace', exact: true })
+        .click();
+      const reviewPanel = await review(page);
+      await page.evaluate(() => {
+        const change = Object.values(window.fixture.state.changes)[0];
+        window.fixture.hold = `/api/projects/current/changes/${change.id}/apply`;
+      });
+      const apply = reviewPanel.getByRole('button', { name: 'Apply & Commit', exact: true });
+      await apply.evaluate((button) => {
+        button.click();
+        button.click();
+      });
+      await page.waitForFunction(() =>
+        window.fixture.requests.some((r) => r.path.endsWith('/apply')),
+      );
+      assert.equal(await apply.getAttribute('aria-busy'), 'true');
+      assert.equal(await apply.isDisabled(), true);
+      assert.equal(await apply.locator('.spinner').count(), 1);
+      assert.equal(await page.getByRole('dialog').count(), 0);
+      await page.evaluate(() => window.fixture.release());
+      await idle(page);
+      assert.equal((await posts(page)).filter((r) => r.path.endsWith('/apply')).length, 1);
+      await page.getByText('Committed commit- on main', { exact: true }).waitFor();
+    } finally {
+      await close();
+    }
+  });
   await test('Git failed commit retries without another apply or review', async () => {
     const { page, close } = await pageFor({ git: true, trusted: true, gitCommitFailure: true });
     try {
@@ -781,6 +813,15 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
         window.fixture.requests.some((r) => r.path.endsWith('/git/merge-preview')),
       );
       assert.equal(await merge.isDisabled(), true);
+      assert.equal(await merge.getAttribute('aria-busy'), 'true');
+      assert.equal(await merge.locator('.spinner').count(), 1);
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      assert.equal(
+        await merge
+          .locator('.spinner')
+          .evaluate((element) => getComputedStyle(element).animationName),
+        'none',
+      );
       assert.equal(await page.getByRole('dialog').count(), 0);
       assert.equal(
         await page

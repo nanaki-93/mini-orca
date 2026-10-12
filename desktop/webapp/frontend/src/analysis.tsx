@@ -3,6 +3,7 @@ import { activeRun, analysisSetupModels, workspace as w, type State } from './wo
 import { CapturedModels, AnalysisModelSummary } from './analysis-models';
 import {
   Button,
+  Spinner,
   Disclosure,
   Empty,
   Go,
@@ -117,6 +118,7 @@ export function Analysis({ s }: { s: State }) {
         )}
         <Button
           tone="primary"
+          loading={s.busy === 'Execute analysis' || s.busy === 'Start analysis'}
           aria-describedby="analysis-start-permissions"
           icon="play"
           disabled={!!s.busy || (!continuation && (!s.selection || !s.models || activeRun(s.run)))}
@@ -137,12 +139,8 @@ export function Analysis({ s }: { s: State }) {
         </Button>
       </Heading>
       <p className="small muted" id="analysis-start-permissions">
-        Execute analysis starts immediately{' '}
-        {continuation
-          ? "with the saved run's captured models and settings"
-          : 'using the models shown below'}
-        , including AI Security review and feature discovery. Selected files, instructions and saved
-        goals may be sent to the selected remote providers.
+        Includes AI Security review and feature discovery. Shares selected files, instructions and
+        goals with the selected providers{continuation ? " using the saved run's models" : ''}.
       </p>
       {continuation && (
         <Notice>
@@ -151,47 +149,55 @@ export function Analysis({ s }: { s: State }) {
         </Notice>
       )}
       <Panel className="analysis-run-settings">
-        <div className="form-grid analysis-settings-fields">
-          {(
-            [
-              ['batch_files', 'Files per batch', 1, 500, 'Maximum files in each batch.'],
-              ['budget_seconds', 'Time budget · seconds', 1, 3600, 'File-analysis time per batch.'],
+        <Disclosure title="Advanced settings">
+          <div className="form-grid analysis-settings-fields">
+            {(
               [
-                'max_attempts_per_stage',
-                'Attempts per stage',
-                1,
-                4,
-                'Includes the first attempt and retries.',
-              ],
-            ] as const
-          ).map(([key, label, min, max, hint]) => (
-            <div className="analysis-setting" key={key}>
-              <label htmlFor={`analysis-${key}`}>{label}</label>
-              <input
-                id={`analysis-${key}`}
-                aria-describedby={`analysis-${key}-hint`}
-                type="number"
-                min={min}
-                max={max}
-                value={limits[key]}
-                onChange={(e) =>
-                  w.set({ analysisLimits: { ...limits, [key]: Number(e.target.value) } })
-                }
-              />
-              <small id={`analysis-${key}-hint`} className="muted">
-                {hint}
-              </small>
-            </div>
-          ))}
-        </div>
-        <label className="checkbox-line analysis-refresh-option">
-          <input
-            type="checkbox"
-            checked={refresh}
-            onChange={(e) => w.set({ analysisRefresh: e.target.checked })}
-          />
-          Refresh previously analyzed files
-        </label>
+                ['batch_files', 'Files per batch', 1, 500, 'Maximum files in each batch.'],
+                [
+                  'budget_seconds',
+                  'Time budget · seconds',
+                  1,
+                  3600,
+                  'File-analysis time per batch.',
+                ],
+                [
+                  'max_attempts_per_stage',
+                  'Attempts per stage',
+                  1,
+                  4,
+                  'Includes the first attempt and retries.',
+                ],
+              ] as const
+            ).map(([key, label, min, max, hint]) => (
+              <div className="analysis-setting" key={key}>
+                <label htmlFor={`analysis-${key}`}>{label}</label>
+                <input
+                  id={`analysis-${key}`}
+                  aria-describedby={`analysis-${key}-hint`}
+                  type="number"
+                  min={min}
+                  max={max}
+                  value={limits[key]}
+                  onChange={(e) =>
+                    w.set({ analysisLimits: { ...limits, [key]: Number(e.target.value) } })
+                  }
+                />
+                <small id={`analysis-${key}-hint`} className="muted">
+                  {hint}
+                </small>
+              </div>
+            ))}
+          </div>
+          <label className="checkbox-line analysis-refresh-option">
+            <input
+              type="checkbox"
+              checked={refresh}
+              onChange={(e) => w.set({ analysisRefresh: e.target.checked })}
+            />
+            Refresh previously analyzed files
+          </label>
+        </Disclosure>
         <AnalysisModelSummary s={s} value={models} />
       </Panel>
       {changed && (
@@ -623,7 +629,7 @@ export function AnalysisRun({ s }: { s: State }) {
         </div>
         {activeRun(run) && (
           <div className="analysis-current-step" role="status" aria-label="Current analysis step">
-            <span className="spinner" aria-hidden="true" />
+            <Spinner />
             <p>{currentStep}</p>
           </div>
         )}

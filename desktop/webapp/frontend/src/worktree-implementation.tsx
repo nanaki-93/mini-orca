@@ -6,7 +6,7 @@ import { ChangeHistory } from './change-shared';
 import { Instructions } from './instructions';
 import { Editor, Context } from './editor';
 import { Models } from './overview';
-import { Badge, Button, Modal, Notice, Panel } from './ui';
+import { Badge, Button, Modal, Notice, Panel, Spinner } from './ui';
 
 export function Implementations({ s }: { s: State }) {
   if (!s.implementations.length) return null;
@@ -51,7 +51,7 @@ export function WorktreeImplementation({ child }: { child: Workspace }) {
         </Panel>
         {s.busy && (
           <Notice>
-            {s.busy}…{' '}
+            <Spinner /> {s.busy}…{' '}
             {canCancelOperation(s.busy) && (
               <Button onClick={() => void child.cancel()}>Cancel</Button>
             )}

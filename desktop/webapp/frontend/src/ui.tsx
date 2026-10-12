@@ -24,14 +24,31 @@ export function Icon({ name }: { name: string }) {
 export function Button({
   children,
   icon,
+  loading = false,
   tone = '',
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: string; tone?: string }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { icon?: string; tone?: string; loading?: boolean }) {
   return (
-    <button {...props} className={`button ${tone} ${props.className || ''}`}>
-      {icon && <Icon name={icon} />}
+    <button
+      {...props}
+      disabled={props.disabled || loading}
+      aria-busy={loading || undefined}
+      className={`button ${tone} ${props.className || ''}`}
+    >
+      {loading ? <Spinner /> : icon && <Icon name={icon} />}
       {children}
     </button>
+  );
+}
+export function Spinner() {
+  return <span className="spinner" aria-hidden="true" />;
+}
+export function Loading({ label }: { label: string }) {
+  return (
+    <div className="loading" role="status">
+      <Spinner />
+      <span>{label}</span>
+    </div>
   );
 }
 export function Go({
@@ -69,7 +86,18 @@ export function StatusDot({ value, label }: { value?: string; label?: string }) 
     : ['failed', 'error'].includes(value || '')
       ? 'red'
       : 'yellow';
-  return <span className={`status-dot ${tone}`} role="img" aria-label={status} title={status} />;
+  const active = ['running', 'queued', 'pausing', 'canceling'].includes(value || '');
+  return (
+    <span
+      className={`status-dot ${tone}`}
+      data-active={active || undefined}
+      role="img"
+      aria-label={status}
+      title={status}
+    >
+      {active && <Spinner />}
+    </span>
+  );
 }
 export function Badge({ value, tone }: { value?: string; tone?: string }) {
   if (['suggested', 'ai_suggestion'].includes(value || '')) return null;
@@ -109,7 +137,12 @@ export function Badge({ value, tone }: { value?: string; tone?: string }) {
             : ['ai_suggestion', 'candidate', 'hypothesis', 'estimated'].includes(value || '')
               ? 'violet'
               : '');
-  return <span className={`badge ${style}`}>{human(value)}</span>;
+  return (
+    <span className={`badge ${style}`}>
+      {['running', 'queued', 'pausing', 'canceling'].includes(value || '') && <Spinner />}
+      {human(value)}
+    </span>
+  );
 }
 export function PriorityIcon({ value }: { value: string }) {
   const icon = {
@@ -261,7 +294,7 @@ function Diagram({ source, label }: { source: string; label: string }) {
   return (
     <div className="diagram">
       {result?.url && <img src={result.url} alt={label} />}
-      {!result && <p role="status">Rendering diagram…</p>}
+      {!result && <Loading label="Rendering diagram…" />}
       {result?.error && <p>{result.error}</p>}
       <Disclosure title="Diagram source" open={!!result?.error}>
         <pre tabIndex={0}>{source}</pre>

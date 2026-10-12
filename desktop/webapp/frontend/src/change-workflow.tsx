@@ -2,7 +2,17 @@ import { useWorkspace } from './workspace-context';
 import { activeChangeWorkflow, type State } from './workspace';
 import type { ChangeWorkflowModels } from './models';
 import { AgentModel } from './agent-model';
-import { Badge, BulletContent, Button, Notice, Panel, Prose, human } from './ui';
+import {
+  Badge,
+  BulletContent,
+  Button,
+  Disclosure,
+  KeyValues,
+  Notice,
+  Panel,
+  Prose,
+  human,
+} from './ui';
 
 export const defaultWorkflowModels: ChangeWorkflowModels = {
   create: 'function',
@@ -81,14 +91,19 @@ export function WorkflowProgress({
                 {stage.status === 'completed' && <span>Completed</span>}
               </span>
             </div>
-            {stage.model && (
-              <p className="small muted">
-                {stage.model.model} · Thinking: {stage.model.reasoning_effort || 'Default'}
-              </p>
-            )}
           </li>
         ))}
       </ol>
+      <Disclosure title="Models used">
+        <KeyValues
+          values={workflow.stages
+            .filter((stage) => stage.model)
+            .map((stage) => [
+              stageNames[stage.name] || human(stage.name),
+              `${stage.model!.model} · Thinking: ${stage.model!.reasoning_effort || 'Default'}`,
+            ])}
+        />
+      </Disclosure>
       {showOutcome && workflow.reason && (
         <Notice error={workflow.status === 'failed'}>{workflow.reason}</Notice>
       )}

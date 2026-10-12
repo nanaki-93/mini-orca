@@ -141,6 +141,7 @@ function CommitRecovery({ s }: { s: State }) {
     <div className="stack">
       <CommitMessage message={message} onChange={setMessage} disabled={!!s.busy} />
       <Button
+        loading={s.busy === 'Retry commit'}
         disabled={!!s.busy || s.uncertain || !message.trim()}
         onClick={() => void w.retryChangeCommit(message)}
       >

@@ -1,7 +1,14 @@
+import { useState } from 'react';
 import { workspace as w, type State } from './workspace';
-import { Button, Empty, Heading, Notice, Overlay, Panel } from './ui';
+import { Button, Empty, Heading, Loading, Notice, Overlay, Panel } from './ui';
 
 export function GitWorkspace({ s }: { s: State }) {
+  const [pending, setPending] = useState('');
+  const run = (key: string, action: () => Promise<void>) => {
+    if (w.state.busy) return;
+    setPending(key);
+    void action().finally(() => setPending(''));
+  };
   const repository = s.gitWorkspace;
   const worktrees = repository?.worktrees.filter((tree) => tree.mergeable) || [];
   const failed = repository?.worktrees.filter((tree) => tree.error) || [];
@@ -14,7 +21,12 @@ export function GitWorkspace({ s }: { s: State }) {
         detail={`Worktrees ready to merge into ${repository?.branch || 'the current branch'}.`}
         variant="intro"
       >
-        <Button icon="refresh" disabled={busy} onClick={() => void w.loadGitWorkspace()}>
+        <Button
+          icon="refresh"
+          disabled={busy}
+          loading={s.busy === 'Refresh Git'}
+          onClick={() => void w.act('Refresh Git', () => w.loadGitWorkspace())}
+        >
           Refresh Git
         </Button>
       </Heading>
@@ -28,7 +40,11 @@ export function GitWorkspace({ s }: { s: State }) {
         </Notice>
       )}
       {!repository ? (
-        <Empty title="Loading Git status…" />
+        s.resourceErrors['Git / Worktrees'] ? (
+          <Empty title="Git status unavailable" />
+        ) : (
+          <Loading label="Loading Git status…" />
+        )
       ) : !repository.available ? (
         <Empty
           title="This project is not a Git repository"
@@ -118,20 +134,26 @@ export function GitWorkspace({ s }: { s: State }) {
                       <Button disabled={blocked} onClick={() => void w.openWorktree(tree.path)}>
                         View implementation
                       </Button>
-                      <Button disabled={blocked} onClick={() => void w.previewGitMerge(tree)}>
+                      <Button
+                        disabled={blocked}
+                        loading={pending === `preview:${tree.path}`}
+                        onClick={() => run(`preview:${tree.path}`, () => w.previewGitMerge(tree))}
+                      >
                         Preview diff
                       </Button>
                       <Button
                         tone="danger"
                         disabled={blocked}
-                        onClick={() => void w.discardWorktree(tree)}
+                        loading={pending === `discard:${tree.path}`}
+                        onClick={() => run(`discard:${tree.path}`, () => w.discardWorktree(tree))}
                       >
                         Discard change
                       </Button>
                       <Button
                         tone="primary"
                         disabled={blocked}
-                        onClick={() => void w.gitAction('merge', tree)}
+                        loading={pending === `merge:${tree.path}`}
+                        onClick={() => run(`merge:${tree.path}`, () => w.gitAction('merge', tree))}
                       >
                         Merge into current branch
                       </Button>
@@ -165,6 +187,7 @@ export function GitWorkspace({ s }: { s: State }) {
             </Button>
             <Button
               tone="primary"
+              loading={s.busy === 'Update Git workspace'}
               disabled={blocked || !s.gitPreview.commits.trim()}
               onClick={() => void w.gitAction('merge')}
             >
