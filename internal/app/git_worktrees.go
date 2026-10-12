@@ -22,6 +22,7 @@ type GitWorktree struct {
 	Locked    bool                 `json:"locked"`
 	Prunable  bool                 `json:"prunable"`
 	Dirty     *bool                `json:"dirty,omitempty"`
+	Mergeable bool                 `json:"mergeable"`
 	Completed []ChangeHistoryEntry `json:"completed"`
 	Error     string               `json:"error,omitempty"`
 }
@@ -46,7 +47,7 @@ func (s *Service) GitWorkspace(ctx context.Context, id, revision string) (*GitWo
 		return nil, err
 	}
 	for i := range result.Worktrees {
-		populateGitWorktree(ctx, repository.Root, &result.Worktrees[i])
+		populateGitWorktree(ctx, repository, &result.Worktrees[i])
 	}
 	result.Branches, err = readGitBranches(ctx, repository.Root, result.Worktrees)
 	if err != nil {
@@ -100,13 +101,13 @@ func readGitWorktrees(ctx context.Context, root string) ([]GitWorktree, error) {
 	return result, nil
 }
 
-func populateGitWorktree(ctx context.Context, root string, tree *GitWorktree) {
+func populateGitWorktree(ctx context.Context, target *GitRepository, tree *GitWorktree) {
 	canonical, err := project.CanonicalRoot(tree.Path)
 	if err != nil {
 		tree.Error = err.Error()
 		return
 	}
-	tree.Path, tree.Current = canonical, canonical == root
+	tree.Path, tree.Current = canonical, canonical == target.Root
 	repository, err := readGitRepository(ctx, canonical)
 	if err != nil {
 		tree.Error = err.Error()
@@ -126,6 +127,10 @@ func populateGitWorktree(ctx context.Context, root string, tree *GitWorktree) {
 		if entry.State == "applied" && entry.Commit != nil && entry.Commit.State == "committed" {
 			tree.Completed = append(tree.Completed, entry)
 		}
+	}
+	tree.Mergeable, err = gitWorktreeMergeable(ctx, target, tree, repository)
+	if err != nil {
+		tree.Error = "Merge status unavailable: " + err.Error()
 	}
 }
 

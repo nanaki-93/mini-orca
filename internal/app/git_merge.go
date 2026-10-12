@@ -24,22 +24,60 @@ func mergeSource(ctx context.Context, repository *GitRepository, request GitMuta
 		if tree.Path != request.Path {
 			continue
 		}
-		if tree.Current || tree.Locked || tree.Prunable || tree.Head != request.SourceHead || tree.Branch == "" {
+		if tree.Head != request.SourceHead {
 			return nil, project.ErrRevisionConflict
 		}
 		source, err := readGitRepository(ctx, tree.Path)
 		if err != nil {
 			return nil, err
 		}
-		if err := requireGitIdentity(source, tree.GitIdentity); err != nil {
+		if err := requireGitMergeSource(&tree, source); err != nil {
 			return nil, err
-		}
-		if source.Dirty {
-			return nil, fmt.Errorf("commit the worktree's remaining changes before merging")
 		}
 		return &tree, nil
 	}
 	return nil, fmt.Errorf("choose an existing worktree from this repository")
+}
+
+func requireGitMergeSource(tree *GitWorktree, source *GitRepository) error {
+	if tree.Current || tree.Locked || tree.Prunable || tree.Branch == "" {
+		return project.ErrRevisionConflict
+	}
+	if err := requireGitIdentity(source, tree.GitIdentity); err != nil {
+		return err
+	}
+	if source.Dirty {
+		return fmt.Errorf("commit the worktree's remaining changes before merging or discarding it")
+	}
+	return nil
+}
+
+func requireGitMergeTarget(repository *GitRepository) error {
+	if err := requireGitIdentity(repository, repository.GitIdentity); err != nil {
+		return err
+	}
+	if repository.Dirty {
+		return fmt.Errorf("commit or move local changes before merging")
+	}
+	return nil
+}
+
+// Merge eligibility is a passive guard, not a promise that Git will resolve conflicts.
+func gitWorktreeMergeable(ctx context.Context, target *GitRepository, tree *GitWorktree, source *GitRepository) (bool, error) {
+	if requireGitMergeTarget(target) != nil || requireGitMergeSource(tree, source) != nil {
+		return false, nil
+	}
+	if _, err := gitRead(ctx, target.Root, "merge-base", target.Head, source.Head); err != nil {
+		if gitExitCode(err, 1) {
+			return false, nil
+		}
+		return false, err
+	}
+	_, err := gitRead(ctx, target.Root, "merge-base", "--is-ancestor", source.Head, target.Head)
+	if gitExitCode(err, 1) {
+		return true, nil
+	}
+	return false, err
 }
 
 func (s *Service) PreviewGitMerge(ctx context.Context, request GitMutationRequest) (*GitMergePreview, error) {
@@ -72,8 +110,8 @@ func (s *Service) MergeGitWorktree(ctx context.Context, request GitMutationReque
 	if err != nil {
 		return nil, err
 	}
-	if repository.Dirty {
-		return nil, fmt.Errorf("commit or move local changes before merging")
+	if err := requireGitMergeTarget(repository); err != nil {
+		return nil, err
 	}
 	source, err := mergeSource(ctx, repository, request)
 	if err != nil {
@@ -83,7 +121,7 @@ func (s *Service) MergeGitWorktree(ctx context.Context, request GitMutationReque
 	_, err = gitRead(ctx, repository.Root, "merge", "--no-edit", "--no-stat", "--no-autostash", "--no-rerere-autoupdate", source.Head)
 	result := s.completeGitMutation(repository.Root, "merged", err)
 	if result.State == "merged" {
-		if err := s.removeMergedWorktree(ctx, repository.Root, source); err != nil {
+		if err := s.removeGitWorktree(ctx, repository.Root, source, worktreeMerged); err != nil {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("Merge completed, but worktree %s was not removed: %v. Resolve the issue and remove it with Git.", source.Path, err))
 		} else {
 			result.RemovedWorktree = source.Path

@@ -253,8 +253,10 @@ func TestCancellationBeforeDispatchDoesNotStartNetworkWork(t *testing.T) {
 }
 
 func TestBridgeSharedChangeRoutesRemainAllowlisted(t *testing.T) {
-	if allowedRequest("GET", "/api/projects/current/git/merge", "") {
-		t.Fatal("allowed a mutation route as a read")
+	for _, action := range []string{"merge", "discard-worktree"} {
+		if allowedRequest("GET", "/api/projects/current/git/"+action, "") {
+			t.Fatal("allowed a mutation route as a read")
+		}
 	}
 	for _, request := range [][3]string{
 		{"GET", "/api/projects/current?worktree_path=%2Fproject%2F.worktrees%2Ffix", ""},
@@ -268,6 +270,7 @@ func TestBridgeSharedChangeRoutesRemainAllowlisted(t *testing.T) {
 		{"POST", "/api/projects/current/git/merge-preview", "{}"},
 		{"POST", "/api/projects/current/git/merge", "{}"},
 		{"POST", "/api/projects/current/git/abort-merge", "{}"},
+		{"POST", "/api/projects/current/git/discard-worktree", "{}"},
 		{"GET", "/api/projects/current/changes/change-id", ""},
 		{"GET", "/api/projects/current/instructions?path=AGENTS.md", ""},
 		{"GET", "/api/projects/current/features", ""},

@@ -197,4 +197,41 @@ func TestWorktreeRoutesPreserveProjectAndRequireScopedIdentity(t *testing.T) {
 			t.Fatalf("removed worktree scope still accepted: %d %s", reopened.Code, reopened.Body.String())
 		}
 	}
+	index, _ = manager.Index()
+	if _, err := service.TrustProjectExecution(index.ProjectRevision, true); err != nil {
+		t.Fatal(err)
+	}
+	discard := app.GitMutationRequest{
+		GitIdentity: repository.GitIdentity, ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision,
+		Confirm: true, ConfirmExecution: true, TargetBranch: "codex/discard", Path: filepath.Join(root, ".worktrees", "discard"),
+		SourceHead: repository.Head,
+	}
+	created, err = service.CreateGitWorktree(context.Background(), discard)
+	if err != nil || created.State != "created" || created.Error != "" {
+		t.Fatalf("create for discard: %+v, %v", created, err)
+	}
+	for _, branch := range []string{"changed-after-review", "codex/discard"} {
+		discard.SourceBranch = branch
+		body, err := json.Marshal(discard)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := call("POST", "/api/projects/current/git/discard-worktree", string(body), "")
+		if branch != "codex/discard" {
+			if got.Code != http.StatusConflict {
+				t.Fatalf("stale discard: %d %s", got.Code, got.Body.String())
+			}
+			if _, err := os.Stat(created.Path); err != nil {
+				t.Fatalf("stale discard removed worktree: %v", err)
+			}
+			continue
+		}
+		var result app.GitMutationResult
+		if got.Code != http.StatusOK || json.Unmarshal(got.Body.Bytes(), &result) != nil || result.State != "discarded" || result.RemovedWorktree != created.Path || result.Repository.Head != repository.Head {
+			t.Fatalf("discard receipt: %d %s", got.Code, got.Body.String())
+		}
+		if _, err := os.Stat(created.Path); !os.IsNotExist(err) {
+			t.Fatalf("discarded worktree still exists: %v", err)
+		}
+	}
 }
