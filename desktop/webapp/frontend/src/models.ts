@@ -437,6 +437,7 @@ export interface GitMergePreview {
 export interface GitMutation {
   state: string;
   path?: string;
+  removed_worktree?: string;
   repository?: GitRepository;
   index?: ProjectIndex;
   error?: string;

@@ -574,7 +574,12 @@ export function installFixture(options = {}) {
               branches: [
                 { name: state.git.branch, head: state.git.head, worktree_path: state.git.root },
                 { name: 'feature/other', head: 'head-other' },
-                { name: 'codex/fix', head: 'head-fix', worktree_path: `${project.path}-fix` },
+                {
+                  name: 'codex/fix',
+                  head: 'head-fix',
+                  worktree_path: state.gitWorktrees.find((tree) => tree.branch === 'codex/fix')
+                    ?.path,
+                },
               ],
               worktrees: state.gitWorktrees.map((tree) =>
                 tree.path === state.project.path
@@ -616,6 +621,8 @@ export function installFixture(options = {}) {
             ].includes(path)
           ) {
             let outcome = 'switched';
+            let removedWorktree;
+            const warnings = [];
             if (path.endsWith('/switch')) {
               state.git.branch = body.target_branch;
               state.git.head = 'head-other';
@@ -626,7 +633,17 @@ export function installFixture(options = {}) {
                 state.git.merge_head = body.source_head;
                 state.git.conflicts = ['internal/worker/process.go'];
                 state.git.dirty = true;
-              } else state.git.head = body.source_head;
+              } else {
+                state.git.head = body.source_head;
+                if (options.gitCleanupFailure)
+                  warnings.push(
+                    `Merge completed, but worktree ${body.path} was not removed: checkout is locked.`,
+                  );
+                else {
+                  removedWorktree = body.path;
+                  state.gitWorktrees = state.gitWorktrees.filter((tree) => tree.path !== body.path);
+                }
+              }
             }
             if (path.endsWith('/abort-merge')) {
               outcome = 'aborted';
@@ -638,13 +655,14 @@ export function installFixture(options = {}) {
             state.trusted = false;
             return response({
               state: outcome,
+              removed_worktree: removedWorktree,
               repository: { ...repository(), project_revision: state.project.project_revision },
               index: {
                 ...identity,
                 project_revision: state.project.project_revision,
                 files: state.files,
               },
-              warnings: [],
+              warnings,
               ...(outcome === 'conflicts'
                 ? {
                     error: 'Merge conflicts occurred. Resolve the listed files or abort the merge.',

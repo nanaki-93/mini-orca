@@ -81,7 +81,15 @@ func (s *Service) MergeGitWorktree(ctx context.Context, request GitMutationReque
 	}
 	s.invalidateJobsForProjectChange()
 	_, err = gitRead(ctx, repository.Root, "merge", "--no-edit", "--no-stat", "--no-autostash", "--no-rerere-autoupdate", source.Head)
-	return s.completeGitMutation(repository.Root, "merged", err), nil
+	result := s.completeGitMutation(repository.Root, "merged", err)
+	if result.State == "merged" {
+		if err := s.removeMergedWorktree(ctx, repository.Root, source); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Merge completed, but worktree %s was not removed: %v. Resolve the issue and remove it with Git.", source.Path, err))
+		} else {
+			result.RemovedWorktree = source.Path
+		}
+	}
+	return result, nil
 }
 
 func (s *Service) AbortGitMerge(ctx context.Context, request GitMutationRequest) (*GitMutationResult, error) {

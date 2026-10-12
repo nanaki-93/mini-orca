@@ -210,19 +210,35 @@ func TestGitMergePreviewSuccessAndConflictRecovery(t *testing.T) {
 			if _, err := service.MergeGitWorktree(context.Background(), request); err == nil {
 				t.Fatal("merged a source head that changed after review")
 			}
+			if _, err := os.Stat(path); err != nil {
+				t.Fatalf("stale merge removed the worktree: %v", err)
+			}
 			request.SourceHead = testGit(t, path, "rev-parse", "HEAD")
 			result, err := service.MergeGitWorktree(context.Background(), request)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if !conflict {
-				if result.State != "merged" || result.Repository.Head != request.SourceHead {
+				if result.State != "merged" || result.Repository.Head != request.SourceHead || result.RemovedWorktree != path || len(result.Warnings) != 0 {
 					t.Fatalf("merge: %+v", result)
+				}
+				if _, err := os.Stat(path); !os.IsNotExist(err) {
+					t.Fatalf("merged worktree still exists: %v", err)
+				}
+				if got := testGit(t, root, "rev-parse", "refs/heads/codex/fix"); got != request.SourceHead {
+					t.Fatal("cleanup lost the source branch")
+				}
+				trees, err := readGitWorktrees(context.Background(), root)
+				if err != nil || len(trees) != 1 || !trees[0].Current {
+					t.Fatalf("merged worktree remains registered: %+v, %v", trees, err)
 				}
 				return
 			}
-			if result.State != "conflicts" || len(result.Repository.Conflicts) != 1 || result.Repository.MergeHead == "" {
+			if result.State != "conflicts" || len(result.Repository.Conflicts) != 1 || result.Repository.MergeHead == "" || result.RemovedWorktree != "" {
 				t.Fatalf("conflict hidden: %+v", result)
+			}
+			if got := testGit(t, path, "rev-parse", "HEAD"); got != request.SourceHead {
+				t.Fatal("conflict removed or changed the source worktree")
 			}
 			request = trustedGitRequest(t, service)
 			request.MergeHead = result.Repository.MergeHead
@@ -233,6 +249,9 @@ func TestGitMergePreviewSuccessAndConflictRecovery(t *testing.T) {
 			restored, _ := os.ReadFile(filepath.Join(root, "main.go"))
 			if !strings.Contains(string(restored), "current") {
 				t.Fatal("abort lost pre-merge source")
+			}
+			if _, err := os.Stat(path); err != nil || result.RemovedWorktree != "" {
+				t.Fatalf("abort removed the worktree: %v", err)
 			}
 		})
 	}

@@ -226,7 +226,7 @@ paths:
       - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
-      description: Merge the reviewed committed worktree head into the current clean branch.
+      description: Merge the reviewed committed worktree head into the current clean branch, then remove the clean source worktree and its local task history without force. The branch is retained. Cleanup failures preserve the merged state and return warnings.
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationRequest'}}}}
       responses:
         '200': {description: Observed Git outcome, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
@@ -2794,6 +2794,7 @@ components:
       properties:
         state: {type: string, enum: [created, switched, merged, conflicts, aborted, failed]}
         path: {type: string}
+        removed_worktree: {type: string, description: Absolute source worktree path returned only when removal after a successful merge completed}
         repository: {$ref: '#/components/schemas/GitRepository'}
         index: {$ref: '#/components/schemas/ProjectIndex'}
         error: {type: string}

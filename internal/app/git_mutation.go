@@ -23,12 +23,13 @@ type GitMutationRequest struct {
 }
 
 type GitMutationResult struct {
-	State      string                `json:"state"`
-	Path       string                `json:"path,omitempty"`
-	Repository *GitRepository        `json:"repository,omitempty"`
-	Index      *project.ProjectIndex `json:"index,omitempty"`
-	Error      string                `json:"error,omitempty"`
-	Warnings   []string              `json:"warnings"`
+	State           string                `json:"state"`
+	Path            string                `json:"path,omitempty"`
+	RemovedWorktree string                `json:"removed_worktree,omitempty"`
+	Repository      *GitRepository        `json:"repository,omitempty"`
+	Index           *project.ProjectIndex `json:"index,omitempty"`
+	Error           string                `json:"error,omitempty"`
+	Warnings        []string              `json:"warnings"`
 }
 
 func (s *Service) gitMutationPreflight(ctx context.Context, request GitMutationRequest, abort bool) (*GitRepository, error) {
@@ -162,6 +163,13 @@ func validateWorktreeOverlap(ctx context.Context, root, path string) error {
 }
 
 func prepareWorktreeDirectory(ctx context.Context, root string) error {
+	if err := addGitLocalExclude(ctx, root, "/.worktrees/"); err != nil {
+		return err
+	}
+	return os.MkdirAll(filepath.Join(root, ".worktrees"), 0755)
+}
+
+func addGitLocalExclude(ctx context.Context, root, pattern string) error {
 	common, err := gitRead(ctx, root, "rev-parse", "--path-format=absolute", "--git-common-dir")
 	if err != nil {
 		return err
@@ -185,7 +193,7 @@ func prepareWorktreeDirectory(ctx context.Context, root string) error {
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	if !strings.Contains("\n"+string(data)+"\n", "\n/.worktrees/\n") {
+	if !strings.Contains("\n"+string(data)+"\n", "\n"+pattern+"\n") {
 		if err := os.MkdirAll(filepath.Dir(exclude), 0755); err != nil {
 			return err
 		}
@@ -193,7 +201,7 @@ func prepareWorktreeDirectory(ctx context.Context, root string) error {
 		if err != nil {
 			return err
 		}
-		_, writeErr := file.WriteString("\n/.worktrees/\n")
+		_, writeErr := file.WriteString("\n" + pattern + "\n")
 		closeErr := file.Close()
 		if writeErr != nil {
 			return writeErr
@@ -202,7 +210,7 @@ func prepareWorktreeDirectory(ctx context.Context, root string) error {
 			return closeErr
 		}
 	}
-	return os.MkdirAll(filepath.Join(root, ".worktrees"), 0755)
+	return nil
 }
 
 func (s *Service) SwitchGitBranch(ctx context.Context, request GitMutationRequest) (*GitMutationResult, error) {

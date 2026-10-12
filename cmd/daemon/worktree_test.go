@@ -166,4 +166,35 @@ func TestWorktreeRoutesPreserveProjectAndRequireScopedIdentity(t *testing.T) {
 	if err != nil || len(parentHistory) != 0 {
 		t.Fatalf("child history leaked: %+v, %v", parentHistory, err)
 	}
+	merge := app.GitMutationRequest{
+		GitIdentity: repository.GitIdentity, ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision,
+		Path: created.Path, SourceHead: repository.Head, ConfirmExecution: true,
+	}
+	for _, confirmed := range []bool{false, true} {
+		merge.Confirm = confirmed
+		body, err := json.Marshal(merge)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := call("POST", "/api/projects/current/git/merge", string(body), "")
+		if !confirmed {
+			if got.Code != http.StatusBadRequest {
+				t.Fatalf("unconfirmed merge: %d %s", got.Code, got.Body.String())
+			}
+			if _, err := os.Stat(created.Path); err != nil {
+				t.Fatalf("unconfirmed merge removed worktree: %v", err)
+			}
+			continue
+		}
+		var result app.GitMutationResult
+		if got.Code != http.StatusOK || json.Unmarshal(got.Body.Bytes(), &result) != nil || result.State != "merged" || result.RemovedWorktree != created.Path || len(result.Warnings) != 0 {
+			t.Fatalf("merge cleanup receipt: %d %s", got.Code, got.Body.String())
+		}
+		if _, err := os.Stat(created.Path); !os.IsNotExist(err) {
+			t.Fatalf("merged worktree still exists: %v", err)
+		}
+		if reopened := call("GET", "/api/projects/current"+scope, "", ""); reopened.Code != http.StatusBadRequest {
+			t.Fatalf("removed worktree scope still accepted: %d %s", reopened.Code, reopened.Body.String())
+		}
+	}
 }

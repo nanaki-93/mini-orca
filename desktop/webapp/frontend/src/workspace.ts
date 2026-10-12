@@ -427,6 +427,9 @@ export class Workspace {
       (gitWorkspace) => {
         if (projectKey(gitWorkspace) !== projectKey(this.state.project))
           throw new Error('Git workspace changed. Refresh it.');
+        for (const child of this.state.implementations)
+          if (!gitWorkspace.worktrees.some((tree) => tree.path === child.worktreePath))
+            this.closeWorktree(child.worktreePath!);
         const preview = this.state.gitPreview;
         this.set({
           gitWorkspace,
@@ -487,7 +490,9 @@ export class Workspace {
       const message =
         action === 'abort-merge'
           ? 'Discard conflict-resolution edits and restore the state before the merge.'
-          : 'Prepared fixes will need fresh checks and review.';
+          : action === 'merge'
+            ? 'After a successful merge, the source worktree directory and its local task history will be deleted, and its implementation will close. The branch is kept. Prepared fixes will need fresh checks and review.'
+            : 'Prepared fixes will need fresh checks and review.';
       if (
         !(await this.confirm({
           title,
@@ -532,6 +537,7 @@ export class Workspace {
       if (epoch !== this.epoch) return;
       this.epoch++;
       this.fileEpoch++;
+      if (result.removed_worktree) this.closeWorktree(result.removed_worktree);
       this.set({
         project: {
           ...this.state.project!,
@@ -639,6 +645,17 @@ export class Workspace {
         this.set({ implementation: child, page: 'worktree' });
     });
     return this.state.implementation === child ? child : undefined;
+  }
+  private closeWorktree(path: string) {
+    const child = this.state.implementations.find((item) => item.worktreePath === path);
+    if (!child) return;
+    child.stop();
+    this.set({
+      implementations: this.state.implementations.filter((item) => item !== child),
+      ...(this.state.implementation === child
+        ? { implementation: undefined, ...(this.state.page === 'worktree' ? { page: 'git' } : {}) }
+        : {}),
+    });
   }
   async refreshProject() {
     const identity = this.identity();

@@ -158,8 +158,12 @@ visible. The sidebar collapses to icons.
   opens an existing checkout, including the checkout that already holds `main`; this
   project switch stops the previous project's implementation workers.
   **Merge into Current Branch**
-  first shows incoming commits and a read-only diff. Conflicts remain visible with
-  their paths and an **Abort merge** action; abort discards conflict resolutions.
+  first shows incoming commits and a read-only diff. After a successful merge, the
+  source worktree directory and its local task history are deleted, its implementation
+  closes, and its branch is kept. Cleanup never forces removal of uncommitted changes;
+  a warning explains when the merge succeeded but the worktree could not be removed.
+  Conflicts remain visible with their paths and an **Abort merge** action; abort
+  discards conflict resolutions.
   There is no separate new-workflow sidebar action: creation starts at **Prepare fix**.
 - **Features** presents advisory ideas as compact rows. Selecting a row opens
   the complete idea in a dialog; **Project goals** expands goal editing and search. Searches
