@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -124,21 +125,34 @@ func newHTTPMux(
 ) http.Handler {
 	current := newProjectHTTPMux(application, projectManager)
 	return api.LocalOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := r.URL.Query().Get("worktree_path")
-		if path == "" {
+		query, err := url.ParseQuery(r.URL.RawQuery)
+		if err != nil {
+			api.WriteAppError(w, api.BadRequest("invalid request query", "Provide valid URL-encoded query parameters.", err))
+			return
+		}
+		paths, scoped := query["worktree_path"]
+		if !scoped {
 			current.ServeHTTP(w, r)
+			return
+		}
+		if len(paths) != 1 || paths[0] == "" {
+			api.WriteAppError(w, api.BadRequest("invalid worktree scope", "Provide worktree_path once with an absolute registered worktree path.", nil))
 			return
 		}
 		if r.URL.Path != "/api/projects/current" && !strings.HasPrefix(r.URL.Path, "/api/projects/current/") {
 			api.WriteError(w, http.StatusBadRequest, "worktree scope requires a project endpoint")
 			return
 		}
-		service, manager, err := application.WorktreeService(r.Context(), path)
+		service, manager, err := application.WorktreeService(r.Context(), paths[0])
 		if err != nil {
 			api.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		newProjectHTTPMux(service, manager).ServeHTTP(w, r)
+		// Worktree scope belongs to routing, not the endpoint's identity guards or filters.
+		query.Del("worktree_path")
+		scopedRequest := r.Clone(r.Context())
+		scopedRequest.URL.RawQuery = query.Encode()
+		newProjectHTTPMux(service, manager).ServeHTTP(w, scopedRequest)
 	}), daemonAllowsExternalHosts())
 }
 
