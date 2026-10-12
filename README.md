@@ -7,10 +7,10 @@ The Wails/React desktop client talks to a Go daemon through a native bridge.
 ## Use it
 
 1. Open a local project and inspect its summary, files and symbols.
-2. Choose your file scope in **Context → Files & scope**, then select **Prepare analysis**
-   in Analysis. Assign Bug, Performance, Security and feature models on **Models**.
-   The button starts immediately with the selected models and scope. Use **Preview analysis**
-   to inspect request bounds and destinations before starting instead.
+2. Choose your file scope in **Context → Files & scope** and assign Bug, Performance,
+   Security and feature models on **Models**. Select **Execute analysis** in Analysis
+   to start immediately with those models and scope, without confirmation dialogs.
+   Use **Preview analysis** to inspect request bounds and destinations first.
    Analysis also checks for new feature suggestions using saved project goals.
    Overview links category counts to Findings and Features.
 3. Use **Prepare fix** on a finding, or describe a feature in **Chat** with up to
@@ -34,9 +34,11 @@ The Wails/React desktop client talks to a Go daemon through a native bridge.
 
 **Findings** groups Bugs, Performance and Security with search and impact filters
 over saved results.
-Pause waits for an active stage; Cancel stops further work. Resume uses a
-fresh preview and intent; completed or canceled runs need a new Start. The run coordinates specialized
-semantic, Performance, Security-rule, advisory Security and project-wide feature
+Pause waits for an active stage; Cancel stops further work. **Execute analysis** resumes
+paused or interrupted runs from Setup or Last run without confirmation dialogs, using
+captured settings and a fresh daemon preview. For completed or canceled runs, start a new
+analysis from Setup. Each run coordinates specialized semantic, Performance,
+Security-rule, advisory Security and project-wide feature
 suggestion stages and can make
 multiple model requests. Security intent is explicit even with a local provider.
 Verified Go scans and proposal checks remain separate trusted
@@ -65,7 +67,7 @@ make desktop-run
 The daemon defaults to `127.0.0.1:9090`; the desktop uses
 `http://127.0.0.1:9090` unless `MINI_ORCA_URL` is set. Keep `config.yaml` local.
 Each prompt-bearing request to a non-loopback HTTP or CLI provider needs scope-specific
-confirmation. Provider keys are not part of API metadata.
+consent. Provider keys are not part of API metadata.
 
 ## Project intelligence
 
