@@ -83,9 +83,11 @@ export function WorktreePreparation({
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
       .slice(0, 48) || 'fix';
+  //add a random suffix to the slug to avoid conflicts with existing worktrees
+  const randomSuffix = Math.random().toString(36).substring(2, 8);
   const [mode, setMode] = useState('current');
-  const [branch, setBranch] = useState(`codex/${slug}`);
-  const [path, setPath] = useState(`${s.project!.path}/.worktrees/${slug}`);
+  const [branch, setBranch] = useState(`codex/${slug}-${randomSuffix}`);
+  const [path, setPath] = useState(`${s.project!.path}/.worktrees/${slug}-${randomSuffix}`);
   return (
     <Overlay title={`Prepare ${task} workspace`} onClose={onClose}>
       <form
