@@ -72,6 +72,55 @@ func TestChangeHTTPSelectedProfile(t *testing.T) {
 	}
 }
 
+func TestChangeHTTPPreservesFindingTargetsAndRejectsInvalidScope(t *testing.T) {
+	h := newChangeHandlerFixture(t, "http://127.0.0.1:1")
+	index, _ := h.manager.Index()
+	target := project.FindingTarget{ProjectID: "origin-project", Kind: "semantic", ID: "finding:origin", Path: "main.go"}
+	for _, state := range []string{"valid", "legacy", "duplicate", "outside scope", "unknown producer", "unknown security source", "missing origin", "too many"} {
+		t.Run(state, func(t *testing.T) {
+			request := app.ChangeCreateRequest{ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Kind: "fix", Title: "Fix selected finding", Paths: []string{"main.go"}, FindingTargets: []project.FindingTarget{target}}
+			switch state {
+			case "legacy":
+				request.FindingTargets = nil
+			case "duplicate":
+				request.FindingTargets = append(request.FindingTargets, target)
+			case "outside scope":
+				request.FindingTargets[0].Path = "other.go"
+			case "unknown producer":
+				request.FindingTargets[0].Kind = "unknown"
+			case "unknown security source":
+				request.FindingTargets[0].Kind, request.FindingTargets[0].Source = "security", "unknown"
+			case "missing origin":
+				request.FindingTargets[0].ProjectID = ""
+			case "too many":
+				request.FindingTargets = make([]project.FindingTarget, 17)
+			}
+			response := workflowResponse(t, h.Open, "POST", "/changes", "", request)
+			if state != "valid" && state != "legacy" {
+				if response.Code != http.StatusBadRequest {
+					t.Fatalf("invalid finding targets: %d %s", response.Code, response.Body)
+				}
+				return
+			}
+			var session app.ChangeSession
+			if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &session) != nil {
+				t.Fatalf("open: %d %s", response.Code, response.Body)
+			}
+			restored, err := h.service.ChangeSession(context.Background(), session.ID)
+			if err != nil || len(restored.FindingTargets) != len(request.FindingTargets) {
+				t.Fatalf("restored targets: %+v, %v", restored, err)
+			}
+			if state == "valid" && restored.FindingTargets[0] != target {
+				t.Fatalf("lost original finding identity: %+v", restored.FindingTargets)
+			}
+		})
+	}
+	history, err := h.service.ChangeHistory(context.Background())
+	if err != nil || len(history) != 2 {
+		t.Fatalf("invalid input wrote sessions: %+v, %v", history, err)
+	}
+}
+
 func TestChangeHTTPInstructionProposalRequiresChecksReviewAndConfirmation(t *testing.T) {
 	handler := newChangeHandlerFixture(t, "http://127.0.0.1:1")
 	index, _ := handler.manager.Index()

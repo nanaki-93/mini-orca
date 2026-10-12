@@ -132,6 +132,15 @@ func loadAnalysisTriage(root string, identity AnalysisRunIdentity, hashes map[st
 			statuses[finding.ID] = finding.Status
 		}
 	}
+	completed, err := store.Completions(identity.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	for _, completion := range completed {
+		if completion.Kind == "semantic" {
+			statuses[completion.ID] = project.FindingStatusFixed
+		}
+	}
 	return statuses, nil
 }
 

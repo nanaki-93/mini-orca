@@ -79,14 +79,18 @@ type FindingInput struct {
 }
 
 type findingDocument struct {
-	SchemaVersion string           `json:"schema_version"`
-	Findings      []UnifiedFinding `json:"findings"`
+	SchemaVersion string              `json:"schema_version"`
+	Findings      []UnifiedFinding    `json:"findings"`
+	Completed     []FindingCompletion `json:"completed,omitempty"`
 }
+
+// Store instances for the same checkout share read-modify-write ownership.
+var findingStoreLocks sync.Map
 
 // FindingStore persists only sanitized finding metadata under .mini-orca.
 type FindingStore struct {
 	root string
-	mu   sync.Mutex
+	mu   *sync.Mutex
 }
 
 func NewFindingStore(root string) (*FindingStore, error) {
@@ -94,16 +98,19 @@ func NewFindingStore(root string) (*FindingStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FindingStore{root: canonical}, nil
+	lock, _ := findingStoreLocks.LoadOrStore(canonical, &sync.Mutex{})
+	return &FindingStore{root: canonical, mu: lock.(*sync.Mutex)}, nil
 }
 
 func (s *FindingStore) Load(input FindingInput) ([]UnifiedFinding, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	findings, err := s.loadLocked()
+	document, err := s.loadLocked(true)
 	if err != nil {
 		return nil, err
 	}
+	applyFindingCompletions(document)
+	findings := document.Findings
 	for index := range findings {
 		if !findingMatchesInput(findings[index], input) {
 			findings[index].Freshness = FindingFreshnessStale
@@ -124,10 +131,11 @@ func (s *FindingStore) ReconcileSource(input FindingInput, source string, report
 	if input.ProjectID == "" || input.ProjectRevision == "" {
 		return nil, fmt.Errorf("finding project identity is required")
 	}
-	previous, err := s.loadLocked()
+	document, err := s.loadLocked(true)
 	if err != nil {
 		return nil, err
 	}
+	previous := document.Findings
 	byID := make(map[string]UnifiedFinding, len(previous))
 	current := make([]UnifiedFinding, 0, len(previous)+len(reported))
 	for _, finding := range previous {
@@ -161,7 +169,9 @@ func (s *FindingStore) ReconcileSource(input FindingInput, source string, report
 		current = append(current, finding)
 	}
 	sort.Slice(current, func(i, j int) bool { return current[i].ID < current[j].ID })
-	if err := s.storeLocked(current); err != nil {
+	document.Findings = current
+	applyFindingCompletions(document)
+	if err := s.storeLocked(document); err != nil {
 		return nil, err
 	}
 	return cloneFindings(current), nil
@@ -174,40 +184,53 @@ func (s *FindingStore) SetStatus(id, status string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	findings, err := s.loadLocked()
+	document, err := s.loadLocked(true)
 	if err != nil {
 		return err
 	}
+	findings := document.Findings
 	for index := range findings {
 		if findings[index].ID == id {
 			findings[index].Status = status
-			return s.storeLocked(findings)
+			if status != FindingStatusFixed {
+				retained := document.Completed[:0]
+				for _, completion := range document.Completed {
+					if completion.Kind != "semantic" || completion.ID != id || completion.ProjectID != findings[index].ProjectID {
+						retained = append(retained, completion)
+					}
+				}
+				document.Completed = retained
+			}
+			return s.storeLocked(document)
 		}
 	}
 	return fmt.Errorf("finding not found")
 }
 
-func (s *FindingStore) loadLocked() ([]UnifiedFinding, error) {
+func (s *FindingStore) loadLocked(recoverCorrupt bool) (*findingDocument, error) {
 	path := filepath.Join(s.root, findingStorePath)
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		return []UnifiedFinding{}, nil
+		return &findingDocument{SchemaVersion: findingStoreSchema, Findings: []UnifiedFinding{}}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read findings: %w", err)
 	}
 	var document findingDocument
 	if err := json.Unmarshal(data, &document); err != nil || document.SchemaVersion != findingStoreSchema {
+		if !recoverCorrupt {
+			return nil, fmt.Errorf("findings storage is corrupt or unsupported")
+		}
 		if recoverErr := storage.RecoverCorrupt(path); recoverErr != nil {
 			return nil, recoverErr
 		}
-		return []UnifiedFinding{}, nil
+		return &findingDocument{SchemaVersion: findingStoreSchema, Findings: []UnifiedFinding{}}, nil
 	}
-	return document.Findings, nil
+	return &document, nil
 }
 
-func (s *FindingStore) storeLocked(findings []UnifiedFinding) error {
-	data, err := json.MarshalIndent(findingDocument{SchemaVersion: findingStoreSchema, Findings: findings}, "", "  ")
+func (s *FindingStore) storeLocked(document *findingDocument) error {
+	data, err := json.MarshalIndent(document, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode findings: %w", err)
 	}

@@ -5638,7 +5638,7 @@ try {
         assert.equal(await workspace.getByText('Permissions & checks', { exact: true }).count(), 0);
         if (semantic) {
           const cause = await workspace.locator('.fix-cause').boundingBox();
-          for (const name of ['Delete', 'Mark as fixed']) {
+          for (const name of ['Delete', 'Mark as Done']) {
             const action = workspace.getByRole('button', { name, exact: true });
             const bounds = await action.boundingBox();
             assert.ok(bounds.y + bounds.height < cause.y, `${name} stays above the cause`);
@@ -5687,7 +5687,7 @@ try {
         assert.ok((await metadata.innerText()).includes(expected.symbol));
         assert.ok((await panel('Cause').innerText()).includes(expected.source));
         if (semantic)
-          await workspace.getByRole('button', { name: 'Mark as fixed', exact: true }).waitFor();
+          await workspace.getByRole('button', { name: 'Mark as Done', exact: true }).waitFor();
         assert.equal(
           await panel('Engineering insight')
             .locator('.prose')
@@ -5742,7 +5742,7 @@ try {
                 'All findings',
                 'Go to file',
                 'Prepare fix',
-                ...(semantic ? ['Delete', 'Mark as fixed'] : []),
+                ...(semantic ? ['Delete', 'Mark as Done'] : []),
               ])
                 assert.equal(
                   await workspace.getByRole('button', { name: label, exact: true }).isEnabled(),
@@ -5866,7 +5866,7 @@ try {
         for (const label of [
           'Go to file',
           'Prepare fix',
-          ...(semantic ? ['Delete', 'Mark as fixed'] : []),
+          ...(semantic ? ['Delete', 'Mark as Done'] : []),
         ])
           assert.equal(
             await workspace.getByRole('button', { name: label, exact: true }).isDisabled(),
@@ -5907,14 +5907,17 @@ try {
       for (const [label, status] of [
         ['Delete', 'dismissed'],
         ['Reopen', 'open'],
-        ['Mark as fixed', 'fixed'],
+        ['Mark as Done', 'fixed'],
       ]) {
         await page.getByRole('button', { name: label, exact: true }).click();
         await idle(page);
-        assert.equal(await page.getByLabel('Finding state', { exact: true }).innerText(), status);
+        assert.equal(
+          await page.getByLabel('Finding state', { exact: true }).innerText(),
+          status === 'fixed' ? 'Done' : status,
+        );
       }
       assert.equal(
-        await page.getByRole('button', { name: 'Mark as fixed', exact: true }).isDisabled(),
+        await page.getByRole('button', { name: 'Mark as Done', exact: true }).isDisabled(),
         true,
       );
       const writes = await page.evaluate(() =>

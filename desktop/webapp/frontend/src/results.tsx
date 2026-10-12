@@ -42,6 +42,7 @@ interface ResultRow {
   confidence: string;
   freshness: string;
   status: string;
+  verification?: string;
   kind: string;
   insight?: M.Insight;
   text: [string, string][];
@@ -49,10 +50,12 @@ interface ResultRow {
   task?: M.TaskSpec;
   cause: string;
   solution: string;
+  target: M.FindingTarget;
 }
 function semantic(f: M.Finding): ResultRow {
   return {
     key: `semantic:${f.id}`,
+    target: { project_id: f.project_id, kind: 'semantic', id: f.id, path: f.location.path },
     title: findingTitle(f.title, f.message),
     name: findingName(f.title, f.message),
     path: f.location.path,
@@ -76,6 +79,7 @@ function semantic(f: M.Finding): ResultRow {
 function performance(report: M.PerformanceReport): ResultRow[] {
   return (report.findings || []).map((f) => ({
     key: `performance:${report.path}:${f.id}`,
+    target: { project_id: report.project_id, kind: 'performance', id: f.id, path: report.path },
     title: f.title,
     name: findingName(f.title, f.observed_pattern),
     path: report.path,
@@ -99,6 +103,13 @@ function performance(report: M.PerformanceReport): ResultRow[] {
 function security(report: M.SecurityReport): ResultRow[] {
   return (report.findings || []).map((f) => ({
     key: `security:${report.path}:${report.source}:${f.id}`,
+    target: {
+      project_id: report.project_id,
+      kind: 'security',
+      id: f.id,
+      path: f.source_anchor.path || report.path,
+      source: report.source,
+    },
     title: f.title,
     name: findingName(f.title, f.observed_condition),
     path: f.source_anchor.path || report.path,
@@ -108,6 +119,7 @@ function security(report: M.SecurityReport): ResultRow[] {
     confidence: f.confidence,
     freshness: report.status,
     status: f.verification_state || f.triage,
+    verification: f.verification_state,
     kind: report.source || 'Security finding',
     insight: f.engineering_insight,
     cause: f.observed_condition,
@@ -132,7 +144,19 @@ function resultRows(s: State, category: FindingCategory): ResultRow[] {
       ]
     : (s.findings || []).filter((f) => f.category === category).map(semantic);
   if (category === 'security' && s.securityReport) rows.push(...security(s.securityReport));
-  return [...new Map(rows.map((row) => [row.key, row])).values()];
+  return [...new Map(rows.map((row) => [row.key, row])).values()].map((row) => ({
+    ...row,
+    status: s.completedFindings?.some(
+      (target) =>
+        target.project_id === row.target.project_id &&
+        target.kind === row.target.kind &&
+        target.id === row.target.id &&
+        target.path === row.target.path &&
+        (target.source || '') === (row.target.source || ''),
+    )
+      ? 'fixed'
+      : row.status,
+  }));
 }
 export function selectedResult(s: State) {
   const selected = s.selectedFinding;
@@ -189,6 +213,7 @@ export function Results({ s }: { s: State }) {
   }, [listView.page, page]);
   const detail = s.page === 'finding' ? selectedResult(s) : undefined;
   const fixSeed = (row: ResultRow): M.ChangeSeed => ({
+    finding_targets: [row.target],
     title: row.name,
     paths: [row.path],
     kind,
@@ -228,7 +253,7 @@ export function Results({ s }: { s: State }) {
               disabled={!!s.busy || detail.status === 'fixed'}
               onClick={() => void w.triage(detail.finding!, 'fixed')}
             >
-              Mark as fixed
+              Mark as Done
             </Button>
           </div>
         )}
@@ -247,7 +272,13 @@ export function Results({ s }: { s: State }) {
             </span>
             {detail.status !== detail.freshness && (
               <span aria-label="Finding state">
-                <Badge value={detail.status} />
+                <Badge
+                  value={detail.status === 'fixed' ? 'Done' : detail.status}
+                  tone={detail.status === 'fixed' ? 'green' : undefined}
+                />
+                {detail.status === 'fixed' && detail.verification && (
+                  <Badge value={detail.verification} />
+                )}
               </span>
             )}
             <span className="results-state">
@@ -546,6 +577,7 @@ export function Results({ s }: { s: State }) {
                 </small>
               </span>
               <span className="result-badges">
+                {row.status === 'fixed' && <Badge value="Done" tone="green" />}
                 <PriorityIcon value={row.severity} />
                 <span className="results-state">
                   <StatusDot value={row.freshness} label="Freshness" />

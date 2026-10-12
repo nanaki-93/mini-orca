@@ -267,10 +267,24 @@ func TestProjectWorkspaceAPIsAreRevisionGuardedAndSourceFree(t *testing.T) {
 		t.Fatalf("overview = %d %s", overview.Code, overview.Body.String())
 	}
 
+	store, err := project.NewFindingStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	completion := project.FindingCompletion{FindingTarget: project.FindingTarget{ProjectID: index.ProjectID, Kind: "performance", ID: "slow-loop", Path: "main.go"}, CommitOID: "merged-commit"}
+	if err := store.Complete([]project.FindingCompletion{completion}); err != nil {
+		t.Fatal(err)
+	}
 	findings := httptest.NewRecorder()
 	handler.Findings(findings, httptest.NewRequest(http.MethodGet, "/api/projects/current/findings?project_revision="+index.ProjectRevision+"&confidence=suggested", nil))
 	if findings.Code != http.StatusOK || !strings.Contains(findings.Body.String(), `"findings":[]`) {
 		t.Fatalf("findings = %d %s", findings.Code, findings.Body.String())
+	}
+	var response struct {
+		Completed []project.FindingCompletion `json:"completed"`
+	}
+	if err := json.Unmarshal(findings.Body.Bytes(), &response); err != nil || len(response.Completed) != 1 || response.Completed[0] != completion {
+		t.Fatalf("finding completion response: %s, %v", findings.Body, err)
 	}
 
 	noScan := httptest.NewRecorder()

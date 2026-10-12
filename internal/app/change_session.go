@@ -36,6 +36,7 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 	}
 	now := time.Now().UTC()
 	session := &ChangeSession{SchemaVersion: 1, ID: "change-" + hex.EncodeToString(nonce[:]), ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Kind: request.Kind, Title: strings.TrimSpace(request.Title), AcceptanceCriteria: request.AcceptanceCriteria, Targets: []ChangeTarget{}, Changes: []ChangeEdit{}, Messages: []ChatSessionMessage{}, Instructions: map[string]string{}, Checks: []DraftCheck{}, State: "draft", Freshness: "current", PolicyFingerprint: policy.Version(), CreatedAt: now, UpdatedAt: now}
+	session.FindingTargets = append([]project.FindingTarget(nil), request.FindingTargets...)
 	if err := captureChangeScope(root, session, request.Paths); err != nil {
 		return nil, err
 	}
@@ -94,7 +95,7 @@ func captureChangeScope(root string, session *ChangeSession, paths []string) err
 		session.Targets = append(session.Targets, target)
 		session.Instructions[path] = instructions.Fingerprint
 	}
-	return nil
+	return validateChangeFindingTargets(session)
 }
 
 func validChangeKind(kind string) bool {

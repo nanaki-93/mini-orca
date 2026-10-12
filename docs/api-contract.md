@@ -754,6 +754,15 @@ A change creation body carries `project_id`, `project_revision`, `kind`
 but deletes and other languages are unavailable. A manual instruction proposal adds
 `content` to this body and requires exactly one AGENTS.md path. It makes no model call.
 
+Finding-driven changes also capture optional `finding_targets` (up to sixteen
+distinct entries). Each records the original `project_id`, producer `kind`
+(`semantic`, `performance`, or `security`), finding `id` and project-relative `path`
+within the captured paths. Security targets also require `source` (`ai` or
+`deterministic`); other producers omit it. These immutable references remain in
+the session and history when the task is prepared in another worktree. Existing
+schema-1 sessions without references remain readable; titles and paths alone are
+never used to infer which findings a historical commit addressed.
+
 Messages, checks, review, Apply and Undo carry `project_id`, `project_revision`,
 `revision` and `hash`; the session ID is in the route. Messages add `message`,
 `confirm_remote_provider`, optional `profile` (`analyze`, `bug`, or `function`,
@@ -991,14 +1000,28 @@ rechecks both heads and requires both worktrees clean. Merge conflicts return
 success. Resolve them using ordinary Git tools, or explicitly abort by sending
 the displayed `merge_head`; abort discards conflict-resolution edits.
 
-After a successful merge, the daemon stops the source implementation worker,
+After a successful merge, the daemon marks findings linked to applied, committed
+fix sessions Done in the original project. It captures the links before merging
+and verifies each fix commit belongs to the reviewed source HEAD. Drafts, undone
+fixes, failed commits, commits outside that history and other projects' targets
+do not complete findings. Completion is persisted before worktree removal and
+survives reindexing, stale analysis and restarts. `GET /api/projects/current/findings`
+returns these references with their `commit_oid` in `completed`, independently of
+finding filters. Semantic findings also use the existing `status: fixed`; explicit
+reopen or dismissal clears their completion. Confidence, verification and freshness
+are unchanged. The web client labels completed findings **Done** in lists and details.
+If saving completion fails, `state` remains `merged`, `warnings` explains the
+failure, and the worktree and its task history are retained. Retrying the guarded
+merge after fixing storage saves completion even if Git has already merged the HEAD.
+
+The daemon then stops the source implementation worker,
 rechecks the source identity and clean state, verifies its commit is in the current
 branch, and removes the source checkout with `git worktree remove` without force.
 The source branch is retained. Private `.mini-orca/` task history is locally
 ignored for removal and deleted with the checkout. Checkouts containing another
 registered worktree are retained. Conflicted, failed and aborted merges never
-remove the source. Successful removal returns `removed_worktree` with its absolute
-path, allowing the desktop to close the implementation and stop polling it. If
+complete findings or remove the source. Successful removal returns `removed_worktree`
+with its absolute path, allowing the desktop to close the implementation and stop polling it. If
 cleanup fails, the merge remains `state: merged` and `warnings` explains why the
 worktree remains; `removed_worktree` is omitted. No push happens automatically.
 

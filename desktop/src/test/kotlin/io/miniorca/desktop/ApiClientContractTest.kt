@@ -11,6 +11,24 @@ import kotlinx.serialization.json.Json
 
 class ApiClientContractTest {
   @Test
+  fun findingCompletionsDecodeWithoutChangingFindingEvidence() {
+    val api =
+        ApiClient(
+            transport =
+                DaemonTransport { _, _, _ ->
+                  TransportResponse(
+                      200,
+                      """{"project_id":"project","project_revision":"revision","findings":[],"completed":[{"project_id":"project","kind":"security","source":"ai","id":"risk","path":"main.go","commit_oid":"merged-commit"}]}""")
+                })
+    val response = api.findings("revision")
+    assertTrue(response.findings.isEmpty())
+    assertEquals(
+        FindingCompletion("project", "security", "risk", "main.go", "ai", "merged-commit"),
+        response.completed.single())
+    assertTrue(Json.decodeFromString<FindingsResponse>("""{"findings":[]}""").completed.isEmpty())
+  }
+
+  @Test
   fun semanticRiskTitlesDecodeWithLegacyReports() {
     for (title in listOf("", "Missing input validation")) {
       val field = if (title.isEmpty()) "" else "\"title\":\"$title\","
