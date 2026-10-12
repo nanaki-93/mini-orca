@@ -61,16 +61,17 @@ visible. The sidebar collapses to icons.
   **Context → Files & scope** manages captured file selection, exclusions and
   per-file status. **Analysis** keeps Setup and Last run together.
   Unsaved selection and setup choices survive navigation between these pages;
-  save file selections before preparing a run. Batch size, time budget, attempts and
+  save file selections before starting a run. Batch size, time budget, attempts and
   refresh options stay visible above the operation summaries. **Refresh** and
-  **Prepare analysis** sit at the top of the page. New runs default to a 1,800-second
+  **Execute analysis** sit at the top of the page. New runs default to a 1,800-second
   (30-minute) file-analysis budget per batch.
   Continuations retain the saved run's limits.
-  When a run is paused or interrupted, **Prepare continuation** on Analysis
-  starts the saved run with its captured settings and fresh admission. To use
-  new settings, cancel the saved run in **Last run**, then prepare a new analysis.
-  **Prepare analysis** starts directly, including AI Security review and feature discovery;
-  its inline note explains remote sharing. A fresh daemon preview still guards each admission.
+  When a run is paused or interrupted, **Execute analysis** in Setup or **Last run**
+  resumes it immediately with its captured settings and fresh admission. To use
+  new settings, cancel the saved run in **Last run**, then execute a new analysis.
+  **Execute analysis** starts directly without confirmation dialogs, including AI Security
+  review and feature discovery; its inline note explains remote sharing.
+  A fresh daemon preview still guards each admission.
   **Preview analysis** optionally shows captured scope, request bounds and provider destinations
   before a separately confirmed start.
   **Analyze stale files** is available only in Analysis and refreshes outdated
