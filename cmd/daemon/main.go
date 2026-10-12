@@ -124,6 +124,7 @@ func newHTTPMux(
 	projectManager *project.Manager,
 ) http.Handler {
 	current := newProjectHTTPMux(application, projectManager)
+	worktrees := &worktreeRouter{}
 	return api.LocalOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		query, err := url.ParseQuery(r.URL.RawQuery)
 		if err != nil {
@@ -152,7 +153,7 @@ func newHTTPMux(
 		query.Del("worktree_path")
 		scopedRequest := r.Clone(r.Context())
 		scopedRequest.URL.RawQuery = query.Encode()
-		newProjectHTTPMux(service, manager).ServeHTTP(w, scopedRequest)
+		worktrees.handler(service, manager).ServeHTTP(w, scopedRequest)
 	}), daemonAllowsExternalHosts())
 }
 
