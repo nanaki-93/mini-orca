@@ -132,32 +132,158 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
         /^codex\//,
       );
       await dialog.getByLabel('New branch name', { exact: true }).fill('codex/cancel-fix');
-      await dialog.getByLabel('Worktree path', { exact: true }).fill('/fixture/harbor-cancel-fix');
+      await dialog
+        .getByLabel('Worktree path', { exact: true })
+        .fill('/fixture/harbor/.worktrees/cancel-fix');
       await layout(page, 'git-prepare-worktree');
       await dialog.getByRole('button', { name: 'Create worktree & prepare', exact: true }).click();
       await page.getByRole('button', { name: 'Review next file', exact: true }).waitFor();
       await idle(page);
       const requests = await posts(page);
       const creation = requests.findIndex((r) => r.path.endsWith('/git/worktrees'));
-      const restore = requests.findIndex(
-        (r, i) => i > creation && r.path === '/api/projects/restore',
-      );
       const capture = requests.findIndex(
-        (r, i) => i > restore && r.path === '/api/projects/current/changes',
+        (r, i) => i > creation && r.path === '/api/projects/current/changes',
       );
-      assert.ok(creation >= 0 && restore > creation && capture > restore);
+      assert.ok(creation >= 0 && capture > creation);
       assert.equal(requests[creation].body.target_branch, 'codex/cancel-fix');
-      assert.equal(requests[restore].body.project_path, '/fixture/harbor-cancel-fix');
-      assert.equal(requests[capture].body.project_id, 'project-worktree');
-      assert.ok(requests.slice(restore).some((r) => r.path.endsWith('/execution-trust')));
+      assert.equal(requests[creation].body.path, '/fixture/harbor/.worktrees/cancel-fix');
+      assert.equal(requests[capture].body.project_id, 'project-worktree-codex/cancel-fix');
+      assert.equal(requests[capture].query.worktree_path, '/fixture/harbor/.worktrees/cancel-fix');
+      assert.equal(
+        requests.slice(creation).some((r) => r.path === '/api/projects/restore'),
+        false,
+      );
+      assert.equal(
+        await page.evaluate(() => localStorage.getItem('mini-orca:last-project')),
+        '/fixture/harbor',
+      );
       await page
         .getByRole('button', {
-          name: 'Current branch: codex/cancel-fix. Open Git / Worktrees',
+          name: 'Current branch: main. Open Git / Worktrees',
           exact: true,
         })
         .waitFor();
     } finally {
       await close();
+    }
+  });
+  await test('Git worktrees keep parallel implementations separate through cancel and Apply', async () => {
+    const { page, close } = await pageFor({ git: true, workflowRunning: true });
+    try {
+      for (const name of ['first', 'second']) {
+        const dialog = await prepare(page);
+        await dialog.getByRole('radio', { name: 'New Git worktree', exact: true }).check();
+        assert.match(
+          await dialog.getByLabel('Worktree path', { exact: true }).inputValue(),
+          /^\/fixture\/harbor\/\.worktrees\//,
+        );
+        await dialog.getByLabel('New branch name', { exact: true }).fill(`codex/${name}`);
+        await dialog
+          .getByLabel('Worktree path', { exact: true })
+          .fill(`/fixture/harbor/.worktrees/${name}`);
+        await dialog
+          .getByRole('button', { name: 'Create worktree & prepare', exact: true })
+          .click();
+        await page.getByRole('button', { name: 'Cancel workflow', exact: true }).waitFor();
+        await idle(page);
+      }
+      const running = await page.evaluate(() =>
+        Object.values(window.fixture.worktreeStates).map(
+          (state) => Object.values(state.changes)[0].workflow.status,
+        ),
+      );
+      assert.deepEqual(running, ['running', 'running']);
+      await page.getByRole('button', { name: 'Cancel workflow', exact: true }).click();
+      await idle(page);
+      assert.deepEqual(
+        await page.evaluate(() =>
+          Object.values(window.fixture.worktreeStates).map(
+            (state) => Object.values(state.changes)[0].workflow.status,
+          ),
+        ),
+        ['running', 'canceled'],
+      );
+      await page.getByRole('button', { name: 'All implementations', exact: true }).click();
+      await page.getByRole('button', { name: 'View implementation', exact: true }).first().click();
+      await page.evaluate(() =>
+        window.fixture.worktreeStates['/fixture/harbor/.worktrees/first'].completeWorkflow(),
+      );
+      await page.getByRole('button', { name: 'Review next file', exact: true }).waitFor();
+      await page.setViewportSize({ width: 900, height: 640 });
+      await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+      await layout(page, 'parallel-worktree-review-large-text');
+      const commit = await review(page);
+      await commit.getByRole('button', { name: 'Apply & Commit', exact: true }).click();
+      await page.getByText(/Committed .* on codex\/first/).waitFor();
+      const mutations = (await posts(page)).filter((r) => /\/(review|apply)$/.test(r.path));
+      assert.equal(mutations.length, 2);
+      assert.ok(
+        mutations.every((r) => r.query.worktree_path === '/fixture/harbor/.worktrees/first'),
+      );
+      await page
+        .getByRole('button', { name: 'Current branch: main. Open Git / Worktrees', exact: true })
+        .waitFor();
+      assert.equal(await page.evaluate(() => window.fixture.state.changeReceipt), null);
+      assert.equal(
+        await page.evaluate(
+          () => window.fixture.worktreeStates['/fixture/harbor/.worktrees/second'].changeReceipt,
+        ),
+        null,
+      );
+    } finally {
+      await close();
+    }
+  });
+  await test('Git feature conversations choose isolated worktrees and preserve test options', async () => {
+    for (const markdown of [false, true]) {
+      const { page, close } = await pageFor({ git: true });
+      try {
+        await nav(page, 'Chat');
+        await page
+          .getByLabel('Files to change', { exact: true })
+          .fill(markdown ? 'README.md' : 'internal/feature.go\ninternal/feature_test.go');
+        await page
+          .getByLabel('Change request', { exact: true })
+          .fill('Implement the requested feature in this captured scope.');
+        if (markdown)
+          await page
+            .getByRole('checkbox', { name: 'Run project tests after generation', exact: true })
+            .uncheck();
+        const before = (await posts(page)).length;
+        await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
+        const dialog = page.getByRole('dialog', { name: 'Prepare feature workspace', exact: true });
+        await dialog.waitFor();
+        await idle(page);
+        assert.equal((await posts(page)).length, before);
+        await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+        assert.equal((await posts(page)).length, before);
+        await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
+        await dialog.getByRole('radio', { name: 'New Git worktree', exact: true }).check();
+        await dialog.getByLabel('New branch name', { exact: true }).fill('codex/feature');
+        await dialog
+          .getByLabel('Worktree path', { exact: true })
+          .fill('/fixture/harbor/.worktrees/feature');
+        await dialog
+          .getByRole('button', { name: 'Create worktree & prepare', exact: true })
+          .click();
+        await page.waitForFunction(
+          (suffix) => window.fixture.requests.some((r) => r.path.endsWith(suffix)),
+          markdown ? '/checks' : '/workflow',
+        );
+        await idle(page);
+        const requests = await posts(page);
+        const capture = requests.findLast((r) => r.path === '/api/projects/current/changes');
+        assert.equal(capture.body.kind, 'feature');
+        assert.equal(capture.query.worktree_path, '/fixture/harbor/.worktrees/feature');
+        if (markdown)
+          assert.equal(requests.findLast((r) => r.path.endsWith('/checks')).body.run_tests, false);
+        await page
+          .getByRole('button', { name: 'Current branch: main. Open Git / Worktrees', exact: true })
+          .waitFor();
+        assert.equal(await page.getByRole('alert').count(), 0);
+      } finally {
+        await close();
+      }
     }
   });
   await test('Git branch switch requires confirmation and refreshes the sidebar', async () => {
@@ -179,6 +305,33 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
           exact: true,
         })
         .waitFor();
+    } finally {
+      await close();
+    }
+  });
+  await test('Git can reopen main in its existing checkout without switching a checked-out branch', async () => {
+    const { page, close } = await pageFor({ git: true, gitBranch: 'codex/fix' });
+    try {
+      await page.evaluate(() => {
+        window.fixture.state.gitWorktrees[1].branch = 'main';
+        window.fixture.state.gitWorktrees[1].path = '/fixture/main';
+      });
+      await nav(page, 'Git / Worktrees');
+      const tree = page
+        .locator('.git-worktree')
+        .filter({ has: page.getByRole('heading', { name: 'main', exact: true }) });
+      await tree.getByRole('button', { name: 'Open project here', exact: true }).click();
+      await idle(page);
+      await page
+        .getByRole('button', { name: 'Current branch: main. Open Git / Worktrees', exact: true })
+        .waitFor();
+      const requests = await posts(page);
+      assert.equal(requests.at(-1).path, '/api/projects/restore');
+      assert.equal(requests.at(-1).body.project_path, '/fixture/main');
+      assert.equal(
+        requests.some((r) => r.path.endsWith('/git/switch')),
+        false,
+      );
     } finally {
       await close();
     }

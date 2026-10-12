@@ -1,7 +1,8 @@
+import { useWorkspace } from './workspace-context';
 import { CommitDialog } from './git-controls';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ChangeSession, ChangeSeed } from './models';
-import { workspace as w, activeChangeWorkflow, canAcceptChange, type State } from './workspace';
+import { activeChangeWorkflow, canAcceptChange, type State } from './workspace';
 import { WorkflowProgress } from './change-workflow';
 import { ChangeChecks, ChangeOutcome, ProposalDiff } from './change-shared';
 import { FixPreparation } from './fix-preparation';
@@ -69,6 +70,7 @@ export function FixHeading({
 }
 
 export function FixWorkspace({ s }: { s: State }) {
+  const w = useWorkspace();
   const change = s.change;
   const finding = s.changeSeed?.finding;
   const kind = change?.kind || s.changeSeed?.kind || 'fix';
@@ -254,6 +256,7 @@ export function ProposalReview({
   details: ReactNode;
   tests?: boolean;
 }) {
+  const w = useWorkspace();
   const [tab, setTab] = useState('changes');
   const [committing, setCommitting] = useState(false);
   const [path, setPath] = useState(change.changes[0].path);

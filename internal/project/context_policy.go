@@ -8,10 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
-const contextPolicyVersion = "2"
+const contextPolicyVersion = "3"
 
 // ContextDecision explains whether a project file may enter an LLM prompt.
 type ContextDecision struct {
@@ -97,6 +98,9 @@ func (p *ContextPolicy) Decide(relative string) ContextDecision {
 	}
 	if path == ".mini-orca" || strings.HasPrefix(path, ".mini-orca/") {
 		return ContextDecision{Path: path, Reason: "Mini-Orca metadata"}
+	}
+	if slices.Contains(strings.Split(path, "/"), ".worktrees") {
+		return ContextDecision{Path: path, Reason: "isolated worktrees"}
 	}
 	if info, err := os.Lstat(filepath.Join(p.root, filepath.FromSlash(path))); err == nil && info.Mode()&os.ModeSymlink != 0 {
 		return ContextDecision{Path: path, Reason: "symlink is excluded from model context"}

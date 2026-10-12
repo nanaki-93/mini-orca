@@ -67,6 +67,9 @@ func (s *Service) CreateGitWorktree(ctx context.Context, request GitMutationRequ
 	if err != nil {
 		return nil, err
 	}
+	if err := prepareWorktreeDirectory(ctx, repository.Root); err != nil {
+		return nil, err
+	}
 	_, err = gitRead(ctx, repository.Root, "worktree", "add", "--no-track", "-b", request.TargetBranch, "--", path, repository.Head)
 	result := &GitMutationResult{State: "created", Path: path, Repository: repository, Warnings: []string{}}
 	if err != nil {
@@ -105,35 +108,101 @@ func validateNewWorktreePath(ctx context.Context, root, path string) (string, er
 		return "", fmt.Errorf("choose an absolute path for the new worktree")
 	}
 	path = filepath.Clean(path)
+	parent := filepath.Join(root, ".worktrees")
+	if filepath.Dir(path) != parent {
+		return "", fmt.Errorf("create the worktree directly inside %s", parent)
+	}
 	if _, err := os.Lstat(path); !os.IsNotExist(err) {
 		return "", fmt.Errorf("worktree path must not already exist")
 	}
-	parent, err := project.CanonicalRoot(filepath.Dir(path))
-	if err != nil {
-		return "", fmt.Errorf("worktree parent directory must exist: %w", err)
-	}
-	path = filepath.Join(parent, filepath.Base(path))
-	trees, err := readGitWorktrees(ctx, root)
-	if err != nil {
+	if info, err := os.Lstat(parent); err == nil {
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf(".worktrees must be a directory, not a symlink")
+		}
+	} else if !os.IsNotExist(err) {
 		return "", err
 	}
+	if err := validateWorktreeOverlap(ctx, root, path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func validateWorktreeOverlap(ctx context.Context, root, path string) error {
+	trees, err := readGitWorktrees(ctx, root)
+	if err != nil {
+		return err
+	}
 	for _, tree := range trees {
+		if tree.Current {
+			continue // The dedicated .worktrees directory belongs to this checkout.
+		}
 		canonical, err := filepath.EvalSymlinks(tree.Path)
 		if os.IsNotExist(err) {
 			continue
 		}
 		if err != nil {
-			return "", err
+			return err
 		}
 		relative, err := filepath.Rel(canonical, path)
 		if err != nil {
-			return "", err
+			return err
 		}
 		if relative == "." || relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("create the worktree outside existing worktrees")
+			// A selected checkout may itself live in an ancestor's ignored
+			// .worktrees directory. Its own .worktrees remains isolated too.
+			selected, err := filepath.Rel(canonical, root)
+			if err == nil && strings.HasPrefix(selected, ".worktrees"+string(filepath.Separator)) {
+				continue
+			}
+			return fmt.Errorf("create the worktree outside existing worktrees")
 		}
 	}
-	return path, nil
+	return nil
+}
+
+func prepareWorktreeDirectory(ctx context.Context, root string) error {
+	common, err := gitRead(ctx, root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return err
+	}
+	exclude := filepath.Join(strings.TrimSpace(common), "info", "exclude")
+	if info, err := os.Lstat(filepath.Dir(exclude)); err == nil {
+		if !info.IsDir() {
+			return fmt.Errorf("git info must be a directory, not a symlink")
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if info, err := os.Lstat(exclude); err == nil {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("git info/exclude must be a regular file")
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	data, err := os.ReadFile(exclude)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if !strings.Contains("\n"+string(data)+"\n", "\n/.worktrees/\n") {
+		if err := os.MkdirAll(filepath.Dir(exclude), 0755); err != nil {
+			return err
+		}
+		file, err := os.OpenFile(exclude, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+		if err != nil {
+			return err
+		}
+		_, writeErr := file.WriteString("\n/.worktrees/\n")
+		closeErr := file.Close()
+		if writeErr != nil {
+			return writeErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+	}
+	return os.MkdirAll(filepath.Join(root, ".worktrees"), 0755)
 }
 
 func (s *Service) SwitchGitBranch(ctx context.Context, request GitMutationRequest) (*GitMutationResult, error) {

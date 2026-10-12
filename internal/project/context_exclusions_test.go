@@ -31,3 +31,21 @@ func TestProjectContextHonorsExplicitAnalysisExclusions(t *testing.T) {
 		t.Fatal("explicitly excluded target sent as context")
 	}
 }
+
+func TestWorktreeSourcesCannotEnterContextThroughExplicitIncludes(t *testing.T) {
+	root := t.TempDir()
+	writeSourceWalkFixture(t, root, "main.go", "package main\n")
+	writeSourceWalkFixture(t, root, ".worktrees/fix/duplicate.go", "package duplicate\n")
+	writeSourceWalkFixture(t, root, ".mini-orca/context-policy.json", `{"include":["**"]}`)
+	policy, err := NewContextPolicy(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if policy.Decide(".worktrees/fix/duplicate.go").Include {
+		t.Fatal("explicit include admitted a nested worktree")
+	}
+	text, _, err := NewContextBuilder().BuildWithExcludedFiles(root, "", nil)
+	if err != nil || strings.Contains(text, "duplicate") {
+		t.Fatalf("nested source reached context: %s, %v", text, err)
+	}
+}

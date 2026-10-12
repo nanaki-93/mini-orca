@@ -140,6 +140,9 @@ func (s *Service) RestoreActiveProject(root string, analysis *project.Analysis) 
 func (s *Service) replaceActiveProject(activate func() error) error {
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()
+	if err := s.closeWorktreeServices(); err != nil {
+		return err
+	}
 	s.invalidateJobsForProjectChange()
 	return activate()
 }

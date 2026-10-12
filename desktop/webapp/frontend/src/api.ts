@@ -46,7 +46,11 @@ export function query(values: object): string {
 }
 export class API {
   private pending = new Map<string, { bridge: NativeBridge; reject: () => void }>();
+  constructor(private worktreePath?: string) {}
   async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    if (this.worktreePath && (path === current || path.startsWith(`${current}/`))) {
+      path += `${path.includes('?') ? '&' : '?'}worktree_path=${encodeURIComponent(this.worktreePath)}`;
+    }
     const id = crypto.randomUUID();
     const bridge = native();
     const canceled = new Promise<never>((_, reject) =>

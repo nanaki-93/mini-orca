@@ -22,7 +22,18 @@ tags:
   - name: Chat
   - name: Drafts
 paths:
+  /api/projects/current:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+    get:
+      tags: [Projects]
+      summary: Read the selected project without changing the active project
+      responses:
+        '200': {description: Project summary, content: {application/json: {schema: {$ref: '#/components/schemas/ProjectAnalysis'}}}}
+        '400': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Chat]
       description: List bounded local conversation summaries without generation or source contents.
@@ -42,6 +53,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/recovery:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Chat]
       description: Read the latest grouped mutation or interrupted recovery journal.
@@ -54,6 +67,7 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}:
     parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
       - {in: path, name: sessionID, required: true, schema: {type: string}}
     get:
       tags: [Chat]
@@ -67,6 +81,7 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/resume:
     parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
       - {in: path, name: sessionID, required: true, schema: {type: string}}
     post:
       tags: [Chat]
@@ -78,6 +93,7 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/messages:
     parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
       - {in: path, name: sessionID, required: true, schema: {type: string}}
     post:
       tags: [Chat]
@@ -89,6 +105,7 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/checks:
     parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
       - {in: path, name: sessionID, required: true, schema: {type: string}}
     post:
       tags: [Chat]
@@ -100,6 +117,7 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/workflow:
     parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
       - {in: path, name: sessionID, required: true, schema: {type: string}}
     post:
       tags: [Chat]
@@ -111,6 +129,7 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/workflow/cancel:
     parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
       - {in: path, name: sessionID, required: true, schema: {type: string}}
     post:
       tags: [Chat]
@@ -122,6 +141,7 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/review:
     parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
       - {in: path, name: sessionID, required: true, schema: {type: string}}
     post:
       tags: [Chat]
@@ -133,6 +153,7 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/apply:
     parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
       - {in: path, name: sessionID, required: true, schema: {type: string}}
     post:
       tags: [Chat]
@@ -144,6 +165,7 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/commit:
     parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
       - {in: path, name: sessionID, required: true, schema: {type: string}}
     post:
       tags: [Chat]
@@ -154,6 +176,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/git/workspace:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       description: List local branches and worktrees, including their completed committed fixes and per-worktree errors.
@@ -165,15 +189,19 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/git/worktrees:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
-      description: Create a new branch and worktree at an unused absolute path; does not activate it.
+      description: Create a new branch and worktree at an unused absolute path directly inside the project's .worktrees directory; creates and locally ignores that directory without activating the worktree.
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationRequest'}}}}
       responses:
         '200': {description: Observed Git outcome, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/git/switch:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
       description: Switch to an existing local branch with a clean working tree.
@@ -183,6 +211,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/git/merge-preview:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
       description: Preview incoming commits and a read-only diff without running filters or merging.
@@ -192,6 +222,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/git/merge:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
       description: Merge the reviewed committed worktree head into the current clean branch.
@@ -201,6 +233,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/git/abort-merge:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
       description: Abort the identified merge, discarding conflict-resolution edits.
@@ -210,6 +244,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/git/repository:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       description: Read repository identity and working-tree state without executing project code.
@@ -222,6 +258,7 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/undo:
     parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
       - {in: path, name: sessionID, required: true, schema: {type: string}}
     post:
       tags: [Chat]
@@ -233,6 +270,7 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/changes/{sessionID}/verify:
     parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
       - {in: path, name: sessionID, required: true, schema: {type: string}}
     post:
       tags: [Chat]
@@ -243,6 +281,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/instructions:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Chat]
       description: Preview applicable AGENTS.md content, origins and instruction presets.
@@ -255,6 +295,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/instructions/proposal:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Chat]
       description: Prepare an AGENTS.md proposal without a provider or source write.
@@ -264,6 +306,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/features:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Chat]
       description: Read saved goals and advisory feature suggestions.
@@ -275,6 +319,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/features/goals:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Chat]
       description: Save goals; ideas generated for other goals become stale and are kept.
@@ -284,6 +330,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/features/generate:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Chat]
       description: Explicitly add new bounded feature ideas with Analyze consent, keeping existing ideas and their statuses.
@@ -294,6 +342,7 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/features/{featureID}:
     parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
       - {in: path, name: featureID, required: true, schema: {type: string}}
     patch:
       tags: [Chat]
@@ -304,6 +353,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/analysis/selection:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       description: Read project inventory and saved exclusions without dispatching analysis.
@@ -327,6 +378,8 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
         '500': {$ref: '#/components/responses/Error'}
   /api/projects/current/analysis/preview:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisPreviewRequest'}}}}
@@ -337,6 +390,8 @@ paths:
         '500': {$ref: '#/components/responses/Error'}
         '200': {description: Whole-project admission preview, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRunPreview'}}}}
   /api/projects/current/analysis/run:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       parameters:
@@ -360,6 +415,8 @@ paths:
         '500': {$ref: '#/components/responses/Error'}
         '202': {description: Durably admitted run, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRun'}}}}
   /api/projects/current/analysis/run/control:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRunControlRequest'}}}}
@@ -370,6 +427,8 @@ paths:
         '500': {$ref: '#/components/responses/Error'}
         '200': {description: Updated control state, content: {application/json: {schema: {$ref: '#/components/schemas/AnalysisRun'}}}}
   /api/projects/current/analysis/results:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       parameters:
@@ -410,6 +469,8 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Status'}
   /api/projects/current/chat/sessions:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Chat]
       summary: Open a conversation pinned to one file, declaration, and optional reviewed task
@@ -421,6 +482,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/chat/sessions/{sessionID}/messages:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Chat]
       summary: Request a declaration proposal in an existing session
@@ -492,6 +555,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '500': {$ref: '#/components/responses/Error'}
   /api/projects/current/overview:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       summary: Source-free project workspace overview
@@ -502,6 +567,8 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/findings:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       summary: List source-free verified findings and AI suggestions
@@ -528,6 +595,8 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/findings/{findingID}:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     patch:
       tags: [Projects]
       summary: Update a finding's user triage status
@@ -545,6 +614,8 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/scan:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       summary: Read explicit Go scan progress from a temporary copied workspace
@@ -577,6 +648,8 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/execution-trust:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       summary: Read the current project's trusted local execution scope
@@ -604,6 +677,8 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/index:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       summary: Deterministic active-project index
@@ -615,6 +690,8 @@ paths:
               schema: {$ref: '#/components/schemas/ProjectIndex'}
         '404': {$ref: '#/components/responses/Error'}
   /api/projects/current/files/info:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       summary: Selected file information
@@ -628,6 +705,8 @@ paths:
               schema: {$ref: '#/components/schemas/FileInfo'}
         '400': {$ref: '#/components/responses/Error'}
   /api/projects/current/files/symbols:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       summary: Atomic targets in one selected file
@@ -645,6 +724,8 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
   /api/projects/current/impact:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       summary: Advisory index-based impact preview for one selected file or symbol
@@ -661,6 +742,8 @@ paths:
               schema: {type: object}
         '400': {$ref: '#/components/responses/Error'}
   /api/projects/current/git:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       summary: Read-only Git status for one selected file
@@ -674,6 +757,8 @@ paths:
               schema: {type: object}
         '400': {$ref: '#/components/responses/Error'}
   /api/projects/current/files/analysis:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       summary: Cached semantic analysis for one selected file
@@ -697,6 +782,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/files/security-scan:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Security]
       summary: Scan exactly one eligible Go file with deterministic source-only security rules
@@ -711,6 +798,8 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
   /api/projects/current/files/explanation:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
       summary: Explain one exact indexed Go declaration without creating workflow state
@@ -727,6 +816,8 @@ paths:
         '422': {$ref: '#/components/responses/Error'}
         '504': {$ref: '#/components/responses/Error'}
   /api/projects/current/security-review:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Security]
       summary: Perform one explicit passive AI security review of one selected file
@@ -743,6 +834,8 @@ paths:
         '422': {$ref: '#/components/responses/Error'}
         '504': {$ref: '#/components/responses/Error'}
   /api/projects/current/analysis-job:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       summary: Sequential semantic-analysis job progress
@@ -764,6 +857,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/analysis-job/pause:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
       summary: Pause after the current one-file analysis
@@ -774,6 +869,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/analysis-job/resume:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
       summary: Resume a persisted paused job
@@ -785,6 +882,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/analysis-job/cancel:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
       summary: Cancel the active sequential analysis job
@@ -795,6 +894,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/performance:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Performance]
       summary: Read cached source-based performance review coverage and findings
@@ -806,6 +907,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/performance/context:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Performance]
       summary: Preview a policy-filtered bounded performance queue without provider work
@@ -818,6 +921,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/performance-job:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Performance]
       summary: Read persisted bounded performance-review progress
@@ -839,6 +944,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/performance-job/pause:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Performance]
       summary: Pause a performance review after its active file finishes
@@ -850,6 +957,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/performance-job/resume:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Performance]
       summary: Resume a compatible paused performance job with fresh provider confirmation
@@ -861,6 +970,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/performance-job/cancel:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Performance]
       summary: Cancel active or pending performance review work
@@ -872,6 +983,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/reindex:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
       summary: Refresh deterministic project facts
@@ -890,6 +1003,8 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/drafts/{draftID}:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     patch:
       tags: [Drafts]
       summary: Create the next draft revision from a declaration/import edit
@@ -903,6 +1018,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/drafts/{draftID}/validate:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Drafts]
       summary: Compose and validate one exact declaration draft revision
@@ -916,6 +1033,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/drafts/{draftID}/checks:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Drafts]
       summary: Run focused checks for one validated declaration revision
@@ -929,6 +1048,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/drafts/{draftID}/benchmarks:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Performance]
       summary: List selectable existing Go benchmarks for one validated draft
@@ -954,6 +1075,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/apply:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Drafts]
       summary: Explicitly apply one validated and checked declaration draft
@@ -965,6 +1088,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/undo:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Drafts]
       summary: Undo the immediately preceding unchanged apply
@@ -976,6 +1101,8 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/context:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
       summary: Preview bounded model context
@@ -990,6 +1117,12 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
 components:
   parameters:
+    WorktreePath:
+      in: query
+      name: worktree_path
+      required: false
+      description: Optional absolute path of another registered worktree in the active repository. Requests use that checkout's project identity, jobs, trust and proposal guards without changing the active project. Membership is rechecked on every request.
+      schema: {type: string}
     SessionID:
       name: sessionID
       in: path
@@ -2652,7 +2785,7 @@ components:
             confirm: {type: boolean, description: Required true for mutations}
             confirm_execution: {type: boolean, description: Required true for mutations in addition to current project execution trust}
             target_branch: {type: string, description: New branch for worktrees; existing local branch for switch}
-            path: {type: string, description: Absolute new worktree path or selected merge source path}
+            path: {type: string, description: Absolute new path directly inside the project .worktrees directory or selected merge source path}
             source_head: {type: string, description: Reviewed source worktree HEAD for merge and preview}
             merge_head: {type: string, description: Identified MERGE_HEAD for abort}
     GitMutationResult:

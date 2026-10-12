@@ -61,6 +61,15 @@ func (s *Service) CancelChangeWorkflows() {
 // ShutdownChangeWorkflows waits for process/workspace cleanup after revoking
 // the worker. Lifecycle mutations use cancellation alone to avoid lock waits.
 func (s *Service) ShutdownChangeWorkflows(ctx context.Context) error {
+	children := s.worktreeServices()
+	for _, child := range children {
+		child.CancelChangeWorkflows()
+	}
+	for _, child := range children {
+		if err := child.ShutdownChangeWorkflows(ctx); err != nil {
+			return err
+		}
+	}
 	s.changeWorkflow.mu.Lock()
 	job := s.changeWorkflow.job
 	if job != nil {

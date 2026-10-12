@@ -122,7 +122,36 @@ func newHTTPMux(
 	application *app.Service,
 	projectManager *project.Manager,
 ) http.Handler {
+	current := newProjectHTTPMux(application, projectManager)
+	return api.LocalOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Query().Get("worktree_path")
+		if path == "" {
+			current.ServeHTTP(w, r)
+			return
+		}
+		if r.URL.Path != "/api/projects/current" && !strings.HasPrefix(r.URL.Path, "/api/projects/current/") {
+			api.WriteError(w, http.StatusBadRequest, "worktree scope requires a project endpoint")
+			return
+		}
+		service, manager, err := application.WorktreeService(r.Context(), path)
+		if err != nil {
+			api.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		newProjectHTTPMux(service, manager).ServeHTTP(w, r)
+	}), daemonAllowsExternalHosts())
+}
+
+func newProjectHTTPMux(application *app.Service, projectManager *project.Manager) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/projects/current", func(w http.ResponseWriter, r *http.Request) {
+		analysis, err := projectManager.Analysis()
+		if err != nil {
+			api.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		api.WriteJSON(w, http.StatusOK, analysis)
+	})
 
 	// Health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -233,7 +262,7 @@ func newHTTPMux(
 	mux.HandleFunc("POST /api/projects/current/apply", draftHandler.Apply)
 	mux.HandleFunc("POST /api/projects/current/undo", draftHandler.Undo)
 
-	return api.LocalOnly(mux, daemonAllowsExternalHosts())
+	return mux
 }
 
 func daemonAllowsExternalHosts() bool {

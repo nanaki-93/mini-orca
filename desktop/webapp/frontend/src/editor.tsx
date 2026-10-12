@@ -1,5 +1,6 @@
+import { useWorkspace } from './workspace-context';
 import { useEffect, useRef, useState } from 'react';
-import { activeChangeWorkflow, workspace as w, type State } from './workspace';
+import { activeChangeWorkflow, type State } from './workspace';
 import {
   Badge,
   Button,
@@ -28,6 +29,7 @@ function FileTree({
   busy: boolean;
   depth?: number;
 }) {
+  const w = useWorkspace();
   const folders = new Map<string, string[]>();
   const leaves: string[] = [];
   for (const path of paths) {
@@ -66,6 +68,7 @@ function FileTree({
   );
 }
 export function Editor({ s }: { s: State }) {
+  const w = useWorkspace();
   const [filter, setFilter] = useState('');
   const [limit, setLimit] = useState(100);
   const [opened, setOpened] = useState<string[]>(s.file ? [s.file.path] : []);
@@ -165,6 +168,7 @@ export function Editor({ s }: { s: State }) {
   );
 }
 function DeclarationPicker({ s }: { s: State }) {
+  const w = useWorkspace();
   return (
     <div className="row wrap declaration-picker">
       <label className="sr-only" htmlFor="symbol-picker">
@@ -193,6 +197,7 @@ function DeclarationPicker({ s }: { s: State }) {
   );
 }
 function Source({ s }: { s: State }) {
+  const w = useWorkspace();
   const code = useRef<HTMLPreElement>(null);
   const [prompt, setPrompt] = useState('');
   const symbol = s.symbols.find((value) => value.name === s.symbol);
@@ -400,6 +405,7 @@ function Source({ s }: { s: State }) {
   );
 }
 export function Context({ s }: { s: State }) {
+  const w = useWorkspace();
   const context = s.context;
   if (!context)
     return (

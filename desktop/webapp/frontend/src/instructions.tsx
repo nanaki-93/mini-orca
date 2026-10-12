@@ -1,5 +1,6 @@
+import { useWorkspace } from './workspace-context';
 import { useEffect, useState } from 'react';
-import { workspace as w, type State } from './workspace';
+import { type State } from './workspace';
 import { Badge, Button, Disclosure, Heading, Notice, Panel, Prose } from './ui';
 import type { InstructionPreview } from './models';
 
@@ -44,6 +45,7 @@ function insertGuidelineSection(content: string, category: string, additions: st
 }
 
 export function Instructions({ s }: { s: State }) {
+  const w = useWorkspace();
   const preview = s.instructionPreview;
   const [path, setPath] = useState(preview?.path || 'AGENTS.md');
   const [content, setContent] = useState(preview?.existing_content || '');

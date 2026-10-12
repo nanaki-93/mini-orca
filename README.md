@@ -9,7 +9,8 @@ The Wails/React desktop client talks to a Go daemon through a native bridge.
 1. Open a local project and inspect its summary, files and symbols.
 2. Choose your file scope in **Context → Files & scope**, then select **Prepare analysis**
    in Analysis. Assign Bug, Performance, Security and feature models on **Models**.
-   Review the inventory, request bounds and model destinations, then confirm the displayed run.
+   The button starts immediately with the selected models and scope. Use **Preview analysis**
+   to inspect request bounds and destinations before starting instead.
    Analysis also checks for new feature suggestions using saved project goals.
    Overview links category counts to Findings and Features.
 3. Use **Prepare fix** on a finding, or describe a feature in **Chat** with up to

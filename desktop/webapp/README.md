@@ -67,10 +67,12 @@ visible. The sidebar collapses to icons.
   (30-minute) file-analysis budget per batch.
   Continuations retain the saved run's limits.
   When a run is paused or interrupted, **Prepare continuation** on Analysis
-  prepares the saved run with its captured settings and fresh consent. To use
+  starts the saved run with its captured settings and fresh admission. To use
   new settings, cancel the saved run in **Last run**, then prepare a new analysis.
-  Preparing a run opens a preview dialog with captured scope and provider destinations. Starting it still
-  confirms remote-provider sharing and Security review for that admission.
+  **Prepare analysis** starts directly, including AI Security review and feature discovery;
+  its inline note explains remote sharing. A fresh daemon preview still guards each admission.
+  **Preview analysis** optionally shows captured scope, request bounds and provider destinations
+  before a separately confirmed start.
   **Analyze stale files** is available only in Analysis and refreshes outdated
   files while preserving unchanged results and the saved file selection.
   **Last run** focuses on current progress and pause, continue or cancel controls.
@@ -109,10 +111,16 @@ visible. The sidebar collapses to icons.
   level; sharing destinations stay in consent previews.
   A short note beside **Prepare fix** identifies remote sharing and isolated checks.
   **Refresh preparation** appears when loading fails or a selected model is unavailable.
-  In a Git repository, **Prepare fix** opens workspace selection: use the current
-  branch or create a worktree with an editable branch name and absolute path.
+  In a Git repository, **Prepare fix** opens workspace selection. **Generate changes**
+  in a new feature conversation offers the same choice, preserving its selected file
+  scope and test option. Use the current branch or create a worktree with an editable
+  branch name and a path inside the target
+  project's **.worktrees/** folder (created automatically and locally ignored by Git).
   Creation starts from the displayed commit; uncommitted files stay in the original
-  workspace. It then opens the worktree and captures a fresh fix there. The final
+  workspace. The app keeps that project and branch selected, with its terminals open.
+  Each worktree captures its own proposal, permissions and checks, so implementations
+  can run concurrently. **Changes → Worktree implementations** reopens each task;
+  Review, Apply, Commit and Undo affect only that task's checkout. The final
   preparation action authorizes generation, isolated checks, remote sharing and
   Security intent when applicable. Changed destinations
   or project revisions require fresh preparation.
@@ -144,7 +152,11 @@ visible. The sidebar collapses to icons.
   The branch switcher lists local branches and identifies those checked out in
   other worktrees. Switch and merge require clean working trees, explicit execution
   trust, and confirmation; active terminals close and prepared evidence is cleared.
-  Worktrees list their completed committed fixes. **Merge into Current Branch**
+  Worktrees list their completed committed fixes. **View implementations** opens their
+  saved tasks without changing the selected project. **Open project here** explicitly
+  opens an existing checkout, including the checkout that already holds `main`; this
+  project switch stops the previous project's implementation workers.
+  **Merge into Current Branch**
   first shows incoming commits and a read-only diff. Conflicts remain visible with
   their paths and an **Abort merge** action; abort discards conflict resolutions.
   There is no separate new-workflow sidebar action: creation starts at **Prepare fix**.

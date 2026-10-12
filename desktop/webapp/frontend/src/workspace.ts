@@ -8,6 +8,7 @@ export type Page =
   | 'changes'
   | 'history'
   | 'git'
+  | 'worktree'
   | 'welcome'
   | 'summary'
   | 'project'
@@ -48,6 +49,8 @@ export interface FixPreparationContext {
   repository: M.GitRepository;
 }
 export interface State {
+  implementations: Workspace[];
+  implementation?: Workspace;
   page: Page;
   busy: string;
   error: string;
@@ -130,6 +133,7 @@ export function analysisSetupModels(s: State): AnalysisAssignments {
 const changePage = (kind: string): Page =>
   ['fix', 'performance', 'security'].includes(kind) ? 'changes' : 'chat';
 const initial = (): State => ({
+  implementations: [],
   page: 'welcome',
   busy: '',
   error: '',
@@ -212,7 +216,13 @@ export function workflowReviewable(change: M.ChangeSession) {
 export class Workspace {
   state = initial();
   private listeners = new Set<() => void>();
-  private api = new API();
+  private api: API;
+  constructor(
+    readonly worktreePath?: string,
+    private parent?: Workspace,
+  ) {
+    this.api = new API(worktreePath);
+  }
   private epoch = 0;
   private fileEpoch = 0;
   private operation = 0;
@@ -278,6 +288,10 @@ export class Workspace {
     this.schedule();
   }
   stop() {
+    this.epoch++;
+    this.operation++;
+    this.fileEpoch++;
+    for (const child of this.state.implementations) child.stop();
     this.stopped = true;
     clearTimeout(this.timer);
     this.respond(false);
@@ -370,6 +384,7 @@ export class Workspace {
       );
       this.epoch++;
       this.fileEpoch++;
+      for (const child of this.state.implementations) child.stop();
       this.state = {
         ...initial(),
         connected: true,
@@ -544,9 +559,11 @@ export class Workspace {
     preparation: FixPreparationContext,
     branch: string,
     path: string,
+    tests = true,
   ) {
     let created: string | undefined;
     const originalProject = projectKey(this.state.project);
+    const originalEpoch = this.epoch;
     await this.act('Create worktree', async () => {
       const epoch = this.epoch;
       const profiles = seed.paths.some((path) => path.endsWith('_test.go'))
@@ -576,12 +593,12 @@ export class Workspace {
       created = result.path;
     });
     if (!created || projectKey(this.state.project) !== originalProject || this.state.busy) return;
-    await this.openProject(created, false);
-    if (this.state.project?.path !== created || this.state.error || this.state.busy) return;
-    this.seedChange(seed);
+    const child = await this.openWorktree(created);
+    if (!child || projectKey(this.state.project) !== originalProject) return;
+    child.seedChange(seed);
     let fresh: FixPreparationContext;
     try {
-      fresh = await this.readFixPreparation();
+      fresh = await child.readFixPreparation();
       if (
         Object.values(models).some(
           (profile) =>
@@ -593,12 +610,35 @@ export class Workspace {
           'Models changed. Review preparation in the new worktree before continuing.',
         );
     } catch (error) {
-      this.fail(error);
+      child.fail(error);
       return;
     }
+    if (originalEpoch !== this.epoch) return;
     if (seed.paths.some((value) => value.endsWith('_test.go')))
-      await this.startChangeWorkflow(seed, models, fresh);
-    else await this.prepareChange(seed, true, models.create, fresh);
+      await child.startChangeWorkflow(seed, models, fresh);
+    else await child.prepareChange(seed, tests, models.create, fresh);
+  }
+  async openWorktree(path: string) {
+    let child = this.state.implementations.find((item) => item.worktreePath === path);
+    await this.act('Open implementation', async () => {
+      const epoch = this.epoch;
+      const operation = this.operation;
+      const navigation = this.navigation;
+      if (!child) {
+        child = new Workspace(path, this);
+        const project = await child.api.get<M.Project>(current);
+        if (epoch !== this.epoch || operation !== this.operation) return;
+        child.set({ project, connected: true, models: this.state.models, page: 'history' });
+        await child.refreshProject();
+        if (epoch !== this.epoch || operation !== this.operation) return;
+        this.set({ implementations: [...this.state.implementations, child] });
+        child.subscribe(() => this.set({}));
+        child.schedule();
+      }
+      if (epoch === this.epoch && operation === this.operation && navigation === this.navigation)
+        this.set({ implementation: child, page: 'worktree' });
+    });
+    return this.state.implementation === child ? child : undefined;
   }
   async refreshProject() {
     const identity = this.identity();
@@ -670,6 +710,13 @@ export class Workspace {
     });
   }
   async navigate(page: Page) {
+    if (
+      this.parent &&
+      !['chat', 'changes', 'history', 'instructions', 'editor', 'context', 'models'].includes(page)
+    ) {
+      await this.parent.navigate(page);
+      return;
+    }
     this.navigation++;
     this.set({
       page,
@@ -782,9 +829,12 @@ export class Workspace {
     refresh = false,
     models?: M.AnalysisModels,
     stalePath?: string,
+    start = false,
   ) {
     await this.act('Prepare analysis', async () => {
       const epoch = this.epoch;
+      const operation = this.operation;
+      const navigation = this.navigation;
       const setup = this.state.analysisSetup ? { ...this.state.analysisSetup } : undefined;
       const selection_id = this.state.selection?.selection_id;
       const run = mode === 'resume' ? this.state.run : undefined;
@@ -802,91 +852,106 @@ export class Workspace {
       });
       if (
         epoch !== this.epoch ||
+        operation !== this.operation ||
+        (start && navigation !== this.navigation) ||
         selection_id !== this.state.selection?.selection_id ||
         JSON.stringify(setup) !== JSON.stringify(this.state.analysisSetup)
       )
         return;
-      this.set({ preview, resume: run?.identity, page: 'analysis-preview' });
+      this.set({
+        preview,
+        resume: run?.identity,
+        ...(start ? {} : { page: 'analysis-preview' as Page }),
+      });
+      if (start) await this.dispatchAnalysis(false);
     });
   }
   async startAnalysis() {
     await this.act('Start analysis', async () => {
-      const p = this.state.preview;
-      if (!p || projectKey(p.identity) !== projectKey(this.state.project))
-        throw new Error('Prepare a fresh analysis preview.');
-      const epoch = this.epoch,
-        operation = this.operation;
-      const remote = p.providers.filter(
-        (provider) =>
-          provider.remote_confirmation_required &&
-          (p.files.some((file) =>
-            file.stages.some(
-              (stage) =>
-                stage.max_model_requests > 0 &&
-                (stage.provider_id === provider.id || provider.stages.includes(stage.stage)),
-            ),
-          ) ||
-            (p.features?.provider_id === provider.id && p.features.max_model_requests > 0)),
-      );
-      if (remote.length || p.security_review_intent_required) {
-        const accepted = await this.confirm({
-          title: this.state.resume ? 'Resume analysis' : 'Start analysis',
-          message: remote.length
-            ? `Send selected context to ${remote.length === 1 ? 'this remote provider' : 'these remote providers'}${p.security_review_intent_required ? ' and include AI Security review' : ''}?`
-            : 'Include AI Security review for the selected files?',
-          accept: 'Start',
-          details: [
-            `${p.files.length} selected files`,
-            ...remote.map(
-              (provider) => `${provider.model.model} · ${provider.model.provider_origin}`,
-            ),
-            ...(p.features?.max_model_requests
-              ? ['Feature discovery includes saved goals and allowed project context.']
-              : []),
-          ],
-        });
-        if (!accepted) return;
-      }
-      if (
-        epoch !== this.epoch ||
-        operation !== this.operation ||
-        this.state.preview?.preview_id !== p.preview_id
-      )
-        return;
-      const confirmations = {
-        provider_ids: remote.map((provider) => provider.id),
-        security_review: p.security_review_intent_required,
-      };
-      const run = this.state.resume
-        ? await this.api.post<M.AnalysisRun>(`${current}/analysis/run/control`, {
-            identity: this.state.resume,
-            action: 'resume',
-            preview_id: p.preview_id,
-            confirmations,
-          })
-        : await this.api.post<M.AnalysisRun>(`${current}/analysis/run`, {
-            identity: p.identity,
-            preview_id: p.preview_id,
-            limits: p.limits,
-            refresh: p.refresh,
-            include_features: !!p.features,
-            models: p.models,
-            retry_stale_failed: p.retry_stale_failed || false,
-            stale_only: p.stale_only || false,
-            stale_path: p.stale_path,
-            recover_incomplete: p.recover_incomplete || false,
-            confirmations,
-          });
-      this.set({
-        run,
-        preview: undefined,
-        resume: undefined,
-        results: {},
-        page: 'analysis-run',
-        featureGenerationRequested: this.state.featureGenerationRequested || !!p.features,
-      });
-      await this.loadFeatures();
+      await this.dispatchAnalysis(true);
     });
+  }
+  private async dispatchAnalysis(confirm: boolean) {
+    const p = this.state.preview;
+    if (!p || projectKey(p.identity) !== projectKey(this.state.project))
+      throw new Error('Prepare a fresh analysis preview.');
+    if (!p.files.length && !p.features?.max_model_requests)
+      throw new Error('No analysis work is available for the selected files.');
+    const epoch = this.epoch,
+      operation = this.operation;
+    const remote = p.providers.filter(
+      (provider) =>
+        provider.remote_confirmation_required &&
+        (p.files.some((file) =>
+          file.stages.some(
+            (stage) =>
+              stage.max_model_requests > 0 &&
+              (stage.provider_id === provider.id || provider.stages.includes(stage.stage)),
+          ),
+        ) ||
+          (p.features?.provider_id === provider.id && p.features.max_model_requests > 0)),
+    );
+    if (confirm && (remote.length || p.security_review_intent_required)) {
+      const accepted = await this.confirm({
+        title: this.state.resume ? 'Resume analysis' : 'Start analysis',
+        message: remote.length
+          ? `Send selected context to ${remote.length === 1 ? 'this remote provider' : 'these remote providers'}${p.security_review_intent_required ? ' and include AI Security review' : ''}?`
+          : 'Include AI Security review for the selected files?',
+        accept: 'Start',
+        details: [
+          `${p.files.length} selected files`,
+          ...remote.map(
+            (provider) => `${provider.model.model} · ${provider.model.provider_origin}`,
+          ),
+          ...(p.features?.max_model_requests
+            ? ['Feature discovery includes saved goals and allowed project context.']
+            : []),
+        ],
+      });
+      if (!accepted) return;
+    }
+    if (
+      epoch !== this.epoch ||
+      operation !== this.operation ||
+      this.state.preview?.preview_id !== p.preview_id
+    )
+      return;
+    const confirmations = {
+      provider_ids: remote.map((provider) => provider.id),
+      security_review: p.security_review_intent_required,
+    };
+    const run = this.state.resume
+      ? await this.api.post<M.AnalysisRun>(`${current}/analysis/run/control`, {
+          identity: this.state.resume,
+          action: 'resume',
+          preview_id: p.preview_id,
+          confirmations,
+        })
+      : await this.api.post<M.AnalysisRun>(`${current}/analysis/run`, {
+          identity: p.identity,
+          preview_id: p.preview_id,
+          limits: p.limits,
+          refresh: p.refresh,
+          include_features: !!p.features,
+          models: p.models,
+          retry_stale_failed: p.retry_stale_failed || false,
+          stale_only: p.stale_only || false,
+          stale_path: p.stale_path,
+          recover_incomplete: p.recover_incomplete || false,
+          confirmations,
+        });
+    if (epoch !== this.epoch || operation !== this.operation) return;
+    if (projectKey(run.identity) !== projectKey(p.identity))
+      throw new Error('Analysis belongs to another project revision.');
+    this.set({
+      run,
+      preview: undefined,
+      resume: undefined,
+      results: {},
+      page: 'analysis-run',
+      featureGenerationRequested: this.state.featureGenerationRequested || !!p.features,
+    });
+    await this.loadFeatures();
   }
   async controlRun(action: 'pause' | 'cancel') {
     await this.act(`${action === 'pause' ? 'Pause' : 'Cancel'} analysis`, async () => {
