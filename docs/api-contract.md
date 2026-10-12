@@ -77,7 +77,7 @@ untrusted networks.
 | POST | `/api/projects/current/git/worktrees` | Create a new branch and worktree from the displayed HEAD. |
 | POST | `/api/projects/current/git/switch` | Switch a clean project to an existing local branch. |
 | POST | `/api/projects/current/git/merge-preview` | Preview the selected worktree's incoming commits and diff. |
-| POST | `/api/projects/current/git/merge` | Merge the reviewed worktree HEAD into the current clean branch, then remove the merged worktree. |
+| POST | `/api/projects/current/git/merge` | Merge the captured worktree HEAD into the current clean branch, then remove the merged worktree. |
 | POST | `/api/projects/current/git/discard-worktree` | Remove a confirmed clean worktree without merging; keep its branch. |
 | POST | `/api/projects/current/git/abort-merge` | Abort the identified merge and discard conflict resolutions. |
 | GET | `/api/projects/current/git/repository` | Read guarded repository identity, branch and working-tree state. |
@@ -668,7 +668,7 @@ messages, 2 MiB per conversation/recovery journal and two hundred conversations.
 History lists return summaries (`id`, project identity, kind, title, revision,
 hash, state, freshness and updated time); selected reads/resume return full contents.
 History reads are passive. Resume clears check/review authority; stale history is readable but cannot
-be applied. Existing declaration sessions retain their in-memory behavior.
+be applied.
 
 `POST /api/projects/current/changes/{sessionID}/workflow` starts a bounded agent
 workflow and returns HTTP 202 with the captured session and `workflow.id`.
@@ -853,7 +853,7 @@ the current worktree to the same branch.
 
 Merge preview and merge take the selected worktree `path` and `source_head`.
 Preview returns source/target identities, incoming commits and a bounded read-only
-diff; it requires no execution trust and never merges. After review, merge
+diff; it requires no execution trust and never merges. Merge
 rechecks both heads and requires both worktrees clean. Merge conflicts return
 `state: conflicts`, `repository.merge_head` and `repository.conflicts` instead of
 success. Resolve them using ordinary Git tools, or explicitly abort by sending
@@ -861,7 +861,7 @@ the displayed `merge_head`; abort discards conflict-resolution edits.
 
 After a successful merge, the daemon marks findings linked to applied, committed
 fix sessions Done in the original project. It captures the links before merging
-and verifies each fix commit belongs to the reviewed source HEAD. Drafts, undone
+and verifies each fix commit belongs to the captured source HEAD. Drafts, undone
 fixes, failed commits, commits outside that history and other projects' targets
 do not complete findings. Completion is persisted before worktree removal and
 survives reindexing, stale analysis and restarts. `GET /api/projects/current/findings`
