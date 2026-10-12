@@ -14,7 +14,7 @@ guides add local detail; keep shared rules here instead of copying them.
 ## Project and ownership
 
 Mini-Orca is a local-first coding assistant: a Go 1.22 daemon, a Wails/React
-desktop client, a legacy Kotlin/Compose client and a loopback HTTP API. It supports
+desktop client and a loopback HTTP API. It supports
 project-wide analysis and checked chat proposals across up to eight captured
 Go/Markdown paths, plus the legacy one-declaration draft workflow. Both require
 diff review, explicit Apply and guarded Undo.
@@ -131,15 +131,14 @@ native review for task completion.
 | Changed area | Required checks when the environment permits |
 | --- | --- |
 | Go code | `go fmt ./...`, `make fmt-check`, `go test ./...`, `make test-race`, `make vet`, `./scripts/quality.sh --go-only` |
-| Desktop code/build | `./scripts/desktop-gradle.sh test spotlessCheck detekt` |
 | Desktop web client/host | `make web-test`; native packaging changes also require `make web-build` on macOS arm64 |
 | Python/shell tooling | `python3 -m unittest discover -s scripts/tests -p 'test_*.py'` and syntax checks for changed shell scripts |
 | Prose-only documentation/instructions | `git diff --check`; verify referenced paths, commands and consistency with current code |
 | Cross-stack changes or full validation request | `./scripts/validate.sh` |
 
 `make check` covers formatting, Go tests/races/vet, Python tooling tests and
-desktop tests. `make quality` adds the maintained static, reachability, complexity,
-clone and desktop formatting checks. `./scripts/validate.sh` combines the full
+web desktop tests. `make quality` adds the maintained static, reachability, complexity,
+clone checks. `./scripts/validate.sh` combines the full
 local gates and is also used by CI. Documentation that changes a contract or
 build procedure needs the corresponding contract tests or procedure validation.
 

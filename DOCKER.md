@@ -1,6 +1,6 @@
 # Docker deployment
 
-The container runs only the Mini-Orca daemon for the Compose Desktop client. It
+The container runs only the Mini-Orca daemon for the Wails desktop client. It
 is not a browser IDE or a multi-user service. The daemon is loopback-only by
 default. The container binds inside its network namespace so Docker can forward
 the port, while every maintained host mapping is restricted to host loopback.

@@ -1,44 +1,33 @@
 # Mini-Orca UI guidelines
 
-Visual design is open to change. The current
-[Calibrated mockup](../.mockups/flows/tokyo-midnight/01-summary.html)
-is an optional reference, not a required target for palette, typography,
-component shapes, spacing, shell, navigation, pane arrangement or responsive
-behavior. The current implementation is not a design requirement.
+Design around the developer's next action. Keep the main content and primary
+action prominent; disclose supporting metadata and explanations on demand.
+Routine actions should execute from their buttons without redundant dialogs.
+Palette, typography, navigation and layout may change as needed.
 
 ## Interaction and accessibility
 
-Choose copy, hierarchy, controls and presentation for the task at hand. Keep
-users able to identify the current state, available actions, errors and recovery
-paths. Keep necessary labels and accessible names/states, keyboard operation and
-visible focus. Do not rely on color alone to convey meaning. Check text and
-indicator contrast against the backgrounds used by the chosen design, including
-interaction states and larger text. Preserve full access to findings, explanations
-and diagnostics even if their presentation changes.
+Keep actions, current state, errors and recovery paths clear. Use accessible names,
+keyboard operation and visible focus. Color supplements labels; check contrast
+against actual backgrounds. Show progress while requests or jobs run and prevent
+duplicate submission. Honor reduced-motion preferences.
+
+Preserve access to findings, explanations and diagnostics. Long paths, narrow
+windows and large text must not hide actions or clip content. Model-authored HTML,
+links and remote images remain inert; source and composed diffs stay read-only.
 
 ## Product behavior
 
-Visual changes must not silently change the workflow: navigation, disclosures and
-previews do not request a provider response, run project code or write source.
-Remote-provider consent, execution trust, Review/Apply/Undo and stale-evidence
-checks remain explicit. Source and composed diffs stay read-only; only the
-isolated declaration/import draft is editable. Do not invent project facts,
-findings, scores or working controls without behavior behind them. Distinguish
-verified results from model suggestions, measured performance from estimates,
-and unknown, stale, partial, canceled and failed results from successful results.
-
-The current client uses Jewel and shared controls, but their existing styles and
-tokens are not mandated for redesign. Coordinate implementation changes so the
-interface remains coherent. `ModelResultContent` currently handles freeform model
-prose; if its presentation changes, keep content available and model-supplied
-links, HTML and images inert.
+Navigation, disclosures and previews do not dispatch providers, execute project
+code or write source. Keep provider consent and execution trust tied to the
+relevant action and scope. Explicit Apply/Undo and stale-evidence checks remain
+enforced. Never invent project facts or present suggestions as verified results.
+Unknown, unavailable, stale, partial, failed and canceled states retain meaning.
 
 ## Verification
 
-Use automated workflow and production-component tests for changed flows at
-relevant viewport and text sizes and across relevant result states. Check action
-reachability, clipping, keyboard focus, accessible names, contrast and clear
-consent/error states. Compare rendered production components
-against the *chosen* design using `DesktopVisualLayoutTest` component renders.
-Offscreen renders cannot prove OS focus, popup placement or screen-reader behavior;
-limit evidence claims to the behavior exercised by the tests.
+Use browser tests of production components and workflow tests at relevant viewport
+and text sizes. Exercise loading, empty, populated and failure states, collapsed
+details, keyboard access, action reachability and contrast. Inspect rendered
+screenshots. These tests do not prove native focus, popup placement or screen-reader
+behavior; native packaging and PTY lifecycle checks provide separate evidence.

@@ -1,72 +1,23 @@
 # Desktop client
 
-Read [../AGENTS.md](../AGENTS.md) first. Before UI changes, read
-[UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) and inspect the relevant existing
-components and state owners. [README.md](README.md) owns desktop setup and use.
-For `webapp/`, also read [webapp/AGENTS.md](webapp/AGENTS.md); its native bridge and
-React workflow owner replace the Compose-specific APIs described below.
+Read [../AGENTS.md](../AGENTS.md), [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md)
+and [webapp/AGENTS.md](webapp/AGENTS.md) before editing. The Wails/React client is
+the supported desktop; [webapp/README.md](webapp/README.md) owns setup and usage.
 
-## State and workflow ownership
-
-- Keep desktop implementation in `desktop/`. Compose components render state and
-  emit user actions; `DesktopWorkflowPresenter`, the workflow owners and controller
-  own daemon interactions and transitions. Keep visual-only state local.
-- Use `ApiClient` and existing serializable models for daemon requests. Preserve
-  field names, optional-value semantics, structured failures and request guards.
-  A changed daemon contract requires coordinated backend/docs/tests, not a
-  client-only assumption or permissive decoding workaround.
-- Keep snapshots immutable and reuse project/file/draft/run identities. Reject
-  stale responses after navigation, edits, project switches or a replacement job.
-  Cancellation alone does not establish that an old response cannot arrive.
-- Own coroutines and polling through existing lifecycles. Keep blocking I/O off
-  the UI thread, propagate `CancellationException` and dispose resources on close.
-  Do not start network calls from composition or restart them on recomposition.
-- Reuse the existing eligibility/state owners. Presentation helpers may explain
-  a blocked action but must not independently recreate daemon business rules.
-- Preserve explicit draft discard, evidence invalidation after edits and guarded
-  Review/Apply/Undo. Navigation, tabs and disclosures remain local interactions.
-  Only the isolated declaration/import draft is editable; source/diff stay read-only.
-
-## UI implementation
-
-- Follow the [UI guidelines](UI_DESIGN_GUIDELINES.md) for interaction,
-  accessibility and verification. Copy, palette, shapes, layout and navigation
-  may be redesigned; previous mocks and theme tokens are not required targets.
-- Coordinate changed components with the current client and state owners. Keep
-  valid actions reachable, errors visible and details available. Do not add
-  fabricated metrics, dummy callbacks or unsupported controls.
-- Preserve labeled states for empty/loading/stale/failed/partial/canceled results.
-  Keep unknown values distinct from zero and provider status distinct from daemon
-  connectivity. Color supplements labels and keyboard focus.
-- Choose responsive behavior for the new design. Preserve saved pane preferences
-  where applicable and keep long paths, larger text and actions accessible.
-- Preserve keyboard access, accessible names/states, selection and focus. Reuse
-  `ModelResultContent` for freeform model prose and its bounded literal fallback;
-  do not activate model-supplied HTML, links or remote images.
-- For terminal work, follow [TERMINAL.md](TERMINAL.md). Preserve shell ownership,
-  close/project-switch behavior, terminal keystrokes and source freshness checks
-  on return. Do not persist transcripts or send them to a provider.
-
-## Build and verification
-
-Use `./scripts/desktop-gradle.sh` from the repository root; it invokes the checked-in
-Gradle wrapper with the documented Java 21 launcher and Java/JBR 25 toolchain.
-Do not require global Gradle, commit machine paths or change system JDKs. Keep the
-existing Kotlin/JVM targets and pinned versions unless an upgrade is requested.
-
-Run focused tests while iterating, then
-`./scripts/desktop-gradle.sh test spotlessCheck detekt` for desktop code/build
-changes. Format changed Kotlin using the configured Spotless/ktfmt rules; inspect
-formatter output for unrelated churn. Do not change lint configuration or snapshots
-merely to hide a regression.
-
-For substantive visual changes, render affected production components and compare
-them to the chosen design. Follow the UI guidelines' viewport, text-scale
-and state checks, including the review with optional help collapsed. Use the
-existing `DesktopVisualLayoutTest` fixtures.
-Component tests establish only their exercised behavior; do not claim OS focus,
-popup placement or screen-reader observations from offscreen renders.
-
-For terminal/runtime/packaging changes, run the relevant documented distribution
-build and automated terminal probes. Record unavailable platform checks accurately;
-do not claim packaging verification from unit tests alone.
+- Keep daemon interactions and immutable workflow transitions in the workspace
+  owner. Components render state and emit actions; visual state stays local.
+- Use typed wire models and existing API transport. Preserve structured failures,
+  optional values, cancellation and project/file/proposal identity guards.
+- Reuse shared controls and domain eligibility rules. Keep actions reachable,
+  keyboard focus visible and errors actionable; move supporting detail into
+  disclosures instead of repeating explanations around each action.
+- Navigation and disclosures are passive. Source/diffs remain read-only; Apply
+  and Undo retain their guards. Model-authored HTML, links and images stay inert.
+- Requests and background work need accessible progress indicators. Distinguish
+  unknown, unavailable, stale, partial, canceled and failed results from success.
+- Terminal processes belong to native bridge sessions. Hiding a terminal keeps
+  it alive; closing/project switching cleans it up. Never persist transcripts or
+  send them to models. Recheck source freshness on return.
+- Run `make web-test`; packaging/host changes also require `make web-build` on
+  macOS arm64. Browser tests exercise production components at relevant viewport
+  and text sizes. Do not claim OS focus or screen-reader evidence from them.

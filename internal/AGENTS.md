@@ -15,7 +15,7 @@ the backend guide for changes to `cmd/`.
   Avoid placing business rules in HTTP handlers or expanding `Service` with
   unrelated responsibilities when an existing cohesive owner fits.
 - For a wire-contract change, update Go request/response types, daemon route
-  registrations, Kotlin serialization/client models, `docs/openapi.yaml` and
+  registrations, TypeScript wire models, `docs/openapi.yaml` and
   `docs/api-contract.md` as applicable. Cover both successful and rejected requests
   in handler/client contract tests. Never silently relax guards for convenience.
 

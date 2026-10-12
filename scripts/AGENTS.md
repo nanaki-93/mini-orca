@@ -4,7 +4,7 @@ Read [../AGENTS.md](../AGENTS.md) first. This is also the tooling guide for root
 Makefile and `.github/workflows/` changes.
 
 - Preserve ownership: `validate.sh` aggregates full validation, `quality.sh` owns
-  pinned quality stages, `desktop-gradle.sh` resolves the launcher/toolchain,
+  pinned Go quality stages, `desktop-web.sh` owns desktop checks and packaging,
   and Makefile/CI invoke those maintained paths. Fix a stage in its owner;
   do not introduce another competing validation script.
 - Keep shell scripts compatible with their declared interpreter and Python with
@@ -16,9 +16,8 @@ Makefile and `.github/workflows/` changes.
 - Keep quality tools pinned and separate from application dependencies. Do not
   relax thresholds, exclusions, checksums or static-analysis configuration to
   accommodate a change. Update build docs/tests when a supported command changes.
-- Toolchain helpers must validate requested Java homes and explain mismatches.
-  Do not silently use the wrong runtime, replace system installations or write
-  machine-specific paths into versioned files.
+- Validate required runtimes and explain mismatches. Do not replace system
+  installations or write machine-specific paths into versioned files.
 
 ## Dispatcher and runtime tools
 

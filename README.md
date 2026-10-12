@@ -105,8 +105,8 @@ Analyze-all/Performance jobs remain readable but cannot inherit fresh dispatch
 authority; start a new run when they cannot be resumed. See the
 [API migration details](docs/api-contract.md#legacy-job-migration-ana-05).
 
-The web client remembers the last project path, theme and text size. Compose pane
-preferences remain separate. Terminal starts without launching a shell.
+The web client remembers the last project path, theme and text size. Terminal
+starts without launching a shell.
 Mini-Orca does not save terminal transcripts or send them to a model. Returning to
 Source rechecks the selected file and invalidates stale evidence; reindex
 explicitly after adding, removing or renaming files in the terminal.
@@ -116,30 +116,23 @@ explicitly after adding, removing or renaming files in the terminal.
 Follow [AGENTS.md](AGENTS.md). UI contributions follow the
 [UI interaction and accessibility guidelines](desktop/UI_DESIGN_GUIDELINES.md).
 Run focused tests while editing. For a clean checkout,
-install Go 1.25+ and Node.js 22+. The retained Compose client also uses the
-checked-in Gradle wrapper. The full local gate is:
+install Go 1.25+ and Node.js 22+. The full local gate is:
 
 ```sh
-MINI_ORCA_JDK21_HOME=/path/to/jdk-21 \
-MINI_ORCA_JBR25_HOME=/path/to/jbr-25 \
 ./scripts/validate.sh
 ```
 
-The JDK 21 launcher is required by Detekt; the Java 25 location supplies the desktop
-toolchain and may be a JBR or JDK. Both explicit homes must contain `java` and `javac`
-at those exact major versions. `MINI_ORCA_JAVA25_HOME` is an equivalent explicit name
-for a non-JBR toolchain. If `MINI_ORCA_JDK21_HOME` is omitted, the script accepts only
-a verified Java 21 JDK from `JAVA_HOME` or `PATH`; it does not defer launcher selection
-to Gradle. The Java 25 toolchain may be omitted only when Gradle can discover it. The
-default checks use fakes and temporary directories, do not start the daemon, and do not
-require a provider, key, or project configuration. The wrapper pins Gradle 9.1.0 and
-verifies its published SHA-256 before use.
+The checks use fakes and temporary directories, do not start the daemon, and do
+not require a provider, key or project configuration. Browser component tests
+need Playwright Chromium (`npx playwright install chromium` from
+`desktop/webapp/frontend`). Native packaging requires macOS arm64 and Xcode
+command-line tools.
 
-`make check` remains the supported Make gate for formatting, tests, race detection,
-vet and both desktop clients' tests. `make quality` runs the pinned static/reachability/complexity/
-clone and Desktop static stages and reports every failed stage.
+`make check` covers formatting, Go tests/races/vet, Python tooling and desktop
+workflow/bridge tests. `make quality` runs the pinned Go static, reachability,
+complexity and clone checks and reports every failed stage.
 
-- [Web desktop setup and usage](desktop/webapp/README.md) · [Legacy Compose client](desktop/README.md) · [UI guidelines](desktop/UI_DESIGN_GUIDELINES.md)
+- [Web desktop setup and usage](desktop/webapp/README.md) · [UI guidelines](desktop/UI_DESIGN_GUIDELINES.md)
 - [API guide](docs/api-contract.md) · [OpenAPI](docs/openapi.yaml) · [configuration](CONFIG.md)
 - [Docker](DOCKER.md) · [release notes](RELEASE_NOTES.md)
 

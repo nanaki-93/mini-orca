@@ -1,8 +1,7 @@
 # Desktop web client
 
 Mini-Orca's desktop web interface uses React and Wails, with embedded assets and
-the existing Go daemon. The supported native target is macOS 13+ on arm64. The Compose
-client remains available through `make compose-desktop-run`.
+the Go daemon. The supported native target is macOS 13+ on arm64.
 
 ## Build and run
 
