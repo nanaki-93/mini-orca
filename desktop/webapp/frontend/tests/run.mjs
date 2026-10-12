@@ -11,6 +11,11 @@ import { testThemes } from './themes.mjs';
 import { testStudio } from './studio.mjs';
 import { testResults } from './results.mjs';
 
+async function expandDetails(page, title) {
+  const summary = page.locator('summary').filter({ hasText: title }).first();
+  if (!(await summary.evaluate((element) => element.parentElement.open))) await summary.click();
+}
+
 async function openFeature(page) {
   if (
     !(await page.locator('.features-page').count()) ||
@@ -477,6 +482,7 @@ async function studioContainment(surface) {
   checks++;
 }
 async function scanLayout(page) {
+  await expandDetails(page, /^Tests/);
   const surface = page.locator('.tests-workspace');
   await headingContainment(surface.locator('.page-heading'));
 
@@ -711,6 +717,7 @@ async function analysisSections(page) {
   checks++;
 }
 async function analysisSettingsFields(page) {
+  await expandDetails(page, 'Advanced settings');
   const settings = page.locator('.analysis-run-settings');
   for (const selector of ['.analysis-operation', 'input[type="number"]']) {
     const controls = settings.locator(selector);
@@ -939,8 +946,13 @@ async function contrast(page, name) {
     }
     for (const element of document.querySelectorAll('.status-dot')) {
       if (!element.checkVisibility()) continue;
+      const spinner = element.querySelector('.spinner');
       const value = ratio(
-        rgba(getComputedStyle(element).backgroundColor),
+        rgba(
+          spinner
+            ? getComputedStyle(spinner).borderTopColor
+            : getComputedStyle(element).backgroundColor,
+        ),
         background(element.parentElement),
       );
       if (value < 3) failures.push(`${element.title}: ${value.toFixed(2)}:1 indicator`);
@@ -1850,6 +1862,8 @@ try {
         featuresReady: true,
       });
       await idle(page);
+      assert.equal(await page.locator('.summary-path').isVisible(), false);
+      await expandDetails(page, 'Project details');
       assert.equal(await page.locator('.summary-path').innerText(), projectPath);
       assert.equal(await page.locator('.summary-description .prose').innerText(), projectSummary);
       assert.equal(
@@ -2779,13 +2793,14 @@ try {
       await close();
     }
   });
-  await test('Analysis keeps all options visible in one responsive section', async () => {
+  await test('Analysis keeps advanced options accessible in one responsive section', async () => {
     for (const empty of [false, true]) {
       const { page, close } = await pageFor({ empty });
       try {
         await nav(page, 'Analysis');
         await idle(page);
-        assert.equal(await page.locator('.analysis-setup details').count(), 0);
+        assert.equal(await page.getByLabel('Files per batch', { exact: true }).isVisible(), false);
+        await expandDetails(page, 'Advanced settings');
         assert.equal(await page.locator('.analysis-setup .panel').count(), 1);
         assert.equal(
           await page.getByRole('heading', { name: 'Analysis setup', exact: true }).count(),
@@ -3299,6 +3314,7 @@ try {
       await chooseModel(review, 'bug');
       await chooseModel(features, 'function');
       await nav(page, 'Analysis');
+      await expandDetails(page, 'Advanced settings');
       const batch = page.getByLabel('Files per batch', { exact: true });
       const budget = page.getByLabel('Time budget · seconds', { exact: true });
       const attempts = page.getByLabel('Attempts per stage', { exact: true });
@@ -3425,6 +3441,7 @@ try {
       await nav(page, 'Analysis');
       await chooseModel(page.getByLabel('Performance model', { exact: true }), 'function');
       await chooseModel(page.getByLabel('Security model', { exact: true }), 'bug');
+      await expandDetails(page, 'Advanced settings');
       await page.getByLabel('Files per batch', { exact: true }).fill('37');
       await nav(page, 'Files');
       await page.getByLabel('Include internal/worker/process.go', { exact: true }).uncheck();
@@ -3951,6 +3968,7 @@ try {
             { exact: true },
           )
           .waitFor();
+        await expandDetails(page, 'Advanced settings');
         await page.getByLabel('Time budget · seconds', { exact: true }).fill('1800');
         await chooseModel(page.getByLabel('Bug analysis model'), 'function');
         await layout(page, `analysis-setup-${status}-continuation`);
@@ -5027,6 +5045,7 @@ try {
         await nav(page, 'Bugs');
         await nav(page, 'Overview');
         await idle(page);
+        await expandDetails(page, /^Tests/);
         const surface = page.locator('.tests-workspace');
         const heading = surface.locator('.page-heading');
         const action = page.locator('.topbar').getByRole('button', {

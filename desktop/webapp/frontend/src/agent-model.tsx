@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { Model, ModelChoice } from './models';
 import { workspace as w, type State } from './workspace';
-import { Button, Icon, Notice } from './ui';
+import { Button, Spinner, Icon, Notice } from './ui';
 
 export type AgentType = 'create' | 'analysis' | 'review' | 'test';
 
@@ -236,13 +236,14 @@ function ModelPicker({
         </p>
       )}
       <div className="model-picker-footer">
-        <span role="status">
+        <span role="status" className="row">
+          {s.modelsLoading && <Spinner />}
           {s.modelsLoading ? 'Refreshing models…' : `${choices.length} models`}
         </span>
         <Button
           icon="refresh"
           tone="small"
-          disabled={s.modelsLoading}
+          loading={s.modelsLoading}
           onClick={() => void w.loadAvailableModels()}
         >
           Refresh models

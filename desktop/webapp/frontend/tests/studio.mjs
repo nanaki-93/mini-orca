@@ -1,6 +1,43 @@
 import { strict as assert } from 'node:assert';
 
 export async function testStudio({ test, pageFor, nav, idle, layout }) {
+  await test('Studio details stay optional and accessible without dispatching work', async () => {
+    const { page, close } = await pageFor();
+    try {
+      await idle(page);
+      const writes = await page.evaluate(() =>
+        window.fixture.requests.filter((r) => r.method !== 'GET'),
+      );
+      for (const width of [1440, 800]) {
+        await page.setViewportSize({ width, height: 1000 });
+        if (width === 800)
+          await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+        await nav(page, 'Overview');
+        assert.equal(await page.locator('.summary-path').isVisible(), false);
+        await layout(page, `summary-simple-${width}`);
+        const details = page.locator('summary').filter({ hasText: 'Project details' });
+        await details.focus();
+        await page.keyboard.press('Enter');
+        assert.equal(await page.locator('.summary-path').isVisible(), true);
+        await details.click();
+        await nav(page, 'Analysis');
+        assert.equal(await page.getByLabel('Files per batch', { exact: true }).isVisible(), false);
+        assert.equal(
+          await page.getByRole('button', { name: 'Execute analysis', exact: true }).isVisible(),
+          true,
+        );
+        await layout(page, `analysis-simple-${width}`);
+        await page.locator('summary').filter({ hasText: 'Advanced settings' }).click();
+        assert.equal(await page.getByLabel('Files per batch', { exact: true }).isVisible(), true);
+      }
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+        writes,
+      );
+    } finally {
+      await close();
+    }
+  });
   await test('Last run executes continuation without confirmation dialogs', async () => {
     for (const [runStatus, remote] of [
       ['paused', false],
@@ -292,7 +329,11 @@ export async function testStudio({ test, pageFor, nav, idle, layout }) {
       await page.getByRole('heading', { name: 'Ready for review', exact: true }).waitFor();
       await layout(page, 'studio-task-conversation');
       await page.getByRole('button', { name: 'Open proposal', exact: true }).click();
-      await page.getByRole('complementary', { name: 'Review evidence' }).waitFor();
+      await page.getByRole('tablist', { name: 'Fix review' }).waitFor();
+      assert.equal(await page.getByRole('complementary', { name: 'Review evidence' }).count(), 0);
+      await page.getByRole('tab', { name: 'Checks', exact: true }).click();
+      await page.getByRole('heading', { name: 'Check evidence', exact: true }).waitFor();
+      await page.getByRole('tab', { name: 'Changes (2)', exact: true }).click();
       assert.equal(
         await page.getByRole('tablist', { name: 'Files to change' }).getByRole('tab').count(),
         2,

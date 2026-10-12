@@ -24,6 +24,7 @@ import {
   Panel,
   Prose,
   StatusDot,
+  human,
 } from './ui';
 
 export function ProjectPage({ s, compact = false }: { s: State; compact?: boolean }) {
@@ -142,6 +143,10 @@ export function ProjectPage({ s, compact = false }: { s: State; compact?: boolea
   );
 }
 export function Summary({ s }: { s: State }) {
+  const [showTests, setShowTests] = useState(false);
+  useEffect(() => {
+    if (s.scan && ['running', 'failed', 'partial'].includes(s.scan.status)) setShowTests(true);
+  }, [s.scan?.status]);
   const overview = s.overview;
   const coverage = overview?.analysis_coverage;
   const percent = coverage?.total ? Math.round((100 * coverage.fresh) / coverage.total) : null;
@@ -202,13 +207,6 @@ export function Summary({ s }: { s: State }) {
       </span>
       <span className="studio-row-copy">
         <strong>{title}</strong>
-        <small>
-          {page === 'features'
-            ? 'Explore what to build next'
-            : page === 'performance'
-              ? 'Unmeasured model suggestions'
-              : 'Suggestions to investigate'}
-        </small>
       </span>
       <StatusDot value={status} label={title} />
       <span className="metric-number">{count ?? '—'}</span>
@@ -222,13 +220,6 @@ export function Summary({ s }: { s: State }) {
         <header className="page-heading">
           <div>
             <h1>{s.project!.name}</h1>
-            <div className="summary-description">
-              <StatusDot
-                value={overview?.analysis.status || s.project!.ai_status}
-                label="Overview"
-              />
-              <Prose text={overview?.analysis.purpose || s.project!.summary} />
-            </div>
           </div>
           <div className="actions">
             <Button
@@ -254,25 +245,31 @@ export function Summary({ s }: { s: State }) {
             </Button>
           </div>
         </header>
-        <p className="summary-path">{s.project!.path}</p>
-        <dl className="summary-facts" aria-label="Project facts">
-          <div>
-            <dt>Project type</dt>
-            <dd className="summary-project-type">{s.project!.type}</dd>
+        <Disclosure title="Project details">
+          <div className="summary-description">
+            <StatusDot value={overview?.analysis.status || s.project!.ai_status} label="Overview" />
+            <Prose text={overview?.analysis.purpose || s.project!.summary} />
           </div>
-          <div>
-            <dt>Source files</dt>
-            <dd>{overview?.metrics.source_file_count ?? '—'}</dd>
-          </div>
-          <div>
-            <dt>Lines</dt>
-            <dd>{overview?.metrics.total_lines?.toLocaleString() ?? '—'}</dd>
-          </div>
-          <div>
-            <dt>Verified findings</dt>
-            <dd>{overview?.finding_counts.verified ?? '—'}</dd>
-          </div>
-        </dl>
+          <p className="summary-path">{s.project!.path}</p>
+          <dl className="summary-facts" aria-label="Project facts">
+            <div>
+              <dt>Project type</dt>
+              <dd className="summary-project-type">{s.project!.type}</dd>
+            </div>
+            <div>
+              <dt>Source files</dt>
+              <dd>{overview?.metrics.source_file_count ?? '—'}</dd>
+            </div>
+            <div>
+              <dt>Lines</dt>
+              <dd>{overview?.metrics.total_lines?.toLocaleString() ?? '—'}</dd>
+            </div>
+            <div>
+              <dt>Verified findings</dt>
+              <dd>{overview?.finding_counts.verified ?? '—'}</dd>
+            </div>
+          </dl>
+        </Disclosure>
         {overview?.analysis.failure && <p className="error-text">{overview.analysis.failure}</p>}
       </div>
       <section className="studio-resume" aria-label="Continue work">
@@ -284,13 +281,7 @@ export function Summary({ s }: { s: State }) {
             {currentWork?.title ||
               (s.run ? 'Explore your project analysis' : 'What would you like to build?')}
           </h2>
-          <p>
-            {currentWork
-              ? 'Open the captured conversation, files and evidence.'
-              : s.run
-                ? 'Inspect the saved results, then choose what to work on.'
-                : 'Describe a task and choose its file scope. Every change starts with your review.'}
-          </p>
+
           {currentWork && (
             <span className="small muted">
               {('workflow_status' in currentWork && currentWork.workflow_status) ||
@@ -355,7 +346,18 @@ export function Summary({ s }: { s: State }) {
           </div>
         </Panel>
       </div>
-      <Tests s={s} />
+      <Disclosure
+        title={
+          <span className="row">
+            <strong>Tests</strong>
+            <StatusDot value={s.scan?.status} />
+            <span>{s.scan ? human(s.scan.status) : 'Not run'}</span>
+          </span>
+        }
+        open={showTests}
+      >
+        <Tests s={s} />
+      </Disclosure>
       <div className="studio-scope-line">
         <span className="row">
           <Icon name="folder" />

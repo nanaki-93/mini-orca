@@ -4,7 +4,7 @@ import { useEffect, useId, useState } from 'react';
 import type { ChangeSeed } from './models';
 import { workflowSeed, type FixPreparationContext, type State } from './workspace';
 import { defaultWorkflowModels } from './change-workflow';
-import { Button, Icon, Notice, Panel } from './ui';
+import { Button, Icon, Loading, Notice, Panel } from './ui';
 
 export function FixPreparation({
   s,
@@ -71,7 +71,7 @@ export function FixPreparation({
       {error ? (
         <Notice error>{error}</Notice>
       ) : !context ? (
-        <p>Loading models and permissions…</p>
+        <Loading label="Loading models and permissions…" />
       ) : (
         <>
           <h2 className="fix-scope-title">Files in this fix</h2>

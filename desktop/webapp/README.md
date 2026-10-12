@@ -45,7 +45,9 @@ dialogs over the current workspace. Escape closes them and restores focus.
 **Terminal** opens a bottom drawer from the status bar while keeping the workspace
 visible. The sidebar collapses to icons.
 
-- **Overview → Tests** shows each local check phase, command, status and output.
+- **Overview** keeps findings and the next action visible. **Project details**
+  expands the description, path and counts. **Tests** expands each check phase,
+  command, status and output; active or failed tests open automatically.
   **Run Tests** beside the top-bar search starts the checks with explicit project
   execution trust; it becomes **Cancel Tests** while they run. Viewing the results
   never executes project code.
@@ -61,7 +63,7 @@ visible. The sidebar collapses to icons.
   per-file status. **Analysis** keeps Setup and Last run together.
   Unsaved selection and setup choices survive navigation between these pages;
   save file selections before starting a run. Batch size, time budget, attempts and
-  refresh options stay visible above the operation summaries. **Refresh** and
+  refresh options are under **Advanced settings** above the operation summaries. **Refresh** and
   **Execute analysis** sit at the top of the page. New runs default to a 1,800-second
   (30-minute) file-analysis budget per batch.
   Continuations retain the saved run's limits.
