@@ -79,7 +79,7 @@ export function Analysis({ s }: { s: State }) {
     !activeRun(s.run) && !continuation && s.selection?.recovery?.state === 'available';
   const preview = (mode: 'new' | 'repair', start = false) => {
     if (changed) {
-      w.fail('Save your file selection before preparing a run.');
+      w.fail('Save your file selection before starting analysis.');
       return;
     }
     void w.previewAnalysis(mode, limits, refresh, models, undefined, start);
@@ -133,13 +133,16 @@ export function Analysis({ s }: { s: State }) {
               : preview('new', true)
           }
         >
-          {continuation ? 'Prepare continuation' : 'Prepare analysis'}
+          Execute analysis
         </Button>
       </Heading>
       <p className="small muted" id="analysis-start-permissions">
-        Prepare analysis starts immediately using the models shown below, including AI Security
-        review and feature discovery. Selected files, instructions and saved goals may be sent to
-        the selected remote providers.
+        Execute analysis starts immediately{' '}
+        {continuation
+          ? "with the saved run's captured models and settings"
+          : 'using the models shown below'}
+        , including AI Security review and feature discovery. Selected files, instructions and saved
+        goals may be sent to the selected remote providers.
       </p>
       {continuation && (
         <Notice>
@@ -502,7 +505,7 @@ export function AnalysisRun({ s }: { s: State }) {
     return (
       <div className="workspace-page analysis-run">
         <Heading variant="intro" title="Project analysis" />
-        <Empty title="No analysis run yet">Prepare a run from Analysis in the sidebar.</Empty>
+        <Empty title="No analysis run yet">Execute analysis from Analysis in the sidebar.</Empty>
       </div>
     );
   const total = run.sections.reduce((sum, section) => sum + section.coverage.total, 0);
@@ -561,10 +564,13 @@ export function AnalysisRun({ s }: { s: State }) {
         {['paused', 'interrupted'].includes(run.status) && (
           <Button
             tone="primary"
+            aria-describedby="analysis-resume-permissions"
             disabled={!!s.busy}
-            onClick={() => void w.previewAnalysis('resume', run.plan.limits)}
+            onClick={() =>
+              void w.previewAnalysis('resume', run.plan.limits, false, undefined, undefined, true)
+            }
           >
-            Prepare continuation
+            Execute analysis
           </Button>
         )}
         {(activeRun(run) || ['paused', 'interrupted'].includes(run.status)) && (
@@ -576,6 +582,13 @@ export function AnalysisRun({ s }: { s: State }) {
           </Button>
         )}
       </Heading>
+      {['paused', 'interrupted'].includes(run.status) && (
+        <p className="small muted" id="analysis-resume-permissions">
+          Execute analysis resumes this run immediately with its captured models and settings,
+          including AI Security review and any feature discovery. Selected files, instructions and
+          saved goals may be sent to the captured remote providers.
+        </p>
+      )}
       {run.reason && <Notice>{run.reason}</Notice>}
       {run.features?.reason && <Notice>Feature discovery: {run.features.reason}</Notice>}
       <Panel className="analysis-progress">

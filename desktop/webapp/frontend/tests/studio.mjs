@@ -1,14 +1,68 @@
 import { strict as assert } from 'node:assert';
 
 export async function testStudio({ test, pageFor, nav, idle, layout }) {
-  await test('Prepare analysis starts directly with captured consent and no dialogs', async () => {
-    for (const runStatus of ['completed', 'paused', 'interrupted']) {
-      const { page, close } = await pageFor({ remote: true, runStatus });
+  await test('Last run executes continuation without confirmation dialogs', async () => {
+    for (const [runStatus, remote] of [
+      ['paused', false],
+      ['paused', true],
+      ['interrupted', true],
+    ]) {
+      const { page, close } = await pageFor({
+        remote,
+        runStatus,
+        capturedModels: {
+          code: 'function',
+          performance: 'bug',
+          security: 'analyze',
+          features: 'function',
+        },
+      });
+      try {
+        const saved = await page.evaluate(() => structuredClone(window.fixture.state.run));
+        await nav(page, 'Last run');
+        await page.getByRole('button', { name: 'Execute analysis', exact: true }).click();
+        await idle(page);
+        assert.equal(await page.getByRole('dialog').count(), 0);
+        const requests = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method === 'POST'),
+        );
+        const previews = requests.filter((r) => r.path.endsWith('/analysis/preview'));
+        const resumes = requests.filter((r) => r.body?.action === 'resume');
+        assert.equal(previews.length, 1);
+        assert.equal(resumes.length, 1);
+        assert.ok(requests.indexOf(resumes[0]) > requests.indexOf(previews[0]));
+        assert.deepEqual(previews[0].body.resume_run, saved.identity);
+        assert.deepEqual(previews[0].body.models, saved.plan.models);
+        assert.deepEqual(previews[0].body.limits, saved.plan.limits);
+        assert.deepEqual(resumes[0].body.identity, saved.identity);
+        assert.equal(resumes[0].body.preview_id, saved.plan.preview_id);
+        assert.deepEqual(resumes[0].body.confirmations, {
+          provider_ids: remote ? ['provider-1'] : [],
+          security_review: true,
+        });
+        assert.equal(
+          requests.some((r) => r.path.endsWith('/analysis/run')),
+          false,
+        );
+        assert.equal(await page.evaluate(() => window.fixture.state.run.status), 'running');
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Execute analysis starts directly with captured consent and no dialogs', async () => {
+    for (const [runStatus, remote] of [
+      ['completed', false],
+      ['completed', true],
+      ['paused', true],
+      ['interrupted', true],
+    ]) {
+      const { page, close } = await pageFor({ remote, runStatus });
       try {
         await nav(page, 'Analysis');
         await page
           .getByRole('button', {
-            name: runStatus === 'completed' ? 'Prepare analysis' : 'Prepare continuation',
+            name: 'Execute analysis',
             exact: true,
           })
           .click();
@@ -26,7 +80,7 @@ export async function testStudio({ test, pageFor, nav, idle, layout }) {
         const start = starts[0];
         assert.ok(preview >= 0 && requests.indexOf(start) > preview);
         assert.equal(start.body.confirmations.security_review, true);
-        assert.ok(start.body.confirmations.provider_ids.length > 0);
+        assert.equal(start.body.confirmations.provider_ids.length > 0, remote);
         if (runStatus === 'completed') assert.equal(start.body.limits.budget_seconds, 1800);
         else assert.equal(start.body.action, 'resume');
       } finally {
@@ -35,15 +89,22 @@ export async function testStudio({ test, pageFor, nav, idle, layout }) {
     }
   });
   await test('Direct analysis admission rejects failures and ignores previews after navigation', async () => {
-    for (const navigate of [false, true]) {
-      const { page, close } = await pageFor();
+    for (const [route, navigate] of [
+      ['Analysis', false],
+      ['Analysis', true],
+      ['Last run', false],
+      ['Last run', true],
+    ]) {
+      const { page, close } = await pageFor({
+        runStatus: route === 'Last run' ? 'paused' : 'completed',
+      });
       try {
-        await nav(page, 'Analysis');
+        await nav(page, route);
         await page.evaluate((navigate) => {
           if (navigate) window.fixture.hold = '/api/projects/current/analysis/preview';
           else window.fixture.failures['/api/projects/current/analysis/preview'] = 409;
         }, navigate);
-        await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+        await page.getByRole('button', { name: 'Execute analysis', exact: true }).click();
         if (navigate) {
           await page.waitForFunction(() =>
             window.fixture.requests.some((r) => r.path.endsWith('/analysis/preview')),
@@ -55,7 +116,9 @@ export async function testStudio({ test, pageFor, nav, idle, layout }) {
         assert.equal(
           await page.evaluate(() =>
             window.fixture.requests.some(
-              (r) => r.method === 'POST' && r.path.endsWith('/analysis/run'),
+              (r) =>
+                r.method === 'POST' &&
+                (r.path.endsWith('/analysis/run') || r.body?.action === 'resume'),
             ),
           ),
           false,

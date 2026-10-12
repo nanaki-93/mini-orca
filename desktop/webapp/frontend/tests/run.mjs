@@ -2682,9 +2682,9 @@ try {
               'Refresh',
               'Preview analysis',
               'Repair analysis',
-              'Prepare analysis',
+              'Execute analysis',
             ]);
-            assert.equal(await intro.locator('.button.primary').innerText(), 'Prepare analysis');
+            assert.equal(await intro.locator('.button.primary').innerText(), 'Execute analysis');
             assert.equal(
               await page.getByRole('button', { name: 'View run', exact: true }).count(),
               0,
@@ -2762,7 +2762,7 @@ try {
         }
         assert.equal(await page.getByRole('table').count(), 0);
         assert.equal(await page.getByLabel('Filter analysis files').count(), 0);
-        for (const action of ['Prepare analysis', 'Refresh'])
+        for (const action of ['Execute analysis', 'Refresh'])
           assert.equal(await page.getByRole('button', { name: action, exact: true }).count(), 1);
       } finally {
         await close();
@@ -2774,7 +2774,7 @@ try {
     try {
       await nav(page, 'Analysis');
       assert.equal(
-        await page.getByRole('button', { name: 'Prepare analysis', exact: true }).isDisabled(),
+        await page.getByRole('button', { name: 'Execute analysis', exact: true }).isDisabled(),
         true,
       );
       assert.equal(await page.getByText(/eligible files selected/).count(), 0);
@@ -2827,11 +2827,11 @@ try {
       await filter.fill('');
       assert.equal(await page.getByLabel('Include internal/worker/process.go').isChecked(), false);
       await nav(page, 'Analysis');
-      for (const action of ['Prepare analysis', 'Repair analysis']) {
+      for (const action of ['Execute analysis', 'Repair analysis']) {
         await page.getByRole('button', { name: action, exact: true }).click();
         await page
           .getByRole('alert')
-          .getByText('Save your file selection before preparing a run.')
+          .getByText('Save your file selection before starting analysis.')
           .waitFor();
       }
       assert.deepEqual(
@@ -3271,7 +3271,7 @@ try {
       for (const control of [code, review, security, features])
         assert.equal(await control.isDisabled(), true);
       await nav(page, 'Analysis');
-      for (const name of ['Prepare analysis', 'Repair analysis', 'Refresh'])
+      for (const name of ['Execute analysis', 'Repair analysis', 'Refresh'])
         assert.equal(await page.getByRole('button', { name, exact: true }).isDisabled(), true);
       for (const control of [batch, budget, attempts, refresh])
         assert.equal(await control.isDisabled(), false, 'Limits remain editable while busy');
@@ -3344,7 +3344,7 @@ try {
       await nav(page, 'Analysis');
       // An empty catalog is present metadata; do not add a new preparation eligibility rule.
       assert.equal(
-        await page.getByRole('button', { name: 'Prepare analysis', exact: true }).isDisabled(),
+        await page.getByRole('button', { name: 'Execute analysis', exact: true }).isDisabled(),
         false,
       );
       await analysisSettingsFields(page);
@@ -3454,7 +3454,8 @@ try {
           before,
           'Viewing the saved run does not prepare or start it',
         );
-        await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
+        await nav(page, 'Analysis');
+        await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
         await idle(page);
         await page.getByRole('heading', { name: 'Continue analysis', exact: true }).waitFor();
         await page.getByText('600 seconds', { exact: true }).waitFor();
@@ -3533,8 +3534,7 @@ try {
           );
           await chooseModel(page.getByLabel('Feature discovery model'), 'analyze');
           await nav(page, 'Analysis');
-          await nav(page, 'Last run');
-          await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
+          await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
         } else {
           await chooseModel(page.getByLabel('Feature discovery model'), 'function');
           await page
@@ -3734,8 +3734,7 @@ try {
       try {
         await nav(page, 'Analysis');
         await idle(page);
-        await nav(page, 'Last run');
-        await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
+        await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
         await idle(page);
         const calls = await page.evaluate(() =>
           window.fixture.requests.filter((r) => r.method !== 'GET'),
@@ -3832,9 +3831,7 @@ try {
           assert.equal(
             await page
               .getByRole('button', {
-                name: ['paused', 'interrupted'].includes(status)
-                  ? 'Prepare continuation'
-                  : 'Prepare analysis',
+                name: 'Execute analysis',
                 exact: true,
               })
               .isDisabled(),
@@ -3878,8 +3875,8 @@ try {
         await page.getByRole('button', { name: 'Refresh', exact: true }).click();
         await idle(page);
         assert.equal(
-          await page.getByRole('button', { name: 'Prepare analysis', exact: true }).count(),
-          0,
+          await page.getByRole('button', { name: 'Execute analysis', exact: true }).count(),
+          1,
         );
         await page
           .getByText(
@@ -4012,7 +4009,8 @@ try {
     await startAnalysis(page);
     await page.getByRole('button', { name: 'Pause', exact: true }).click();
     await idle(page);
-    await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
+    await nav(page, 'Analysis');
+    await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
     await idle(page);
     assert.equal(
       await page
@@ -4104,7 +4102,8 @@ try {
     assert.equal(start.body.confirmations.security_review, true);
     await page.getByRole('button', { name: 'Pause', exact: true }).click();
     await idle(page);
-    await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
+    await nav(page, 'Analysis');
+    await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
     await idle(page);
     for (const [label, key] of [
       ['Code', 'draft-model'],
@@ -4251,7 +4250,7 @@ try {
           ['queued', 'running'].includes(status) ? 1 : 0,
         );
         assert.equal(
-          await heading.getByRole('button', { name: 'Prepare continuation', exact: true }).count(),
+          await heading.getByRole('button', { name: 'Execute analysis', exact: true }).count(),
           resumable ? 1 : 0,
         );
         const cancel = heading.getByRole('button', { name: 'Cancel run', exact: true });
@@ -4697,7 +4696,7 @@ try {
             assert.equal(
               await page
                 .locator('.analysis-run')
-                .getByText('Prepare a run from Analysis in the sidebar.', { exact: true })
+                .getByText('Execute analysis from Analysis in the sidebar.', { exact: true })
                 .isVisible(),
               true,
             );

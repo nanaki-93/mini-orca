@@ -831,7 +831,7 @@ export class Workspace {
     stalePath?: string,
     start = false,
   ) {
-    await this.act('Prepare analysis', async () => {
+    await this.act(start ? 'Execute analysis' : 'Preview analysis', async () => {
       const epoch = this.epoch;
       const operation = this.operation;
       const navigation = this.navigation;
