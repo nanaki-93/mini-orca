@@ -148,8 +148,9 @@ export function GitWorkspace({ s }: { s: State }) {
           </p>
           <p className="small muted">
             Incoming changes since the common ancestor. Git will merge these with your current
-            branch. After a successful merge, the source worktree and its local task history are
-            deleted, and its implementation closes. The branch is kept.
+            branch. After a successful merge, findings linked to the committed fixes are marked
+            Done. The source worktree and its local task history are deleted, and its implementation
+            closes. The branch is kept.
           </p>
           <h3>Incoming commits</h3>
           <pre tabIndex={0}>{s.gitPreview.commits || 'No new commits.'}</pre>

@@ -248,7 +248,7 @@ export function installFixture(options = {}) {
     path: files[0].path,
     content_hash: files[0].content_hash,
     status: options.stalePaths?.includes(files[0].path) ? 'stale' : 'success',
-    source: 'rules',
+    source: 'deterministic',
     findings: [
       {
         id: 'sec-1',
@@ -329,6 +329,7 @@ export function installFixture(options = {}) {
     project,
     files,
     finding,
+    completedFindings: [],
     run: options.empty ? null : { ...run, ...structuredClone(options.runOverride || {}) },
     preview,
     scan: options.scanReport ? { ...identity, ...structuredClone(options.scanReport) } : null,
@@ -677,6 +678,7 @@ export function installFixture(options = {}) {
                 state.git.dirty = true;
               } else {
                 state.git.head = body.source_head;
+                state.completedFindings = options.gitFindingCompletions || [];
                 if (options.gitCleanupFailure)
                   warnings.push(
                     `Merge completed, but worktree ${body.path} was not removed: checkout is locked.`,
@@ -908,6 +910,7 @@ export function installFixture(options = {}) {
               kind: body.kind,
               title: body.title,
               acceptance_criteria: body.acceptance_criteria || [],
+              finding_targets: body.finding_targets,
               revision: 0,
               hash: 'empty',
               state: 'draft',
@@ -1248,7 +1251,11 @@ export function installFixture(options = {}) {
           if (path.endsWith('/index') || path.endsWith('/reindex'))
             return response({ ...rev, files: options.emptyIndex ? [] : state.files });
           if (path.endsWith('/findings'))
-            return response({ ...rev, findings: options.empty ? [] : [state.finding] });
+            return response({
+              ...rev,
+              findings: options.empty ? [] : [state.finding],
+              completed: state.completedFindings,
+            });
           if (path.includes('/findings/')) {
             state.finding.status = body.status;
             return response(null);

@@ -187,11 +187,17 @@ func (h *ProjectHandler) Findings(w http.ResponseWriter, r *http.Request) {
 		writeProjectError(w, "finding lookup failed", err)
 		return
 	}
+	completed, err := h.service.FindingCompletions()
+	if err != nil {
+		writeProjectError(w, "finding completion lookup failed", err)
+		return
+	}
 	api.WriteJSON(w, http.StatusOK, struct {
-		ProjectID       string                   `json:"project_id"`
-		ProjectRevision string                   `json:"project_revision"`
-		Findings        []project.UnifiedFinding `json:"findings"`
-	}{ProjectID: findingsProjectID(h.manager), ProjectRevision: r.URL.Query().Get("project_revision"), Findings: findings})
+		ProjectID       string                      `json:"project_id"`
+		ProjectRevision string                      `json:"project_revision"`
+		Findings        []project.UnifiedFinding    `json:"findings"`
+		Completed       []project.FindingCompletion `json:"completed"`
+	}{ProjectID: findingsProjectID(h.manager), ProjectRevision: r.URL.Query().Get("project_revision"), Findings: findings, Completed: completed})
 }
 
 // UpdateFindingStatus changes only user triage for one deterministic finding.

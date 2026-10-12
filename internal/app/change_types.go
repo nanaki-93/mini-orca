@@ -37,6 +37,7 @@ type ChangeSession struct {
 	Kind               string                  `json:"kind"`
 	Title              string                  `json:"title"`
 	AcceptanceCriteria []string                `json:"acceptance_criteria"`
+	FindingTargets     []project.FindingTarget `json:"finding_targets,omitempty"`
 	Targets            []ChangeTarget          `json:"targets"`
 	Instructions       map[string]string       `json:"instructions"`
 	PolicyFingerprint  string                  `json:"policy_fingerprint"`
@@ -63,27 +64,29 @@ type ChangeSession struct {
 // Listing summaries keeps a full history within the native response bound;
 // source and conversation contents are returned only for the chosen session.
 type ChangeHistoryEntry struct {
-	ID              string        `json:"id"`
-	ProjectID       string        `json:"project_id"`
-	ProjectRevision string        `json:"project_revision"`
-	Kind            string        `json:"kind"`
-	Title           string        `json:"title"`
-	Revision        int64         `json:"revision"`
-	Hash            string        `json:"hash"`
-	State           string        `json:"state"`
-	Freshness       string        `json:"freshness"`
-	WorkflowStatus  string        `json:"workflow_status,omitempty"`
-	Commit          *ChangeCommit `json:"commit,omitempty"`
-	UpdatedAt       time.Time     `json:"updated_at"`
+	ID              string                  `json:"id"`
+	ProjectID       string                  `json:"project_id"`
+	ProjectRevision string                  `json:"project_revision"`
+	Kind            string                  `json:"kind"`
+	Title           string                  `json:"title"`
+	Revision        int64                   `json:"revision"`
+	Hash            string                  `json:"hash"`
+	State           string                  `json:"state"`
+	Freshness       string                  `json:"freshness"`
+	WorkflowStatus  string                  `json:"workflow_status,omitempty"`
+	Commit          *ChangeCommit           `json:"commit,omitempty"`
+	FindingTargets  []project.FindingTarget `json:"finding_targets,omitempty"`
+	UpdatedAt       time.Time               `json:"updated_at"`
 }
 
 type ChangeCreateRequest struct {
-	ProjectID          string   `json:"project_id"`
-	ProjectRevision    string   `json:"project_revision"`
-	Kind               string   `json:"kind"`
-	Title              string   `json:"title"`
-	Paths              []string `json:"paths"`
-	AcceptanceCriteria []string `json:"acceptance_criteria"`
+	ProjectID          string                  `json:"project_id"`
+	ProjectRevision    string                  `json:"project_revision"`
+	Kind               string                  `json:"kind"`
+	Title              string                  `json:"title"`
+	Paths              []string                `json:"paths"`
+	AcceptanceCriteria []string                `json:"acceptance_criteria"`
+	FindingTargets     []project.FindingTarget `json:"finding_targets,omitempty"`
 }
 
 type ChangeIdentity struct {

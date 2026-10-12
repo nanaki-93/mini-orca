@@ -139,6 +139,17 @@ export interface Finding extends ProjectIdentity {
 }
 export interface FindingsResponse extends ProjectIdentity {
   findings: Finding[];
+  completed?: FindingCompletion[];
+}
+export interface FindingTarget {
+  project_id: string;
+  kind: 'semantic' | 'performance' | 'security';
+  id: string;
+  path: string;
+  source?: string;
+}
+export interface FindingCompletion extends FindingTarget {
+  commit_oid: string;
 }
 export interface Limits {
   batch_files: number;
@@ -465,6 +476,7 @@ export interface TerminalUpdate {
 }
 
 export interface ChangeSession extends ProjectIdentity {
+  finding_targets?: FindingTarget[];
   git?: GitIdentity;
   commit?: ChangeCommit;
   id: string;
@@ -506,6 +518,7 @@ export type ChangeHistoryEntry = Pick<
   | 'hash'
   | 'state'
   | 'freshness'
+  | 'finding_targets'
   | 'updated_at'
 > & { workflow_status?: string };
 export interface ChangeWorkflowModels {
@@ -542,6 +555,7 @@ export interface ChangeVerification extends ProjectIdentity {
   checks: Check[];
 }
 export interface ChangeSeed {
+  finding_targets?: FindingTarget[];
   title: string;
   message: string;
   kind: string;

@@ -226,7 +226,7 @@ paths:
       - {$ref: '#/components/parameters/WorktreePath'}
     post:
       tags: [Projects]
-      description: Merge the reviewed committed worktree head into the current clean branch, then remove the clean source worktree and its local task history without force. The branch is retained. Cleanup failures preserve the merged state and return warnings.
+      description: Merge the reviewed committed worktree head into the current clean branch, mark findings linked to its applied committed fixes Done, then remove the clean source worktree and its local task history without force. The branch is retained. Completion persistence failures retain the worktree and return warnings; cleanup failures preserve completion and the merged state.
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationRequest'}}}}
       responses:
         '200': {description: Observed Git outcome, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
@@ -1334,6 +1334,27 @@ components:
         project_id: {type: string}
         project_revision: {type: string}
         findings: {type: array, items: {$ref: '#/components/schemas/UnifiedFinding'}}
+        completed: {type: array, description: "Merged finding targets for this project, independent of finding filters and evidence freshness.", items: {$ref: '#/components/schemas/FindingCompletion'}}
+    FindingTarget:
+      type: object
+      additionalProperties: false
+      required: [project_id, kind, id, path]
+      properties:
+        project_id: {type: string, minLength: 1, maxLength: 1024, description: "Original finding project identity, retained when preparing in a worktree."}
+        kind: {type: string, enum: [semantic, performance, security]}
+        id: {type: string, minLength: 1, maxLength: 1024}
+        path: {type: string, minLength: 1, maxLength: 1024, description: Project-relative finding path within the captured change paths.}
+        source: {type: string, enum: [ai, deterministic], description: Required only for security findings; omitted for other producers.}
+    FindingCompletion:
+      type: object
+      required: [project_id, kind, id, path, commit_oid]
+      properties:
+        project_id: {type: string}
+        kind: {type: string, enum: [semantic, performance, security]}
+        id: {type: string}
+        path: {type: string}
+        source: {type: string, enum: [ai, deterministic]}
+        commit_oid: {type: string, description: Committed fix verified as an ancestor of the reviewed merged head.}
     UnifiedFinding:
       type: object
       required: [id, source, confidence, severity, title, message, project_id, project_revision, location, status, freshness, detected_at]
@@ -2443,6 +2464,7 @@ components:
         title: {type: string, minLength: 1, maxLength: 200}
         paths: {type: array, minItems: 1, maxItems: 8, uniqueItems: true, items: {type: string}}
         acceptance_criteria: {type: array, maxItems: 16, items: {type: string, maxLength: 1024}}
+        finding_targets: {type: array, maxItems: 16, uniqueItems: true, items: {$ref: '#/components/schemas/FindingTarget'}}
     InstructionProposalRequest:
       description: ChangeCreateRequest fields plus content; exactly one AGENTS.md path and instructions kind.
       allOf:
@@ -2545,6 +2567,7 @@ components:
         kind: {type: string}
         title: {type: string}
         acceptance_criteria: {type: array, items: {type: string}}
+        finding_targets: {type: array, maxItems: 16, items: {$ref: '#/components/schemas/FindingTarget'}}
         revision: {type: integer}
         hash: {type: string}
         state: {type: string, enum: [draft, applied, undone, prepared, undoing, recovery_required]}
@@ -2606,6 +2629,7 @@ components:
       required: [id, project_id, project_revision, kind, title, revision, hash, state, freshness, updated_at]
       properties:
         commit: {$ref: '#/components/schemas/ChangeCommit'}
+        finding_targets: {type: array, maxItems: 16, items: {$ref: '#/components/schemas/FindingTarget'}}
         id: {type: string}
         project_id: {type: string}
         project_revision: {type: string}

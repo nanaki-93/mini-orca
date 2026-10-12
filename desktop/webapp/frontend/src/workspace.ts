@@ -67,6 +67,7 @@ export interface State {
   selectedFinding?: { category: FindingCategory; key: string };
   findingViews: Partial<Record<FindingCategory, FindingListView>>;
   findings?: M.Finding[];
+  completedFindings?: M.FindingCompletion[];
   selection?: M.Selection;
   run?: M.AnalysisRun | null;
   preview?: M.AnalysisPreview;
@@ -488,7 +489,7 @@ export class Workspace {
       const message =
         action === 'abort-merge'
           ? 'Discard conflict-resolution edits and restore the state before the merge.'
-          : 'After a successful merge, the source worktree directory and its local task history will be deleted, and its implementation will close. The branch is kept. Prepared fixes will need fresh checks and review.';
+          : 'After a successful merge, findings linked to the committed fixes will be marked Done. The source worktree directory and its local task history will be deleted, and its implementation will close. The branch is kept. Prepared fixes will need fresh checks and review.';
       if (
         !(await this.confirm({
           title,
@@ -717,7 +718,8 @@ export class Workspace {
       this.resource(
         'findings',
         () => this.api.get<M.FindingsResponse>(`${current}/findings`, identity),
-        (result) => this.set({ findings: result.findings || [] }),
+        (result) =>
+          this.set({ findings: result.findings || [], completedFindings: result.completed || [] }),
       ),
       this.resource(
         'run',
@@ -1750,6 +1752,7 @@ export class Workspace {
           title: seed.title,
           paths: seed.paths,
           acceptance_criteria: seed.acceptance_criteria,
+          finding_targets: seed.finding_targets,
         });
         if (epoch !== this.epoch || operation !== this.operation) return;
         if (projectKey(change) !== projectKey(this.state.project))
@@ -1889,6 +1892,7 @@ export class Workspace {
           title: seed.title,
           paths: seed.paths,
           acceptance_criteria: seed.acceptance_criteria,
+          finding_targets: seed.finding_targets,
         });
         if (epoch !== this.epoch || operation !== this.operation) return;
         if (projectKey(change) !== projectKey(this.state.project))

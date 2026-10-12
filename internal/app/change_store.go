@@ -70,6 +70,9 @@ func readChangeSession(root, id string) (*ChangeSession, error) {
 }
 
 func validateStoredChange(session ChangeSession) error {
+	if err := validateChangeFindingTargets(&session); err != nil {
+		return err
+	}
 	seen := map[string]bool{}
 	for _, target := range session.Targets {
 		if seen[target.Path] || len(target.Content) > maxChangeBytes || target.Hash != contentHash([]byte(target.Content)) && target.Exists {
@@ -161,6 +164,7 @@ func listChangeSessions(root string) ([]ChangeHistoryEntry, error) {
 		}
 		entry := ChangeHistoryEntry{ID: session.ID, ProjectID: session.ProjectID, ProjectRevision: session.ProjectRevision, Kind: session.Kind, Title: session.Title, Revision: session.Revision, Hash: session.Hash, State: session.State, Freshness: session.Freshness, UpdatedAt: session.UpdatedAt}
 		entry.Commit = session.Commit
+		entry.FindingTargets = session.FindingTargets
 		if session.Workflow != nil {
 			entry.WorkflowStatus = session.Workflow.Status
 		}

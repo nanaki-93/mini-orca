@@ -117,10 +117,18 @@ func (s *Service) MergeGitWorktree(ctx context.Context, request GitMutationReque
 	if err != nil {
 		return nil, err
 	}
+	completed, err := mergedFindingTargets(ctx, repository, source)
+	if err != nil {
+		return nil, err
+	}
 	s.invalidateJobsForProjectChange()
 	_, err = gitRead(ctx, repository.Root, "merge", "--no-edit", "--no-stat", "--no-autostash", "--no-rerere-autoupdate", source.Head)
 	result := s.completeGitMutation(repository.Root, "merged", err)
 	if result.State == "merged" {
+		if err := completeMergedFindings(ctx, repository.Root, source.Head, completed); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Merge completed, but findings could not be marked Done: %v. Worktree %s and its task history were retained.", err, source.Path))
+			return result, nil
+		}
 		if err := s.removeGitWorktree(ctx, repository.Root, source, worktreeMerged); err != nil {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("Merge completed, but worktree %s was not removed: %v. Resolve the issue and remove it with Git.", source.Path, err))
 		} else {

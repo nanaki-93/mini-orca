@@ -342,6 +342,14 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
       assert.equal(requests[creation].body.target_branch, 'codex/cancel-fix');
       assert.equal(requests[creation].body.path, '/fixture/harbor/.worktrees/cancel-fix');
       assert.equal(requests[capture].body.project_id, 'project-worktree-codex/cancel-fix');
+      assert.deepEqual(requests[capture].body.finding_targets, [
+        {
+          project_id: 'project-1',
+          kind: 'semantic',
+          id: 'finding-1',
+          path: 'internal/worker/process.go',
+        },
+      ]);
       assert.equal(requests[capture].query.worktree_path, '/fixture/harbor/.worktrees/cancel-fix');
       assert.equal(
         requests.slice(creation).some((r) => r.path === '/api/projects/restore'),
@@ -535,6 +543,113 @@ export async function testGitWorkflows({ test, pageFor, nav, idle, layout }) {
           await page.getByRole('button', { name: 'View implementation', exact: true }).count(),
           conflict ? 1 : 0,
         );
+      } finally {
+        await close();
+      }
+    });
+  for (const conflict of [false, true])
+    await test(`Git merge finding completion is refreshed and scoped (conflict=${conflict})`, async () => {
+      const gitFindingCompletions = [
+        {
+          project_id: 'project-1',
+          kind: 'semantic',
+          id: 'finding-1',
+          path: 'internal/worker/process.go',
+          commit_oid: 'fix-commit',
+        },
+        {
+          project_id: 'project-1',
+          kind: 'performance',
+          id: 'perf-1',
+          path: 'internal/worker/process.go',
+          commit_oid: 'fix-commit',
+        },
+        {
+          project_id: 'project-1',
+          kind: 'security',
+          source: 'deterministic',
+          id: 'sec-1',
+          path: 'internal/worker/process.go',
+          commit_oid: 'fix-commit',
+        },
+      ];
+      const { page, close } = await pageFor({
+        git: true,
+        gitMergeConflict: conflict,
+        gitFindingCompletions,
+      });
+      try {
+        await page.evaluate(() => {
+          const state = window.fixture.state;
+          state.results.bugs = {
+            semantic: [
+              state.finding,
+              { ...state.finding, id: 'unrelated', title: 'Separate concern' },
+            ],
+          };
+          state.security.findings.push({
+            ...state.security.findings[0],
+            id: 'unrelated',
+            title: 'Separate security concern',
+          });
+        });
+        await nav(page, 'Bugs');
+        assert.equal(
+          await page.locator('.result-row').getByText('Done', { exact: true }).count(),
+          0,
+        );
+        await nav(page, 'Git / Worktrees');
+        await page.getByRole('button', { name: 'Merge into current branch', exact: true }).click();
+        await idle(page);
+        await page
+          .getByRole('dialog', { name: 'Review worktree merge', exact: true })
+          .getByRole('button', { name: 'Merge into current branch', exact: true })
+          .click();
+        const confirmation = page.getByRole('dialog', {
+          name: 'Merge codex/fix into main?',
+          exact: true,
+        });
+        await confirmation
+          .getByText(/findings linked to the committed fixes will be marked Done/)
+          .waitFor();
+        await confirmation
+          .getByRole('button', { name: 'Merge into current branch', exact: true })
+          .click();
+        await idle(page);
+        for (const category of ['Bugs', 'Performance', 'Security']) {
+          await nav(page, category);
+          assert.equal(
+            await page.locator('.result-row').getByText('Done', { exact: true }).count(),
+            conflict ? 0 : 1,
+          );
+          await page.locator('.result-row').first().click();
+          if (!conflict) {
+            await page
+              .getByLabel('Finding state', { exact: true })
+              .getByText('Done', { exact: true })
+              .waitFor();
+            if (category === 'Security')
+              await page
+                .getByLabel('Finding state', { exact: true })
+                .getByText('unverified', { exact: true })
+                .waitFor();
+            await layout(page, `merged-finding-${category}`);
+          }
+        }
+        const requests = await posts(page);
+        assert.equal(requests.filter((request) => request.path.includes('/findings/')).length, 0);
+        // A later findings read, independent of the merge receipt, retains Done.
+        await nav(page, 'Overview');
+        await nav(page, 'Bugs');
+        assert.equal(
+          await page.locator('.result-row').getByText('Done', { exact: true }).count(),
+          conflict ? 0 : 1,
+        );
+        if (!conflict) {
+          await page.setViewportSize({ width: 900, height: 640 });
+          await page.getByRole('button', { name: 'Larger text', exact: true }).click();
+          await layout(page, 'merged-findings-list-large-text');
+        }
       } finally {
         await close();
       }

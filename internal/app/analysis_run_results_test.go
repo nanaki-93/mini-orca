@@ -24,6 +24,37 @@ func assertSavedAnalysisCounts(t *testing.T, s *Service, run *AnalysisRun, want 
 	}
 }
 
+func TestAnalysisResultsReadCompletionWithoutPriorFindingReconciliation(t *testing.T) {
+	server, calls := analysisResponseServer(t, analysisReply)
+	service, root := newSemanticAnalysisService(t, server.URL, 0)
+	ctx := context.Background()
+	preview := analysisRunPreviewFor(t, service, AnalysisRunLimits{100, 30, 1}, nil)
+	if _, err := service.StartAnalysisRun(ctx, analysisStartFor(preview)); err != nil {
+		t.Fatal(err)
+	}
+	run := completedAnalysisRun(t, service)
+	results, err := service.ReadAnalysisSection(ctx, run.Identity, project.FindingCategoryBugs, "")
+	if err != nil || len(results.Semantic) != 1 {
+		t.Fatalf("original results: %+v, %v", results, err)
+	}
+	finding := results.Semantic[0]
+	store, err := project.NewFindingStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Complete([]project.FindingCompletion{{FindingTarget: project.FindingTarget{ProjectID: finding.ProjectID, Kind: "semantic", ID: finding.ID, Path: finding.Location.Path}, CommitOID: "merged-commit"}}); err != nil {
+		t.Fatal(err)
+	}
+	before := calls.Load()
+	results, err = service.ReadAnalysisSection(ctx, run.Identity, project.FindingCategoryBugs, "")
+	if err != nil || len(results.Semantic) != 1 || results.Semantic[0].Status != project.FindingStatusFixed {
+		t.Fatalf("completion omitted from analysis results: %+v, %v", results, err)
+	}
+	if results.Semantic[0].Confidence != finding.Confidence || results.Semantic[0].Freshness != finding.Freshness || calls.Load() != before {
+		t.Fatal("reading completion changed evidence or dispatched a model")
+	}
+}
+
 func TestAnalysisResultsKeepCanceledRefreshEvidenceAndUnknownCounts(t *testing.T) {
 	var block atomic.Bool
 	started, release := make(chan struct{}), make(chan struct{})

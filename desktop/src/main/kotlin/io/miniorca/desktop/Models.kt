@@ -453,7 +453,18 @@ data class UnifiedFinding(
 data class FindingsResponse(
     @SerialName("project_id") val projectId: String = "",
     @SerialName("project_revision") val projectRevision: String = "",
-    val findings: List<UnifiedFinding> = emptyList()
+    val findings: List<UnifiedFinding> = emptyList(),
+    val completed: List<FindingCompletion> = emptyList()
+)
+
+@Serializable
+data class FindingCompletion(
+    @SerialName("project_id") val projectId: String,
+    val kind: String,
+    val id: String,
+    val path: String,
+    val source: String = "",
+    @SerialName("commit_oid") val commitOid: String
 )
 
 @Serializable
