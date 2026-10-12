@@ -466,7 +466,7 @@ export class Workspace {
       this.set({ gitPreview });
     });
   }
-  async gitAction(action: 'switch' | 'merge' | 'abort-merge', targetBranch?: string) {
+  async gitAction(action: 'merge' | 'abort-merge') {
     await this.act('Update Git workspace', async () => {
       const repository = this.state.gitWorkspace;
       const preview = this.state.gitPreview;
@@ -482,27 +482,18 @@ export class Workspace {
       const epoch = this.epoch,
         navigation = this.navigation;
       const title =
-        action === 'switch'
-          ? `Switch to ${targetBranch}?`
-          : action === 'merge'
-            ? `Merge ${preview!.source.branch} into ${repository.branch}?`
-            : 'Abort this merge?';
+        action === 'merge'
+          ? `Merge ${preview!.source.branch} into ${repository.branch}?`
+          : 'Abort this merge?';
       const message =
         action === 'abort-merge'
           ? 'Discard conflict-resolution edits and restore the state before the merge.'
-          : action === 'merge'
-            ? 'After a successful merge, the source worktree directory and its local task history will be deleted, and its implementation will close. The branch is kept. Prepared fixes will need fresh checks and review.'
-            : 'Prepared fixes will need fresh checks and review.';
+          : 'After a successful merge, the source worktree directory and its local task history will be deleted, and its implementation will close. The branch is kept. Prepared fixes will need fresh checks and review.';
       if (
         !(await this.confirm({
           title,
           message: `${message} Trust this project for local execution: Git filters and merge drivers may run; approved project checks may also execute. Open terminal sessions will close.`,
-          accept:
-            action === 'switch'
-              ? 'Switch branch'
-              : action === 'merge'
-                ? 'Merge into current branch'
-                : 'Abort merge',
+          accept: action === 'merge' ? 'Merge into current branch' : 'Abort merge',
           destructive: action === 'abort-merge',
         }))
       )
@@ -523,11 +514,9 @@ export class Workspace {
           branch: repository.branch,
           confirm: true,
           confirm_execution: true,
-          ...(action === 'switch'
-            ? { target_branch: targetBranch }
-            : action === 'merge'
-              ? { path: preview!.path, source_head: preview!.source.head }
-              : { merge_head: repository.merge_head }),
+          ...(action === 'merge'
+            ? { path: preview!.path, source_head: preview!.source.head }
+            : { merge_head: repository.merge_head }),
         });
       } catch (error) {
         if (!(error instanceof ApiError))
@@ -556,6 +545,53 @@ export class Workspace {
         uncertain: !result.index,
       });
       await this.refreshProject();
+      await this.loadGitWorkspace();
+    });
+  }
+  async discardWorktree(tree: M.GitWorktree) {
+    await this.act('Discard worktree', async () => {
+      const repository = this.state.gitWorkspace;
+      if (!repository || this.state.resourceErrors['Git / Worktrees'] || this.state.uncertain)
+        throw new Error('Refresh Git status first.');
+      const epoch = this.epoch,
+        navigation = this.navigation;
+      if (
+        !(await this.confirm({
+          title: `Discard ${tree.branch}?`,
+          message: `Delete the worktree at ${tree.path} and its local task history without merging. Its implementation will close. The branch and committed changes are kept. Trust this project for local execution; approved project checks may run.`,
+          accept: 'Discard change',
+          destructive: true,
+        }))
+      )
+        return;
+      if (epoch !== this.epoch || navigation !== this.navigation) return;
+      await this.api.post(`${current}/execution-trust`, {
+        project_revision: repository.project_revision,
+        confirm: true,
+      });
+      if (epoch !== this.epoch || navigation !== this.navigation) return;
+      let result: M.GitMutation;
+      try {
+        result = await this.api.post<M.GitMutation>(`${current}/git/discard-worktree`, {
+          ...this.identity(),
+          head: repository.head,
+          branch: repository.branch,
+          path: tree.path,
+          source_head: tree.head,
+          source_branch: tree.branch,
+          confirm: true,
+          confirm_execution: true,
+        });
+      } catch (error) {
+        if (epoch === this.epoch) {
+          if (error instanceof ApiError) await this.loadGitWorkspace();
+          else this.set({ uncertain: true, gitPreview: undefined, gitResult: undefined });
+        }
+        throw error;
+      }
+      if (epoch !== this.epoch) return;
+      if (result.removed_worktree) this.closeWorktree(result.removed_worktree);
+      this.set({ gitResult: result, gitPreview: undefined });
       await this.loadGitWorkspace();
     });
   }

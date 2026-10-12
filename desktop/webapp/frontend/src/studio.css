@@ -1451,42 +1451,39 @@ svg.icon {
 .sidebar-collapsed .project-branch span {
   display: none;
 }
-.git-branch-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.git-branch-row > div {
-  min-width: 0;
-}
-.git-branch-row .path {
-  overflow-wrap: anywhere;
-}
-.git-branch-name {
-  font-size: 20px;
-  overflow-wrap: anywhere;
-}
-.git-switcher {
-  align-items: flex-end;
-}
-.git-switcher .git-branch-control {
-  min-width: 220px;
-  flex: 1;
-}
 .git-worktrees {
   display: grid;
   gap: 16px;
 }
 .git-worktree {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 580px);
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+.git-worktree + .git-worktree {
   border-top: 1px solid var(--line);
   padding-top: 16px;
-  min-width: 0;
 }
 .git-worktree h3 {
   overflow-wrap: anywhere;
   margin: 0;
+}
+.git-worktree-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.git-worktree-actions .button {
+  min-width: 0;
+  height: 100%;
+  white-space: normal;
+}
+@media (max-width: 1100px) {
+  .git-worktree {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .git-merge-diff {
   max-height: 42vh;
@@ -1509,10 +1506,6 @@ svg.icon {
   width: auto;
 }
 
-.git-branch-control label {
-  display: block;
-  margin-bottom: 8px;
-}
 .compact-stack {
   gap: 8px;
 }

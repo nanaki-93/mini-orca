@@ -1,18 +1,17 @@
-import { useId, useState } from 'react';
 import { workspace as w, type State } from './workspace';
-import { Badge, Button, Empty, Heading, Notice, Overlay, Panel } from './ui';
+import { Button, Empty, Heading, Notice, Overlay, Panel } from './ui';
 
 export function GitWorkspace({ s }: { s: State }) {
   const repository = s.gitWorkspace;
-  const [branch, setBranch] = useState('');
-  const branchID = useId();
+  const worktrees = repository?.worktrees.filter((tree) => tree.mergeable) || [];
+  const failed = repository?.worktrees.filter((tree) => tree.error) || [];
   const busy = !!s.busy;
   const blocked = busy || !!s.resourceErrors['Git / Worktrees'] || s.uncertain;
   return (
     <div className="workspace-page git-workspace">
       <Heading
         title="Git / Worktrees"
-        detail="Switch branches, review completed fixes, and merge isolated work."
+        detail={`Worktrees ready to merge into ${repository?.branch || 'the current branch'}.`}
         variant="intro"
       >
         <Button icon="refresh" disabled={busy} onClick={() => void w.loadGitWorkspace()}>
@@ -90,148 +89,54 @@ export function GitWorkspace({ s }: { s: State }) {
               tools.
             </Notice>
           )}
-          <Panel title="Current branch">
-            <div className="git-branch-row">
-              <div>
-                <strong className="git-branch-name">{repository.branch || 'Detached HEAD'}</strong>
-                <p className="path small muted">{repository.root}</p>
-              </div>
-              <Badge value={repository.dirty ? 'Uncommitted changes' : 'Clean'} />
-            </div>
-            <div className="actions git-switcher">
-              <div className="git-branch-control">
-                <label htmlFor={branchID}>Switch to branch</label>
-                <select
-                  id={branchID}
-                  className="field"
-                  value={branch}
-                  onChange={(event) => setBranch(event.target.value)}
-                >
-                  <option value="">Choose a local branch</option>
-                  {repository.branches.map((item) => (
-                    <option
-                      key={item.name}
-                      value={item.name}
-                      disabled={
-                        item.name === repository.branch ||
-                        (!!item.worktree_path && item.worktree_path !== repository.root)
-                      }
-                    >
-                      {item.name}
-                      {item.name === repository.branch
-                        ? ' · current'
-                        : item.worktree_path
-                          ? ' · in another worktree'
-                          : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <Button
-                disabled={
-                  blocked ||
-                  repository.dirty ||
-                  !branch ||
-                  branch === repository.branch ||
-                  !!repository.merge_head ||
-                  !!repository.operation ||
-                  !repository.at_root ||
-                  !repository.head
-                }
-                onClick={() => void w.gitAction('switch', branch)}
-              >
-                Switch branch
-              </Button>
-            </div>
-            {repository.dirty && (
-              <p className="small muted">
-                Commit or move your local changes before switching or merging.
-              </p>
-            )}
-          </Panel>
-          <Panel title="Worktrees">
-            <p className="small muted">
-              To create a worktree, select Prepare fix on a finding or Generate changes in a new
-              feature conversation.
-            </p>
-            <div className="git-worktrees">
-              {repository.worktrees.map((tree) => (
-                <article className="git-worktree" key={tree.path}>
-                  <div className="git-branch-row">
-                    <div>
-                      <h3>{tree.branch || 'Detached HEAD'}</h3>
-                      <p className="path small">{tree.path}</p>
-                    </div>
-                    <Badge
-                      value={
-                        tree.current
-                          ? 'Current'
-                          : tree.locked
-                            ? 'Locked'
-                            : tree.prunable
-                              ? 'Unavailable'
-                              : tree.dirty === undefined
-                                ? 'Status unavailable'
-                                : tree.dirty
-                                  ? 'Uncommitted changes'
-                                  : 'Clean'
-                      }
-                    />
-                  </div>
-                  {tree.error && <Notice error>{tree.error}</Notice>}
-                  <p>
-                    {tree.error
-                      ? 'Completed fix history may be unavailable.'
-                      : `${tree.completed.length} completed ${tree.completed.length === 1 ? 'fix' : 'fixes'}`}
-                  </p>
-                  {tree.completed.length > 0 && (
-                    <ul>
-                      {tree.completed.map((fix) => (
-                        <li key={fix.id}>{fix.title}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {!tree.current && (
-                    <Button
-                      disabled={blocked || tree.prunable}
-                      onClick={() => void w.openWorktree(tree.path)}
-                    >
-                      View implementations
-                    </Button>
-                  )}
-                  {!tree.current && (
-                    <Button
-                      disabled={blocked || tree.prunable}
-                      onClick={() => void w.openProject(tree.path, false)}
-                    >
-                      Open project here
-                    </Button>
-                  )}
-                  {!tree.current && (
-                    <Button
-                      icon="branch"
-                      disabled={
-                        blocked ||
-                        !!tree.error ||
-                        tree.dirty !== false ||
-                        tree.locked ||
-                        tree.prunable ||
-                        !tree.branch ||
-                        tree.head === repository.head ||
-                        repository.dirty ||
-                        !!repository.merge_head ||
-                        !!repository.operation ||
-                        !repository.at_root ||
-                        !repository.branch
-                      }
-                      onClick={() => void w.previewGitMerge(tree)}
-                    >
-                      Merge into Current Branch
-                    </Button>
-                  )}
-                </article>
+          {failed.length > 0 && (
+            <Notice error>
+              <strong>Some worktree statuses are unavailable. Refresh Git to retry.</strong>
+              {failed.map((tree) => (
+                <p key={tree.path}>
+                  {tree.branch || tree.path}: {tree.error}
+                </p>
               ))}
-            </div>
+            </Notice>
+          )}
+          <Panel title="Worktrees">
+            {worktrees.length === 0 ? (
+              <Empty
+                title="No worktrees ready to merge"
+                detail={
+                  repository.dirty
+                    ? 'Commit or move local changes in the current branch, then refresh Git.'
+                    : undefined
+                }
+              />
+            ) : (
+              <div className="git-worktrees">
+                {worktrees.map((tree) => (
+                  <article className="git-worktree" key={tree.path} aria-label={tree.branch}>
+                    <h3>{tree.branch}</h3>
+                    <div className="git-worktree-actions">
+                      <Button disabled={blocked} onClick={() => void w.openWorktree(tree.path)}>
+                        View implementation
+                      </Button>
+                      <Button
+                        tone="danger"
+                        disabled={blocked}
+                        onClick={() => void w.discardWorktree(tree)}
+                      >
+                        Discard change
+                      </Button>
+                      <Button
+                        tone="primary"
+                        disabled={blocked}
+                        onClick={() => void w.previewGitMerge(tree)}
+                      >
+                        Merge into current branch
+                      </Button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
           </Panel>
         </>
       )}

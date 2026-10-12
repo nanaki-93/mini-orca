@@ -447,6 +447,7 @@ export function installFixture(options = {}) {
       head: state.git.head,
       branch: state.git.branch,
       current: true,
+      mergeable: false,
       dirty: state.git.dirty,
       completed: [],
     },
@@ -455,6 +456,7 @@ export function installFixture(options = {}) {
       head: 'head-fix',
       branch: 'codex/fix',
       current: false,
+      mergeable: true,
       dirty: false,
       completed: [{ id: 'completed-fix', title: 'Handle cancellation', state: 'applied' }],
     },
@@ -583,8 +585,22 @@ export function installFixture(options = {}) {
               ],
               worktrees: state.gitWorktrees.map((tree) =>
                 tree.path === state.project.path
-                  ? { ...tree, ...state.git, path: tree.path, current: true }
-                  : { ...tree, current: false },
+                  ? { ...tree, ...state.git, path: tree.path, current: true, mergeable: false }
+                  : {
+                      ...tree,
+                      current: false,
+                      mergeable:
+                        !!tree.mergeable &&
+                        tree.head !== state.git.head &&
+                        !tree.dirty &&
+                        !tree.locked &&
+                        !tree.prunable &&
+                        !tree.error &&
+                        !!tree.branch &&
+                        !state.git.dirty &&
+                        !state.git.merge_head &&
+                        !state.git.operation,
+                    },
               ),
             });
           if (path === '/api/projects/current/git/worktrees') {
@@ -595,6 +611,7 @@ export function installFixture(options = {}) {
               branch: body.target_branch,
               head: body.head,
               current: false,
+              mergeable: false,
               dirty: false,
               completed: [],
             });
@@ -613,6 +630,31 @@ export function installFixture(options = {}) {
               commits: 'a1b2c3d Handle cancellation',
               diff: 'diff --git a/internal/worker/process.go b/internal/worker/process.go\n- return nil\n+ return ctx.Err()\n',
             });
+          if (path === '/api/projects/current/git/discard-worktree') {
+            const tree = state.gitWorktrees.find((tree) => tree.path === body.path);
+            if (
+              !tree ||
+              tree.head !== body.source_head ||
+              tree.branch !== body.source_branch ||
+              tree.dirty
+            )
+              return {
+                status: 409,
+                body: JSON.stringify({
+                  type: 'conflict',
+                  user_message: 'Worktree changed; refresh Git status.',
+                }),
+              };
+            if (options.gitDiscardFailure)
+              return response({ state: 'failed', error: 'The checkout is locked.', warnings: [] });
+            state.gitWorktrees = state.gitWorktrees.filter((tree) => tree.path !== body.path);
+            return response({
+              state: 'discarded',
+              removed_worktree: body.path,
+              repository: repository(),
+              warnings: [],
+            });
+          }
           if (
             [
               '/api/projects/current/git/switch',
