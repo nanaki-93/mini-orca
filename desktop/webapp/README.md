@@ -150,18 +150,20 @@ visible. The sidebar collapses to icons.
   any Git commit. It does not automatically mark the finding fixed.
 - The active branch appears directly beneath the project name in the sidebar.
   Selecting it opens **Git / Worktrees**, also available in the Project navigation.
-  The branch switcher lists local branches and identifies those checked out in
-  other worktrees. Switch and merge require clean working trees, explicit execution
-  trust, and confirmation; active terminals close and prepared evidence is cleared.
-  Worktrees list their completed committed fixes. **View implementations** opens their
-  saved tasks without changing the selected project. **Open project here** explicitly
-  opens an existing checkout, including the checkout that already holds `main`; this
-  project switch stops the previous project's implementation workers.
-  **Merge into Current Branch**
+  The page shows only clean worktrees with incoming commits that can be merged
+  into the current clean local branch. Current, already merged, locked, unavailable
+  and otherwise blocked worktrees are hidden. Each row has its branch title and
+  three aligned actions. **View implementation** opens its saved tasks without
+  changing the selected project. **Discard change** confirms removal of the clean
+  checkout and its local task history without merging; the branch and committed
+  changes are kept. Discard rechecks the source identity and never forces deletion.
+  **Merge into current branch**
   first shows incoming commits and a read-only diff. After a successful merge, the
   source worktree directory and its local task history are deleted, its implementation
   closes, and its branch is kept. Cleanup never forces removal of uncommitted changes;
   a warning explains when the merge succeeded but the worktree could not be removed.
+  Merge requires explicit execution trust and confirmation; active terminals close
+  and prepared evidence is cleared. Eligibility does not predict merge conflicts.
   Conflicts remain visible with their paths and an **Abort merge** action; abort
   discards conflict resolutions.
   There is no separate new-workflow sidebar action: creation starts at **Prepare fix**.
