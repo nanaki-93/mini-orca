@@ -32,7 +32,7 @@ func trustedGitRequest(t *testing.T, service *Service) GitMutationRequest {
 func createWorkflowWorktree(t *testing.T, service *Service, request GitMutationRequest) string {
 	t.Helper()
 	request.TargetBranch = "codex/fix"
-	request.Path = filepath.Join(t.TempDir(), "fix")
+	request.Path = filepath.Join(service.manager.Root(), ".worktrees", "fix")
 	result, err := service.CreateGitWorktree(context.Background(), request)
 	if err != nil || result.State != "created" {
 		t.Fatalf("create worktree: %+v %v", result, err)
@@ -80,6 +80,72 @@ func TestGitWorktreeCreationIsolationAndGuards(t *testing.T) {
 	request.TargetBranch = "codex/unconfirmed"
 	if _, err := service.CreateGitWorktree(context.Background(), request); err == nil {
 		t.Fatal("created without execution consent")
+	}
+}
+
+func TestGitWorktreeRejectsSymlinkDirectoryWithoutSideEffects(t *testing.T) {
+	service, root, request := gitWorkflowFixture(t)
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(root, ".worktrees")); err != nil {
+		t.Fatal(err)
+	}
+	request.TargetBranch = "codex/symlink"
+	request.Path = filepath.Join(root, ".worktrees", "escape")
+	if _, err := service.CreateGitWorktree(context.Background(), request); err == nil {
+		t.Fatal("accepted symlinked worktree directory")
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("wrote outside project: %+v, %v", entries, err)
+	}
+	if got := testGit(t, root, "branch", "--list", request.TargetBranch); got != "" {
+		t.Fatal("rejected request created a branch")
+	}
+}
+
+func TestGitWorktreeRejectsSymlinkedGitExclusions(t *testing.T) {
+	service, root, request := gitWorkflowFixture(t)
+	outside := t.TempDir()
+	info := filepath.Join(root, ".git", "info")
+	if err := os.Rename(info, filepath.Join(root, ".git", "info-backup")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, info); err != nil {
+		t.Fatal(err)
+	}
+	request.TargetBranch = "codex/symlink"
+	request.Path = filepath.Join(root, ".worktrees", "fix")
+	if _, err := service.CreateGitWorktree(context.Background(), request); err == nil {
+		t.Fatal("accepted symlinked Git info directory")
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("wrote outside Git metadata: %+v, %v", entries, err)
+	}
+	if _, err := os.Stat(request.Path); !os.IsNotExist(err) {
+		t.Fatal("failed exclusion guard created a worktree")
+	}
+}
+
+func TestGitWorktreeCanBeCreatedFromAnExistingProjectWorktree(t *testing.T) {
+	service, root, request := gitWorkflowFixture(t)
+	path := createWorkflowWorktree(t, service, request)
+	child, _, err := service.WorktreeService(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request = trustedGitRequest(t, child)
+	request.TargetBranch = "codex/second"
+	request.Path = filepath.Join(path, ".worktrees", "second")
+	created, err := child.CreateGitWorktree(context.Background(), request)
+	if err != nil || created.State != "created" || created.Error != "" {
+		t.Fatalf("create from linked checkout: %+v, %v", created, err)
+	}
+	if service.manager.Root() != root || child.manager.Root() != path || testGit(t, path, "branch", "--show-current") != "codex/fix" {
+		t.Fatal("creating another worktree changed a selected checkout")
+	}
+	if got := testGit(t, root, "status", "--porcelain"); got != "" {
+		t.Fatalf("nested worktree dirtied the original checkout: %s", got)
 	}
 }
 

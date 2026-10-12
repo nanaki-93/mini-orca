@@ -1,6 +1,73 @@
 import { strict as assert } from 'node:assert';
 
 export async function testStudio({ test, pageFor, nav, idle, layout }) {
+  await test('Prepare analysis starts directly with captured consent and no dialogs', async () => {
+    for (const runStatus of ['completed', 'paused', 'interrupted']) {
+      const { page, close } = await pageFor({ remote: true, runStatus });
+      try {
+        await nav(page, 'Analysis');
+        await page
+          .getByRole('button', {
+            name: runStatus === 'completed' ? 'Prepare analysis' : 'Prepare continuation',
+            exact: true,
+          })
+          .click();
+        await idle(page);
+        await page.locator('.analysis-run').waitFor();
+        assert.equal(await page.getByRole('dialog').count(), 0);
+        const requests = await page.evaluate(() =>
+          window.fixture.requests.filter((r) => r.method === 'POST'),
+        );
+        const preview = requests.findIndex((r) => r.path.endsWith('/analysis/preview'));
+        const starts = requests.filter(
+          (r) => r.path.endsWith('/analysis/run') || r.body?.action === 'resume',
+        );
+        assert.equal(starts.length, 1);
+        const start = starts[0];
+        assert.ok(preview >= 0 && requests.indexOf(start) > preview);
+        assert.equal(start.body.confirmations.security_review, true);
+        assert.ok(start.body.confirmations.provider_ids.length > 0);
+        if (runStatus === 'completed') assert.equal(start.body.limits.budget_seconds, 1800);
+        else assert.equal(start.body.action, 'resume');
+      } finally {
+        await close();
+      }
+    }
+  });
+  await test('Direct analysis admission rejects failures and ignores previews after navigation', async () => {
+    for (const navigate of [false, true]) {
+      const { page, close } = await pageFor();
+      try {
+        await nav(page, 'Analysis');
+        await page.evaluate((navigate) => {
+          if (navigate) window.fixture.hold = '/api/projects/current/analysis/preview';
+          else window.fixture.failures['/api/projects/current/analysis/preview'] = 409;
+        }, navigate);
+        await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+        if (navigate) {
+          await page.waitForFunction(() =>
+            window.fixture.requests.some((r) => r.path.endsWith('/analysis/preview')),
+          );
+          await nav(page, 'Overview');
+          await page.evaluate(() => window.fixture.release());
+        }
+        await idle(page);
+        assert.equal(
+          await page.evaluate(() =>
+            window.fixture.requests.some(
+              (r) => r.method === 'POST' && r.path.endsWith('/analysis/run'),
+            ),
+          ),
+          false,
+        );
+        assert.equal(await page.getByRole('dialog').count(), 0);
+        if (!navigate)
+          await page.getByRole('alert').getByText('Fixture rejection', { exact: true }).waitFor();
+      } finally {
+        await close();
+      }
+    }
+  });
   await test('Studio pages fill the available workspace width', async () => {
     const { page, close } = await pageFor();
     try {
@@ -129,7 +196,7 @@ export async function testStudio({ test, pageFor, nav, idle, layout }) {
       await layout(page, 'studio-feature-dialog');
       await page.keyboard.press('Escape');
       await nav(page, 'Analysis');
-      await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+      await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
       const preview = page.getByRole('dialog', { name: 'Analysis preview', exact: true });
       await preview.waitFor();
       assert.equal(await page.locator('.analysis-setup').isVisible(), true);

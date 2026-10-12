@@ -50,6 +50,9 @@ type modelOutput struct {
 
 // Service owns configured model access and the active project's generation path.
 type Service struct {
+	config                          *config.Config
+	worktreesMu                     sync.Mutex
+	worktrees                       map[string]*Service
 	manager                         *project.Manager
 	runtimes                        scopedRuntimes
 	discoverPiModels                func(context.Context, string) ([]llm.PiModel, error)
@@ -104,6 +107,8 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 
 	contextBuilder := project.NewContextBuilder()
 	service := &Service{
+		config:           cfg,
+		worktrees:        make(map[string]*Service),
 		discoverPiModels: llm.DiscoverPiModels,
 		manager:          manager,
 		changeAuthority:  make(map[string]string),

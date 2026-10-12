@@ -57,6 +57,7 @@ untrusted networks.
 | GET | `/api/projects/current/context` | Bounded context manifest for a project-relative `path`; source is never returned. |
 | POST | `/api/projects/import` | Import the user-selected project and build deterministic project facts. |
 | POST | `/api/projects/restore` | Restore a previously imported local project without contacting the model. |
+| GET | `/api/projects/current` | Read the selected project summary without changing the active project. |
 | GET | `/api/projects/current/overview` | Read source-free metrics, structured analysis, coverage, and finding counts for `project_revision`. |
 | GET | `/api/projects/current/analysis/selection` | Read the file checklist and saved exclusions with project/revision guards; no dispatch. |
 | POST | `/api/projects/current/analysis/selection` | Save excluded paths with project/revision and selection identity guards; no source changes. |
@@ -949,14 +950,32 @@ trust and reindex even after a Git command fails. A command failure can leave
 source changes; its receipt preserves `error`, observed repository status and
 index/warnings. Transport failures require status/recovery refresh before retry.
 
-Creation adds `target_branch` and an unused absolute `path` whose parent exists
-outside all current worktrees. It runs `git worktree add` from the captured HEAD;
-uncommitted content is not copied. It stores a local inventory marked AI-unavailable, then returns the path without
-changing the active project. The desktop then uses the existing project restore route, which closes
-terminals and activates the worktree. A fresh proposal captures that project's
-paths, identity, instructions and execution/provider consent; old review evidence
-is not transferred. Branch switching takes an existing `target_branch`; dirty
-worktrees and branches checked out elsewhere block the switch.
+Creation adds `target_branch` and an unused absolute `path` directly inside the
+current project's `.worktrees/` directory. The daemon creates that directory,
+rejects symlinked parents, and adds `/.worktrees/` to Git's local `info/exclude`.
+Project indexing, context policy and isolated checks also exclude `.worktrees`;
+creating or editing an implementation does not change the original source revision.
+It runs `git worktree add` from the captured HEAD; uncommitted content is not copied.
+A local inventory marked AI-unavailable allows the new checkout to reopen without
+model access. Creation returns its path without changing the active project.
+
+Project endpoints accept an optional `worktree_path` query parameter, an absolute
+path to another registered worktree of the active repository. Membership is
+rechecked on each request; unrelated, missing and pruned paths are rejected.
+`GET /api/projects/current?worktree_path=...` returns that checkout's project identity.
+Subsequent requests use its own project ID/revision and ordinary proposal guards.
+Each checkout has a separate manager, execution trust, proposal authority and
+bounded workflow worker. Reads and navigation never start generation or transfer
+consent. The desktop keeps the original branch and terminals selected while
+separate implementations run; task Review/Apply/Commit/Undo target only their
+captured checkout. Daemon shutdown and explicit project replacement stop these
+workers; reindexing or switching branches in the original checkout does not
+replace their task state. Existing initialized worktrees outside `.worktrees` remain readable.
+
+Branch switching takes an existing `target_branch`; dirty worktrees and branches
+checked out elsewhere block the switch. To return to a branch already checked
+out elsewhere, explicitly restore that existing project path instead of switching
+the current worktree to the same branch.
 
 Merge preview and merge take the selected worktree `path` and `source_head`.
 Preview returns source/target identities, incoming commits and a bounded read-only

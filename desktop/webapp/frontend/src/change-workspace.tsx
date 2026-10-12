@@ -1,4 +1,12 @@
-import { workspace as w, canAcceptChange, activeChangeWorkflow, type State } from './workspace';
+import { useWorkspace } from './workspace-context';
+import { useState } from 'react';
+import {
+  canAcceptChange,
+  activeChangeWorkflow,
+  type State,
+  type FixPreparationContext,
+} from './workspace';
+import { WorktreePreparation } from './git-controls';
 import { WorkflowProgress, defaultWorkflowModels } from './change-workflow';
 import {
   Badge,
@@ -26,6 +34,8 @@ export function ChangeWorkspace({ s }: { s: State }) {
 }
 
 function ChatWorkspace({ s }: { s: State }) {
+  const w = useWorkspace();
+  const [preparation, setPreparation] = useState<FixPreparationContext>();
   const change = s.change;
   const reviewOnly = s.page === 'changes';
   const draft =
@@ -63,8 +73,31 @@ function ChatWorkspace({ s }: { s: State }) {
     !!s.busy ||
     running ||
     (!!change && (change.state !== 'draft' || change.freshness !== 'current'));
+  const generate = (
+    context?: FixPreparationContext,
+    workspace?: { branch: string; path: string },
+  ) => {
+    setPreparation(undefined);
+    if (context && workspace) {
+      void w.prepareFixInWorktree(seed, models, context, workspace.branch, workspace.path, tests);
+    } else {
+      void (useAgents
+        ? w.startChangeWorkflow(seed, models, context)
+        : w.prepareChange(seed, tests, models.create, context));
+    }
+  };
   return (
     <div className="chat-page">
+      {preparation && (
+        <WorktreePreparation
+          s={{ ...s, changeSeed: seed }}
+          remote={(useAgents ? Object.values(models) : [models.create]).some(
+            (profile) => preparation.models.scopes[profile]?.remote_provider,
+          )}
+          onClose={() => setPreparation(undefined)}
+          onPrepare={(workspace) => generate(preparation, workspace)}
+        />
+      )}
       <header className="chat-meta">
         <div>
           <span className="studio-eyebrow">
@@ -255,11 +288,18 @@ function ChatWorkspace({ s }: { s: State }) {
                     !title.trim() ||
                     (useAgents && !s.models)
                   }
-                  onClick={() =>
-                    void (useAgents
-                      ? w.startChangeWorkflow(seed, models)
-                      : w.prepareChange(seed, tests, models.create))
-                  }
+                  onClick={() => {
+                    if (
+                      !change &&
+                      taskKind !== 'instructions' &&
+                      s.repository?.available &&
+                      !w.worktreePath
+                    ) {
+                      void w.act('Prepare workspace', async () =>
+                        setPreparation(await w.readFixPreparation()),
+                      );
+                    } else generate();
+                  }}
                 >
                   Generate changes
                 </Button>

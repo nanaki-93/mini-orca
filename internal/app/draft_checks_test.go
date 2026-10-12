@@ -240,6 +240,7 @@ func TestCopyCheckWorkspaceExcludesCachesAndPreservesTestFixtures(t *testing.T) 
 		".git":                                  "gitdir: /outside/worktree\n",
 		"node_modules/dependency/index.js":      "cache",
 		"desktop/build/generated.txt":           "cache",
+		".worktrees/fix/main.go":                "package ignored\n",
 		".mini-orca/check.json":                 "metadata",
 		"testdata/node_modules/fixture.txt":     "required fixture",
 		"testdata/nested/.git":                  "gitdir: /outside/fixture-worktree\n",
@@ -266,7 +267,7 @@ func TestCopyCheckWorkspaceExcludesCachesAndPreservesTestFixtures(t *testing.T) 
 			t.Fatalf("required copied path %q: %v", path, err)
 		}
 	}
-	for _, path := range []string{".git", "node_modules", "desktop/build", ".mini-orca", "linked.go", "testdata/nested/.git", "testdata/nested/.hg", "testdata/nested/.svn", "testdata/nested/.mini-orca"} {
+	for _, path := range []string{".git", ".worktrees", "node_modules", "desktop/build", ".mini-orca", "linked.go", "testdata/nested/.git", "testdata/nested/.hg", "testdata/nested/.svn", "testdata/nested/.mini-orca"} {
 		if _, err := os.Lstat(filepath.Join(destination, path)); !os.IsNotExist(err) {
 			t.Fatalf("excluded path %q has error %v", path, err)
 		}

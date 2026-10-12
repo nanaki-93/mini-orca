@@ -1,3 +1,4 @@
+import { useWorkspace } from './workspace-context';
 import { useEffect, useState } from 'react';
 import {
   workspace as w,
@@ -371,6 +372,7 @@ export function Summary({ s }: { s: State }) {
   );
 }
 export function Models({ s }: { s: State }) {
+  const w = useWorkspace();
   return (
     <div className="workspace-page models-workspace">
       <Heading

@@ -77,12 +77,12 @@ export function Analysis({ s }: { s: State }) {
     s.run && ['paused', 'interrupted'].includes(s.run.status) ? s.run : undefined;
   const hasRepair =
     !activeRun(s.run) && !continuation && s.selection?.recovery?.state === 'available';
-  const preview = (mode: 'new' | 'repair') => {
+  const preview = (mode: 'new' | 'repair', start = false) => {
     if (changed) {
       w.fail('Save your file selection before preparing a run.');
       return;
     }
-    void w.previewAnalysis(mode, limits, refresh, models);
+    void w.previewAnalysis(mode, limits, refresh, models, undefined, start);
   };
   return (
     <div className="workspace-page analysis-setup">
@@ -95,6 +95,16 @@ export function Analysis({ s }: { s: State }) {
           Refresh
         </Button>
         <StaleAnalysisButton s={s} />
+        <Button
+          disabled={!!s.busy || (!continuation && (!s.selection || !s.models || activeRun(s.run)))}
+          onClick={() =>
+            continuation
+              ? void w.previewAnalysis('resume', continuation.plan.limits)
+              : preview('new')
+          }
+        >
+          Preview analysis
+        </Button>
         {hasRepair && (
           <Button
             icon="play"
@@ -107,17 +117,30 @@ export function Analysis({ s }: { s: State }) {
         )}
         <Button
           tone="primary"
+          aria-describedby="analysis-start-permissions"
           icon="play"
           disabled={!!s.busy || (!continuation && (!s.selection || !s.models || activeRun(s.run)))}
           onClick={() =>
             continuation
-              ? void w.previewAnalysis('resume', continuation.plan.limits)
-              : preview('new')
+              ? void w.previewAnalysis(
+                  'resume',
+                  continuation.plan.limits,
+                  false,
+                  undefined,
+                  undefined,
+                  true,
+                )
+              : preview('new', true)
           }
         >
           {continuation ? 'Prepare continuation' : 'Prepare analysis'}
         </Button>
       </Heading>
+      <p className="small muted" id="analysis-start-permissions">
+        Prepare analysis starts immediately using the models shown below, including AI Security
+        review and feature discovery. Selected files, instructions and saved goals may be sent to
+        the selected remote providers.
+      </p>
       {continuation && (
         <Notice>
           Your saved analysis is {human(continuation.status)}. Continue with its captured settings,

@@ -156,6 +156,7 @@ const surfaceInventory = {
     ],
   },
   'change-workspace': {
+    worktree: ['parallel implementations', 'scoped review', 'cancel', 'apply', 'large text'],
     chat: [
       'new',
       'seeded',
@@ -2679,6 +2680,7 @@ try {
             assert.equal(await intro.locator('p').count(), 0);
             assert.deepEqual(await intro.getByRole('button').allTextContents(), [
               'Refresh',
+              'Preview analysis',
               'Repair analysis',
               'Prepare analysis',
             ]);
@@ -2981,7 +2983,7 @@ try {
         'pi:openai-codex/gpt-5',
       );
       await nav(page, 'Analysis');
-      await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+      await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
       await idle(page);
       const preview = await page.evaluate(() =>
         window.fixture.requests.findLast((r) => r.path.endsWith('/analysis/preview')),
@@ -3260,7 +3262,7 @@ try {
         window.fixture.hold = '/api/projects/current/analysis/preview';
       });
       await nav(page, 'Analysis');
-      await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+      await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
       await page.locator('.busy-strip').waitFor();
       await page.waitForFunction(() =>
         window.fixture.requests.some((r) => r.path.endsWith('/analysis/preview')),
@@ -3371,7 +3373,7 @@ try {
       );
       await nav(page, 'Analysis');
       assert.equal(await page.getByLabel('Files per batch', { exact: true }).inputValue(), '37');
-      await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+      await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
       assert.equal(await page.getByRole('alert').count(), 1);
       await nav(page, 'Files');
       assert.equal(
@@ -3381,7 +3383,7 @@ try {
       await page.getByRole('button', { name: 'Save selection', exact: true }).click();
       await idle(page);
       await nav(page, 'Analysis');
-      await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+      await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
       await idle(page);
       const request = await page.evaluate(() =>
         window.fixture.requests.findLast((r) => r.path.endsWith('/analysis/preview')),
@@ -3537,7 +3539,7 @@ try {
           await chooseModel(page.getByLabel('Feature discovery model'), 'function');
           await page
             .getByRole('button', {
-              name: mode === 'repair' ? 'Repair analysis' : 'Prepare analysis',
+              name: mode === 'repair' ? 'Repair analysis' : 'Preview analysis',
               exact: true,
             })
             .click();
@@ -3888,7 +3890,7 @@ try {
         await page.getByLabel('Time budget · seconds', { exact: true }).fill('1800');
         await chooseModel(page.getByLabel('Bug analysis model'), 'function');
         await layout(page, `analysis-setup-${status}-continuation`);
-        await page.getByRole('button', { name: 'Prepare continuation', exact: true }).click();
+        await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
         await idle(page);
         await page.getByRole('heading', { name: 'Continue analysis', exact: true }).waitFor();
         await page
@@ -3940,7 +3942,7 @@ try {
       await page.getByRole('button', { name: 'Cancel run', exact: true }).click();
       await idle(page);
       await nav(page, 'Analysis');
-      await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+      await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
       await idle(page);
       await startAnalysis(page);
       const requests = await page.evaluate(() => window.fixture.requests);
@@ -3961,7 +3963,7 @@ try {
   await test('Analysis preview requires consent; pause and resume use captured identities', async () => {
     const { page, close } = await pageFor({ remote: true });
     await nav(page, 'Analysis');
-    await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
     await idle(page);
     const preview = await page.evaluate(() =>
       window.fixture.requests.find((r) => r.path.endsWith('/analysis/preview')),
@@ -4058,7 +4060,7 @@ try {
     await chooseModel(page.getByLabel('Feature discovery model'), 'analyze');
     assert.equal(await page.evaluate(() => window.fixture.requests.length), before);
     await nav(page, 'Analysis');
-    await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
     await idle(page);
     const choices = {
       code: 'function',
@@ -4137,7 +4139,7 @@ try {
   await test('Analysis exposes provider progress and keeps saved results available', async () => {
     const { page, close } = await pageFor();
     await nav(page, 'Analysis');
-    await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
     await idle(page);
     await startAnalysis(page);
     await page.getByRole('heading', { name: 'Run details', exact: true }).waitFor();
@@ -7452,7 +7454,7 @@ try {
   await test('Project analysis includes feature suggestions in preview, consent and Summary', async () => {
     const { page, close } = await pageFor({ remote: true, analysisCompletes: true });
     await nav(page, 'Analysis');
-    await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
     await idle(page);
     await page.getByRole('heading', { name: 'New feature suggestions', exact: true }).waitFor();
     assert.equal(
@@ -8274,7 +8276,7 @@ try {
         featuresStale: true,
       });
       await nav(page, 'Analysis');
-      await page.getByRole('button', { name: 'Prepare analysis', exact: true }).click();
+      await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
       await idle(page);
       await startAnalysis(page);
       await nav(page, 'Overview');

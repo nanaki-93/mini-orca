@@ -1,4 +1,5 @@
 import { GitWorkspace } from './git-workspace';
+import { Implementations, WorktreeImplementation } from './worktree-implementation';
 import {
   Component,
   useEffect,
@@ -190,6 +191,8 @@ function App() {
   else if (s.page === 'project' || s.page === 'welcome' || !s.project)
     content = <ProjectPage s={s} />;
   else if (s.page === 'git') content = <GitWorkspace s={s} />;
+  else if (s.page === 'worktree' && s.implementation)
+    content = <WorktreeImplementation child={s.implementation} />;
   else if (s.page === 'summary') content = <Summary s={s} />;
   else if (s.page === 'analysis') content = <Analysis s={s} />;
   else if (s.page === 'analysis-files') content = <AnalysisFiles s={s} />;
@@ -197,7 +200,13 @@ function App() {
   else if (s.page === 'analysis-run') content = <AnalysisRun s={s} />;
   else if (category || s.page === 'finding')
     content = <Results s={s} key={`${s.project.project_id}:${category}`} />;
-  else if (s.page === 'chat' || s.page === 'changes') content = <ChangeWorkspace s={s} />;
+  else if (s.page === 'chat' || s.page === 'changes')
+    content = (
+      <>
+        {s.page === 'changes' && <Implementations s={s} />}
+        <ChangeWorkspace s={s} />
+      </>
+    );
   else if (s.page === 'history')
     content = (
       <div className="workspace-page">

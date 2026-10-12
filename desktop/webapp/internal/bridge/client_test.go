@@ -257,6 +257,8 @@ func TestBridgeSharedChangeRoutesRemainAllowlisted(t *testing.T) {
 		t.Fatal("allowed a mutation route as a read")
 	}
 	for _, request := range [][3]string{
+		{"GET", "/api/projects/current?worktree_path=%2Fproject%2F.worktrees%2Ffix", ""},
+		{"POST", "/api/projects/current/changes?worktree_path=%2Fproject%2F.worktrees%2Ffix", "{}"},
 		{"GET", "/api/projects/current/changes?project_id=p&project_revision=r", ""},
 		{"GET", "/api/projects/current/changes/recovery", ""},
 		{"GET", "/api/projects/current/git/repository?project_id=p&project_revision=r", ""},

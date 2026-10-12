@@ -1,7 +1,8 @@
+import { useWorkspace } from './workspace-context';
 import { WorktreePreparation } from './git-controls';
 import { useEffect, useId, useState } from 'react';
 import type { ChangeSeed } from './models';
-import { workspace as w, workflowSeed, type FixPreparationContext, type State } from './workspace';
+import { workflowSeed, type FixPreparationContext, type State } from './workspace';
 import { defaultWorkflowModels } from './change-workflow';
 import { Button, Icon, Notice, Panel } from './ui';
 
@@ -16,6 +17,7 @@ export function FixPreparation({
   disabled: boolean;
   label?: string;
 }) {
+  const w = useWorkspace();
   const [context, setContext] = useState<FixPreparationContext>();
   const [error, setError] = useState('');
   const [choosingWorkspace, setChoosingWorkspace] = useState(false);
@@ -98,7 +100,7 @@ export function FixPreparation({
           aria-describedby={context ? permissionsID : undefined}
           onClick={() => {
             if (!context || !ready) return;
-            if (context.repository.available) setChoosingWorkspace(true);
+            if (context.repository.available && !w.worktreePath) setChoosingWorkspace(true);
             else begin();
           }}
         >

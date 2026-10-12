@@ -75,6 +75,7 @@ export function WorktreePreparation({
   remote: boolean;
 }) {
   const seed = s.changeSeed;
+  const task = seed?.kind === 'feature' ? 'feature' : 'fix';
   const title = seed?.title || 'fix';
   const slug =
     title
@@ -84,9 +85,9 @@ export function WorktreePreparation({
       .slice(0, 48) || 'fix';
   const [mode, setMode] = useState('current');
   const [branch, setBranch] = useState(`codex/${slug}`);
-  const [path, setPath] = useState(`${s.project!.path}-${slug}`);
+  const [path, setPath] = useState(`${s.project!.path}/.worktrees/${slug}`);
   return (
-    <Overlay title="Prepare fix workspace" onClose={onClose}>
+    <Overlay title={`Prepare ${task} workspace`} onClose={onClose}>
       <form
         className="stack"
         onSubmit={(event) => {
@@ -95,7 +96,7 @@ export function WorktreePreparation({
         }}
       >
         <fieldset className="git-workspace-options">
-          <legend>Where should this fix be prepared?</legend>
+          <legend>Where should this {task} be prepared?</legend>
           <label>
             <input
               type="radio"
@@ -131,7 +132,8 @@ export function WorktreePreparation({
             </label>
             <p className="small muted">
               Starts from the current commit. Local uncommitted changes stay here. Choose a new
-              directory whose parent already exists.
+              directory inside this project's .worktrees folder. Your current project and branch
+              stay open while the implementation runs separately.
             </p>
             <p className="small muted">
               Trust this project for local execution. Creating a worktree can run configured

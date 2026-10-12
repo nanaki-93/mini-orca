@@ -21,7 +21,7 @@ const (
 )
 
 var ignoredProjectDirectories = map[string]bool{
-	".git": true, ".gradle": true, ".idea": true, ".mini-orca": true,
+	".git": true, ".gradle": true, ".idea": true, ".mini-orca": true, ".worktrees": true,
 	"node_modules": true, "vendor": true, "build": true, "dist": true,
 	"target": true, "out": true, ".next": true, ".cache": true,
 }

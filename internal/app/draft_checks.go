@@ -557,7 +557,7 @@ func skipCheckWorkspaceDirectory(relative string) bool {
 
 func isCheckWorkspaceMetadata(relative string) bool {
 	switch filepath.Base(relative) {
-	case ".mini-orca", ".git", ".hg", ".svn":
+	case ".mini-orca", ".worktrees", ".git", ".hg", ".svn":
 		return true
 	default:
 		return false

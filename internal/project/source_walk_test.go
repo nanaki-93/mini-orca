@@ -17,6 +17,8 @@ func TestWalkProjectFilesPreservesEligibilityOrderingAndSymlinkPolicy(t *testing
 	writeSourceWalkFixture(t, root, "src/generated.tmp", "temporary")
 	writeSourceWalkFixture(t, root, "vendor/dependency.go", "package dependency\n")
 	writeSourceWalkFixture(t, root, ".git/ignored.go", "package ignored\n")
+	writeSourceWalkFixture(t, root, ".worktrees/fix/duplicate.go", "package duplicate\n")
+	writeSourceWalkFixture(t, root, ".worktrees/fix/.gitignore", "*.go\n")
 	writeSourceWalkFixture(t, root, ".gitignore", "src/generated.tmp\n")
 	outside := filepath.Join(t.TempDir(), "outside.go")
 	if err := os.WriteFile(outside, []byte("package outside\n"), 0o600); err != nil {

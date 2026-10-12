@@ -468,9 +468,32 @@ export function installFixture(options = {}) {
       ...(options.restoreFailure ? { '/api/projects/restore': 503 } : {}),
       ...(options.importFailure ? { '/api/projects/import': 503 } : {}),
     };
+  const rootState = state;
+  const worktreeStates = {};
+  function scopedState(path) {
+    if (!path) return rootState;
+    if (!worktreeStates[path]) {
+      const tree = rootState.gitWorktrees.find((tree) => tree.path === path);
+      if (!tree) throw new Error('Unknown fixture worktree');
+      const child = structuredClone(rootState);
+      child.project = {
+        ...child.project,
+        project_id: `project-worktree-${tree.branch}`,
+        path,
+        name: path.split('/').at(-1),
+      };
+      child.git = { ...child.git, root: path, branch: tree.branch, head: tree.head, dirty: false };
+      child.trusted = false;
+      child.changes = {};
+      child.changeReceipt = null;
+      worktreeStates[path] = child;
+    }
+    return worktreeStates[path];
+  }
   let held = null;
   window.fixture = {
     state,
+    worktreeStates,
     options,
     requests,
     terminals,
@@ -514,6 +537,11 @@ export function installFixture(options = {}) {
         async Request(id, method, target, payload) {
           const url = new URL(target, 'http://fixture');
           const path = url.pathname;
+          const state = scopedState(url.searchParams.get('worktree_path'));
+          const identity = {
+            project_id: state.project.project_id,
+            project_revision: state.project.project_revision,
+          };
           const body = payload ? JSON.parse(payload) : undefined;
           requests.push({ id, method, path, query: Object.fromEntries(url.searchParams), body });
           if (window.fixture.hold === path || window.fixture.hold === `${method} ${path}`)
@@ -533,6 +561,7 @@ export function installFixture(options = {}) {
             status: value === null ? 204 : 200,
             body: value === null ? '' : JSON.stringify(value),
           });
+          if (path === '/api/projects/current') return response(state.project);
           const rev = { ...identity, project_revision: state.project.project_revision };
           const pathFile =
             state.files.find((f) => f.path === (url.searchParams.get('path') || body?.path)) ||
@@ -873,7 +902,9 @@ export function installFixture(options = {}) {
               };
               change.reviewed_hash = '';
               change.messages.push({ role: 'user', content: body.message });
-              window.fixture.completeWorkflow = (status = 'awaiting_human_review') => {
+              state.completeWorkflow = window.fixture.completeWorkflow = (
+                status = 'awaiting_human_review',
+              ) => {
                 change.revision++;
                 change.hash = `workflow-proposal-${change.revision}`;
                 change.changes = change.targets.map((target) => ({

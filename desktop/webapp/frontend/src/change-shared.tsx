@@ -1,10 +1,12 @@
+import { useWorkspace } from './workspace-context';
 import { useState } from 'react';
 import { CommitDialog } from './git-controls';
-import { workspace as w, activeChangeWorkflow, changeChecksPassed, type State } from './workspace';
+import { activeChangeWorkflow, changeChecksPassed, type State } from './workspace';
 import type { ChangeSession } from './models';
 import { Badge, Button, Disclosure, Empty, Notice, Panel } from './ui';
 
 export function ChangeOutcome({ s }: { s: State }) {
+  const w = useWorkspace();
   const change = s.change;
   const [retrying, setRetrying] = useState(false);
   return (
@@ -145,6 +147,7 @@ export function ChangeOutcome({ s }: { s: State }) {
 }
 
 export function ChangeHistory({ s }: { s: State }) {
+  const w = useWorkspace();
   const running = activeChangeWorkflow(s.change);
   return (
     <Panel className="chat-history" title="Saved conversations">
@@ -186,6 +189,7 @@ export function ChangeHistory({ s }: { s: State }) {
 }
 
 export function ChangeChecks({ s, tests = true }: { s: State; tests?: boolean }) {
+  const w = useWorkspace();
   const change = s.change;
   if (!change) return null;
   const blocked =

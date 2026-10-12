@@ -1,3 +1,4 @@
+import { useWorkspace } from './workspace-context';
 import {
   useEffect,
   useLayoutEffect,
@@ -9,7 +10,7 @@ import {
 import { renderMermaidSVG } from 'beautiful-mermaid';
 import { icons } from './icons';
 import type { Insight } from './models';
-import { workspace, type Page } from './workspace';
+import { type Page } from './workspace';
 
 export function Icon({ name }: { name: string }) {
   return (
@@ -45,6 +46,7 @@ export function Go({
   icon?: string;
   tone?: string;
 }) {
+  const workspace = useWorkspace();
   return (
     <Button tone={tone} icon={icon} onClick={() => void workspace.navigate(page)}>
       {children}
@@ -316,6 +318,7 @@ export function BulletContent({ title, items }: { title: string; items?: string[
   ) : null;
 }
 export function Modal() {
+  const workspace = useWorkspace();
   const confirmation = workspace.state.confirmation;
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {

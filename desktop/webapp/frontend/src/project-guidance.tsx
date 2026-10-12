@@ -1,7 +1,9 @@
-import { workspace as w, type State } from './workspace';
+import { useWorkspace } from './workspace-context';
+import { type State } from './workspace';
 import { Button, Icon } from './ui';
 
 export function ProjectGuidance({ s }: { s: State }) {
+  const w = useWorkspace();
   if (
     !s.project ||
     !['chat', 'changes'].includes(s.page) ||

@@ -1,0 +1,187 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
+)
+
+func TestWorktreeImplementationsRunConcurrentlyAndApplyInIsolation(t *testing.T) {
+	entered := make(chan struct{}, 2)
+	release := make(chan struct{})
+	service, root, _ := workflowService(t, [3]func() string{
+		func() string { entered <- struct{}{}; <-release; return workflowImplementation },
+		func() string { return workflowTests },
+		func() string { return workflowApproval },
+	})
+	t.Cleanup(func() { _ = service.ShutdownChangeWorkflows(context.Background()) })
+	t.Cleanup(func() { close(release) })
+	initializeChangeGit(t, service, root)
+	root = service.manager.Root()
+	request := trustedGitRequest(t, service)
+	children := make([]*Service, 2)
+	sessions := make([]*ChangeSession, 2)
+	for i := range children {
+		request.TargetBranch = fmt.Sprintf("codex/fix-%d", i)
+		request.Path = filepath.Join(root, ".worktrees", fmt.Sprintf("fix-%d", i))
+		created, err := service.CreateGitWorktree(context.Background(), request)
+		if err != nil || created.State != "created" || created.Error != "" {
+			t.Fatalf("create: %+v, %v", created, err)
+		}
+		child, manager, err := service.WorktreeService(context.Background(), created.Path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if child == service || manager == service.manager {
+			t.Fatal("worktree reused the active project state")
+		}
+		again, _, err := service.WorktreeService(context.Background(), created.Path)
+		if err != nil || again != child {
+			t.Fatal("reopening lost the worker owner")
+		}
+		session := openChangeFixture(t, child, "new.go", "new_test.go")
+		trust, err := child.ExecutionTrust(session.ProjectRevision, "")
+		if err != nil || trust.Trusted {
+			t.Fatal("worktree inherited execution consent")
+		}
+		if _, err := child.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+			t.Fatal(err)
+		}
+		sessions[i], err = child.StartChangeWorkflow(context.Background(), session.ID, workflowRequest(session))
+		if err != nil {
+			t.Fatal(err)
+		}
+		children[i] = child
+	}
+	for range children {
+		select {
+		case <-entered:
+		case <-time.After(10 * time.Second):
+			t.Fatal("implementations did not dispatch concurrently")
+		}
+	}
+	// Reindexing the original project must neither capture child sources nor
+	// cancel jobs in separate worktrees.
+	index, err := service.Reindex()
+	if err != nil || index.ProjectRevision != request.ProjectRevision {
+		t.Fatalf("worktrees changed the original project revision: %+v, %v", index, err)
+	}
+	for range children {
+		release <- struct{}{}
+	}
+	for i, child := range children {
+		sessions[i] = finishedWorkflow(t, child, sessions[i].ID)
+		if sessions[i].Workflow.Status != "awaiting_human_review" {
+			t.Fatalf("implementation %d: %+v", i, sessions[i].Workflow)
+		}
+	}
+	child, session := children[0], sessions[0]
+	if _, err := child.ReviewChange(context.Background(), session.ID, changeIdentity(session)); err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := child.ApplyChange(context.Background(), session.ID, ChangeApplyRequest{
+		ChangeIdentity: changeIdentity(session), GitIdentity: *session.Git, Confirm: true, CommitMessage: "Implement Helper",
+	})
+	if err != nil || receipt.Commit == nil || receipt.Commit.State != "committed" {
+		t.Fatalf("apply: %+v, %v", receipt, err)
+	}
+	for _, untouched := range []string{root, children[1].manager.Root()} {
+		if _, err := os.Stat(filepath.Join(untouched, "new.go")); !os.IsNotExist(err) {
+			t.Fatalf("Apply changed another checkout: %s", untouched)
+		}
+	}
+	if service.manager.Root() != root || testGit(t, root, "branch", "--show-current") != "main" || testGit(t, root, "rev-parse", "HEAD") != request.Head {
+		t.Fatal("implementation switched the active project or branch")
+	}
+	if got := testGit(t, root, "status", "--porcelain"); got != "" {
+		t.Fatalf("worktree metadata dirtied the original checkout: %s", got)
+	}
+}
+
+func TestWorktreeServiceRejectsUnrelatedOrRemovedCheckout(t *testing.T) {
+	service, root, request := gitWorkflowFixture(t)
+	path := createWorkflowWorktree(t, service, request)
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inactive, err := New(service.config, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := inactive.WorktreeService(context.Background(), path); !errors.Is(err, project.ErrNoActiveProject) {
+		t.Fatalf("worktree scope bypassed active-project guard: %v", err)
+	}
+	for _, rejected := range []string{root, t.TempDir(), filepath.Join(root, "missing"), ".worktrees/fix"} {
+		if _, _, err := service.WorktreeService(context.Background(), rejected); err == nil {
+			t.Fatalf("accepted unrelated path %s", rejected)
+		}
+	}
+	if _, _, err := service.WorktreeService(context.Background(), path); err != nil {
+		t.Fatal(err)
+	}
+	testGit(t, root, "worktree", "remove", "--force", path)
+	if _, _, err := service.WorktreeService(context.Background(), path); err == nil {
+		t.Fatal("cached worker bypassed worktree membership")
+	}
+}
+
+func TestWorktreeWorkersStopOnShutdownAndProjectReplacement(t *testing.T) {
+	for _, action := range []string{"shutdown", "replace"} {
+		t.Run(action, func(t *testing.T) {
+			entered := make(chan struct{})
+			release := make(chan struct{})
+			service, root, _ := workflowService(t, [3]func() string{
+				func() string { close(entered); <-release; return workflowImplementation },
+				func() string { return workflowTests },
+				func() string { return workflowApproval },
+			})
+			t.Cleanup(func() { close(release) })
+			initializeChangeGit(t, service, root)
+			path := createWorkflowWorktree(t, service, trustedGitRequest(t, service))
+			child, _, err := service.WorktreeService(context.Background(), path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			session := openChangeFixture(t, child, "new.go", "new_test.go")
+			if _, err := child.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := child.StartChangeWorkflow(context.Background(), session.ID, workflowRequest(session)); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-entered:
+			case <-time.After(10 * time.Second):
+				t.Fatal("worker did not start")
+			}
+			if action == "shutdown" {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				err = service.ShutdownChangeWorkflows(ctx)
+			} else {
+				analysis, readErr := service.manager.Analysis()
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				err = service.RestoreActiveProject(root, analysis)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			finished := finishedWorkflow(t, child, session.ID)
+			if finished.Workflow.Status != "canceled" {
+				t.Fatalf("worker survived %s: %+v", action, finished.Workflow)
+			}
+			if _, err := os.Stat(filepath.Join(path, "new.go")); !os.IsNotExist(err) {
+				t.Fatal("canceled worker wrote source")
+			}
+		})
+	}
+}

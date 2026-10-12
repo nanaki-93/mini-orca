@@ -148,7 +148,8 @@ export function GitWorkspace({ s }: { s: State }) {
           </Panel>
           <Panel title="Worktrees">
             <p className="small muted">
-              To create a worktree, select Prepare fix on a finding or feature.
+              To create a worktree, select Prepare fix on a finding or Generate changes in a new
+              feature conversation.
             </p>
             <div className="git-worktrees">
               {repository.worktrees.map((tree) => (
@@ -186,6 +187,22 @@ export function GitWorkspace({ s }: { s: State }) {
                         <li key={fix.id}>{fix.title}</li>
                       ))}
                     </ul>
+                  )}
+                  {!tree.current && (
+                    <Button
+                      disabled={blocked || tree.prunable}
+                      onClick={() => void w.openWorktree(tree.path)}
+                    >
+                      View implementations
+                    </Button>
+                  )}
+                  {!tree.current && (
+                    <Button
+                      disabled={blocked || tree.prunable}
+                      onClick={() => void w.openProject(tree.path, false)}
+                    >
+                      Open project here
+                    </Button>
                   )}
                   {!tree.current && (
                     <Button

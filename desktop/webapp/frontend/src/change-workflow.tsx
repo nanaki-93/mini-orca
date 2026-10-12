@@ -1,4 +1,5 @@
-import { activeChangeWorkflow, workspace as w, type State } from './workspace';
+import { useWorkspace } from './workspace-context';
+import { activeChangeWorkflow, type State } from './workspace';
 import type { ChangeWorkflowModels } from './models';
 import { AgentModel } from './agent-model';
 import { Badge, BulletContent, Button, Notice, Panel, Prose, human } from './ui';
@@ -18,6 +19,7 @@ export function WorkflowModels({
   value: ChangeWorkflowModels;
   disabled: boolean;
 }) {
+  const w = useWorkspace();
   const roles = ['create', 'test', 'review'] as const;
   return (
     <fieldset className="workflow-models" disabled={disabled}>
@@ -56,6 +58,7 @@ export function WorkflowProgress({
   actionLabel?: string;
   showCancel?: boolean;
 }) {
+  const w = useWorkspace();
   const workflow = s.change?.workflow;
   if (!workflow) return null;
   return (
