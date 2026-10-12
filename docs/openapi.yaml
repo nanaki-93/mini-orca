@@ -479,35 +479,6 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Status'}
-  /api/projects/current/chat/sessions:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    post:
-      tags: [Chat]
-      summary: Open a conversation pinned to one file, declaration, and optional reviewed task
-      requestBody:
-        required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/ChatSessionRequest'}}}
-      responses:
-        '201': {description: Active file-scoped session, content: {application/json: {schema: {$ref: '#/components/schemas/ChatSession'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/chat/sessions/{sessionID}/messages:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    post:
-      tags: [Chat]
-      summary: Request a declaration proposal in an existing session
-      description: The message body cannot change the session's project, file, mode, or declaration target. A repair is explicit, limited to the latest failed task draft, and pins that parent's reviewed temporary proof for the remaining lineage.
-      parameters:
-        - {$ref: '#/components/parameters/SessionID'}
-      requestBody:
-        required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/ChatMessageRequest'}}}
-      responses:
-        '200': {description: New editable declaration draft proposal, content: {application/json: {schema: {$ref: '#/components/schemas/ChatDraftProposal'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
   /api/models/current:
     get:
       tags: [Daemon]
@@ -844,155 +815,6 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
         '504': {$ref: '#/components/responses/Error'}
-  /api/projects/current/analysis-job:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    get:
-      tags: [Projects]
-      summary: Sequential semantic-analysis job progress
-      parameters:
-        - {$ref: '#/components/parameters/ProjectRevision'}
-      responses:
-        '200': {description: Source-free project-scoped progress, content: {application/json: {schema: {$ref: '#/components/schemas/AnalyzeAllJob'}}}}
-        '204': {description: No Analyze-all job has been started for this project revision.}
-        '404': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-    post:
-      tags: [Projects]
-      summary: Explicitly start bounded sequential analysis
-      requestBody:
-        required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/AnalyzeAllRequest'}}}
-      responses:
-        '202': {description: Job accepted; one file is analyzed at a time, content: {application/json: {schema: {$ref: '#/components/schemas/AnalyzeAllJob'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/analysis-job/pause:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    post:
-      tags: [Projects]
-      summary: Pause after the current one-file analysis
-      parameters:
-        - {$ref: '#/components/parameters/ProjectRevision'}
-      responses:
-        '200': {description: Paused job, content: {application/json: {schema: {$ref: '#/components/schemas/AnalyzeAllJob'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/analysis-job/resume:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    post:
-      tags: [Projects]
-      summary: Resume a persisted paused job
-      requestBody:
-        required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/AnalyzeAllRequest'}}}
-      responses:
-        '202': {description: Resumed job, content: {application/json: {schema: {$ref: '#/components/schemas/AnalyzeAllJob'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/analysis-job/cancel:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    post:
-      tags: [Projects]
-      summary: Cancel the active sequential analysis job
-      parameters:
-        - {$ref: '#/components/parameters/ProjectRevision'}
-      responses:
-        '200': {description: Canceled job, content: {application/json: {schema: {$ref: '#/components/schemas/AnalyzeAllJob'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/performance:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    get:
-      tags: [Performance]
-      summary: Read cached source-based performance review coverage and findings
-      parameters:
-        - {$ref: '#/components/parameters/ProjectRevision'}
-      responses:
-        '200': {description: Queue-derived source-based review report, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceReport'}}}}
-        '204': {description: No performance review has been started for this project revision.}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/performance/context:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    get:
-      tags: [Performance]
-      summary: Preview a policy-filtered bounded performance queue without provider work
-      parameters:
-        - {$ref: '#/components/parameters/ProjectRevision'}
-        - {name: max_files, in: query, schema: {type: integer, minimum: 1, maximum: 500}}
-        - {name: run_budget_seconds, in: query, schema: {type: integer, minimum: 1, maximum: 3600}}
-      responses:
-        '200': {description: Source-free queue and configured Analysis-model manifest, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceQueuePreview'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/performance-job:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    get:
-      tags: [Performance]
-      summary: Read persisted bounded performance-review progress
-      parameters:
-        - {$ref: '#/components/parameters/ProjectRevision'}
-      responses:
-        '200': {description: Source-free progress, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceJob'}}}}
-        '204': {description: No performance job has been started for this project revision.}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-    post:
-      tags: [Performance]
-      summary: Explicitly start a bounded sequential source-based performance review
-      requestBody:
-        required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceJobRequest'}}}
-      responses:
-        '202': {description: Job accepted; only one file is reviewed at a time, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceJob'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/performance-job/pause:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    post:
-      tags: [Performance]
-      summary: Pause a performance review after its active file finishes
-      parameters:
-        - {$ref: '#/components/parameters/ProjectRevision'}
-        - {name: expected_job_id, in: query, required: true, schema: {type: string}}
-      responses:
-        '200': {description: Paused job, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceJob'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/performance-job/resume:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    post:
-      tags: [Performance]
-      summary: Resume a compatible paused performance job with fresh provider confirmation
-      requestBody:
-        required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceJobRequest'}}}
-      responses:
-        '202': {description: Resumed job, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceJob'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/performance-job/cancel:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    post:
-      tags: [Performance]
-      summary: Cancel active or pending performance review work
-      parameters:
-        - {$ref: '#/components/parameters/ProjectRevision'}
-        - {name: expected_job_id, in: query, required: true, schema: {type: string}}
-      responses:
-        '200': {description: Canceled job; completed cached reports remain available, content: {application/json: {schema: {$ref: '#/components/schemas/PerformanceJob'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/reindex:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}
@@ -1012,104 +834,6 @@ paths:
               schema: {$ref: '#/components/schemas/ProjectIndex'}
         '400': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/drafts/{draftID}:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    patch:
-      tags: [Drafts]
-      summary: Create the next draft revision from a declaration/import edit
-      parameters:
-        - {$ref: '#/components/parameters/DraftID'}
-      requestBody:
-        required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/DraftUpdateRequest'}}}
-      responses:
-        '200': {description: Updated draft revision with prior validation and check evidence cleared, content: {application/json: {schema: {$ref: '#/components/schemas/Draft'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/drafts/{draftID}/validate:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    post:
-      tags: [Drafts]
-      summary: Compose and validate one exact declaration draft revision
-      parameters:
-        - {$ref: '#/components/parameters/DraftID'}
-      requestBody:
-        required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/DraftValidationRequest'}}}
-      responses:
-        '200': {description: Valid or invalid draft with read-only composition evidence, content: {application/json: {schema: {$ref: '#/components/schemas/Draft'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/drafts/{draftID}/checks:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    post:
-      tags: [Drafts]
-      summary: Run focused checks for one validated declaration revision
-      parameters:
-        - {$ref: '#/components/parameters/DraftID'}
-      requestBody:
-        required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/DraftCheckRequest'}}}
-      responses:
-        '200': {description: Isolated check report for the displayed revision and hash, content: {application/json: {schema: {$ref: '#/components/schemas/DraftCheckReport'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/drafts/{draftID}/benchmarks:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    get:
-      tags: [Performance]
-      summary: List selectable existing Go benchmarks for one validated draft
-      parameters:
-        - {$ref: '#/components/parameters/DraftID'}
-        - {$ref: '#/components/parameters/ProjectRevision'}
-        - {name: expected_revision, in: query, required: true, schema: {type: integer, format: int64, minimum: 1}}
-        - {name: expected_hash, in: query, required: true, schema: {type: string}}
-      responses:
-        '200': {description: Available existing benchmarks or an unavailable reason; no process is started, content: {application/json: {schema: {$ref: '#/components/schemas/GoBenchmarkCatalog'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-    post:
-      tags: [Performance]
-      summary: Compare one selected existing Go benchmark in copied workspaces
-      parameters:
-        - {$ref: '#/components/parameters/DraftID'}
-      requestBody:
-        required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/GoBenchmarkComparisonRequest'}}}
-      responses:
-        '200': {description: Complete paired measurements or a sample-free unavailable/failed/canceled state; this does not enable Apply, content: {application/json: {schema: {$ref: '#/components/schemas/GoBenchmarkComparison'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/apply:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    post:
-      tags: [Drafts]
-      summary: Explicitly apply one validated and checked declaration draft
-      requestBody:
-        required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/ApplyRequest'}}}
-      responses:
-        '200': {description: Source was replaced; inspect warnings for incomplete metadata updates, content: {application/json: {schema: {$ref: '#/components/schemas/ApplyResult'}}}}
-        '400': {$ref: '#/components/responses/Error'}
-        '409': {$ref: '#/components/responses/Error'}
-  /api/projects/current/undo:
-    parameters:
-      - {$ref: '#/components/parameters/WorktreePath'}
-    post:
-      tags: [Drafts]
-      summary: Undo the immediately preceding unchanged apply
-      requestBody:
-        required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/UndoRequest'}}}
-      responses:
-        '200': {description: Source was restored; inspect warnings for incomplete metadata updates, content: {application/json: {schema: {$ref: '#/components/schemas/ApplyResult'}}}}
-        '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/context:
     parameters:
@@ -1134,16 +858,6 @@ components:
       required: false
       description: Optional absolute path of another registered worktree in the active repository. Requests use that checkout's project identity, jobs, trust and proposal guards without changing the active project. Membership is rechecked on every request.
       schema: {type: string}
-    SessionID:
-      name: sessionID
-      in: path
-      required: true
-      schema: {type: string}
-    DraftID:
-      name: draftID
-      in: path
-      required: true
-      schema: {type: string}
     ProjectPath:
       name: path
       in: query
@@ -1162,6 +876,13 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Error'}
   schemas:
+    Error:
+      type: object
+      required: [type, message, user_message]
+      properties:
+        type: {type: string}
+        message: {type: string}
+        user_message: {type: string}
     Health:
       type: object
       required: [status, version]
@@ -1174,7 +895,7 @@ components:
       properties:
         status: {type: string, example: running}
         version: {type: string}
-        workflow: {type: string, example: single_coder_preview}
+        workflow: {type: string, example: shared_proposals}
     ScopedModel:
       type: object
       required: [scope, profile, model, provider_origin, remote_provider, temperature, max_tokens, context_max_tokens, timeout, max_retries]
@@ -1632,102 +1353,6 @@ components:
         context_policy_version: {type: string}
         instructions_fingerprint: {type: string, description: Identity of the applicable AGENTS.md guides used for analysis.}
         generated_at: {type: string, format: date-time}
-    AnalyzeAllRequest:
-      type: object
-      required: [project_revision]
-      properties:
-        project_revision: {type: string}
-        max_files: {type: integer, minimum: 1, maximum: 500, description: Bounded cache-warming file budget.}
-        max_retries: {type: integer, minimum: 0, maximum: 3}
-        confirm_remote_provider: {type: boolean}
-    AnalyzeAllJob:
-      type: object
-      required: [project_id, project_revision, status, max_files, max_retries, files, created_at, updated_at]
-      properties:
-        project_id: {type: string}
-        project_revision: {type: string}
-        status: {type: string, enum: [running, paused, interrupted, canceled, completed, stale]}
-        max_files: {type: integer}
-        max_retries: {type: integer}
-        files:
-          type: array
-          items: {$ref: '#/components/schemas/AnalyzeAllFileJob'}
-        created_at: {type: string, format: date-time}
-        updated_at: {type: string, format: date-time}
-    AnalyzeAllFileJob:
-      type: object
-      required: [path, status, attempts]
-      properties:
-        path: {type: string, description: Eligible project-relative source file.}
-        status: {type: string, enum: [pending, running, completed, failed]}
-        attempts: {type: integer}
-        error: {type: string, description: Sanitized per-file failure state.}
-    PerformanceJobRequest:
-      type: object
-      required: [project_revision]
-      properties:
-        project_revision: {type: string}
-        max_files: {type: integer, minimum: 1, maximum: 500}
-        run_budget_seconds: {type: integer, minimum: 1, maximum: 3600, description: Provider execution budget; defaults to 900 seconds.}
-        queue_id: {type: string, description: Optional queue identity returned by the current context preview.}
-        policy_fingerprint: {type: string, description: Optional policy fingerprint returned by the current context preview.}
-        expected_job_id: {type: string, description: Required by clients when resuming a known job.}
-        confirm_remote_provider: {type: boolean}
-    PerformanceJob:
-      type: object
-      required: [id, generation, project_id, project_revision, root, policy_fingerprint, queue_id, status, max_files, run_budget, elapsed, files, created_at, updated_at]
-      properties:
-        id: {type: string}
-        generation: {type: string}
-        project_id: {type: string}
-        project_revision: {type: string}
-        root: {type: string, description: Canonical local project root captured by the job.}
-        policy_fingerprint: {type: string}
-        queue_id: {type: string}
-        status: {type: string, enum: [running, paused, interrupted, canceled, completed, stale]}
-        max_files: {type: integer}
-        run_budget: {type: integer, format: int64, description: Nanoseconds of provider execution budget.}
-        elapsed: {type: integer, format: int64, description: Nanoseconds of recorded provider execution time.}
-        active_started_at: {type: string, format: date-time, description: Persisted request start used to conservatively account interrupted provider work.}
-        files: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/PerformanceJobFile'}}
-        created_at: {type: string, format: date-time}
-        updated_at: {type: string, format: date-time}
-    PerformanceJobFile:
-      type: object
-      required: [path, content_hash, status, attempts]
-      properties:
-        path: {type: string, description: Exact project-relative queued file.}
-        content_hash: {type: string}
-        status: {type: string, enum: [pending, running, completed, cached, failed, skipped]}
-        attempts: {type: integer}
-        reason: {type: string}
-        error: {type: string, description: Sanitized per-file failure state.}
-    PerformanceQueuePreview:
-      type: object
-      required: [project_id, project_revision, policy_fingerprint, queue_id, max_files, files, excluded, oversized, outside_limit, provider]
-      properties:
-        project_id: {type: string}
-        project_revision: {type: string}
-        policy_fingerprint: {type: string}
-        queue_id: {type: string}
-        max_files: {type: integer}
-        files: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/PerformanceJobFile'}}
-        excluded: {type: integer}
-        oversized: {type: integer}
-        outside_limit: {type: integer}
-        provider: {$ref: '#/components/schemas/ScopedModel'}
-    PerformanceReport:
-      type: object
-      required: [project_id, project_revision, queue_id, status, counts, categories, paths, findings]
-      properties:
-        project_id: {type: string}
-        project_revision: {type: string}
-        queue_id: {type: string}
-        status: {type: string, enum: [running, paused, interrupted, canceled, completed, stale]}
-        counts: {type: object, additionalProperties: {type: integer}}
-        categories: {type: object, additionalProperties: {type: integer}}
-        paths: {type: object, additionalProperties: {type: string}, description: Source-free finding ID to project-relative path mapping.}
-        findings: {type: array, items: {$ref: '#/components/schemas/PerformanceFinding'}}
     PerformanceFinding:
       type: object
       required: [id, category, potential_impact, confidence, title, observed_pattern, workload_conditions, recommendation, tradeoff, verification_plan, start_line, end_line]
@@ -1850,248 +1475,6 @@ components:
         signature: {type: string}
         start_line: {type: integer, minimum: 1}
         end_line: {type: integer, minimum: 1}
-    ChatSessionRequest:
-      type: object
-      required: [project_id, project_revision, base_file_hash, open_path, mode, target_symbol]
-      properties:
-        project_id: {type: string}
-        project_revision: {type: string}
-        base_file_hash: {type: string}
-        open_path: {type: string, description: Project-relative open Go source file.}
-        mode: {type: string, enum: [replace_symbol, create_symbol]}
-        target_symbol: {type: string, description: Exact existing symbol for replacement or valid Go identifier absent from all indexed symbols in the open file for creation. Creation rejects Go keywords and workflow-reserved names (_, init, main); it does not guarantee package-wide uniqueness. Function versus Type is conveyed in the message, not a separate session field.}
-        task_spec: {$ref: '#/components/schemas/BugTaskSpec'}
-        engineering_insight: {$ref: '#/components/schemas/EngineeringInsight'}
-    ChatMessageRequest:
-      type: object
-      required: [message]
-      properties:
-        message: {type: string}
-        parent_draft_id: {type: string, description: Optional earlier draft in this same session.}
-        confirm_remote_provider: {type: boolean, description: Required before prompt content is sent to a non-loopback provider.}
-        repair: {type: boolean, description: Explicit check-driven repair for the latest task-bound failed draft; pins its reviewed temporary proof and is limited to three per session.}
-    ChatSession:
-      type: object
-      required: [id, project_id, project_revision, base_file_hash, open_path, mode, target_symbol, state, messages, created_at, updated_at]
-      properties:
-        id: {type: string}
-        project_id: {type: string}
-        project_revision: {type: string}
-        base_file_hash: {type: string}
-        open_path: {type: string}
-        mode: {type: string, enum: [replace_symbol, create_symbol]}
-        target_symbol: {type: string}
-        task_spec: {$ref: '#/components/schemas/BugTaskSpec'}
-        repair_count: {type: integer, minimum: 0, maximum: 3}
-        state: {type: string, enum: [active, stale]}
-        latest_draft_id: {type: string}
-        messages: {type: array, items: {$ref: '#/components/schemas/ChatSessionMessage'}}
-        created_at: {type: string, format: date-time}
-        updated_at: {type: string, format: date-time}
-    ChatSessionMessage:
-      type: object
-      required: [role, content, created_at]
-      properties:
-        role: {type: string, enum: [user, assistant]}
-        content: {type: string}
-        draft_id: {type: string}
-        created_at: {type: string, format: date-time}
-    ChatDraftProposal:
-      type: object
-      required: [session_id, draft, assistant_message, context_manifest]
-      properties:
-        session_id: {type: string}
-        draft: {$ref: '#/components/schemas/Draft'}
-        assistant_message: {$ref: '#/components/schemas/ChatSessionMessage'}
-        context_manifest: {$ref: '#/components/schemas/ContextManifest'}
-    Draft:
-      type: object
-      required: [id, project_id, project_revision, base_file_hash, target_path, mode, target_symbol, declaration, revision, hash, state]
-      properties:
-        id: {type: string}
-        project_id: {type: string}
-        project_revision: {type: string}
-        base_file_hash: {type: string}
-        target_path: {type: string}
-        mode: {type: string, enum: [replace_symbol, create_symbol]}
-        target_symbol: {type: string}
-        declaration: {type: string, description: The editable declaration only.}
-        imports: {type: array, items: {type: string}}
-        revision: {type: integer, format: int64}
-        hash: {type: string}
-        candidate_hash: {type: string}
-        parent_draft_id: {type: string}
-        previous_hash: {type: string}
-        state: {type: string, enum: [generated, dirty, validating, valid, invalid, stale]}
-        validation: {$ref: '#/components/schemas/DeclarationValidation'}
-        task_spec: {$ref: '#/components/schemas/BugTaskSpec'}
-    DraftUpdateRequest:
-      type: object
-      required: [project_revision, expected_revision, declaration]
-      properties:
-        project_revision: {type: string}
-        expected_revision: {type: integer, format: int64}
-        declaration: {type: string, description: Replacement text for the isolated declaration, not the source file.}
-        imports: {type: array, items: {type: string}}
-    DraftValidationRequest:
-      type: object
-      required: [project_revision, expected_revision]
-      properties:
-        project_revision: {type: string}
-        expected_revision: {type: integer, format: int64}
-    DraftCheckRequest:
-      type: object
-      required: [project_revision, expected_revision, expected_hash]
-      properties:
-        project_revision: {type: string}
-        expected_revision: {type: integer, format: int64}
-        expected_hash: {type: string}
-        run_lint: {type: boolean}
-        run_tests: {type: boolean}
-    DraftCheckReport:
-      type: object
-      required: [target_path, applicable, checks]
-      properties:
-        draft_id: {type: string}
-        draft_revision: {type: integer, format: int64}
-        draft_hash: {type: string}
-        candidate_hash: {type: string}
-        project_id: {type: string}
-        project_revision: {type: string}
-        base_file_hash: {type: string}
-        target_path: {type: string}
-        applicable: {type: boolean}
-        checks: {type: array, items: {type: object}}
-    GoBenchmarkComparisonRequest:
-      type: object
-      required: [project_revision, expected_revision, expected_hash, benchmark, expected_scope]
-      additionalProperties: false
-      properties:
-        project_revision: {type: string}
-        expected_revision: {type: integer, format: int64, minimum: 1}
-        expected_hash: {type: string}
-        benchmark: {type: string, description: Exact name returned by the benchmark catalog; never a command or shell fragment.}
-        expected_scope: {type: string, description: Opaque scope returned with the displayed fixed argv; binds execution to that reviewed selection.}
-    GoBenchmarkCatalog:
-      type: object
-      required: [draft_id, draft_revision, draft_hash, available, trusted, benchmarks]
-      properties:
-        draft_id: {type: string}
-        draft_revision: {type: integer, format: int64}
-        draft_hash: {type: string}
-        project_id: {type: string}
-        project_revision: {type: string}
-        base_file_hash: {type: string}
-        target_path: {type: string}
-        available: {type: boolean}
-        trusted: {type: boolean, description: Current project-revision execution consent. False still returns command previews.}
-        reason: {type: string}
-        benchmarks: {type: array, items: {$ref: '#/components/schemas/GoBenchmarkChoice'}, description: Existing valid benchmark choices in the affected package.}
-    GoBenchmarkChoice:
-      type: object
-      required: [name, command, scope]
-      properties:
-        name: {type: string}
-        command: {type: array, items: {type: string}, description: Exact daemon-built argv preview.}
-        scope: {type: string, description: Opaque selected-scope guard bound to the reviewed workspace fixture and required to run this displayed argv.}
-    GoBenchmarkSample:
-      type: object
-      required: [iterations, ns_per_op, bytes_per_op, allocs_per_op]
-      properties:
-        iterations: {type: integer, format: int64, minimum: 1}
-        ns_per_op: {type: number, format: double, minimum: 0, exclusiveMinimum: true}
-        bytes_per_op: {type: integer, format: int64, minimum: 0}
-        allocs_per_op: {type: integer, format: int64, minimum: 0}
-    GoBenchmarkMeasurement:
-      type: object
-      required: [samples]
-      properties:
-        samples: {type: array, minItems: 5, maxItems: 5, items: {$ref: '#/components/schemas/GoBenchmarkSample'}}
-    GoBenchmarkComparison:
-      type: object
-      required: [draft_id, draft_revision, draft_hash, status]
-      properties:
-        draft_id: {type: string}
-        draft_revision: {type: integer, format: int64}
-        draft_hash: {type: string}
-        project_id: {type: string}
-        project_revision: {type: string}
-        base_file_hash: {type: string}
-        target_path: {type: string}
-        benchmark: {type: string}
-        scope: {type: string}
-        status: {type: string, enum: [completed, unavailable, failed, canceled]}
-        reason: {type: string}
-        command: {type: array, items: {type: string}, description: Fixed daemon-built argv preview.}
-        base: {$ref: '#/components/schemas/GoBenchmarkMeasurement'}
-        candidate: {$ref: '#/components/schemas/GoBenchmarkMeasurement'}
-      allOf:
-        - oneOf:
-            - properties:
-                status: {type: string, enum: [completed]}
-              required: [status, base, candidate]
-            - properties:
-                status: {type: string, enum: [unavailable, canceled]}
-              required: [status]
-              not:
-                anyOf:
-                  - required: [base]
-                  - required: [candidate]
-            - properties:
-                status: {type: string, enum: [failed]}
-              required: [status]
-              not:
-                anyOf:
-                  - required: [base]
-                  - required: [candidate]
-    ApplyRequest:
-      type: object
-      required: [draft_id, draft_revision, draft_hash, project_id, project_revision, base_file_hash, confirm]
-      properties:
-        draft_id: {type: string}
-        draft_revision: {type: integer, format: int64}
-        draft_hash: {type: string}
-        project_id: {type: string}
-        project_revision: {type: string}
-        base_file_hash: {type: string}
-        confirm: {type: boolean, description: Must be true after the user reviews the file and declaration named by the draft.}
-    ApplyResult:
-      type: object
-      required: [project_revision, post_apply_hash, undo_available, audit, index]
-      properties:
-        project_revision: {type: string, description: Refreshed revision or the last known revision when indexing fails.}
-        post_apply_hash: {type: string, description: Hash of the source after the mutation.}
-        undo_available: {type: boolean}
-        audit: {type: object, description: Source-free receipt of the actual mutation; warnings indicate if durable audit persistence failed.}
-        index:
-          oneOf:
-            - {$ref: '#/components/schemas/ProjectIndex'}
-            - {type: object, nullable: true, enum: [null]}
-        warnings:
-          type: array
-          items: {type: string}
-          description: Nonfatal failures after source replacement. Source changed even when metadata updates failed.
-    UndoRequest:
-      type: object
-      required: [project_id, project_revision, post_apply_hash, confirm]
-      properties:
-        project_id: {type: string}
-        project_revision: {type: string}
-        post_apply_hash: {type: string}
-        confirm: {type: boolean, description: Must be true after the user confirms restoration of the immediately preceding unchanged apply.}
-    DeclarationValidation:
-      type: object
-      required: [applicable, scope_mode, diagnostics, diff]
-      properties:
-        applicable: {type: boolean}
-        scope_mode: {type: string, enum: [strict_symbol, symbol_plus_imports]}
-        diagnostics: {type: array, items: {$ref: '#/components/schemas/DeclarationFinding'}}
-        diff: {$ref: '#/components/schemas/UnifiedDiff'}
-    DeclarationFinding:
-      type: object
-      properties:
-        code: {type: string}
-        message: {type: string}
     UnifiedDiff:
       type: object
       properties:
@@ -2105,13 +1488,6 @@ components:
         old_line: {type: integer}
         new_line: {type: integer}
         text: {type: string}
-    Error:
-      type: object
-      required: [type, message, user_message]
-      properties:
-        type: {type: string}
-        message: {type: string}
-        user_message: {type: string}
     FindingCategory:
       type: string
       enum: [bugs, performance, security]
@@ -2272,8 +1648,6 @@ components:
       properties:
         models: {$ref: '#/components/schemas/AnalysisModels'}
         features: {$ref: '#/components/schemas/AnalysisFeaturePlan'}
-        compatibility_stage: {type: string, enum: [semantic, performance], description: Present only for a bounded legacy adapter run.}
-        compatibility_budget_nanoseconds: {type: integer, minimum: 1, maximum: 3600000000000, description: Total active-time budget retained by the legacy Performance adapter.}
         schema_version: {type: string, enum: ['1']}
         preview_id: {type: string, minLength: 1, description: Admission fingerprint including remaining work, cache dispositions and request bounds.}
         identity: {$ref: '#/components/schemas/AnalysisQueueIdentity'}
@@ -2367,7 +1741,6 @@ components:
       required: [schema_version, identity, plan, status, files, sections, elapsed_seconds, window_elapsed_seconds, window_files_completed, created_at, updated_at]
       properties:
         features: {$ref: '#/components/schemas/AnalysisFeatureProgress'}
-        compatibility_elapsed_nanoseconds: {type: integer, minimum: 0, maximum: 3600000000000}
         schema_version: {type: string, enum: ['1']}
         identity: {$ref: '#/components/schemas/AnalysisRunIdentity'}
         plan: {$ref: '#/components/schemas/AnalysisRunPreview'}

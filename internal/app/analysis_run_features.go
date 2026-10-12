@@ -32,7 +32,7 @@ func validateStoredAnalysisFeatures(run *AnalysisRun) error {
 	if plan == nil && progress == nil {
 		return nil
 	}
-	if plan == nil || progress == nil || !validAnalysisFeaturePlan(plan, run.Plan.CompatibilityStage) {
+	if plan == nil || progress == nil || !validAnalysisFeaturePlan(plan) {
 		return errAnalysisRunCorrupt
 	}
 	if validateAnalysisExcludedPaths(plan.ExcludedPaths) != nil {
@@ -52,8 +52,8 @@ func analysisFeatureHash(hash string) bool {
 	return strings.HasPrefix(hash, "sha256:") && len(hash) == 71
 }
 
-func validAnalysisFeaturePlan(plan *AnalysisFeaturePlan, compatibility AnalysisStage) bool {
-	return compatibility == "" && analysisFeatureHash(plan.GoalsHash) && analysisFeatureHash(plan.WorkspaceHash) && len(plan.ProviderID) == 64 &&
+func validAnalysisFeaturePlan(plan *AnalysisFeaturePlan) bool {
+	return analysisFeatureHash(plan.GoalsHash) && analysisFeatureHash(plan.WorkspaceHash) && len(plan.ProviderID) == 64 &&
 		(plan.ExpectedHash == "empty" || analysisFeatureHash(plan.ExpectedHash)) && len(plan.ExcludedPaths) <= maxAnalysisInventoryFiles
 }
 
@@ -62,7 +62,7 @@ func (s *Service) planAnalysisFeatures(ctx context.Context, root string, preview
 	if err != nil {
 		return err
 	}
-	fingerprint, err := benchmarkSourceFingerprint(ctx, root)
+	fingerprint, err := workspaceFingerprint(ctx, root)
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func (s *Service) validateAnalysisFeatureInputs(ctx context.Context, root string
 		return project.ErrRevisionConflict
 	}
 	if sources {
-		return (benchmarkFixture{fingerprint: plan.WorkspaceHash}).verifyCurrent(ctx, root)
+		return (workspaceIdentity{fingerprint: plan.WorkspaceHash}).verifyCurrent(ctx, root)
 	}
 	return nil
 }

@@ -13,7 +13,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
-func TestCLIProvidersAnalyzeAndProposeDraftsWithScopeConsent(t *testing.T) {
+func TestCLIProvidersAnalyzeAndProposeChangesWithScopeConsent(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("CLI providers require process-group cleanup")
 	}
@@ -30,7 +30,7 @@ func TestCLIProvidersAnalyzeAndProposeDraftsWithScopeConsent(t *testing.T) {
 			cfg.ModelScopes = config.ModelScopesConfig{
 				Analyze:  cliAppProfile(t, provider, "analyze-model", `{"purpose":"Explains the fixture.","architecture":"One package.","components":[],"entry_points":[],"flows":[],"risks":[],"next_steps":[],"engineering_insight":null}`, calls),
 				Bug:      cliAppProfile(t, provider, "bug-model", strings.TrimSuffix(validSemanticAnalysis, "}")+`,"engineering_insight":null}`, calls),
-				Function: cliAppProfile(t, provider, "function-model", `{"version":"v1","declaration":"func Run() { fmt.Println(\"updated\") }","explanation":"Updates the message."}`, calls),
+				Function: cliAppProfile(t, provider, "function-model", `{"explanation":"Updates the message.","changes":[{"path":"main.go","content":"package main\nimport \"fmt\"\nfunc Run() { fmt.Println(\"updated\") }\n"}]}`, calls),
 			}
 			service, err := New(cfg, fixture.manager)
 			if err != nil {
@@ -65,17 +65,17 @@ func TestCLIProvidersAnalyzeAndProposeDraftsWithScopeConsent(t *testing.T) {
 			if err != nil || report.Status != project.AnalysisStatusFresh || report.ProviderOrigin != "cli://"+string(provider) {
 				t.Fatalf("file analysis = %+v, %v", report, err)
 			}
-			session := openFixtureChatSession(t, service, project.DeclarationEditReplaceSymbol, "Run")
-			request := ChatSessionMessageRequest{SessionID: session.ID, Message: "Update the message."}
-			if _, err := service.SendChatSessionMessage(context.Background(), request); err == nil {
+			session := openChangeFixture(t, service, "main.go")
+			request := ChangeMessageRequest{ChangeIdentity: changeIdentity(session), Message: "Update the message."}
+			if _, err := service.SendChangeMessage(context.Background(), session.ID, request); err == nil {
 				t.Fatal("proposal dispatched without Function consent")
 			}
 			request.ConfirmRemoteProvider = true
-			proposal, err := service.SendChatSessionMessage(context.Background(), request)
+			proposal, err := service.SendChangeMessage(context.Background(), session.ID, request)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if proposal.Draft.ID == "" || !strings.Contains(proposal.Draft.Declaration, "updated") || proposal.Draft.EffectiveModel.ProviderOrigin != "cli://"+string(provider) {
+			if proposal.ID == "" || len(proposal.Changes) != 1 || !strings.Contains(proposal.Changes[0].Content, "updated") || proposal.ContextManifest.ProviderOrigin != "cli://"+string(provider) {
 				t.Fatalf("proposal = %+v", proposal)
 			}
 			current, err := os.ReadFile(filepath.Join(root, "main.go"))

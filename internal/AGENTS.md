@@ -23,11 +23,11 @@ the backend guide for changes to `cmd/`.
 
 - Reuse project/path policy for containment, symlinks, exclusions and context
   limits; `filepath.Join` alone does not establish that a path is safe.
-- Carry project ID/revision, file hash and draft/run identity through asynchronous
+- Carry project ID/revision, file hash and proposal/run identity through asynchronous
   operations. Recheck before publishing results or changing source; a late result
-  must not become evidence for a different project, file, draft or run.
-- Preserve the guarded Apply/Undo workflow in `app/apply.go`. Apply consumes a
-  stored, validated draft identity, not arbitrary request source. Editing a draft
+  must not become evidence for a different project, file, proposal or run.
+- Preserve the guarded Apply/Undo workflow in `app/change_apply.go`. Apply consumes a
+  stored, checked proposal identity, not arbitrary request source. Revising a proposal
   invalidates its previous checks; Undo requires the expected post-Apply hash.
 - Use existing atomic storage primitives and domain stores. Preserve permissions,
   backup/audit behavior and useful persistence errors. A failure after a source
@@ -50,7 +50,7 @@ the backend guide for changes to `cmd/`.
   through synchronous request work; background jobs use their existing lifecycle
   owner. Preserve deadlines, request/output limits and inclusive retry budgets.
   Avoid holding locks during provider or subprocess I/O.
-- Project-code checks and benchmarks require the existing execution-trust guard
+- Project-code checks require the existing execution-trust guard
   and isolated workspace. Use controlled argv, bounded diagnostics and process
   cleanup; never execute model text as a shell command. The desktop's user-operated
   terminal does not authorize model-driven commands.

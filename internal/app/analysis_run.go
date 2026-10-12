@@ -134,20 +134,18 @@ func (identity AnalysisRunIdentity) Validate() error {
 }
 
 type AnalysisPreviewRequest struct {
-	Models              *AnalysisModels      `json:"models,omitempty"`
-	IncludeFeatures     bool                 `json:"include_features,omitempty"`
-	RetryStaleFailed    bool                 `json:"retry_stale_failed,omitempty"`
-	StaleOnly           bool                 `json:"stale_only,omitempty"`
-	StalePath           string               `json:"stale_path,omitempty"`
-	RecoverIncomplete   bool                 `json:"recover_incomplete,omitempty"`
-	ProjectID           string               `json:"project_id"`
-	ProjectRevision     string               `json:"project_revision"`
-	Scope               string               `json:"scope"`
-	Refresh             bool                 `json:"refresh"`
-	Limits              AnalysisRunLimits    `json:"limits"`
-	ResumeRun           *AnalysisRunIdentity `json:"resume_run,omitempty"`
-	compatibilityStage  AnalysisStage
-	compatibilityBudget time.Duration
+	Models            *AnalysisModels      `json:"models,omitempty"`
+	IncludeFeatures   bool                 `json:"include_features,omitempty"`
+	RetryStaleFailed  bool                 `json:"retry_stale_failed,omitempty"`
+	StaleOnly         bool                 `json:"stale_only,omitempty"`
+	StalePath         string               `json:"stale_path,omitempty"`
+	RecoverIncomplete bool                 `json:"recover_incomplete,omitempty"`
+	ProjectID         string               `json:"project_id"`
+	ProjectRevision   string               `json:"project_revision"`
+	Scope             string               `json:"scope"`
+	Refresh           bool                 `json:"refresh"`
+	Limits            AnalysisRunLimits    `json:"limits"`
+	ResumeRun         *AnalysisRunIdentity `json:"resume_run,omitempty"`
 }
 
 func (request AnalysisPreviewRequest) Validate() error {
@@ -216,8 +214,6 @@ type AnalysisRunPreview struct {
 	StaleOnly                    bool                          `json:"stale_only,omitempty"`
 	StalePath                    string                        `json:"stale_path,omitempty"`
 	RecoverIncomplete            bool                          `json:"recover_incomplete,omitempty"`
-	CompatibilityStage           AnalysisStage                 `json:"compatibility_stage,omitempty"`
-	CompatibilityBudget          time.Duration                 `json:"compatibility_budget_nanoseconds,omitempty"`
 	SchemaVersion                string                        `json:"schema_version"`
 	PreviewID                    string                        `json:"preview_id"`
 	Identity                     AnalysisQueueIdentity         `json:"identity"`
@@ -402,7 +398,6 @@ type AnalysisRunFile struct {
 // in producer-owned report stores; no source, prompt, transcript or consent is saved here.
 type AnalysisRun struct {
 	Features             *AnalysisFeatureProgress  `json:"features,omitempty"`
-	CompatibilityElapsed time.Duration             `json:"compatibility_elapsed_nanoseconds,omitempty"`
 	SchemaVersion        string                    `json:"schema_version"`
 	Identity             AnalysisRunIdentity       `json:"identity"`
 	Plan                 AnalysisRunPreview        `json:"plan"`
@@ -450,22 +445,21 @@ type analysisRunRecovery struct {
 }
 
 type analysisRunController struct {
-	detached                 map[string]analysisRunRecovery
-	mu                       sync.Mutex
-	run                      *AnalysisRun
-	root                     string
-	fault                    error
-	done                     chan struct{}
-	cancel                   context.CancelFunc
-	featureCancel            context.CancelFunc
-	admission                *AnalysisRunPreview
-	confirmations            AnalysisRunConfirmations
-	windowStart              time.Time
-	elapsedBase              int64
-	compatibilityElapsedBase time.Duration
-	windowBudget             time.Duration
-	fileStopReason           string
-	featureStopReason        string
+	detached          map[string]analysisRunRecovery
+	mu                sync.Mutex
+	run               *AnalysisRun
+	root              string
+	fault             error
+	done              chan struct{}
+	cancel            context.CancelFunc
+	featureCancel     context.CancelFunc
+	admission         *AnalysisRunPreview
+	confirmations     AnalysisRunConfirmations
+	windowStart       time.Time
+	elapsedBase       int64
+	windowBudget      time.Duration
+	fileStopReason    string
+	featureStopReason string
 }
 
 func (s *Service) StartAnalysisRun(ctx context.Context, request AnalysisRunStartRequest) (*AnalysisRun, error) {
@@ -480,11 +474,11 @@ func (s *Service) StartAnalysisRun(ctx context.Context, request AnalysisRunStart
 	c := s.analysisRun
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return s.startAnalysisRunLocked(ctx, request, "", 0)
+	return s.startAnalysisRunLocked(ctx, request)
 }
 
 // Caller holds both lifecycle and controller locks.
-func (s *Service) startAnalysisRunLocked(ctx context.Context, request AnalysisRunStartRequest, stage AnalysisStage, budget time.Duration) (*AnalysisRun, error) {
+func (s *Service) startAnalysisRunLocked(ctx context.Context, request AnalysisRunStartRequest) (*AnalysisRun, error) {
 	c := s.analysisRun
 	if err := s.restoreAnalysisRunLocked(); err != nil {
 		return nil, err
@@ -501,7 +495,7 @@ func (s *Service) startAnalysisRunLocked(ctx context.Context, request AnalysisRu
 			return cloneAnalysisRun(c.run), errAnalysisRunBusy
 		}
 	}
-	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{Models: request.Models, IncludeFeatures: request.IncludeFeatures, ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: request.RetryStaleFailed, StaleOnly: request.StaleOnly, StalePath: request.StalePath, RecoverIncomplete: request.RecoverIncomplete, Refresh: request.Refresh, Limits: request.Limits, compatibilityStage: stage, compatibilityBudget: budget})
+	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{Models: request.Models, IncludeFeatures: request.IncludeFeatures, ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: request.RetryStaleFailed, StaleOnly: request.StaleOnly, StalePath: request.StalePath, RecoverIncomplete: request.RecoverIncomplete, Refresh: request.Refresh, Limits: request.Limits})
 	if err != nil {
 		return nil, err
 	}
@@ -522,14 +516,6 @@ func (s *Service) startAnalysisRunLocked(ctx context.Context, request AnalysisRu
 	result := cloneAnalysisRun(c.run)
 	s.launchAnalysisRunLocked(preview, request.Confirmations)
 	return result, nil
-}
-
-// CurrentAnalysisRun can restore metadata but never starts a worker or reuses consent.
-// A recoverable persistence fault returns the retained progress alongside its error.
-func (s *Service) CurrentAnalysisRun(ctx context.Context) (*AnalysisRun, error) {
-	s.jobLifecycleMu.Lock()
-	defer s.jobLifecycleMu.Unlock()
-	return s.currentAnalysisRunLocked(ctx)
 }
 
 // The caller holds jobLifecycleMu through its complete project read.
@@ -646,9 +632,6 @@ func (s *Service) resumeAnalysisRunLocked(ctx context.Context, request AnalysisR
 	if c.run.Status != AnalysisRunPaused && c.run.Status != AnalysisRunInterrupted {
 		return nil, fmt.Errorf("%w: analysis requires paused or interrupted progress to resume", project.ErrRevisionConflict)
 	}
-	if c.run.Plan.CompatibilityBudget > 0 && c.run.CompatibilityElapsed >= c.run.Plan.CompatibilityBudget {
-		return nil, fmt.Errorf("%w: performance job budget is exhausted; start a new job", project.ErrRevisionConflict)
-	}
 	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{ProjectID: c.run.Identity.ProjectID, ProjectRevision: c.run.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: c.run.Plan.RetryStaleFailed, StaleOnly: c.run.Plan.StaleOnly, StalePath: c.run.Plan.StalePath, RecoverIncomplete: c.run.Plan.RecoverIncomplete, Refresh: c.run.Plan.Refresh, Limits: c.run.Plan.Limits, ResumeRun: &request.Identity})
 	if err != nil {
 		return nil, err
@@ -678,9 +661,6 @@ func (s *Service) resumeAnalysisRunLocked(ctx context.Context, request AnalysisR
 func (s *Service) launchAnalysisRunLocked(preview *AnalysisRunPreview, confirmations AnalysisRunConfirmations) {
 	c := s.analysisRun
 	c.windowBudget = time.Duration(c.run.Plan.Limits.BudgetSeconds) * time.Second
-	if c.run.Plan.CompatibilityBudget > 0 {
-		c.windowBudget = min(c.windowBudget, c.run.Plan.CompatibilityBudget-c.run.CompatibilityElapsed)
-	}
 	ctx, cancel := context.WithCancel(context.Background())
 	c.cancel = cancel
 	c.done = make(chan struct{})
@@ -688,7 +668,6 @@ func (s *Service) launchAnalysisRunLocked(preview *AnalysisRunPreview, confirmat
 	c.confirmations = AnalysisRunConfirmations{SecurityReview: confirmations.SecurityReview, ProviderIDs: append([]string(nil), confirmations.ProviderIDs...)}
 	c.windowStart = time.Now()
 	c.elapsedBase = c.run.ElapsedSeconds
-	c.compatibilityElapsedBase = c.run.CompatibilityElapsed
 	c.fileStopReason, c.featureStopReason = "", ""
 	go s.runAnalysisWindow(ctx, c.run.Identity, c.done)
 }
@@ -883,9 +862,6 @@ func (s *Service) updateAnalysisElapsedLocked() {
 	active := time.Since(c.windowStart)
 	if c.run.Plan.Features == nil {
 		active = min(active, c.windowBudget)
-	}
-	if c.run.Plan.CompatibilityBudget > 0 {
-		c.run.CompatibilityElapsed = min(c.run.Plan.CompatibilityBudget, c.compatibilityElapsedBase+active)
 	}
 	elapsed := int64(active / time.Second)
 	c.run.WindowElapsedSeconds = elapsed

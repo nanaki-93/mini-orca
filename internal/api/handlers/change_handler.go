@@ -1,11 +1,12 @@
 package handlers
 
 import (
+	"net/http"
+	"path/filepath"
+
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
-	"net/http"
-	"path/filepath"
 )
 
 type ChangeHandler struct {
@@ -26,7 +27,7 @@ func decodeWorkflowBody(w http.ResponseWriter, r *http.Request, body any) bool {
 }
 func respondWorkflow(w http.ResponseWriter, value any, err error) {
 	if err != nil {
-		writeChatError(w, "AI workflow request failed", err)
+		writeWorkflowError(w, "AI workflow request failed", err)
 		return
 	}
 	api.WriteJSON(w, http.StatusOK, value)
@@ -34,11 +35,11 @@ func respondWorkflow(w http.ResponseWriter, value any, err error) {
 func guardedWorkflowRead(w http.ResponseWriter, r *http.Request, manager *project.Manager) bool {
 	index, err := manager.Index()
 	if err != nil {
-		writeChatError(w, "project unavailable", err)
+		writeWorkflowError(w, "project unavailable", err)
 		return false
 	}
 	if r.URL.Query().Get("project_id") != index.ProjectID || r.URL.Query().Get("project_revision") != index.ProjectRevision {
-		writeChatError(w, "project changed", project.ErrRevisionConflict)
+		writeWorkflowError(w, "project changed", project.ErrRevisionConflict)
 		return false
 	}
 	return true

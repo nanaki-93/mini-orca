@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
@@ -150,7 +149,7 @@ func TestAnalysisRunStoreCloneDoesNotExposeMutableControllerState(t *testing.T) 
 	run.Plan.Files[0].Stages[0].MaxModelRequests = 99
 	run.Plan.Providers[0].Stages[0] = AnalysisStageSecurityRules
 	*run.Sections[0].FindingCount = 99
-	current, err := s.CurrentAnalysisRun(context.Background())
+	current, err := s.currentTestAnalysisRun(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +183,7 @@ func TestAnalysisRunStoreResumeReusesPublishedEvidenceWithNoAttemptsRemaining(t 
 		t.Fatal(err)
 	}
 	restored.runtimes = s.runtimes
-	interrupted, err := restored.CurrentAnalysisRun(context.Background())
+	interrupted, err := restored.currentTestAnalysisRun(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,76 +237,19 @@ func TestAnalysisRunDetachmentRetainsFailureOnlyForCapturedProject(t *testing.T)
 	}
 	release()
 	waitAnalysisWindow(t, s)
-	if run, err := s.CurrentAnalysisRun(context.Background()); err != nil || run != nil {
+	if run, err := s.currentTestAnalysisRun(context.Background()); err != nil || run != nil {
 		t.Fatalf("new project inherited fault: %+v %v", run, err)
 	}
 	if err := s.ActivateProject(root, original); err != nil {
 		t.Fatal(err)
 	}
-	retained, err := s.CurrentAnalysisRun(context.Background())
+	retained, err := s.currentTestAnalysisRun(context.Background())
 	if err != errAnalysisRunPersistence || retained == nil || retained.Status != AnalysisRunInterrupted {
 		t.Fatalf("lost detached fault: %+v %v", retained, err)
 	}
 	s.writeAnalysisRun = nil
 	if _, err := s.ControlAnalysisRun(context.Background(), AnalysisRunControlRequest{Identity: retained.Identity, Action: AnalysisRunCancel}); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestAnalysisRunStorePreservesPerformanceBudgetAcrossProcessLoss(t *testing.T) {
-	server, calls, started, release := analysisBlockingServer(t)
-	s, root := newSemanticAnalysisService(t, server.URL, 0)
-	if _, err := s.StartPerformanceJob(context.Background(), PerformanceJobOptions{MaxFiles: 1, RunBudget: 30 * time.Second}, false); err != nil {
-		t.Fatal(err)
-	}
-	waitForTestSignal(t, started, "performance request before restart")
-	if _, err := s.PausePerformanceJob("", ""); err != nil {
-		t.Fatal(err)
-	}
-	release()
-	paused := completedAnalysisRun(t, s)
-	for _, state := range []AnalysisRunStatus{AnalysisRunRunning, AnalysisRunPausing, AnalysisRunCanceling, AnalysisRunPaused} {
-		t.Run(string(state), func(t *testing.T) {
-			saved := cloneAnalysisRun(paused)
-			saved.Status = state
-			saved.CreatedAt = time.Now().Add(-2 * time.Minute).UTC()
-			saved.UpdatedAt = saved.CreatedAt.Add(time.Minute)
-			saved.CompatibilityElapsed = 100 * time.Millisecond
-			saved.ElapsedSeconds, saved.WindowElapsedSeconds = 0, 0
-			refreshAnalysisSections(saved)
-			data, err := json.Marshal(saved)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := storage.WriteFile(filepath.Join(root, analysisRunRelativePath), data, 0600); err != nil {
-				t.Fatal(err)
-			}
-			restored, err := New(scopedTestConfig(server.URL), s.manager)
-			if err != nil {
-				t.Fatal(err)
-			}
-			restored.runtimes = s.runtimes
-			current, err := restored.CurrentAnalysisRun(context.Background())
-			if err != nil {
-				t.Fatal(err)
-			}
-			want := 30 * time.Second
-			if state == AnalysisRunPaused {
-				want = 100 * time.Millisecond
-			}
-			if current.CompatibilityElapsed != want || current.Files[0].Stages[1].Attempts != paused.Files[0].Stages[1].Attempts || restored.analysisRun.done != nil || calls.Load() != 1 {
-				t.Fatalf("recovery=%+v calls=%d", current, calls.Load())
-			}
-			if state == AnalysisRunRunning || state == AnalysisRunPausing {
-				if _, err := restored.ResumePerformanceJob(context.Background(), current.Identity.ID, false); !errors.Is(err, project.ErrRevisionConflict) {
-					t.Fatalf("spent budget resumed: %v", err)
-				}
-			}
-			persisted, err := loadAnalysisRun(root)
-			if err != nil || persisted.CompatibilityElapsed != want {
-				t.Fatalf("budget not durable: %+v %v", persisted, err)
-			}
-		})
 	}
 }
 
@@ -401,10 +343,9 @@ func TestAnalysisRecoverStoredPlanConstraintsAndLegacyEncoding(t *testing.T) {
 		t.Fatalf("valid recovery run=%+v %v", restored, err)
 	}
 	for label, mutate := range map[string]func(*AnalysisRunPreview){
-		"refresh":       func(plan *AnalysisRunPreview) { plan.Refresh = true },
-		"retry":         func(plan *AnalysisRunPreview) { plan.RetryStaleFailed = true },
-		"compatibility": func(plan *AnalysisRunPreview) { plan.CompatibilityStage = AnalysisStagePerformance },
-		"features":      func(plan *AnalysisRunPreview) { plan.Features = &AnalysisFeaturePlan{} },
+		"refresh":  func(plan *AnalysisRunPreview) { plan.Refresh = true },
+		"retry":    func(plan *AnalysisRunPreview) { plan.RetryStaleFailed = true },
+		"features": func(plan *AnalysisRunPreview) { plan.Features = &AnalysisFeaturePlan{} },
 	} {
 		run := cloneAnalysisRun(valid)
 		mutate(&run.Plan)

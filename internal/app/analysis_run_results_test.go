@@ -145,7 +145,7 @@ func TestAnalysisResultsRetainAllProducersThroughFailedRefreshAndRetry(t *testin
 	waitForTestSignal(t, started, "refresh request")
 	func() {
 		defer close(release)
-		running, err := s.CurrentAnalysisRun(ctx)
+		running, err := s.currentTestAnalysisRun(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -424,9 +424,6 @@ export function installFixture(options = {}) {
               }
             : {}),
         },
-    draft: undefined,
-    session: undefined,
-    applied: false,
     excluded: [],
     selectionId: 'selection-1',
     source,
@@ -506,33 +503,20 @@ export function installFixture(options = {}) {
   };
   if (options.noRememberedProject) localStorage.removeItem('mini-orca:last-project');
   else localStorage.setItem('mini-orca:last-project', project.path);
-  const sameDraft = (d) => ({
-    ...identity,
-    draft_id: d.id,
-    draft_revision: d.revision,
-    draft_hash: d.hash,
-    base_file_hash: d.base_file_hash,
-    target_path: d.target_path,
-  });
-  const validation = () => ({
-    applicable: true,
-    scope_mode: 'single_declaration',
-    diagnostics: [],
-    diff: {
-      old_path: files[0].path,
-      new_path: files[0].path,
-      lines: [
-        {
-          kind: 'context',
-          old_line: 5,
-          new_line: 5,
-          text: 'func Process(ctx context.Context) error {',
-        },
-        { kind: 'removed', old_line: 6, text: '\treturn nil' },
-        { kind: 'added', new_line: 6, text: '\treturn ctx.Err()' },
-        { kind: 'context', old_line: 7, new_line: 7, text: '}' },
-      ],
-    },
+  const proposalDiff = () => ({
+    old_path: files[0].path,
+    new_path: files[0].path,
+    lines: [
+      {
+        kind: 'context',
+        old_line: 5,
+        new_line: 5,
+        text: 'func Process(ctx context.Context) error {',
+      },
+      { kind: 'removed', old_line: 6, text: '\treturn nil' },
+      { kind: 'added', new_line: 6, text: '\treturn ctx.Err()' },
+      { kind: 'context', old_line: 7, new_line: 7, text: '}' },
+    ],
   });
   window.go = {
     main: {
@@ -974,7 +958,7 @@ export function installFixture(options = {}) {
                   path: target.path,
                   content: source.replace('return nil', 'return ctx.Err()'),
                   hash: `candidate-${change.revision}`,
-                  diff: validation().diff,
+                  diff: proposalDiff(),
                 }));
                 change.messages.push({
                   role: 'assistant',
@@ -1049,7 +1033,7 @@ export function installFixture(options = {}) {
                     path: target.path,
                     content: source.replace('return nil', 'return ctx.Err()'),
                     hash: `candidate-${change.revision}`,
-                    diff: options.changeDiff || validation().diff,
+                    diff: options.changeDiff || proposalDiff(),
                   }));
               change.checks = [];
               change.reviewed_hash = '';
@@ -1513,91 +1497,6 @@ export function installFixture(options = {}) {
             });
           if (path.endsWith('/security-review') || path.endsWith('/files/security-scan'))
             return response(security);
-          if (path.endsWith('/chat/sessions')) {
-            state.session = {
-              ...rev,
-              id: 'session-1',
-              base_file_hash: body.base_file_hash,
-              open_path: body.open_path,
-              mode: body.mode,
-              target_symbol: body.target_symbol,
-              state: 'open',
-              latest_draft_id: '',
-            };
-            return response(state.session);
-          }
-          if (path.endsWith('/messages')) {
-            state.draft = {
-              ...rev,
-              id: 'draft-1',
-              base_file_hash: files[0].content_hash,
-              target_path: files[0].path,
-              target_symbol: state.session.target_symbol,
-              mode: state.session.mode,
-              declaration: `func ${state.session.target_symbol}(ctx context.Context) error {\n\treturn ctx.Err()\n}`,
-              imports: options.draftImports ?? ['context'],
-              revision: 1,
-              hash: options.declarationDraftHash ?? 'draft-hash-1',
-              candidate_hash: options.declarationCandidateHash ?? 'candidate-1',
-              state: 'generated',
-              engineering_insight: insight,
-            };
-            return response({
-              session_id: 'session-1',
-              draft: state.draft,
-              assistant_message: {
-                role: 'assistant',
-                content: options.hostile
-                  ? '<img src="https://evil.invalid/tracker" onerror="alert(1)"> [link](https://evil.invalid)'
-                  : (options.declarationAssistantMessage ?? 'The draft returns the context error.'),
-              },
-              context_manifest: context,
-            });
-          }
-          if (path.endsWith('/drafts/draft-1') && method === 'PATCH') {
-            state.draft = {
-              ...state.draft,
-              revision: state.draft.revision + 1,
-              hash: options.declarationDraftHash ?? 'draft-hash-' + (state.draft.revision + 1),
-              declaration: body.declaration,
-              imports: body.imports,
-              validation: undefined,
-            };
-            return response(state.draft);
-          }
-          if (path.endsWith('/validate')) {
-            state.draft.validation = options.draftValidation ?? validation();
-            state.draft.state = state.draft.validation.applicable ? 'validated' : 'invalid';
-            return response(state.draft);
-          }
-          if (path.endsWith('/checks'))
-            return response({
-              ...sameDraft(state.draft),
-              candidate_hash: state.draft.candidate_hash,
-              applicable: !options.checkFail,
-              checks: [
-                { name: 'parse', required: true, state: 'passed', command: [], output: '' },
-                {
-                  name: 'format',
-                  required: true,
-                  state: options.checkFail ? 'failed' : 'passed',
-                  command: ['gofmt'],
-                  output: options.checkFail ? 'Formatting failed' : '',
-                },
-                ...(body.run_tests
-                  ? [
-                      {
-                        name: 'tests',
-                        required: false,
-                        state: 'passed',
-                        command: ['go', 'test', './...'],
-                        output: 'ok worker',
-                      },
-                    ]
-                  : []),
-              ],
-              ...options.draftChecks,
-            });
           if (path.endsWith('/execution-trust')) {
             if (method === 'POST') state.trusted = true;
             return response({
@@ -1607,69 +1506,6 @@ export function installFixture(options = {}) {
                 ['go', 'test', './...'],
                 ['go', 'vet', './...'],
               ],
-            });
-          }
-          if (path.endsWith('/benchmarks'))
-            return response(
-              method === 'GET'
-                ? {
-                    ...sameDraft(state.draft),
-                    available: true,
-                    trusted: state.trusted,
-                    benchmarks: [
-                      {
-                        name: 'BenchmarkProcess',
-                        scope: 'worker',
-                        command: ['go', 'test', '-bench=BenchmarkProcess'],
-                      },
-                    ],
-                    ...options.benchmarkCatalog,
-                  }
-                : {
-                    ...sameDraft(state.draft),
-                    benchmark: body.benchmark,
-                    scope: body.expected_scope,
-                    status: 'completed',
-                    command: ['go', 'test', '-bench=BenchmarkProcess'],
-                    base: {
-                      samples: [
-                        { iterations: 1000, ns_per_op: 250, bytes_per_op: 24, allocs_per_op: 1 },
-                      ],
-                    },
-                    candidate: {
-                      samples: [
-                        { iterations: 1000, ns_per_op: 200, bytes_per_op: 0, allocs_per_op: 0 },
-                      ],
-                    },
-                    ...options.benchmarkResult,
-                  },
-            );
-          if (path.endsWith('/apply') || path.endsWith('/undo')) {
-            const undo = path.endsWith('/undo');
-            state.applied = !undo;
-            state.project.project_revision = undo ? 'revision-3' : 'revision-2';
-            state.files[0].content_hash = undo ? 'restored-hash' : 'applied-hash';
-            state.source = undo ? source : source.replace('return nil', 'return ctx.Err()');
-            return response({
-              project_revision: state.project.project_revision,
-              post_apply_hash: state.files[0].content_hash,
-              undo_available: !undo,
-              audit: {
-                id: 'receipt-1',
-                action: undo ? 'undo' : 'apply',
-                target_path: files[0].path,
-                outcome: 'success',
-                timestamp: '2026-10-04T05:00:00Z',
-                before_hash: 'base',
-                after_hash: state.files[0].content_hash,
-              },
-              index: {
-                ...rev,
-                project_revision: state.project.project_revision,
-                files: state.files,
-              },
-              warnings: [],
-              ...(undo ? options.declarationUndoReceipt : options.declarationReceipt),
             });
           }
           if (path.endsWith('/scan')) {

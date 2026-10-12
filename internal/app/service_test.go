@@ -35,7 +35,7 @@ func TestRemoteProviderRequiresConfirmation(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if !service.EffectiveModel().RemoteProvider {
+	if !service.CurrentModelCatalog().Scopes["function"].RemoteProvider {
 		t.Fatal("effective model must disclose that the configured provider is remote")
 	}
 }
@@ -113,7 +113,7 @@ func TestModelCatalogAndConfirmationAreScopeSpecific(t *testing.T) {
 	}
 }
 
-func TestEffectiveModelKeepsCatalogDraftAndPreviewMetadataShapes(t *testing.T) {
+func TestEffectiveModelKeepsCatalogAndPreviewMetadataShapes(t *testing.T) {
 	temperature := float32(0.2)
 	metadata := EffectiveModel{
 		Scope: "function", Profile: "function", Model: "fixture-model", ReasoningEffort: "high",
@@ -128,8 +128,7 @@ func TestEffectiveModelKeepsCatalogDraftAndPreviewMetadataShapes(t *testing.T) {
 
 	for name, value := range map[string]any{
 		"catalog": ModelCatalog{Scopes: map[string]EffectiveModel{"function": metadata}},
-		"draft":   Draft{EffectiveModel: metadata},
-		"preview": PerformanceQueuePreview{Provider: metadata},
+		"preview": AnalysisProviderRequirement{Model: metadata},
 	} {
 		encoded, err := json.Marshal(value)
 		if err != nil {
@@ -140,10 +139,6 @@ func TestEffectiveModelKeepsCatalogDraftAndPreviewMetadataShapes(t *testing.T) {
 		}
 	}
 
-	audit, err := json.Marshal(AuditEntry{Model: metadata.Model, Profile: metadata.Profile})
-	if err != nil || !strings.Contains(string(audit), `"model":"fixture-model"`) || !strings.Contains(string(audit), `"profile":"function"`) {
-		t.Fatalf("audit model metadata = %s, %v", audit, err)
-	}
 }
 
 func TestScopedModelLocalMixedAndRemoteConfirmationMatrixUsesNoProvider(t *testing.T) {
@@ -297,7 +292,7 @@ func TestScopedModelRuntimesRouteOnlyAssignedOperations(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&bugRequest); err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(bugRequest.Messages[0].Content, "## Immutable session scope") {
+		if strings.Contains(bugRequest.Messages[0].Content, "captured file scope") {
 			t.Fatal("semantic analysis received a function request")
 		}
 		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "bug-returned", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: validSemanticAnalysis}}}})
@@ -308,10 +303,10 @@ func TestScopedModelRuntimesRouteOnlyAssignedOperations(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&functionRequest); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(functionRequest.Messages[0].Content, "## Immutable session scope") || strings.Contains(functionRequest.Messages[0].Content, "Use the function_skill skill.") {
+		if !strings.Contains(functionRequest.Messages[0].Content, "captured file scope") || strings.Contains(functionRequest.Messages[0].Content, "Use the function_skill skill.") {
 			t.Fatal("function proposal did not receive the direct scoped request")
 		}
-		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "function-returned", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"version":"v1","declaration":"func Run() {}","explanation":"Keeps the declaration focused."}`}}}})
+		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "function-returned", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"explanation":"Updates Run.","changes":[{"path":"main.go","content":"package main\n\nfunc Run() { println(\"updated\") }\n"}]}`}}}})
 	}))
 	defer functionServer.Close()
 
@@ -352,127 +347,19 @@ func TestScopedModelRuntimesRouteOnlyAssignedOperations(t *testing.T) {
 	if fileAnalysis.Scope != "bug" || fileAnalysis.ConfiguredModel != "bug-model" || fileAnalysis.Model != "bug-returned" || fileAnalysis.ProviderOrigin != bugServer.URL || fileAnalysis.ReasoningEffort != "medium" {
 		t.Fatalf("file analysis provenance = %+v", fileAnalysis)
 	}
-	session := openFixtureChatSession(t, service, project.DeclarationEditReplaceSymbol, "Run")
-	proposal, err := service.SendChatSessionMessage(context.Background(), ChatSessionMessageRequest{SessionID: session.ID, Message: "Clarify it."})
+	session := openChangeFixture(t, service, "main.go")
+	proposal, err := service.SendChangeMessage(context.Background(), session.ID, ChangeMessageRequest{ChangeIdentity: changeIdentity(session), Message: "Clarify it."})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if proposal.Draft.EffectiveModel.Scope != "function" || proposal.Draft.EffectiveModel.Model != "function-model" || proposal.Draft.EffectiveModel.ProviderOrigin != functionServer.URL || proposal.Draft.EffectiveModel.ReasoningEffort != "low" {
-		t.Fatalf("draft provenance = %+v", proposal.Draft.EffectiveModel)
+	if proposal.ContextManifest.Scope != "function" || proposal.ContextManifest.Model != "function-model" || proposal.ContextManifest.ProviderOrigin != functionServer.URL {
+		t.Fatalf("draft provenance = %+v", proposal.ContextManifest)
 	}
 	if analyzeCalls != 1 || bugCalls != 1 || functionCalls != 1 {
 		t.Fatalf("scope calls = analyze:%d bug:%d function:%d", analyzeCalls, bugCalls, functionCalls)
 	}
 	if analyzeRequest.ReasoningEffort != "high" || bugRequest.ReasoningEffort != "medium" || functionRequest.ReasoningEffort != "low" {
 		t.Fatalf("scope reasoning efforts = analyze:%q bug:%q function:%q", analyzeRequest.ReasoningEffort, bugRequest.ReasoningEffort, functionRequest.ReasoningEffort)
-	}
-}
-
-func TestScopedModelEndToEndTaskFlowKeepsNonPromptOperationsModelFree(t *testing.T) {
-	var analyzeCalls, bugCalls, functionCalls int
-	analyzeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		analyzeCalls++
-		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "analyze-response", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"purpose":"Fixture.","architecture":"One package.","components":[],"entry_points":[],"flows":[],"risks":[],"next_steps":[]}`}}}})
-	}))
-	defer analyzeServer.Close()
-	bugServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		bugCalls++
-		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "bug-response", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"purpose":"Runs one boolean operation.","responsibilities":["Return its current state."],"dependencies":[],"side_effects":[],"risks":[{"category":"bugs","severity":"high","summary":"The operation never succeeds.","task_spec":{"schema_version":"1","target_path":"main.go","target_symbol":"Run","target_signature":"untrusted","acceptance_criteria":["Run returns true."],"non_goals":["Do not edit another declaration."],"go_test_candidate":{"name":"TestRun","content":"package fixture\n\nimport \"testing\"\n\nfunc TestRun(t *testing.T) { if !Run() { t.Fatal(\"expected true\") } }\n"}}}],"suggestions":[],"symbol_explanations":{"Run":"Returns the current boolean."}}`}}}})
-	}))
-	defer bugServer.Close()
-	functionServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		functionCalls++
-		_ = json.NewEncoder(w).Encode(llm.ChatResponse{Model: "function-response", Choices: []llm.ChatChoice{{Message: llm.ChatMessage{Content: `{"version":"v1","declaration":"func Run() bool { return true }","explanation":"Satisfies the reviewed task."}`}}}})
-	}))
-	defer functionServer.Close()
-
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module fixture\n\ngo 1.22\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package fixture\n\nfunc Run() bool { return false }\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	manager, err := project.NewManager(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	service, err := New(&config.Config{
-		ModelScopes: config.ModelScopesConfig{
-			Analyze:  config.ModelProfileConfig{APIBaseURL: analyzeServer.URL + "/v1", Model: "analyze-model"},
-			Bug:      config.ModelProfileConfig{APIBaseURL: bugServer.URL + "/v1", Model: "bug-model"},
-			Function: config.ModelProfileConfig{APIBaseURL: functionServer.URL + "/v1", Model: "function-model", ContextMaxTokens: intPointer(400)},
-		},
-		Retry: config.RetryConfig{MaxRetries: 0, BackoffBase: 1, BackoffMax: 1},
-	}, manager)
-	if err != nil {
-		t.Fatal(err)
-	}
-	analysis, err := service.AnalyzeProject(context.Background(), root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := manager.Set(root, analysis); err != nil {
-		t.Fatal(err)
-	}
-	fileAnalysis, err := service.AnalyzeFile(context.Background(), "main.go", false, false)
-	if err != nil || len(fileAnalysis.Risks) != 1 || fileAnalysis.Risks[0].TaskSpec == nil {
-		t.Fatalf("bug task analysis = %+v, err = %v", fileAnalysis, err)
-	}
-	task := fileAnalysis.Risks[0].TaskSpec
-	bugManifest, err := service.AnalysisContextManifest("main.go")
-	if err != nil || bugManifest.Scope != "bug" || bugManifest.Model != "bug-model" || bugManifest.ProviderOrigin != bugServer.URL {
-		t.Fatalf("bug context manifest = %+v, err = %v", bugManifest, err)
-	}
-	functionManifest, err := service.ContextManifest("main.go")
-	if err != nil || functionManifest.Scope != "function" || functionManifest.Model != "function-model" || functionManifest.ProviderOrigin != functionServer.URL {
-		t.Fatalf("function context manifest = %+v, err = %v", functionManifest, err)
-	}
-	indexedFile, err := manager.IndexedFile("main.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	session, err := service.OpenChatSession(ChatSessionCreateRequest{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: indexedFile.ContentHash, OpenPath: "main.go", Mode: project.DeclarationEditReplaceSymbol, TargetSymbol: "Run", TaskSpec: task})
-	if err != nil {
-		t.Fatal(err)
-	}
-	proposal, err := service.SendChatSessionMessage(context.Background(), ChatSessionMessageRequest{SessionID: session.ID, Message: "Implement the reviewed task."})
-	if err != nil || proposal.Draft.TaskSpec == nil || proposal.Draft.EffectiveModel.Scope != string(config.FunctionModelScope) {
-		t.Fatalf("function proposal = %+v, err = %v", proposal, err)
-	}
-	validated, err := service.ValidateDraft(proposal.Draft.ID, proposal.Draft.Revision)
-	if err != nil || validated.State != DraftValid {
-		t.Fatalf("validated draft = %+v, err = %v", validated, err)
-	}
-	if _, err := service.TrustProjectExecution(analysis.ProjectRevision, true); err != nil {
-		t.Fatal(err)
-	}
-	checks, err := service.CheckDraft(context.Background(), DraftCheckRequest{ID: validated.ID, ExpectedRevision: validated.Revision, ExpectedHash: validated.Hash})
-	if err != nil || !checks.Applicable || len(taskChecks(checks.Checks)) != 2 {
-		t.Fatalf("task checks = %+v, err = %v", checks, err)
-	}
-	applied, err := service.ApplyDraft(context.Background(), ApplyRequest{DraftID: validated.ID, DraftRevision: validated.Revision, DraftHash: validated.Hash, ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, BaseFileHash: indexedFile.ContentHash, Confirm: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.UndoDraft(context.Background(), UndoRequest{ProjectID: analysis.ProjectID, ProjectRevision: applied.ProjectRevision, PostApplyHash: applied.PostApplyHash, Confirm: true}); err != nil {
-		t.Fatal(err)
-	}
-	current, err := manager.Analysis()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.TrustProjectExecution(current.ProjectRevision, true); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.ScanGoProject(context.Background(), current.ProjectRevision); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.Reindex(); err != nil {
-		t.Fatal(err)
-	}
-	if analyzeCalls != 1 || bugCalls != 1 || functionCalls != 1 {
-		t.Fatalf("all model calls must stay on their single prompt operation: analyze:%d bug:%d function:%d", analyzeCalls, bugCalls, functionCalls)
 	}
 }
 

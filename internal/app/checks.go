@@ -14,8 +14,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
 const (
@@ -50,9 +48,9 @@ var (
 	checkSecret        = regexp.MustCompile(`(?i)\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret|credential)\b\s*[:=]\s*[^\s,;]+`)
 )
 
-// DraftCheck is one parser, formatter, lint, or test result. Command is a
+// CheckResult is one parser, formatter, lint, or test result. Command is a
 // display-only argv preview; it is never executed through a shell.
-type DraftCheck struct {
+type CheckResult struct {
 	Name     string   `json:"name"`
 	Required bool     `json:"required"`
 	State    string   `json:"state"`
@@ -61,126 +59,15 @@ type DraftCheck struct {
 	ExitCode int      `json:"exit_code,omitempty"`
 }
 
-// DraftCheckReport determines whether a valid draft composition can be
-// applied. It contains no source content and all commands run in a copy.
-type DraftCheckReport struct {
-	DraftID         string       `json:"draft_id,omitempty"`
-	DraftRevision   int64        `json:"draft_revision,omitempty"`
-	DraftHash       string       `json:"draft_hash,omitempty"`
-	CompositionHash string       `json:"candidate_hash,omitempty"`
-	ProjectID       string       `json:"project_id,omitempty"`
-	ProjectRevision string       `json:"project_revision,omitempty"`
-	BaseFileHash    string       `json:"base_file_hash,omitempty"`
-	TargetPath      string       `json:"target_path"`
-	Applicable      bool         `json:"applicable"`
-	Checks          []DraftCheck `json:"checks"`
-}
-
-// DraftCheckOptions keeps expensive checks explicit. Parsing and formatting
+// CheckOptions keeps expensive checks explicit. Parsing and formatting
 // are required where supported; lint and tests run only when requested.
-type DraftCheckOptions struct {
+type CheckOptions struct {
 	RunLint  bool `json:"run_lint,omitempty"`
 	RunTests bool `json:"run_tests,omitempty"`
 }
 
-type draftCheckInput struct {
-	file            project.IndexFile
-	source          string
-	projectRevision string
-	taskTest        *project.GoTestCandidateSpec
-}
-
-// runDraftChecks executes only the exact, already-validated draft in an
-// temporary project copy. It is intentionally not a general source-check API.
-func (s *Service) runDraftChecks(ctx context.Context, input draftCheckInput, options DraftCheckOptions) (DraftCheckReport, error) {
-	file := input.file
-	revision := input.projectRevision
-	if revision == "" {
-		analysis, err := s.manager.Analysis()
-		if err != nil {
-			return DraftCheckReport{}, err
-		}
-		revision = analysis.ProjectRevision
-	}
-	workspace, err := os.MkdirTemp("", "mini-orca-check-")
-	if err != nil {
-		return DraftCheckReport{}, fmt.Errorf("create draft check workspace: %w", err)
-	}
-	defer os.RemoveAll(workspace)
-	if err := copyCheckWorkspace(ctx, s.manager.Root(), workspace); err != nil {
-		return DraftCheckReport{}, err
-	}
-	var taskChecks []DraftCheck
-	var taskCommand []string
-	if input.taskTest != nil {
-		testPath, err := taskTestPath(workspace, file.Path)
-		if err != nil {
-			return DraftCheckReport{}, err
-		}
-		if err := os.WriteFile(testPath, []byte(input.taskTest.Content), 0600); err != nil {
-			return DraftCheckReport{}, fmt.Errorf("write task test workspace file: %w", err)
-		}
-		taskCommand = []string{"go", "test", "./...", "-run", "^" + regexp.QuoteMeta(input.taskTest.Name) + "$"}
-		taskChecks = append(taskChecks, s.runTaskTestCheck(ctx, workspace, revision, "task test baseline", taskCommand, false))
-	}
-	draftPath := filepath.Join(workspace, filepath.FromSlash(file.Path))
-	if err := os.MkdirAll(filepath.Dir(draftPath), 0700); err != nil {
-		return DraftCheckReport{}, fmt.Errorf("create draft directory: %w", err)
-	}
-	if err := os.WriteFile(draftPath, []byte(input.source), 0600); err != nil {
-		return DraftCheckReport{}, fmt.Errorf("write draft workspace file: %w", err)
-	}
-
-	report := DraftCheckReport{TargetPath: file.Path, Checks: make([]DraftCheck, 0, 4)}
-	switch file.Language {
-	case "Go":
-		report.Checks = append(report.Checks, parseGoDraft(draftPath, input.source))
-		report.Checks = append(report.Checks, s.runCheck(ctx, workspace, revision, "format", true, []string{"gofmt", "-d", file.Path}, true, false))
-		if options.RunLint {
-			report.Checks = append(report.Checks, s.runCheck(ctx, workspace, revision, "lint", false, []string{"go", "vet", "./..."}, false, false))
-		} else {
-			report.Checks = append(report.Checks, DraftCheck{Name: "lint", State: CheckSkipped})
-		}
-		if options.RunTests {
-			report.Checks = append(report.Checks, s.runCheck(ctx, workspace, revision, "tests", false, []string{"go", "test", "./..."}, false, true))
-		} else {
-			report.Checks = append(report.Checks, DraftCheck{Name: "tests", State: CheckSkipped})
-		}
-	default:
-		report.Checks = append(report.Checks,
-			DraftCheck{Name: "parse", State: CheckUnavailable},
-			DraftCheck{Name: "format", Required: true, State: CheckUnavailable},
-			DraftCheck{Name: "lint", State: CheckUnavailable},
-			DraftCheck{Name: "tests", State: CheckUnavailable},
-		)
-	}
-	if len(taskChecks) == 1 && taskChecks[0].State == CheckPassed {
-		taskChecks = append(taskChecks, s.runTaskTestCheck(ctx, workspace, revision, "task test verification", taskCommand, true))
-	}
-	report.Checks = append(report.Checks, taskChecks...)
-	report.Applicable = requiredChecksPassed(report.Checks)
-	return report, nil
-}
-
-func taskTestPath(workspace, targetPath string) (string, error) {
-	directory := filepath.Join(workspace, filepath.Dir(filepath.FromSlash(targetPath)))
-	for suffix := 0; suffix < 100; suffix++ {
-		name := "mini_orca_task_test.go"
-		if suffix > 0 {
-			name = fmt.Sprintf("mini_orca_task_%d_test.go", suffix)
-		}
-		path := filepath.Join(directory, name)
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			return path, nil
-		} else if err != nil {
-			return "", err
-		}
-	}
-	return "", fmt.Errorf("no available generated task test filename")
-}
-
-func (s *Service) runTaskTestCheck(ctx context.Context, workspace, revision, name string, command []string, expectPass bool) DraftCheck {
-	check, err := s.executeDraftCheck(ctx, workspace, revision, DraftCheck{Name: name, Required: true, Command: append([]string(nil), command...)}, true)
+func (s *Service) runTaskTestCheck(ctx context.Context, workspace, revision, name string, command []string, expectPass bool) CheckResult {
+	check, err := s.executeCheck(ctx, workspace, revision, CheckResult{Name: name, Required: true, Command: append([]string(nil), command...)}, true)
 	if check.State == CheckCanceled {
 		return check
 	}
@@ -193,8 +80,8 @@ func (s *Service) runTaskTestCheck(ctx context.Context, workspace, revision, nam
 	return check
 }
 
-func parseGoDraft(path, source string) DraftCheck {
-	check := DraftCheck{Name: "parse", Required: true}
+func parseGoSource(path, source string) CheckResult {
+	check := CheckResult{Name: "parse", Required: true}
 	if _, err := parser.ParseFile(token.NewFileSet(), path, source, parser.AllErrors); err != nil {
 		check.State = CheckFailed
 		check.Output = err.Error()
@@ -204,8 +91,8 @@ func parseGoDraft(path, source string) DraftCheck {
 	return check
 }
 
-func (s *Service) runCheck(ctx context.Context, workspace, revision, name string, required bool, command []string, failOnOutput, executesProjectCode bool) DraftCheck {
-	check, err := s.executeDraftCheck(ctx, workspace, revision, DraftCheck{Name: name, Required: required, Command: append([]string(nil), command...)}, executesProjectCode)
+func (s *Service) runCheck(ctx context.Context, workspace, revision, name string, required bool, command []string, failOnOutput, executesProjectCode bool) CheckResult {
+	check, err := s.executeCheck(ctx, workspace, revision, CheckResult{Name: name, Required: required, Command: append([]string(nil), command...)}, executesProjectCode)
 	if check.State == CheckCanceled {
 		return check
 	}
@@ -217,7 +104,7 @@ func (s *Service) runCheck(ctx context.Context, workspace, revision, name string
 	return check
 }
 
-func (s *Service) executeDraftCheck(ctx context.Context, workspace, revision string, check DraftCheck, executesProjectCode bool) (DraftCheck, error) {
+func (s *Service) executeCheck(ctx context.Context, workspace, revision string, check CheckResult, executesProjectCode bool) (CheckResult, error) {
 	if err := ctx.Err(); err != nil {
 		check.State = CheckCanceled
 		check.Output = err.Error()
@@ -350,7 +237,7 @@ func (output *boundedCheckOutput) Truncated() bool {
 	return output.truncated
 }
 
-func requiredChecksPassed(checks []DraftCheck) bool {
+func requiredChecksPassed(checks []CheckResult) bool {
 	for _, check := range checks {
 		if check.Required && check.State != CheckPassed {
 			return false

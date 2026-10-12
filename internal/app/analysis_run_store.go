@@ -92,6 +92,20 @@ func loadAnalysisRun(root string) (*AnalysisRun, error) {
 	if len(data) > maxAnalysisRunMetadataBytes {
 		return nil, errAnalysisRunCorrupt
 	}
+	// Retired single-stage jobs carry no authority in the unified workflow.
+	// Leave their bytes untouched until an explicit new run replaces the journal.
+	var header struct {
+		SchemaVersion string `json:"schema_version"`
+		Plan          struct {
+			RetiredStage string `json:"compatibility_stage"`
+		} `json:"plan"`
+	}
+	if err := json.Unmarshal(data, &header); err != nil {
+		return nil, errAnalysisRunCorrupt
+	}
+	if header.SchemaVersion == AnalysisRunSchemaVersion && (header.Plan.RetiredStage == "semantic" || header.Plan.RetiredStage == "performance") {
+		return nil, nil
+	}
 	var run AnalysisRun
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -145,7 +159,6 @@ func (s *Service) restoreAnalysisRunLocked() error {
 	if run == nil {
 		return nil
 	}
-	recoverAnalysisCompatibilityBudget(run, time.Now())
 	switch run.Status {
 	case AnalysisRunQueued, AnalysisRunRunning, AnalysisRunPausing:
 		run.Status = AnalysisRunInterrupted
@@ -158,23 +171,6 @@ func (s *Service) restoreAnalysisRunLocked() error {
 		return s.saveAnalysisRunLocked(false)
 	}
 	return nil
-}
-
-// A legacy Performance budget spans resumes. A process loss cannot establish
-// when its active window stopped, so charge the unobserved interval conservatively
-// up to the captured total budget, just as the old request-start ledger did.
-func recoverAnalysisCompatibilityBudget(run *AnalysisRun, now time.Time) {
-	if run.Plan.CompatibilityStage != AnalysisStagePerformance {
-		return
-	}
-	switch run.Status {
-	case AnalysisRunQueued, AnalysisRunRunning, AnalysisRunPausing, AnalysisRunCanceling:
-		remaining := run.Plan.CompatibilityBudget - run.CompatibilityElapsed
-		charged := min(remaining, max(time.Duration(0), now.Sub(run.UpdatedAt)))
-		run.CompatibilityElapsed += charged
-		run.ElapsedSeconds = int64(run.CompatibilityElapsed / time.Second)
-		run.WindowElapsedSeconds = min(int64(run.Plan.Limits.BudgetSeconds), run.WindowElapsedSeconds+int64(charged/time.Second))
-	}
 }
 
 func (s *Service) saveAnalysisRunLocked(recoverFault bool) error {
@@ -230,7 +226,7 @@ func analysisMetadataReason(value string) bool {
 		return true
 	}
 	switch value {
-	case "The provider rejected the Performance response format.", analysisSelectionExclusion, analysisRetryExclusion, analysisRecoveryExclusion, analysisStaleExclusion, analysisStalePathExclusion, "Outside this compatibility queue.", "Not requested by this compatibility action.", "", "Excluded by source policy.", "Not a supported text source file.", "Source exceeds analyzer size limits.", "Not eligible for semantic source analysis.",
+	case "The provider rejected the Performance response format.", analysisSelectionExclusion, analysisRetryExclusion, analysisRecoveryExclusion, analysisStaleExclusion, analysisStalePathExclusion, "", "Excluded by source policy.", "Not a supported text source file.", "Source exceeds analyzer size limits.", "Not eligible for semantic source analysis.",
 		"Passive security rules require a Go source file.", "The model for this stage is not configured.",
 		"Analysis stage could not complete.", "The stage needs an additional attempt allowance.", "The file is not eligible for this source analysis.",
 		"The report contains incomplete evidence; review its details.", "The model request or response failed. Other analysis results remain available.",
@@ -248,7 +244,7 @@ func analysisMetadataReason(value string) bool {
 }
 
 func validateStoredAnalysisRun(run *AnalysisRun) error {
-	if !validStoredAnalysisIdentity(run) || !validAnalysisCompatibility(run) || !validStoredAnalysisWindow(run) {
+	if !validStoredAnalysisIdentity(run) || !validStoredAnalysisWindow(run) {
 		return errAnalysisRunCorrupt
 	}
 	queue, err := analysisQueueFingerprint(&run.Plan)
@@ -290,13 +286,13 @@ func validStoredAnalysisIdentity(run *AnalysisRun) bool {
 }
 
 func validStoredAnalysisIdentityPlan(plan *AnalysisRunPreview) bool {
-	if validateAnalysisSelectionOptions(plan.RecoverIncomplete, plan.Refresh, plan.RetryStaleFailed, plan.Features != nil, plan.StaleOnly, plan.StalePath) != nil || plan.StaleOnly && plan.CompatibilityStage != "" {
+	if validateAnalysisSelectionOptions(plan.RecoverIncomplete, plan.Refresh, plan.RetryStaleFailed, plan.Features != nil, plan.StaleOnly, plan.StalePath) != nil {
 		return false
 	}
-	if plan.RetryStaleFailed && (plan.Refresh || plan.CompatibilityStage != "") {
+	if plan.RetryStaleFailed && plan.Refresh {
 		return false
 	}
-	if plan.RecoverIncomplete && (plan.Refresh || plan.RetryStaleFailed || plan.CompatibilityStage != "" || plan.Features != nil) {
+	if plan.RecoverIncomplete && (plan.Refresh || plan.RetryStaleFailed || plan.Features != nil) {
 		return false
 	}
 	return plan.Models.Validate() == nil && plan.Limits.Validate() == nil && plan.PreviewID != ""

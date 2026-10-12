@@ -243,9 +243,7 @@ visible. The sidebar collapses to icons.
   **Changes** workspace, where review, Apply and guarded Undo remain explicit.
   Explanations and file analysis remain available in Source. **Inspect this file**
   also contains **Scan source** and **AI Security review**; their results open
-  Security without starting further analysis. The separate
-  Assistant, declaration draft, Checks, Review, receipt and draft-benchmark screens
-  have been retired from this client. Returning to Source rechecks file freshness.
+  Security without starting further analysis. Returning to Source rechecks file freshness.
 - **Overview** shows the project description below its name and project stats
   directly below its path, then puts the current task or saved analysis in a
   **Continue work** or **Your next step** band. Opening captured work does not generate or apply changes.
@@ -269,7 +267,7 @@ visible. The sidebar collapses to icons.
 - **Terminal** starts a shell only after an explicit action. Tabs keep running
   while hidden. Closing tabs, switching projects and exiting the app clean up
   their owned processes. A cleanup failure remains visible and blocks switching
-  or closing. Terminal use never grants execution trust for checks or benchmarks.
+  or closing. Terminal use never grants execution trust for project checks.
 
 The interface remembers the last project path, appearance, text size and sidebar
 width in webview storage. Chat drafts remain in memory during navigation.
@@ -279,7 +277,7 @@ evidence. Consent and execution trust are not restored. History lists return
 summaries; chosen sessions expose their complete contents. Bounds are eight paths,
 256 KiB context/response, forty messages, 2 MiB per conversation/recovery journal
 and two hundred conversations. Go/Markdown proposals cannot delete files.
-Performance changes remain unmeasured until an explicit benchmark comparison.
+Performance changes remain unmeasured without external benchmark evidence.
 Restoring a project never starts a provider request or shell. **⌘K / Ctrl+K** opens
 file and command search. Actions have visible focus and descriptive labels.
 

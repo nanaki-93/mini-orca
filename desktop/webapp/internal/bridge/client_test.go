@@ -18,6 +18,24 @@ func (transport requestTransport) RoundTrip(request *http.Request) (*http.Respon
 	return transport(request)
 }
 
+func TestRetiredWorkflowRequestsNeverReachTransport(t *testing.T) {
+	client, err := NewClient("http://127.0.0.1:9090")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.http.Transport = requestTransport(func(*http.Request) (*http.Response, error) {
+		t.Fatal("retired request reached the daemon")
+		return nil, nil
+	})
+	for _, path := range []string{"chat/sessions", "drafts/old", "drafts/old/checks", "drafts/old/benchmarks", "apply", "undo", "analysis-job", "performance-job", "performance", "performance/context"} {
+		for _, method := range []string{"GET", "POST", "PATCH"} {
+			if _, err := client.Request(context.Background(), "retired", method, "/api/projects/current/"+path, ""); err == nil {
+				t.Fatalf("accepted retired request: %s %s", method, path)
+			}
+		}
+	}
+}
+
 func TestFeatureGenerationDoesNotShortenTheWorkflowDeadline(t *testing.T) {
 	for _, allowance := range []time.Duration{0, time.Minute, 10 * time.Minute, 20 * time.Minute} {
 		t.Run(allowance.String(), func(t *testing.T) {

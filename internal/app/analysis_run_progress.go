@@ -56,7 +56,7 @@ func refreshAnalysisSectionsWithEligibility(run *AnalysisRun, includeIneligible 
 		for i, file := range run.Files {
 			for j, stage := range file.Stages {
 				plan := run.Plan.Files[i].Stages[j]
-				if !includeIneligible && !plan.Eligible && plan.Reason != "Not requested by this compatibility action." {
+				if !includeIneligible && !plan.Eligible {
 					continue
 				}
 				for _, consumer := range stage.Stage.Categories() {

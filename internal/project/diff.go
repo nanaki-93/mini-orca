@@ -5,6 +5,19 @@ import "strings"
 type diffMatch struct{ old, new int }
 
 // BuildUnifiedDiff aligns unchanged lines between edits and preserves both source line numbers.
+type UnifiedDiff struct {
+	OldPath string     `json:"old_path"`
+	NewPath string     `json:"new_path"`
+	Lines   []DiffLine `json:"lines"`
+}
+
+type DiffLine struct {
+	Kind    string `json:"kind"`
+	OldLine int    `json:"old_line,omitempty"`
+	NewLine int    `json:"new_line,omitempty"`
+	Text    string `json:"text"`
+}
+
 func BuildUnifiedDiff(path, original, composed string) UnifiedDiff {
 	before, after := strings.Split(original, "\n"), strings.Split(composed, "\n")
 	if original == "" {

@@ -139,8 +139,8 @@ func (s *Service) prepareDeclarationExplanation(request DeclarationExplanationRe
 	}
 	functionContext, manifest, err := s.buildDeclarationContext(s.manager.Root(), project.FunctionContextOptions{
 		TargetPath: request.TargetPath, TargetSymbol: request.TargetSymbol,
-		Mode: project.DeclarationEditReplaceSymbol, Index: index,
-		MaxTokens: sessionFunctionContextLimit(runtime.effective.ContextMaxTokens),
+		Index:     index,
+		MaxTokens: declarationContextLimit(runtime.effective.ContextMaxTokens),
 	})
 	if err != nil {
 		return preparedDeclarationExplanation{}, fmt.Errorf("build declaration explanation context: %w", err)
@@ -184,9 +184,6 @@ func (s *Service) currentDeclarationExplanationTargetWithIndex(request Declarati
 	}
 	if file.Language != "Go" || file.Binary {
 		return currentDeclarationExplanationTarget{}, nil, fmt.Errorf("%w: declaration explanation requires an indexed Go source file", project.ErrUnsupportedFile)
-	}
-	if err := validateChatTarget(*file, project.DeclarationEditReplaceSymbol, request.TargetSymbol); err != nil {
-		return currentDeclarationExplanationTarget{}, nil, fmt.Errorf("declaration explanation target: %w", err)
 	}
 	symbol := exactExplanationSymbol(*file, request.TargetSymbol)
 	if symbol == nil {
@@ -272,4 +269,11 @@ func validateDeclarationExplanation(response declarationExplanationModelResponse
 	}
 	response.Summary = strings.TrimSpace(response.Summary)
 	return nil
+}
+
+func declarationContextLimit(limit int) int {
+	if limit <= 0 {
+		return 4000
+	}
+	return limit
 }

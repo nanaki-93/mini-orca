@@ -5,14 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/nanaki-93/mini-orca/v2/internal/config"
-	"github.com/nanaki-93/mini-orca/v2/internal/llm"
-	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"io"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
 type FeatureSuggestion struct {
@@ -321,7 +322,7 @@ func featureContext(ctx context.Context, root string, excluded []string) (string
 	if err != nil {
 		return "", manifest, "", err
 	}
-	fingerprint, err := benchmarkSourceFingerprint(ctx, root)
+	fingerprint, err := workspaceFingerprint(ctx, root)
 	return text, manifest, fingerprint, err
 }
 
@@ -360,7 +361,7 @@ func (s *Service) verifyFeatureInput(ctx context.Context, root string, previous 
 	if current.Hash != previous.Hash {
 		return project.ErrRevisionConflict
 	}
-	return (benchmarkFixture{fingerprint: fingerprint}).verifyCurrent(ctx, root)
+	return (workspaceIdentity{fingerprint: fingerprint}).verifyCurrent(ctx, root)
 }
 
 func featureResponseSchema() llm.JSONSchema {

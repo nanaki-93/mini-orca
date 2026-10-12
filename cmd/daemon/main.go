@@ -178,10 +178,9 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"running","version":"` + version.Version + `","workflow":"single_coder_preview"}`))
+		_, _ = w.Write([]byte(`{"status":"running","version":"` + version.Version + `","workflow":"shared_proposals"}`))
 	})
 
-	chatHandler := handlers.NewChatHandler(application)
 	changeHandler := handlers.NewChangeHandler(application, projectManager)
 	gitHandler := handlers.NewGitHandler(application)
 	mux.HandleFunc("GET /api/projects/current/git/repository", gitHandler.Repository)
@@ -214,11 +213,6 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	mux.HandleFunc("POST /api/projects/current/features/generate", featureHandler.Generate)
 	mux.HandleFunc("PATCH /api/projects/current/features/{featureID}", featureHandler.Status)
 
-	// File-scoped chat session endpoints. A message has no target fields; its
-	// immutable project/file/symbol identity is established at session creation.
-	mux.HandleFunc("POST /api/projects/current/chat/sessions", chatHandler.OpenSession)
-	mux.HandleFunc("POST /api/projects/current/chat/sessions/{sessionID}/messages", chatHandler.SendSessionMessage)
-
 	modelHandler := handlers.NewModelHandler(application)
 	mux.HandleFunc("GET /api/models/current", modelHandler.Current)
 	mux.HandleFunc("GET /api/models/available", modelHandler.Available)
@@ -235,7 +229,6 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	mux.HandleFunc("GET /api/projects/current/analysis/results", analysisHandler.Results)
 
 	projectHandler := handlers.NewProjectHandler(projectManager, application)
-	draftHandler := handlers.NewDraftHandler(application, projectManager)
 	mux.HandleFunc("POST /api/projects/import", projectHandler.Import)
 	mux.HandleFunc("POST /api/projects/restore", projectHandler.Restore)
 	mux.HandleFunc("GET /api/projects/current/overview", projectHandler.Overview)
@@ -256,26 +249,7 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	mux.HandleFunc("POST /api/projects/current/files/security-scan", projectHandler.ScanSecurityFile)
 	mux.HandleFunc("POST /api/projects/current/files/explanation", projectHandler.ExplainDeclaration)
 	mux.HandleFunc("POST /api/projects/current/security-review", projectHandler.ReviewSecurityFile)
-	mux.HandleFunc("GET /api/projects/current/analysis-job", projectHandler.AnalyzeAllJob)
-	mux.HandleFunc("POST /api/projects/current/analysis-job", projectHandler.StartAnalyzeAll)
-	mux.HandleFunc("POST /api/projects/current/analysis-job/pause", projectHandler.PauseAnalyzeAll)
-	mux.HandleFunc("POST /api/projects/current/analysis-job/resume", projectHandler.ResumeAnalyzeAll)
-	mux.HandleFunc("POST /api/projects/current/analysis-job/cancel", projectHandler.CancelAnalyzeAll)
-	mux.HandleFunc("GET /api/projects/current/performance", projectHandler.PerformanceReport)
-	mux.HandleFunc("GET /api/projects/current/performance/context", projectHandler.PerformanceContext)
-	mux.HandleFunc("GET /api/projects/current/performance-job", projectHandler.PerformanceJob)
-	mux.HandleFunc("POST /api/projects/current/performance-job", projectHandler.StartPerformanceJob)
-	mux.HandleFunc("POST /api/projects/current/performance-job/pause", projectHandler.PausePerformanceJob)
-	mux.HandleFunc("POST /api/projects/current/performance-job/resume", projectHandler.ResumePerformanceJob)
-	mux.HandleFunc("POST /api/projects/current/performance-job/cancel", projectHandler.CancelPerformanceJob)
 	mux.HandleFunc("POST /api/projects/current/reindex", projectHandler.Reindex)
-	mux.HandleFunc("PATCH /api/projects/current/drafts/{draftID}", draftHandler.UpdateDraft)
-	mux.HandleFunc("POST /api/projects/current/drafts/{draftID}/validate", draftHandler.ValidateDraft)
-	mux.HandleFunc("POST /api/projects/current/drafts/{draftID}/checks", draftHandler.CheckDraft)
-	mux.HandleFunc("GET /api/projects/current/drafts/{draftID}/benchmarks", draftHandler.GoBenchmarks)
-	mux.HandleFunc("POST /api/projects/current/drafts/{draftID}/benchmarks", draftHandler.CompareGoBenchmark)
-	mux.HandleFunc("POST /api/projects/current/apply", draftHandler.Apply)
-	mux.HandleFunc("POST /api/projects/current/undo", draftHandler.Undo)
 
 	return mux
 }

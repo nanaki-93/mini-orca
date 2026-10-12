@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"go/format"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
 func (s *Service) CheckChange(ctx context.Context, id string, request ChangeCheckRequest) (*ChangeSession, error) {
@@ -29,7 +30,7 @@ func (s *Service) CheckChange(ctx context.Context, id string, request ChangeChec
 	}
 	checks := changeSourceChecks(session.Changes)
 	if requiredChecksPassed(checks) && (request.RunTests || request.RunLint) {
-		executed, err := s.checkChangeWorkspace(ctx, root, session, request.DraftCheckOptions)
+		executed, err := s.checkChangeWorkspace(ctx, root, session, request.CheckOptions)
 		if err != nil {
 			return nil, err
 		}
@@ -38,7 +39,7 @@ func (s *Service) CheckChange(ctx context.Context, id string, request ChangeChec
 	return s.publishChangeChecks(ctx, id, request, checks)
 }
 
-func (s *Service) publishChangeChecks(ctx context.Context, id string, request ChangeCheckRequest, checks []DraftCheck) (*ChangeSession, error) {
+func (s *Service) publishChangeChecks(ctx context.Context, id string, request ChangeCheckRequest, checks []CheckResult) (*ChangeSession, error) {
 	s.changesMu.Lock()
 	defer s.changesMu.Unlock()
 	current, root, err := s.loadChangeForAction(ctx, id, request.ChangeIdentity)
@@ -46,7 +47,7 @@ func (s *Service) publishChangeChecks(ctx context.Context, id string, request Ch
 		return nil, err
 	}
 	current.Checks, current.ReviewedHash, current.UpdatedAt = checks, "", time.Now().UTC()
-	current.CheckOptions = request.DraftCheckOptions
+	current.CheckOptions = request.CheckOptions
 	if current.Workflow != nil && changeWorkflowReviewable(current) {
 		current.Workflow.Stages[3].Status = "waiting"
 	}
@@ -58,7 +59,7 @@ func (s *Service) publishChangeChecks(ctx context.Context, id string, request Ch
 	return current, nil
 }
 
-func pinChangeRegression(session *ChangeSession, checks []DraftCheck) {
+func pinChangeRegression(session *ChangeSession, checks []CheckResult) {
 	for _, check := range checks {
 		if check.Name == "regression baseline" && check.State == CheckPassed {
 			session.PinnedTests = changeTestEdits(session.Changes)
@@ -66,18 +67,18 @@ func pinChangeRegression(session *ChangeSession, checks []DraftCheck) {
 	}
 }
 
-func changeSourceChecks(edits []ChangeEdit) []DraftCheck {
-	checks := []DraftCheck{}
+func changeSourceChecks(edits []ChangeEdit) []CheckResult {
+	checks := []CheckResult{}
 	for _, edit := range edits {
 		if filepath.Ext(edit.Path) != ".go" {
-			checks = append(checks, DraftCheck{Name: "text: " + edit.Path, Required: true, State: CheckPassed})
+			checks = append(checks, CheckResult{Name: "text: " + edit.Path, Required: true, State: CheckPassed})
 			continue
 		}
-		parsed := parseGoDraft(edit.Path, edit.Content)
+		parsed := parseGoSource(edit.Path, edit.Content)
 		parsed.Name += ": " + edit.Path
 		checks = append(checks, parsed)
 		formatted, err := format.Source([]byte(edit.Content))
-		check := DraftCheck{Name: "format: " + edit.Path, Required: true, State: CheckPassed}
+		check := CheckResult{Name: "format: " + edit.Path, Required: true, State: CheckPassed}
 		if err != nil || !bytes.Equal(formatted, []byte(edit.Content)) {
 			check.State, check.Output = CheckFailed, "Candidate must parse and be gofmt-formatted."
 		}
@@ -86,7 +87,7 @@ func changeSourceChecks(edits []ChangeEdit) []DraftCheck {
 	return checks
 }
 
-func (s *Service) checkChangeWorkspace(ctx context.Context, root string, session *ChangeSession, options DraftCheckOptions) ([]DraftCheck, error) {
+func (s *Service) checkChangeWorkspace(ctx context.Context, root string, session *ChangeSession, options CheckOptions) ([]CheckResult, error) {
 	workspace, err := os.MkdirTemp("", "mini-orca-change-check-")
 	if err != nil {
 		return nil, err
@@ -118,8 +119,8 @@ func (s *Service) checkChangeWorkspace(ctx context.Context, root string, session
 	return checks, ctx.Err()
 }
 
-func (s *Service) changeRegressionBaseline(ctx context.Context, workspace string, session *ChangeSession, runTests bool) ([]DraftCheck, error) {
-	checks := []DraftCheck{}
+func (s *Service) changeRegressionBaseline(ctx context.Context, workspace string, session *ChangeSession, runTests bool) ([]CheckResult, error) {
+	checks := []CheckResult{}
 	newTests := newChangeTestEdits(session)
 	if !runTests || len(newTests) == 0 {
 		return checks, nil
@@ -219,7 +220,7 @@ func (s *Service) reserveChangeRepair(ctx context.Context, id string, identity C
 	return session, root, nil
 }
 
-func changeCheckEvidence(checks []DraftCheck) string {
+func changeCheckEvidence(checks []CheckResult) string {
 	var text strings.Builder
 	for _, check := range checks {
 		if text.Len() >= 4096 {

@@ -32,20 +32,6 @@ func TestReleaseFixtureRepresentsPolicyAndParserAcceptanceCases(t *testing.T) {
 	if len(symbols) != 3 || len(diagnostics) != 0 {
 		t.Fatalf("main fixture facts = symbols:%+v diagnostics:%+v", symbols, diagnostics)
 	}
-	replaced := ComposeGoDeclaration("main.go", string(mainSource), GoDeclarationEdit{
-		Mode: DeclarationEditReplaceSymbol, TargetSymbol: "Run",
-		Declaration: "func Run(name string) string { return \"updated \" + name }",
-	})
-	if !replaced.Validation.Applicable || !strings.Contains(replaced.Source, "updated") || !strings.Contains(replaced.Source, "func Keep") {
-		t.Fatalf("fixture replace composition = %+v", replaced)
-	}
-	created := ComposeGoDeclaration("main.go", string(mainSource), GoDeclarationEdit{
-		Mode: DeclarationEditCreateSymbol, TargetSymbol: "ReleaseNote",
-		Declaration: "type ReleaseNote struct { Text string }",
-	})
-	if !created.Validation.Applicable || !strings.Contains(created.Source, "type ReleaseNote struct") || !strings.Contains(created.Source, "type Worker") {
-		t.Fatalf("fixture create composition = %+v", created)
-	}
 	brokenSource, err := os.ReadFile(filepath.Join(root, "malformed.go.fixture"))
 	if err != nil {
 		t.Fatal(err)

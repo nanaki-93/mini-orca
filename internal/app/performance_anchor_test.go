@@ -75,7 +75,7 @@ func TestPerformanceRetryCompletesRangesSpanningDeclarations(t *testing.T) {
 			if completed.Status != AnalysisRunCompleted || calls.Load() != 4 {
 				t.Fatalf("completion=%+v calls=%d", completed, calls.Load())
 			}
-			_, _, policy, err := s.performanceInputs()
+			_, _, policy, err := s.analysisInputs()
 			if err != nil {
 				t.Fatal(err)
 			}
