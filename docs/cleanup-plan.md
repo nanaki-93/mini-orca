@@ -1,0 +1,12 @@
+# Repository cleanup
+
+Consolidate Mini-Orca on its Wails/React client and shared proposal workflow. Remove superseded implementations, reduce routine interaction cost, and preserve source identity checks, explicit Apply, guarded Undo, provider consent and actionable errors.
+
+Each implementation step is verified and committed separately. This plan covers the current request; older task lists do not authorize work.
+
+- [ ] **1. Retire the Compose desktop.** Remove Kotlin sources, Gradle tooling, obsolete UI prototypes and scratch artifacts. Update build gates, CI and setup/instruction documentation for the single supported desktop. Verify Python tooling tests, shell syntax, daemon documentation contracts and the web desktop build/tests.
+- [ ] **2. Remove superseded daemon workflows.** Remove declaration drafts, their chat/apply/benchmark endpoints, and legacy Analyze-all/Performance job adapters. Keep shared proposal checks, read-only explanations and unified analysis. Remove dead helpers, models, fixtures and contracts; deliberately reject incompatible stored runs. Verify Go tests, race checks, static/reachability/complexity/clone checks, route contracts and web tests.
+- [ ] **3. Improve active-path performance.** Inspect request routing and UI loading; remove repeated construction or unnecessary work with measured regression coverage. Keep cancellation and project/worktree identity guards. Verify affected tests and benchmarks, then the applicable Go/web gates.
+- [ ] **4. Execute routine Git actions directly.** Make reviewed Apply & Commit and worktree Merge execute from their action buttons, with sensible editable commit messages and optional details. Keep stale-head guards, conflict recovery and explicit destructive recovery actions. Verify browser workflow tests, rejection cases and native bridge tests.
+- [ ] **5. Simplify presentation and loading.** Reduce repeated explanations and technical metadata, move supporting information into disclosures, consolidate shared controls and show accessible progress for requests and background work. Verify production components at normal/large text and narrow/wide viewports, including errors and running states.
+- [ ] **6. Validate and finish.** Review all changes, update usage/migration documentation, run `go fmt ./...`, `./scripts/validate.sh`, `make web-build` and `git diff --check`. Record actual evidence and any limitations, commit the final step and leave the working tree clean.
