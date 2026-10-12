@@ -182,12 +182,9 @@ export async function testGuidedFixes({
         if (large) await page.getByRole('button', { name: 'Larger text', exact: true }).click();
         const review = await page.locator('.fix-review').boundingBox();
         const diff = await page.locator('.fix-review .diff').boundingBox();
-        const evidence = await page.locator('.review-evidence').boundingBox();
         assert.ok(
-          width > 1000
-            ? Math.abs(review.width - diff.width - evidence.width) < 2
-            : Math.abs(review.width - diff.width) < 2,
-          'The diff and evidence fill the review workspace',
+          Math.abs(review.width - diff.width) < 2,
+          'The diff fills the review workspace at every viewport width',
         );
         await next.scrollIntoViewIfNeeded();
         const action = await next.boundingBox();

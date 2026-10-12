@@ -3358,6 +3358,7 @@ try {
         assert.equal(await page.getByRole('button', { name, exact: true }).isDisabled(), true);
       for (const control of [batch, budget, attempts, refresh])
         assert.equal(await control.isDisabled(), false, 'Limits remain editable while busy');
+      await expandDetails(page, 'Advanced settings');
       await batch.fill('38');
       await budget.fill('901');
       await attempts.fill('4');

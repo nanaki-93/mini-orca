@@ -18,7 +18,7 @@ Read [../AGENTS.md](../AGENTS.md) first. Use these rules for root Markdown too.
 - Keep current documentation focused on use, implementation and supported
   contracts. Do not turn ordinary edits into completion reports or task ledgers.
 - Examples must use real routes/options and placeholder secrets/portable paths.
-  Keep API examples consistent with guard fields, error states and Kotlin/Go types.
+  Keep API examples consistent with guard fields, error states and TypeScript/Go types.
   `internal/version/version.go` owns the release version; check it before changing
   release references.
 - Record only checks actually performed. Separate unit/fixture evidence from

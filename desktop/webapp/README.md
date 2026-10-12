@@ -131,8 +131,8 @@ visible. The sidebar collapses to icons.
   Stale finding details offer **Analyze stale file**, which prepares analysis only
   for that finding's file. Preview and Start keep that target, and results for
   other files remain available. Freshness follows content and applicable guidance.
-  The generated fix opens on **Changes**, with file tabs, a read-only diff and
-  a check-evidence pane. **Checks** contains full diagnostics, captured workflow
+  The generated fix opens on **Changes**, with file tabs and a full-width read-only
+  diff. **Checks** contains full diagnostics, captured workflow
   stages and model review. **Details** contains the cause, solution, scope,
   instructions and regeneration, with a link to **History**.
   **Review next file** advances through the diffs; **Apply & Commit** becomes available
@@ -154,8 +154,8 @@ visible. The sidebar collapses to icons.
   Selecting it opens **Git / Worktrees**, also available in the Project navigation.
   The page shows only clean worktrees with incoming commits that can be merged
   into the current clean local branch. Current, already merged, locked, unavailable
-  and otherwise blocked worktrees are hidden. Each row has its branch title and
-  three aligned actions. **View implementation** opens its saved tasks without
+  and otherwise blocked worktrees are hidden. Each row offers implementation, preview,
+  discard and merge actions. **View implementation** opens its saved tasks without
   changing the selected project. **Discard change** confirms removal of the clean
   checkout and its local task history without merging; the branch and committed
   changes are kept. Discard rechecks the source identity and never forces deletion.
