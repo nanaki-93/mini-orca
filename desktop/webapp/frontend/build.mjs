@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -7,9 +7,14 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const output = path.resolve(root, '../internal/assets/files');
 const branding = path.resolve(root, '../../../docs/icons');
 await mkdir(output, { recursive: true });
+// Remove stale generated chunks while retaining the tracked asset placeholder.
+for (const name of await readdir(output))
+  if (name.endsWith('.js') || name.endsWith('.css')) await rm(path.join(output, name));
 await build({
-  entryPoints: [path.join(root, 'src/main.tsx')],
-  outfile: path.join(output, 'app.js'),
+  entryPoints: { app: path.join(root, 'src/main.tsx') },
+  outdir: output,
+  format: 'esm',
+  splitting: true,
   bundle: true,
   minify: true,
   sourcemap: false,

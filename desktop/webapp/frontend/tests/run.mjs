@@ -314,6 +314,7 @@ async function startAnalysis(page, resume = false) {
 async function openSummaryDiagrams(page) {
   await nav(page, 'Architecture');
   await page.getByRole('heading', { name: 'Architecture and Flow', exact: true }).waitFor();
+  await page.getByText('Rendering diagram…', { exact: true }).first().waitFor({ state: 'hidden' });
 }
 async function openSource(page) {
   await nav(page, 'Source');
@@ -1649,6 +1650,68 @@ try {
       await close();
     }
   });
+  await test('Diagram code loads on demand and failed loads preserve readable source', async () => {
+    for (const fail of [false, true]) {
+      const { page, close } = await pageFor({ flows: [] });
+      try {
+        const assets = () =>
+          page.evaluate(() =>
+            performance
+              .getEntriesByType('resource')
+              .filter((entry) => entry.name.endsWith('.js'))
+              .map((entry) => ({ name: entry.name, bytes: entry.decodedBodySize })),
+          );
+        await idle(page);
+        const initial = await assets();
+        assert.equal(
+          initial.some((entry) => entry.name.includes('/diagram-renderer-')),
+          false,
+        );
+        if (fail) await page.route('**/diagram-renderer-*.js', (route) => route.abort());
+        const before = await page.evaluate(() =>
+          window.fixture.requests.filter((request) => request.method !== 'GET'),
+        );
+        await openSummaryDiagrams(page);
+        if (fail) {
+          await page.getByText('Diagram preview unavailable', { exact: true }).waitFor();
+          assert.match(await page.locator('.diagram pre').innerText(), /^flowchart/);
+          assert.equal(await page.locator('.diagram pre').isVisible(), true);
+        } else {
+          await page.getByRole('img', { name: 'Architecture diagram', exact: true }).waitFor();
+          const loaded = await assets();
+          assert.equal(
+            loaded.filter((entry) => entry.name.includes('/diagram-renderer-')).length,
+            1,
+          );
+          const initialBytes = initial.reduce((total, entry) => total + entry.bytes, 0);
+          const deferredBytes = loaded
+            .filter((entry) => entry.name.includes('/diagram-renderer-'))
+            .reduce((total, entry) => total + entry.bytes, 0);
+          assert.ok(
+            deferredBytes > initialBytes,
+            'Most JavaScript is deferred until diagrams are opened',
+          );
+          console.log(
+            `JavaScript at startup: ${initialBytes} bytes; deferred diagram code: ${deferredBytes} bytes`,
+          );
+          await nav(page, 'Overview');
+          await openSummaryDiagrams(page);
+          assert.equal(
+            (await assets()).filter((entry) => entry.name.includes('/diagram-renderer-')).length,
+            1,
+          );
+        }
+        assert.deepEqual(
+          await page.evaluate(() =>
+            window.fixture.requests.filter((request) => request.method !== 'GET'),
+          ),
+          before,
+        );
+      } finally {
+        await close();
+      }
+    }
+  });
   await test('Architecture navigation opens all saved charts and entry points locally', async () => {
     const { page, close } = await pageFor();
     await idle(page);
@@ -1668,6 +1731,10 @@ try {
     await card.focus();
     await page.keyboard.press('Enter');
     await page.getByRole('heading', { name: 'Architecture and Flow', exact: true }).waitFor();
+    await page
+      .getByText('Rendering diagram…', { exact: true })
+      .first()
+      .waitFor({ state: 'hidden' });
     assert.equal(await page.evaluate(() => window.fixture.requests.length), requests);
     assert.equal(await page.locator('.diagram img').count(), 3);
     for (const name of ['Architecture diagram', 'Flow 1 diagram', 'Flow 2 diagram'])

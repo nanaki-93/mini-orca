@@ -2,12 +2,11 @@ import { useWorkspace } from './workspace-context';
 import {
   useEffect,
   useLayoutEffect,
-  useMemo,
+  useState,
   useRef,
   type ReactNode,
   type ButtonHTMLAttributes,
 } from 'react';
-import { renderMermaidSVG } from 'beautiful-mermaid';
 import { icons } from './icons';
 import type { Insight } from './models';
 import { type Page } from './workspace';
@@ -244,28 +243,27 @@ export function InsightCard({ insight }: { insight?: Insight }) {
   );
 }
 function Diagram({ source, label }: { source: string; label: string }) {
-  const result = useMemo<{ url?: string; error?: string }>(() => {
-    if (source.length > 16000 || source.split('\n').length > 160)
-      return { error: 'Diagram is too large to render.' };
-    try {
-      const svg = renderMermaidSVG(source, {
-        bg: '#101b14',
-        fg: '#f1fff4',
-        accent: '#5cfa8b',
-        font: 'sans-serif',
-        padding: 24,
+  const [rendered, setRendered] = useState<{ source: string; url?: string; error?: string }>();
+  const result = rendered?.source === source ? rendered : undefined;
+  useEffect(() => {
+    let active = true;
+    void import('./diagram-renderer')
+      .then(({ renderDiagram }) => {
+        if (active) setRendered({ source, ...renderDiagram(source) });
+      })
+      .catch(() => {
+        if (active) setRendered({ source, error: 'Diagram preview unavailable' });
       });
-      // SVG images cannot run scripts or activate model-authored links.
-      return { url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` };
-    } catch {
-      return { error: 'Diagram preview unavailable' };
-    }
+    return () => {
+      active = false;
+    };
   }, [source]);
   return (
     <div className="diagram">
-      {result.url && <img src={result.url} alt={label} />}
-      {result.error && <p>{result.error}</p>}
-      <Disclosure title="Diagram source" open={!!result.error}>
+      {result?.url && <img src={result.url} alt={label} />}
+      {!result && <p role="status">Rendering diagram…</p>}
+      {result?.error && <p>{result.error}</p>}
+      <Disclosure title="Diagram source" open={!!result?.error}>
         <pre tabIndex={0}>{source}</pre>
       </Disclosure>
     </div>
