@@ -44,7 +44,7 @@ func TestChangeChecksRequireTrustAndProveNewTests(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := prepareChangeFixture(t, service, "new.go", "new_test.go")
-	request := ChangeCheckRequest{ChangeIdentity: changeIdentity(session), DraftCheckOptions: DraftCheckOptions{RunTests: true}}
+	request := ChangeCheckRequest{ChangeIdentity: changeIdentity(session), CheckOptions: CheckOptions{RunTests: true}}
 	if _, err := service.CheckChange(context.Background(), session.ID, request); err == nil {
 		t.Fatal("checks ran without trust")
 	}

@@ -7,8 +7,7 @@
 Mini-Orca uses a Wails/React client and loopback daemon for one active project.
 The shared change workflow captures up to eight explicit Go/Markdown paths,
 prepares versioned proposals, checks them, records diff review and explicitly
-applies them with guarded recovery/Undo. The legacy declaration APIs remain
-compatible with the Compose client and editable isolated declaration drafts.
+applies them with guarded recovery/Undo.
 Source and composed diffs stay read-only. The daemon never writes source,
 runs project code, commits or pushes merely because a project or history is opened.
 
@@ -22,7 +21,7 @@ with the structured error response described below.
 
 ## Local request boundary
 
-The daemon trusts the local Compose Desktop process to call its loopback API;
+The daemon trusts the native Wails host to call its loopback API;
 it does not provide browser sessions, CORS access, or request authentication.
 With the default loopback bind, requests must use a `Host` of `localhost`,
 `127.0.0.1`, or `::1` (with an optional port). Requests carrying an `Origin`
@@ -34,8 +33,7 @@ a browser API while preserving native desktop requests, which send no
 `POST` and `PATCH` requests with a body must send `Content-Type:
 application/json` (a charset parameter is permitted); other media types and a
 missing content type receive `415 Unsupported Media Type` before a route
-handler runs. The documented pause and cancel actions carry their guards in
-the query string and remain bodyless. `GET /health` remains available to
+handler runs. Analysis controls carry the full run identity in their JSON body. `GET /health` remains available to
 loopback health checks with no request body.
 
 `MINI_ORCA_BIND_ADDRESS` can deliberately bind the daemon beyond loopback. In
@@ -49,9 +47,7 @@ untrusted networks.
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health` | Liveness and daemon version. |
-| GET | `/status` | Daemon status and `single_coder_preview` workflow identifier. |
-| POST | `/api/projects/current/chat/sessions` | Open a Go declaration conversation pinned to project/file/revision/hash, mode, target, and optional reviewed task spec. |
-| POST | `/api/projects/current/chat/sessions/{sessionID}/messages` | Request one declaration proposal; the body cannot retarget the session and may explicitly request a bounded task repair. |
+| GET | `/status` | Daemon status and `shared_proposals` workflow identifier. |
 | GET | `/api/models/current` | Non-secret `analyze`, `bug`, and `function` model catalog. |
 | GET | `/api/models/available` | Model choices from configured transports and Pi, with defaults and discovery status. |
 | GET | `/api/projects/current/context` | Bounded context manifest for a project-relative `path`; source is never returned. |
@@ -92,26 +88,7 @@ untrusted networks.
 | POST | `/api/projects/current/files/security-scan` | Scan one selected eligible Go file with deterministic source-only rules; no provider request or subprocess execution occurs. Matches require syntactic review and do not prove exploitability. At most five source-order matches are returned; a `partial` report says when that limit truncates coverage. |
 | POST | `/api/projects/current/files/explanation` | Explicitly explain one exact indexed Go declaration using transient Function-scope context. |
 | POST | `/api/projects/current/security-review` | Explicitly perform one passive, source-free AI Security review for one current eligible file, optionally one exact declaration. |
-| GET | `/api/projects/current/analysis-job` | Read explicit bounded Analyze-all progress. |
-| POST | `/api/projects/current/analysis-job` | Start bounded sequential Analyze-all cache warming. |
-| POST | `/api/projects/current/analysis-job/pause` | Pause Analyze-all after its active file finishes. |
-| POST | `/api/projects/current/analysis-job/resume` | Resume a persisted paused Analyze-all job. |
-| POST | `/api/projects/current/analysis-job/cancel` | Cancel active/pending Analyze-all work. |
-| GET | `/api/projects/current/performance` | Read cached source-based performance findings and queue-derived coverage; no model work occurs. |
-| GET | `/api/projects/current/performance/context` | Preview the bounded policy-filtered Performance queue and Analysis-model manifest. |
-| GET | `/api/projects/current/performance-job` | Read persisted source-free Performance-job progress. |
-| POST | `/api/projects/current/performance-job` | Explicitly start a bounded sequential Performance review with current queue identity and remote confirmation. |
-| POST | `/api/projects/current/performance-job/pause` | Pause after the active file, guarded by current revision and expected job ID. |
-| POST | `/api/projects/current/performance-job/resume` | Resume a compatible paused job with fresh remote confirmation. |
-| POST | `/api/projects/current/performance-job/cancel` | Cancel active/pending Performance work, retaining completed file reports. |
 | POST | `/api/projects/current/reindex` | Refresh deterministic facts without an LLM request. |
-| PATCH | `/api/projects/current/drafts/{draftID}` | Replace only the declaration/import list and create the next draft revision. |
-| POST | `/api/projects/current/drafts/{draftID}/validate` | Compose and validate one exact draft revision. |
-| POST | `/api/projects/current/drafts/{draftID}/checks` | Run scoped checks for one validated draft revision and hash. |
-| GET | `/api/projects/current/drafts/{draftID}/benchmarks` | List explicitly selectable existing Go benchmarks in the affected package for one validated draft revision. |
-| POST | `/api/projects/current/drafts/{draftID}/benchmarks` | Compare one selected existing Go benchmark in isolated base and candidate copies. |
-| POST | `/api/projects/current/apply` | Apply one validated, checked declaration draft only after `confirm: true`. |
-| POST | `/api/projects/current/undo` | Restore only the immediately preceding unchanged apply after `confirm: true`. |
 | GET | `/api/projects/current/changes` | List local change conversations without generation. |
 | POST | `/api/projects/current/changes` | Capture a task and one to eight explicit Go/Markdown paths. |
 | GET | `/api/projects/current/changes/recovery` | Read the latest grouped mutation or interrupted recovery journal. |
@@ -157,97 +134,10 @@ Security review requests require `project_id`, `project_revision`, `base_file_ha
 
 Import, restore, navigation, indexing, parsing, and `gofmt`/`go vet` source analysis never execute imported project code. `go test` can execute package initialization and tests, including generated temporary task tests. Before it can run, the client reads the exact argv scope from `GET /api/projects/current/execution-trust`; pass the validated generated test name as `task_test_name` to receive its exact `-run` argv. The client then explicitly posts `confirm: true` for the active project revision. This in-memory trust is separate from remote-model consent and is cleared when the project is replaced, restored, or reindexed. Commands run only in a temporary copied workspace with a small toolchain environment allowlist; this is trusted local execution, not sandboxing. On supported Unix platforms cancellation owns the command process group and its descendants. Other platforms reject project-code execution when that ownership is unavailable; source-only commands remain available.
 
-## Focused draft lifecycle
-
-Create a session with the imported `project_id`, current `project_revision`,
-selected-file `base_file_hash`, project-relative `open_path`, and either
-`replace_symbol` or `create_symbol` mode. A replace target must be one exact Go
-symbol. A create target must be a valid top-level Go identifier absent from the
-indexed open file's symbols (including inexact or non-atomic symbols). Go keywords
-and the workflow-reserved names `_`, `init`, and `main` are rejected; valid names
-such as `_helper` and `any` are allowed. Admission checks the current project,
-revision and file hash; it does not guarantee package-wide name uniqueness.
-Function versus Type is preparation conveyed in the message, not a separate
-session mode or request field. Those session values are immutable for messages.
-A session and message do not themselves validate or apply source changes.
-
-A successful session message yields an isolated `Draft`: declaration text,
-optional imports, revision, hash, target identity, and state. It never returns
-an editable source file. `PATCH` accepts only declaration/import changes and an
-expected revision. Any edit clears earlier validation and checks. Validate and
-checks each pin the revision (and checks also pin its hash), so stale or changed
-drafts cannot be applied.
-
-Project/file analyses, their AI findings and suggestions, and generated drafts
-may include an optional `engineering_insight`. It is concise advisory model
-prose bound to the parent result's normal freshness identity; it cannot carry a
-path, action, or Apply authority. Missing or malformed optional insight text is
-omitted without discarding otherwise valid analysis or a draft. Editing a draft
-clears its insight for the current candidate revision.
-
-An optional `task_spec` may open only a matching `replace_symbol` session. The
-daemon validates its exact indexed target against the current revision and file
-hash, then carries it through that session and its drafts. Its optional Go test
-candidate is written only to the temporary copied check workspace under a
-non-conflicting generated `_test.go` name. It must fail on the captured base
-and pass with the composed candidate before its required check succeeds.
-
-When current task-bound checks fail, a client can send the next pinned session
-message with `repair: true`. The daemon requires that exact latest failed draft,
-pins any reviewed temporary proof carried by that parent for the rest of the
-repair lineage, uses bounded sanitized check evidence supplied by the client,
-and permits at most three such repair requests. A later repair cannot drop or
-replace the pinned proof. Checks, temporary tests, validation, Apply, and Undo
-never start a provider request on their own.
-
-## Optional Go benchmark comparison
-
-For a valid displayed Go draft, `GET /api/projects/current/drafts/{draftID}/benchmarks`
-lists only valid existing benchmark functions from the draft target's package.
-Each choice includes the exact daemon-built argv and an opaque selected-scope
-guard bound to a bounded whole-workspace fixture fingerprint before trust is
-granted. It requires the same exact draft revision/hash and current project
-revision as the comparison request. The list is unavailable when the candidate
-is invalid or stale or the affected package has no eligible benchmark. Its
-`trusted` flag reports current-session execution consent.
-
-`POST /api/projects/current/drafts/{draftID}/benchmarks` accepts one listed
-benchmark name and the displayed selected-scope guard. The daemon recomputes the
-scope before execution, so any workspace change since display makes the request
-unavailable. The daemon constructs the fixed argv itself: `go test .`, `-run ^$`,
-an exact escaped `-bench` filter, five 100 ms samples, `-benchmem`, and bounded
-test/process deadlines. It runs the base and candidate in separate temporary
-copies with the same captured whole-workspace fingerprint, argv and sanitized
-toolchain environment. Request cancellation owns the active process group; no
-shell, model-authored command, benchmark generator or project-source write is
-involved. A changed baseline or draft invalidates the comparison. Failed,
-canceled or incomplete results return no samples and never grant Apply authority.
-A completed result returns paired samples as optional evidence without declaring
-a winner; reviewers still assess variability and noise.
-
-`POST /api/projects/current/apply` requires the displayed draft id, revision,
-hash, project identity, base file hash, and an explicit `confirm: true`. It
-re-reads the target and rejects stale state before its atomic one-file write.
-Undo similarly requires the post-apply hash and explicit confirmation; it
-restores only the immediately preceding unchanged apply. The audit omits source,
-draft text, prompts, and secret-like values.
-
-Apply saves a source-free recovery journal before replacing the file. A failure
-before replacement leaves source unchanged. After replacement, Apply and Undo
-return a successful mutation receipt even if indexing, audit persistence, or
-metadata cleanup fails; the optional `warnings` array explains those failures.
-The desktop displays these warnings alongside the actual mutation outcome.
-If indexing fails, `index` is null and `project_revision` retains the last known
-revision; `post_apply_hash` still identifies the resulting source. Re-index to
-refresh deterministic project facts. Apply retains its recovery journal when
-completion is partial, allowing guarded Undo after restart when the file still
-matches the applied hash. A mismatched recovery journal blocks Undo rather than
-falling back to an older change.
-
 ## Project intelligence and limits
 
 Import and reindex build deterministic metadata; neither starts a verified scan
-or Analyze-all. Indexing streams hashes and line counts for large files, while
+or unified analysis. Indexing streams hashes and line counts for large files, while
 symbol extraction is limited to text files within the 1 MiB source-view limit.
 Larger text files retain full size, hash and line-count facts with a diagnostic
 that symbol extraction is unavailable. Index schema version 3 rebuilds older
@@ -259,17 +149,16 @@ Findings keep source (`ai`, parser, vet, or test), confidence, severity, status,
 and freshness separate so a model suggestion is never presented as a verified
 tool result.
 
-Declaration editing, exact symbol targeting, composition, and mandatory parse /
-format checks are Go-first. Other languages may have conservative approximate
-symbol extraction and analysis, but do not receive exact declaration editing or
-equivalent validators.
+Shared proposals support captured Go and Markdown files. Go changes require
+parse and format checks; other languages retain conservative symbol extraction
+and analysis without source editing.
 
 ## Privacy, configuration, and errors
 
 The daemon binds to loopback by default. It filters ignored, generated,
 configuration, and secret-like paths before assembling model context. Each
 prompt request checks the effective scope shown by `/api/models/current`: project
-import and explicit source-based Performance reviews use `analyze`, selected-file analysis and Analyze-all use `bug`, and
+import and explicit source-based Performance reviews use `analyze`, selected-file analysis uses `bug`, and
 declaration proposals use `function`. A non-loopback HTTP or CLI scope requires
 `confirm_remote_provider: true` for that request only; confirmation for one
 scope never authorizes another. Restore, reindex, scans, validation, checks,
@@ -300,7 +189,7 @@ request only when configured. Keys belong only in ignored local config and are
 neither logged nor returned.
 
 Scopes can instead select `provider: agy` or `provider: pi` in local configuration.
-These CLI transports feed the same analysis and draft workflows; they add no
+These CLI transports feed the same analysis and proposal workflows; they add no
 command-execution API. Catalog and provenance identify them as `cli://agy` or
 `cli://pi`, always with `remote_provider: true` and the same scope-specific
 confirmation requirement. CLI `temperature` and `max_tokens` metadata are
@@ -318,7 +207,7 @@ provider URL explicitly when its endpoint changes.
 ## Unified analysis contract
 
 These routes are registered through the same loopback/origin policy as the other
-local APIs. The shared controller owns unified and compatibility execution.
+local APIs. The shared controller owns unified analysis execution.
 All bodies reject unknown fields and trailing JSON. Query guards must each occur
 once, use only documented names and contain 1–4096 characters. Missing/invalid
 request fields return 400, unknown projects 404, identity/lifecycle conflicts 409,
@@ -503,47 +392,20 @@ or authorize a changed provider/project. Pause/cancel do not carry confirmations
 Scope-specific existing consent rules remain enforced before each provider dispatch.
 The run never invokes tests, vet, benchmarks, exploits or suggested shell commands.
 
-### Legacy job migration (ANA-05)
+### Retired workflows
 
-Analyze-all and Performance routes use the same durable analysis controller.
-They capture only their original semantic or performance stage and at most their
-existing `max_files` limit; they never authorize Security or another model scope.
-Their projections keep the original job/file response shapes and bounded queue
-IDs. New metadata lives in `.mini-orca/analysis/run.json`; old session job files
-and historical producer reports are retained, not rewritten. Unified previews
-show `compatibility_stage` when resuming one of these bounded jobs, making its
-limited coverage explicit. An ordinary unified start always captures every stage
-and the whole project.
+The Kotlin desktop, declaration chat/drafts, declaration Apply/Undo and benchmark
+comparison, Analyze-all jobs and separate Performance jobs have been removed.
+Their former routes return 404. Use `changes` for checked proposals and grouped
+Apply/Undo, and `analysis/preview`, `analysis/run` and `analysis/run/control` for
+analysis. Read-only declaration explanations remain supported.
 
-Legacy responses project queued/running to running, pausing/paused to paused,
-canceling/canceled to canceled, and terminal stage outcomes to completed with
-per-file errors. `interrupted` is an additive job state for recoverable shared
-progress and saved pre-migration jobs. Provider retries are now charged as actual
-transport attempts, bounded by the smaller effective-provider and job allowance;
-there is no additional semantic parser retry loop. Performance retains its total
-active-time budget across resumes (including sub-second accounting), rather than
-receiving a new window allowance. After process loss, an active job conservatively
-charges the interval since its last durable progress update, capped at that total
-budget; a saved paused job does not spend its idle time. An exhausted legacy budget
-requires a new start.
-
-Pre-migration jobs lack captured provider fingerprints and semantic source hashes,
-and their attempt counters represented file calls rather than transport requests.
-They therefore cannot safely resume under the new authority contract. Reads retain
-all original file progress/attempts and present formerly running/paused jobs as
-interrupted, without dispatch or writes. Legacy controls on those snapshots return
-409 with a migration message: review the retained progress and explicitly start a
-new job, or use unified preview/start. A new run has a new identity and accounting;
-it does not reinterpret or reset the historical job. Saved reports remain available
-through the existing report endpoints and matching caches can be reused.
-
-The single owner rejects overlapping kinds, retains a fault until explicit durable
-recovery, and requires the old worker to finish cancellation before replacement.
-A project switch may briefly return busy until that worker exits; stale controls
-cannot affect a replacement. Legacy clients should move to the unified identity
-and preview/control routes to distinguish every lifecycle state and use fresh
-provider-specific consent. Legacy remote-confirmation booleans remain limited to
-their single provider scope.
+Existing shared proposals and unified runs retain their schemas and guards.
+Single-stage journals marked `compatibility_stage` as semantic or performance
+are ignored: opening a project neither resumes them nor grants consent. Their
+bytes remain untouched until an explicitly started unified run replaces
+`analysis/run.json`. Old files under `sessions/` and declaration backups are no
+longer read or used for Undo. Matching per-file analysis remains reusable.
 
 ### Progress and partial evidence
 
@@ -557,10 +419,7 @@ the progress owner; result prose belongs only to the three result reads.
 Coverage counts captured file-stage units relevant to the section: total, pending,
 running, succeeded, partial, failed, skipped and unavailable. These sum to total;
 excluded files are separately visible in the plan. Ineligible stages are marked
-`skipped` with a reason and omitted from section totals. Stages omitted by legacy
-single-section actions still count as incomplete coverage. Existing schema-1 runs
-that counted them as unavailable are validated and normalized when restored.
-Cached current evidence counts
+`skipped` with a reason and omitted from section totals. Cached current evidence counts
 as succeeded. A partial/truncated report retains findings but cannot claim full
 coverage. Pending means unfinished, including abandoned work in canceled/stale
 runs; it is not permission to dispatch. A successful stage shared by sections is
@@ -728,7 +587,7 @@ The instructions preview also requires a canonical relative `path` ending in
 `AGENTS.md`. It reads root-to-directory guides, respecting context exclusions
 and rejecting symlinks. More local guidance applies within its own directory.
 Applicable guides are included by default in project and file analysis, performance
-and security AI reviews, declaration explanations and drafts, feature suggestions,
+and security AI reviews, declaration explanations, feature suggestions,
 and proposal creation, testing and review. They grant no provider, execution or
 Apply authority. AI file reports carry optional `instructions_fingerprint`
 provenance; changed applicable guides make cached reports stale and invalidate
@@ -859,7 +718,7 @@ expose interrupted/partial work and must be recovered before another grouped App
 A mutation receipt reports the actual state, index (when available), warnings and
 Undo availability. Metadata failure after source changes does not erase the receipt.
 Undo verifies post-Apply hashes and removes files that the proposal created. The
-latest grouped change supersedes legacy declaration Undo.
+latest grouped change owns the Undo journal.
 
 `POST /api/projects/current/changes/{sessionID}/verify` accepts `ChangeIdentity`:
 current `project_id`/`project_revision` plus applied proposal `revision`/`hash`.

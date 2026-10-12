@@ -164,7 +164,7 @@ func TestChangeGenerationHistoryAndRevision(t *testing.T) {
 	if _, err := service.SendChangeMessage(context.Background(), session.ID, ChangeMessageRequest{ChangeIdentity: changeIdentity(session), Message: "Stale revision."}); !errors.Is(err, project.ErrRevisionConflict) {
 		t.Fatalf("accepted old revision: %v", err)
 	}
-	first.Checks = []DraftCheck{{Name: "parse", Required: true, State: CheckPassed}}
+	first.Checks = []CheckResult{{Name: "parse", Required: true, State: CheckPassed}}
 	first.ReviewedHash = first.Hash
 	if err := writeChangeSession(root, first); err != nil {
 		t.Fatal(err)

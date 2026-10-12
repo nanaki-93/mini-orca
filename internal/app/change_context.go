@@ -89,10 +89,10 @@ func changeMessages(session *ChangeSession, message, text string) ([]llm.ChatMes
 		explanationGuidance = " The explanation field is displayed under Proposed solution. Describe only the correction and how each changed file implements it. Do not repeat the cause or diagnostic background; they are displayed separately. Include unresolved failures, limitations and uncertainty affecting the solution."
 	}
 	input, err := json.Marshal(struct {
-		Request      string               `json:"request"`
-		Criteria     []string             `json:"acceptance_criteria"`
-		Conversation []ChatSessionMessage `json:"conversation"`
-		Previous     []ChangeEdit         `json:"previous_proposal"`
+		Request      string          `json:"request"`
+		Criteria     []string        `json:"acceptance_criteria"`
+		Conversation []ChangeMessage `json:"conversation"`
+		Previous     []ChangeEdit    `json:"previous_proposal"`
 	}{message, session.AcceptanceCriteria, session.Messages, session.Changes})
 	if err != nil {
 		return nil, err

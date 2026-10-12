@@ -12,16 +12,16 @@ import (
 )
 
 type ChangeVerification struct {
-	SchemaVersion   int          `json:"schema_version"`
-	SessionID       string       `json:"session_id"`
-	ProjectID       string       `json:"project_id"`
-	ProjectRevision string       `json:"project_revision"`
-	ProposalHash    string       `json:"proposal_hash"`
-	WorkspaceHash   string       `json:"workspace_hash"`
-	Status          string       `json:"status"`
-	Reason          string       `json:"reason,omitempty"`
-	Checks          []DraftCheck `json:"checks"`
-	UpdatedAt       time.Time    `json:"updated_at"`
+	SchemaVersion   int           `json:"schema_version"`
+	SessionID       string        `json:"session_id"`
+	ProjectID       string        `json:"project_id"`
+	ProjectRevision string        `json:"project_revision"`
+	ProposalHash    string        `json:"proposal_hash"`
+	WorkspaceHash   string        `json:"workspace_hash"`
+	Status          string        `json:"status"`
+	Reason          string        `json:"reason,omitempty"`
+	Checks          []CheckResult `json:"checks"`
+	UpdatedAt       time.Time     `json:"updated_at"`
 }
 
 func (s *Service) VerifyChange(ctx context.Context, id string, identity ChangeIdentity) (*ChangeVerification, error) {
@@ -30,7 +30,7 @@ func (s *Service) VerifyChange(ctx context.Context, id string, identity ChangeId
 
 // Execution happens outside workflow locks. Publication repeats the complete
 // applied identity check, so Undo, another Apply or unrelated edits discard it.
-func (s *Service) verifyChangeWithChecks(ctx context.Context, id string, identity ChangeIdentity, run func(context.Context, string, *changeJournal, string) ([]DraftCheck, error)) (*ChangeVerification, error) {
+func (s *Service) verifyChangeWithChecks(ctx context.Context, id string, identity ChangeIdentity, run func(context.Context, string, *changeJournal, string) ([]CheckResult, error)) (*ChangeVerification, error) {
 	root := s.manager.Root()
 	journal, err := s.appliedChangeForVerification(ctx, root, id, identity)
 	if err != nil {
@@ -42,7 +42,7 @@ func (s *Service) verifyChangeWithChecks(ctx context.Context, id string, identit
 		}
 	}
 	checks, checkErr := run(ctx, root, journal, identity.ProjectRevision)
-	evidence := &ChangeVerification{SchemaVersion: 1, SessionID: id, ProjectID: identity.ProjectID, ProjectRevision: identity.ProjectRevision, ProposalHash: identity.Hash, WorkspaceHash: journal.PostWorkspaceHash, Checks: append([]DraftCheck{}, checks...), UpdatedAt: time.Now().UTC()}
+	evidence := &ChangeVerification{SchemaVersion: 1, SessionID: id, ProjectID: identity.ProjectID, ProjectRevision: identity.ProjectRevision, ProposalHash: identity.Hash, WorkspaceHash: journal.PostWorkspaceHash, Checks: append([]CheckResult{}, checks...), UpdatedAt: time.Now().UTC()}
 	evidence.Status, evidence.Reason = verificationOutcome(checks, checkErr)
 	// Record interrupted checks as canceled without inheriting canceled source
 	// identity work. This bounded read/write cleanup never executes project code.
@@ -81,7 +81,7 @@ func (s *Service) appliedChangeForVerification(ctx context.Context, root, id str
 	if err := validateChangeRestore(root, journal); err != nil {
 		return nil, err
 	}
-	if err := (benchmarkFixture{fingerprint: journal.PostWorkspaceHash}).verifyCurrent(ctx, root); err != nil {
+	if err := (workspaceIdentity{fingerprint: journal.PostWorkspaceHash}).verifyCurrent(ctx, root); err != nil {
 		return nil, err
 	}
 	return journal, nil
@@ -100,7 +100,7 @@ func changeHasGo(edits []ChangeEdit) bool {
 	return false
 }
 
-func (s *Service) verifyAppliedWorkspace(ctx context.Context, root string, journal *changeJournal, revision string) ([]DraftCheck, error) {
+func (s *Service) verifyAppliedWorkspace(ctx context.Context, root string, journal *changeJournal, revision string) ([]CheckResult, error) {
 	checks := changeSourceChecks(journal.Session.Changes)
 	if !changeHasGo(journal.Session.Changes) || !requiredChecksPassed(checks) {
 		return checks, ctx.Err()
@@ -125,7 +125,7 @@ func (s *Service) verifyAppliedWorkspace(ctx context.Context, root string, journ
 	return checks, ctx.Err()
 }
 
-func verificationOutcome(checks []DraftCheck, err error) (string, string) {
+func verificationOutcome(checks []CheckResult, err error) (string, string) {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return "canceled", "Verification was interrupted before completion."
 	}
@@ -158,7 +158,7 @@ func (s *Service) currentChangeVerification(ctx context.Context, root string, jo
 		evidence.Status, evidence.Reason = "stale", "Project identity changed after verification."
 		return &evidence, nil
 	}
-	if err := (benchmarkFixture{fingerprint: evidence.WorkspaceHash}).verifyCurrent(ctx, root); err != nil {
+	if err := (workspaceIdentity{fingerprint: evidence.WorkspaceHash}).verifyCurrent(ctx, root); err != nil {
 		if !errors.Is(err, project.ErrRevisionConflict) {
 			return nil, err
 		}

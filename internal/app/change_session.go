@@ -35,7 +35,7 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 		return nil, err
 	}
 	now := time.Now().UTC()
-	session := &ChangeSession{SchemaVersion: 1, ID: "change-" + hex.EncodeToString(nonce[:]), ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Kind: request.Kind, Title: strings.TrimSpace(request.Title), AcceptanceCriteria: request.AcceptanceCriteria, Targets: []ChangeTarget{}, Changes: []ChangeEdit{}, Messages: []ChatSessionMessage{}, Instructions: map[string]string{}, Checks: []DraftCheck{}, State: "draft", Freshness: "current", PolicyFingerprint: policy.Version(), CreatedAt: now, UpdatedAt: now}
+	session := &ChangeSession{SchemaVersion: 1, ID: "change-" + hex.EncodeToString(nonce[:]), ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, Kind: request.Kind, Title: strings.TrimSpace(request.Title), AcceptanceCriteria: request.AcceptanceCriteria, Targets: []ChangeTarget{}, Changes: []ChangeEdit{}, Messages: []ChangeMessage{}, Instructions: map[string]string{}, Checks: []CheckResult{}, State: "draft", Freshness: "current", PolicyFingerprint: policy.Version(), CreatedAt: now, UpdatedAt: now}
 	session.FindingTargets = append([]project.FindingTarget(nil), request.FindingTargets...)
 	if err := captureChangeScope(root, session, request.Paths); err != nil {
 		return nil, err
@@ -49,7 +49,7 @@ func (s *Service) OpenChangeSession(ctx context.Context, request ChangeCreateReq
 		return nil, err
 	}
 	session.ContextManifest = s.contextManifestForRuntime(manifest, s.runtimes.function)
-	session.WorkspaceHash, err = benchmarkSourceFingerprint(ctx, root)
+	session.WorkspaceHash, err = workspaceFingerprint(ctx, root)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func (s *Service) verifyChangeCurrent(ctx context.Context, root string, session 
 			return project.ErrRevisionConflict
 		}
 	}
-	return (benchmarkFixture{fingerprint: session.WorkspaceHash}).verifyCurrent(ctx, root)
+	return (workspaceIdentity{fingerprint: session.WorkspaceHash}).verifyCurrent(ctx, root)
 }
 
 func (s *Service) ChangeSession(ctx context.Context, id string) (*ChangeSession, error) {
@@ -200,7 +200,7 @@ func (s *Service) ResumeChange(ctx context.Context, id string) (*ChangeSession, 
 	if changeWorkflowActive(session.Workflow) {
 		return nil, fmt.Errorf("%w: cancel the workflow before restoring its conversation", project.ErrRevisionConflict)
 	}
-	session.Checks, session.ReviewedHash = []DraftCheck{}, ""
+	session.Checks, session.ReviewedHash = []CheckResult{}, ""
 	invalidateChangeWorkflow(session, "Restored workflow evidence requires a new run.")
 	delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
 	if err := writeChangeSession(root, session); err != nil {
@@ -318,14 +318,14 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 	}
 	session.Revision++
 	session.Changes, session.Hash = edits, changeProposalHash(edits)
-	session.Checks, session.ReviewedHash = []DraftCheck{}, ""
+	session.Checks, session.ReviewedHash = []CheckResult{}, ""
 	if ctx.Value(changeWorkflowContextKey{}) == nil {
 		invalidateChangeWorkflow(session, "The proposal changed. Run the workflow again before human review.")
 	}
 	delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
 	session.ContextManifest = s.contextManifestForRuntime(manifest, runtime)
 	now := time.Now().UTC()
-	session.Messages = append(session.Messages, ChatSessionMessage{Role: "user", Content: request.Message, CreatedAt: now}, ChatSessionMessage{Role: "assistant", Content: explanation, CreatedAt: now})
+	session.Messages = append(session.Messages, ChangeMessage{Role: "user", Content: request.Message, CreatedAt: now}, ChangeMessage{Role: "assistant", Content: explanation, CreatedAt: now})
 	session.UpdatedAt = now
 	if err := writeChangeSession(root, session); err != nil {
 		return nil, err
@@ -348,7 +348,7 @@ func (s *Service) ProposeInstructions(ctx context.Context, request InstructionPr
 	}
 	session.Changes = []ChangeEdit{{Path: target.Path, Content: request.Content, Hash: contentHash([]byte(request.Content)), Diff: project.BuildUnifiedDiff(target.Path, target.Content, request.Content)}}
 	session.Hash, session.Revision = changeProposalHash(session.Changes), 1
-	session.Messages = []ChatSessionMessage{{Role: "assistant", Content: "Review the instruction changes before applying them.", CreatedAt: time.Now().UTC()}}
+	session.Messages = []ChangeMessage{{Role: "assistant", Content: "Review the instruction changes before applying them.", CreatedAt: time.Now().UTC()}}
 	s.changesMu.Lock()
 	defer s.changesMu.Unlock()
 	if err := s.verifyChangeCurrent(ctx, root, session); err != nil {

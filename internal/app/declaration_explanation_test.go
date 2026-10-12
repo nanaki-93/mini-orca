@@ -54,7 +54,7 @@ func TestExplainDeclarationReturnsBoundedTransientResultWithoutMutation(t *testi
 	if calls.Load() != 1 || !strings.Contains(prompt, "func Run") || strings.Contains(prompt, "helper secret") {
 		t.Fatalf("calls = %d, prompt = %q", calls.Load(), prompt)
 	}
-	if string(after) != string(before) || len(service.drafts.records) != 0 || len(service.chatSessions.records) != 0 {
+	if string(after) != string(before) || len(service.changeAuthority) != 0 {
 		t.Fatalf("read-only explanation mutated workflow or source")
 	}
 }
@@ -160,7 +160,7 @@ func TestExplainDeclarationRejectsLatePublicationAfterPolicyChange(t *testing.T)
 		t.Fatalf("late policy error = %v", err)
 	}
 	after, _ := os.ReadFile(filepath.Join(root, "main.go"))
-	if calls.Load() != 1 || string(before) != string(after) || len(service.drafts.records) != 0 || len(service.chatSessions.records) != 0 {
+	if calls.Load() != 1 || string(before) != string(after) || len(service.changeAuthority) != 0 {
 		t.Fatal("policy-invalidated explanation published or mutated workflow state")
 	}
 }
@@ -188,7 +188,7 @@ func TestExplainDeclarationRevalidatesPolicyAfterContextPreparationBeforeProvide
 	if !errors.Is(err, project.ErrExcludedFile) {
 		t.Fatalf("post-context policy error = %v", err)
 	}
-	if calls.Load() != 0 || len(service.drafts.records) != 0 || len(service.chatSessions.records) != 0 {
+	if calls.Load() != 0 || len(service.changeAuthority) != 0 {
 		t.Fatal("policy change during context preparation reached provider or workflow state")
 	}
 }
@@ -209,7 +209,7 @@ func TestExplainDeclarationPreservesCancellationWithoutWorkflowMutation(t *testi
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation error = %v", err)
 	}
-	if calls.Load() != 0 || len(service.drafts.records) != 0 || len(service.chatSessions.records) != 0 {
+	if calls.Load() != 0 || len(service.changeAuthority) != 0 {
 		t.Fatal("canceled explanation created workflow state")
 	}
 }
@@ -226,7 +226,7 @@ func TestExplainDeclarationReturnsProviderFailureWithoutWorkflowMutation(t *test
 	if err == nil {
 		t.Fatal("provider failure was accepted")
 	}
-	if len(service.drafts.records) != 0 || len(service.chatSessions.records) != 0 {
+	if len(service.changeAuthority) != 0 {
 		t.Fatal("provider failure created workflow state")
 	}
 }
@@ -256,7 +256,7 @@ func TestExplainDeclarationHandlesRefusedLoopbackProviderWithoutWorkflowMutation
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(after) != string(before) || len(service.drafts.records) != 0 || len(service.chatSessions.records) != 0 {
+	if string(after) != string(before) || len(service.changeAuthority) != 0 {
 		t.Fatal("refused provider request mutated workflow or source")
 	}
 }

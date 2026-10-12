@@ -20,13 +20,8 @@ func TestBuildFunctionWithManifestLimitsContextToSelectedDeclaration(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	file := index.Files[0]
-	if file.Path != "helper.go" {
-		file = index.Files[1]
-	}
 	context, manifest, err := NewContextBuilder().BuildFunctionWithManifest(root, FunctionContextOptions{
-		TargetPath: "main.go", TargetSymbol: "Run", Mode: DeclarationEditReplaceSymbol, Index: index,
-		TaskSpec:  &BugTaskSpec{SchemaVersion: BugTaskSpecSchemaVersion, TargetPath: "main.go", TargetSymbol: "Run", TargetSignature: file.Symbols[0].Signature, AcceptanceCriteria: []string{"Print the selected value."}, NonGoals: []string{"Do not edit helpers."}},
+		TargetPath: "main.go", TargetSymbol: "Run", Index: index,
 		MaxTokens: 400,
 	})
 	if err != nil {
@@ -40,12 +35,12 @@ func TestBuildFunctionWithManifestLimitsContextToSelectedDeclaration(t *testing.
 			t.Fatalf("function context leaked unrelated source %q: %s", unwanted, context)
 		}
 	}
-	if !strings.Contains(context, "func Run()") || !strings.Contains(context, "Print the selected value.") {
+	if !strings.Contains(context, "func Run()") {
 		t.Fatalf("function context omitted task boundary: %s", context)
 	}
 }
 
-func TestBuildFunctionWithManifestSupportsCreateAndReportsTruncation(t *testing.T) {
+func TestBuildFunctionWithManifestRejectsUnknownSymbolsAndReportsTruncation(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package sample\n\nfunc Run() {}\n"), 0600); err != nil {
 		t.Fatal(err)
@@ -54,15 +49,14 @@ func TestBuildFunctionWithManifestSupportsCreateAndReportsTruncation(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, manifest, err := NewContextBuilder().BuildFunctionWithManifest(root, FunctionContextOptions{TargetPath: "main.go", TargetSymbol: "NewRun", Mode: DeclarationEditCreateSymbol, Index: index, MaxTokens: 400})
-	if err != nil || manifest.Truncated || !strings.Contains(created, "Create a new top-level declaration named NewRun.") {
-		t.Fatalf("create context = %q, manifest = %+v, err = %v", created, manifest, err)
+	if _, _, err := NewContextBuilder().BuildFunctionWithManifest(root, FunctionContextOptions{TargetPath: "main.go", TargetSymbol: "NewRun", Index: index}); err == nil {
+		t.Fatal("unknown declaration was accepted")
 	}
-	truncated, manifest, err := NewContextBuilder().BuildFunctionWithManifest(root, FunctionContextOptions{TargetPath: "main.go", TargetSymbol: "Run", Mode: DeclarationEditReplaceSymbol, Index: index, MaxTokens: 8})
+	truncated, manifest, err := NewContextBuilder().BuildFunctionWithManifest(root, FunctionContextOptions{TargetPath: "main.go", TargetSymbol: "Run", Index: index, MaxTokens: 8})
 	if err != nil || !manifest.Truncated || manifest.EstimatedTokens > manifest.TokenLimit || !strings.Contains(truncated, "[context truncated]") {
 		t.Fatalf("truncated context = %q, manifest = %+v, err = %v", truncated, manifest, err)
 	}
-	_, manifest, err = NewContextBuilder().BuildFunctionWithManifest(root, FunctionContextOptions{TargetPath: "main.go", TargetSymbol: "Run", Mode: DeclarationEditReplaceSymbol, Index: index, MaxTokens: 1})
+	_, manifest, err = NewContextBuilder().BuildFunctionWithManifest(root, FunctionContextOptions{TargetPath: "main.go", TargetSymbol: "Run", Index: index, MaxTokens: 1})
 	if err != nil || !manifest.Truncated || manifest.EstimatedTokens > manifest.TokenLimit {
 		t.Fatalf("tiny budget manifest = %+v, err = %v", manifest, err)
 	}
@@ -80,7 +74,7 @@ func TestBuildFunctionWithManifestIncludesScopedInstructions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	text, manifest, err := NewContextBuilder().BuildFunctionWithManifest(root, FunctionContextOptions{TargetPath: "main.go", TargetSymbol: "Run", Mode: DeclarationEditReplaceSymbol, Index: index})
+	text, manifest, err := NewContextBuilder().BuildFunctionWithManifest(root, FunctionContextOptions{TargetPath: "main.go", TargetSymbol: "Run", Index: index})
 	if err != nil || !strings.Contains(text, "Preserve cancellation") || len(manifest.Included) != 2 || manifest.Included[0].Path != "AGENTS.md" {
 		t.Fatalf("instructions absent from context: %q, %+v, %v", text, manifest, err)
 	}

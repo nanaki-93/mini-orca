@@ -387,7 +387,7 @@ func legacyFeatureHistory(t *testing.T, s *Service, root, freshness string, sugg
 	if err != nil {
 		t.Fatal(err)
 	}
-	fingerprint, err := benchmarkSourceFingerprint(context.Background(), root)
+	fingerprint, err := workspaceFingerprint(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -524,7 +524,7 @@ func fillFeatureHistory(t *testing.T, s *Service, root string, slack int) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fingerprint, err := benchmarkSourceFingerprint(context.Background(), root)
+	fingerprint, err := workspaceFingerprint(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}

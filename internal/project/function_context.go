@@ -11,17 +11,14 @@ import (
 // FunctionContextOptions describes the bounded declaration-focused context for
 // one Function-scope request. It intentionally contains no unrelated source.
 type FunctionContextOptions struct {
-	TargetPath       string
-	TargetSymbol     string
-	Mode             DeclarationEditMode
-	Index            *ProjectIndex
-	TaskSpec         *BugTaskSpec
-	PriorDeclaration string
-	MaxTokens        int
+	TargetPath   string
+	TargetSymbol string
+	Index        *ProjectIndex
+	MaxTokens    int
 }
 
 // BuildFunctionWithManifest retains policy and manifest semantics while
-// emitting only deterministic facts plus the selected declaration or stub.
+// emitting only deterministic facts plus the selected declaration.
 func (b *ContextBuilder) BuildFunctionWithManifest(root string, options FunctionContextOptions) (string, ContextManifest, error) {
 	manifest := ContextManifest{Included: []ContextFile{}, Excluded: []ContextDecision{}, ByteLimit: maxContextBytes, TokenLimit: options.MaxTokens}
 	if options.MaxTokens <= 0 {
@@ -56,7 +53,7 @@ func (b *ContextBuilder) BuildFunctionWithManifest(root string, options Function
 	if file == nil {
 		return "", manifest, fmt.Errorf("function context target is not indexed")
 	}
-	declaration, err := functionContextDeclaration(string(data), *file, options.TargetSymbol, options.Mode)
+	declaration, err := functionContextDeclaration(string(data), *file, options.TargetSymbol)
 	if err != nil {
 		return "", manifest, err
 	}
@@ -96,10 +93,7 @@ func functionContextFile(index *ProjectIndex, path string) *IndexFile {
 	return nil
 }
 
-func functionContextDeclaration(source string, file IndexFile, symbol string, mode DeclarationEditMode) (string, error) {
-	if mode == DeclarationEditCreateSymbol {
-		return "// Create a new top-level declaration named " + symbol + ".", nil
-	}
+func functionContextDeclaration(source string, file IndexFile, symbol string) (string, error) {
 	for _, candidate := range file.Symbols {
 		if candidate.Name == symbol && candidate.Confidence == "exact" && candidate.AtomicTarget {
 			return sourceLines(source, candidate.StartLine, candidate.EndLine), nil
@@ -128,17 +122,6 @@ func renderFunctionContext(path string, file IndexFile, declaration string, opti
 	result.WriteString("Target path: " + path + "\n")
 	result.WriteString("Target symbol: " + options.TargetSymbol + "\n")
 	result.WriteString("Package/import facts: " + strings.Join(file.Imports, ", ") + "\n")
-	if options.TaskSpec != nil {
-		task := options.TaskSpec
-		result.WriteString("Task signature: " + task.TargetSignature + "\nAcceptance criteria:\n")
-		for _, criterion := range task.AcceptanceCriteria {
-			result.WriteString("- " + criterion + "\n")
-		}
-		result.WriteString("Non-goals:\n")
-		for _, nonGoal := range task.NonGoals {
-			result.WriteString("- " + nonGoal + "\n")
-		}
-	}
 	signatures := directlyRelevantSignatures(file, options.TargetSymbol)
 	if len(signatures) > 0 {
 		result.WriteString("Relevant indexed signatures:\n")
@@ -146,10 +129,7 @@ func renderFunctionContext(path string, file IndexFile, declaration string, opti
 			result.WriteString("- " + signature + "\n")
 		}
 	}
-	result.WriteString("Selected declaration or stub:\n```go\n" + declaration + "\n```\n")
-	if options.PriorDeclaration != "" {
-		result.WriteString("Prior declaration revision (explicit request only):\n```go\n" + options.PriorDeclaration + "\n```\n")
-	}
+	result.WriteString("Selected declaration:\n```go\n" + declaration + "\n```\n")
 	return result.String()
 }
 

@@ -169,7 +169,7 @@ func TestSavedAnalysisDetectsLiveChangesOutsideSelectedFiles(t *testing.T) {
 			}
 			// No reindex: freshness must inspect live source, including context
 			// outside the selected per-file analysis queue.
-			run, err := s.CurrentAnalysisRun(context.Background())
+			run, err := s.currentTestAnalysisRun(context.Background())
 			if err != nil || run.Status != AnalysisRunStale || run.Identity != completed.Identity || calls.Load() != 4 {
 				t.Fatalf("changed analysis=%+v calls=%d error=%v", run, calls.Load(), err)
 			}
@@ -207,7 +207,7 @@ func TestAnalysisRestartRecoversFalseStalenessWithIneligibleStages(t *testing.T)
 	}
 	requests := calls.Load()
 	s = transitionAnalysisProject(t, s, "restart")
-	run, err := s.CurrentAnalysisRun(context.Background())
+	run, err := s.currentTestAnalysisRun(context.Background())
 	if err != nil || !reflect.DeepEqual(run, completed) || calls.Load() != requests {
 		t.Fatalf("saved evidence did not recover: status=%s calls=%d error=%v", run.Status, calls.Load(), err)
 	}

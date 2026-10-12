@@ -101,7 +101,7 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 			return nil, err
 		}
 	}
-	analysis, index, policy, err := s.performanceInputs()
+	analysis, index, policy, err := s.analysisInputs()
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 	if err != nil {
 		return nil, err
 	}
-	preview := &AnalysisRunPreview{Models: cloneAnalysisModels(request.Models), CompatibilityStage: request.compatibilityStage, CompatibilityBudget: request.compatibilityBudget, RetryStaleFailed: request.RetryStaleFailed, StaleOnly: request.StaleOnly, StalePath: request.StalePath, RecoverIncomplete: request.RecoverIncomplete, SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
+	preview := &AnalysisRunPreview{Models: cloneAnalysisModels(request.Models), RetryStaleFailed: request.RetryStaleFailed, StaleOnly: request.StaleOnly, StalePath: request.StalePath, RecoverIncomplete: request.RecoverIncomplete, SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
 		Identity: AnalysisQueueIdentity{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, PolicyFingerprint: policy.Version(), ProviderFingerprint: fingerprint},
 		Files:    []AnalysisPlannedFile{}, Excluded: []AnalysisExcludedFile{}, Providers: providers}
 	root := s.manager.Root()
@@ -149,8 +149,6 @@ func captureAnalysisResumeOptions(request *AnalysisPreviewRequest, run *Analysis
 		return project.ErrRevisionConflict
 	}
 	request.StalePath = run.Plan.StalePath
-	request.compatibilityStage = run.Plan.CompatibilityStage
-	request.compatibilityBudget = run.Plan.CompatibilityBudget
 	request.IncludeFeatures = run.Plan.Features != nil
 	request.Models = cloneAnalysisModels(run.Plan.Models)
 
@@ -159,11 +157,6 @@ func captureAnalysisResumeOptions(request *AnalysisPreviewRequest, run *Analysis
 
 func (s *Service) completeAnalysisPreviewLocked(ctx context.Context, root string, preview *AnalysisRunPreview, request AnalysisPreviewRequest) (*AnalysisRunPreview, error) {
 	var err error
-	if request.compatibilityStage != "" {
-		if err := s.scopeCompatibilityPreview(preview, request.ResumeRun); err != nil {
-			return nil, err
-		}
-	}
 	if mode := analysisSelectionMode(request.RetryStaleFailed, request.RecoverIncomplete, request.StaleOnly); mode != analysisSelectAll {
 		if err := s.scopeAnalysisRetryPreview(ctx, mode, preview, request.ResumeRun); err != nil {
 			return nil, err
@@ -244,7 +237,7 @@ func (s *Service) validateAnalysisQueue(ctx context.Context, root string, plan *
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	analysis, index, policy, err := s.performanceInputs()
+	analysis, index, policy, err := s.analysisInputs()
 	if err != nil {
 		return err
 	}
@@ -252,7 +245,6 @@ func (s *Service) validateAnalysisQueue(ctx context.Context, root string, plan *
 	if err != nil {
 		return err
 	}
-	providers = compatibilityProviders(providers, plan.CompatibilityStage)
 	fingerprint, err := analysisFingerprint(providers)
 	if err != nil {
 		return err

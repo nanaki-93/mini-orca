@@ -10,7 +10,7 @@ The daemon configures three model profiles, used by default as follows:
 | Scope | Used for |
 | --- | --- |
 | `analyze` | Project import, architectural summaries and source-based Performance review |
-| `bug` | Selected-file analysis and Analyze-all suggestions |
+| `bug` | Selected-file and unified semantic analysis |
 | `function` | Declaration proposals and explicit repairs |
 
 The Chat agent workflow chooses a profile independently for Creation, Testing
@@ -182,7 +182,7 @@ of invoking compatibility fallbacks. `MINI_ORCA_CONFIG` selects the file path
 ## Local metadata and manual cleanup
 
 Configuration stays separate from project metadata. Mini-Orca stores its local
-index, analysis, findings, Analyze-all state, Apply audit, and Undo backup data
+index, analysis, findings, shared proposals and grouped recovery data
 under the imported project's `.mini-orca/` directory; see
 [README.md](README.md#project-intelligence) for the current paths. These files are
 application metadata, separate from configuration.

@@ -84,14 +84,14 @@ func TestChangeVerifyFailedCanceledAndUnavailableKeepAppliedFiles(t *testing.T) 
 		t.Fatalf("failed tests reported success: %+v, %v", evidence, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	evidence, err = service.verifyChangeWithChecks(ctx, session.ID, identity, func(context.Context, string, *changeJournal, string) ([]DraftCheck, error) {
+	evidence, err = service.verifyChangeWithChecks(ctx, session.ID, identity, func(context.Context, string, *changeJournal, string) ([]CheckResult, error) {
 		cancel()
-		return []DraftCheck{{Name: "tests", Required: true, State: CheckCanceled}}, ctx.Err()
+		return []CheckResult{{Name: "tests", Required: true, State: CheckCanceled}}, ctx.Err()
 	})
 	if err != nil || evidence.Status != "canceled" {
 		t.Fatalf("cancellation lost: %+v, %v", evidence, err)
 	}
-	evidence, err = service.verifyChangeWithChecks(context.Background(), session.ID, identity, func(context.Context, string, *changeJournal, string) ([]DraftCheck, error) {
+	evidence, err = service.verifyChangeWithChecks(context.Background(), session.ID, identity, func(context.Context, string, *changeJournal, string) ([]CheckResult, error) {
 		return nil, errors.New("workspace unavailable")
 	})
 	if err != nil || evidence.Status != "unavailable" {
@@ -115,11 +115,11 @@ func TestChangeVerifyRejectsLateEvidenceAfterSourceChanges(t *testing.T) {
 	if _, err := service.TrustProjectExecution(identity.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
-	_, err := service.verifyChangeWithChecks(context.Background(), session.ID, identity, func(context.Context, string, *changeJournal, string) ([]DraftCheck, error) {
+	_, err := service.verifyChangeWithChecks(context.Background(), session.ID, identity, func(context.Context, string, *changeJournal, string) ([]CheckResult, error) {
 		if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n// independent work\n"), 0644); err != nil {
 			t.Fatal(err)
 		}
-		return []DraftCheck{{Name: "tests", Required: true, State: CheckPassed}}, nil
+		return []CheckResult{{Name: "tests", Required: true, State: CheckPassed}}, nil
 	})
 	if !errors.Is(err, project.ErrRevisionConflict) {
 		t.Fatalf("late verification became current evidence: %v", err)

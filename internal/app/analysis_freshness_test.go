@@ -327,7 +327,7 @@ func transitionAnalysisProject(t *testing.T, s *Service, transition string) *Ser
 		if err := s.ActivateProject(other, &project.Analysis{Name: "other"}); err != nil {
 			t.Fatal(err)
 		}
-		if run, err := s.CurrentAnalysisRun(context.Background()); err != nil || run != nil {
+		if run, err := s.currentTestAnalysisRun(context.Background()); err != nil || run != nil {
 			t.Fatalf("other project run=%+v error=%v", run, err)
 		}
 	case "reindex":
@@ -437,7 +437,7 @@ func TestAnalysisFreshnessRecoversPreviouslyStaledFinishedResults(t *testing.T) 
 				t.Fatal(err)
 			}
 			s = transitionAnalysisProject(t, s, "restart")
-			run, err := s.CurrentAnalysisRun(context.Background())
+			run, err := s.currentTestAnalysisRun(context.Background())
 			if err != nil || run == nil {
 				t.Fatalf("restore error=%v", err)
 			}

@@ -3,13 +3,13 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"github.com/nanaki-93/mini-orca/v2/internal/project"
-	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
+	"github.com/nanaki-93/mini-orca/v2/internal/storage"
 )
 
 type changeJournal struct {
@@ -254,7 +254,7 @@ func (s *Service) UndoChange(ctx context.Context, id string, request ChangeApply
 		return nil, err
 	}
 	if journal.State == "applied" && journal.PostWorkspaceHash != "" {
-		if err := (benchmarkFixture{fingerprint: journal.PostWorkspaceHash}).verifyCurrent(ctx, root); err != nil {
+		if err := (workspaceIdentity{fingerprint: journal.PostWorkspaceHash}).verifyCurrent(ctx, root); err != nil {
 			return nil, err
 		}
 	}
@@ -288,7 +288,7 @@ func (s *Service) completeChangeMutation(root string, journal *changeJournal, wa
 	} else {
 		result.Index, result.ProjectRevision = index, index.ProjectRevision
 	}
-	journal.PostWorkspaceHash, err = benchmarkSourceFingerprint(context.Background(), root)
+	journal.PostWorkspaceHash, err = workspaceFingerprint(context.Background(), root)
 	if err != nil {
 		result.Warnings = append(result.Warnings, "Source changed; workspace identity could not be captured: "+err.Error())
 	}
@@ -301,16 +301,7 @@ func (s *Service) completeChangeMutation(root string, journal *changeJournal, wa
 		result.Warnings = append(result.Warnings, "Source changed; history could not be updated: "+err.Error())
 	}
 	delete(s.changeAuthority, journal.Session.ProjectID+"/"+journal.Session.ID)
-	removeLegacyChangeUndo(root, result)
 	return result
-}
-
-func removeLegacyChangeUndo(root string, result *ChangeMutationResult) {
-	for _, relative := range []string{applyStateRelativePath, pendingApplyRelativePath} {
-		if err := os.Remove(filepath.Join(root, relative)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			result.Warnings = append(result.Warnings, "Previous declaration Undo metadata could not be removed: "+err.Error())
-		}
-	}
 }
 
 func (s *Service) ChangeRecovery() (*ChangeMutationResult, error) {

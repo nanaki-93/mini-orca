@@ -103,7 +103,7 @@ func TestChangeRecoveryRejectsOversizedMetadataBeforeWrites(t *testing.T) {
 	server := changeProvider(t, func() string { return groupedChangeResponse })
 	service, root := newSemanticAnalysisService(t, server.URL, 0)
 	session := prepareChangeFixture(t, service, "main.go", "docs/change.md")
-	session.Messages = []ChatSessionMessage{{Role: "user", Content: strings.Repeat("x", 2*1024*1024)}}
+	session.Messages = []ChangeMessage{{Role: "user", Content: strings.Repeat("x", 2*1024*1024)}}
 	if err := writeChangeJournal(root, &changeJournal{Version: 1, Session: *session, State: "prepared"}); err == nil {
 		t.Fatal("oversized journal was accepted")
 	}

@@ -13,7 +13,7 @@ import (
 
 // ErrPiAuthenticationExpired identifies a provider-reported expiry without
 // retaining the provider's diagnostic text or credentials.
-var ErrPiAuthenticationExpired = errors.New("Pi authentication has expired; sign in to the selected provider in Pi again")
+var ErrPiAuthenticationExpired = errors.New("authentication for Pi has expired; sign in to the selected provider in Pi again")
 
 type cliResponseDecoder struct {
 	profile  config.ModelProfile

@@ -68,10 +68,7 @@ type Service struct {
 	analysisRun                     *analysisRunController
 	writeAnalysisRun                func(string, []byte, os.FileMode) error
 	goScan                          *goScanController
-	drafts                          *draftStore
-	chatSessions                    *chatSessionStore
 	executionTrust                  *executionTrustStore
-	benchmarkRunner                 goBenchmarkRunner
 	buildDeclarationContext         func(string, project.FunctionContextOptions) (string, project.ContextManifest, error)
 	loadSecurityFileReport          func(string, project.SecurityReportInput) (*project.SecurityFileReport, error)
 	beforeSecurityReviewPublication func()
@@ -124,13 +121,10 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		retryMax:                time.Duration(backoffMax) * time.Millisecond,
 		analysisRun:             &analysisRunController{},
 		goScan:                  newGoScanController(),
-		drafts:                  newDraftStore(),
-		chatSessions:            newChatSessionStore(),
 		executionTrust:          newExecutionTrustStore(),
 		buildDeclarationContext: contextBuilder.BuildFunctionWithManifest,
 		loadSecurityFileReport:  project.LoadSecurityFileReport,
 	}
-	service.benchmarkRunner = checkGoBenchmarkRunner{service: service}
 	return service, nil
 }
 
@@ -167,7 +161,7 @@ func configuredDuration(seconds int, defaultValue time.Duration) time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
-// ValidateMutableRequest rejects draft operations based on a different project or file state.
+// ValidateMutableRequest rejects source-scoped operations based on a different project or file state.
 func (s *Service) ValidateMutableRequest(id, revision, targetFile, baseFileHash string) error {
 	return s.manager.ValidateMutableRequest(id, revision, targetFile, baseFileHash)
 }
@@ -188,10 +182,6 @@ func (s *Service) AnalyzeProject(ctx context.Context, root string) (*project.Ana
 func (s *Service) RestoreProject(root string) (*project.Analysis, error) {
 	runtime := s.runtimes.analyze
 	return project.NewAnalyzerWithProvenance(nil, runtime.profile.Model, string(config.AnalyzeModelScope), runtime.effective.ProviderOrigin, runtime.effective.ReasoningEffort).Restore(root)
-}
-
-func (s *Service) EffectiveModel() EffectiveModel {
-	return s.runtimes.function.effective
 }
 
 // EffectiveModels returns safe metadata for every configured prompt scope.

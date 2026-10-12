@@ -48,12 +48,12 @@ type ChangeSession struct {
 	Hash               string                  `json:"hash"`
 	State              string                  `json:"state"`
 	Freshness          string                  `json:"freshness"`
-	Messages           []ChatSessionMessage    `json:"messages"`
+	Messages           []ChangeMessage         `json:"messages"`
 	Changes            []ChangeEdit            `json:"changes"`
 	PinnedTests        []ChangeEdit            `json:"pinned_tests,omitempty"`
 	ContextManifest    project.ContextManifest `json:"context_manifest"`
-	Checks             []DraftCheck            `json:"checks"`
-	CheckOptions       DraftCheckOptions       `json:"check_options"`
+	Checks             []CheckResult           `json:"checks"`
+	CheckOptions       CheckOptions            `json:"check_options"`
 	ReviewedHash       string                  `json:"reviewed_hash,omitempty"`
 	RepairAttempts     int                     `json:"repair_attempts"`
 	Workflow           *ChangeWorkflow         `json:"workflow,omitempty"`
@@ -111,7 +111,7 @@ type InstructionProposalRequest struct {
 
 type ChangeCheckRequest struct {
 	ChangeIdentity
-	DraftCheckOptions
+	CheckOptions
 }
 
 type ChangeApplyRequest struct {

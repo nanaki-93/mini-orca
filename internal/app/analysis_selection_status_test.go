@@ -3,11 +3,12 @@ package app
 import (
 	"context"
 	"errors"
-	"github.com/nanaki-93/mini-orca/v2/internal/project"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
 func readSelectionFor(t *testing.T, s *Service) *AnalysisFileSelection {
@@ -193,14 +194,14 @@ func TestAnalysisSelectionExplainsNewFilesAndUnreadableStageEvidence(t *testing.
 func TestAnalysisSelectionLimitedRunSkipsDoNotClaimCompleteCoverage(t *testing.T) {
 	server, _ := analysisResponseServer(t, emptyAnalysisReply)
 	s, _ := newSemanticAnalysisService(t, server.URL, 0)
-	analysis, index, policy, err := s.performanceInputs()
+	analysis, index, policy, err := s.analysisInputs()
 	if err != nil {
 		t.Fatal(err)
 	}
 	file := index.Files[0]
-	evidence := analysisSelectionEvidence{files: map[string]AnalysisRunFile{file.Path: {AnalysisFileIdentity: AnalysisFileIdentity{Path: file.Path, ContentHash: file.ContentHash}, Stages: []AnalysisStageProgress{{Stage: AnalysisStagePerformance, Status: AnalysisStageSkipped, Reason: "Not requested by this compatibility action."}}}}}
+	evidence := analysisSelectionEvidence{files: map[string]AnalysisRunFile{file.Path: {AnalysisFileIdentity: AnalysisFileIdentity{Path: file.Path, ContentHash: file.ContentHash}, Stages: []AnalysisStageProgress{{Stage: AnalysisStagePerformance, Status: AnalysisStageSkipped, Reason: "Stage was skipped before analysis."}}}}}
 	stage := s.analysisSelectionStage(*analysis, file, policy, AnalysisStagePerformance, evidence)
-	if stage.Status != "missing" || !strings.Contains(stage.Reason, "Not requested") {
+	if stage.Status != "missing" || !strings.Contains(stage.Reason, "Stage was skipped") {
 		t.Fatalf("omitted stage hidden: %+v", stage)
 	}
 	preview := analysisRunPreviewFor(t, s, AnalysisRunLimits{100, 900, 2}, nil)

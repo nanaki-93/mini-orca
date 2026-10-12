@@ -69,7 +69,7 @@ type analysisSectionReader struct {
 
 func (s *Service) analysisSectionReader(run *AnalysisRun, category project.FindingCategory, path, root string) (*analysisSectionReader, error) {
 	identity := run.Identity
-	analysis, index, policy, err := s.performanceInputs()
+	analysis, index, policy, err := s.analysisInputs()
 	if err != nil {
 		return nil, err
 	}

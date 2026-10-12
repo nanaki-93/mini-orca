@@ -103,7 +103,7 @@ func waitForAnalysisFileCount(t *testing.T, s *Service, count int) *AnalysisRun 
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		run, err := s.CurrentAnalysisRun(context.Background())
+		run, err := s.currentTestAnalysisRun(context.Background())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -418,7 +418,7 @@ func TestAnalysisRunFeatureDiscoveryOutlivesFileBudget(t *testing.T) {
 	}
 	waitForTestSignal(t, featureStarted, "feature discovery during file work")
 	waitForTestSignal(t, fileCanceled, "file budget expiry")
-	run, err := s.CurrentAnalysisRun(context.Background())
+	run, err := s.currentTestAnalysisRun(context.Background())
 	if err != nil || run.Status != AnalysisRunRunning || run.Features.Status != AnalysisStageRunning {
 		t.Fatalf("file deadline interrupted features: %+v, %v", run, err)
 	}
@@ -558,7 +558,7 @@ func TestAnalysisRunFeaturesKeepPriorIdeasAndCountOnlyNewOnes(t *testing.T) {
 		t.Fatal(err)
 	}
 	restarted.runtimes = s.runtimes
-	if current, err := restarted.CurrentAnalysisRun(context.Background()); err != nil || current.Status != run.Status || *current.Features.SuggestionCount != 2 {
+	if current, err := restarted.currentTestAnalysisRun(context.Background()); err != nil || current.Status != run.Status || *current.Features.SuggestionCount != 2 {
 		t.Fatalf("restarted run=%+v %v", current, err)
 	}
 	featureReply.Store(featureOutput("Idea six"))
@@ -665,7 +665,7 @@ func TestAnalysisRunWithEarlierFeaturePromptIdentityReadsStale(t *testing.T) {
 		t.Fatal(err)
 	}
 	restarted.runtimes = s.runtimes
-	current, err := restarted.CurrentAnalysisRun(context.Background())
+	current, err := restarted.currentTestAnalysisRun(context.Background())
 	if err != nil || current.Status != AnalysisRunStale || current.Features.Status != AnalysisStageCompleted || *current.Features.SuggestionCount != 1 {
 		t.Fatalf("earlier prompt run=%+v %v", current, err)
 	}

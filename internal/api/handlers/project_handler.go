@@ -3,9 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
@@ -67,23 +65,6 @@ type securityReviewRequest struct {
 	Path                  string `json:"path"`
 	Symbol                string `json:"symbol,omitempty"`
 	ConfirmRemoteProvider *bool  `json:"confirm_remote_provider"`
-}
-
-type analyzeAllRequest struct {
-	ProjectRevision       string `json:"project_revision"`
-	MaxFiles              int    `json:"max_files,omitempty"`
-	MaxRetries            int    `json:"max_retries,omitempty"`
-	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
-}
-
-type performanceJobRequest struct {
-	ProjectRevision       string `json:"project_revision"`
-	MaxFiles              int    `json:"max_files,omitempty"`
-	RunBudgetSeconds      int    `json:"run_budget_seconds,omitempty"`
-	QueueID               string `json:"queue_id,omitempty"`
-	PolicyFingerprint     string `json:"policy_fingerprint,omitempty"`
-	ExpectedJobID         string `json:"expected_job_id,omitempty"`
-	ConfirmRemoteProvider bool   `json:"confirm_remote_provider,omitempty"`
 }
 
 type findingStatusRequest struct {
@@ -375,189 +356,6 @@ func (h *ProjectHandler) Reindex(w http.ResponseWriter, r *http.Request) {
 	api.WriteJSON(w, http.StatusOK, index)
 }
 
-// AnalyzeAllJob returns persisted sequential cache-warming progress.
-func (h *ProjectHandler) AnalyzeAllJob(w http.ResponseWriter, r *http.Request) {
-	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
-		return
-	}
-	job, err := h.service.AnalyzeAllJob()
-	if err != nil {
-		writeProjectError(w, "analyze-all job lookup failed", err)
-		return
-	}
-	if job == nil {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	api.WriteJSON(w, http.StatusOK, job)
-}
-
-// StartAnalyzeAll explicitly starts a bounded sequential analysis job.
-func (h *ProjectHandler) StartAnalyzeAll(w http.ResponseWriter, r *http.Request) {
-	request, ok := h.decodeAnalyzeAllRequest(w, r)
-	if !ok || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
-		return
-	}
-	job, err := h.service.StartAnalyzeAll(r.Context(), app.AnalyzeAllOptions{ProjectRevision: request.ProjectRevision, MaxFiles: request.MaxFiles, MaxRetries: request.MaxRetries}, request.ConfirmRemoteProvider)
-	if err != nil {
-		writeProjectError(w, "start analyze-all failed", err)
-		return
-	}
-	api.WriteJSON(w, http.StatusAccepted, job)
-}
-
-// PauseAnalyzeAll pauses after any current one-file request completes.
-func (h *ProjectHandler) PauseAnalyzeAll(w http.ResponseWriter, r *http.Request) {
-	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
-		return
-	}
-	job, err := h.service.PauseAnalyzeAll(r.URL.Query().Get("project_revision"))
-	if err != nil {
-		writeProjectError(w, "pause analyze-all failed", err)
-		return
-	}
-	api.WriteJSON(w, http.StatusOK, job)
-}
-
-// ResumeAnalyzeAll restarts a paused job for the same active project revision.
-func (h *ProjectHandler) ResumeAnalyzeAll(w http.ResponseWriter, r *http.Request) {
-	request, ok := h.decodeAnalyzeAllRequest(w, r)
-	if !ok || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
-		return
-	}
-	job, err := h.service.ResumeAnalyzeAll(r.Context(), request.ConfirmRemoteProvider, request.ProjectRevision)
-	if err != nil {
-		writeProjectError(w, "resume analyze-all failed", err)
-		return
-	}
-	api.WriteJSON(w, http.StatusAccepted, job)
-}
-
-// CancelAnalyzeAll cancels an in-flight request and prevents later files starting.
-func (h *ProjectHandler) CancelAnalyzeAll(w http.ResponseWriter, r *http.Request) {
-	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
-		return
-	}
-	job, err := h.service.CancelAnalyzeAll(r.URL.Query().Get("project_revision"))
-	if err != nil {
-		writeProjectError(w, "cancel analyze-all failed", err)
-		return
-	}
-	api.WriteJSON(w, http.StatusOK, job)
-}
-
-// PerformanceReport returns only cached source-based review results.
-func (h *ProjectHandler) PerformanceReport(w http.ResponseWriter, r *http.Request) {
-	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
-		return
-	}
-	report, err := h.service.PerformanceProjectReport()
-	if err != nil {
-		writeProjectError(w, "performance report lookup failed", err)
-		return
-	}
-	if report == nil {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	api.WriteJSON(w, http.StatusOK, report)
-}
-
-// PerformanceContext previews a bounded policy-filtered queue without provider work.
-func (h *ProjectHandler) PerformanceContext(w http.ResponseWriter, r *http.Request) {
-	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
-		return
-	}
-	preview, err := h.service.PreviewPerformanceQueue(app.PerformanceJobOptions{MaxFiles: queryPositiveInt(r, "max_files"), RunBudget: time.Duration(queryPositiveInt(r, "run_budget_seconds")) * time.Second})
-	if err != nil {
-		writeProjectError(w, "performance context preview failed", err)
-		return
-	}
-	api.WriteJSON(w, http.StatusOK, preview)
-}
-
-// PerformanceJob returns source-free progress for the active project revision.
-func (h *ProjectHandler) PerformanceJob(w http.ResponseWriter, r *http.Request) {
-	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
-		return
-	}
-	job, err := h.service.PerformanceJob()
-	if err != nil {
-		writeProjectError(w, "performance job lookup failed", err)
-		return
-	}
-	if job == nil {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-	api.WriteJSON(w, http.StatusOK, job)
-}
-
-// StartPerformanceJob explicitly starts a queue bound to the current revision.
-func (h *ProjectHandler) StartPerformanceJob(w http.ResponseWriter, r *http.Request) {
-	request, ok := h.decodePerformanceJobRequest(w, r)
-	if !ok || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
-		return
-	}
-	job, err := h.service.StartPerformanceJob(r.Context(), performanceOptions(request), request.ConfirmRemoteProvider)
-	if err != nil {
-		writeProjectError(w, "start performance job failed", err)
-		return
-	}
-	api.WriteJSON(w, http.StatusAccepted, job)
-}
-
-func (h *ProjectHandler) PausePerformanceJob(w http.ResponseWriter, r *http.Request) {
-	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
-		return
-	}
-	job, err := h.service.PerformanceJob()
-	if err != nil || job == nil || r.URL.Query().Get("expected_job_id") == "" || r.URL.Query().Get("expected_job_id") != job.ID {
-		writeProjectError(w, "pause performance job failed", project.ErrRevisionConflict)
-		return
-	}
-	job, err = h.service.PausePerformanceJob(r.URL.Query().Get("expected_job_id"), r.URL.Query().Get("project_revision"))
-	if err != nil {
-		writeProjectError(w, "pause performance job failed", err)
-		return
-	}
-	api.WriteJSON(w, http.StatusOK, job)
-}
-
-func (h *ProjectHandler) ResumePerformanceJob(w http.ResponseWriter, r *http.Request) {
-	request, ok := h.decodePerformanceJobRequest(w, r)
-	if !ok || !requireCurrentRevision(w, h.manager, request.ProjectRevision) {
-		return
-	}
-	if request.ExpectedJobID == "" {
-		api.WriteRequestError(w, errors.New("expected_job_id is required"), "invalid performance resume request", "Provide the paused job ID.")
-		return
-	}
-	job, err := h.service.ResumePerformanceJob(r.Context(), request.ExpectedJobID, request.ConfirmRemoteProvider, request.ProjectRevision)
-	if err != nil {
-		writeProjectError(w, "resume performance job failed", err)
-		return
-	}
-	api.WriteJSON(w, http.StatusAccepted, job)
-}
-
-func (h *ProjectHandler) CancelPerformanceJob(w http.ResponseWriter, r *http.Request) {
-	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
-		return
-	}
-	job, err := h.service.PerformanceJob()
-	if err != nil || job == nil || r.URL.Query().Get("expected_job_id") == "" || r.URL.Query().Get("expected_job_id") != job.ID {
-		writeProjectError(w, "cancel performance job failed", project.ErrRevisionConflict)
-		return
-	}
-	job, err = h.service.CancelPerformanceJob(r.URL.Query().Get("expected_job_id"), r.URL.Query().Get("project_revision"))
-	if err != nil {
-		writeProjectError(w, "cancel performance job failed", err)
-		return
-	}
-	api.WriteJSON(w, http.StatusOK, job)
-}
-
 // FileAnalysis returns cached semantic state only; source is never returned.
 func (h *ProjectHandler) FileAnalysis(w http.ResponseWriter, r *http.Request) {
 	if !requireCurrentRevision(w, h.manager, r.URL.Query().Get("project_revision")) {
@@ -682,39 +480,10 @@ func findingsProjectID(manager *project.Manager) string {
 	return analysis.ProjectID
 }
 
-func (h *ProjectHandler) decodeAnalyzeAllRequest(w http.ResponseWriter, r *http.Request) (analyzeAllRequest, bool) {
-	var request analyzeAllRequest
-	if err := api.DecodeJSON(w, r, &request); err != nil {
-		api.WriteRequestError(w, err, "invalid analyze-all request", "Provide project_revision and optional job limits.")
-		return request, false
-	}
-	return request, true
-}
-
-func (h *ProjectHandler) decodePerformanceJobRequest(w http.ResponseWriter, r *http.Request) (performanceJobRequest, bool) {
-	var request performanceJobRequest
-	if !decodeStrictJSON(w, r, &request, "invalid performance job request", "Provide project_revision and optional bounded review settings.") {
-		return request, false
-	}
-	return request, true
-}
-
-func performanceOptions(request performanceJobRequest) app.PerformanceJobOptions {
-	return app.PerformanceJobOptions{ProjectRevision: request.ProjectRevision, MaxFiles: request.MaxFiles, RunBudget: time.Duration(request.RunBudgetSeconds) * time.Second, QueueID: request.QueueID, PolicyFingerprint: request.PolicyFingerprint}
-}
-
-func queryPositiveInt(r *http.Request, name string) int {
-	var value int
-	_, _ = fmt.Sscan(r.URL.Query().Get(name), &value)
-	return value
-}
-
 func writeProjectError(w http.ResponseWriter, action string, err error) {
 	switch {
 	case errors.Is(err, app.ErrAnalysisProgressUnavailable):
 		api.WriteAppError(w, api.Internal(action, "Analysis progress could not be saved. Read the retained overview, then resume or cancel explicitly.", err))
-	case errors.Is(err, app.ErrAnalysisLegacyMigration):
-		api.WriteAppError(w, api.Conflict(action, "This saved legacy job cannot resume. Its progress is retained; review it and explicitly start a new job or use unified analysis preview/start.", err))
 	case errors.Is(err, app.ErrAnalysisRunBusy):
 		api.WriteAppError(w, api.Conflict(action, "An analysis run is already active or paused. Continue or cancel it before starting a new analysis.", err))
 	case errors.Is(err, project.ErrNoActiveProject):

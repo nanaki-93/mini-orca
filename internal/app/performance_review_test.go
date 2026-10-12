@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
@@ -192,4 +193,33 @@ func reviewPerformanceStageForTest(t *testing.T, service *Service, ctx context.C
 		})
 	}
 	return service.analyzeFileStage(ctx, request, authority)
+}
+
+const validPerformanceReview = `{"findings":[{"category":"cpu","potential_impact":"low","confidence":"low","title":"Avoid repeated formatting","observed_pattern":"The selected function formats output on each call.","workload_conditions":"This matters only when the function is called frequently.","recommendation":"Measure before changing the formatting path.","tradeoff":"Caching may retain stale output.","verification_plan":"Benchmark representative repeated calls.","start_line":5,"end_line":5,"symbol":"Run"}]}`
+
+func storeCachedPerformanceReport(t *testing.T, service *Service, root string) (*project.Analysis, *project.IndexFile, *project.ContextPolicy) {
+	t.Helper()
+	analysis, err := service.manager.Analysis()
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := service.manager.IndexedFile("main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy, err := project.NewContextPolicy(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cachedReport := project.PerformanceFileReport{
+		SchemaVersion: "1", ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision,
+		Path: file.Path, ContentHash: file.ContentHash, Status: "completed",
+		Findings: []project.PerformanceFinding{{ID: "performance:cached", Category: "cpu"}},
+		Model:    "model", Profile: "analyze", Scope: "analyze", PromptVersion: project.PerformancePromptVersion,
+		ContextPolicyVersion: policy.Version(), GeneratedAt: time.Now().UTC(),
+	}
+	if err := project.StorePerformanceFileReport(root, cachedReport); err != nil {
+		t.Fatal(err)
+	}
+	return analysis, file, policy
 }

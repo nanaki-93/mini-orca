@@ -47,7 +47,7 @@ execution actions. Source hypotheses are not runtime measurements.
 Source changes always require approval. Mini-Orca does not automatically run
 scans, commit or push. Shared proposals support Go and Markdown without deletions;
 other languages retain conservative analysis and symbol information. Optimization
-claims remain unmeasured unless a benchmark comparison provides measurements.
+claims remain unmeasured without external benchmark evidence.
 
 ## Run
 
@@ -74,15 +74,14 @@ consent. Provider keys are not part of API metadata.
 The daemon owns indexing, context exclusions, model requests and guarded source
 mutation. The desktop renders state and rejects stale asynchronous results.
 Three configured scopes serve project/Performance/Security analysis (`analyze`), file/bug
-analysis (`bug`) and change/declaration proposals/repairs (`function`).
+analysis (`bug`) and change proposals/repairs (`function`).
 **Models** assigns these profiles independently for creation, test writing and
 model review in Chat and fixes, followed by human review of the checked diffs.
 Feature ideas and Bug/Performance/Security findings can seed the same workflow.
 
 Project-local `.mini-orca/` stores `index.json`, `project-analysis.json`,
-`file-analysis/`, `findings.json`, `performance/files/`, unified progress in
-`analysis/run.json`, legacy job history under `sessions/`,
-Apply receipts/audit under `sessions/`, and declaration Undo data under `backups/`.
+`file-analysis/`, `findings.json`, `performance/files/` and unified progress in
+`analysis/run.json`.
 Private `changes/` files retain conversations, captured source and proposals,
 feature goals/ideas, the latest grouped recovery journal and verification evidence.
 AGENTS.md files stay in the project as the instruction source of truth. Restore
@@ -100,10 +99,11 @@ counts. Changed prompt/provider/source identities require fresh analysis; readin
 or restoring history makes no model request.
 
 Unified runs use schema `1` in `.mini-orca/analysis/run.json`. Interrupted runs
-retain their attempt ledger and need a fresh preview before resuming. Older
-Analyze-all/Performance jobs remain readable but cannot inherit fresh dispatch
-authority; start a new run when they cannot be resumed. See the
-[API migration details](docs/api-contract.md#legacy-job-migration-ana-05).
+retain their attempt ledger and need a fresh preview before resuming. Retired
+Analyze-all/Performance jobs and declaration drafts are no longer loaded. Start a
+new unified run; existing file reports and shared proposals remain available.
+See [workflow migration](docs/api-contract.md#retired-workflows).
+
 
 The web client remembers the last project path, theme and text size. Terminal
 starts without launching a shell.

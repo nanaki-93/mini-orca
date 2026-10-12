@@ -237,7 +237,7 @@ func featureWorkspaceHash(ctx context.Context, root string, report *FeatureRepor
 	if report.Status == "not_generated" && len(report.Suggestions) == 0 {
 		return "", nil
 	}
-	return benchmarkSourceFingerprint(ctx, root)
+	return workspaceFingerprint(ctx, root)
 }
 
 // normalizedFeatureTitle folds only case, spacing and punctuation differences.

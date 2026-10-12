@@ -41,7 +41,7 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 		w.Stages = append(w.Stages, ChangeWorkflowStage{Name: []string{"create", "test", "review"}[i], Status: "pending", Model: &runtime.effective})
 	}
 	w.Stages = append(w.Stages, ChangeWorkflowStage{Name: "human_review", Status: "blocked"})
-	session.Workflow, session.Checks, session.ReviewedHash = w, []DraftCheck{}, ""
+	session.Workflow, session.Checks, session.ReviewedHash = w, []CheckResult{}, ""
 	session.UpdatedAt = now
 	if err := writeChangeSession(root, session); err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func (s *Service) executeChangeWorkflowStage(ctx context.Context, job *changeWor
 	case 1:
 		session, err = s.generateWorkflowTests(ctx, job.root, session, runtime)
 		if err == nil {
-			session, err = s.CheckChange(ctx, job.sessionID, ChangeCheckRequest{ChangeIdentity: identityForChange(session), DraftCheckOptions: DraftCheckOptions{RunTests: true}})
+			session, err = s.CheckChange(ctx, job.sessionID, ChangeCheckRequest{ChangeIdentity: identityForChange(session), CheckOptions: CheckOptions{RunTests: true}})
 		}
 		if err == nil && !requiredChecksPassed(session.Checks) {
 			err = errWorkflowChecksFailed

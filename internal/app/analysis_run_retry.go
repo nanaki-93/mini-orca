@@ -101,7 +101,7 @@ func (s *Service) scopeAnalysisRetryPreview(ctx context.Context, mode analysisSc
 	if err := scopeAnalysisStalePath(preview); err != nil {
 		return err
 	}
-	analysis, index, policy, err := s.performanceInputs()
+	analysis, index, policy, err := s.analysisInputs()
 	if err != nil {
 		return err
 	}

@@ -58,7 +58,7 @@ func (s *Service) analysisSelectionLocked(ctx context.Context, id, revision stri
 // The returned recovery evidence lets a selection save summarize its new exclusions
 // without observing every file again.
 func (s *Service) analysisSelectionWithRecoveryLocked(ctx context.Context, id, revision string) (*AnalysisFileSelection, analysisRecoveryEvidence, error) {
-	analysis, index, policy, err := s.performanceInputs()
+	analysis, index, policy, err := s.analysisInputs()
 	if err != nil {
 		return nil, analysisRecoveryEvidence{}, err
 	}
