@@ -22,7 +22,7 @@ type Response struct {
 	Body   string `json:"body"`
 }
 
-// Client carries the same local HTTP contract as the Compose transport. Only
+// Client carries the daemon HTTP contract over the native bridge. Only
 // compiled application code can reach it; no HTTP bridge is exposed to browsers.
 type Client struct {
 	base      string

@@ -11,7 +11,6 @@ BUILD_DIR := build
 # Go settings
 GO := go
 CGO_ENABLED := 0
-GRADLE := ./scripts/desktop-gradle.sh
 
 # Docker settings
 DOCKER := docker
@@ -74,22 +73,14 @@ agent-dispatcher: ## Run the local dispatcher tests without paid agent calls
 fmt-check: ## Verify Go formatting without modifying files
 	@files="$$(gofmt -l $$(find . -path '*/testdata/*' -prune -o -name '*.go' -type f -not -path './build/*' -print))"; test -z "$$files" || { echo "Run go fmt ./...:"; echo "$$files"; exit 1; }
 
-quality: ## Run Go and Desktop static, reachability, complexity, clone, and format checks
+quality: ## Run Go static, reachability, complexity and clone checks
 	@./scripts/quality.sh
 
-desktop-test: ## Run desktop unit tests through the Gradle wrapper
-	@$(GRADLE) test
+desktop-test: web-test ## Run desktop workflow, component and native bridge tests
 
-compose-desktop-build: ## Build the legacy Compose desktop distribution
-	@$(GRADLE) clean packageDistributionForCurrentOS
+check: fmt-check test test-race vet agent-dispatcher web-test ## Run the complete supported validation path
 
-check: fmt-check test test-race vet agent-dispatcher desktop-test web-test ## Run the complete supported validation path
-
-compose-desktop-run: ## Run the legacy Compose desktop client
-	@echo "$(COLOR_GREEN)Starting the Mini-Orca desktop client...$(COLOR_RESET)"
-	@$(GRADLE) run
-
-.PHONY: web-test web-build web-run web-preview compose-desktop-build compose-desktop-run
+.PHONY: web-test web-build web-run web-preview
 desktop-build: web-build ## Build the desktop web application
 
 desktop-run: web-run ## Run the desktop web application

@@ -45,7 +45,6 @@ PROTECTED_FILES = {
     "Makefile",
     "PLAN.md",
     "scripts/autopilot.py",
-    "scripts/desktop-gradle.sh",
     "scripts/quality.sh",
     "scripts/tests/test_autopilot.py",
     "scripts/validate.sh",

@@ -1,8 +1,7 @@
 # Desktop web client
 
 Read the root and desktop guides. This directory owns the Wails host and React
-client; the Compose-specific controls and Gradle commands apply to the legacy
-client only. Preserve the same daemon wire contracts and workflow boundaries.
+client. Preserve daemon wire contracts and workflow boundaries.
 
 - `internal/bridge` owns native HTTP transport, cancellation and PTY sessions.
   Keep daemon browser-origin protections unchanged. Never execute model text.

@@ -40,10 +40,6 @@ class QualityTests(unittest.TestCase):
         for directory in ("cmd", "internal", "scripts"):
             (self.root / directory).mkdir()
         (self.root / "cmd" / "main.go").write_text("package main\n")
-        self.write_executable(
-            self.root / "scripts" / "desktop-gradle.sh",
-            '#!/bin/sh\nprintf "%s\\n" "desktop $*" >> "$QUALITY_CALLS"\n',
-        )
 
     def write_executable(self, path, content):
         path.write_text(content)
@@ -77,12 +73,6 @@ class QualityTests(unittest.TestCase):
         self.assertTrue(any("jscpd@4.0.5" in call for call in calls))
         self.assertIn("PASS Go complexity", result.stdout)
         self.assertIn("PASS Go clone detection", result.stdout)
-        desktop_call = "desktop spotlessCheck detekt"
-        if lane == "all":
-            self.assertIn(desktop_call, calls)
-            self.assertIn("PASS Desktop formatting and static analysis", result.stdout)
-        else:
-            self.assertNotIn(desktop_call, calls)
         return result
 
     def test_clean_output_passes(self):
@@ -127,6 +117,49 @@ class QualityTests(unittest.TestCase):
         self.assertIn(
             "Quality failed: Go static analysis, Go reachability", result.stderr
         )
+
+
+class ValidationTests(unittest.TestCase):
+    def test_all_supported_stages_run_and_failures_are_aggregated(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            shutil.copy(QUALITY_SCRIPT.with_name("validate.sh"), scripts)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            calls = root / "calls"
+            stub = '#!/bin/sh\nprintf "%s %s\\n" "$0" "$*" >> "$VALIDATION_CALLS"\n'
+            for path in [
+                *(bin_dir / name for name in ("make", "go", "python3")),
+                scripts / "quality.sh",
+                scripts / "desktop-web.sh",
+            ]:
+                path.write_text(stub)
+                path.chmod(0o755)
+            (bin_dir / "dirname").symlink_to(shutil.which("dirname"))
+            for failure in ("", "go-test"):
+                with self.subTest(failure=failure):
+                    calls.write_text("")
+                    result = subprocess.run(
+                        ["/bin/sh", str(scripts / "validate.sh")],
+                        env={
+                            **os.environ,
+                            "PATH": str(bin_dir),
+                            "VALIDATION_CALLS": str(calls),
+                            "MINI_ORCA_VALIDATE_FAIL_STAGE": failure,
+                        },
+                        capture_output=True, text=True, timeout=10,
+                    )
+                    self.assertEqual(result.returncode, 1 if failure else 0)
+                    self.assertIn("PASS desktop-web", result.stdout)
+                    self.assertIn("PASS go-quality", result.stdout)
+                    self.assertIn("PASS daemon-contracts", result.stdout)
+                    self.assertEqual(len(calls.read_text().splitlines()), 7 if failure else 8)
+                    if failure:
+                        self.assertIn("Validation failed: go-test", result.stderr)
+                    else:
+                        self.assertIn("Validation passed.", result.stdout)
 
 
 if __name__ == "__main__":

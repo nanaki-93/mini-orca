@@ -60,23 +60,12 @@ run_go_quality() {
     internal cmd
 }
 
-run_desktop_quality() {
-  run_stage "Desktop formatting and static analysis" ./scripts/desktop-gradle.sh spotlessCheck detekt
-}
-
 case "${1:-all}" in
-  all)
+  all|--go-only)
     run_go_quality
-    run_desktop_quality
-    ;;
-  --go-only)
-    run_go_quality
-    ;;
-  --desktop-only)
-    run_desktop_quality
     ;;
   --help|-h)
-    printf '%s\n' "Usage: $0 [--go-only|--desktop-only]"
+    printf '%s\n' "Usage: $0 [--go-only]"
     printf '%s\n' "Set MINI_ORCA_QUALITY_FAIL_STAGE to a stage name to exercise aggregate failure reporting."
     exit 0
     ;;
