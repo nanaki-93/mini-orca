@@ -420,6 +420,7 @@ export interface GitWorktree extends GitIdentity {
   locked: boolean;
   prunable: boolean;
   dirty?: boolean;
+  mergeable: boolean;
   completed: ChangeHistoryEntry[];
   error?: string;
 }

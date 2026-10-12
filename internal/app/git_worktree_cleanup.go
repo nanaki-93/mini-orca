@@ -6,18 +6,27 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/nanaki-93/mini-orca/v2/internal/project"
+)
+
+type worktreeRemoval string
+
+const (
+	worktreeMerged    worktreeRemoval = "merged"
+	worktreeDiscarded worktreeRemoval = "discarded"
 )
 
 // The caller owns jobLifecycleMu, so no new worktree request can be routed while
 // its worker is stopped and its checkout is removed. Git retains the branch.
-func (s *Service) removeMergedWorktree(ctx context.Context, root string, source *GitWorktree) error {
+func (s *Service) removeGitWorktree(ctx context.Context, root string, source *GitWorktree, removal worktreeRemoval) error {
 	s.worktreesMu.Lock()
 	child := s.worktrees[source.Path]
 	s.worktreesMu.Unlock()
 	if child != nil {
 		child.jobLifecycleMu.Lock()
 		defer child.jobLifecycleMu.Unlock()
-		if err := validateMergedWorktree(ctx, root, source); err != nil {
+		if err := validateWorktreeRemoval(ctx, root, source, removal); err != nil {
 			return err
 		}
 		cleanup, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -28,7 +37,7 @@ func (s *Service) removeMergedWorktree(ctx context.Context, root string, source 
 		child.changesMu.Lock()
 		defer child.changesMu.Unlock()
 	}
-	if err := validateMergedWorktree(ctx, root, source); err != nil {
+	if err := validateWorktreeRemoval(ctx, root, source, removal); err != nil {
 		return err
 	}
 	// Private task history can be untracked even though the checkout is clean.
@@ -69,7 +78,7 @@ func (s *Service) stopWorktreeJobs(ctx context.Context) error {
 	return nil
 }
 
-func validateMergedWorktree(ctx context.Context, root string, source *GitWorktree) error {
+func validateWorktreeRemoval(ctx context.Context, root string, source *GitWorktree, removal worktreeRemoval) error {
 	repository, err := readGitRepository(ctx, root)
 	if err != nil {
 		return err
@@ -77,8 +86,10 @@ func validateMergedWorktree(ctx context.Context, root string, source *GitWorktre
 	if err := requireGitIdentity(repository, repository.GitIdentity); err != nil {
 		return err
 	}
-	if _, err := gitRead(ctx, root, "merge-base", "--is-ancestor", source.Head, repository.Head); err != nil {
-		return fmt.Errorf("verify the reviewed commit is merged: %w", err)
+	if removal == worktreeMerged {
+		if _, err := gitRead(ctx, root, "merge-base", "--is-ancestor", source.Head, repository.Head); err != nil {
+			return fmt.Errorf("verify the reviewed commit is merged: %w", err)
+		}
 	}
 	current, err := mergeSource(ctx, repository, GitMutationRequest{Path: source.Path, SourceHead: source.Head})
 	if err != nil {
@@ -104,4 +115,27 @@ func validateMergedWorktree(ctx context.Context, root string, source *GitWorktre
 		}
 	}
 	return nil
+}
+
+func (s *Service) DiscardGitWorktree(ctx context.Context, request GitMutationRequest) (*GitMutationResult, error) {
+	s.jobLifecycleMu.Lock()
+	defer s.jobLifecycleMu.Unlock()
+	repository, err := s.gitMutationPreflight(ctx, request, false)
+	if err != nil {
+		return nil, err
+	}
+	source, err := mergeSource(ctx, repository, request)
+	if err != nil {
+		return nil, err
+	}
+	if request.SourceBranch == "" || source.Branch != request.SourceBranch {
+		return nil, fmt.Errorf("worktree branch changed; refresh Git status before discarding: %w", project.ErrRevisionConflict)
+	}
+	result := &GitMutationResult{State: "discarded", Path: source.Path, Repository: repository, Warnings: []string{}}
+	if err := s.removeGitWorktree(ctx, repository.Root, source, worktreeDiscarded); err != nil {
+		result.State, result.Error = "failed", err.Error()
+	} else {
+		result.RemovedWorktree = source.Path
+	}
+	return result, nil
 }

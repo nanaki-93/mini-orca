@@ -19,6 +19,7 @@ type GitMutationRequest struct {
 	TargetBranch     string `json:"target_branch,omitempty"`
 	Path             string `json:"path,omitempty"`
 	SourceHead       string `json:"source_head,omitempty"`
+	SourceBranch     string `json:"source_branch,omitempty"`
 	MergeHead        string `json:"merge_head,omitempty"`
 }
 

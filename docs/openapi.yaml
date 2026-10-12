@@ -180,7 +180,7 @@ paths:
       - {$ref: '#/components/parameters/WorktreePath'}
     get:
       tags: [Projects]
-      description: List local branches and worktrees, including their completed committed fixes and per-worktree errors.
+      description: List local branches and all worktrees, including merge eligibility against the current branch, completed committed fixes and per-worktree errors. Eligibility does not predict merge conflicts.
       parameters:
         - {in: query, name: project_id, required: true, schema: {type: string}}
         - {in: query, name: project_revision, required: true, schema: {type: string}}
@@ -230,6 +230,17 @@ paths:
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationRequest'}}}}
       responses:
         '200': {description: Observed Git outcome, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/git/discard-worktree:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+    post:
+      tags: [Projects]
+      description: Remove the confirmed clean source worktree and its local task history without merging or forcing deletion. Requires source_head and source_branch; retains the branch and current checkout.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationRequest'}}}}
+      responses:
+        '200': {description: Observed removal outcome, content: {application/json: {schema: {$ref: '#/components/schemas/GitMutationResult'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
   /api/projects/current/git/abort-merge:
@@ -2785,16 +2796,17 @@ components:
             confirm: {type: boolean, description: Required true for mutations}
             confirm_execution: {type: boolean, description: Required true for mutations in addition to current project execution trust}
             target_branch: {type: string, description: New branch for worktrees; existing local branch for switch}
-            path: {type: string, description: Absolute new path directly inside the project .worktrees directory or selected merge source path}
-            source_head: {type: string, description: Reviewed source worktree HEAD for merge and preview}
+            path: {type: string, description: Absolute new path directly inside the project .worktrees directory or selected source path for merge or discard}
+            source_head: {type: string, description: Reviewed source worktree HEAD for merge or preview or discard}
+            source_branch: {type: string, description: Required source branch identity for discard}
             merge_head: {type: string, description: Identified MERGE_HEAD for abort}
     GitMutationResult:
       type: object
       required: [state, warnings]
       properties:
-        state: {type: string, enum: [created, switched, merged, conflicts, aborted, failed]}
+        state: {type: string, enum: [created, switched, merged, discarded, conflicts, aborted, failed]}
         path: {type: string}
-        removed_worktree: {type: string, description: Absolute source worktree path returned only when removal after a successful merge completed}
+        removed_worktree: {type: string, description: Absolute source worktree path returned only when removal after merge or discard completed}
         repository: {$ref: '#/components/schemas/GitRepository'}
         index: {$ref: '#/components/schemas/ProjectIndex'}
         error: {type: string}
@@ -2834,5 +2846,6 @@ components:
                       locked: {type: boolean}
                       prunable: {type: boolean}
                       dirty: {type: boolean, description: Omitted when status cannot be read}
+                      mergeable: {type: boolean, description: Clean local branches with shared history and incoming commits; excludes current or locked or prunable worktrees and in-progress Git operations. Does not predict conflicts.}
                       completed: {type: array, items: {$ref: '#/components/schemas/ChangeHistoryEntry'}}
                       error: {type: string}

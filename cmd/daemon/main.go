@@ -191,6 +191,7 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	mux.HandleFunc("POST /api/projects/current/git/merge-preview", gitHandler.PreviewMerge)
 	mux.HandleFunc("POST /api/projects/current/git/merge", gitHandler.Merge)
 	mux.HandleFunc("POST /api/projects/current/git/abort-merge", gitHandler.AbortMerge)
+	mux.HandleFunc("POST /api/projects/current/git/discard-worktree", gitHandler.DiscardWorktree)
 	mux.HandleFunc("GET /api/projects/current/changes", changeHandler.List)
 	mux.HandleFunc("POST /api/projects/current/changes", changeHandler.Open)
 	mux.HandleFunc("GET /api/projects/current/changes/recovery", changeHandler.Recovery)

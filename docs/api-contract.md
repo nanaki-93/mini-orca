@@ -82,6 +82,7 @@ untrusted networks.
 | POST | `/api/projects/current/git/switch` | Switch a clean project to an existing local branch. |
 | POST | `/api/projects/current/git/merge-preview` | Preview the selected worktree's incoming commits and diff. |
 | POST | `/api/projects/current/git/merge` | Merge the reviewed worktree HEAD into the current clean branch, then remove the merged worktree. |
+| POST | `/api/projects/current/git/discard-worktree` | Remove a confirmed clean worktree without merging; keep its branch. |
 | POST | `/api/projects/current/git/abort-merge` | Abort the identified merge and discard conflict resolutions. |
 | GET | `/api/projects/current/git/repository` | Read guarded repository identity, branch and working-tree state. |
 | POST | `/api/projects/current/changes/{sessionID}/commit` | Retry the latest failed proposal commit without reapplying source. |
@@ -938,6 +939,11 @@ Repository/workspace reads require current `project_id` and `project_revision`.
 HEAD stays distinguishable from read failures. Worktree status failures have an
 `error` and omit `dirty`; unknown status is never treated as clean. Lists are
 bounded to 100 worktrees. Completed entries are applied, committed change history.
+Each worktree has `mergeable`, computed against the current branch: both checkouts
+must be clean local branches without an operation in progress, the source must be
+unlocked and present, and it must have commits not already in the target with a
+shared ancestor. This passive eligibility check does not predict merge conflicts.
+The full list remains available even when no worktree is eligible.
 Passive status/diff reads disable configured clean/process filters, external diff
 commands and text conversion; they do not grant project execution trust.
 
@@ -995,3 +1001,11 @@ remove the source. Successful removal returns `removed_worktree` with its absolu
 path, allowing the desktop to close the implementation and stop polling it. If
 cleanup fails, the merge remains `state: merged` and `warnings` explains why the
 worktree remains; `removed_worktree` is omitted. No push happens automatically.
+
+Discard takes the selected worktree `path`, `source_head` and `source_branch` plus
+the usual mutation identity, confirmation and execution trust. It rechecks the
+clean source and branch, stops its worker, and removes the checkout and private
+task history without merging or forcing deletion. The source branch and current
+checkout remain unchanged. Locked, stale, dirty and nested checkouts are protected
+by the same removal guards as merge cleanup. Success returns `state: discarded`
+and `removed_worktree`; removal failure returns `state: failed` with `error`.

@@ -37,7 +37,7 @@ func TestGitRepositoryRequiresCurrentProject(t *testing.T) {
 func TestGitMutationsRejectUnconfirmedAndUnknownFields(t *testing.T) {
 	fixture := newChangeHandlerFixture(t, "http://127.0.0.1:1")
 	handler := NewGitHandler(fixture.service)
-	for _, action := range []http.HandlerFunc{handler.CreateWorktree, handler.Switch, handler.Merge, handler.AbortMerge} {
+	for _, action := range []http.HandlerFunc{handler.CreateWorktree, handler.Switch, handler.Merge, handler.AbortMerge, handler.DiscardWorktree} {
 		for _, body := range []string{`{}`, `{"confirm":true,"shell":"rm"}`, `{} {}`} {
 			response := httptest.NewRecorder()
 			action(response, httptest.NewRequest("POST", "/git", strings.NewReader(body)))
