@@ -1,5 +1,5 @@
 import { useWorkspace } from './workspace-context';
-import { CommitDialog } from './git-controls';
+import { CommitMessage } from './git-controls';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ChangeSession, ChangeSeed } from './models';
 import { activeChangeWorkflow, canAcceptChange, type State } from './workspace';
@@ -258,7 +258,7 @@ export function ProposalReview({
 }) {
   const w = useWorkspace();
   const [tab, setTab] = useState('changes');
-  const [committing, setCommitting] = useState(false);
+  const [commitMessage, setCommitMessage] = useState(change.title);
   const [path, setPath] = useState(change.changes[0].path);
   const [viewed, setViewed] = useState<string[]>([path]);
   const [focusDiff, setFocusDiff] = useState(false);
@@ -281,18 +281,6 @@ export function ProposalReview({
   };
   return (
     <section className="fix-review chat-review" aria-label="Proposal review">
-      {committing && (
-        <CommitDialog
-          s={s}
-          title="Apply & Commit"
-          message={change.title}
-          onClose={() => setCommitting(false)}
-          onCommit={(message) => {
-            setCommitting(false);
-            void w.acceptChange(message);
-          }}
-        />
-      )}
       <FixTabs
         label="Fix review"
         selected={tab}
@@ -410,6 +398,9 @@ export function ProposalReview({
         )}
         {tab === 'details' && details}
       </div>
+      {change.state === 'draft' && s.repository?.available && (
+        <CommitMessage message={commitMessage} onChange={setCommitMessage} disabled={!!s.busy} />
+      )}
       {change.state === 'draft' && (
         <div className="fix-action-bar">
           <div>
@@ -453,13 +444,15 @@ export function ProposalReview({
                 !s.repository ||
                 !!s.resourceErrors.Git ||
                 (s.repository.available &&
-                  (!s.repository.at_root || !s.repository.branch || !s.repository.head))
+                  (!s.repository.at_root ||
+                    !s.repository.branch ||
+                    !s.repository.head ||
+                    !commitMessage.trim()))
               }
               onClick={(event) => {
                 // The preceding click may have advanced the last file at this same position.
                 if (event.detail > 1) return;
-                if (s.repository?.available) setCommitting(true);
-                else void w.acceptChange();
+                void w.acceptChange(commitMessage);
               }}
             >
               {s.repository?.available

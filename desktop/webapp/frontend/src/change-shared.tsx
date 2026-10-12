@@ -1,6 +1,6 @@
 import { useWorkspace } from './workspace-context';
 import { useState } from 'react';
-import { CommitDialog } from './git-controls';
+import { CommitMessage } from './git-controls';
 import { activeChangeWorkflow, changeChecksPassed, type State } from './workspace';
 import type { ChangeSession } from './models';
 import { Badge, Button, Disclosure, Empty, Notice, Panel } from './ui';
@@ -8,21 +8,8 @@ import { Badge, Button, Disclosure, Empty, Notice, Panel } from './ui';
 export function ChangeOutcome({ s }: { s: State }) {
   const w = useWorkspace();
   const change = s.change;
-  const [retrying, setRetrying] = useState(false);
   return (
     <>
-      {retrying && s.changeReceipt?.commit && (
-        <CommitDialog
-          s={s}
-          title="Retry commit"
-          message={s.changeReceipt.commit.message}
-          onClose={() => setRetrying(false)}
-          onCommit={(message) => {
-            setRetrying(false);
-            void w.retryChangeCommit(message);
-          }}
-        />
-      )}
       {(s.uncertain || s.changeReceipt) && (
         <section className="workspace-page chat-outcome" aria-label="Change outcome">
           {s.uncertain && (
@@ -64,9 +51,10 @@ export function ChangeOutcome({ s }: { s: State }) {
                   <p>{s.changeReceipt.commit.error || s.changeReceipt.commit.message}</p>
                   {s.changeReceipt.commit.state === 'failed' &&
                     s.changeReceipt.state === 'applied' && (
-                      <Button disabled={!!s.busy || s.uncertain} onClick={() => setRetrying(true)}>
-                        Retry commit
-                      </Button>
+                      <CommitRecovery
+                        key={s.changeReceipt.session_id + s.changeReceipt.hash}
+                        s={s}
+                      />
                     )}
                   {s.changeReceipt.commit.state === 'pending' && (
                     <p>Refresh Git status and inspect the branch history before retrying.</p>
@@ -143,6 +131,22 @@ export function ChangeOutcome({ s }: { s: State }) {
         </section>
       )}
     </>
+  );
+}
+
+function CommitRecovery({ s }: { s: State }) {
+  const w = useWorkspace();
+  const [message, setMessage] = useState(s.changeReceipt!.commit!.message);
+  return (
+    <div className="stack">
+      <CommitMessage message={message} onChange={setMessage} disabled={!!s.busy} />
+      <Button
+        disabled={!!s.busy || s.uncertain || !message.trim()}
+        onClick={() => void w.retryChangeCommit(message)}
+      >
+        Retry commit
+      </Button>
+    </div>
   );
 }
 

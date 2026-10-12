@@ -118,6 +118,9 @@ export function GitWorkspace({ s }: { s: State }) {
                       <Button disabled={blocked} onClick={() => void w.openWorktree(tree.path)}>
                         View implementation
                       </Button>
+                      <Button disabled={blocked} onClick={() => void w.previewGitMerge(tree)}>
+                        Preview diff
+                      </Button>
                       <Button
                         tone="danger"
                         disabled={blocked}
@@ -128,7 +131,7 @@ export function GitWorkspace({ s }: { s: State }) {
                       <Button
                         tone="primary"
                         disabled={blocked}
-                        onClick={() => void w.previewGitMerge(tree)}
+                        onClick={() => void w.gitAction('merge', tree)}
                       >
                         Merge into current branch
                       </Button>
@@ -138,6 +141,10 @@ export function GitWorkspace({ s }: { s: State }) {
               </div>
             )}
           </Panel>
+          <p className="small muted">
+            Merge runs local Git filters and drivers, closes terminals and removes the merged
+            worktree. The branch is kept.
+          </p>
         </>
       )}
       {s.gitPreview && (
@@ -145,12 +152,6 @@ export function GitWorkspace({ s }: { s: State }) {
           <p>
             <strong>{s.gitPreview.source.branch}</strong> into{' '}
             <strong>{s.gitPreview.target.branch}</strong>
-          </p>
-          <p className="small muted">
-            Incoming changes since the common ancestor. Git will merge these with your current
-            branch. After a successful merge, findings linked to the committed fixes are marked
-            Done. The source worktree and its local task history are deleted, and its implementation
-            closes. The branch is kept.
           </p>
           <h3>Incoming commits</h3>
           <pre tabIndex={0}>{s.gitPreview.commits || 'No new commits.'}</pre>
