@@ -184,6 +184,21 @@ export function Results({ s }: { s: State }) {
     ...resultRows(s, 'performance'),
     ...resultRows(s, 'security'),
   ];
+  const bugRows = resultRows(s, 'bugs');
+  const secRows = resultRows(s, 'security');
+  const perfRows = resultRows(s, 'performance');
+  const countBugs = bugRows.filter((row) => (showDone ? true : row.status !== 'fixed')).length;
+  const countSec = secRows.filter((row) => (showDone ? true : row.status !== 'fixed')).length;
+  const countPerf = perfRows.filter((row) => (showDone ? true : row.status !== 'fixed')).length;
+  const countAll = [...new Map(allRows.map((r) => [r.key, r])).values()].filter((row) =>
+    showDone ? true : row.status !== 'fixed',
+  ).length;
+  const categoryCounts: Record<'all' | FindingCategory, number> = {
+    all: countAll,
+    bugs: countBugs,
+    security: countSec,
+    performance: countPerf,
+  };
   const unique =
     categoryFilter === 'all'
       ? [...new Map(allRows.map((row) => [row.key, row])).values()]
@@ -573,7 +588,19 @@ export function Results({ s }: { s: State }) {
                   updateView({ page: 1 });
                 }}
               >
-                {cat === 'all' ? 'All' : human(cat)[0].toUpperCase() + human(cat).slice(1)}
+                <span>
+                  {cat === 'all' ? 'All' : human(cat)[0].toUpperCase() + human(cat).slice(1)}
+                </span>
+                <span
+                  style={{
+                    marginLeft: '4px',
+                    fontSize: '11px',
+                    opacity: categoryFilter === cat ? 0.9 : 0.6,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  ({categoryCounts[cat]})
+                </span>
               </Button>
             ))}
           </div>
@@ -745,16 +772,28 @@ export function Results({ s }: { s: State }) {
           <Empty
             title={
               unique.length
-                ? 'No matching findings'
+                ? 'No matching issues'
                 : s.run && !results
                   ? 'Results not loaded'
-                  : 'No findings'
+                  : 'No issues found'
             }
-            detail={results ? `Run state: ${human(results.progress.status)}` : undefined}
+            detail={
+              unique.length
+                ? 'Try clearing the search or priority filter.'
+                : results
+                  ? `Run state: ${human(results.progress.status)}. All analyzed files healthy.`
+                  : 'Run an analysis to scan the project.'
+            }
           >
-            <Button tone="primary" icon="play" onClick={() => void w.runAnalysisDirect()}>
-              Run analysis
-            </Button>
+            {unique.length ? (
+              <Button tone="ghost" icon="undo" onClick={clearSearch}>
+                Clear filters
+              </Button>
+            ) : (
+              <Button tone="primary" icon="play" onClick={() => void w.runAnalysisDirect()}>
+                Run analysis
+              </Button>
+            )}
           </Empty>
         )}
         <nav className="findings-pagination" aria-label="Findings pagination">
