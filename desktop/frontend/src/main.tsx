@@ -52,15 +52,21 @@ const findingPages: [Page, string][] = [
 ];
 const themes = [
   { id: 'dark', name: 'Graphite', letter: 'G', mark: '/mo-mark-graphite.svg' },
+  { id: 'light', name: 'Porcelain', letter: 'P', mark: '/mo-mark-porcelain.svg' },
   { id: 'midnight', name: 'Midnight', letter: 'M', mark: '/mo-mark-midnight.svg' },
-  { id: 'emerald', name: 'Emerald', letter: 'E', mark: '/mo-mark-graphite.svg' },
-  { id: 'nordic', name: 'Nordic', letter: 'N', mark: '/mo-mark-midnight.svg' },
   { id: 'signal', name: 'Signal', letter: 'S', mark: '/mo-mark-signal.svg' },
+  {
+    id: 'crimson-violet',
+    name: 'Crimson Violet',
+    letter: 'C',
+    mark: '/mo-mark-crimson-violet.svg',
+  },
+  { id: 'nordic', name: 'Nordic', letter: 'N', mark: '/mo-mark-nordic.svg' },
   {
     id: 'amethyst',
     name: 'Amethyst',
     letter: 'A',
-    mark: '/mo-mark-crimson-violet.svg',
+    mark: '/mo-mark-amethyst.svg',
   },
 ] as const;
 function App() {
