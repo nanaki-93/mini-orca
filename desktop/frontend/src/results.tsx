@@ -73,7 +73,7 @@ function semantic(f: M.Finding): ResultRow {
     cause: [...new Set([f.message, f.evidence].filter(Boolean))].join('\n\n'),
     solution:
       f.task_spec?.acceptance_criteria.join('\n') ||
-      'No solution yet. Prepare a fix to review the proposed changes.',
+      'No solution yet. Prepare a fix to review proposed changes.',
   };
 }
 function performance(report: M.PerformanceReport): ResultRow[] {
@@ -268,7 +268,7 @@ export function Results({ s }: { s: State }) {
           <>
             <span className="finding-priority">
               <PriorityIcon value={detail.severity} />
-              <span>{human(detail.severity)} priority</span>
+              <span>{human(detail.severity)}</span>
             </span>
             {detail.status !== detail.freshness && (
               <span aria-label="Finding state">
@@ -297,29 +297,22 @@ export function Results({ s }: { s: State }) {
         </Button>
       </FixHeading>
       {detail.freshness === 'stale' && (
-        <Notice>This finding is stale. Refresh its analysis before preparing a fix.</Notice>
+        <Notice>This finding is stale. Refresh analysis before preparing a fix.</Notice>
       )}
       {category === 'performance' && (
-        <Notice>Performance unmeasured; tests do not establish a speedup.</Notice>
+        <Notice>Performance unmeasured; tests do not establish a runtime speedup.</Notice>
       )}
       <Panel title="Cause" className="fix-explanation fix-cause">
         {detail.name !== detail.title && detail.title !== detail.cause && (
           <Prose text={detail.title} />
         )}
-        <Prose
-          text={detail.cause || 'No cause was saved. Review the evidence before preparing a fix.'}
-        />
+        <Prose text={detail.cause || 'No cause recorded.'} />
         <p className="small muted">
-          {human(detail.kind)} · Reported confidence: {human(detail.confidence)}
+          {human(detail.kind)} · Confidence: {human(detail.confidence)}
         </p>
       </Panel>
       <Panel title="Proposed solution" className="fix-explanation fix-solution">
-        <SolutionExcerpt
-          text={
-            detail.solution ||
-            'No remediation was supplied. Review the generated solution before Apply.'
-          }
-        />
+        <SolutionExcerpt text={detail.solution || 'No remediation supplied.'} />
       </Panel>
       {seed && detail.path && (
         <FixPreparation key={detail.key} s={s} seed={seed} disabled={fixDisabled} />
@@ -401,7 +394,7 @@ export function Results({ s }: { s: State }) {
               <span>
                 {results.saved_finding_count === null
                   ? 'Count unavailable'
-                  : `${results.saved_finding_count} saved findings`}
+                  : `${results.saved_finding_count} findings`}
               </span>
             </span>
           ) : undefined
@@ -420,19 +413,16 @@ export function Results({ s }: { s: State }) {
           Refresh
         </Button>
         <Go page="analysis" tone="primary">
-          Analyze project
+          Analyze
         </Go>
       </Heading>
       {results?.retained_files?.length ? (
         <Notice>
-          Includes retained results from {results.retained_files.length} files outside this run.
+          Retained results from {results.retained_files.length} files outside this run.
         </Notice>
       ) : null}
       {s.run?.status === 'stale' && (
-        <Notice>
-          Files are checked individually. Unchanged files keep their saved analysis; reanalyze the
-          stale files to refresh them.
-        </Notice>
+        <Notice>Unchanged files keep saved analysis; reanalyze stale files to refresh.</Notice>
       )}
       <Disclosure
         title={
@@ -460,7 +450,7 @@ export function Results({ s }: { s: State }) {
         {reports.map((report, index) => (
           <div className="section-gap" key={`${report.key}:${index}`}>
             <div className="row wrap">
-              <span className="path">{report.path}</span>
+              <span className="path font-mono">{report.path}</span>
               <span className="results-state">
                 <StatusDot value={report.status} />
                 <span>{human(report.status)}</span>
@@ -497,7 +487,7 @@ export function Results({ s }: { s: State }) {
                   clearSearch();
                 }
               }}
-              placeholder="Search findings, files or symbols…"
+              placeholder="Filter findings, files, symbols…"
             />
             {query && (
               <Button
@@ -537,21 +527,29 @@ export function Results({ s }: { s: State }) {
                 search.current?.focus();
               }}
             >
-              Reset filters
+              Reset
             </Button>
           )}
         </div>
         <div className="findings-columns" aria-hidden="true">
           <span>Finding</span>
-          <span>Priority / freshness</span>
-          <span />
+          <span>Location</span>
+          <span>Status</span>
         </div>
         <div className="result-list">
           {filtered.slice(offset, offset + pageSize).map((row) => (
-            <button
+            <div
               className="result-row"
               key={row.key}
               onClick={() => w.openFinding(category, row.key)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  w.openFinding(category, row.key);
+                }
+              }}
             >
               <span
                 className={`finding-mark ${['high', 'critical'].includes(row.severity) ? 'red' : row.severity === 'low' ? 'blue' : ''}`}
@@ -567,10 +565,21 @@ export function Results({ s }: { s: State }) {
                 />
               </span>
               <span className="list-copy">
-                <strong>{row.name}</strong>
+                <span className="row" style={{ gap: '8px', alignItems: 'center' }}>
+                  <span
+                    className={`severity-tag ${['high', 'critical'].includes(row.severity) ? 'danger' : row.severity === 'medium' ? 'warning' : 'info'}`}
+                  >
+                    {['high', 'critical'].includes(row.severity)
+                      ? 'HIGH'
+                      : row.severity === 'medium'
+                        ? 'MED'
+                        : 'LOW'}
+                  </span>
+                  <strong>{row.name}</strong>
+                </span>
                 <span className="finding-summary">{row.cause.split('\n')[0]}</span>
                 <small>
-                  <span className="path">
+                  <span className="path font-mono">
                     {row.path}
                     {row.line ? `:${row.line}` : ''}
                   </span>
@@ -583,10 +592,27 @@ export function Results({ s }: { s: State }) {
                   <StatusDot value={row.freshness} label="Freshness" />
                 </span>
               </span>
-              <span className="finding-open">
-                <Icon name="chevron" />
-              </span>
-            </button>
+              <div className="finding-inline-actions">
+                <Button
+                  tone="primary small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    w.openFinding(category, row.key);
+                  }}
+                >
+                  Fix
+                </Button>
+                <Button
+                  tone="ghost small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void w.openFile(row.path, row.symbol);
+                  }}
+                >
+                  File
+                </Button>
+              </div>
+            </div>
           ))}
         </div>
         {!filtered.length && (
@@ -596,7 +622,7 @@ export function Results({ s }: { s: State }) {
                 ? 'No matching findings'
                 : s.run && !results
                   ? 'Results not loaded'
-                  : 'No saved findings'
+                  : 'No findings'
             }
             detail={results ? `Run state: ${human(results.progress.status)}` : undefined}
           >
