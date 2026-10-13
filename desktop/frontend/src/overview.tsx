@@ -407,17 +407,26 @@ export function Summary({ s }: { s: State }) {
       >
         <Tests s={s} />
       </Disclosure>
-      <div className="studio-scope-line">
-        <span className="row">
-          <Icon name="folder" />
-          {s.selection?.files.filter(
-            (file) => !file.reason && !s.selection?.excluded_paths.includes(file.path),
-          ).length ?? '—'}{' '}
-          included files
-        </span>
-        <Go page="analysis-files" tone="ghost">
-          Manage scope
-        </Go>
+      <div className="grid equal-columns section-gap summary-ops-grid">
+        <Panel title="File Scope & Exclusions">
+          <p className="muted" style={{ marginBottom: '12px', fontSize: '0.85rem' }}>
+            {s.selection?.files.filter(
+              (file) => !file.reason && !s.selection?.excluded_paths.includes(file.path),
+            ).length ?? '—'}{' '}
+            eligible files included · {s.selection?.excluded_paths.length ?? 0} files excluded
+          </p>
+          <div className="actions">
+            <Go page="analysis-files">Manage File Scope & Exclusions →</Go>
+          </div>
+        </Panel>
+        <Panel title="Agent Environment (AGENTS.md)">
+          <p className="muted" style={{ marginBottom: '12px', fontSize: '0.85rem' }}>
+            Project guidance, architecture rules, and autonomous instructions.
+          </p>
+          <div className="actions">
+            <Go page="instructions">Edit Environment & Rules →</Go>
+          </div>
+        </Panel>
       </div>
     </div>
   );
