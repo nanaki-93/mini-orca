@@ -220,8 +220,8 @@ export function AnalysisFiles({ s }: { s: State }) {
     <div className="workspace-page analysis-files">
       <Heading
         variant="intro"
-        title="Context"
-        detail={`${s.selection?.files.filter((f) => !f.reason && !excluded.includes(f.path)).length ?? '—'} eligible files selected`}
+        title="File Scope & Exclusions"
+        detail={`${s.selection?.files.filter((f) => !f.reason && !excluded.includes(f.path)).length ?? '—'} eligible files selected · configure files to skip`}
       >
         <Go page="analysis" icon="activity">
           Analysis setup

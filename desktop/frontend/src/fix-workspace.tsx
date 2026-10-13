@@ -93,7 +93,7 @@ export function FixWorkspace({ s }: { s: State }) {
     running ||
     (!!change && (change.state !== 'draft' || change.freshness !== 'current'));
 
-  const retryFix = () => {
+  const resetAndRetry = () => {
     const preparedSeed = workflowSeed(seed);
     w.seedChange(preparedSeed);
     void (async () => {
@@ -110,6 +110,16 @@ export function FixWorkspace({ s }: { s: State }) {
         w.fail(error);
       }
     })();
+  };
+
+  const retryWithDiagnostics = () => {
+    const failed = (change?.checks || []).filter((c) => c.state !== 'passed');
+    const diag = failed.length
+      ? `Repair failed checks using diagnostics:\n${failed
+          .map((c) => `[${c.name}] exit code ${c.exit_code}:\n${c.output}`)
+          .join('\n\n')}`
+      : 'Repair failed checks and re-verify.';
+    void w.repairChange(diag);
   };
 
   const earlierExplanations =
@@ -168,9 +178,6 @@ export function FixWorkspace({ s }: { s: State }) {
           <Badge value={change?.freshness === 'stale' ? 'stale' : change?.state || 'draft'} />
         }
       >
-        <Button icon="refresh" disabled={blocked} onClick={() => void retryFix()}>
-          Retry fix
-        </Button>
         <Button
           icon="code"
           disabled={!!s.busy || !sourcePath}
@@ -192,7 +199,8 @@ export function FixWorkspace({ s }: { s: State }) {
           s={s}
           change={change}
           seed={seed}
-          onRetry={retryFix}
+          onResetAndRetry={resetAndRetry}
+          onRetryWithDiagnostics={retryWithDiagnostics}
           details={details}
         />
       ) : (
@@ -239,14 +247,16 @@ export function ProposalReview({
   s,
   change,
   seed,
-  onRetry,
+  onResetAndRetry,
+  onRetryWithDiagnostics,
   details,
   tests = true,
 }: {
   s: State;
   change: ChangeSession;
   seed?: ChangeSeed;
-  onRetry?: () => void;
+  onResetAndRetry?: () => void;
+  onRetryWithDiagnostics?: () => void;
   details?: ReactNode;
   tests?: boolean;
 }) {
@@ -283,27 +293,54 @@ export function ProposalReview({
   };
   return (
     <section className="fix-review chat-review" aria-label="Proposal review">
-      <FixTabs
-        label="Fix steps"
-        selected={tab}
-        onSelect={setTab}
-        panel="fix-review-content"
-        items={[
-          { id: 'finding', label: '1. Finding' },
-          { id: 'changes', label: `2. Changes (${files.length})` },
-          { id: 'checks', label: `3. Checks${attention ? ` (${attention} pending)` : ''}` },
-          { id: 'commit', label: '4. Commit' },
-        ]}
-      />
-      <div
-        id="fix-review-content"
-        role="tabpanel"
-        aria-labelledby={`fix-review-content-tab-${['finding', 'changes', 'checks', 'commit'].indexOf(tab)}`}
-        className="fix-tab-content"
-      >
-        {tab === 'finding' && (
-          <div className="stack fix-step-finding">
-            <Panel title="Cause" className="fix-explanation fix-cause">
+      {attention > 0 && (
+        <div className="retry-banner">
+          <div className="retry-info">
+            <strong>
+              <Icon name="alert" />{' '}
+              {attention === 1 ? '1 check needs attention' : `${attention} checks need attention`}
+            </strong>
+            <small>
+              Resolve failure using test diagnostics as input, or reset and retry from base.
+            </small>
+          </div>
+          <div className="retry-actions">
+            {onRetryWithDiagnostics && (
+              <Button
+                tone="warning small"
+                icon="refresh"
+                disabled={!!s.busy || running}
+                title="Re-run fix using error diagnostics as input, without resetting workspace"
+                onClick={() => void onRetryWithDiagnostics()}
+              >
+                Retry with Diagnostics
+              </Button>
+            )}
+            {onResetAndRetry && (
+              <Button
+                tone="danger small"
+                icon="trash"
+                disabled={!!s.busy || running}
+                title="Clean edit files and retry from base"
+                onClick={() => void onResetAndRetry()}
+              >
+                Reset & Retry
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="implementation-container">
+        <aside className="finding-context-card">
+          <Panel title="Target Finding" className="fix-explanation fix-cause">
+            <div className="context-block">
+              <h4
+                className="small muted uppercase"
+                style={{ marginBottom: '6px', fontSize: '0.72rem', letterSpacing: '0.05em' }}
+              >
+                Cause
+              </h4>
               <Prose
                 text={
                   targetSeed.finding?.cause ||
@@ -311,238 +348,309 @@ export function ProposalReview({
                   'No cause recorded. Review the original finding and source.'
                 }
               />
-              <p className="small muted">
+              <p className="small muted" style={{ marginTop: '8px' }}>
                 {targetSeed.finding
                   ? `Reported finding · ${human(targetSeed.finding.confidence)}`
                   : 'Finding context'}
               </p>
-            </Panel>
-            <FixSolution s={s} />
-            {targetSeed.acceptance_criteria.length > 0 && (
-              <Panel title="Acceptance criteria">
-                <BulletContent title="Acceptance criteria" items={targetSeed.acceptance_criteria} />
-              </Panel>
-            )}
-            {details && <Disclosure title="More details">{details}</Disclosure>}
-          </div>
-        )}
-        {tab === 'changes' && (
-          <>
-            <div className="row between wrap fix-evidence" aria-live="polite">
-              <span className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
-                <Icon name={ready ? 'circleCheck' : 'clock'} />
-                <strong>
-                  {ready
-                    ? 'Checks passed · ready for review'
-                    : running
-                      ? 'Checks in progress'
-                      : 'Resolve checks before applying'}
-                </strong>
-              </span>
-              <div className="row" style={{ gap: '8px', alignItems: 'center' }}>
-                {onRetry && (
-                  <Button
-                    tone="ghost small"
-                    icon="refresh"
-                    disabled={!!s.busy || running}
-                    onClick={() => void onRetry()}
-                  >
-                    Retry fix
-                  </Button>
-                )}
-                <Button
-                  tone={showDiff ? 'ghost small' : 'primary small'}
-                  icon={showDiff ? 'close' : 'code'}
-                  onClick={() => setShowDiff((v) => !v)}
-                >
-                  {showDiff ? 'Hide diff' : 'Check diff'}
-                </Button>
-              </div>
             </div>
-            {!showDiff ? (
-              <div className="proposal-files-summary">
-                <table className="dense-table">
-                  <thead>
-                    <tr>
-                      <th>File</th>
-                      <th>Changes</th>
-                      <th>Status</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {files.map((file) => {
-                      const adds = file.diff?.lines?.filter((l) => l.kind === 'add').length || 0;
-                      const dels = file.diff?.lines?.filter((l) => l.kind === 'delete').length || 0;
-                      const isVisited = viewed.includes(file.path);
-                      return (
-                        <tr key={file.path}>
-                          <td>
-                            <span className="font-mono">{file.path}</span>
-                          </td>
-                          <td>
-                            <span className="diff-stats font-mono">
-                              <span className="diff-stat add">+{adds}</span>{' '}
-                              <span className="diff-stat del">-{dels}</span>
-                            </span>
-                          </td>
-                          <td>
-                            {isVisited ? (
-                              <Badge value="Reviewed" tone="green" />
-                            ) : (
-                              <Badge value="Pending" />
-                            )}
-                          </td>
-                          <td style={{ textAlign: 'right' }}>
-                            <Button
-                              tone="ghost small"
-                              onClick={() => {
-                                selectFile(file.path);
-                                setShowDiff(true);
-                                setFocusDiff(true);
-                              }}
-                            >
-                              Diff
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <>
-                <h2 className="sr-only">Proposal diff</h2>
-                <FixTabs
-                  label="Files to change"
-                  selected={edit.path}
-                  onSelect={selectFile}
-                  panel="fix-file-diff"
-                  items={files.map((file) => ({
-                    id: file.path,
-                    label: file.path,
-                    visited: viewed.includes(file.path),
-                  }))}
-                />
-                <div className="studio-review-body">
-                  <div
-                    ref={diff}
-                    id="fix-file-diff"
-                    role="tabpanel"
-                    aria-labelledby={`fix-file-diff-tab-${files.indexOf(edit)}`}
-                    className="change-files"
-                  >
-                    <ProposalDiff edit={edit} index={files.indexOf(edit)} total={files.length} />
-                  </div>
-                </div>
-              </>
-            )}
-          </>
-        )}
-        {tab === 'checks' && (
-          <div className="stack fix-step-checks">
-            <ChangeChecks s={s} tests={tests} />
-            <WorkflowProgress s={s} actionLabel="Apply" showCancel={false} />
-          </div>
-        )}
-        {tab === 'commit' && (
-          <div className="stack fix-step-commit">
-            <Panel title="Review & Commit">
-              <p className="small muted">
-                {viewed.length} of {files.length} files reviewed. Ready to commit to{' '}
-                {s.repository?.branch || 'the current branch'}.
-              </p>
-              {s.repository?.available && (
-                <CommitMessage
-                  message={commitMessage}
-                  onChange={setCommitMessage}
-                  disabled={!!s.busy}
-                />
-              )}
-            </Panel>
-          </div>
-        )}
-      </div>
-      {change.state === 'draft' && (
-        <div className="fix-action-bar">
-          <div className="row" style={{ gap: '10px', alignItems: 'center' }}>
-            {onRetry && (
-              <Button
-                tone="ghost"
-                icon="refresh"
-                disabled={!!s.busy || running}
-                onClick={() => void onRetry()}
-              >
-                Retry fix
-              </Button>
-            )}
-            <span className="small muted font-mono">
-              {viewed.length}/{files.length} reviewed
-            </span>
-          </div>
-          {running ? (
-            <Button
-              disabled={!!s.busy || change.workflow?.status === 'canceling'}
-              onClick={() => void w.cancelChangeWorkflow()}
-            >
-              Cancel workflow
-            </Button>
-          ) : tab === 'finding' ? (
-            <Button tone="primary" icon="arrow" onClick={() => setTab('changes')}>
-              Review changes
-            </Button>
-          ) : tab === 'changes' ? (
-            next && ready ? (
-              <Button
-                tone="primary"
-                icon="arrow"
-                disabled={!!s.busy}
-                onClick={() => {
-                  selectFile(next.path);
-                  setShowDiff(true);
-                  setFocusDiff(true);
+            {targetSeed.acceptance_criteria.length > 0 && (
+              <div
+                className="context-block"
+                style={{
+                  marginTop: '14px',
+                  paddingTop: '12px',
+                  borderTop: '1px solid var(--line)',
                 }}
               >
-                Review next file
-              </Button>
-            ) : (
-              <Button tone="primary" icon="arrow" onClick={() => setTab('checks')}>
-                Verify checks
-              </Button>
-            )
-          ) : tab === 'checks' ? (
-            <Button tone="primary" icon="arrow" onClick={() => setTab('commit')}>
-              Proceed to commit
-            </Button>
-          ) : (
-            <Button
-              tone="primary"
-              icon="check"
-              loading={s.busy === 'Apply change'}
-              disabled={
-                !!s.busy ||
-                !ready ||
-                !s.repository ||
-                !!s.resourceErrors.Git ||
-                (s.repository.available &&
-                  (!s.repository.at_root ||
-                    !s.repository.branch ||
-                    !s.repository.head ||
-                    !commitMessage.trim()))
-              }
-              onClick={(event) => {
-                if (event.detail > 1) return;
-                void w.acceptChange(commitMessage);
-              }}
-            >
-              {s.repository?.available
-                ? 'Apply & Commit'
-                : `Apply ${files.length} ${files.length === 1 ? 'file' : 'files'}`}
-            </Button>
+                <h4
+                  className="small muted uppercase"
+                  style={{ marginBottom: '6px', fontSize: '0.72rem', letterSpacing: '0.05em' }}
+                >
+                  Acceptance criteria
+                </h4>
+                <BulletContent title="Acceptance criteria" items={targetSeed.acceptance_criteria} />
+              </div>
+            )}
+          </Panel>
+          <FixSolution s={s} />
+          {details && <Disclosure title="Details & Guidance">{details}</Disclosure>}
+        </aside>
+
+        <main className="implementation-main-card">
+          <FixTabs
+            label="Fix steps"
+            selected={tab}
+            onSelect={setTab}
+            panel="fix-review-content"
+            items={[
+              { id: 'finding', label: '1. Finding' },
+              { id: 'changes', label: `2. Changes (${files.length})` },
+              { id: 'checks', label: `3. Checks${attention ? ` (${attention} pending)` : ''}` },
+              { id: 'commit', label: '4. Commit' },
+            ]}
+          />
+          <div
+            id="fix-review-content"
+            role="tabpanel"
+            aria-labelledby={`fix-review-content-tab-${['finding', 'changes', 'checks', 'commit'].indexOf(tab)}`}
+            className="fix-tab-content"
+          >
+            {tab === 'finding' && (
+              <div className="stack fix-step-finding" style={{ padding: '18px 22px' }}>
+                <Panel title="Cause" className="fix-explanation fix-cause">
+                  <Prose
+                    text={
+                      targetSeed.finding?.cause ||
+                      targetSeed.message ||
+                      'No cause recorded. Review the original finding and source.'
+                    }
+                  />
+                  <p className="small muted">
+                    {targetSeed.finding
+                      ? `Reported finding · ${human(targetSeed.finding.confidence)}`
+                      : 'Finding context'}
+                  </p>
+                </Panel>
+                <FixSolution s={s} />
+                {targetSeed.acceptance_criteria.length > 0 && (
+                  <Panel title="Acceptance criteria">
+                    <BulletContent
+                      title="Acceptance criteria"
+                      items={targetSeed.acceptance_criteria}
+                    />
+                  </Panel>
+                )}
+                {details && <Disclosure title="More details">{details}</Disclosure>}
+              </div>
+            )}
+            {tab === 'changes' && (
+              <>
+                <div className="row between wrap fix-evidence" aria-live="polite">
+                  <span className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+                    <Icon name={ready ? 'circleCheck' : 'clock'} />
+                    <strong>
+                      {ready
+                        ? 'Checks passed · ready for review'
+                        : running
+                          ? 'Checks in progress'
+                          : 'Resolve checks before applying'}
+                    </strong>
+                  </span>
+                  <div className="row" style={{ gap: '8px', alignItems: 'center' }}>
+                    <Button
+                      tone={showDiff ? 'ghost small' : 'primary small'}
+                      icon={showDiff ? 'close' : 'code'}
+                      onClick={() => setShowDiff((v) => !v)}
+                    >
+                      {showDiff ? 'Hide diff' : 'Check diff'}
+                    </Button>
+                  </div>
+                </div>
+                {!showDiff ? (
+                  <div className="proposal-files-summary">
+                    <table className="dense-table">
+                      <thead>
+                        <tr>
+                          <th>File</th>
+                          <th>Changes</th>
+                          <th>Status</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {files.map((file) => {
+                          const adds =
+                            file.diff?.lines?.filter((l) => l.kind === 'add').length || 0;
+                          const dels =
+                            file.diff?.lines?.filter((l) => l.kind === 'delete').length || 0;
+                          const isVisited = viewed.includes(file.path);
+                          return (
+                            <tr key={file.path}>
+                              <td>
+                                <span className="font-mono">{file.path}</span>
+                              </td>
+                              <td>
+                                <span className="diff-stats font-mono">
+                                  <span className="diff-stat add">+{adds}</span>{' '}
+                                  <span className="diff-stat del">-{dels}</span>
+                                </span>
+                              </td>
+                              <td>
+                                {isVisited ? (
+                                  <Badge value="Reviewed" tone="green" />
+                                ) : (
+                                  <Badge value="Pending" />
+                                )}
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
+                                <Button
+                                  tone="ghost small"
+                                  onClick={() => {
+                                    selectFile(file.path);
+                                    setShowDiff(true);
+                                    setFocusDiff(true);
+                                  }}
+                                >
+                                  Diff
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <>
+                    <h2 className="sr-only">Proposal diff</h2>
+                    <FixTabs
+                      label="Files to change"
+                      selected={edit.path}
+                      onSelect={selectFile}
+                      panel="fix-file-diff"
+                      items={files.map((file) => ({
+                        id: file.path,
+                        label: file.path,
+                        visited: viewed.includes(file.path),
+                      }))}
+                    />
+                    <div className="studio-review-body">
+                      <div
+                        ref={diff}
+                        id="fix-file-diff"
+                        role="tabpanel"
+                        aria-labelledby={`fix-file-diff-tab-${files.indexOf(edit)}`}
+                        className="change-files"
+                      >
+                        <ProposalDiff
+                          edit={edit}
+                          index={files.indexOf(edit)}
+                          total={files.length}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+            {tab === 'checks' && (
+              <div className="stack fix-step-checks">
+                <ChangeChecks s={s} tests={tests} />
+                <WorkflowProgress s={s} actionLabel="Apply" showCancel={false} />
+              </div>
+            )}
+            {tab === 'commit' && (
+              <div className="stack fix-step-commit">
+                <Panel title="Review & Commit">
+                  <p className="small muted">
+                    {viewed.length} of {files.length} files reviewed. Ready to commit to{' '}
+                    {s.repository?.branch || 'the current branch'}.
+                  </p>
+                  {s.repository?.available && (
+                    <CommitMessage
+                      message={commitMessage}
+                      onChange={setCommitMessage}
+                      disabled={!!s.busy}
+                    />
+                  )}
+                </Panel>
+              </div>
+            )}
+          </div>
+          {change.state === 'draft' && (
+            <div className="fix-action-bar">
+              <div className="row" style={{ gap: '10px', alignItems: 'center' }}>
+                {onRetryWithDiagnostics && attention > 0 && (
+                  <Button
+                    tone="warning small"
+                    icon="refresh"
+                    disabled={!!s.busy || running}
+                    title="Re-run fix using error diagnostics as input, without resetting workspace"
+                    onClick={() => void onRetryWithDiagnostics()}
+                  >
+                    Retry with Diagnostics
+                  </Button>
+                )}
+                {onResetAndRetry && (
+                  <Button
+                    tone="ghost small"
+                    icon="trash"
+                    disabled={!!s.busy || running}
+                    title="Clean edit files and retry from base"
+                    onClick={() => void onResetAndRetry()}
+                  >
+                    Reset & Retry
+                  </Button>
+                )}
+                <span className="small muted font-mono">
+                  {viewed.length}/{files.length} reviewed
+                </span>
+              </div>
+              {running ? (
+                <Button
+                  disabled={!!s.busy || change.workflow?.status === 'canceling'}
+                  onClick={() => void w.cancelChangeWorkflow()}
+                >
+                  Cancel workflow
+                </Button>
+              ) : tab === 'finding' ? (
+                <Button tone="primary" icon="arrow" onClick={() => setTab('changes')}>
+                  Review changes
+                </Button>
+              ) : tab === 'changes' ? (
+                next && ready ? (
+                  <Button
+                    tone="primary"
+                    icon="arrow"
+                    disabled={!!s.busy}
+                    onClick={() => {
+                      selectFile(next.path);
+                      setShowDiff(true);
+                      setFocusDiff(true);
+                    }}
+                  >
+                    Review next file
+                  </Button>
+                ) : (
+                  <Button tone="primary" icon="arrow" onClick={() => setTab('checks')}>
+                    Verify checks
+                  </Button>
+                )
+              ) : tab === 'checks' ? (
+                <Button tone="primary" icon="arrow" onClick={() => setTab('commit')}>
+                  Proceed to commit
+                </Button>
+              ) : (
+                <Button
+                  tone="primary"
+                  icon="check"
+                  loading={s.busy === 'Apply change'}
+                  disabled={
+                    !!s.busy ||
+                    !ready ||
+                    !s.repository ||
+                    !!s.resourceErrors.Git ||
+                    (s.repository.available &&
+                      (!s.repository.at_root ||
+                        !s.repository.branch ||
+                        !s.repository.head ||
+                        !commitMessage.trim()))
+                  }
+                  onClick={(event) => {
+                    if (event.detail > 1) return;
+                    void w.acceptChange(commitMessage);
+                  }}
+                >
+                  {s.repository?.available
+                    ? 'Commit to branch'
+                    : `Apply ${files.length} ${files.length === 1 ? 'file' : 'files'}`}
+                </Button>
+              )}
+            </div>
           )}
-        </div>
-      )}
+        </main>
+      </div>
     </section>
   );
 }

@@ -36,9 +36,9 @@ const improveNav: typeof mainNav = [
 ];
 const utilityNav: [Page, string, string][] = [
   ['git', 'Git / Worktrees', 'branch'],
+  ['instructions', 'Environment', 'file'],
+  ['analysis-files', 'File Scope', 'folder'],
   ['diagrams', 'Architecture', 'network'],
-  ['instructions', 'Instructions', 'file'],
-  ['analysis-files', 'Context', 'folder'],
   ['models', 'Models', 'layers'],
   ['history', 'History', 'clock'],
 ];
@@ -47,7 +47,7 @@ const analysisPages: [Page, string][] = [
   ['analysis-run', 'Last run'],
 ];
 const contextPages: [Page, string][] = [
-  ['analysis-files', 'Files & scope'],
+  ['analysis-files', 'Files to skip / Scope'],
   ['context', 'Provider context'],
 ];
 const findingPages: [Page, string][] = [
