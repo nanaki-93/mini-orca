@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -417,7 +416,7 @@ func (s *Service) validateFeature(idea FeatureSuggestion) error {
 		if err != nil {
 			return err
 		}
-		if file.Binary || filepath.Ext(path) != ".go" && filepath.Ext(path) != ".md" {
+		if file.Binary {
 			return fmt.Errorf("feature path does not support implementation")
 		}
 		if _, err := captureChangeTarget(s.manager.Root(), path); err != nil {

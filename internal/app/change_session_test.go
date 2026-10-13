@@ -269,3 +269,38 @@ func TestChangeScopeAndRemoteConsent(t *testing.T) {
 		}
 	}
 }
+
+func TestChangeUnlocksAllTextFileTypesAndHunkProposalUpdates(t *testing.T) {
+	service, root := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	if err := os.WriteFile(filepath.Join(root, "style.css"), []byte(":root {\n  --bg: #000;\n  --fg: #fff;\n}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	index, err := service.Reindex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	proposal, err := service.ProposeInstructions(context.Background(), InstructionProposalRequest{
+		ChangeCreateRequest: ChangeCreateRequest{
+			ProjectID:       index.ProjectID,
+			ProjectRevision: index.ProjectRevision,
+			Kind:            "feature",
+			Title:           "Direct edit style.css",
+			Paths:           []string{"style.css"},
+		},
+		Content: ":root {\n  --bg: #111;\n  --fg: #eee;\n}\n",
+	})
+	if err != nil || proposal.Revision != 1 || len(proposal.Changes) != 1 {
+		t.Fatalf("direct non-Go/non-Markdown proposal failed: %+v, %v", proposal, err)
+	}
+	updated, err := service.SendChangeMessage(context.Background(), proposal.ID, ChangeMessageRequest{
+		ChangeIdentity: changeIdentity(proposal),
+		Message:        "Accept first hunk only",
+		Changes: []ChangeEditInput{{
+			Path:    "style.css",
+			Content: ":root {\n  --bg: #111;\n  --fg: #fff;\n}\n",
+		}},
+	})
+	if err != nil || updated.Revision != 2 || len(updated.Changes) != 1 || !strings.Contains(updated.Changes[0].Content, "--fg: #fff;") {
+		t.Fatalf("hunk proposal update failed: %+v, %v", updated, err)
+	}
+}
