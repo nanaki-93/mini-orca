@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type * as M from './models';
 import {
   workspace as w,
@@ -165,7 +165,10 @@ export function selectedResult(s: State) {
 }
 const pageSize = 10;
 export function Results({ s }: { s: State }) {
-  const category = findingCategory(s) || 'bugs';
+  const [categoryFilter, setCategoryFilter] = useState<'all' | FindingCategory>('all');
+  const [showDone, setShowDone] = useState(false);
+  const currentCategory = findingCategory(s) || 'bugs';
+  const category = categoryFilter === 'all' ? currentCategory : categoryFilter;
   const kind =
     category === 'performance' ? 'performance' : category === 'security' ? 'security' : 'fix';
   const results = s.results[category];
@@ -174,9 +177,18 @@ export function Results({ s }: { s: State }) {
   const search = useRef<HTMLInputElement>(null);
   const updateView = (patch: Partial<FindingListView>) =>
     w.set({ findingViews: { ...s.findingViews, [category]: { ...listView, ...patch } } });
-  const unique = resultRows(s, category);
+  const allRows = [
+    ...resultRows(s, 'bugs'),
+    ...resultRows(s, 'performance'),
+    ...resultRows(s, 'security'),
+  ];
+  const unique =
+    categoryFilter === 'all'
+      ? [...new Map(allRows.map((row) => [row.key, row])).values()]
+      : resultRows(s, categoryFilter);
   const filtered = unique.filter(
     (row) =>
+      (!showDone ? row.status !== 'fixed' : true) &&
       `${row.name} ${row.title} ${row.path} ${row.symbol}`
         .toLowerCase()
         .includes(query.toLowerCase()) &&
@@ -402,7 +414,11 @@ export function Results({ s }: { s: State }) {
     <div className="workspace-page results-page">
       <Heading
         variant="intro"
-        title={human(category)[0].toUpperCase() + human(category).slice(1)}
+        title={
+          categoryFilter === 'all'
+            ? 'Issues'
+            : `${human(categoryFilter)[0].toUpperCase() + human(categoryFilter).slice(1)} Issues`
+        }
         detail={
           results ? (
             <span className="row wrap">
@@ -411,9 +427,7 @@ export function Results({ s }: { s: State }) {
                 <span>{human(results.progress.status)}</span>
               </span>
               <span>
-                {results.saved_finding_count === null
-                  ? 'Count unavailable'
-                  : `${results.saved_finding_count} findings`}
+                {filtered.length} {filtered.length === 1 ? 'issue' : 'issues'}
               </span>
             </span>
           ) : undefined
@@ -491,13 +505,27 @@ export function Results({ s }: { s: State }) {
           </Panel>
         )}
       </Disclosure>
-      <Panel title="Findings" className="results-findings">
+      <Panel title="Issues" className="results-findings">
         <div className="toolbar findings-toolbar">
+          <div className="category-pills" style={{ display: 'inline-flex', gap: '4px' }}>
+            {(['all', 'bugs', 'security', 'performance'] as const).map((cat) => (
+              <Button
+                key={cat}
+                tone={categoryFilter === cat ? 'primary small' : 'ghost small'}
+                onClick={() => {
+                  setCategoryFilter(cat);
+                  updateView({ page: 1 });
+                }}
+              >
+                {cat === 'all' ? 'All' : human(cat)[0].toUpperCase() + human(cat).slice(1)}
+              </Button>
+            ))}
+          </div>
           <div className="input-wrap findings-search">
             <Icon name="search" />
             <input
               ref={search}
-              aria-label="Filter findings"
+              aria-label="Filter issues"
               value={query}
               onChange={(e) => updateView({ query: e.target.value, page: 1 })}
               onKeyDown={(e) => {
@@ -506,14 +534,14 @@ export function Results({ s }: { s: State }) {
                   clearSearch();
                 }
               }}
-              placeholder="Filter findings, files, symbols…"
+              placeholder="Filter issues, files, symbols…"
             />
             {query && (
               <Button
                 className="findings-search-clear"
                 tone="ghost"
                 icon="close"
-                aria-label="Clear finding search"
+                aria-label="Clear issue search"
                 title="Clear search (Esc)"
                 onClick={clearSearch}
               />
@@ -524,7 +552,7 @@ export function Results({ s }: { s: State }) {
               {severity ? <PriorityIcon value={severity} /> : <Icon name="filter" />}
             </span>
             <select
-              aria-label="Finding priority"
+              aria-label="Issue priority"
               value={severity}
               onChange={(e) => updateView({ severity: e.target.value, page: 1 })}
             >
@@ -537,6 +565,28 @@ export function Results({ s }: { s: State }) {
             </select>
             <Icon name="down" />
           </div>
+          <label
+            className="checkbox-filter"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12px',
+              cursor: 'pointer',
+              userSelect: 'none',
+              marginLeft: '8px',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={showDone}
+              onChange={(e) => {
+                setShowDone(e.target.checked);
+                updateView({ page: 1 });
+              }}
+            />
+            <span>Show Done</span>
+          </label>
           {(query || severity) && (
             <Button
               tone="ghost small"
@@ -551,7 +601,7 @@ export function Results({ s }: { s: State }) {
           )}
         </div>
         <div className="findings-columns" aria-hidden="true">
-          <span>Finding</span>
+          <span>Issue</span>
           <span>Location</span>
           <span>Status</span>
         </div>

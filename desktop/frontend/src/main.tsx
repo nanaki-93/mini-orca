@@ -30,7 +30,7 @@ const mainNav: [Page, string, string][] = [
 ];
 const improveNav: typeof mainNav = [
   ['analysis', 'Analysis', 'activity'],
-  ['bugs', 'Findings', 'bug'],
+  ['bugs', 'Issues', 'bug'],
   ['features', 'Features', 'sparkles'],
   ['changes', 'Changes', 'gitCommit'],
 ];
