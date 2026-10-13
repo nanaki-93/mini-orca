@@ -67,7 +67,7 @@ export function ProjectPage({ s, compact = false }: { s: State; compact?: boolea
                 tone="primary"
                 onClick={() => void w.openProject(path, false)}
               >
-                Open saved project
+                Open project
               </Button>
               <Button
                 disabled={!!s.busy || !path.trim() || !s.connected}
@@ -79,7 +79,7 @@ export function ProjectPage({ s, compact = false }: { s: State; compact?: boolea
             {!s.connected && (
               <div className="stack">
                 <p className="small">
-                  Start the daemon with <code>go run ./cmd/daemon</code>.
+                  Daemon disconnected on <code>:9090</code>.
                 </p>
                 <Button onClick={() => void w.act('Connect', () => w.connect())}>Reconnect</Button>
               </div>
@@ -103,7 +103,7 @@ export function ProjectPage({ s, compact = false }: { s: State; compact?: boolea
             />
             <div className="actions section-gap">
               <Button disabled={!!s.busy} onClick={() => void w.reindex()} icon="refresh">
-                Refresh facts
+                Reindex
               </Button>
               <Go page="summary">Overview</Go>
             </div>
@@ -216,10 +216,10 @@ export function Summary({ s }: { s: State }) {
   return (
     <div className="summary-page">
       <div className="summary-hero">
-        <span className="studio-eyebrow">Your project</span>
         <header className="page-heading">
           <div>
             <h1>{s.project!.name}</h1>
+            <p className="summary-path">{s.project!.path}</p>
           </div>
           <div className="actions">
             <Button
@@ -230,7 +230,7 @@ export function Summary({ s }: { s: State }) {
               Refresh
             </Button>
             <Go page="analysis" icon="activity">
-              Analyze project
+              Analyze
             </Go>
             <Button
               icon="plus"
@@ -241,7 +241,7 @@ export function Summary({ s }: { s: State }) {
                 void w.navigate('chat');
               }}
             >
-              Start a task
+              New task
             </Button>
           </div>
         </header>
@@ -250,7 +250,6 @@ export function Summary({ s }: { s: State }) {
             <StatusDot value={overview?.analysis.status || s.project!.ai_status} label="Overview" />
             <Prose text={overview?.analysis.purpose || s.project!.summary} />
           </div>
-          <p className="summary-path">{s.project!.path}</p>
           <dl className="summary-facts" aria-label="Project facts">
             <div>
               <dt>Project type</dt>
@@ -274,13 +273,8 @@ export function Summary({ s }: { s: State }) {
       </div>
       <section className="studio-resume" aria-label="Continue work">
         <div>
-          <span className="studio-eyebrow">
-            {currentWork ? 'Continue your work' : 'Your next step'}
-          </span>
-          <h2>
-            {currentWork?.title ||
-              (s.run ? 'Explore your project analysis' : 'What would you like to build?')}
-          </h2>
+          <span className="studio-eyebrow">{currentWork ? 'Active task' : 'Next action'}</span>
+          <h2>{currentWork?.title || (s.run ? 'Analysis results ready' : 'Ready for new task')}</h2>
 
           {currentWork && (
             <span className="small muted">
@@ -297,18 +291,17 @@ export function Summary({ s }: { s: State }) {
             disabled={!!s.busy}
             onClick={() => void openWork(currentWork.id)}
           >
-            Continue work
+            Open task
           </Button>
         ) : (
           <Go page={s.run ? 'analysis-run' : 'chat'} icon="arrow" tone="primary">
-            {s.run ? 'View results' : 'Start a task'}
+            {s.run ? 'View results' : 'New task'}
           </Go>
         )}
       </section>
       <div className="summary-dashboard">
         <section className="studio-attention" aria-label="Needs attention">
-          <h2>Needs attention</h2>
-          <p className="small muted">Model suggestions and ideas to investigate.</p>
+          <h2>Triage & findings</h2>
           <div className="metric-grid">{metrics.map(renderMetric)}</div>
         </section>
         <Panel className="coverage-panel">
@@ -379,7 +372,7 @@ export function Models({ s }: { s: State }) {
     <div className="workspace-page models-workspace">
       <Heading
         title="Models"
-        detail="Choose models for analysis, creation, testing and review."
+        detail="Model assignments for analysis, creation, testing and review."
         variant="intro"
       >
         <Button
@@ -398,9 +391,6 @@ export function Models({ s }: { s: State }) {
         </div>
       )}
       <Panel title="Analysis models" className="analysis-model-settings">
-        <p className="small muted">
-          Used for the next analysis. Saved runs keep their captured models.
-        </p>
         <ModelSelectors
           s={s}
           value={analysisSetupModels(s)}
@@ -409,10 +399,6 @@ export function Models({ s }: { s: State }) {
         />
       </Panel>
       <Panel title="Workflow models" className="fix-models">
-        <p className="small muted">
-          Creation, testing and review choices for Chat and fixes. A running workflow keeps its
-          captured models.
-        </p>
         <WorkflowModels
           s={s}
           value={s.workflowModels || s.change?.workflow?.models || defaultWorkflowModels}
@@ -420,9 +406,6 @@ export function Models({ s }: { s: State }) {
         />
       </Panel>
       <h2>Configured profiles</h2>
-      <p className="small muted">
-        Current daemon configuration, not captured run choices or provider health.
-      </p>
       <div className="grid models-grid">
         {Object.values(s.models?.scopes || {}).map((model) => (
           <Panel
@@ -459,10 +442,7 @@ export function Models({ s }: { s: State }) {
 export function Diagrams({ s }: { s: State }) {
   return (
     <>
-      <Heading
-        title="Architecture and Flow"
-        detail="The shape of your project, from captured source."
-      >
+      <Heading title="Architecture and flow">
         <Go page="summary">Back to overview</Go>
       </Heading>
       <div className="architecture-layout">
@@ -497,9 +477,6 @@ export function Diagrams({ s }: { s: State }) {
           <Panel title="Next steps">
             <BulletContent title="" items={s.overview?.analysis.next_steps} />
           </Panel>
-          <p className="small muted">
-            Diagrams explain the captured source. They are not execution traces.
-          </p>
           <Go page="editor" icon="code">
             Explore source
           </Go>
