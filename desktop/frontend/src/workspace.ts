@@ -1941,9 +1941,9 @@ export class Workspace {
       await this.requestChangeChecks(tests);
     });
   }
-  async repairChange() {
+  async repairChange(message = 'Repair failed checks.') {
     await this.act('Repair proposal', async () => {
-      if (await this.requestChangeMessage('Repair failed checks.', true))
+      if (await this.requestChangeMessage(message, true))
         await this.requestChangeChecks(!!this.state.change?.check_options?.run_tests);
     });
   }

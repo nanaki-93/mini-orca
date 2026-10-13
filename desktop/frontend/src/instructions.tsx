@@ -96,7 +96,7 @@ export function Instructions({ s }: { s: State }) {
   const excluded = preview?.effective.excluded.some((file) => file.path === preview.path);
   return (
     <div className="workspace-page instructions-page">
-      <Heading variant="intro" title="Project instructions">
+      <Heading variant="intro" title="Environment (AGENTS.md)">
         <Button disabled={!!s.busy || !ready} onClick={() => setEditing(!editing)}>
           {editing ? 'Read guidance' : 'Edit draft'}
         </Button>
