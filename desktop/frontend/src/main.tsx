@@ -32,13 +32,13 @@ const improveNav: typeof mainNav = [
   ['analysis', 'Analysis', 'activity'],
   ['bugs', 'Findings', 'bug'],
   ['features', 'Features', 'sparkles'],
-  ['changes', 'Changes', 'branch'],
+  ['changes', 'Changes', 'gitCommit'],
 ];
 const utilityNav: [Page, string, string][] = [
   ['git', 'Git / Worktrees', 'branch'],
-  ['diagrams', 'Architecture', 'branch'],
+  ['diagrams', 'Architecture', 'network'],
   ['instructions', 'Instructions', 'file'],
-  ['analysis-files', 'Context', 'layers'],
+  ['analysis-files', 'Context', 'folder'],
   ['models', 'Models', 'layers'],
   ['history', 'History', 'clock'],
 ];
