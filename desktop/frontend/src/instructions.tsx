@@ -98,13 +98,62 @@ export function Instructions({ s }: { s: State }) {
     <div className="workspace-page instructions-page">
       <Heading
         variant="intro"
-        title="Environment (AGENTS.md)"
-        detail="Configure autonomous agent guidance, architecture rules, and execution constraints in root AGENTS.md."
+        title="Settings & Project Rules (AGENTS.md)"
+        detail="Consolidated workspace trust, model routing, and project-wide agent rules."
       >
+        <Button
+          tone="ghost"
+          icon="layers"
+          disabled={!!s.busy}
+          onClick={() => void w.navigate('models')}
+        >
+          Model Routing
+        </Button>
+        <Button
+          tone="ghost"
+          icon="folder"
+          disabled={!!s.busy}
+          onClick={() => void w.navigate('analysis-files')}
+        >
+          File Scope
+        </Button>
         <Button disabled={!!s.busy || !ready} onClick={() => setEditing(!editing)}>
           {editing ? 'Read guidance' : 'Edit draft'}
         </Button>
       </Heading>
+
+      <Panel
+        title="Consolidated Workspace Trust"
+        actions={
+          <Badge
+            value={s.workspaceTrust ? 'Trusted Workspace' : 'Confirmations Active'}
+            tone={s.workspaceTrust ? 'green' : 'violet'}
+          />
+        }
+      >
+        <div className="row between wrap" style={{ gap: '16px' }}>
+          <div>
+            <p className="small muted">
+              Unifies remote AI provider consent, AI security scan consent, and local test execution
+              trust into a single workspace-level setting so running analyses and prompts is
+              frictionless.
+            </p>
+          </div>
+          <label
+            className="row"
+            style={{ gap: '8px', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}
+          >
+            <input
+              type="checkbox"
+              aria-label="Consolidated Workspace Trust"
+              checked={!!s.workspaceTrust}
+              onChange={(e) => void w.setWorkspaceTrust(e.target.checked)}
+            />
+            <span>Trust this workspace</span>
+          </label>
+        </div>
+      </Panel>
+
       <div className="instruction-grid">
         <section className="stack" aria-label="Instruction draft">
           {
@@ -287,6 +336,20 @@ export function Instructions({ s }: { s: State }) {
                       onClick={() => void w.proposeInstructions(proposed)}
                     >
                       Preview instruction diff
+                    </Button>
+                    <Button
+                      tone="ghost"
+                      disabled={
+                        !!s.busy ||
+                        !ready ||
+                        excluded ||
+                        !proposed.trim() ||
+                        pending.length > 0 ||
+                        proposed === preview?.existing_content
+                      }
+                      onClick={() => void w.saveDirectFile(path, proposed)}
+                    >
+                      Save Rules Directly
                     </Button>
                   </div>
                 </>

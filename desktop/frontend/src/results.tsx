@@ -427,15 +427,42 @@ export function Results({ s }: { s: State }) {
         reason: r.reason,
       })),
   ];
+  const featureRows: ResultRow[] = (s.features?.suggestions || [])
+    .filter((idea) => idea.status !== 'dismissed')
+    .map((idea) => ({
+      key: `feature:${idea.id}`,
+      target: {
+        project_id: s.project?.project_id || '',
+        kind: 'feature',
+        id: idea.id,
+        path: idea.paths[0] || '',
+      },
+      title: idea.title,
+      name: idea.title,
+      path: idea.paths.join(', '),
+      symbol: '',
+      line: 0,
+      severity: idea.effort || 'medium',
+      confidence: 'ai_suggestion',
+      freshness: idea.freshness || 'fresh',
+      status: idea.status,
+      kind: 'Feature idea',
+      text: [['Evidence', idea.evidence]],
+      cause: idea.benefit,
+      solution: idea.acceptance_criteria.join('\n'),
+    }));
+  const [selectedInspectorKey, setSelectedInspectorKey] = useState<string>('');
+  const showFeatures = categoryFilter === ('features' as any) || s.page === 'features';
+  const inspectorRow =
+    (showFeatures
+      ? featureRows.find((r) => r.key === selectedInspectorKey) || featureRows[0]
+      : filtered.find((r) => r.key === selectedInspectorKey) || filtered[0]) || undefined;
+
   return (
     <div className="workspace-page results-page">
       <Heading
         variant="intro"
-        title={
-          categoryFilter === 'all'
-            ? 'Issues'
-            : `${human(categoryFilter)[0].toUpperCase() + human(categoryFilter).slice(1)} Issues`
-        }
+        title="Issues & Feature Ideas"
         detail={
           results ? (
             <span className="row wrap">
@@ -444,7 +471,8 @@ export function Results({ s }: { s: State }) {
                 <span>{human(results.progress.status)}</span>
               </span>
               <span>
-                {filtered.length} {filtered.length === 1 ? 'issue' : 'issues'}
+                {filtered.length} {filtered.length === 1 ? 'issue' : 'issues'} ·{' '}
+                {featureRows.length} feature ideas
               </span>
             </span>
           ) : undefined
@@ -528,267 +556,317 @@ export function Results({ s }: { s: State }) {
           </div>
         </div>
       )}
-      <Panel title="Issues" className="results-findings">
-        <div className="toolbar findings-toolbar">
-          <div className="category-pills" style={{ display: 'inline-flex', gap: '4px' }}>
-            {(['all', 'bugs', 'security', 'performance'] as const).map((cat) => (
+      <div className="issue-split-grid">
+        <Panel title="Issues & Ideas" className="results-findings">
+          <div className="toolbar findings-toolbar">
+            <div className="category-pills" style={{ display: 'inline-flex', gap: '4px', flexWrap: 'wrap' }}>
+              {(['all', 'bugs', 'security', 'performance'] as const).map((cat) => (
+                <Button
+                  key={cat}
+                  tone={!showFeatures && categoryFilter === cat ? 'primary small' : 'ghost small'}
+                  onClick={() => {
+                    if (s.page === 'features') void w.navigate('bugs');
+                    setCategoryFilter(cat);
+                    updateView({ page: 1 });
+                  }}
+                >
+                  <span>
+                    {cat === 'all' ? 'All' : human(cat)[0].toUpperCase() + human(cat).slice(1)}
+                  </span>
+                  <span
+                    style={{
+                      marginLeft: '4px',
+                      fontSize: '11px',
+                      opacity: categoryFilter === cat ? 0.9 : 0.6,
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    ({categoryCounts[cat]})
+                  </span>
+                </Button>
+              ))}
               <Button
-                key={cat}
-                tone={categoryFilter === cat ? 'primary small' : 'ghost small'}
-                onClick={() => {
-                  setCategoryFilter(cat);
+                tone={showFeatures ? 'primary small' : 'ghost small'}
+                onClick={() => setCategoryFilter('features' as any)}
+              >
+                <span>Features ({featureRows.length})</span>
+              </Button>
+            </div>
+            <div className="input-wrap findings-search">
+              <Icon name="search" />
+              <input
+                ref={search}
+                aria-label="Filter issues"
+                value={query}
+                onChange={(e) => updateView({ query: e.target.value, page: 1 })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape' && query) {
+                    e.preventDefault();
+                    clearSearch();
+                  }
+                }}
+                placeholder="Filter issues, files, symbols…"
+              />
+              {query && (
+                <Button
+                  className="findings-search-clear"
+                  tone="ghost"
+                  icon="close"
+                  aria-label="Clear issue search"
+                  title="Clear search (Esc)"
+                  onClick={clearSearch}
+                />
+              )}
+            </div>
+            <div className="priority-filter" data-active={!!severity}>
+              <span className="priority-filter-icon" aria-hidden="true">
+                {severity ? <PriorityIcon value={severity} /> : <Icon name="filter" />}
+              </span>
+              <select
+                aria-label="Issue priority"
+                value={severity}
+                onChange={(e) => updateView({ severity: e.target.value, page: 1 })}
+              >
+                <option value="">All priorities</option>
+                {priorities.map((value) => (
+                  <option key={value} value={value}>
+                    {human(value)[0].toUpperCase() + human(value).slice(1)}
+                  </option>
+                ))}
+              </select>
+              <Icon name="down" />
+            </div>
+            <label
+              className="checkbox-filter"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '12px',
+                cursor: 'pointer',
+                userSelect: 'none',
+                marginLeft: '8px',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={showDone}
+                onChange={(e) => {
+                  setShowDone(e.target.checked);
                   updateView({ page: 1 });
                 }}
+              />
+              <span>Show Done</span>
+            </label>
+          </div>
+          <div className="result-list">
+            {(showFeatures ? featureRows : filtered.slice(offset, offset + pageSize)).map((row) => (
+              <div
+                className="result-row"
+                key={row.key}
+                onClick={() => {
+                  setSelectedInspectorKey(row.key);
+                  if (!showFeatures) w.openFinding(category, row.key);
+                }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedInspectorKey(row.key);
+                    if (!showFeatures) w.openFinding(category, row.key);
+                  }
+                }}
               >
-                <span>
-                  {cat === 'all' ? 'All' : human(cat)[0].toUpperCase() + human(cat).slice(1)}
-                </span>
                 <span
-                  style={{
-                    marginLeft: '4px',
-                    fontSize: '11px',
-                    opacity: categoryFilter === cat ? 0.9 : 0.6,
-                    fontVariantNumeric: 'tabular-nums',
-                  }}
+                  className={`finding-mark ${['high', 'critical'].includes(row.severity) ? 'red' : row.severity === 'low' ? 'blue' : ''}`}
                 >
-                  ({categoryCounts[cat]})
+                  <Icon
+                    name={
+                      showFeatures
+                        ? 'sparkles'
+                        : category === 'security'
+                          ? 'shield'
+                          : category === 'performance'
+                            ? 'gauge'
+                            : 'bug'
+                    }
+                  />
                 </span>
-              </Button>
+                <span className="list-copy">
+                  <span className="row" style={{ gap: '8px', alignItems: 'center' }}>
+                    <span
+                      className={`severity-tag ${['high', 'critical'].includes(row.severity) ? 'danger' : row.severity === 'medium' ? 'warning' : 'info'}`}
+                    >
+                      {showFeatures
+                        ? 'IDEA'
+                        : ['high', 'critical'].includes(row.severity)
+                          ? 'HIGH'
+                          : row.severity === 'medium'
+                            ? 'MED'
+                            : 'LOW'}
+                    </span>
+                    <strong>{row.name}</strong>
+                  </span>
+                  <span className="finding-summary">{row.cause.split('\n')[0]}</span>
+                  <small>
+                    <span className="path font-mono">
+                      {row.path}
+                      {row.line ? `:${row.line}` : ''}
+                    </span>
+                  </small>
+                </span>
+                <div className="finding-inline-actions">
+                  <Button
+                    tone="primary small"
+                    disabled={!!s.busy || activeChangeWorkflow(s.change) || row.freshness === 'stale'}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (showFeatures) {
+                        const idea = s.features?.suggestions.find(
+                          (item) => `feature:${item.id}` === row.key,
+                        );
+                        if (idea) w.discussFeature(idea, false);
+                      } else {
+                        triggerFix(row);
+                      }
+                    }}
+                  >
+                    Fix in Editor
+                  </Button>
+                </div>
+              </div>
             ))}
           </div>
-          <div className="input-wrap findings-search">
-            <Icon name="search" />
-            <input
-              ref={search}
-              aria-label="Filter issues"
-              value={query}
-              onChange={(e) => updateView({ query: e.target.value, page: 1 })}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape' && query) {
-                  e.preventDefault();
-                  clearSearch();
-                }
-              }}
-              placeholder="Filter issues, files, symbols…"
-            />
-            {query && (
-              <Button
-                className="findings-search-clear"
-                tone="ghost"
-                icon="close"
-                aria-label="Clear issue search"
-                title="Clear search (Esc)"
-                onClick={clearSearch}
-              />
-            )}
-          </div>
-          <div className="priority-filter" data-active={!!severity}>
-            <span className="priority-filter-icon" aria-hidden="true">
-              {severity ? <PriorityIcon value={severity} /> : <Icon name="filter" />}
-            </span>
-            <select
-              aria-label="Issue priority"
-              value={severity}
-              onChange={(e) => updateView({ severity: e.target.value, page: 1 })}
+          {!showFeatures && !filtered.length && (
+            <Empty
+              title={
+                unique.length
+                  ? 'No matching issues'
+                  : s.run && !results
+                    ? 'Results not loaded'
+                    : 'No issues found'
+              }
+              detail={
+                unique.length
+                  ? 'Try clearing the search or priority filter.'
+                  : results
+                    ? `Run state: ${human(results.progress.status)}. All analyzed files healthy.`
+                    : 'Run an analysis to scan the project.'
+              }
             >
-              <option value="">All priorities</option>
-              {priorities.map((value) => (
-                <option key={value} value={value}>
-                  {human(value)[0].toUpperCase() + human(value).slice(1)}
-                </option>
-              ))}
-            </select>
-            <Icon name="down" />
-          </div>
-          <label
-            className="checkbox-filter"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '12px',
-              cursor: 'pointer',
-              userSelect: 'none',
-              marginLeft: '8px',
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={showDone}
-              onChange={(e) => {
-                setShowDone(e.target.checked);
-                updateView({ page: 1 });
-              }}
-            />
-            <span>Show Done</span>
-          </label>
-          {(query || severity) && (
-            <Button
-              tone="ghost small"
-              icon="undo"
-              onClick={() => {
-                updateView({ query: '', severity: '', page: 1 });
-                search.current?.focus();
-              }}
-            >
-              Reset
-            </Button>
+              {unique.length ? (
+                <Button tone="ghost" icon="undo" onClick={clearSearch}>
+                  Clear filters
+                </Button>
+              ) : (
+                <Button tone="primary" icon="play" onClick={() => void w.runAnalysisDirect()}>
+                  Run analysis
+                </Button>
+              )}
+            </Empty>
           )}
-        </div>
-        <div className="findings-columns" aria-hidden="true">
-          <span>Issue</span>
-          <span>Location</span>
-          <span>Status</span>
-        </div>
-        <div className="result-list">
-          {filtered.slice(offset, offset + pageSize).map((row) => (
-            <div
-              className="result-row"
-              key={row.key}
-              onClick={() => w.openFinding(category, row.key)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  w.openFinding(category, row.key);
-                }
-              }}
-            >
-              <span
-                className={`finding-mark ${['high', 'critical'].includes(row.severity) ? 'red' : row.severity === 'low' ? 'blue' : ''}`}
-              >
-                <Icon
-                  name={
-                    category === 'security'
-                      ? 'shield'
-                      : category === 'performance'
-                        ? 'gauge'
-                        : 'bug'
-                  }
-                />
-              </span>
-              <span className="list-copy">
-                <span className="row" style={{ gap: '8px', alignItems: 'center' }}>
-                  <span
-                    className={`severity-tag ${['high', 'critical'].includes(row.severity) ? 'danger' : row.severity === 'medium' ? 'warning' : 'info'}`}
+          <nav className="findings-pagination" aria-label="Findings pagination">
+            <div className="pagination-summary small muted" role="status">
+              Page {page} of {pageCount}
+            </div>
+            <div className="pagination-pages">
+              <Button
+                tone="ghost"
+                icon="chevronLeft"
+                aria-label="Previous page"
+                title="Previous page"
+                disabled={page === 1}
+                onClick={() => updateView({ page: page - 1 })}
+              />
+              {pageNumbers.map((number, index) => (
+                <Fragment key={number}>
+                  {index > 0 && number > pageNumbers[index - 1] + 1 && (
+                    <span className="pagination-gap" aria-hidden="true">
+                      …
+                    </span>
+                  )}
+                  <Button
+                    tone="ghost"
+                    aria-label={`Page ${number}`}
+                    aria-current={number === page ? 'page' : undefined}
+                    onClick={() => updateView({ page: number })}
                   >
-                    {['high', 'critical'].includes(row.severity)
-                      ? 'HIGH'
-                      : row.severity === 'medium'
-                        ? 'MED'
-                        : 'LOW'}
-                  </span>
-                  <strong>{row.name}</strong>
-                </span>
-                <span className="finding-summary">{row.cause.split('\n')[0]}</span>
-                <small>
-                  <span className="path font-mono">
-                    {row.path}
-                    {row.line ? `:${row.line}` : ''}
-                  </span>
-                </small>
-              </span>
-              <span className="result-badges">
-                {row.status === 'fixed' && <Badge value="Done" tone="green" />}
-                <PriorityIcon value={row.severity} />
-                <span className="results-state">
-                  <StatusDot value={row.freshness} label="Freshness" />
-                </span>
-              </span>
-              <div className="finding-inline-actions">
+                    {number}
+                  </Button>
+                </Fragment>
+              ))}
+              <Button
+                tone="ghost"
+                icon="chevron"
+                aria-label="Next page"
+                title="Next page"
+                disabled={page === pageCount}
+                onClick={() => updateView({ page: page + 1 })}
+              />
+            </div>
+          </nav>
+        </Panel>
+
+        <Panel title="Selected Issue Inspector">
+          {inspectorRow ? (
+            <div className="stack">
+              <div>
+                <Badge value={inspectorRow.kind} tone="violet" />
+                <h3 style={{ marginTop: '8px' }}>{inspectorRow.name}</h3>
+                <p className="small muted font-mono" style={{ marginTop: '4px' }}>
+                  {inspectorRow.path}
+                  {inspectorRow.line ? `:${inspectorRow.line}` : ''}
+                </p>
+              </div>
+              <div>
+                <strong className="small uppercase muted">Cause / Context</strong>
+                <Prose text={inspectorRow.cause || 'No cause recorded.'} />
+              </div>
+              <div>
+                <strong className="small uppercase muted">Proposed Fix / Criteria</strong>
+                <Prose text={inspectorRow.solution || 'Prepare a fix to generate diff hunks.'} />
+              </div>
+              <div className="actions">
                 <Button
-                  tone="primary small"
-                  disabled={!!s.busy || activeChangeWorkflow(s.change) || row.freshness === 'stale'}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    triggerFix(row);
+                  tone="primary"
+                  icon="sparkles"
+                  disabled={!!s.busy || activeChangeWorkflow(s.change)}
+                  onClick={() => {
+                    if (showFeatures) {
+                      const idea = s.features?.suggestions.find(
+                        (item) => `feature:${item.id}` === inspectorRow.key,
+                      );
+                      if (idea) w.discussFeature(idea, false);
+                    } else {
+                      triggerFix(inspectorRow);
+                    }
                   }}
                 >
-                  Fix
+                  Generate & Review Diff
                 </Button>
-                <Button
-                  tone="ghost small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void w.openFile(row.path, row.symbol);
-                  }}
-                >
-                  File
-                </Button>
+                {inspectorRow.path && (
+                  <Button
+                    tone="ghost"
+                    icon="code"
+                    onClick={() =>
+                      void w.openFile(inspectorRow.path.split(',')[0].trim(), inspectorRow.symbol)
+                    }
+                  >
+                    Open File
+                  </Button>
+                )}
               </div>
             </div>
-          ))}
-        </div>
-        {!filtered.length && (
-          <Empty
-            title={
-              unique.length
-                ? 'No matching issues'
-                : s.run && !results
-                  ? 'Results not loaded'
-                  : 'No issues found'
-            }
-            detail={
-              unique.length
-                ? 'Try clearing the search or priority filter.'
-                : results
-                  ? `Run state: ${human(results.progress.status)}. All analyzed files healthy.`
-                  : 'Run an analysis to scan the project.'
-            }
-          >
-            {unique.length ? (
-              <Button tone="ghost" icon="undo" onClick={clearSearch}>
-                Clear filters
-              </Button>
-            ) : (
-              <Button tone="primary" icon="play" onClick={() => void w.runAnalysisDirect()}>
-                Run analysis
-              </Button>
-            )}
-          </Empty>
-        )}
-        <nav className="findings-pagination" aria-label="Findings pagination">
-          <div className="pagination-summary small muted" role="status">
-            Page {page} of {pageCount}
-          </div>
-          <div className="pagination-pages">
-            <Button
-              tone="ghost"
-              icon="chevronLeft"
-              aria-label="Previous page"
-              title="Previous page"
-              disabled={page === 1}
-              onClick={() => updateView({ page: page - 1 })}
+          ) : (
+            <Empty
+              title="Select an issue or feature idea"
+              detail="Click any row on the left to inspect its cause and generate a diff in Code & Diff."
+              icon="bug"
             />
-            {pageNumbers.map((number, index) => (
-              <Fragment key={number}>
-                {index > 0 && number > pageNumbers[index - 1] + 1 && (
-                  <span className="pagination-gap" aria-hidden="true">
-                    …
-                  </span>
-                )}
-                <Button
-                  tone="ghost"
-                  aria-label={`Page ${number}`}
-                  aria-current={number === page ? 'page' : undefined}
-                  onClick={() => updateView({ page: number })}
-                >
-                  {number}
-                </Button>
-              </Fragment>
-            ))}
-            <Button
-              tone="ghost"
-              icon="chevron"
-              aria-label="Next page"
-              title="Next page"
-              disabled={page === pageCount}
-              onClick={() => updateView({ page: page + 1 })}
-            />
-          </div>
-        </nav>
-      </Panel>
+          )}
+        </Panel>
+      </div>
       <Disclosure
         title={
           <>

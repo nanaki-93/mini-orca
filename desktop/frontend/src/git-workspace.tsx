@@ -152,75 +152,114 @@ export function GitWorkspace({ s }: { s: State }) {
               ))}
             </Notice>
           )}
-          <Panel title="Worktrees">
-            {worktrees.length === 0 ? (
-              <Empty
-                title="No worktrees ready to merge"
-                detail={
-                  repository.dirty
-                    ? 'Commit or move local changes in the current branch, then refresh Git.'
-                    : undefined
-                }
-              />
-            ) : (
-              <div className="git-worktrees">
-                {worktrees.map((tree) => {
-                  const info = getWorktreeInfo(tree, s);
-                  const icon = kindIcon(info.kind);
-                  return (
-                    <article className="git-worktree" key={tree.path} aria-label={tree.branch}>
-                      <span
-                        className={`finding-mark ${info.kind === 'security' ? 'red' : info.kind === 'performance' ? 'blue' : ''}`}
-                      >
-                        <Icon name={icon} />
-                      </span>
-                      <div className="list-copy">
-                        <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
-                          <strong>{info.title}</strong>
-                          <span
-                            className={`severity-tag ${info.kind === 'security' ? 'danger' : info.kind === 'performance' ? 'warning' : 'info'}`}
-                          >
-                            {info.kind.toUpperCase()}
-                          </span>
-                        </div>
-                        <small>
-                          <span className="path font-mono">{tree.branch}</span>
-                          <span className="muted"> · {tree.path}</span>
-                        </small>
-                      </div>
-                      <div className="git-worktree-actions">
-                        <Button
-                          tone="ghost small"
-                          disabled={blocked}
-                          onClick={() => void w.openWorktree(tree.path)}
-                        >
-                          View implementation
-                        </Button>
-                        <Button
-                          tone="danger small"
-                          disabled={blocked}
-                          loading={pending === `discard:${tree.path}`}
-                          onClick={() => run(`discard:${tree.path}`, () => w.discardWorktree(tree))}
-                        >
-                          Discard
-                        </Button>
-                        <Button
-                          tone="primary small"
-                          disabled={blocked}
-                          loading={pending === `merge:${tree.path}`}
-                          onClick={() =>
-                            run(`merge:${tree.path}`, () => w.gitAction('merge', tree))
-                          }
-                        >
-                          Merge
-                        </Button>
-                      </div>
-                    </article>
-                  );
-                })}
+          <div className="git-split-grid">
+            <Panel title={`Current Branch (${repository.branch || 'Detached HEAD'})`}>
+              <div className="stack">
+                <div className="row between wrap">
+                  <span className="small muted font-mono">HEAD: {repository.head || '—'}</span>
+                  <span
+                    className={`badge ${repository.dirty ? 'amber' : 'green'}`}
+                    style={{ fontWeight: 600 }}
+                  >
+                    {repository.dirty ? 'Uncommitted changes' : 'Working tree clean'}
+                  </span>
+                </div>
+                <p className="small muted">
+                  In-place proposals and direct file saves apply directly to{' '}
+                  <code>{repository.branch || 'current branch'}</code> with guarded Undo.
+                </p>
+                <div className="actions">
+                  <Button
+                    tone="primary small"
+                    icon="code"
+                    onClick={() => void w.navigate('editor')}
+                  >
+                    Open Code & Diff
+                  </Button>
+                  {s.changeReceipt?.undo_available && (
+                    <Button
+                      tone="ghost small"
+                      icon="undo"
+                      disabled={busy}
+                      onClick={() => void w.undoChange()}
+                    >
+                      Undo Last Change
+                    </Button>
+                  )}
+                </div>
               </div>
-            )}
-          </Panel>
+            </Panel>
+
+            <Panel title="Worktrees">
+              {worktrees.length === 0 ? (
+                <Empty
+                  title="No worktrees ready to merge"
+                  detail={
+                    repository.dirty
+                      ? 'Commit or move local changes in the current branch, then refresh Git.'
+                      : 'Check the Worktree toggle in the Code & Diff prompt bar to run tasks in isolated worktrees.'
+                  }
+                />
+              ) : (
+                <div className="git-worktrees">
+                  {worktrees.map((tree) => {
+                    const info = getWorktreeInfo(tree, s);
+                    const icon = kindIcon(info.kind);
+                    return (
+                      <article className="git-worktree" key={tree.path} aria-label={tree.branch}>
+                        <span
+                          className={`finding-mark ${info.kind === 'security' ? 'red' : info.kind === 'performance' ? 'blue' : ''}`}
+                        >
+                          <Icon name={icon} />
+                        </span>
+                        <div className="list-copy">
+                          <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+                            <strong>{info.title}</strong>
+                            <span
+                              className={`severity-tag ${info.kind === 'security' ? 'danger' : info.kind === 'performance' ? 'warning' : 'info'}`}
+                            >
+                              {info.kind.toUpperCase()}
+                            </span>
+                          </div>
+                          <small>
+                            <span className="path font-mono">{tree.branch}</span>
+                            <span className="muted"> · {tree.path}</span>
+                          </small>
+                        </div>
+                        <div className="git-worktree-actions">
+                          <Button
+                            tone="ghost small"
+                            disabled={blocked}
+                            onClick={() => void w.openWorktree(tree.path)}
+                          >
+                            View implementation
+                          </Button>
+                          <Button
+                            tone="danger small"
+                            disabled={blocked}
+                            loading={pending === `discard:${tree.path}`}
+                            onClick={() => run(`discard:${tree.path}`, () => w.discardWorktree(tree))}
+                          >
+                            Discard
+                          </Button>
+                          <Button
+                            tone="primary small"
+                            disabled={blocked}
+                            loading={pending === `merge:${tree.path}`}
+                            onClick={() =>
+                              run(`merge:${tree.path}`, () => w.gitAction('merge', tree))
+                            }
+                          >
+                            Merge
+                          </Button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </Panel>
+          </div>
         </>
       )}
       {s.gitPreview && (
