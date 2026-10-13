@@ -5,6 +5,7 @@ import {
   activeChangeWorkflow,
   findingCategory,
   workflowSeed,
+  workflowSetupModels,
   activeRun,
   type FindingCategory,
   type FindingListView,
@@ -15,7 +16,6 @@ import { FixHeading } from './fix-workspace';
 import { SolutionExcerpt } from './fix-solution';
 import { StaleAnalysisButton } from './analysis';
 import { findingName, findingTitle } from './finding-name';
-import { defaultWorkflowModels } from './change-workflow';
 import {
   Badge,
   Button,
@@ -265,7 +265,7 @@ export function Results({ s }: { s: State }) {
       try {
         const context = await w.readFixPreparation();
         const useAgents = preparedSeed.paths.some((path) => path.endsWith('_test.go'));
-        const models = s.workflowModels || s.change?.workflow?.models || defaultWorkflowModels;
+        const models = workflowSetupModels(s);
         if (useAgents) {
           await w.startChangeWorkflow(preparedSeed, models, context);
         } else {

@@ -2,8 +2,13 @@ import { useWorkspace } from './workspace-context';
 import { WorktreePreparation } from './git-controls';
 import { useEffect, useId, useState } from 'react';
 import type { ChangeSeed } from './models';
-import { workflowSeed, type FixPreparationContext, type State } from './workspace';
-import { defaultWorkflowModels } from './change-workflow';
+import {
+  effectiveWorkflowModel,
+  workflowSeed,
+  workflowSetupModels,
+  type FixPreparationContext,
+  type State,
+} from './workspace';
 import { Button, Icon, Loading, Notice, Panel } from './ui';
 
 export function FixPreparation({
@@ -42,10 +47,17 @@ export function FixPreparation({
   }, [s.project?.project_id, s.project?.project_revision, modelKey, refresh]);
   const prepared = workflowSeed(seed);
   const useAgents = prepared.paths.some((path) => path.endsWith('_test.go'));
-  const models = s.workflowModels || s.change?.workflow?.models || defaultWorkflowModels;
+  const models = workflowSetupModels(s);
   const profiles = useAgents ? Object.values(models) : [models.create];
-  const ready = context && profiles.every((profile) => context.models.scopes[profile]);
-  const remote = profiles.some((profile) => context?.models.scopes[profile]?.remote_provider);
+  const modelContext = context && {
+    models: context.models,
+    availableModels: context.availableModels || s.availableModels,
+  };
+  const ready =
+    modelContext && profiles.every((profile) => effectiveWorkflowModel(modelContext, profile));
+  const remote = profiles.some(
+    (profile) => modelContext && effectiveWorkflowModel(modelContext, profile)?.remote_provider,
+  );
   const begin = (workspace?: { branch: string; path: string }) => {
     if (!context || !ready) return;
     setChoosingWorkspace(false);

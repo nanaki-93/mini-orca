@@ -1,7 +1,13 @@
 import { useWorkspace } from './workspace-context';
 import { useEffect, useMemo, useState } from 'react';
-import { activeChangeWorkflow, canAcceptChange, changeChecksPassed, type State } from './workspace';
-import { defaultWorkflowModels, WorkflowProgress } from './change-workflow';
+import {
+  activeChangeWorkflow,
+  canAcceptChange,
+  changeChecksPassed,
+  workflowSetupModels,
+  type State,
+} from './workspace';
+import { WorkflowProgress } from './change-workflow';
 import { ChangeHistory, ChangeOutcome } from './change-shared';
 import type * as M from './models';
 import {
@@ -264,9 +270,9 @@ export function Editor({ s }: { s: State }) {
           .slice(0, 28) || 'task'
       }`;
       const path = `${s.project?.path || '.'}/.mini-orca/worktrees/${branch.replace('/', '-')}`;
-      await w.prepareFixInWorktree(seed, defaultWorkflowModels, prep, branch, path, true);
+      await w.prepareFixInWorktree(seed, workflowSetupModels(s), prep, branch, path, true);
     } else {
-      await w.prepareChange(seed, true);
+      await w.prepareChange(seed, true, workflowSetupModels(s).create);
       w.set({ page: 'editor' });
     }
   };

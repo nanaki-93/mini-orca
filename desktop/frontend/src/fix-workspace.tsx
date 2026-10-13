@@ -2,8 +2,14 @@ import { useWorkspace } from './workspace-context';
 import { CommitMessage } from './git-controls';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ChangeSession, ChangeSeed } from './models';
-import { activeChangeWorkflow, canAcceptChange, workflowSeed, type State } from './workspace';
-import { WorkflowProgress, defaultWorkflowModels } from './change-workflow';
+import {
+  activeChangeWorkflow,
+  canAcceptChange,
+  workflowSeed,
+  workflowSetupModels,
+  type State,
+} from './workspace';
+import { WorkflowProgress } from './change-workflow';
 import { ChangeChecks, ChangeOutcome, ProposalDiff } from './change-shared';
 import { FixPreparation } from './fix-preparation';
 import { FixSolution } from './fix-solution';
@@ -100,7 +106,7 @@ export function FixWorkspace({ s }: { s: State }) {
       try {
         const context = await w.readFixPreparation();
         const useAgents = preparedSeed.paths.some((path) => path.endsWith('_test.go'));
-        const models = s.workflowModels || s.change?.workflow?.models || defaultWorkflowModels;
+        const models = workflowSetupModels(s);
         if (useAgents) {
           await w.startChangeWorkflow(preparedSeed, models, context);
         } else {
