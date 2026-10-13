@@ -223,15 +223,21 @@ export function AnalysisFiles({ s }: { s: State }) {
         title="File Scope & Exclusions"
         detail={`${s.selection?.files.filter((f) => !f.reason && !excluded.includes(f.path)).length ?? '—'} eligible files selected · configure files to skip`}
       >
-        <Go page="analysis" icon="activity">
-          Analysis setup
-        </Go>
         <Button
           icon="refresh"
           disabled={!!s.busy || changed}
           onClick={() => void w.act('Refresh files', () => w.refreshProject())}
         >
           Refresh
+        </Button>
+        <Button
+          tone="primary"
+          icon="play"
+          disabled={!!s.busy || changed || activeRun(s.run)}
+          loading={activeRun(s.run)}
+          onClick={() => void w.runAnalysisDirect()}
+        >
+          {activeRun(s.run) ? 'Analyzing…' : 'Run Analysis'}
         </Button>
       </Heading>
       {changed && <Notice>Save your selection before starting analysis.</Notice>}
