@@ -102,7 +102,7 @@ export interface ModelChoice {
   id: string;
   name: string;
   provider: string;
-  source: 'configured' | 'pi';
+  source: 'configured' | 'pi' | 'agy';
   location: 'local' | 'remote' | 'unknown';
   model: Model;
 }
@@ -110,6 +110,7 @@ export interface AvailableModels {
   models: ModelChoice[];
   defaults: Record<string, string>;
   pi: { status: 'ready' | 'unavailable'; message?: string };
+  agy: { status: 'ready' | 'unavailable'; message?: string };
 }
 export interface TaskSpec {
   schema_version: string;

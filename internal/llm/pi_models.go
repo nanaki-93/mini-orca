@@ -6,9 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
-	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 )
@@ -24,23 +22,10 @@ type PiModel struct {
 
 // DiscoverPiModels reads Pi's authenticated and custom model inventory without
 // a prompt, project context, extensions, tools, or startup network refreshes.
-func DiscoverPiModels(ctx context.Context, executable string) (models []PiModel, err error) {
-	directory, err := os.MkdirTemp("", "mini-orca-models-")
-	if err != nil {
-		return nil, fmt.Errorf("cannot create private Pi catalog directory")
-	}
-	defer func() {
-		if cleanupErr := os.RemoveAll(directory); cleanupErr != nil && err == nil {
-			models, err = nil, fmt.Errorf("cannot remove private Pi catalog directory")
-		}
-	}()
-	timed, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
-	output, err := runCLI(timed, config.ModelProfile{Provider: config.PiProvider, CLIPath: executable}, cliInvocation{
-		directory: directory,
-		args:      []string{"--mode", "rpc", "--no-session", "--no-tools", "--no-extensions", "--no-mcp", "--no-skills", "--no-prompt-templates", "--no-themes", "--no-context-files", "--offline", "--no-approve"},
-		input:     "{\"id\":\"models\",\"type\":\"get_available_models\"}\n",
-	})
+func DiscoverPiModels(ctx context.Context, executable string) ([]PiModel, error) {
+	output, err := readCLIModelCatalog(ctx, config.PiProvider, executable,
+		[]string{"--mode", "rpc", "--no-session", "--no-tools", "--no-extensions", "--no-mcp", "--no-skills", "--no-prompt-templates", "--no-themes", "--no-context-files", "--offline", "--no-approve"},
+		"{\"id\":\"models\",\"type\":\"get_available_models\"}\n")
 	if err != nil {
 		return nil, err
 	}

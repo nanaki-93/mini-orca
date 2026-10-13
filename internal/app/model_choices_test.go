@@ -15,9 +15,10 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
-func TestAvailableModelsDeduplicatesJobsAndIncludesPiLocalModels(t *testing.T) {
+func TestAvailableModelsDeduplicatesJobsAndIncludesBothCLICatalogs(t *testing.T) {
 	base, _ := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
 	cfg := scopedTestConfig("http://127.0.0.1:1")
+	cfg.ModelScopes.Analyze = config.ModelProfileConfig{Provider: config.AgyProvider, CLIPath: "/private/test-agy", Model: "configured-agy", ReasoningEffort: "medium"}
 	cfg.ModelScopes.Bug = cfg.ModelScopes.Analyze
 	cfg.ModelScopes.Function = config.ModelProfileConfig{Provider: config.PiProvider, CLIPath: "/private/test-pi", Model: "provider/default"}
 	s, err := New(cfg, base.manager)
@@ -34,8 +35,14 @@ func TestAvailableModelsDeduplicatesJobsAndIncludesPiLocalModels(t *testing.T) {
 			{Provider: "custom", ID: "model"},
 		}, nil
 	}
+	s.discoverAgyModels = func(_ context.Context, executable string) ([]llm.AgyModel, error) {
+		if executable != "/private/test-agy" {
+			t.Fatalf("Agy executable = %q", executable)
+		}
+		return []llm.AgyModel{{ID: "gemini-new-high", Name: "Gemini New (High)"}}, nil
+	}
 	catalog, err := s.AvailableModels(context.Background())
-	if err != nil || len(catalog.Models) != 5 || catalog.Pi.Status != "ready" {
+	if err != nil || len(catalog.Models) != 6 || catalog.Pi.Status != "ready" || catalog.Agy.Status != "ready" {
 		t.Fatalf("catalog = %+v, %v", catalog, err)
 	}
 	if catalog.Defaults["analyze"] != catalog.Defaults["bug"] || catalog.Defaults["bug"] == catalog.Defaults["function"] {
@@ -49,17 +56,27 @@ func TestAvailableModelsDeduplicatesJobsAndIncludesPiLocalModels(t *testing.T) {
 		if choice.Source == "pi" && (choice.Location != locations[choice.ID] || choice.Model.ProviderOrigin != "cli://pi" || !choice.Model.RemoteProvider) {
 			t.Fatalf("Pi location/consent metadata = %+v", choice)
 		}
+		if choice.Source == "agy" && (choice.ID != "agy:gemini-new-high" || choice.Name != "Gemini New (High)" || choice.Location != "unknown" || choice.Model.ProviderOrigin != "cli://agy" || !choice.Model.RemoteProvider || choice.Model.ReasoningEffort != "") {
+			t.Fatalf("Agy catalog/consent metadata = %+v", choice)
+		}
 	}
 	encoded, _ := json.Marshal(catalog)
-	for _, secret := range []string{"private-token", "/private/test-pi", "api_key", "APIKey"} {
+	for _, secret := range []string{"private-token", "/private/test-pi", "/private/test-agy", "api_key", "APIKey"} {
 		if strings.Contains(string(encoded), secret) {
 			t.Fatalf("catalog leaked %q", secret)
 		}
 	}
+	piDiscovery := s.discoverPiModels
 	s.discoverPiModels = func(context.Context, string) ([]llm.PiModel, error) { return nil, errors.New("private-token") }
 	partial, err := s.AvailableModels(context.Background())
-	if err != nil || len(partial.Models) != 2 || partial.Pi.Status != "unavailable" || strings.Contains(partial.Pi.Message, "private-token") {
+	if err != nil || len(partial.Models) != 3 || partial.Pi.Status != "unavailable" || partial.Agy.Status != "ready" || strings.Contains(partial.Pi.Message, "private-token") {
 		t.Fatalf("partial catalog = %+v, %v", partial, err)
+	}
+	s.discoverPiModels = piDiscovery
+	s.discoverAgyModels = func(context.Context, string) ([]llm.AgyModel, error) { return nil, errors.New("private-token") }
+	partial, err = s.AvailableModels(context.Background())
+	if err != nil || len(partial.Models) != 5 || partial.Pi.Status != "ready" || partial.Agy.Status != "unavailable" || strings.Contains(partial.Agy.Message, "private-token") {
+		t.Fatalf("partial Agy catalog = %+v, %v", partial, err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -87,6 +104,7 @@ func TestCatalogModelsDispatchIndependentlyOfConfiguredJobsAndPersist(t *testing
 		t.Fatal(err)
 	}
 	s.discoverPiModels = func(context.Context, string) ([]llm.PiModel, error) { return []llm.PiModel{}, nil }
+	s.discoverAgyModels = func(context.Context, string) ([]llm.AgyModel, error) { return []llm.AgyModel{}, nil }
 	catalog, err := s.AvailableModels(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -122,44 +140,101 @@ func TestCatalogModelsDispatchIndependentlyOfConfiguredJobsAndPersist(t *testing
 	}
 }
 
-func TestPiCatalogChoicesRequireMembershipAndConsentBeforeDispatch(t *testing.T) {
+func TestCLICatalogChoicesRequireMembershipAndConsentBeforeDispatch(t *testing.T) {
+	for _, provider := range []config.ModelProvider{config.PiProvider, config.AgyProvider} {
+		t.Run(string(provider), func(t *testing.T) {
+			testCLICatalogChoiceAdmission(t, provider)
+		})
+	}
+}
+
+func testCLICatalogChoiceAdmission(t *testing.T, provider config.ModelProvider) {
+	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("CLI providers require process-group cleanup")
 	}
 	base, _ := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
 	calls := filepath.Join(t.TempDir(), "calls")
 	cfg := config.Default()
-	cfg.ModelScopes.Function = cliAppProfile(t, config.PiProvider, "lm-studio/local-model", validFeatureResponse, calls)
+	model := "gemini-new-high"
+	if provider == config.PiProvider {
+		model = "lm-studio/local-model"
+	}
+	cfg.ModelScopes.Function = cliAppProfile(t, provider, model, validFeatureResponse, calls)
 	s, err := New(cfg, base.manager)
 	if err != nil {
 		t.Fatal(err)
 	}
 	available := []llm.PiModel{{Provider: "lm-studio", ID: "local-model", BaseURL: "http://127.0.0.1:1234/v1"}}
 	s.discoverPiModels = func(context.Context, string) ([]llm.PiModel, error) { return available, nil }
-	request := FeatureGenerateRequest{FeatureRequest: featureRequestFor(t, s, "Improve cancellation."), Profile: "pi:lm-studio/local-model"}
+	agyAvailable := []llm.AgyModel{{ID: model, Name: "Gemini New (High)"}}
+	s.discoverAgyModels = func(context.Context, string) ([]llm.AgyModel, error) { return agyAvailable, nil }
+	request := FeatureGenerateRequest{FeatureRequest: featureRequestFor(t, s, "Improve cancellation."), Profile: string(provider) + ":" + model}
 	if _, err := s.GenerateFeatures(context.Background(), request); err == nil {
-		t.Fatal("Pi dispatched without consent")
+		t.Fatal("CLI dispatched without consent")
 	}
 	if _, err := os.Stat(calls); !os.IsNotExist(err) {
 		t.Fatal("unconfirmed selection launched inference")
 	}
 	request.ConfirmRemoteProvider = true
 	report, err := s.GenerateFeatures(context.Background(), request)
-	if err != nil || report.Status != "ready" || len(report.Suggestions) != 1 || report.Generations[0].Model == nil || report.Generations[0].Model.Model != "lm-studio/local-model" {
-		t.Fatalf("Pi feature generation = %+v, %v", report, err)
+	if err != nil || report.Status != "ready" || len(report.Suggestions) != 1 || report.Generations[0].Model == nil || report.Generations[0].Model.Model != model || report.Generations[0].Model.ProviderOrigin != "cli://"+string(provider) {
+		t.Fatalf("CLI feature generation = %+v, %v", report, err)
 	}
 	excludeFeatureAnalysisFiles(t, s, []string{"main.go"})
 	models := &AnalysisModels{Code: "bug", Review: "analyze", Features: request.Profile}
 	preview := analysisModelsPreviewFor(t, s, models, AnalysisRunLimits{100, 30, 2})
 	available = nil
+	agyAvailable = nil
 	if _, err := s.StartAnalysisRun(context.Background(), analysisStartFor(preview)); !errors.Is(err, project.ErrRevisionConflict) {
-		t.Fatalf("removed Pi model admitted: %v", err)
+		t.Fatalf("removed CLI model admitted: %v", err)
 	}
 	if run, err := s.ReadAnalysisRun(context.Background(), preview.Identity.ProjectID, preview.Identity.ProjectRevision); err != nil || run != nil {
 		t.Fatal("invalid selection created a run")
 	}
+	if _, err := s.GenerateFeatures(context.Background(), request); !errors.Is(err, project.ErrRevisionConflict) {
+		t.Fatalf("removed CLI model generated features: %v", err)
+	}
 	count, err := os.ReadFile(calls)
 	if err != nil || string(count) != "x" {
 		t.Fatalf("unexpected inference calls: %q, %v", count, err)
+	}
+}
+
+func TestModelSelectionsCheckBothCatalogsOnceAndPreserveLimits(t *testing.T) {
+	s, _ := newSemanticAnalysisService(t, "http://127.0.0.1:1", 0)
+	piCalls, agyCalls := 0, 0
+	s.discoverPiModels = func(_ context.Context, executable string) ([]llm.PiModel, error) {
+		piCalls++
+		if executable != "pi" {
+			t.Fatalf("default Pi executable = %s", executable)
+		}
+		return []llm.PiModel{{Provider: "google", ID: "gemini"}}, nil
+	}
+	s.discoverAgyModels = func(_ context.Context, executable string) ([]llm.AgyModel, error) {
+		agyCalls++
+		if executable != "agy" {
+			t.Fatalf("default Agy executable = %s", executable)
+		}
+		return []llm.AgyModel{{ID: "gemini", Name: "Gemini"}}, nil
+	}
+	selections := []string{"pi:google/gemini", "agy:gemini", "agy:gemini", "pi:google/gemini"}
+	if err := s.validateModelSelections(context.Background(), selections); err != nil || piCalls != 1 || agyCalls != 1 {
+		t.Fatalf("catalog validation = %v, calls = %d/%d", err, piCalls, agyCalls)
+	}
+	selected, ok := s.selectedRuntime(config.BugModelScope, "agy:gemini")
+	base := s.runtimes.bug
+	if !ok || selected.profile.Provider != config.AgyProvider || selected.profile.Model != "gemini" || selected.profile.ContextMaxTokens != base.profile.ContextMaxTokens || selected.effective.Timeout != base.effective.Timeout || selected.effective.MaxRetries != base.effective.MaxRetries {
+		t.Fatalf("Agy operation limits = %+v", selected)
+	}
+	for _, selection := range []string{"agy:", "agy:--prompt", "agy:Gemini Flash", "agy:gemini\n", "agy:../model"} {
+		models := &AnalysisModels{Code: selection, Review: "analyze", Features: "function"}
+		if err := models.Validate(); err == nil {
+			t.Fatalf("invalid selection accepted: %q", selection)
+		}
+	}
+	s.discoverAgyModels = func(context.Context, string) ([]llm.AgyModel, error) { return nil, context.DeadlineExceeded }
+	if err := s.validateModelSelections(context.Background(), []string{"agy:gemini"}); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("discovery failure did not stop admission: %v", err)
 	}
 }

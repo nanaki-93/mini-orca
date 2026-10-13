@@ -369,14 +369,18 @@ func TestCLIHelperProcess(t *testing.T) {
 	}
 	system, _ := os.ReadFile(filepath.Join(directory, agentFile))
 	settings, _ := os.ReadFile(filepath.Join(directory, ".pi/settings.json"))
-	capture, _ := json.Marshal(cliCapture{os.Args[3:], directory, uint32(info.Mode().Perm()), string(input), string(system), string(settings)})
+	capture, _ := json.Marshal(cliCapture{os.Args[4:], directory, uint32(info.Mode().Perm()), string(input), string(system), string(settings)})
 	if os.WriteFile(os.Getenv("MINI_ORCA_TEST_CAPTURE"), capture, 0600) != nil {
 		os.Exit(99)
 	}
 	fmt.Fprint(os.Stderr, "credential-private-marker source-private-marker")
 	switch mode {
 	case "catalog":
-		fmt.Print(piCatalogFixture)
+		if os.Getenv("MINI_ORCA_TEST_PROVIDER") == "agy" {
+			fmt.Print(agyCatalogFixture)
+		} else {
+			fmt.Print(piCatalogFixture)
+		}
 	case "exit":
 		os.Exit(7)
 	case "wait", "wait-child":

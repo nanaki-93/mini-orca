@@ -15,7 +15,7 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
-func TestAvailableModelCatalogIncludesPiMetadataAndRejectsQueries(t *testing.T) {
+func TestAvailableModelCatalogIncludesCLIMetadataAndRejectsQueries(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("CLI providers require process-group cleanup")
 	}
@@ -33,7 +33,13 @@ MODELS
 	if err := os.WriteFile(command, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
+	agyCommand := filepath.Join(t.TempDir(), "fake-agy")
+	agyScript := "#!/bin/sh\n[ \"$1\" = '--log-file' ] && [ \"$3\" = 'models' ] && [ \"$#\" -eq 3 ] || exit 8\nprintf 'gemini-new-high\\tGemini New (High)\\n'\n"
+	if err := os.WriteFile(agyCommand, []byte(agyScript), 0700); err != nil {
+		t.Fatal(err)
+	}
 	cfg := config.Default()
+	cfg.ModelScopes.Analyze = config.ModelProfileConfig{Provider: config.AgyProvider, CLIPath: agyCommand, Model: "configured-agy"}
 	cfg.ModelScopes.Function = config.ModelProfileConfig{Provider: config.PiProvider, CLIPath: command, Model: "local-server/default"}
 	service, err := app.New(cfg, manager)
 	if err != nil {
@@ -49,13 +55,13 @@ MODELS
 			continue
 		}
 		var catalog app.AvailableModels
-		if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &catalog) != nil || catalog.Pi.Status != "ready" {
+		if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &catalog) != nil || catalog.Pi.Status != "ready" || catalog.Agy.Status != "ready" {
 			t.Fatalf("catalog response = %d: %s", response.Code, response.Body.String())
 		}
-		if len(catalog.Defaults) != 3 || len(catalog.Models) == 0 || catalog.Models[len(catalog.Models)-1].ID != "pi:local-server/qwen" {
+		if len(catalog.Defaults) != 3 || len(catalog.Models) != 5 || catalog.Models[0].ID != "agy:gemini-new-high" || catalog.Models[len(catalog.Models)-1].ID != "pi:local-server/qwen" {
 			t.Fatalf("missing catalog data: %+v", catalog)
 		}
-		if strings.Contains(response.Body.String(), "private-token") || strings.Contains(response.Body.String(), command) {
+		if strings.Contains(response.Body.String(), "private-token") || strings.Contains(response.Body.String(), command) || strings.Contains(response.Body.String(), agyCommand) {
 			t.Fatal("catalog exposed credentials or executable path")
 		}
 	}
@@ -65,8 +71,16 @@ MODELS
 	response := httptest.NewRecorder()
 	NewModelHandler(service).Available(response, httptest.NewRequest(http.MethodGet, "/api/models/available", nil))
 	var catalog app.AvailableModels
-	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &catalog) != nil || catalog.Pi.Status != "unavailable" || len(catalog.Models) == 0 {
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &catalog) != nil || catalog.Pi.Status != "unavailable" || catalog.Agy.Status != "ready" || len(catalog.Models) != 4 {
 		t.Fatalf("configured models lost when Pi unavailable: %s", response.Body.String())
+	}
+	if err := os.Remove(agyCommand); err != nil {
+		t.Fatal(err)
+	}
+	response = httptest.NewRecorder()
+	NewModelHandler(service).Available(response, httptest.NewRequest(http.MethodGet, "/api/models/available", nil))
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &catalog) != nil || catalog.Pi.Status != "unavailable" || catalog.Agy.Status != "unavailable" || len(catalog.Models) != 3 {
+		t.Fatalf("configured models lost when both CLIs unavailable: %s", response.Body.String())
 	}
 }
 
