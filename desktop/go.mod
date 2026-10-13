@@ -1,4 +1,4 @@
-module github.com/nanaki-93/mini-orca/v2/desktop/webapp
+module github.com/nanaki-93/mini-orca/v2/desktop
 
 go 1.25.0
 

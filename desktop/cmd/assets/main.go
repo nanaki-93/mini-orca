@@ -1,5 +1,5 @@
 // Command assets generates the native bundle metadata and icon from maintained
-// project sources. Run it from the desktop/webapp module before packaging.
+// project sources. Run it from the desktop module before packaging.
 package main
 
 import (
@@ -16,7 +16,7 @@ func main() {
 }
 
 func generate() error {
-	source, err := os.ReadFile("../../internal/version/version.go")
+	source, err := os.ReadFile("../internal/version/version.go")
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func generate() error {
 	if err := os.WriteFile("build/darwin/Info.plist", []byte(plist), 0644); err != nil {
 		return err
 	}
-	icon, err := os.ReadFile("../../docs/icons/graphite/app-icon/app-icon-1024.png")
+	icon, err := os.ReadFile("../docs/icons/graphite/app-icon/app-icon-1024.png")
 	if err != nil {
 		return fmt.Errorf("read desktop app icon: %w", err)
 	}

@@ -6,4 +6,3 @@
 /build/
 /internal/assets/files/*
 !/internal/assets/files/README.txt
-/webapp

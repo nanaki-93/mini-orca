@@ -1,9 +1,15 @@
 # Desktop client
 
-Read [../AGENTS.md](../AGENTS.md), [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md)
-and [webapp/AGENTS.md](webapp/AGENTS.md) before editing. The Wails/React client is
-the supported desktop; [webapp/README.md](webapp/README.md) owns setup and usage.
+Read [../AGENTS.md](../AGENTS.md) and [UI_DESIGN_GUIDELINES.md](UI_DESIGN_GUIDELINES.md) before editing.
+The Wails/React client is the supported desktop; [README.md](README.md) owns setup and usage.
 
+- `internal/bridge` owns native HTTP transport, cancellation and PTY sessions.
+  Keep daemon browser-origin protections unchanged. Never execute model text.
+- `frontend/src` owns typed wire models, immutable workflow state and presentation.
+  Guard late responses with project/file/draft identities, not cancellation alone.
+  Keep source and diffs read-only, consent explicit and model content inert.
+- The host is a separate Go module so GUI dependencies do not enter the daemon.
+  Frontend assets and Wails bindings are generated; edit their sources only.
 - Keep daemon interactions and immutable workflow transitions in the workspace
   owner. Components render state and emit actions; visual state stays local.
 - Use typed wire models and existing API transport. Preserve structured failures,
