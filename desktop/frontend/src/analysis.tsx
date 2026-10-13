@@ -47,7 +47,7 @@ export function StaleAnalysisButton({ s, path }: { s: State; path?: string }) {
           'stale',
           s.analysisLimits || defaults,
           false,
-          s.run?.plan.models,
+          s.analysisSetup || s.run?.plan.models,
           path,
         )
       }

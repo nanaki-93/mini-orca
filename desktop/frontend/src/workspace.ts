@@ -157,6 +157,33 @@ export function effectiveWorkflowModel(
 }
 const changePage = (kind: string): Page =>
   ['fix', 'performance', 'security'].includes(kind) ? 'changes' : 'chat';
+function readStoredJson<T>(key: string): T | undefined {
+  if (typeof localStorage === 'undefined') return undefined;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as T) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+function readStoredBool(key: string): boolean | undefined {
+  if (typeof localStorage === 'undefined') return undefined;
+  const raw = localStorage.getItem(key);
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  return undefined;
+}
+function writeStoredJson(key: string, value: unknown) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    if (value === undefined) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore storage quota or restricted environment errors.
+  }
+}
 const initial = (): State => ({
   implementations: [],
   page: 'welcome',
@@ -174,6 +201,10 @@ const initial = (): State => ({
   uncertain: false,
   terminals: [],
   featureGenerationRequested: false,
+  analysisSetup: readStoredJson<M.AnalysisModels>('mini-orca:analysis-models'),
+  workflowModels: readStoredJson<M.ChangeWorkflowModels>('mini-orca:workflow-models'),
+  analysisLimits: readStoredJson<M.Limits>('mini-orca:analysis-limits'),
+  analysisRefresh: readStoredBool('mini-orca:analysis-refresh'),
   workspaceTrust:
     typeof localStorage !== 'undefined' &&
     localStorage.getItem('mini-orca:workspace-trust') === 'true',
@@ -274,6 +305,13 @@ export class Workspace {
   };
   snapshot = () => this.state;
   set(patch: Partial<State>) {
+    if ('analysisSetup' in patch) writeStoredJson('mini-orca:analysis-models', patch.analysisSetup);
+    if ('workflowModels' in patch)
+      writeStoredJson('mini-orca:workflow-models', patch.workflowModels);
+    if ('analysisLimits' in patch)
+      writeStoredJson('mini-orca:analysis-limits', patch.analysisLimits);
+    if ('analysisRefresh' in patch)
+      writeStoredJson('mini-orca:analysis-refresh', patch.analysisRefresh);
     this.state = { ...this.state, ...patch };
     this.listeners.forEach((fn) => fn());
   }
@@ -351,11 +389,18 @@ export class Workspace {
       this.fail(error);
     }
     if (this.state.connected)
-      await this.resource(
-        'models',
-        () => this.api.get<M.ModelCatalog>('/api/models/current'),
-        (models) => this.set({ models }),
-      );
+      await Promise.all([
+        this.resource(
+          'models',
+          () => this.api.get<M.ModelCatalog>('/api/models/current'),
+          (models) => this.set({ models }),
+        ),
+        this.resource(
+          'availableModels',
+          () => this.api.get<M.AvailableModels>('/api/models/available'),
+          (availableModels) => this.set({ availableModels }),
+        ),
+      ]);
   }
   private async resource<T>(
     name: string,
@@ -416,11 +461,18 @@ export class Workspace {
       this.epoch++;
       this.fileEpoch++;
       for (const child of this.state.implementations) child.stop();
+      const defaults = initial();
       this.state = {
-        ...initial(),
+        ...defaults,
         connected: true,
         version: this.state.version,
         models: this.state.models,
+        availableModels: this.state.availableModels,
+        analysisSetup: this.state.analysisSetup ?? defaults.analysisSetup,
+        workflowModels: this.state.workflowModels ?? defaults.workflowModels,
+        analysisLimits: this.state.analysisLimits ?? defaults.analysisLimits,
+        analysisRefresh: this.state.analysisRefresh ?? defaults.analysisRefresh,
+        workspaceTrust: this.state.workspaceTrust ?? defaults.workspaceTrust,
         busy: this.state.busy,
         page: 'summary',
         project,
