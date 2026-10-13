@@ -100,16 +100,31 @@ invalid; names containing spaces fail configuration validation with instructions
 to use a slug. Model availability depends on the CLI account. Restart the daemon
 after changing its configuration.
 
-Analysis can also select any model available through Pi without adding it to a
-scope in `config.yaml`. The picker reads Pi's `get_available_models` RPC catalog,
-including custom local models configured in Pi's `models.json`. It uses the first
-configured Pi `cli_path` (Analyze, Bug, then Function), or `pi` on the daemon's
-`PATH` when no scope uses Pi. No prompt or project context is sent during discovery.
-Refresh models after updating Pi's authentication or model configuration. Pi
-catalog failures leave configured choices available; local catalog entries still
-require prompt consent because the CLI controls its downstream destination.
-Catalog assignments use the operation's context/dispatch limits; discovered Pi
-models retain Pi's default thinking settings.
+Analysis can also select models from the live Agy catalog or Pi's available-model
+catalog without adding them to a scope in `config.yaml`. The picker reads
+`agy models` for exact slugs and display names, including model variants, and
+Pi's `get_available_models` RPC catalog, including custom local models from Pi's
+`models.json`. For each CLI it uses the first matching configured `cli_path`
+(Analyze, Bug, then Function), or `agy`/`pi` on the daemon's `PATH` if no scope
+uses that CLI. No prompt or project context is sent during discovery. Agy may
+contact its catalog service; Pi discovery uses its offline inventory.
+
+Use **Models → choose a model → Agy** to browse Agy directly. **Refresh models**
+reloads both catalogs after account or model changes. Each CLI's discovery
+failure is reported separately and leaves configured choices and the other
+CLI's catalog available. Local catalog entries still require prompt consent
+because the CLI controls its downstream destination. Catalog assignments use
+the operation's context/dispatch limits and CLI defaults, with no inherited
+reasoning override from a configured scope. Agy variants retain their exact slug.
+
+For Gemini through an Antigravity account, use Agy directly. Pi removed built-in
+Google Antigravity and Gemini CLI support in
+[0.71.0](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/CHANGELOG.md#0710---2026-04-30).
+Pi still supports the Google Gemini API with its own authentication, such as
+`GEMINI_API_KEY`; signing in to Agy does not populate that Pi provider. See
+[Pi providers](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/providers.md).
+Mini-Orca disables Pi extensions for both discovery and inference, so providers
+added only by a Pi extension are not included.
 
 Each request starts a separate process in a private temporary directory, using
 Mini-Orca's supplied source context. Pi runs in JSON print mode with tools,
