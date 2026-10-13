@@ -1,5 +1,5 @@
 import { GitWorkspace } from './git-workspace';
-import { Implementations, WorktreeImplementation } from './worktree-implementation';
+import { WorktreeImplementation } from './worktree-implementation';
 import {
   Component,
   useEffect,
@@ -15,9 +15,7 @@ import { Summary, ProjectPage, Models, Diagrams, SearchPage } from './overview';
 import { Analysis, AnalysisFiles, AnalysisPreview, AnalysisRun } from './analysis';
 import { Results, selectedResult } from './results';
 import { Editor, Context } from './editor';
-import { ChangeWorkspace } from './change-workspace';
 import { ChangeHistory } from './change-shared';
-import { Features } from './features';
 import { Instructions } from './instructions';
 import { TerminalWorkspace } from './tools';
 import './style.css';
@@ -25,21 +23,10 @@ import './studio.css';
 
 const mainNav: [Page, string, string][] = [
   ['summary', 'Overview', 'grid'],
-  ['editor', 'Source', 'code'],
-  ['chat', 'Chat', 'chat'],
-];
-const improveNav: typeof mainNav = [
-  ['bugs', 'Issues', 'bug'],
-  ['features', 'Features', 'sparkles'],
-  ['changes', 'Changes', 'gitCommit'],
-];
-const utilityNav: [Page, string, string][] = [
-  ['git', 'Git / Worktrees', 'branch'],
-  ['instructions', 'Environment', 'file'],
-  ['analysis-files', 'File Scope', 'folder'],
-  ['diagrams', 'Architecture', 'network'],
-  ['models', 'Models', 'layers'],
-  ['history', 'History', 'clock'],
+  ['editor', 'Code & Diff', 'code'],
+  ['bugs', 'Issues & Ideas', 'bug'],
+  ['git', 'Git & Worktrees', 'branch'],
+  ['instructions', 'Settings & Rules', 'shield'],
 ];
 const contextPages: [Page, string][] = [
   ['analysis-files', 'Files to skip / Scope'],
@@ -51,22 +38,23 @@ const findingPages: [Page, string][] = [
   ['performance', 'Performance'],
 ];
 const themes = [
-  { id: 'dark', name: 'Graphite', letter: 'G', mark: '/mo-mark-graphite.svg' },
-  { id: 'light', name: 'Porcelain', letter: 'P', mark: '/mo-mark-porcelain.svg' },
-  { id: 'midnight', name: 'Midnight', letter: 'M', mark: '/mo-mark-midnight.svg' },
-  { id: 'signal', name: 'Signal', letter: 'S', mark: '/mo-mark-signal.svg' },
-  {
-    id: 'crimson-violet',
-    name: 'Crimson Violet',
-    letter: 'C',
-    mark: '/mo-mark-crimson-violet.svg',
-  },
-  { id: 'nordic', name: 'Nordic', letter: 'N', mark: '/mo-mark-nordic.svg' },
   {
     id: 'amethyst',
     name: 'Amethyst',
     letter: 'A',
     mark: '/mo-mark-amethyst.svg',
+  },
+  {
+    id: 'tokyo-night',
+    name: 'Tokyo Night',
+    letter: 'T',
+    mark: '/mo-mark-tokyo-night.svg',
+  },
+  {
+    id: 'linear-carbon',
+    name: 'Linear Carbon',
+    letter: 'L',
+    mark: '/mo-mark-linear-carbon.svg',
   },
 ] as const;
 function App() {
@@ -80,7 +68,7 @@ function App() {
   const terminalOpen = live.page === 'terminal';
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('mini-orca:theme');
-    return themes.find((choice) => choice.id === saved)?.id || 'dark';
+    return themes.find((choice) => choice.id === saved)?.id || 'amethyst';
   });
   const appearance = themes.find((choice) => choice.id === theme) || themes[0];
   const [large, setLarge] = useState(localStorage.getItem('mini-orca:large') === 'true');
@@ -91,14 +79,19 @@ function App() {
   const category = findingCategory(s);
   const finding = s.page === 'finding' ? selectedResult(s) : undefined;
   const categoryTitle = findingPages.find(([page]) => page === category)?.[1];
-  const activePage =
-    category || s.page === 'finding'
+  const activePage: Page =
+    category ||
+    s.page === 'finding' ||
+    s.page === 'features' ||
+    ['analysis', 'analysis-preview', 'analysis-run'].includes(s.page)
       ? 'bugs'
-      : ['analysis', 'analysis-preview', 'analysis-run'].includes(s.page)
-        ? 'bugs'
-        : contextPages.some(([page]) => page === s.page)
-          ? 'analysis-files'
-          : s.page;
+      : ['editor', 'chat', 'changes', 'history'].includes(s.page)
+        ? 'editor'
+        : ['git', 'worktree'].includes(s.page)
+          ? 'git'
+          : ['instructions', 'models', 'analysis-files', 'context', 'diagrams'].includes(s.page)
+            ? 'instructions'
+            : s.page;
   useEffect(() => {
     void w.start();
     const focus = () => {
@@ -147,18 +140,21 @@ function App() {
     return () => window.removeEventListener('keydown', key);
   }, [s.confirmation]);
   const issueCount =
-    s.findings?.filter((f) => f.status !== 'fixed').length ||
-    s.run?.sections.reduce((sum, sec) => sum + (sec.finding_count || 0), 0) ||
-    0;
+    (s.findings?.filter((f) => f.status !== 'fixed').length ||
+      s.run?.sections.reduce((sum, sec) => sum + (sec.finding_count || 0), 0) ||
+      0) + (s.featureSuggestions?.features.length || 0);
   const worktreeCount = s.gitWorkspace?.worktrees.length || 0;
+  const changeCount = s.change?.edits?.length || 0;
   const nav = (items: typeof mainNav) =>
     items.map(([page, label, icon]) => {
       const count =
-        page === 'bugs' && issueCount > 0
-          ? issueCount
-          : page === 'git' && worktreeCount > 0
-            ? worktreeCount
-            : undefined;
+        page === 'editor' && changeCount > 0
+          ? `${changeCount} diff`
+          : page === 'bugs' && issueCount > 0
+            ? issueCount
+            : page === 'git' && worktreeCount > 0
+              ? worktreeCount
+              : undefined;
       return (
         <button
           key={page}
@@ -166,14 +162,8 @@ function App() {
           data-accent={page}
           aria-label={label}
           title={sidebarCollapsed ? label : undefined}
-          disabled={!s.project && !['project', 'models'].includes(page)}
-          aria-current={
-            activePage === page ||
-            (page === 'analysis' && s.page === 'analysis-preview') ||
-            (page === 'editor' && s.page === 'editor')
-              ? 'page'
-              : undefined
-          }
+          disabled={!s.project && !['project', 'models', 'instructions'].includes(page)}
+          aria-current={activePage === page ? 'page' : undefined}
           onClick={() => void w.navigate(page)}
         >
           <Icon name={icon} />
@@ -183,11 +173,12 @@ function App() {
       );
     });
   const title =
-    [...mainNav, ...improveNav, ...utilityNav].find(([page]) => page === activePage)?.[1] ||
-    s.page
-      .split('-')
-      .map((word) => word[0].toUpperCase() + word.slice(1))
-      .join(' ');
+    mainNav.find(([page]) => page === activePage)?.[1] ||
+    (contextPages.find(([page]) => page === s.page)?.[1] ??
+      s.page
+        .split('-')
+        .map((word) => word[0].toUpperCase() + word.slice(1))
+        .join(' '));
   let content: ReactNode;
   if (s.page === 'models') content = <Models s={s} />;
   else if (s.page === 'project' || s.page === 'welcome' || !s.project)
@@ -200,15 +191,10 @@ function App() {
   else if (s.page === 'analysis-files') content = <AnalysisFiles s={s} />;
   else if (s.page === 'analysis-preview') content = <AnalysisPreview s={s} />;
   else if (s.page === 'analysis-run') content = <AnalysisRun s={s} />;
-  else if (category || s.page === 'finding')
-    content = <Results s={s} key={`${s.project.project_id}:${category}`} />;
-  else if (s.page === 'chat' || s.page === 'changes')
-    content = (
-      <>
-        {s.page === 'changes' && <Implementations s={s} />}
-        <ChangeWorkspace s={s} />
-      </>
-    );
+  else if (category || s.page === 'finding' || s.page === 'features')
+    content = <Results s={s} key={`${s.project.project_id}:${category || s.page}`} />;
+  else if (s.page === 'editor' || s.page === 'chat' || s.page === 'changes')
+    content = <Editor s={s} />;
   else if (s.page === 'history')
     content = (
       <div className="workspace-page">
@@ -220,9 +206,7 @@ function App() {
         <ChangeHistory s={s} />
       </div>
     );
-  else if (s.page === 'features') content = <Features s={s} />;
   else if (s.page === 'instructions') content = <Instructions s={s} />;
-  else if (s.page === 'editor') content = <Editor s={s} />;
   else if (s.page === 'context') content = <Context s={s} />;
   else if (s.page === 'search') content = <SearchPage s={s} />;
   else if (s.page === 'diagrams') content = <Diagrams s={s} />;
@@ -249,29 +233,37 @@ function App() {
             <span className="muted" aria-hidden="true">
               /
             </span>
-            {category ? (
+            {category && s.page === 'finding' ? (
               <>
-                <button onClick={() => void w.navigate('bugs')}>Issues</button>
+                <button onClick={() => void w.navigate('bugs')}>Issues & Ideas</button>
                 <span className="muted" aria-hidden="true">
                   /
                 </span>
-                {s.page === 'finding' ? (
-                  <>
-                    <button onClick={() => void w.navigate(category)}>{categoryTitle}</button>
-                    <span className="muted" aria-hidden="true">
-                      /
-                    </span>
-                    <span aria-current="page">{finding?.name || 'Finding unavailable'}</span>
-                  </>
-                ) : (
-                  <span aria-current="page">{categoryTitle}</span>
-                )}
+                <button onClick={() => void w.navigate(category)}>{categoryTitle}</button>
+                <span className="muted" aria-hidden="true">
+                  /
+                </span>
+                <span aria-current="page">{finding?.name || 'Finding unavailable'}</span>
               </>
             ) : (
               <span aria-current="page">{title}</span>
             )}
           </nav>
           <div className="topbar-actions">
+            <div className="theme-pill-group" role="group" aria-label="Theme">
+              {themes.map((choice) => (
+                <button
+                  key={choice.id}
+                  className="theme-pill-btn"
+                  aria-label={`${choice.name} theme`}
+                  aria-pressed={theme === choice.id}
+                  title={`${choice.name} (${choice.letter})`}
+                  onClick={() => setTheme(choice.id)}
+                >
+                  {choice.name}
+                </button>
+              ))}
+            </div>
             <Button
               icon={s.scan?.status === 'running' ? 'close' : 'play'}
               disabled={!s.project || !!s.busy}
@@ -285,7 +277,7 @@ function App() {
               aria-label="Search files and commands"
             >
               <Icon name="search" />
-              <span>Search files and commands</span>
+              <span>Command Palette</span>
               <kbd>⌘ K</kbd>
             </button>
           </div>
@@ -311,7 +303,7 @@ function App() {
               <button
                 className="project-branch"
                 title={s.repository?.head || 'Git status'}
-                aria-label={`Current branch: ${s.repository?.branch || 'unavailable'}. Open Git / Worktrees`}
+                aria-label={`Current branch: ${s.repository?.branch || 'unavailable'}. Open Git & Worktrees`}
                 onClick={() => void w.navigate('git')}
               >
                 <Icon name="branch" />
@@ -327,18 +319,10 @@ function App() {
               </button>
             )}
             <div className="sidebar-navigation">
+              <div className="nav-label">Workspace</div>
               <nav aria-label="Workspaces">{nav(mainNav)}</nav>
-              <div className="nav-label">Improve</div>
-              <nav aria-label="Workspaces: Improve">{nav(improveNav)}</nav>
-              <div className="sidebar-bottom">
-                <div className="nav-label">Project</div>
-                <nav aria-label="Tools">{nav(utilityNav.slice(0, 4))}</nav>
-              </div>
             </div>
-            <nav className="sidebar-settings" aria-label="Settings">
-              {nav(utilityNav.slice(4))}
-            </nav>
-            <p className="sidebar-note">Local by default. You apply changes.</p>
+            <p className="sidebar-note">Trusted workspace · In-place + Undo</p>
             <button
               className="sidebar-toggle"
               aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -397,8 +381,8 @@ function App() {
                 {s.connected ? 'Daemon connected' : 'Daemon offline'}
               </div>
               <span className="row">
-                <Icon name="laptop" />
-                Local workspace
+                <Icon name="shield" />
+                Workspace trusted
               </span>
               <span>
                 {s.project
@@ -416,19 +400,6 @@ function App() {
                   Terminal
                 </button>
                 <span>{s.version ? `Daemon ${s.version}` : ''}</span>
-                <div className="theme-switcher" role="group" aria-label="Theme">
-                  {themes.map((choice) => (
-                    <button
-                      key={choice.id}
-                      aria-label={`${choice.name} theme`}
-                      aria-pressed={theme === choice.id}
-                      title={`${choice.name} (${choice.letter})`}
-                      onClick={() => setTheme(choice.id)}
-                    >
-                      {choice.letter}
-                    </button>
-                  ))}
-                </div>
                 <button
                   aria-label="Larger text"
                   aria-pressed={large}
