@@ -1,6 +1,50 @@
 import { useState } from 'react';
 import { workspace as w, type State } from './workspace';
-import { Button, Empty, Heading, Loading, Notice, Overlay, Panel } from './ui';
+import type * as M from './models';
+import { Button, Empty, Heading, Icon, Loading, Notice, Overlay, Panel } from './ui';
+
+function getWorktreeInfo(tree: M.GitWorktree, s: State) {
+  const child = s.implementations?.find((item) => item.worktreePath === tree.path);
+  const childChange = child?.state?.change || child?.state?.changeSeed;
+  if (childChange) {
+    return {
+      title: childChange.title,
+      kind: childChange.kind,
+    };
+  }
+  const lastCompleted = tree.completed?.[0];
+  if (lastCompleted) {
+    return {
+      title: lastCompleted.title,
+      kind: lastCompleted.kind,
+    };
+  }
+  let kind = 'fix';
+  if (tree.branch.includes('security') || tree.branch.includes('sec-')) kind = 'security';
+  else if (tree.branch.includes('perf') || tree.branch.includes('performance'))
+    kind = 'performance';
+  else if (tree.branch.includes('feature')) kind = 'feature';
+
+  const cleanTitle = tree.branch
+    .replace(/^(fix|perf|security|feature)[/-]/, '')
+    .replace(/[-_]/g, ' ')
+    .trim();
+  const title = cleanTitle ? cleanTitle[0].toUpperCase() + cleanTitle.slice(1) : tree.branch;
+  return { title, kind };
+}
+
+function kindIcon(kind: string) {
+  switch (kind) {
+    case 'security':
+      return 'shield';
+    case 'performance':
+      return 'gauge';
+    case 'feature':
+      return 'sparkles';
+    default:
+      return 'bug';
+  }
+}
 
 export function GitWorkspace({ s }: { s: State }) {
   const [pending, setPending] = useState('');
@@ -120,32 +164,60 @@ export function GitWorkspace({ s }: { s: State }) {
               />
             ) : (
               <div className="git-worktrees">
-                {worktrees.map((tree) => (
-                  <article className="git-worktree" key={tree.path} aria-label={tree.branch}>
-                    <h3>{tree.branch}</h3>
-                    <div className="git-worktree-actions">
-                      <Button disabled={blocked} onClick={() => void w.openWorktree(tree.path)}>
-                        View implementation
-                      </Button>
-                      <Button
-                        tone="danger"
-                        disabled={blocked}
-                        loading={pending === `discard:${tree.path}`}
-                        onClick={() => run(`discard:${tree.path}`, () => w.discardWorktree(tree))}
+                {worktrees.map((tree) => {
+                  const info = getWorktreeInfo(tree, s);
+                  const icon = kindIcon(info.kind);
+                  return (
+                    <article className="git-worktree" key={tree.path} aria-label={tree.branch}>
+                      <span
+                        className={`finding-mark ${info.kind === 'security' ? 'red' : info.kind === 'performance' ? 'blue' : ''}`}
                       >
-                        Discard change
-                      </Button>
-                      <Button
-                        tone="primary"
-                        disabled={blocked}
-                        loading={pending === `merge:${tree.path}`}
-                        onClick={() => run(`merge:${tree.path}`, () => w.gitAction('merge', tree))}
-                      >
-                        Merge into current branch
-                      </Button>
-                    </div>
-                  </article>
-                ))}
+                        <Icon name={icon} />
+                      </span>
+                      <div className="list-copy">
+                        <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+                          <strong>{info.title}</strong>
+                          <span
+                            className={`severity-tag ${info.kind === 'security' ? 'danger' : info.kind === 'performance' ? 'warning' : 'info'}`}
+                          >
+                            {info.kind.toUpperCase()}
+                          </span>
+                        </div>
+                        <small>
+                          <span className="path font-mono">{tree.branch}</span>
+                          <span className="muted"> · {tree.path}</span>
+                        </small>
+                      </div>
+                      <div className="git-worktree-actions">
+                        <Button
+                          tone="ghost small"
+                          disabled={blocked}
+                          onClick={() => void w.openWorktree(tree.path)}
+                        >
+                          View implementation
+                        </Button>
+                        <Button
+                          tone="danger small"
+                          disabled={blocked}
+                          loading={pending === `discard:${tree.path}`}
+                          onClick={() => run(`discard:${tree.path}`, () => w.discardWorktree(tree))}
+                        >
+                          Discard
+                        </Button>
+                        <Button
+                          tone="primary small"
+                          disabled={blocked}
+                          loading={pending === `merge:${tree.path}`}
+                          onClick={() =>
+                            run(`merge:${tree.path}`, () => w.gitAction('merge', tree))
+                          }
+                        >
+                          Merge
+                        </Button>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             )}
           </Panel>

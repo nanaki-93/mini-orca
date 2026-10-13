@@ -1388,37 +1388,69 @@ svg.icon {
   display: none;
 }
 .git-worktrees {
-  display: grid;
-  gap: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raised);
+  overflow: hidden;
 }
 .git-worktree {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 580px);
+  display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
+  padding: 10px 14px;
+  min-height: 48px;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  transition: background 0.15s ease;
+}
+.git-worktree:last-child {
+  border-bottom: none;
+}
+.git-worktree:hover {
+  background: var(--hover);
+}
+.git-worktree .finding-mark {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+.git-worktree .list-copy {
+  flex: 1;
   min-width: 0;
 }
-.git-worktree + .git-worktree {
-  border-top: 1px solid var(--line);
-  padding-top: 16px;
-}
-.git-worktree h3 {
-  overflow-wrap: anywhere;
-  margin: 0;
+.git-worktree .list-copy strong {
+  font-size: 0.92rem;
+  font-weight: 600;
 }
 .git-worktree-actions {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: flex;
+  align-items: center;
   gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 .git-worktree-actions .button {
-  min-width: 0;
-  height: 100%;
-  white-space: normal;
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
-@media (max-width: 1100px) {
+@media (max-width: 800px) {
   .git-worktree {
-    grid-template-columns: minmax(0, 1fr);
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .git-worktree-actions {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-end;
   }
 }
 .git-merge-diff {
