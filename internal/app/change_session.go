@@ -256,6 +256,9 @@ func (s *Service) loadChangeForAction(ctx context.Context, id string, identity C
 }
 
 func (s *Service) SendChangeMessage(ctx context.Context, id string, request ChangeMessageRequest) (*ChangeSession, error) {
+	if len(request.Changes) > 0 {
+		return s.updateChangeProposal(ctx, id, request)
+	}
 	if strings.TrimSpace(request.Message) == "" || len(request.Message) > 8192 {
 		return nil, fmt.Errorf("provide a message of at most 8192 bytes")
 	}
@@ -274,6 +277,59 @@ func (s *Service) SendChangeMessage(ctx context.Context, id string, request Chan
 		return nil, fmt.Errorf("run current proposal checks before requesting repair")
 	}
 	return s.generateChangeWithRuntime(ctx, root, session, request, runtime)
+}
+
+func (s *Service) updateChangeProposal(ctx context.Context, id string, request ChangeMessageRequest) (*ChangeSession, error) {
+	s.changesMu.Lock()
+	defer s.changesMu.Unlock()
+	session, root, err := s.loadChangeForAction(ctx, id, request.ChangeIdentity)
+	if err != nil {
+		return nil, err
+	}
+	edits, err := buildChangeEdits(session, request.Changes)
+	if err != nil {
+		return nil, err
+	}
+	session.Revision++
+	session.Changes, session.Hash = edits, changeProposalHash(edits)
+	session.Checks, session.ReviewedHash = []CheckResult{}, ""
+	invalidateChangeWorkflow(session, "The proposal changed. Run the workflow again before human review.")
+	delete(s.changeAuthority, session.ProjectID+"/"+session.ID)
+	now := time.Now().UTC()
+	note := strings.TrimSpace(request.Message)
+	if note != "" && len(session.Messages) < maxChangeMessages {
+		session.Messages = append(session.Messages, ChangeMessage{Role: "user", Content: note, CreatedAt: now})
+	}
+	session.UpdatedAt = now
+	if err := writeChangeSession(root, session); err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
+func buildChangeEdits(session *ChangeSession, inputs []ChangeEditInput) ([]ChangeEdit, error) {
+	if len(inputs) == 0 || len(inputs) > maxChangePaths {
+		return nil, fmt.Errorf("provide one to sixty-four file changes")
+	}
+	edits := []ChangeEdit{}
+	seen := map[string]bool{}
+	for _, input := range inputs {
+		if seen[input.Path] {
+			return nil, fmt.Errorf("proposal repeated a target")
+		}
+		seen[input.Path] = true
+		edit, err := makeChangeEdit(session, input.Path, input.Content)
+		if err != nil {
+			return nil, err
+		}
+		if edit != nil {
+			edits = append(edits, *edit)
+		}
+	}
+	if len(edits) == 0 {
+		return nil, fmt.Errorf("proposal contains no changes")
+	}
+	return edits, nil
 }
 
 func (s *Service) changeMessageRuntime(request ChangeMessageRequest) (modelRuntime, error) {
@@ -333,9 +389,22 @@ func (s *Service) generateChangeWithRuntime(ctx context.Context, root string, se
 	return session, nil
 }
 
+func validateDirectProposal(request InstructionProposalRequest) error {
+	if len(request.Paths) != 1 || strings.TrimSpace(request.Content) == "" || !utf8.ValidString(request.Content) || strings.ContainsRune(request.Content, 0) {
+		return fmt.Errorf("provide one target path and non-empty bounded content")
+	}
+	if request.Kind == "instructions" && (filepath.Base(request.Paths[0]) != "AGENTS.md" || len(request.Content) > project.MaxInstructionBytes) {
+		return fmt.Errorf("provide one AGENTS.md path and non-empty bounded instructions")
+	}
+	if len(request.Content) > maxChangeBytes {
+		return fmt.Errorf("content exceeds 256 KiB")
+	}
+	return nil
+}
+
 func (s *Service) ProposeInstructions(ctx context.Context, request InstructionProposalRequest) (*ChangeSession, error) {
-	if request.Kind != "instructions" || len(request.Paths) != 1 || filepath.Base(request.Paths[0]) != "AGENTS.md" || len(request.Content) > project.MaxInstructionBytes || strings.TrimSpace(request.Content) == "" || !utf8.ValidString(request.Content) || strings.ContainsRune(request.Content, 0) {
-		return nil, fmt.Errorf("provide one AGENTS.md path and non-empty bounded instructions")
+	if err := validateDirectProposal(request); err != nil {
+		return nil, err
 	}
 	root := s.manager.Root()
 	session, err := s.OpenChangeSession(ctx, request.ChangeCreateRequest)
@@ -348,7 +417,7 @@ func (s *Service) ProposeInstructions(ctx context.Context, request InstructionPr
 	}
 	session.Changes = []ChangeEdit{{Path: target.Path, Content: request.Content, Hash: contentHash([]byte(request.Content)), Diff: project.BuildUnifiedDiff(target.Path, target.Content, request.Content)}}
 	session.Hash, session.Revision = changeProposalHash(session.Changes), 1
-	session.Messages = []ChangeMessage{{Role: "assistant", Content: "Review the instruction changes before applying them.", CreatedAt: time.Now().UTC()}}
+	session.Messages = []ChangeMessage{{Role: "assistant", Content: "Review the file changes before applying them.", CreatedAt: time.Now().UTC()}}
 	s.changesMu.Lock()
 	defer s.changesMu.Unlock()
 	if err := s.verifyChangeCurrent(ctx, root, session); err != nil {

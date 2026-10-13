@@ -21,9 +21,6 @@ func captureChangeTarget(root, path string) (ChangeTarget, error) {
 	if err != nil {
 		return target, err
 	}
-	if !strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, ".md") {
-		return target, fmt.Errorf("changes support Go and Markdown files")
-	}
 	policy, err := project.NewContextPolicy(root)
 	if err != nil {
 		return target, err
@@ -107,7 +104,7 @@ func changeMessages(session *ChangeSession, message, text string) ([]llm.ChatMes
 }
 
 func changeResponseSchema() llm.JSONSchema {
-	return llm.JSONSchema{Name: "change_proposal", Schema: json.RawMessage(`{"type":"object","additionalProperties":false,"required":["explanation","changes"],"properties":{"explanation":{"type":"string","minLength":1,"maxLength":4096},"changes":{"type":"array","minItems":1,"maxItems":8,"items":{"type":"object","additionalProperties":false,"required":["path","content"],"properties":{"path":{"type":"string"},"content":{"type":"string"}}}}}}`)}
+	return llm.JSONSchema{Name: "change_proposal", Schema: json.RawMessage(`{"type":"object","additionalProperties":false,"required":["explanation","changes"],"properties":{"explanation":{"type":"string","minLength":1,"maxLength":4096},"changes":{"type":"array","minItems":1,"maxItems":64,"items":{"type":"object","additionalProperties":false,"required":["path","content"],"properties":{"path":{"type":"string"},"content":{"type":"string"}}}}}}`)}
 }
 
 func parseChangeResponse(output string, session *ChangeSession) (string, []ChangeEdit, error) {
@@ -115,11 +112,8 @@ func parseChangeResponse(output string, session *ChangeSession) (string, []Chang
 		return "", nil, fmt.Errorf("proposal response exceeds 256 KiB")
 	}
 	var response struct {
-		Explanation string `json:"explanation"`
-		Changes     []struct {
-			Path    string `json:"path"`
-			Content string `json:"content"`
-		} `json:"changes"`
+		Explanation string            `json:"explanation"`
+		Changes     []ChangeEditInput `json:"changes"`
 	}
 	decoder := json.NewDecoder(strings.NewReader(output))
 	decoder.DisallowUnknownFields()
@@ -129,23 +123,9 @@ func parseChangeResponse(output string, session *ChangeSession) (string, []Chang
 	if decoder.Decode(new(any)) != io.EOF || strings.TrimSpace(response.Explanation) == "" || len(response.Explanation) > 4096 || len(response.Changes) == 0 || len(response.Changes) > maxChangePaths {
 		return "", nil, fmt.Errorf("invalid change proposal response")
 	}
-	changes := []ChangeEdit{}
-	seen := map[string]bool{}
-	for _, wire := range response.Changes {
-		if seen[wire.Path] {
-			return "", nil, fmt.Errorf("proposal repeated a target")
-		}
-		seen[wire.Path] = true
-		edit, err := makeChangeEdit(session, wire.Path, wire.Content)
-		if err != nil {
-			return "", nil, err
-		}
-		if edit != nil {
-			changes = append(changes, *edit)
-		}
-	}
-	if len(changes) == 0 {
-		return "", nil, fmt.Errorf("proposal contains no changes")
+	changes, err := buildChangeEdits(session, response.Changes)
+	if err != nil {
+		return "", nil, err
 	}
 	return strings.TrimSpace(response.Explanation), changes, nil
 }

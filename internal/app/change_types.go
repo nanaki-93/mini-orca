@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	maxChangePaths    = 8
+	maxChangePaths    = 64
 	maxChangeBytes    = 256 * 1024
 	maxChangeMessages = 40
 )
@@ -96,12 +96,18 @@ type ChangeIdentity struct {
 	Hash            string `json:"hash"`
 }
 
+type ChangeEditInput struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
 type ChangeMessageRequest struct {
 	ChangeIdentity
-	Profile               string `json:"profile,omitempty"`
-	Message               string `json:"message"`
-	ConfirmRemoteProvider bool   `json:"confirm_remote_provider"`
-	Repair                bool   `json:"repair,omitempty"`
+	Profile               string            `json:"profile,omitempty"`
+	Message               string            `json:"message"`
+	ConfirmRemoteProvider bool              `json:"confirm_remote_provider"`
+	Repair                bool              `json:"repair,omitempty"`
+	Changes               []ChangeEditInput `json:"changes,omitempty"`
 }
 
 type InstructionProposalRequest struct {
