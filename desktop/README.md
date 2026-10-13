@@ -56,9 +56,12 @@ visible. The sidebar collapses to icons.
 - **Analysis** shows four analysis operations and their selected models.
   **Models** in the sidebar provides independent choices for Bug analysis,
   Performance, Security and feature discovery in a searchable model picker.
-  The catalog includes configured models and models available through the local
-  Pi installation. **Refresh** reloads it; Pi discovery failures leave configured
-  choices available. **Back to workspace** returns to the previous task or finding.
+  The catalog includes configured models, Pi's available models, and Agy's live
+  model list. **Agy** and **Pi** filters distinguish the routes, and Agy names
+  retain the CLI's model variants. **Refresh** reloads both catalogs; either
+  CLI's discovery failure leaves configured choices and the other catalog
+  available with a separate recovery message. See [CLI configuration](../CONFIG.md#cli-providers)
+  for Gemini through Agy versus Pi. **Back to workspace** returns to the previous task or finding.
   **Context → Files & scope** manages captured file selection, exclusions and
   per-file status. **Analysis** keeps Setup and Last run together.
   Unsaved selection and setup choices survive navigation between these pages;
@@ -185,7 +188,7 @@ visible. The sidebar collapses to icons.
   page, then return to Chat and select **Generate changes**. **Manage models** opens
   that page without losing the task title, file scope, request or test choice.
   New conversations clear the previous draft. These workflows use configured
-  profiles; Analysis also offers Pi catalog models. The choices reference the
+  profiles; Analysis also offers Pi and Agy catalog models. The choices reference the
   daemon's configured Function, Bug and Analyze profiles
   (the respective defaults); configure their actual providers/models in `config.yaml`.
   Include a `_test.go` path. The testing agent writes tests, then the daemon runs

@@ -122,9 +122,20 @@ function ModelPicker({
   useEffect(() => {
     document.getElementById(`${listID}-${activeIndex}`)?.scrollIntoView({ block: 'nearest' });
   }, [activeIndex, listID, query, filter]);
-  const error = configuredOnly
-    ? s.resourceErrors.models
-    : s.resourceErrors.availableModels || s.availableModels?.pi.message;
+  const error = configuredOnly ? s.resourceErrors.models : s.resourceErrors.availableModels;
+  const discoveryErrors =
+    configuredOnly || error
+      ? []
+      : (
+          [
+            ['Pi', s.availableModels?.pi],
+            ['Agy', s.availableModels?.agy],
+          ] as const
+        ).flatMap(([name, discovery]) =>
+          discovery?.status === 'unavailable'
+            ? [discovery.message || `${name} models are unavailable. Refresh to retry.`]
+            : [],
+        );
   return (
     <dialog
       ref={dialog}
@@ -176,7 +187,12 @@ function ModelPicker({
         {(
           [
             ['all', 'All models'],
-            ...(!configuredOnly ? [['pi', 'Pi']] : []),
+            ...(!configuredOnly
+              ? [
+                  ['agy', 'Agy'],
+                  ['pi', 'Pi'],
+                ]
+              : []),
             ['local', 'Local'],
             ...(!configuredOnly ? [['configured', 'Configured']] : []),
           ] as const
@@ -194,9 +210,10 @@ function ModelPicker({
           </Button>
         ))}
       </div>
-      {error && (
-        <Notice error={configuredOnly || !!s.resourceErrors.availableModels}>{error}</Notice>
-      )}
+      {error && <Notice error>{error}</Notice>}
+      {discoveryErrors.map((message) => (
+        <Notice key={message}>{message}</Notice>
+      ))}
       <div
         className="model-picker-list"
         role="listbox"
@@ -221,6 +238,15 @@ function ModelPicker({
             <span className="model-picker-option-copy">
               <strong>{choice.name}</strong>
               <span>Thinking: {choice.model.reasoning_effort || 'Default'}</span>
+              {!configuredOnly && (
+                <small>
+                  {choice.source === 'agy'
+                    ? 'Agy'
+                    : choice.source === 'pi'
+                      ? `Pi · ${choice.provider}`
+                      : 'Configured'}
+                </small>
+              )}
             </span>
             {choice.id === selected && <Icon name="check" />}
           </button>

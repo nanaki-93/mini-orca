@@ -742,6 +742,61 @@ async function analysisSettingsFields(page) {
   );
   checks++;
 }
+function modelCatalogFixture() {
+  const configured = `configured:${'a'.repeat(64)}`;
+  return {
+    defaults: { analyze: configured, bug: configured, function: configured },
+    pi: { status: 'ready' },
+    agy: { status: 'ready' },
+    models: [
+      {
+        id: configured,
+        name: 'Gemini 3.8 Flash',
+        provider: 'openai',
+        source: 'configured',
+        location: 'remote',
+        raw: 'gemini-3.8-flash',
+      },
+      {
+        id: 'agy:gemini-4-argon-high',
+        name: 'Gemini 4 Argon (High)',
+        provider: 'agy',
+        source: 'agy',
+        location: 'unknown',
+        raw: 'gemini-4-argon-high',
+      },
+      {
+        id: 'pi:openai-codex/gpt-5',
+        name: 'GPT-5',
+        provider: 'openai-codex',
+        source: 'pi',
+        location: 'remote',
+        raw: 'openai-codex/gpt-5',
+      },
+      {
+        id: 'pi:lm-studio/qwen/local',
+        name: 'Qwen Local',
+        provider: 'lm-studio',
+        source: 'pi',
+        location: 'local',
+        raw: 'lm-studio/qwen/local',
+      },
+    ].map(({ raw, ...choice }) => ({
+      ...choice,
+      model: {
+        model: raw,
+        profile: choice.id,
+        scope: '',
+        provider_origin:
+          choice.source === 'configured' ? 'https://provider.invalid' : `cli://${choice.source}`,
+        remote_provider: true,
+        timeout: '2m',
+        reasoning_effort: choice.source === 'configured' ? 'medium' : '',
+      },
+    })),
+  };
+}
+
 function savedModelsFixture(long = false) {
   const details = [
     {
@@ -2942,49 +2997,9 @@ try {
       await close();
     }
   });
-  await test('Analysis model picker searches Pi and local models without job labels or inference', async () => {
-    const configured = `configured:${'a'.repeat(64)}`;
-    const availableModels = {
-      defaults: { analyze: configured, bug: configured, function: configured },
-      pi: { status: 'ready' },
-      models: [
-        {
-          id: configured,
-          name: 'Gemini 3.8 Flash',
-          provider: 'openai',
-          source: 'configured',
-          location: 'remote',
-          raw: 'gemini-3.8-flash',
-        },
-        {
-          id: 'pi:openai-codex/gpt-5',
-          name: 'GPT-5',
-          provider: 'openai-codex',
-          source: 'pi',
-          location: 'remote',
-          raw: 'openai-codex/gpt-5',
-        },
-        {
-          id: 'pi:lm-studio/qwen/local',
-          name: 'Qwen Local',
-          provider: 'lm-studio',
-          source: 'pi',
-          location: 'local',
-          raw: 'lm-studio/qwen/local',
-        },
-      ].map(({ raw, ...choice }) => ({
-        ...choice,
-        model: {
-          model: raw,
-          profile: choice.id,
-          scope: '',
-          provider_origin: choice.source === 'pi' ? 'cli://pi' : 'https://provider.invalid',
-          remote_provider: true,
-          timeout: '2m',
-          reasoning_effort: choice.source === 'configured' ? 'medium' : '',
-        },
-      })),
-    };
+  await test('Analysis model picker searches Agy, Pi and local models without inference', async () => {
+    const availableModels = modelCatalogFixture();
+    const configured = availableModels.defaults.analyze;
     const { page, close } = await pageFor({ availableModels, featuresReady: true });
     try {
       await nav(page, 'Models');
@@ -2997,17 +3012,229 @@ try {
       const dialog = page.getByRole('dialog', { name: 'Choose a model' });
       const search = dialog.getByRole('combobox', { name: 'Search models' });
       assert.equal(await search.evaluate((element) => element === document.activeElement), true);
-      assert.equal(await dialog.getByRole('option').count(), 3);
+      assert.equal(await dialog.getByRole('option').count(), 4);
       assert.deepEqual(await dialog.locator('.model-picker-option-copy').allTextContents(), [
-        'Gemini 3.8 FlashThinking: medium',
-        'GPT-5Thinking: Default',
-        'Qwen LocalThinking: Default',
+        'Gemini 3.8 FlashThinking: mediumConfigured',
+        'Gemini 4 Argon (High)Thinking: DefaultAgy',
+        'GPT-5Thinking: DefaultPi · openai-codex',
+        'Qwen LocalThinking: DefaultPi · lm-studio',
       ]);
       assert.equal(await code.locator('small').innerText(), 'Thinking: medium');
       assert.doesNotMatch(
         await dialog.getByRole('listbox').innerText(),
         /\b(analyze|bug|feature|function)\b/i,
       );
+      await layout(page, 'agy-model-catalog-all');
+      await dialog.getByRole('button', { name: 'Agy', exact: true }).click();
+      assert.equal(await dialog.getByRole('option').count(), 1);
+      await search.fill('gemini');
+      await search.press('Enter');
+      assert.equal(await code.getAttribute('value'), 'agy:gemini-4-argon-high');
+      assert.match(await code.getAttribute('title'), /Gemini 4 Argon \(High\)/);
+      await code.click();
+      await dialog.getByRole('button', { name: 'Pi', exact: true }).click();
+      assert.equal(await dialog.getByRole('option').count(), 2);
+      await dialog.getByRole('button', { name: 'Local', exact: true }).click();
+      assert.equal(await dialog.getByRole('option').count(), 1);
+      await dialog.getByRole('option', { name: /Qwen Local/ }).waitFor();
+      await search.fill('no-such-model');
+      await dialog.getByText('No models match these filters.', { exact: true }).waitFor();
+      await search.fill('lm-studio');
+      await search.press('Enter');
+      assert.equal(await code.getAttribute('value'), 'pi:lm-studio/qwen/local');
+      assert.equal(await code.evaluate((element) => element === document.activeElement), true);
+      await code.click();
+      await search.fill('gpt');
+      await page.keyboard.press('Escape');
+      assert.equal(
+        await code.getAttribute('value'),
+        'pi:lm-studio/qwen/local',
+        'Cancel retains the selected model',
+      );
+      assert.deepEqual(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
+        before,
+      );
+      await chooseModel(
+        page.getByLabel('Feature discovery model', { exact: true }),
+        'agy:gemini-4-argon-high',
+      );
+      await page.keyboard.press('Control+k');
+      await page.getByRole('button', { name: 'Analyze project', exact: true }).click();
+      await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
+      await idle(page);
+      const preview = await page.evaluate(() =>
+        window.fixture.requests.findLast((r) => r.path.endsWith('/analysis/preview')),
+      );
+      assert.deepEqual(preview.body.models, {
+        code: 'pi:lm-studio/qwen/local',
+        performance: configured,
+        security: configured,
+        features: 'agy:gemini-4-argon-high',
+      });
+      await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
+      const consent = page.locator('dialog:not(.studio-overlay)');
+      await consent.getByText('lm-studio/qwen/local · cli://pi', { exact: true }).waitFor();
+      await consent.getByText('gemini-4-argon-high · cli://agy', { exact: true }).waitFor();
+      await consent.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await idle(page);
+      assert.equal(
+        await page.evaluate(
+          () =>
+            window.fixture.requests.filter(
+              (r) => r.method !== 'GET' && r.path.endsWith('/analysis/run'),
+            ).length,
+        ),
+        0,
+      );
+      await page.getByRole('button', { name: 'Back', exact: true }).click();
+      await nav(page, 'Features');
+      await openGoals(page);
+      await page
+        .getByRole('button', { name: 'Search more feature suggestions', exact: true })
+        .click();
+      await page
+        .locator('dialog:not(.studio-overlay)')
+        .getByText('gemini-4-argon-high', { exact: true })
+        .waitFor();
+      assert.doesNotMatch(
+        await page.locator('dialog:not(.studio-overlay)').innerText(),
+        /configured:|Profile:/,
+      );
+      await page
+        .locator('dialog:not(.studio-overlay)')
+        .getByRole('button', { name: 'Continue', exact: true })
+        .click();
+      await idle(page);
+      const generation = await page.evaluate(() =>
+        window.fixture.requests.findLast((r) => r.path.endsWith('/features/generate')),
+      );
+      assert.equal(generation.body.profile, 'agy:gemini-4-argon-high');
+      assert.equal(generation.body.confirm_remote_provider, true);
+      await nav(page, 'Models');
+      await code.click();
+      await page.evaluate(() => {
+        window.fixture.state.availableModels.pi = {
+          status: 'unavailable',
+          message: 'Pi models could not be loaded. Refresh to retry.',
+        };
+        window.fixture.state.availableModels.models =
+          window.fixture.state.availableModels.models.filter((choice) => choice.source !== 'pi');
+      });
+      await dialog.getByRole('button', { name: 'Refresh models', exact: true }).click();
+      await dialog
+        .getByText('Pi models could not be loaded. Refresh to retry.', { exact: true })
+        .waitFor();
+      assert.equal(
+        await dialog.getByRole('option').count(),
+        2,
+        'Agy remains available when Pi fails',
+      );
+      await dialog.getByRole('button', { name: 'Agy', exact: true }).click();
+      assert.equal(await dialog.getByRole('option').count(), 1);
+      await page.evaluate(() => {
+        window.fixture.state.availableModels.agy = { status: 'unavailable' };
+        window.fixture.state.availableModels.models =
+          window.fixture.state.availableModels.models.filter((choice) => choice.source !== 'agy');
+      });
+      await dialog.getByRole('button', { name: 'Refresh models', exact: true }).click();
+      await dialog
+        .getByText('Agy models are unavailable. Refresh to retry.', { exact: true })
+        .waitFor();
+      await dialog
+        .getByText('Pi models could not be loaded. Refresh to retry.', { exact: true })
+        .waitFor();
+      assert.equal(await dialog.getByRole('option').count(), 0);
+      await dialog.getByRole('button', { name: 'All models', exact: true }).click();
+      assert.equal(
+        await dialog.getByRole('option').count(),
+        1,
+        'Configured models remain available',
+      );
+      await page.setViewportSize({ width: 800, height: 1000 });
+      await page.evaluate(() => document.documentElement.classList.add('large-text'));
+      await layout(page, 'agy-model-catalog-unavailable-800-large');
+      await page.keyboard.press('Escape');
+      assert.match(await code.getAttribute('title'), /Model unavailable/);
+      await nav(page, 'Features');
+      await openGoals(page);
+      await page
+        .getByRole('button', { name: 'Search more feature suggestions', exact: true })
+        .click();
+      await idle(page);
+      await page
+        .getByRole('alert')
+        .getByText('The selected model is unavailable. Refresh models and choose again.', {
+          exact: true,
+        })
+        .waitFor();
+      assert.equal(
+        await page.evaluate(
+          () => window.fixture.requests.filter((r) => r.path.endsWith('/features/generate')).length,
+        ),
+        1,
+        'An unavailable selection cannot dispatch',
+      );
+      await nav(page, 'Models');
+      await code.click();
+      await page.evaluate(
+        (choice) => {
+          window.fixture.state.availableModels.agy = { status: 'ready' };
+          window.fixture.state.availableModels.models.push(choice);
+        },
+        {
+          ...availableModels.models[1],
+          id: 'agy:gemini-next-low',
+          name: 'Gemini Next (Low)',
+          model: {
+            ...availableModels.models[1].model,
+            model: 'gemini-next-low',
+            profile: 'agy:gemini-next-low',
+          },
+        },
+      );
+      const beforeRefresh = await page.evaluate(
+        () => window.fixture.requests.filter((r) => r.method !== 'GET').length,
+      );
+      await dialog.getByRole('button', { name: 'Refresh models', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Agy', exact: true }).click();
+      await dialog.getByRole('option', { name: /Gemini Next \(Low\)/ }).waitFor();
+      assert.equal(
+        await dialog.getByRole('option').count(),
+        1,
+        'Refresh reads the new Agy catalog',
+      );
+      assert.equal(
+        await dialog
+          .getByText('Agy models are unavailable. Refresh to retry.', { exact: true })
+          .count(),
+        0,
+      );
+      assert.equal(
+        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET').length),
+        beforeRefresh,
+        'Refresh never starts inference',
+      );
+      await page.keyboard.press('Escape');
+      await page.getByLabel('Creation model', { exact: true }).click();
+      assert.equal(await dialog.getByRole('button', { name: 'Agy', exact: true }).count(), 0);
+      assert.equal(await dialog.getByRole('button', { name: 'Pi', exact: true }).count(), 0);
+      assert.equal(
+        await dialog.getByRole('option').count(),
+        3,
+        'Workflows retain configured profiles',
+      );
+    } finally {
+      await close();
+    }
+  });
+  await test('Analysis model picker layout and contrast across viewports', async () => {
+    const { page, close } = await pageFor({ availableModels: modelCatalogFixture() });
+    try {
+      await nav(page, 'Models');
+      const code = page.getByLabel('Bug analysis model', { exact: true });
+      await code.click();
+      const dialog = page.getByRole('dialog', { name: 'Choose a model' });
       for (const width of [1440, 800]) {
         await page.setViewportSize({ width, height: 900 });
         for (const theme of ['dark', 'light']) {
@@ -3037,125 +3264,6 @@ try {
           }
         }
       }
-      await dialog.getByRole('button', { name: 'Pi', exact: true }).click();
-      assert.equal(await dialog.getByRole('option').count(), 2);
-      await dialog.getByRole('button', { name: 'Local', exact: true }).click();
-      assert.equal(await dialog.getByRole('option').count(), 1);
-      await dialog.getByRole('option', { name: /Qwen Local/ }).waitFor();
-      await search.fill('no-such-model');
-      await dialog.getByText('No models match these filters.', { exact: true }).waitFor();
-      await search.fill('lm-studio');
-      await search.press('Enter');
-      assert.equal(await code.getAttribute('value'), 'pi:lm-studio/qwen/local');
-      assert.equal(await code.evaluate((element) => element === document.activeElement), true);
-      await code.click();
-      await search.fill('gpt');
-      await page.keyboard.press('Escape');
-      assert.equal(
-        await code.getAttribute('value'),
-        'pi:lm-studio/qwen/local',
-        'Cancel retains the selected model',
-      );
-      assert.deepEqual(
-        await page.evaluate(() => window.fixture.requests.filter((r) => r.method !== 'GET')),
-        before,
-      );
-      await chooseModel(
-        page.getByLabel('Feature discovery model', { exact: true }),
-        'pi:openai-codex/gpt-5',
-      );
-      await nav(page, 'Analysis');
-      await page.getByRole('button', { name: 'Preview analysis', exact: true }).click();
-      await idle(page);
-      const preview = await page.evaluate(() =>
-        window.fixture.requests.findLast((r) => r.path.endsWith('/analysis/preview')),
-      );
-      assert.deepEqual(preview.body.models, {
-        code: 'pi:lm-studio/qwen/local',
-        performance: configured,
-        security: configured,
-        features: 'pi:openai-codex/gpt-5',
-      });
-      await page.getByRole('button', { name: 'Start analysis', exact: true }).click();
-      const consent = page.locator('dialog:not(.studio-overlay)');
-      await consent.getByText('lm-studio/qwen/local · cli://pi', { exact: true }).waitFor();
-      await consent.getByRole('button', { name: 'Cancel', exact: true }).click();
-      await idle(page);
-      assert.equal(
-        await page.evaluate(
-          () =>
-            window.fixture.requests.filter(
-              (r) => r.method !== 'GET' && r.path.endsWith('/analysis/run'),
-            ).length,
-        ),
-        0,
-      );
-      await page.getByRole('button', { name: 'Back', exact: true }).click();
-      await nav(page, 'Features');
-      await openGoals(page);
-      await page
-        .getByRole('button', { name: 'Search more feature suggestions', exact: true })
-        .click();
-      await page
-        .locator('dialog:not(.studio-overlay)')
-        .getByText('openai-codex/gpt-5', { exact: true })
-        .waitFor();
-      assert.doesNotMatch(
-        await page.locator('dialog:not(.studio-overlay)').innerText(),
-        /configured:|Profile:/,
-      );
-      await page
-        .locator('dialog:not(.studio-overlay)')
-        .getByRole('button', { name: 'Continue', exact: true })
-        .click();
-      await idle(page);
-      const generation = await page.evaluate(() =>
-        window.fixture.requests.findLast((r) => r.path.endsWith('/features/generate')),
-      );
-      assert.equal(generation.body.profile, 'pi:openai-codex/gpt-5');
-      assert.equal(generation.body.confirm_remote_provider, true);
-      await nav(page, 'Models');
-      await code.click();
-      await page.evaluate(() => {
-        window.fixture.state.availableModels.pi = {
-          status: 'unavailable',
-          message: 'Pi models could not be loaded. Refresh to retry.',
-        };
-        window.fixture.state.availableModels.models =
-          window.fixture.state.availableModels.models.filter(
-            (choice) => choice.source === 'configured',
-          );
-      });
-      await dialog.getByRole('button', { name: 'Refresh models', exact: true }).click();
-      await dialog
-        .getByText('Pi models could not be loaded. Refresh to retry.', { exact: true })
-        .waitFor();
-      assert.equal(
-        await dialog.getByRole('option').count(),
-        1,
-        'Configured models remain available',
-      );
-      await page.keyboard.press('Escape');
-      assert.match(await code.getAttribute('title'), /Model unavailable/);
-      await nav(page, 'Features');
-      await openGoals(page);
-      await page
-        .getByRole('button', { name: 'Search more feature suggestions', exact: true })
-        .click();
-      await idle(page);
-      await page
-        .getByRole('alert')
-        .getByText('The selected model is unavailable. Refresh models and choose again.', {
-          exact: true,
-        })
-        .waitFor();
-      assert.equal(
-        await page.evaluate(
-          () => window.fixture.requests.filter((r) => r.path.endsWith('/features/generate')).length,
-        ),
-        1,
-        'An unavailable selection cannot dispatch',
-      );
     } finally {
       await close();
     }

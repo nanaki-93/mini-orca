@@ -155,7 +155,7 @@ func TestNativeModelCatalogReadsStayOnTheDaemon(t *testing.T) {
 		if request.Method != http.MethodGet || request.URL.Path != "/api/models/available" || request.Header.Get("Origin") != "" {
 			t.Fatalf("catalog request changed: %s %s", request.Method, request.URL)
 		}
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"models":[],"defaults":{},"pi":{"status":"ready"}}`))}, nil
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"models":[],"defaults":{},"pi":{"status":"ready"},"agy":{"status":"ready"}}`))}, nil
 	})
 	if result, err := client.Request(context.Background(), "catalog", http.MethodGet, "/api/models/available", ""); err != nil || result.Status != http.StatusOK {
 		t.Fatalf("catalog response = %+v, %v", result, err)

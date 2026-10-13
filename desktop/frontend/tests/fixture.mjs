@@ -1161,6 +1161,7 @@ export function installFixture(options = {}) {
                       model: { ...model(scope), scope: '' },
                     })),
                 pi: { status: 'ready' },
+                agy: { status: 'ready' },
               },
             );
           if (path === '/api/models/current')
