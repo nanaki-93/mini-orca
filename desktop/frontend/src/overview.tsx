@@ -381,7 +381,10 @@ export function Summary({ s }: { s: State }) {
                 onClick={() => void w.openFile(file.path)}
               >
                 <div className="row between">
-                  <strong className="font-mono" style={{ fontSize: '0.82rem', color: 'var(--accent)' }}>
+                  <strong
+                    className="font-mono"
+                    style={{ fontSize: '0.82rem', color: 'var(--accent)' }}
+                  >
                     {file.path.split('/').at(-1)}
                   </strong>
                   <Icon name="arrow" />

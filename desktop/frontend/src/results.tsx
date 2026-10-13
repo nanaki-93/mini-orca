@@ -433,7 +433,7 @@ export function Results({ s }: { s: State }) {
       key: `feature:${idea.id}`,
       target: {
         project_id: s.project?.project_id || '',
-        kind: 'feature',
+        kind: 'semantic',
         id: idea.id,
         path: idea.paths[0] || '',
       },
@@ -559,7 +559,10 @@ export function Results({ s }: { s: State }) {
       <div className="issue-split-grid">
         <Panel title="Issues & Ideas" className="results-findings">
           <div className="toolbar findings-toolbar">
-            <div className="category-pills" style={{ display: 'inline-flex', gap: '4px', flexWrap: 'wrap' }}>
+            <div
+              className="category-pills"
+              style={{ display: 'inline-flex', gap: '4px', flexWrap: 'wrap' }}
+            >
               {(['all', 'bugs', 'security', 'performance'] as const).map((cat) => (
                 <Button
                   key={cat}
@@ -719,7 +722,9 @@ export function Results({ s }: { s: State }) {
                 <div className="finding-inline-actions">
                   <Button
                     tone="primary small"
-                    disabled={!!s.busy || activeChangeWorkflow(s.change) || row.freshness === 'stale'}
+                    disabled={
+                      !!s.busy || activeChangeWorkflow(s.change) || row.freshness === 'stale'
+                    }
                     onClick={(e) => {
                       e.stopPropagation();
                       if (showFeatures) {
