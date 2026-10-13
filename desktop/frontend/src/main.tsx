@@ -146,28 +146,42 @@ function App() {
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, [s.confirmation]);
+  const issueCount =
+    s.findings?.filter((f) => f.status !== 'fixed').length ||
+    s.run?.sections.reduce((sum, sec) => sum + (sec.finding_count || 0), 0) ||
+    0;
+  const worktreeCount = s.gitWorkspace?.worktrees.length || 0;
   const nav = (items: typeof mainNav) =>
-    items.map(([page, label, icon]) => (
-      <button
-        key={page}
-        className="nav-link"
-        data-accent={page}
-        aria-label={label}
-        title={sidebarCollapsed ? label : undefined}
-        disabled={!s.project && !['project', 'models'].includes(page)}
-        aria-current={
-          activePage === page ||
-          (page === 'analysis' && s.page === 'analysis-preview') ||
-          (page === 'editor' && s.page === 'editor')
-            ? 'page'
-            : undefined
-        }
-        onClick={() => void w.navigate(page)}
-      >
-        <Icon name={icon} />
-        <span>{label}</span>
-      </button>
-    ));
+    items.map(([page, label, icon]) => {
+      const count =
+        page === 'bugs' && issueCount > 0
+          ? issueCount
+          : page === 'git' && worktreeCount > 0
+            ? worktreeCount
+            : undefined;
+      return (
+        <button
+          key={page}
+          className="nav-link"
+          data-accent={page}
+          aria-label={label}
+          title={sidebarCollapsed ? label : undefined}
+          disabled={!s.project && !['project', 'models'].includes(page)}
+          aria-current={
+            activePage === page ||
+            (page === 'analysis' && s.page === 'analysis-preview') ||
+            (page === 'editor' && s.page === 'editor')
+              ? 'page'
+              : undefined
+          }
+          onClick={() => void w.navigate(page)}
+        >
+          <Icon name={icon} />
+          <span>{label}</span>
+          {count !== undefined && <span className="nav-count badge-count">{count}</span>}
+        </button>
+      );
+    });
   const title =
     [...mainNav, ...improveNav, ...utilityNav].find(([page]) => page === activePage)?.[1] ||
     s.page
