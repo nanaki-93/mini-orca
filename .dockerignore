@@ -2,8 +2,6 @@
 .idea
 .vscode
 build/
-desktop/.gradle/
-desktop/.kotlin/
 desktop/build/
 config.yaml
 .env
