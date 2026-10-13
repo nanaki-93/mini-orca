@@ -108,6 +108,7 @@ export interface State {
   analysisRefresh?: boolean;
   analysisSelectionDraft?: { selectionID: string; excluded: string[] };
   workflowModels?: M.ChangeWorkflowModels;
+  workspaceTrust?: boolean;
 }
 export interface ChatDraft {
   sessionID?: string;
@@ -150,6 +151,9 @@ const initial = (): State => ({
   uncertain: false,
   terminals: [],
   featureGenerationRequested: false,
+  workspaceTrust:
+    typeof localStorage !== 'undefined' &&
+    localStorage.getItem('mini-orca:workspace-trust') === 'true',
 });
 const projectKey = (p?: M.ProjectIdentity) => (p ? `${p.project_id}:${p.project_revision}` : '');
 const fileKey = (s: State) => `${projectKey(s.project)}:${s.file?.path}:${s.file?.content_hash}`;
@@ -1223,6 +1227,7 @@ export class Workspace {
     if (!model)
       throw new Error('The selected model is unavailable. Refresh models and choose again.');
     if (!model.remote_provider && !explicit) return false;
+    if (this.state.workspaceTrust) return model.remote_provider;
     const accepted = await this.confirm({
       title,
       message: model.remote_provider
@@ -1314,6 +1319,26 @@ export class Workspace {
         this.set({ securityReport, page: 'security', selectedFinding: undefined });
     });
   }
+  async setWorkspaceTrust(trusted: boolean) {
+    if (typeof localStorage !== 'undefined')
+      localStorage.setItem('mini-orca:workspace-trust', String(trusted));
+    this.set({
+      workspaceTrust: trusted,
+      notice: trusted
+        ? 'Consolidated Workspace Trust enabled.'
+        : 'Consolidated Workspace Trust disabled; explicit confirmations restored.',
+    });
+    if (trusted && this.state.project) {
+      try {
+        await this.api.post(`${current}/execution-trust`, {
+          project_revision: this.identity().project_revision,
+          confirm: true,
+        });
+      } catch {
+        // Ignore if backend trust endpoint is unavailable until next check.
+      }
+    }
+  }
   private async trust(): Promise<boolean> {
     const params = {
       project_revision: this.identity().project_revision,
@@ -1321,6 +1346,7 @@ export class Workspace {
     const trust = await this.api.get<M.ExecutionTrust>(`${current}/execution-trust`, params);
     if (trust.trusted) return true;
     if (
+      !this.state.workspaceTrust &&
       !(await this.confirm({
         title: 'Allow project code to run?',
         message: 'Checks run in an isolated copy. Project code can still access this computer.',
@@ -1978,7 +2004,11 @@ export class Workspace {
   async acceptChange(commitMessage?: string) {
     await this.act('Apply change', async () => {
       const change = this.state.change;
-      if (!change || !['chat', 'changes'].includes(this.state.page) || !canAcceptChange(this.state))
+      if (
+        !change ||
+        !['editor', 'chat', 'changes'].includes(this.state.page) ||
+        !canAcceptChange(this.state)
+      )
         throw new Error('The displayed proposal needs current passing checks and model review.');
       const epoch = this.epoch;
       const operation = this.operation;
@@ -1998,7 +2028,7 @@ export class Workspace {
         epoch !== this.epoch ||
         operation !== this.operation ||
         navigation !== this.navigation ||
-        !['chat', 'changes'].includes(this.state.page) ||
+        !['editor', 'chat', 'changes'].includes(this.state.page) ||
         this.state.change?.id !== change.id ||
         this.state.change.revision !== change.revision ||
         this.state.change.hash !== change.hash
@@ -2024,6 +2054,83 @@ export class Workspace {
           : {}),
       });
       await this.acceptChangeMutation(receipt);
+    });
+  }
+  async applyProposalNow(commitMessage?: string) {
+    if (this.state.change && !changeChecksPassed(this.state.change)) {
+      await this.checkChange(false);
+    }
+    if (this.state.change && canAcceptChange(this.state)) {
+      await this.acceptChange(commitMessage);
+    }
+  }
+  async updateProposalFileContent(path: string, content: string, note = 'Updated diff hunks.') {
+    await this.act('Update proposal', async () => {
+      const change = this.state.change;
+      if (!change || change.state !== 'draft' || change.freshness !== 'current')
+        throw new Error('Start a fresh proposal before updating hunks.');
+      const identity = this.changeIdentity(change);
+      const updatedChanges = change.changes
+        .map((edit) =>
+          edit.path === path ? { path, content } : { path: edit.path, content: edit.content },
+        )
+        .filter((edit) => {
+          const target = change.targets.find((t) => t.path === edit.path);
+          return !target || edit.content !== target.content;
+        });
+      if (!updatedChanges.length) {
+        this.set({
+          change: undefined,
+          changeSeed: undefined,
+          notice: 'All hunks rejected; proposal cleared.',
+        });
+        return;
+      }
+      const next = await this.api.post<M.ChangeSession>(
+        `${current}/changes/${encodeURIComponent(change.id)}/messages`,
+        {
+          ...identity,
+          message: note,
+          changes: updatedChanges,
+        },
+      );
+      this.set({ change: next, changeReceipt: undefined });
+      await this.requestChangeChecks(false);
+    });
+  }
+  async saveDirectFile(path: string, content: string) {
+    await this.act('Save file', async () => {
+      if (activeChangeWorkflow(this.state.change))
+        throw new Error('Finish or cancel the active workflow first.');
+      const isInstructions = path === 'AGENTS.md' || path.endsWith('/AGENTS.md');
+      const change = await this.api.post<M.ChangeSession>(`${current}/instructions/proposal`, {
+        ...this.identity(),
+        kind: isInstructions ? 'instructions' : 'feature',
+        title: `Save ${path}`,
+        paths: [path],
+        acceptance_criteria: [`Apply direct edits to ${path}.`],
+        content,
+      });
+      this.set({ change, changeSeed: undefined, changeReceipt: undefined });
+      const checked = await this.api.post<M.ChangeSession>(
+        `${current}/changes/${encodeURIComponent(change.id)}/checks`,
+        { ...this.changeIdentity(change), run_tests: false },
+      );
+      const reviewed = await this.api.post<M.ChangeSession>(
+        `${current}/changes/${encodeURIComponent(checked.id)}/review`,
+        this.changeIdentity(checked),
+      );
+      this.set({ change: reviewed });
+      const repository = this.state.repository;
+      const receipt = await this.writeChangeSource(reviewed.id, 'apply', {
+        ...this.changeIdentity(reviewed),
+        ...(repository?.available
+          ? { head: repository.head, branch: repository.branch, commit_message: `Update ${path}` }
+          : {}),
+      });
+      await this.acceptChangeMutation(receipt);
+      if (this.state.file?.path === path) await this.refreshFile();
+      this.set({ notice: `Saved ${path} (Undo available).` });
     });
   }
   async retryChangeCommit(message: string) {
