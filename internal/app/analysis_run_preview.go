@@ -193,7 +193,7 @@ func (s *Service) analysisStageCacheState(analysis project.Analysis, file projec
 		if err != nil {
 			return false, "", time.Time{}, err
 		}
-		report, err := cache.Load(semanticCacheInputForRuntime(&analysis, &file, file.ContentHash, policy.Version(), s.analysisModelRuntime(stage, models)))
+		report, err := cache.WithPolicy(policy).Load(semanticCacheInputForRuntime(&analysis, &file, file.ContentHash, policy.Version(), s.analysisModelRuntime(stage, models)))
 		if err != nil {
 			return false, "", time.Time{}, err
 		}

@@ -177,6 +177,7 @@ func (s *Service) refreshAISuggestions(analysis *project.Analysis, index *projec
 	if err != nil {
 		return err
 	}
+	cache = cache.WithPolicy(policy)
 	for i := range index.Files {
 		file := &index.Files[i]
 		if file.Binary {

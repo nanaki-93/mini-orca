@@ -109,10 +109,13 @@ type FileAnalysisInput struct {
 	ContextPolicyVersion string
 }
 
+var fileAnalysisLocks sync.Map
+
 // FileAnalysisCache persists semantic summaries under one project root.
 type FileAnalysisCache struct {
-	root string
-	mu   sync.Mutex
+	root   string
+	mu     *sync.Mutex
+	policy *ContextPolicy
 }
 
 func NewFileAnalysisCache(root string) (*FileAnalysisCache, error) {
@@ -120,7 +123,19 @@ func NewFileAnalysisCache(root string) (*FileAnalysisCache, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &FileAnalysisCache{root: canonical}, nil
+	lock, _ := fileAnalysisLocks.LoadOrStore(canonical, &sync.Mutex{})
+	return &FileAnalysisCache{root: canonical, mu: lock.(*sync.Mutex)}, nil
+}
+
+func (c *FileAnalysisCache) WithPolicy(policy *ContextPolicy) *FileAnalysisCache {
+	return &FileAnalysisCache{root: c.root, mu: c.mu, policy: policy}
+}
+
+func (c *FileAnalysisCache) contextPolicy() (*ContextPolicy, error) {
+	if c.policy != nil {
+		return c.policy, nil
+	}
+	return NewContextPolicy(c.root)
 }
 
 // Load returns a cache entry whose status is fresh, stale, missing, failed, or
@@ -128,7 +143,11 @@ func NewFileAnalysisCache(root string) (*FileAnalysisCache, error) {
 func (c *FileAnalysisCache) Load(input FileAnalysisInput) (*FileAnalysis, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if err := c.validateInput(input); err != nil {
+	policy, err := c.contextPolicy()
+	if err != nil {
+		return nil, err
+	}
+	if err := c.validateInputWithPolicy(input, policy); err != nil {
 		return nil, err
 	}
 	path := c.cachePath(input.Path)
@@ -149,7 +168,7 @@ func (c *FileAnalysisCache) Load(input FileAnalysisInput) (*FileAnalysis, error)
 	if !analysisMatches(analysis, input) {
 		analysis.Status = AnalysisStatusStale
 	}
-	if err := ValidateInstructions(c.root, input.Path, analysis.InstructionsFingerprint); err != nil {
+	if err := validateInstructionsWithPolicy(c.root, input.Path, analysis.InstructionsFingerprint, policy); err != nil {
 		if !errors.Is(err, ErrRevisionConflict) {
 			return nil, err
 		}
@@ -175,7 +194,11 @@ func (c *FileAnalysisCache) Store(analysis FileAnalysis) error {
 		}
 	}
 	input := inputFromAnalysis(analysis)
-	if err := c.validateInput(input); err != nil {
+	policy, err := c.contextPolicy()
+	if err != nil {
+		return err
+	}
+	if err := c.validateInputWithPolicy(input, policy); err != nil {
 		return err
 	}
 	if !validAnalysisStatus(analysis.Status) || analysis.Status == AnalysisStatusMissing || analysis.Status == AnalysisStatusStale {
@@ -197,11 +220,7 @@ func (c *FileAnalysisCache) Store(analysis FileAnalysis) error {
 	return nil
 }
 
-func (c *FileAnalysisCache) validateInput(input FileAnalysisInput) error {
-	policy, err := NewContextPolicy(c.root)
-	if err != nil {
-		return err
-	}
+func (c *FileAnalysisCache) validateInputWithPolicy(input FileAnalysisInput, policy *ContextPolicy) error {
 	decision := policy.Decide(input.Path)
 	if decision.Reason == "unsafe path" || !decision.Include {
 		return fmt.Errorf("file analysis path is not eligible: %s", decision.Reason)

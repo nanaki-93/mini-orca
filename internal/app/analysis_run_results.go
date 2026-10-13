@@ -198,7 +198,7 @@ func (reader *analysisSectionReader) readSemantic(indexed project.IndexFile, fil
 	if err != nil {
 		return err
 	}
-	semantic, err := cache.Load(semanticCacheInputForRuntime(reader.analysis, &indexed, file.ContentHash, reader.policy.Version(), reader.service.analysisModelRuntime(AnalysisStageSemantic, reader.run.Plan.Models)))
+	semantic, err := cache.WithPolicy(reader.policy).Load(semanticCacheInputForRuntime(reader.analysis, &indexed, file.ContentHash, reader.policy.Version(), reader.service.analysisModelRuntime(AnalysisStageSemantic, reader.run.Plan.Models)))
 	if err != nil {
 		return err
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
 )
@@ -13,24 +14,36 @@ func (s *Service) AvailableModels(ctx context.Context) (AvailableModels, error) 
 	if err != nil {
 		return AvailableModels{}, err
 	}
-	for _, discovery := range []struct {
+	discoveries := []struct {
 		provider config.ModelProvider
 		name     string
 		status   *ModelDiscovery
+		models   []ModelChoice
 	}{
-		{config.PiProvider, "Pi", &catalog.Pi},
-		{config.AgyProvider, "Agy", &catalog.Agy},
-	} {
-		models, err := s.discoverModelChoices(ctx, discovery.provider)
-		if ctx.Err() != nil {
-			return AvailableModels{}, ctx.Err()
-		}
-		*discovery.status = ModelDiscovery{Status: "ready"}
-		if err != nil {
-			*discovery.status = ModelDiscovery{Status: "unavailable", Message: fmt.Sprintf("%s models could not be loaded. Check that %s is installed, signed in, and its model configuration is valid, then refresh models.", discovery.name, discovery.name)}
-			continue
-		}
-		catalog.Models = append(catalog.Models, models...)
+		{provider: config.PiProvider, name: "Pi", status: &catalog.Pi},
+		{provider: config.AgyProvider, name: "Agy", status: &catalog.Agy},
+	}
+	var wg sync.WaitGroup
+	wg.Add(len(discoveries))
+	for i := range discoveries {
+		go func(index int) {
+			defer wg.Done()
+			d := &discoveries[index]
+			models, discoverErr := s.discoverModelChoices(ctx, d.provider)
+			if discoverErr != nil {
+				*d.status = ModelDiscovery{Status: "unavailable", Message: fmt.Sprintf("%s models could not be loaded. Check that %s is installed, signed in, and its model configuration is valid, then refresh models.", d.name, d.name)}
+				return
+			}
+			*d.status = ModelDiscovery{Status: "ready"}
+			d.models = models
+		}(i)
+	}
+	wg.Wait()
+	if ctx.Err() != nil {
+		return AvailableModels{}, ctx.Err()
+	}
+	for i := range discoveries {
+		catalog.Models = append(catalog.Models, discoveries[i].models...)
 	}
 	sort.SliceStable(catalog.Models, func(i, j int) bool {
 		a, b := catalog.Models[i], catalog.Models[j]

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/storage"
@@ -221,10 +222,27 @@ func oneOf(value string, values ...string) bool {
 	return false
 }
 
+var performanceReportLocks sync.Map
+
+func performanceReportLock(root string) (*sync.Mutex, error) {
+	canonical, err := CanonicalRoot(root)
+	if err != nil {
+		return nil, err
+	}
+	lock, _ := performanceReportLocks.LoadOrStore(canonical, &sync.Mutex{})
+	return lock.(*sync.Mutex), nil
+}
+
 func StorePerformanceFileReport(root string, report PerformanceFileReport) error {
 	if report.ProjectID == "" || report.Path == "" || report.ContentHash == "" || report.PromptVersion == "" || report.GeneratedAt.IsZero() {
 		return fmt.Errorf("performance report is incomplete")
 	}
+	mu, err := performanceReportLock(root)
+	if err != nil {
+		return err
+	}
+	mu.Lock()
+	defer mu.Unlock()
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return err
@@ -239,6 +257,12 @@ func LoadPerformanceFileReport(root, path, contentHash string, policy *ContextPo
 	if policy == nil {
 		return nil, fmt.Errorf("performance report policy is required")
 	}
+	mu, err := performanceReportLock(root)
+	if err != nil {
+		return nil, err
+	}
+	mu.Lock()
+	defer mu.Unlock()
 	cachePath := performanceCachePath(root, path)
 	data, err := os.ReadFile(cachePath)
 	if os.IsNotExist(err) {
@@ -257,7 +281,7 @@ func LoadPerformanceFileReport(root, path, contentHash string, policy *ContextPo
 	if performanceReportIsStale(report, root, path, contentHash, policy) {
 		report.Status = "stale"
 	}
-	if err := ValidateInstructions(root, path, report.InstructionsFingerprint); err != nil {
+	if err := validateInstructionsWithPolicy(root, path, report.InstructionsFingerprint, policy); err != nil {
 		if !errors.Is(err, ErrRevisionConflict) {
 			return nil, err
 		}

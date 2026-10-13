@@ -379,16 +379,19 @@ func (c *SecurityReportCache) reportCurrent(report SecurityFileReport, input Sec
 	if !securityReportMatchesInput(report, input) {
 		return false, nil
 	}
+	policy, err := NewContextPolicy(c.root)
+	if err != nil {
+		return false, nil
+	}
 	if report.Source == SecuritySourceAI {
-		if err := ValidateInstructions(c.root, report.Path, report.InstructionsFingerprint); err != nil {
+		if err := validateInstructionsWithPolicy(c.root, report.Path, report.InstructionsFingerprint, policy); err != nil {
 			if !errors.Is(err, ErrRevisionConflict) {
 				return false, err
 			}
 			return false, nil
 		}
 	}
-	policy, err := NewContextPolicy(c.root)
-	if err != nil || policy.Version() != report.ContextPolicyVersion || !policy.Decide(report.Path).Include {
+	if policy.Version() != report.ContextPolicyVersion || !policy.Decide(report.Path).Include {
 		return false, nil
 	}
 	current, err := GetFileInfo(c.root, report.Path)
