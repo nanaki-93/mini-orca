@@ -1,7 +1,7 @@
 # Local interactive terminal
 
 The Wails host owns PTY sessions; React renders them with xterm.js. See the
-[desktop guide](webapp/README.md) for terminal use and native verification.
+[desktop guide](README.md) for terminal use and native verification.
 
 Opening or restoring a project starts no shell. **New terminal** explicitly
 starts a local shell in the project. Hiding the drawer retains the session;
