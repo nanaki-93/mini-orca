@@ -16,11 +16,7 @@ export function GitWorkspace({ s }: { s: State }) {
   const blocked = busy || !!s.resourceErrors['Git / Worktrees'] || s.uncertain;
   return (
     <div className="workspace-page git-workspace">
-      <Heading
-        title="Git / Worktrees"
-        detail={`Worktrees ready to merge into ${repository?.branch || 'the current branch'}.`}
-        variant="intro"
-      >
+      <Heading title="Git / Worktrees" variant="intro">
         <Button
           icon="refresh"
           disabled={busy}
@@ -79,10 +75,7 @@ export function GitWorkspace({ s }: { s: State }) {
           )}
           {repository.merge_head && (
             <Panel title="Merge in progress" className="git-conflicts">
-              <p>
-                Review these files and resolve the merge using your Git tools. You can also abort
-                and restore the state before this merge.
-              </p>
+              <p>Resolve merge conflicts or abort merge.</p>
               {repository.conflicts.length ? (
                 <ul>
                   {repository.conflicts.map((path) => (
@@ -156,10 +149,6 @@ export function GitWorkspace({ s }: { s: State }) {
               </div>
             )}
           </Panel>
-          <p className="small muted">
-            Merge runs local Git filters and drivers, closes terminals and removes the merged
-            worktree. The branch is kept.
-          </p>
         </>
       )}
       {s.gitPreview && (

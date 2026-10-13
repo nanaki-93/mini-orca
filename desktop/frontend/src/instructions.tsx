@@ -96,11 +96,7 @@ export function Instructions({ s }: { s: State }) {
   const excluded = preview?.effective.excluded.some((file) => file.path === preview.path);
   return (
     <div className="workspace-page instructions-page">
-      <Heading
-        variant="intro"
-        title="Project instructions"
-        detail="The rules every analysis and change should follow."
-      >
+      <Heading variant="intro" title="Project instructions">
         <Button disabled={!!s.busy || !ready} onClick={() => setEditing(!editing)}>
           {editing ? 'Read guidance' : 'Edit draft'}
         </Button>
@@ -140,11 +136,7 @@ export function Instructions({ s }: { s: State }) {
                 <strong>{path}</strong>
                 <Badge value={preview?.exists ? 'Included' : 'New file'} />
               </div>
-              <Prose
-                text={
-                  content || 'No instructions saved in this scope. Edit a draft to add guidance.'
-                }
-              />
+              <Prose text={content || 'No instructions saved in this scope.'} />
             </section>
           )}
           {editing && (
@@ -169,17 +161,6 @@ export function Instructions({ s }: { s: State }) {
                     />
                   </label>
                   <Disclosure title="Add project guidelines">
-                    {' '}
-                    <p>
-                      Choose individual rules for your AGENTS.md. Sections cover architecture,
-                      setup, code style, testing, security and handoff. Project-specific choices use
-                      indexed source and build files in this scope; reindex after changing the
-                      project.
-                    </p>
-                    <p className="muted">
-                      {presets.length} choices across {categories.length} sections · {matched}{' '}
-                      matched to this scope. Common project rules are also available.
-                    </p>
                     {!matched && (
                       <Notice>
                         No matching indexed files in this scope. Use general or custom guidance.

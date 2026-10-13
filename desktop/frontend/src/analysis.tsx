@@ -138,15 +138,8 @@ export function Analysis({ s }: { s: State }) {
           Execute analysis
         </Button>
       </Heading>
-      <p className="small muted" id="analysis-start-permissions">
-        Includes AI Security review and feature discovery. Shares selected files, instructions and
-        goals with the selected providers{continuation ? " using the saved run's models" : ''}.
-      </p>
       {continuation && (
-        <Notice>
-          Your saved analysis is {human(continuation.status)}. Continue with its captured settings,
-          or cancel it in Last run before starting a new analysis.
-        </Notice>
+        <Notice>Analysis {human(continuation.status)}. Resume or cancel in Last run.</Notice>
       )}
       <Panel className="analysis-run-settings">
         <Disclosure title="Advanced settings">
@@ -398,7 +391,6 @@ export function AnalysisPreview({ s }: { s: State }) {
       <Heading
         variant="intro"
         title={isRepair ? 'Repair analysis' : isResume ? 'Continue analysis' : 'Ready to analyze'}
-        detail="Review captured scope, request bounds and model destinations before starting."
       >
         <Go page="analysis">Back</Go>
         <Button
@@ -435,11 +427,6 @@ export function AnalysisPreview({ s }: { s: State }) {
                 ['Existing results', p.refresh ? 'Refresh' : 'Reuse when current'],
               ]}
             />
-            {isRepair && (
-              <p className="small muted section-gap">
-                Repair re-attempts unfinished analysis work. It does not modify your source code.
-              </p>
-            )}
           </Panel>
           <Panel title="Models" className="analysis-preview-models">
             <CapturedModels plan={p} />
@@ -452,9 +439,6 @@ export function AnalysisPreview({ s }: { s: State }) {
                 the captured choices above.
               </Notice>
             )}
-            <p className="small muted section-gap">
-              Start confirms any remote context sharing and AI Security review.
-            </p>
           </Panel>
           {p.features && (
             <Panel title="New feature suggestions">
@@ -570,7 +554,6 @@ export function AnalysisRun({ s }: { s: State }) {
         {['paused', 'interrupted'].includes(run.status) && (
           <Button
             tone="primary"
-            aria-describedby="analysis-resume-permissions"
             disabled={!!s.busy}
             onClick={() =>
               void w.previewAnalysis('resume', run.plan.limits, false, undefined, undefined, true)
@@ -588,13 +571,6 @@ export function AnalysisRun({ s }: { s: State }) {
           </Button>
         )}
       </Heading>
-      {['paused', 'interrupted'].includes(run.status) && (
-        <p className="small muted" id="analysis-resume-permissions">
-          Execute analysis resumes this run immediately with its captured models and settings,
-          including AI Security review and any feature discovery. Selected files, instructions and
-          saved goals may be sent to the captured remote providers.
-        </p>
-      )}
       {run.reason && <Notice>{run.reason}</Notice>}
       {run.features?.reason && <Notice>Feature discovery: {run.features.reason}</Notice>}
       <Panel className="analysis-progress">
