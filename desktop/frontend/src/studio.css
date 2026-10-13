@@ -1516,3 +1516,39 @@ svg.icon {
 .font-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
+
+.proposal-files-summary {
+  margin-top: 14px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.dense-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.dense-table th {
+  padding: 8px 12px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+  background: var(--canvas);
+}
+.dense-table td {
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  border-bottom: 1px solid var(--line);
+}
+.dense-table tr:last-child td {
+  border-bottom: none;
+}
+.diff-stat.add {
+  color: #22c55e;
+  font-weight: 600;
+}
+.diff-stat.del {
+  color: #ef4444;
+  font-weight: 600;
+}

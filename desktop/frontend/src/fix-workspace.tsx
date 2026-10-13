@@ -258,17 +258,18 @@ export function ProposalReview({
 }) {
   const w = useWorkspace();
   const [tab, setTab] = useState('changes');
+  const [showDiff, setShowDiff] = useState(false);
   const [commitMessage, setCommitMessage] = useState(change.title);
   const [path, setPath] = useState(change.changes[0].path);
   const [viewed, setViewed] = useState<string[]>([path]);
   const [focusDiff, setFocusDiff] = useState(false);
   const diff = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!focusDiff) return;
+    if (!focusDiff || !showDiff) return;
     diff.current?.scrollIntoView({ block: 'center' });
     diff.current?.querySelector('pre')?.focus({ preventScroll: true });
     setFocusDiff(false);
-  }, [focusDiff, path]);
+  }, [focusDiff, showDiff, path]);
   const files = change.changes;
   const edit = files.find((file) => file.path === path) || files[0];
   const next = files.find((file) => !viewed.includes(file.path));
@@ -311,31 +312,93 @@ export function ProposalReview({
                       : 'Resolve checks before applying'}
                 </strong>
               </span>
-              <span className="small muted font-mono">Diff review</span>
-            </div>
-            <h2 className="sr-only">Proposal diff</h2>
-            <FixTabs
-              label="Files to change"
-              selected={edit.path}
-              onSelect={selectFile}
-              panel="fix-file-diff"
-              items={files.map((file) => ({
-                id: file.path,
-                label: file.path,
-                visited: viewed.includes(file.path),
-              }))}
-            />
-            <div className="studio-review-body">
-              <div
-                ref={diff}
-                id="fix-file-diff"
-                role="tabpanel"
-                aria-labelledby={`fix-file-diff-tab-${files.indexOf(edit)}`}
-                className="change-files"
+              <Button
+                tone={showDiff ? 'ghost small' : 'primary small'}
+                icon={showDiff ? 'close' : 'code'}
+                onClick={() => setShowDiff((v) => !v)}
               >
-                <ProposalDiff edit={edit} index={files.indexOf(edit)} total={files.length} />
-              </div>
+                {showDiff ? 'Hide diff' : 'Check diff'}
+              </Button>
             </div>
+            {!showDiff ? (
+              <div className="proposal-files-summary">
+                <table className="dense-table">
+                  <thead>
+                    <tr>
+                      <th>File</th>
+                      <th>Changes</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {files.map((file) => {
+                      const adds = file.diff?.lines?.filter((l) => l.kind === 'add').length || 0;
+                      const dels = file.diff?.lines?.filter((l) => l.kind === 'delete').length || 0;
+                      const isVisited = viewed.includes(file.path);
+                      return (
+                        <tr key={file.path}>
+                          <td>
+                            <span className="font-mono">{file.path}</span>
+                          </td>
+                          <td>
+                            <span className="diff-stats font-mono">
+                              <span className="diff-stat add">+{adds}</span>{' '}
+                              <span className="diff-stat del">-{dels}</span>
+                            </span>
+                          </td>
+                          <td>
+                            {isVisited ? (
+                              <Badge value="Reviewed" tone="green" />
+                            ) : (
+                              <Badge value="Pending" />
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <Button
+                              tone="ghost small"
+                              onClick={() => {
+                                selectFile(file.path);
+                                setShowDiff(true);
+                                setFocusDiff(true);
+                              }}
+                            >
+                              Diff
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <>
+                <h2 className="sr-only">Proposal diff</h2>
+                <FixTabs
+                  label="Files to change"
+                  selected={edit.path}
+                  onSelect={selectFile}
+                  panel="fix-file-diff"
+                  items={files.map((file) => ({
+                    id: file.path,
+                    label: file.path,
+                    visited: viewed.includes(file.path),
+                  }))}
+                />
+                <div className="studio-review-body">
+                  <div
+                    ref={diff}
+                    id="fix-file-diff"
+                    role="tabpanel"
+                    aria-labelledby={`fix-file-diff-tab-${files.indexOf(edit)}`}
+                    className="change-files"
+                  >
+                    <ProposalDiff edit={edit} index={files.indexOf(edit)} total={files.length} />
+                  </div>
+                </div>
+              </>
+            )}
           </>
         )}
         {tab === 'checks' && (
@@ -371,6 +434,7 @@ export function ProposalReview({
               onClick={() => {
                 setTab('changes');
                 selectFile(next.path);
+                setShowDiff(true);
                 setFocusDiff(true);
               }}
             >
