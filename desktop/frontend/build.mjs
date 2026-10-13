@@ -29,6 +29,19 @@ for (const theme of ['graphite', 'porcelain', 'midnight', 'signal', 'crimson-vio
     path.join(output, `mo-mark-${theme}.svg`),
   );
 }
+const midnightSvg = await readFile(path.join(branding, 'midnight/ui/mo-mark.svg'), 'utf8');
+const nordicSvg = midnightSvg
+  .replaceAll('midnight transparent mark', 'nordic transparent mark')
+  .replaceAll('#EAF4FF', '#EAF2FD')
+  .replaceAll('#78CDCF', '#60A5FA');
+await writeFile(path.join(output, 'mo-mark-nordic.svg'), nordicSvg);
+
+const crimsonSvg = await readFile(path.join(branding, 'crimson-violet/ui/mo-mark.svg'), 'utf8');
+const amethystSvg = crimsonSvg
+  .replaceAll('Crimson Violet transparent mark', 'amethyst transparent mark')
+  .replaceAll('#CCA6FF', '#F3E8FF')
+  .replaceAll('#85E89D', '#C084FC');
+await writeFile(path.join(output, 'mo-mark-amethyst.svg'), amethystSvg);
 await copyFile(path.join(branding, 'favicon.png'), path.join(output, 'favicon.png'));
 await copyFile(
   path.join(branding, 'graphite/app-icon/app-icon-1024.png'),
