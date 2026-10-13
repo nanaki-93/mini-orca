@@ -561,28 +561,6 @@ export function ProposalReview({
           {change.state === 'draft' && (
             <div className="fix-action-bar">
               <div className="row" style={{ gap: '10px', alignItems: 'center' }}>
-                {onRetryWithDiagnostics && attention > 0 && (
-                  <Button
-                    tone="warning small"
-                    icon="refresh"
-                    disabled={!!s.busy || running}
-                    title="Re-run fix using error diagnostics as input, without resetting workspace"
-                    onClick={() => void onRetryWithDiagnostics()}
-                  >
-                    Retry with Diagnostics
-                  </Button>
-                )}
-                {onResetAndRetry && (
-                  <Button
-                    tone="ghost small"
-                    icon="trash"
-                    disabled={!!s.busy || running}
-                    title="Clean edit files and retry from base"
-                    onClick={() => void onResetAndRetry()}
-                  >
-                    Reset & Retry
-                  </Button>
-                )}
                 <span className="small muted font-mono">
                   {viewed.length}/{files.length} reviewed
                 </span>
