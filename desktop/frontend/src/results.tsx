@@ -480,54 +480,6 @@ export function Results({ s }: { s: State }) {
       {s.run?.status === 'stale' && (
         <Notice>Unchanged files keep saved analysis; reanalyze stale files to refresh.</Notice>
       )}
-      <Disclosure
-        title={
-          <>
-            <span>Analysis details</span>
-            {reports.length > 0 && (
-              <span className="small muted">
-                {' · '}
-                {reports.length} report notices (
-                {[...new Set(reports.map((r) => human(r.status)))].join(', ')})
-              </span>
-            )}
-            {!!results?.unclassified?.length && (
-              <span className="small muted">
-                {' '}
-                · {results.unclassified.length} unclassified suggestions
-              </span>
-            )}
-          </>
-        }
-      >
-        {!reports.length && !results?.unclassified?.length && (
-          <p className="muted">No additional report diagnostics are loaded.</p>
-        )}
-        {reports.map((report, index) => (
-          <div className="section-gap" key={`${report.key}:${index}`}>
-            <div className="row wrap">
-              <span className="path font-mono">{report.path}</span>
-              <span className="results-state">
-                <StatusDot value={report.status} />
-                <span>{human(report.status)}</span>
-              </span>
-            </div>
-            {report.reason && <Prose text={report.reason} />}
-          </div>
-        ))}
-        {!!results?.unclassified?.length && (
-          <Panel title="Unclassified suggestions">
-            {results.unclassified.map((f) => (
-              <Disclosure key={f.id} title={f.title}>
-                <Prose text={f.message} />
-                <Button onClick={() => void w.openFile(f.location.path, f.location.symbol)}>
-                  Go to file
-                </Button>
-              </Disclosure>
-            ))}
-          </Panel>
-        )}
-      </Disclosure>
       {activeRun(s.run) && (
         <div
           className="analysis-live-banner"
@@ -837,6 +789,54 @@ export function Results({ s }: { s: State }) {
           </div>
         </nav>
       </Panel>
+      <Disclosure
+        title={
+          <>
+            <span>Analysis details</span>
+            {reports.length > 0 && (
+              <span className="small muted">
+                {' · '}
+                {reports.length} report notices (
+                {[...new Set(reports.map((r) => human(r.status)))].join(', ')})
+              </span>
+            )}
+            {!!results?.unclassified?.length && (
+              <span className="small muted">
+                {' '}
+                · {results.unclassified.length} unclassified suggestions
+              </span>
+            )}
+          </>
+        }
+      >
+        {!reports.length && !results?.unclassified?.length && (
+          <p className="muted">No additional report diagnostics are loaded.</p>
+        )}
+        {reports.map((report, index) => (
+          <div className="section-gap" key={`${report.key}:${index}`}>
+            <div className="row wrap">
+              <span className="path font-mono">{report.path}</span>
+              <span className="results-state">
+                <StatusDot value={report.status} />
+                <span>{human(report.status)}</span>
+              </span>
+            </div>
+            {report.reason && <Prose text={report.reason} />}
+          </div>
+        ))}
+        {!!results?.unclassified?.length && (
+          <Panel title="Unclassified suggestions">
+            {results.unclassified.map((f) => (
+              <Disclosure key={f.id} title={f.title}>
+                <Prose text={f.message} />
+                <Button onClick={() => void w.openFile(f.location.path, f.location.symbol)}>
+                  Go to file
+                </Button>
+              </Disclosure>
+            ))}
+          </Panel>
+        )}
+      </Disclosure>
     </div>
   );
 }
