@@ -2,8 +2,8 @@ import { useWorkspace } from './workspace-context';
 import { CommitMessage } from './git-controls';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ChangeSession, ChangeSeed } from './models';
-import { activeChangeWorkflow, canAcceptChange, type State } from './workspace';
-import { WorkflowProgress } from './change-workflow';
+import { activeChangeWorkflow, canAcceptChange, workflowSeed, type State } from './workspace';
+import { WorkflowProgress, defaultWorkflowModels } from './change-workflow';
 import { ChangeChecks, ChangeOutcome, ProposalDiff } from './change-shared';
 import { FixPreparation } from './fix-preparation';
 import { FixSolution } from './fix-solution';
@@ -92,6 +92,26 @@ export function FixWorkspace({ s }: { s: State }) {
     !!s.busy ||
     running ||
     (!!change && (change.state !== 'draft' || change.freshness !== 'current'));
+
+  const retryFix = () => {
+    const preparedSeed = workflowSeed(seed);
+    w.seedChange(preparedSeed);
+    void (async () => {
+      try {
+        const context = await w.readFixPreparation();
+        const useAgents = preparedSeed.paths.some((path) => path.endsWith('_test.go'));
+        const models = s.workflowModels || s.change?.workflow?.models || defaultWorkflowModels;
+        if (useAgents) {
+          await w.startChangeWorkflow(preparedSeed, models, context);
+        } else {
+          await w.prepareChange(preparedSeed, true, models.create, context);
+        }
+      } catch (error) {
+        w.fail(error);
+      }
+    })();
+  };
+
   const earlierExplanations =
     change?.messages.filter((entry) => entry.role === 'assistant').slice(0, -1) || [];
   const details = (
@@ -121,16 +141,6 @@ export function FixWorkspace({ s }: { s: State }) {
           </Disclosure>
         </Panel>
       )}
-      {change?.state === 'draft' && !running && (
-        <Disclosure title="Regenerate fix">
-          <FixPreparation
-            s={s}
-            seed={seed}
-            disabled={blocked || !seed.message.trim()}
-            label="Regenerate fix"
-          />
-        </Disclosure>
-      )}
       <Go page="history" icon="clock">
         Open history
       </Go>
@@ -158,6 +168,9 @@ export function FixWorkspace({ s }: { s: State }) {
           <Badge value={change?.freshness === 'stale' ? 'stale' : change?.state || 'draft'} />
         }
       >
+        <Button icon="refresh" disabled={blocked} onClick={() => void retryFix()}>
+          Retry fix
+        </Button>
         <Button
           icon="code"
           disabled={!!s.busy || !sourcePath}
@@ -173,9 +186,17 @@ export function FixWorkspace({ s }: { s: State }) {
         <Notice>Performance unmeasured; tests do not establish a speedup.</Notice>
       )}
       <ChangeOutcome s={s} />
-      {!change?.changes.length && (
+      {change?.changes.length ? (
+        <ProposalReview
+          key={`${change.project_id}:${change.project_revision}:${change.id}:${change.revision}:${change.hash}`}
+          s={s}
+          change={change}
+          seed={seed}
+          onRetry={retryFix}
+          details={details}
+        />
+      ) : (
         <>
-          {' '}
           <Panel title="Cause" className="fix-explanation fix-cause">
             <Prose
               text={
@@ -191,37 +212,6 @@ export function FixWorkspace({ s }: { s: State }) {
             </p>
           </Panel>
           <FixSolution s={s} />
-        </>
-      )}
-      {change?.changes.length ? (
-        <ProposalReview
-          key={`${change.project_id}:${change.project_revision}:${change.id}:${change.revision}:${change.hash}`}
-          s={s}
-          change={change}
-          details={
-            <>
-              {' '}
-              <Panel title="Cause" className="fix-explanation fix-cause">
-                <Prose
-                  text={
-                    finding?.cause ||
-                    seed.message ||
-                    'No cause was saved. Review the original finding and source.'
-                  }
-                />
-                <p className="small muted">
-                  {finding
-                    ? `Reported finding · ${human(finding.confidence)}`
-                    : 'Saved finding context'}
-                </p>
-              </Panel>
-              <FixSolution s={s} />
-              {details}
-            </>
-          }
-        />
-      ) : (
-        <>
           {running ? (
             <WorkflowProgress s={s} showOutcome={false} />
           ) : (
@@ -248,15 +238,26 @@ export function FixWorkspace({ s }: { s: State }) {
 export function ProposalReview({
   s,
   change,
+  seed,
+  onRetry,
   details,
   tests = true,
 }: {
   s: State;
   change: ChangeSession;
-  details: ReactNode;
+  seed?: ChangeSeed;
+  onRetry?: () => void;
+  details?: ReactNode;
   tests?: boolean;
 }) {
   const w = useWorkspace();
+  const targetSeed: ChangeSeed = seed || {
+    title: change.title,
+    paths: change.targets.map((target) => target.path),
+    kind: change.kind,
+    message: change.messages.find((m) => m.role === 'user')?.content || '',
+    acceptance_criteria: change.acceptance_criteria,
+  };
   const [tab, setTab] = useState('changes');
   const [showDiff, setShowDiff] = useState(false);
   const [commitMessage, setCommitMessage] = useState(change.title);
@@ -283,22 +284,48 @@ export function ProposalReview({
   return (
     <section className="fix-review chat-review" aria-label="Proposal review">
       <FixTabs
-        label="Fix review"
+        label="Fix steps"
         selected={tab}
         onSelect={setTab}
         panel="fix-review-content"
         items={[
-          { id: 'changes', label: `Changes (${files.length})` },
-          { id: 'checks', label: `Checks${attention ? ` (${attention} need attention)` : ''}` },
-          { id: 'details', label: 'Details' },
+          { id: 'finding', label: '1. Finding' },
+          { id: 'changes', label: `2. Changes (${files.length})` },
+          { id: 'checks', label: `3. Checks${attention ? ` (${attention} pending)` : ''}` },
+          { id: 'commit', label: '4. Commit' },
         ]}
       />
       <div
         id="fix-review-content"
         role="tabpanel"
-        aria-labelledby={`fix-review-content-tab-${['changes', 'checks', 'details'].indexOf(tab)}`}
+        aria-labelledby={`fix-review-content-tab-${['finding', 'changes', 'checks', 'commit'].indexOf(tab)}`}
         className="fix-tab-content"
       >
+        {tab === 'finding' && (
+          <div className="stack fix-step-finding">
+            <Panel title="Cause" className="fix-explanation fix-cause">
+              <Prose
+                text={
+                  targetSeed.finding?.cause ||
+                  targetSeed.message ||
+                  'No cause recorded. Review the original finding and source.'
+                }
+              />
+              <p className="small muted">
+                {targetSeed.finding
+                  ? `Reported finding · ${human(targetSeed.finding.confidence)}`
+                  : 'Finding context'}
+              </p>
+            </Panel>
+            <FixSolution s={s} />
+            {targetSeed.acceptance_criteria.length > 0 && (
+              <Panel title="Acceptance criteria">
+                <BulletContent title="Acceptance criteria" items={targetSeed.acceptance_criteria} />
+              </Panel>
+            )}
+            {details && <Disclosure title="More details">{details}</Disclosure>}
+          </div>
+        )}
         {tab === 'changes' && (
           <>
             <div className="row between wrap fix-evidence" aria-live="polite">
@@ -312,13 +339,25 @@ export function ProposalReview({
                       : 'Resolve checks before applying'}
                 </strong>
               </span>
-              <Button
-                tone={showDiff ? 'ghost small' : 'primary small'}
-                icon={showDiff ? 'close' : 'code'}
-                onClick={() => setShowDiff((v) => !v)}
-              >
-                {showDiff ? 'Hide diff' : 'Check diff'}
-              </Button>
+              <div className="row" style={{ gap: '8px', alignItems: 'center' }}>
+                {onRetry && (
+                  <Button
+                    tone="ghost small"
+                    icon="refresh"
+                    disabled={!!s.busy || running}
+                    onClick={() => void onRetry()}
+                  >
+                    Retry fix
+                  </Button>
+                )}
+                <Button
+                  tone={showDiff ? 'ghost small' : 'primary small'}
+                  icon={showDiff ? 'close' : 'code'}
+                  onClick={() => setShowDiff((v) => !v)}
+                >
+                  {showDiff ? 'Hide diff' : 'Check diff'}
+                </Button>
+              </div>
             </div>
             {!showDiff ? (
               <div className="proposal-files-summary">
@@ -402,22 +441,45 @@ export function ProposalReview({
           </>
         )}
         {tab === 'checks' && (
-          <div className="stack">
+          <div className="stack fix-step-checks">
             <ChangeChecks s={s} tests={tests} />
             <WorkflowProgress s={s} actionLabel="Apply" showCancel={false} />
           </div>
         )}
-        {tab === 'details' && details}
+        {tab === 'commit' && (
+          <div className="stack fix-step-commit">
+            <Panel title="Review & Commit">
+              <p className="small muted">
+                {viewed.length} of {files.length} files reviewed. Ready to commit to{' '}
+                {s.repository?.branch || 'the current branch'}.
+              </p>
+              {s.repository?.available && (
+                <CommitMessage
+                  message={commitMessage}
+                  onChange={setCommitMessage}
+                  disabled={!!s.busy}
+                />
+              )}
+            </Panel>
+          </div>
+        )}
       </div>
-      {change.state === 'draft' && s.repository?.available && (
-        <CommitMessage message={commitMessage} onChange={setCommitMessage} disabled={!!s.busy} />
-      )}
       {change.state === 'draft' && (
         <div className="fix-action-bar">
-          <div>
-            <strong>
-              {viewed.length} of {files.length} files reviewed
-            </strong>
+          <div className="row" style={{ gap: '10px', alignItems: 'center' }}>
+            {onRetry && (
+              <Button
+                tone="ghost"
+                icon="refresh"
+                disabled={!!s.busy || running}
+                onClick={() => void onRetry()}
+              >
+                Retry fix
+              </Button>
+            )}
+            <span className="small muted font-mono">
+              {viewed.length}/{files.length} reviewed
+            </span>
           </div>
           {running ? (
             <Button
@@ -426,19 +488,32 @@ export function ProposalReview({
             >
               Cancel workflow
             </Button>
-          ) : next && ready ? (
-            <Button
-              tone="primary"
-              icon="arrow"
-              disabled={!!s.busy}
-              onClick={() => {
-                setTab('changes');
-                selectFile(next.path);
-                setShowDiff(true);
-                setFocusDiff(true);
-              }}
-            >
-              Review next file
+          ) : tab === 'finding' ? (
+            <Button tone="primary" icon="arrow" onClick={() => setTab('changes')}>
+              Review changes
+            </Button>
+          ) : tab === 'changes' ? (
+            next && ready ? (
+              <Button
+                tone="primary"
+                icon="arrow"
+                disabled={!!s.busy}
+                onClick={() => {
+                  selectFile(next.path);
+                  setShowDiff(true);
+                  setFocusDiff(true);
+                }}
+              >
+                Review next file
+              </Button>
+            ) : (
+              <Button tone="primary" icon="arrow" onClick={() => setTab('checks')}>
+                Verify checks
+              </Button>
+            )
+          ) : tab === 'checks' ? (
+            <Button tone="primary" icon="arrow" onClick={() => setTab('commit')}>
+              Proceed to commit
             </Button>
           ) : (
             <Button
@@ -448,7 +523,6 @@ export function ProposalReview({
               disabled={
                 !!s.busy ||
                 !ready ||
-                !!next ||
                 !s.repository ||
                 !!s.resourceErrors.Git ||
                 (s.repository.available &&
@@ -458,7 +532,6 @@ export function ProposalReview({
                     !commitMessage.trim()))
               }
               onClick={(event) => {
-                // The preceding click may have advanced the last file at this same position.
                 if (event.detail > 1) return;
                 void w.acceptChange(commitMessage);
               }}
