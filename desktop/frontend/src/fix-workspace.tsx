@@ -396,18 +396,27 @@ export function ProposalReview({
         </aside>
 
         <main className="implementation-main-card">
-          <FixTabs
-            label="Fix steps"
-            selected={tab}
-            onSelect={setTab}
-            panel="fix-review-content"
-            items={[
+          <div className="stepper" role="tablist" aria-label="Fix progress steps">
+            {[
               { id: 'finding', label: '1. Finding' },
               { id: 'changes', label: `2. Changes (${files.length})` },
-              { id: 'checks', label: `3. Checks${attention ? ` (${attention} pending)` : ''}` },
+              {
+                id: 'checks',
+                label: `3. Checks${attention ? ` (${attention} pending)` : ' (passed)'}`,
+              },
               { id: 'commit', label: '4. Commit' },
-            ]}
-          />
+            ].map((item) => (
+              <button
+                key={item.id}
+                role="tab"
+                aria-selected={tab === item.id}
+                className={`step-item ${tab === item.id ? 'active' : item.id === 'finding' || (item.id === 'changes' && files.length > 0) ? 'completed' : ''}`}
+                onClick={() => setTab(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
           <div
             id="fix-review-content"
             role="tabpanel"
