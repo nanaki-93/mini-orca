@@ -193,6 +193,24 @@ export function FixWorkspace({ s }: { s: State }) {
         <Notice>Performance unmeasured; tests do not establish a speedup.</Notice>
       )}
       <ChangeOutcome s={s} />
+      <div className="pipeline-stepper" role="navigation" aria-label="Fix progress">
+        <div
+          className={`pipeline-step ${change?.changes.length || running ? 'completed' : 'active'}`}
+        >
+          <span className="step-num">{change?.changes.length || running ? '✓' : '1'}</span>
+          <span>1. Preparation</span>
+        </div>
+        <div
+          className={`pipeline-step ${change?.changes.length ? 'completed' : running ? 'active' : ''}`}
+        >
+          <span className="step-num">{change?.changes.length ? '✓' : '2'}</span>
+          <span>2. Solution</span>
+        </div>
+        <div className={`pipeline-step ${change?.changes.length ? 'active' : ''}`}>
+          <span className="step-num">3</span>
+          <span>3. Review Changes</span>
+        </div>
+      </div>
       {change?.changes.length ? (
         <ProposalReview
           key={`${change.project_id}:${change.project_revision}:${change.id}:${change.revision}:${change.hash}`}
