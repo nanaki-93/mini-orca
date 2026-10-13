@@ -930,6 +930,16 @@ export class Workspace {
       if (start) await this.dispatchAnalysis(false);
     });
   }
+  async runAnalysisDirect() {
+    const limits = this.state.analysisLimits || {
+      batch_files: 20,
+      budget_seconds: 1800,
+      max_attempts_per_stage: 2,
+    };
+    const refresh = this.state.analysisRefresh || false;
+    const models = analysisSetupModels(this.state);
+    await this.previewAnalysis('new', limits, refresh, models, undefined, true);
+  }
   async startAnalysis() {
     await this.act('Start analysis', async () => {
       await this.dispatchAnalysis(true);
@@ -1012,7 +1022,9 @@ export class Workspace {
       preview: undefined,
       resume: undefined,
       results: {},
-      page: 'analysis-run',
+      page: ['summary', 'bugs', 'security', 'performance', 'finding'].includes(this.state.page)
+        ? this.state.page
+        : 'bugs',
       featureGenerationRequested: this.state.featureGenerationRequested || !!p.features,
     });
     await this.loadFeatures();

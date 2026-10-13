@@ -5,6 +5,7 @@ import {
   activeChangeWorkflow,
   findingCategory,
   workflowSeed,
+  activeRun,
   type FindingCategory,
   type FindingListView,
   type State,
@@ -27,6 +28,7 @@ import {
   Notice,
   Panel,
   Prose,
+  Spinner,
   PriorityIcon,
   StatusDot,
   human,
@@ -445,9 +447,15 @@ export function Results({ s }: { s: State }) {
         >
           Refresh
         </Button>
-        <Go page="analysis" tone="primary">
-          Analyze
-        </Go>
+        <Button
+          icon="play"
+          tone="primary"
+          disabled={!!s.busy || activeRun(s.run)}
+          loading={activeRun(s.run)}
+          onClick={() => void w.runAnalysisDirect()}
+        >
+          {activeRun(s.run) ? 'Analyzing…' : 'Run Analysis'}
+        </Button>
       </Heading>
       {results?.retained_files?.length ? (
         <Notice>
@@ -505,6 +513,54 @@ export function Results({ s }: { s: State }) {
           </Panel>
         )}
       </Disclosure>
+      {activeRun(s.run) && (
+        <div
+          className="analysis-live-banner"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            padding: '12px 18px',
+            background: 'var(--panel)',
+            border: '1px solid var(--line)',
+            borderLeft: '4px solid var(--accent)',
+            borderRadius: '6px',
+            marginBottom: '16px',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+            <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+              <Spinner />
+              <strong style={{ fontSize: '0.88rem' }}>Analyzing project…</strong>
+              <span className="small muted font-mono">
+                {s.run?.window_files_completed ?? 0} files completed
+              </span>
+            </div>
+            <progress
+              className="analysis-progress-bar"
+              style={{ width: '100%', height: '5px', marginTop: '4px' }}
+              value={
+                s.run?.sections.reduce(
+                  (sum, sec) =>
+                    sum + sec.coverage.succeeded + sec.coverage.failed + sec.coverage.partial,
+                  0,
+                ) || 0
+              }
+              max={s.run?.sections.reduce((sum, sec) => sum + sec.coverage.total, 0) || 100}
+            />
+          </div>
+          <div className="actions" style={{ flexShrink: 0 }}>
+            <Button
+              tone="ghost small"
+              disabled={!!s.busy || s.run?.status === 'canceling'}
+              onClick={() => void w.controlRun('cancel')}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
       <Panel title="Issues" className="results-findings">
         <div className="toolbar findings-toolbar">
           <div className="category-pills" style={{ display: 'inline-flex', gap: '4px' }}>
@@ -696,7 +752,9 @@ export function Results({ s }: { s: State }) {
             }
             detail={results ? `Run state: ${human(results.progress.status)}` : undefined}
           >
-            <Go page="analysis">Open analysis</Go>
+            <Button tone="primary" icon="play" onClick={() => void w.runAnalysisDirect()}>
+              Run analysis
+            </Button>
           </Empty>
         )}
         <nav className="findings-pagination" aria-label="Findings pagination">

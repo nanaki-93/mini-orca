@@ -4,6 +4,7 @@ import {
   workspace as w,
   activeChangeWorkflow,
   analysisSetupModels,
+  activeRun,
   type State,
   type Page,
 } from './workspace';
@@ -24,6 +25,7 @@ import {
   Panel,
   Prose,
   StatusDot,
+  Spinner,
   human,
 } from './ui';
 
@@ -229,9 +231,15 @@ export function Summary({ s }: { s: State }) {
             >
               Refresh
             </Button>
-            <Go page="analysis" icon="activity">
-              Analyze
-            </Go>
+            <Button
+              icon="play"
+              tone="primary"
+              disabled={!!s.busy || activeRun(s.run)}
+              loading={activeRun(s.run)}
+              onClick={() => void w.runAnalysisDirect()}
+            >
+              {activeRun(s.run) ? 'Analyzing…' : 'Run Analysis'}
+            </Button>
             <Button
               icon="plus"
               tone="primary"
@@ -271,6 +279,54 @@ export function Summary({ s }: { s: State }) {
         </Disclosure>
         {overview?.analysis.failure && <p className="error-text">{overview.analysis.failure}</p>}
       </div>
+      {activeRun(s.run) && (
+        <div
+          className="analysis-live-banner"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            padding: '12px 18px',
+            background: 'var(--panel)',
+            border: '1px solid var(--line)',
+            borderLeft: '4px solid var(--accent)',
+            borderRadius: '8px',
+            marginBottom: '16px',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+            <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
+              <Spinner />
+              <strong style={{ fontSize: '0.88rem' }}>Analyzing project…</strong>
+              <span className="small muted font-mono">
+                {s.run?.window_files_completed ?? 0} files completed
+              </span>
+            </div>
+            <progress
+              className="analysis-progress-bar"
+              style={{ width: '100%', height: '5px', marginTop: '4px' }}
+              value={
+                s.run?.sections.reduce(
+                  (sum, sec) =>
+                    sum + sec.coverage.succeeded + sec.coverage.failed + sec.coverage.partial,
+                  0,
+                ) || 0
+              }
+              max={s.run?.sections.reduce((sum, sec) => sum + sec.coverage.total, 0) || 100}
+            />
+          </div>
+          <div className="actions" style={{ flexShrink: 0 }}>
+            <Button
+              tone="ghost small"
+              disabled={!!s.busy || s.run?.status === 'canceling'}
+              onClick={() => void w.controlRun('cancel')}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
       <section className="studio-resume" aria-label="Continue work">
         <div>
           <span className="studio-eyebrow">{currentWork ? 'Active task' : 'Next action'}</span>
@@ -404,6 +460,78 @@ export function Models({ s }: { s: State }) {
           value={s.workflowModels || s.change?.workflow?.models || defaultWorkflowModels}
           disabled={!!s.busy || !s.models || activeChangeWorkflow(s.change)}
         />
+      </Panel>
+      <Panel title="Analysis & batch settings" className="analysis-batch-settings">
+        <div className="form-grid analysis-settings-fields">
+          {(
+            [
+              ['batch_files', 'Files per batch', 1, 500, 'Maximum files in each batch.'],
+              ['budget_seconds', 'Time budget · seconds', 1, 3600, 'File-analysis time per batch.'],
+              [
+                'max_attempts_per_stage',
+                'Attempts per stage',
+                1,
+                4,
+                'Includes the first attempt and retries.',
+              ],
+            ] as const
+          ).map(([key, label, min, max, hint]) => {
+            const limits = s.analysisLimits || {
+              batch_files: 20,
+              budget_seconds: 1800,
+              max_attempts_per_stage: 2,
+            };
+            return (
+              <div
+                className="analysis-setting"
+                key={key}
+                style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
+              >
+                <label htmlFor={`settings-${key}`} style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                  {label}
+                </label>
+                <input
+                  id={`settings-${key}`}
+                  type="number"
+                  min={min}
+                  max={max}
+                  value={limits[key]}
+                  style={{
+                    maxWidth: '140px',
+                    padding: '6px 8px',
+                    borderRadius: '5px',
+                    border: '1px solid var(--line)',
+                    background: 'var(--canvas)',
+                    color: 'var(--text)',
+                  }}
+                  onChange={(e) =>
+                    w.set({ analysisLimits: { ...limits, [key]: Number(e.target.value) } })
+                  }
+                />
+                <small className="muted" style={{ fontSize: '0.75rem' }}>
+                  {hint}
+                </small>
+              </div>
+            );
+          })}
+        </div>
+        <label
+          className="checkbox-line"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginTop: '14px',
+            cursor: 'pointer',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={s.analysisRefresh || false}
+            onChange={(e) => w.set({ analysisRefresh: e.target.checked })}
+          />
+          <span style={{ fontSize: '0.85rem' }}>Refresh previously analyzed files on next run</span>
+        </label>
       </Panel>
       <h2>Configured profiles</h2>
       <div className="grid models-grid">
