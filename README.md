@@ -53,7 +53,7 @@ claims remain unmeasured without external benchmark evidence.
 
 Use Go 1.25+, Node.js 22+ and Xcode command-line tools for the macOS arm64 desktop
 application. The daemon itself still targets Go 1.22. Read
-[desktop setup](desktop/webapp/README.md#build-and-run) before the first launch.
+[desktop setup](desktop/README.md#build-and-run) before the first launch.
 Configure all three model scopes using [CONFIG.md](CONFIG.md). Each scope supports
 an OpenAI-compatible HTTP provider, Antigravity CLI (`agy`), or Pi (`pi`).
 
@@ -125,14 +125,14 @@ install Go 1.25+ and Node.js 22+. The full local gate is:
 The checks use fakes and temporary directories, do not start the daemon, and do
 not require a provider, key or project configuration. Browser component tests
 need Playwright Chromium (`npx playwright install chromium` from
-`desktop/webapp/frontend`). Native packaging requires macOS arm64 and Xcode
+`desktop/frontend`). Native packaging requires macOS arm64 and Xcode
 command-line tools.
 
 `make check` covers formatting, Go tests/races/vet, Python tooling and desktop
 workflow/bridge tests. `make quality` runs the pinned Go static, reachability,
 complexity and clone checks and reports every failed stage.
 
-- [Web desktop setup and usage](desktop/webapp/README.md) · [UI guidelines](desktop/UI_DESIGN_GUIDELINES.md)
+- [Desktop setup and usage](desktop/README.md) · [UI guidelines](desktop/UI_DESIGN_GUIDELINES.md)
 - [API guide](docs/api-contract.md) · [OpenAPI](docs/openapi.yaml) · [configuration](CONFIG.md)
 - [Docker](DOCKER.md) · [release notes](RELEASE_NOTES.md)
 

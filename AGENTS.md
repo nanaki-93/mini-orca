@@ -7,7 +7,7 @@ guides add local detail; keep shared rules here instead of copying them.
 | Work area | Read before editing |
 | --- | --- |
 | Go daemon and evaluation CLI (`cmd/`, `internal/`) | [internal/AGENTS.md](internal/AGENTS.md) |
-| Desktop clients (`desktop/`) | [desktop/AGENTS.md](desktop/AGENTS.md); for the web client, [desktop/webapp/AGENTS.md](desktop/webapp/AGENTS.md) |
+| Desktop client (`desktop/`) | [desktop/AGENTS.md](desktop/AGENTS.md) |
 | Python/shell tooling, Makefile and CI | [scripts/AGENTS.md](scripts/AGENTS.md) |
 | Documentation and API descriptions | [docs/AGENTS.md](docs/AGENTS.md) |
 
@@ -114,8 +114,7 @@ Do not infer authorization from old task queues or generated
 - Do not add credentials, provider tokens, source-bearing diagnostics or local
   `config.yaml` to Git. Use `config.example.yaml` for configuration examples.
 - Do not hand-edit generated build output, caches, dependency trees or local
-  runtime evidence, including `build/`, `desktop/build/`, `desktop/.gradle/`,
-  `desktop/.kotlin/` and `.mini-orca/autopilot/`.
+  runtime evidence, including `build/`, `desktop/build/`, and `.mini-orca/autopilot/`.
 
 ## Validation
 

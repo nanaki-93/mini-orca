@@ -2,7 +2,7 @@
 
 Prepared from the user-provided logo reference image. The transparent SVG symbol is a faithful **vector trace of the reference screenshot** (not an original editable design document); the original visible M/O geometry and orca eye are preserved. The original screenshot's antialiasing and gradients were simplified to solid theme colors for reliable UI rendering.
 
-The [desktop web client](../../desktop/webapp/README.md) uses this directory as
+The [desktop client](../../desktop/README.md) uses this directory as
 its branding source. Its build copies the theme marks and favicon into the
 embedded frontend, and Wails creates the native macOS icon from the Graphite
 1024-pixel app-icon PNG. The remaining exports are available for other consumers.
@@ -49,26 +49,6 @@ Copy the `graphite`/`porcelain`/`midnight` folders into the frontend's **actual 
 ```
 
 Alternatively use `<img src="/assets/branding/graphite/ui/titlebar-lockup.svg" height="32" alt="Mini-Orca">` instead of separate text. Swap `graphite` for `porcelain` or `midnight` when changing theme.
-
-## Importing into Kotlin Compose Desktop (if used)
-
-Copy e.g. `graphite/ui/mo-mark-32h.png` to `src/main/resources/branding/mo-mark.png`, then:
-
-```kotlin
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.height
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.dp
-
-Image(
-    painter = painterResource("branding/mo-mark.png"),
-    contentDescription = "Mini-Orca",
-    modifier = Modifier.height(28.dp)
-)
-```
-
-Resource paths depend on the actual module layout; use the module that renders the title bar.
 
 ## Packaging
 
