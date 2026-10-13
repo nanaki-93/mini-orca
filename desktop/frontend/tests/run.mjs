@@ -3216,14 +3216,18 @@ try {
         'Refresh never starts inference',
       );
       await page.keyboard.press('Escape');
-      await page.getByLabel('Creation model', { exact: true }).click();
-      assert.equal(await dialog.getByRole('button', { name: 'Agy', exact: true }).count(), 0);
-      assert.equal(await dialog.getByRole('button', { name: 'Pi', exact: true }).count(), 0);
+      const creation = page.getByLabel('Creation model', { exact: true });
+      await creation.click();
+      assert.equal(await dialog.getByRole('button', { name: 'Agy', exact: true }).count(), 1);
+      assert.equal(await dialog.getByRole('button', { name: 'Pi', exact: true }).count(), 1);
       assert.equal(
         await dialog.getByRole('option').count(),
-        3,
-        'Workflows retain configured profiles',
+        2,
+        'Workflows share the dynamic catalog with Agy, Pi, and configured models',
       );
+      await dialog.getByRole('button', { name: 'Agy', exact: true }).click();
+      await dialog.getByRole('option', { name: /Gemini Next \(Low\)/ }).click();
+      assert.equal(await creation.getAttribute('value'), 'agy:gemini-next-low');
     } finally {
       await close();
     }

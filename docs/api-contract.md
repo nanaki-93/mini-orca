@@ -631,7 +631,8 @@ never used to infer which findings a historical commit addressed.
 
 Messages, checks, review, Apply and Undo carry `project_id`, `project_revision`,
 `revision` and `hash`; the session ID is in the route. Messages add `message`,
-`confirm_remote_provider`, optional `profile` (`analyze`, `bug`, or `function`,
+`confirm_remote_provider`, optional `profile` (`configured:<hash>`,
+`pi:<provider>/<model>`, `agy:<slug>`, or legacy `analyze`, `bug`, `function`,
 default `function`) and optional `repair`. Consent applies to the selected profile. Repair requires current failed
 checks and consumes one of three durable attempts. Checks accept `run_tests` and
 `run_lint`; once requested those checks remain required. Go is formatted before
@@ -680,8 +681,10 @@ be applied.
 `POST /api/projects/current/changes/{sessionID}/workflow` starts a bounded agent
 workflow and returns HTTP 202 with the captured session and `workflow.id`.
 The request carries the current `ChangeIdentity`, `message`, and
-`models: {create, test, review}`. Each model value names one configured `analyze`,
-`bug` or `function` profile. `confirmed_profiles` lists the selected remote
+`models: {create, test, review}`. Each model value is an opaque catalog ID
+(`configured:<hash>`, `pi:<provider>/<model>`, or `agy:<slug>`) or a legacy
+configured profile name (`analyze`, `bug`, or `function`); catalog membership is
+rechecked before admission. `confirmed_profiles` lists the selected remote
 profiles the user approved; local profiles need no remote confirmation. Security
 tasks additionally require `confirm_security: true`. Current project execution
 trust and at least one captured `_test.go` path are required before dispatch.

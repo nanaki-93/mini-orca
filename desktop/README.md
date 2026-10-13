@@ -187,10 +187,9 @@ visible. The sidebar collapses to icons.
   Testing and Review model independently in **Workflow models** on the **Models**
   page, then return to Chat and select **Generate changes**. **Manage models** opens
   that page without losing the task title, file scope, request or test choice.
-  New conversations clear the previous draft. These workflows use configured
-  profiles; Analysis also offers Pi and Agy catalog models. The choices reference the
-  daemon's configured Function, Bug and Analyze profiles
-  (the respective defaults); configure their actual providers/models in `config.yaml`.
+  New conversations clear the previous draft. Workflow and Analysis selectors share
+  the same catalog of configured profiles, Pi models and Agy models, defaulting to
+  the daemon's configured Function, Bug and Analyze profiles (`config.yaml`).
   Include a `_test.go` path. The testing agent writes tests, then the daemon runs
   them in an isolated copy before the review agent evaluates the proposal.
   The app shows each stage, captured models, check evidence and review findings;

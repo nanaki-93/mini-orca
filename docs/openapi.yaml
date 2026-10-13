@@ -1856,7 +1856,7 @@ components:
         - type: object
           properties:
             message: {type: string, maxLength: 8192}
-            profile: {type: string, enum: [analyze, bug, function], default: function}
+            profile: {$ref: '#/components/schemas/ModelSelection', default: function}
             confirm_remote_provider: {type: boolean}
             repair: {type: boolean}
     ChangeCheckRequest:
@@ -1881,9 +1881,9 @@ components:
       additionalProperties: false
       required: [create, test, review]
       properties:
-        create: {type: string, enum: [analyze, bug, function]}
-        test: {type: string, enum: [analyze, bug, function]}
-        review: {type: string, enum: [analyze, bug, function]}
+        create: {$ref: '#/components/schemas/ModelSelection'}
+        test: {$ref: '#/components/schemas/ModelSelection'}
+        review: {$ref: '#/components/schemas/ModelSelection'}
     ChangeWorkflowRequest:
       allOf:
         - {$ref: '#/components/schemas/ChangeIdentity'}
@@ -1892,7 +1892,7 @@ components:
           properties:
             message: {type: string, minLength: 1, maxLength: 8192}
             models: {$ref: '#/components/schemas/ChangeWorkflowModels'}
-            confirmed_profiles: {type: array, items: {type: string, enum: [analyze, bug, function]}}
+            confirmed_profiles: {type: array, items: {$ref: '#/components/schemas/ModelSelection'}}
             confirm_security: {type: boolean, description: Required true for security tasks}
     ChangeWorkflowControl:
       type: object

@@ -130,6 +130,107 @@ try {
       await close();
     }
   });
+
+  await test('Workflow models share the dynamic Agy, Pi, and configured catalog with Analysis models', async () => {
+    const configured = `configured:${'a'.repeat(64)}`;
+    const availableModels = {
+      defaults: { analyze: configured, bug: configured, function: configured },
+      pi: { status: 'ready' },
+      agy: { status: 'ready' },
+      models: [
+        {
+          id: configured,
+          name: 'Gemini 3.8 Flash',
+          provider: 'openai',
+          source: 'configured',
+          location: 'remote',
+          model: {
+            model: 'gemini-3.8-flash',
+            profile: configured,
+            scope: '',
+            provider_origin: 'https://provider.invalid',
+            remote_provider: true,
+            timeout: '2m',
+            reasoning_effort: 'medium',
+          },
+        },
+        {
+          id: 'agy:gemini-4-argon-high',
+          name: 'Gemini 4 Argon (High)',
+          provider: 'agy',
+          source: 'agy',
+          location: 'unknown',
+          model: {
+            model: 'gemini-4-argon-high',
+            profile: 'agy:gemini-4-argon-high',
+            scope: '',
+            provider_origin: 'cli://agy',
+            remote_provider: true,
+            timeout: '2m',
+            reasoning_effort: '',
+          },
+        },
+        {
+          id: 'pi:lm-studio/qwen/local',
+          name: 'Qwen Local',
+          provider: 'lm-studio',
+          source: 'pi',
+          location: 'local',
+          model: {
+            model: 'lm-studio/qwen/local',
+            profile: 'pi:lm-studio/qwen/local',
+            scope: '',
+            provider_origin: 'cli://pi',
+            remote_provider: true,
+            timeout: '2m',
+            reasoning_effort: '',
+          },
+        },
+      ],
+    };
+    const { page, close } = await pageFor({ availableModels, trusted: true });
+    try {
+      await nav(page, 'Settings & Rules');
+      await idle(page);
+      await page.getByRole('button', { name: 'Model Routing', exact: true }).click();
+      await idle(page);
+
+      const creation = page.getByLabel('Creation model', { exact: true });
+      assert.equal(await creation.getAttribute('value'), configured);
+      await creation.click();
+      const dialog = page.getByRole('dialog', { name: 'Choose a model', exact: true });
+      await dialog.getByRole('button', { name: 'Pi', exact: true }).click();
+      await dialog.getByRole('option', { name: /Qwen Local/ }).click();
+      assert.equal(await creation.getAttribute('value'), 'pi:lm-studio/qwen/local');
+
+      const testing = page.getByLabel('Testing model', { exact: true });
+      await testing.click();
+      await dialog.getByRole('button', { name: 'Agy', exact: true }).click();
+      await dialog.getByRole('option', { name: /Gemini 4 Argon \(High\)/ }).click();
+      assert.equal(await testing.getAttribute('value'), 'agy:gemini-4-argon-high');
+
+      await nav(page, 'Issues & Ideas');
+      await idle(page);
+      await page.getByRole('button', { name: 'Fix in Editor', exact: true }).first().click();
+      await idle(page);
+
+      const workflowReq = await page.evaluate(() =>
+        window.fixture.requests.find((r) => r.path.endsWith('/workflow')),
+      );
+      assert.ok(workflowReq, 'Fix in Editor dispatches a workflow request');
+      assert.deepEqual(workflowReq.body.models, {
+        create: 'pi:lm-studio/qwen/local',
+        test: 'agy:gemini-4-argon-high',
+        review: configured,
+      });
+      assert.deepEqual(
+        workflowReq.body.confirmed_profiles.sort(),
+        [configured, 'agy:gemini-4-argon-high', 'pi:lm-studio/qwen/local'].sort(),
+      );
+    } finally {
+      await close();
+    }
+  });
 } finally {
   await browser.close();
   server.close();

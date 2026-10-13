@@ -13,9 +13,9 @@ The daemon configures three model profiles, used by default as follows:
 | `bug` | Selected-file and unified semantic analysis |
 | `function` | Declaration proposals and explicit repairs |
 
-The Chat agent workflow chooses a profile independently for Creation, Testing
-and Review. Defaults are `function`, `bug` and `analyze`, respectively. Configure
-each profile below, then choose the stage assignments in Chat. A captured run
+The Chat agent workflow chooses a model independently for Creation, Testing
+and Review. Defaults are `function`, `bug` and `analyze`, respectively. Choose
+configured profiles or discovered Agy/Pi catalog models on **Models**. A captured run
 keeps its selected model, timeout and retry budget; remote consent covers every
 selected remote profile. These selections do not change other operations' defaults.
 
@@ -100,7 +100,7 @@ invalid; names containing spaces fail configuration validation with instructions
 to use a slug. Model availability depends on the CLI account. Restart the daemon
 after changing its configuration.
 
-Analysis can also select models from the live Agy catalog or Pi's available-model
+Analysis and workflow stages can also select models from the live Agy catalog or Pi's available-model
 catalog without adding them to a scope in `config.yaml`. The picker reads
 `agy models` for exact slugs and display names, including model variants, and
 Pi's `get_available_models` RPC catalog, including custom local models from Pi's
