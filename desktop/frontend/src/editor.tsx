@@ -246,8 +246,7 @@ export function Editor({ s }: { s: State }) {
       (s.changeSeed?.paths.length ? s.changeSeed.paths : activePath ? [activePath] : []);
     if (!targetPaths.length) return;
     const seed: M.ChangeSeed = {
-      title:
-        change?.title || s.changeSeed?.title || `Update ${targetPaths[0].split('/').at(-1)}`,
+      title: change?.title || s.changeSeed?.title || `Update ${targetPaths[0].split('/').at(-1)}`,
       kind: change?.kind || s.changeSeed?.kind || 'feature',
       paths: targetPaths,
       message: trimmed,
@@ -257,11 +256,13 @@ export function Editor({ s }: { s: State }) {
     setPrompt('');
     if (useWorktree && s.repository?.available && !w.worktreePath) {
       const prep = await w.readFixPreparation();
-      const branch = `orca/${seed.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '')
-        .slice(0, 28) || 'task'}`;
+      const branch = `orca/${
+        seed.title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+          .slice(0, 28) || 'task'
+      }`;
       const path = `${s.project?.path || '.'}/.mini-orca/worktrees/${branch.replace('/', '-')}`;
       await w.prepareFixInWorktree(seed, defaultWorkflowModels, prep, branch, path, true);
     } else {
@@ -455,8 +456,8 @@ export function Editor({ s }: { s: State }) {
                           tone={changeChecksPassed(change) ? 'green' : 'violet'}
                         />
                         <span className="small muted font-mono">
-                          {change.changes.length}{' '}
-                          {change.changes.length === 1 ? 'file' : 'files'} in proposal
+                          {change.changes.length} {change.changes.length === 1 ? 'file' : 'files'}{' '}
+                          in proposal
                         </span>
                       </div>
                       <p className="small muted" style={{ marginTop: '4px' }}>
@@ -559,11 +560,7 @@ export function Editor({ s }: { s: State }) {
                             <tbody>
                               {hunk.lines.map((line, lineIdx) => {
                                 const cls =
-                                  line.kind === 'add'
-                                    ? 'add'
-                                    : line.kind === 'delete'
-                                      ? 'del'
-                                      : '';
+                                  line.kind === 'add' ? 'add' : line.kind === 'delete' ? 'del' : '';
                                 const prefix =
                                   line.kind === 'add' ? '+' : line.kind === 'delete' ? '-' : ' ';
                                 return (
@@ -611,7 +608,10 @@ export function Editor({ s }: { s: State }) {
                   <span className="row" style={{ gap: '8px' }}>
                     <Icon name="code" />
                     <strong className="font-mono">{s.file.path}</strong>
-                    <Badge value={dirty ? 'Unsaved edits' : 'Direct edit'} tone={dirty ? 'amber' : 'violet'} />
+                    <Badge
+                      value={dirty ? 'Unsaved edits' : 'Direct edit'}
+                      tone={dirty ? 'amber' : 'violet'}
+                    />
                   </span>
                   <div className="row" style={{ gap: '8px' }}>
                     <span className="small muted">
@@ -664,7 +664,9 @@ export function Editor({ s }: { s: State }) {
                 </div>
                 {(change?.messages || []).map((entry, idx) => (
                   <div key={idx} className="small">
-                    <strong style={{ color: entry.role === 'user' ? 'var(--accent)' : 'var(--green)' }}>
+                    <strong
+                      style={{ color: entry.role === 'user' ? 'var(--accent)' : 'var(--green)' }}
+                    >
                       {entry.role === 'user' ? 'You: ' : 'Mini-Orca: '}
                     </strong>
                     <span>{entry.content}</span>
@@ -680,11 +682,7 @@ export function Editor({ s }: { s: State }) {
                 void submitPrompt();
               }}
             >
-              <Button
-                tone="ghost small"
-                icon="clock"
-                onClick={() => setHistoryOpen((v) => !v)}
-              >
+              <Button tone="ghost small" icon="clock" onClick={() => setHistoryOpen((v) => !v)}>
                 History ({(change?.messages.length || 0) + (s.changeHistory?.length || 0)})
               </Button>
               {activePath && <Badge value={`@${activePath.split('/').at(-1)}`} tone="violet" />}
@@ -762,10 +760,7 @@ function FileInspectionDrawer({ s }: { s: State }) {
       <Disclosure title="Inspect declarations, file analysis & security">
         <DeclarationPicker s={s} />
         <div className="actions" style={{ marginTop: '8px' }}>
-          <Button
-            disabled={!!s.busy || !s.symbol || s.fileStale}
-            onClick={() => void w.explain()}
-          >
+          <Button disabled={!!s.busy || !s.symbol || s.fileStale} onClick={() => void w.explain()}>
             Explain declaration
           </Button>
           <Button disabled={!!s.busy || s.fileStale} onClick={() => void w.analyzeFile()}>

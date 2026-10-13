@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { workspace as w, type State } from './workspace';
 import type * as M from './models';
 import { Button, Empty, Heading, Icon, Loading, Notice, Overlay, Panel } from './ui';
@@ -9,14 +9,14 @@ function getWorktreeInfo(tree: M.GitWorktree, s: State) {
   if (childChange) {
     return {
       title: childChange.title,
-      kind: childChange.kind,
+      kind: childChange.kind || 'fix',
     };
   }
   const lastCompleted = tree.completed?.[0];
   if (lastCompleted) {
     return {
       title: lastCompleted.title,
-      kind: lastCompleted.kind,
+      kind: lastCompleted.kind || 'fix',
     };
   }
   let kind = 'fix';
@@ -58,6 +58,11 @@ export function GitWorkspace({ s }: { s: State }) {
   const failed = repository?.worktrees.filter((tree) => tree.error) || [];
   const busy = !!s.busy;
   const blocked = busy || !!s.resourceErrors['Git / Worktrees'] || s.uncertain;
+  useEffect(() => {
+    if (!repository && !busy && !s.resourceErrors['Git / Worktrees']) {
+      void w.loadGitWorkspace();
+    }
+  }, [repository, busy, s.resourceErrors]);
   return (
     <div className="workspace-page git-workspace">
       <Heading title="Git / Worktrees" variant="intro">
@@ -238,7 +243,9 @@ export function GitWorkspace({ s }: { s: State }) {
                             tone="danger small"
                             disabled={blocked}
                             loading={pending === `discard:${tree.path}`}
-                            onClick={() => run(`discard:${tree.path}`, () => w.discardWorktree(tree))}
+                            onClick={() =>
+                              run(`discard:${tree.path}`, () => w.discardWorktree(tree))
+                            }
                           >
                             Discard
                           </Button>

@@ -177,7 +177,9 @@ function ChatWorkspace({ s }: { s: State }) {
                       </select>
                     </label>
                   </div>
-                  <p className="small muted">All project text files unlocked, including new files.</p>
+                  <p className="small muted">
+                    All project text files unlocked, including new files.
+                  </p>
                 </Disclosure>
               ) : (
                 <Panel
