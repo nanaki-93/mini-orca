@@ -1832,3 +1832,46 @@ svg.icon {
   color: var(--muted);
   background: var(--raised);
 }
+
+/* Enterprise KPI Cards and Navigation Badges */
+.card-kpi {
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+.card-kpi:hover {
+  border-color: var(--control-line);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+}
+
+.nav-count.badge-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.nav-link:hover .nav-count.badge-count {
+  color: var(--text);
+  border-color: var(--control-line);
+}
+
+.summary-ops-grid .panel {
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.summary-ops-grid .panel p {
+  margin: 8px 0 14px;
+}
