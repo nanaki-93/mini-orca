@@ -1,1289 +1,2051 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" data-theme="dark">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>mini-orca UI/UX Mockup - Developer Experience</title>
-  <style>
-    :root {
-      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    }
-    /* All-Dark Color Palettes */
-    :root, [data-theme="dark"] {
-      --bg: #141715;
-      --canvas: #1b1e1b;
-      --raised: #242923;
-      --hover: #31372f;
-      --border: #3b4237;
-      --text: #f4f6ee;
-      --muted: #a6b29d;
-      --accent: #e5c483;
-      --accent-hover: #edd6a4;
-      --blue: #85d9ed;
-      --green: #80ddba;
-      --red: #f87171;
-      --orange: #fbbf24;
-      --theme-name: "Graphite (Warm Amber)";
-    }
-    [data-theme="midnight"] {
-      --bg: #070e17;
-      --canvas: #0c1827;
-      --raised: #132439;
-      --hover: #1c334f;
-      --border: #254366;
-      --text: #eaf4ff;
-      --muted: #91b3d6;
-      --accent: #38bdf8;
-      --accent-hover: #60d0fd;
-      --blue: #38bdf8;
-      --green: #34d399;
-      --red: #f87171;
-      --orange: #fbbf24;
-      --theme-name: "Midnight (Ocean Cyan)";
-    }
-    [data-theme="emerald"] {
-      --bg: #07130e;
-      --canvas: #0d1e17;
-      --raised: #142a20;
-      --hover: #1e3c2e;
-      --border: #294d3c;
-      --text: #ecfaf3;
-      --muted: #8ec3a7;
-      --accent: #3ddc84;
-      --accent-hover: #5eed9c;
-      --blue: #38bdf8;
-      --green: #4ade80;
-      --red: #f87171;
-      --orange: #fbbf24;
-      --theme-name: "Emerald (Pine & Jade)";
-    }
-    [data-theme="nordic"] {
-      --bg: #0c1017;
-      --canvas: #121822;
-      --raised: #1a2331;
-      --hover: #263346;
-      --border: #33435c;
-      --text: #f0f6fc;
-      --muted: #94a7bd;
-      --accent: #60a5fa;
-      --accent-hover: #8bbefa;
-      --blue: #60a5fa;
-      --green: #34d399;
-      --red: #fb7185;
-      --orange: #fbbf24;
-      --theme-name: "Nordic (Slate & Arctic)";
-    }
-    [data-theme="signal"] {
-      --bg: #0a0a0d;
-      --canvas: #121217;
-      --raised: #1a1a22;
-      --hover: #252530;
-      --border: #353545;
-      --text: #fff1ee;
-      --muted: #b5a9ad;
-      --accent: #ff5a66;
-      --accent-hover: #ff7d86;
-      --blue: #93c5fd;
-      --green: #86efac;
-      --red: #ff5a66;
-      --orange: #fde047;
-      --theme-name: "Signal (Onyx & Coral)";
-    }
-    [data-theme="amethyst"] {
-      --bg: #140d21;
-      --canvas: #1b122c;
-      --raised: #25193d;
-      --hover: #332353;
-      --border: #463070;
-      --text: #fbf5ff;
-      --muted: #b99fd6;
-      --accent: #c084fc;
-      --accent-hover: #d8b4fe;
-      --blue: #93c5fd;
-      --green: #86efac;
-      --red: #f87171;
-      --orange: #fde047;
-      --theme-name: "Amethyst (Royal Violet)";
-    }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>mini-orca UI/UX Mockup - Developer Experience</title>
+    <style>
+      :root {
+        --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      }
+      /* Project Color Palettes */
+      :root,
+      [data-theme='dark'] {
+        --bg: #141715;
+        --canvas: #1b1e1b;
+        --raised: #242923;
+        --hover: #31372f;
+        --border: #3b4237;
+        --text: #f4f6ee;
+        --muted: #a6b29d;
+        --accent: #e5c483;
+        --accent-hover: #edd6a4;
+        --blue: #85d9ed;
+        --green: #80ddba;
+        --red: #f87171;
+        --orange: #fbbf24;
+        --theme-name: 'Graphite (Warm Amber)';
+      }
+      [data-theme='light'] {
+        --bg: #f7f6f2;
+        --canvas: #ffffff;
+        --raised: #edeee7;
+        --hover: #e1e5da;
+        --border: #cdd3c6;
+        --text: #202a23;
+        --muted: #54614f;
+        --accent: #346448;
+        --accent-hover: #2a503a;
+        --blue: #235f79;
+        --green: #286447;
+        --red: #a33244;
+        --orange: #7c571f;
+        --theme-name: 'Porcelain (Clean Light)';
+      }
+      [data-theme='midnight'] {
+        --bg: #070e17;
+        --canvas: #0c1827;
+        --raised: #132439;
+        --hover: #1c334f;
+        --border: #254366;
+        --text: #eaf4ff;
+        --muted: #91b3d6;
+        --accent: #38bdf8;
+        --accent-hover: #60d0fd;
+        --blue: #38bdf8;
+        --green: #34d399;
+        --red: #f87171;
+        --orange: #fbbf24;
+        --theme-name: 'Midnight (Ocean Cyan)';
+      }
+      [data-theme='signal'] {
+        --bg: #0a0a0d;
+        --canvas: #121217;
+        --raised: #1a1a22;
+        --hover: #252530;
+        --border: #353545;
+        --text: #fff1ee;
+        --muted: #b5a9ad;
+        --accent: #ff5a66;
+        --accent-hover: #ff7d86;
+        --blue: #93c5fd;
+        --green: #86efac;
+        --red: #ff5a66;
+        --orange: #fde047;
+        --theme-name: 'Signal (Onyx & Coral)';
+      }
+      [data-theme='crimson-violet'] {
+        --bg: #1c0d30;
+        --canvas: #24113d;
+        --raised: #3b224f;
+        --hover: #462c5b;
+        --border: #745285;
+        --text: #f9edff;
+        --muted: #d0b7df;
+        --accent: #85e89d;
+        --accent-hover: #adf5ba;
+        --blue: #a5dcfa;
+        --green: #9ee6bd;
+        --red: #ffadbd;
+        --orange: #f4cf88;
+        --theme-name: 'Crimson Violet (Aubergine & Mint)';
+      }
+      [data-theme='nordic'] {
+        --bg: #0c1017;
+        --canvas: #121822;
+        --raised: #1a2331;
+        --hover: #263346;
+        --border: #33435c;
+        --text: #f0f6fc;
+        --muted: #94a7bd;
+        --accent: #60a5fa;
+        --accent-hover: #8bbefa;
+        --blue: #60a5fa;
+        --green: #34d399;
+        --red: #fb7185;
+        --orange: #fbbf24;
+        --theme-name: 'Nordic (Slate & Arctic)';
+      }
+      [data-theme='amethyst'] {
+        --bg: #140d21;
+        --canvas: #1b122c;
+        --raised: #25193d;
+        --hover: #332353;
+        --border: #463070;
+        --text: #fbf5ff;
+        --muted: #b99fd6;
+        --accent: #c084fc;
+        --accent-hover: #d8b4fe;
+        --blue: #93c5fd;
+        --green: #86efac;
+        --red: #f87171;
+        --orange: #fde047;
+        --theme-name: 'Amethyst (Royal Violet)';
+      }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--sans);
-      font-size: 13px;
-      line-height: 1.5;
-      display: flex;
-      height: 100vh;
-      overflow: hidden;
-    }
-    /* Sidebar */
-    .sidebar {
-      width: 220px;
-      background: var(--canvas);
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-    }
-    .brand {
-      padding: 16px;
-      font-weight: 700;
-      font-size: 15px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .brand svg { width: 18px; height: 18px; fill: var(--accent); }
-    .nav { padding: 12px 8px; flex: 1; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
-    .nav-label {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      padding: 12px 8px 4px;
-    }
-    .nav-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 7px 10px;
-      border-radius: 6px;
-      color: var(--muted);
-      cursor: pointer;
-      text-decoration: none;
-      font-weight: 500;
-      border: none;
-      background: none;
-      width: 100%;
-      text-align: left;
-    }
-    .nav-item:hover { background: var(--raised); color: var(--text); }
-    .nav-item.active { background: rgba(56, 139, 253, 0.15); color: var(--blue); }
-    .nav-item svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
-    .badge-count {
-      margin-left: auto;
-      background: var(--raised);
-      color: var(--muted);
-      padding: 1px 6px;
-      border-radius: 10px;
-      font-size: 11px;
-      font-weight: 600;
-    }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 13px;
+        line-height: 1.5;
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+      }
+      /* Sidebar */
+      .sidebar {
+        width: 220px;
+        background: var(--canvas);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 0;
+      }
+      .brand {
+        padding: 16px;
+        font-weight: 700;
+        font-size: 15px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .brand svg {
+        width: 18px;
+        height: 18px;
+        fill: var(--accent);
+      }
+      .nav {
+        padding: 12px 8px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        overflow-y: auto;
+      }
+      .nav-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 12px 8px 4px;
+      }
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 10px;
+        border-radius: 6px;
+        color: var(--muted);
+        cursor: pointer;
+        text-decoration: none;
+        font-weight: 500;
+        border: none;
+        background: none;
+        width: 100%;
+        text-align: left;
+      }
+      .nav-item:hover {
+        background: var(--raised);
+        color: var(--text);
+      }
+      .nav-item.active {
+        background: rgba(56, 139, 253, 0.15);
+        color: var(--blue);
+      }
+      .nav-item svg {
+        width: 16px;
+        height: 16px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2;
+        flex-shrink: 0;
+      }
+      .badge-count {
+        margin-left: auto;
+        background: var(--raised);
+        color: var(--muted);
+        padding: 1px 6px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 600;
+      }
 
-    /* Main Container */
-    .main-view {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    .topbar {
-      height: 48px;
-      background: var(--canvas);
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 20px;
-      flex-shrink: 0;
-    }
-    .project-info {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: 600;
-    }
-    .branch-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      padding: 2px 8px;
-      border-radius: 4px;
-      background: var(--raised);
-      border: 1px solid var(--border);
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--text);
-    }
-    .content-area {
-      flex: 1;
-      overflow-y: auto;
-      padding: 24px;
-    }
+      /* Main Container */
+      .main-view {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .topbar {
+        height: 48px;
+        background: var(--canvas);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        flex-shrink: 0;
+      }
+      .project-info {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+      }
+      .branch-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 2px 8px;
+        border-radius: 4px;
+        background: var(--raised);
+        border: 1px solid var(--border);
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text);
+      }
+      .content-area {
+        flex: 1;
+        overflow-y: auto;
+        padding: 24px;
+      }
 
-    /* Mockup Panels */
-    .mockup-panel { display: none; }
-    .mockup-panel.active { display: block; }
+      /* Mockup Panels */
+      .mockup-panel {
+        display: none;
+      }
+      .mockup-panel.active {
+        display: block;
+      }
 
-    /* Heading & Toolbars */
-    .panel-heading {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 16px;
-    }
-    .panel-heading h1 { font-size: 18px; font-weight: 600; }
-    .actions-row { display: flex; align-items: center; gap: 8px; }
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 12px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      border: 1px solid var(--border);
-      background: var(--raised);
-      color: var(--text);
-      text-decoration: none;
-      transition: background 0.12s ease;
-      white-space: nowrap;
-    }
-    .btn:hover { background: var(--hover); }
-    .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .btn.primary:hover { background: var(--accent-hover); }
-    .btn.success { background: var(--green); border-color: var(--green); color: #fff; }
-    .btn.success:hover { background: var(--green-hover); }
-    .btn.danger { background: rgba(218, 54, 51, 0.15); border-color: rgba(218, 54, 51, 0.4); color: #f85149; }
-    .btn.danger:hover { background: var(--red); color: #fff; }
-    .btn.warning { background: rgba(210, 153, 34, 0.15); border-color: rgba(210, 153, 34, 0.4); color: #d29922; }
-    .btn.warning:hover { background: var(--orange); color: #fff; }
+      /* Heading & Toolbars */
+      .panel-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+      .panel-heading h1 {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .actions-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        border: 1px solid var(--border);
+        background: var(--raised);
+        color: var(--text);
+        text-decoration: none;
+        transition: background 0.12s ease;
+        white-space: nowrap;
+      }
+      .btn:hover {
+        background: var(--hover);
+      }
+      .btn.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      .btn.primary:hover {
+        background: var(--accent-hover);
+      }
+      .btn.success {
+        background: var(--green);
+        border-color: var(--green);
+        color: #fff;
+      }
+      .btn.success:hover {
+        background: var(--green-hover);
+      }
+      .btn.danger {
+        background: rgba(218, 54, 51, 0.15);
+        border-color: rgba(218, 54, 51, 0.4);
+        color: #f85149;
+      }
+      .btn.danger:hover {
+        background: var(--red);
+        color: #fff;
+      }
+      .btn.warning {
+        background: rgba(210, 153, 34, 0.15);
+        border-color: rgba(210, 153, 34, 0.4);
+        color: #d29922;
+      }
+      .btn.warning:hover {
+        background: var(--orange);
+        color: #fff;
+      }
 
-    /* Filters Bar */
-    .filter-bar {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 14px;
-      background: var(--canvas);
-      padding: 8px 12px;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-    }
-    .search-input {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 5px;
-      padding: 5px 10px;
-      color: var(--text);
-      font-size: 12px;
-      flex: 1;
-      max-width: 320px;
-    }
-    .category-pills { display: flex; gap: 4px; }
-    .pill {
-      padding: 3px 10px;
-      border-radius: 12px;
-      background: var(--raised);
-      border: 1px solid var(--border);
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-    .checkbox-filter {
-      margin-left: auto;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      color: var(--text);
-      font-size: 12px;
-      cursor: pointer;
-      user-select: none;
-    }
+      /* Filters Bar */
+      .filter-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 14px;
+        background: var(--canvas);
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+      }
+      .search-input {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 5px 10px;
+        color: var(--text);
+        font-size: 12px;
+        flex: 1;
+        max-width: 320px;
+      }
+      .category-pills {
+        display: flex;
+        gap: 4px;
+      }
+      .pill {
+        padding: 3px 10px;
+        border-radius: 12px;
+        background: var(--raised);
+        border: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .pill.active {
+        background: var(--accent);
+        color: #fff;
+        border-color: var(--accent);
+      }
+      .checkbox-filter {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text);
+        font-size: 12px;
+        cursor: pointer;
+        user-select: none;
+      }
 
-    /* Dense Issues Table */
-    .issues-table {
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--canvas);
-      overflow: hidden;
-    }
-    .issue-row {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--border);
-      cursor: pointer;
-      transition: background 0.1s ease;
-    }
-    .issue-row:last-child { border-bottom: none; }
-    .issue-row:hover { background: var(--raised); }
-    .issue-mark {
-      width: 28px;
-      height: 28px;
-      border-radius: 6px;
-      background: var(--raised);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-    .issue-mark svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
-    .issue-mark.bug { color: #f85149; }
-    .issue-mark.shield { color: #388bfd; }
-    .issue-mark.gauge { color: #d29922; }
-    .issue-copy { flex: 1; min-width: 0; }
-    .issue-header { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
-    .tag {
-      font-size: 10px;
-      font-weight: 700;
-      padding: 1px 6px;
-      border-radius: 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-    .tag.danger { background: rgba(218, 54, 51, 0.2); color: #f85149; border: 1px solid rgba(218, 54, 51, 0.4); }
-    .tag.warning { background: rgba(210, 153, 34, 0.2); color: #d29922; border: 1px solid rgba(210, 153, 34, 0.4); }
-    .tag.info { background: rgba(56, 139, 253, 0.2); color: #58a6ff; border: 1px solid rgba(56, 139, 253, 0.4); }
-    .tag.done { background: rgba(35, 134, 54, 0.2); color: #3fb950; border: 1px solid rgba(35, 134, 54, 0.4); }
-    .issue-title { font-weight: 600; color: var(--text); }
-    .issue-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); }
-    .issue-actions { display: flex; gap: 6px; flex-shrink: 0; margin-left: 12px; }
+      /* Dense Issues Table */
+      .issues-table {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--canvas);
+        overflow: hidden;
+      }
+      .issue-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+        transition: background 0.1s ease;
+      }
+      .issue-row:last-child {
+        border-bottom: none;
+      }
+      .issue-row:hover {
+        background: var(--raised);
+      }
+      .issue-mark {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        background: var(--raised);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .issue-mark svg {
+        width: 15px;
+        height: 15px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2;
+      }
+      .issue-mark.bug {
+        color: #f85149;
+      }
+      .issue-mark.shield {
+        color: #388bfd;
+      }
+      .issue-mark.gauge {
+        color: #d29922;
+      }
+      .issue-copy {
+        flex: 1;
+        min-width: 0;
+      }
+      .issue-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 2px;
+      }
+      .tag {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 1px 6px;
+        border-radius: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .tag.danger {
+        background: rgba(218, 54, 51, 0.2);
+        color: #f85149;
+        border: 1px solid rgba(218, 54, 51, 0.4);
+      }
+      .tag.warning {
+        background: rgba(210, 153, 34, 0.2);
+        color: #d29922;
+        border: 1px solid rgba(210, 153, 34, 0.4);
+      }
+      .tag.info {
+        background: rgba(56, 139, 253, 0.2);
+        color: #58a6ff;
+        border: 1px solid rgba(56, 139, 253, 0.4);
+      }
+      .tag.done {
+        background: rgba(35, 134, 54, 0.2);
+        color: #3fb950;
+        border: 1px solid rgba(35, 134, 54, 0.4);
+      }
+      .issue-title {
+        font-weight: 600;
+        color: var(--text);
+      }
+      .issue-meta {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .issue-actions {
+        display: flex;
+        gap: 6px;
+        flex-shrink: 0;
+        margin-left: 12px;
+      }
 
-    /* Implementation Option B: Adaptive Split Layout */
-    .implementation-container {
-      display: grid;
-      grid-template-columns: 360px 1fr;
-      gap: 20px;
-      align-items: start;
-    }
-    @media (max-width: 1050px) {
-      .implementation-container { grid-template-columns: 1fr; }
-      .finding-context { display: none; }
-    }
-    .card {
-      background: var(--canvas);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 16px;
-    }
-    .card-title {
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .finding-context { display: flex; flex-direction: column; gap: 14px; }
-    .context-block h4 { font-size: 11px; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
-    .context-block p { font-size: 12px; color: var(--text); }
-    .criteria-list { list-style: none; margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
-    .criteria-list li { font-size: 12px; display: flex; align-items: flex-start; gap: 6px; }
-    .criteria-list li::before { content: "•"; color: var(--accent); }
+      /* Implementation Option B: Adaptive Split Layout */
+      .implementation-container {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        gap: 20px;
+        align-items: start;
+      }
+      @media (max-width: 1050px) {
+        .implementation-container {
+          grid-template-columns: 1fr;
+        }
+        .finding-context {
+          display: none;
+        }
+      }
+      .card {
+        background: var(--canvas);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 16px;
+      }
+      .card-title {
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .finding-context {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .context-block h4 {
+        font-size: 11px;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+      .context-block p {
+        font-size: 12px;
+        color: var(--text);
+      }
+      .criteria-list {
+        list-style: none;
+        margin-top: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .criteria-list li {
+        font-size: 12px;
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+      }
+      .criteria-list li::before {
+        content: '•';
+        color: var(--accent);
+      }
 
-    /* Fix Workflow Pipeline / Stepper */
-    .stepper {
-      display: flex;
-      border: 1px solid var(--border);
-      background: var(--raised);
-      border-radius: 6px;
-      overflow: hidden;
-      margin-bottom: 16px;
-    }
-    .step-item {
-      flex: 1;
-      padding: 8px 12px;
-      text-align: center;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--muted);
-      border-right: 1px solid var(--border);
-      background: none;
-      cursor: pointer;
-    }
-    .step-item:last-child { border-right: none; }
-    .step-item.active { background: rgba(56, 139, 253, 0.15); color: var(--blue); }
-    .step-item.completed { color: #3fb950; }
+      /* Fix Workflow Pipeline / Stepper */
+      .stepper {
+        display: flex;
+        border: 1px solid var(--border);
+        background: var(--raised);
+        border-radius: 6px;
+        overflow: hidden;
+        margin-bottom: 16px;
+      }
+      .step-item {
+        flex: 1;
+        padding: 8px 12px;
+        text-align: center;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--muted);
+        border-right: 1px solid var(--border);
+        background: none;
+        cursor: pointer;
+      }
+      .step-item:last-child {
+        border-right: none;
+      }
+      .step-item.active {
+        background: rgba(56, 139, 253, 0.15);
+        color: var(--blue);
+      }
+      .step-item.completed {
+        color: #3fb950;
+      }
 
-    /* Action Banner with 2 Retry Buttons */
-    .retry-banner {
-      background: var(--raised);
-      border: 1px solid rgba(245, 158, 11, 0.4);
-      border-left: 4px solid var(--orange);
-      border-radius: 6px;
-      padding: 12px 16px;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 14px;
-    }
-    .retry-info { display: flex; flex-direction: column; gap: 2px; }
-    .retry-info strong { font-size: 12px; color: var(--text); }
-    .retry-info small { color: var(--muted); font-size: 11px; }
-    .retry-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+      /* Action Banner with 2 Retry Buttons */
+      .retry-banner {
+        background: var(--raised);
+        border: 1px solid rgba(245, 158, 11, 0.4);
+        border-left: 4px solid var(--orange);
+        border-radius: 6px;
+        padding: 12px 16px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+      }
+      .retry-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .retry-info strong {
+        font-size: 12px;
+        color: var(--text);
+      }
+      .retry-info small {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .retry-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
 
-    /* Diff Review Card */
-    .diff-summary-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
-    .diff-summary-table th { text-align: left; padding: 6px 10px; color: var(--muted); font-size: 11px; border-bottom: 1px solid var(--border); }
-    .diff-summary-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
-    .diff-stat.add { color: #3fb950; font-weight: 600; }
-    .diff-stat.del { color: #f85149; font-weight: 600; }
-    .diff-canvas {
-      margin-top: 14px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--bg);
-      font-family: var(--mono);
-      font-size: 12px;
-      overflow-x: auto;
-    }
-    .diff-line { padding: 2px 10px; white-space: pre; }
-    .diff-line.add { background: rgba(35, 134, 54, 0.2); color: #7ee787; }
-    .diff-line.del { background: rgba(218, 54, 51, 0.2); color: #ffa198; }
-    .diff-line.info { color: var(--muted); background: var(--raised); }
+      /* Diff Review Card */
+      .diff-summary-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        font-size: 12px;
+      }
+      .diff-summary-table th {
+        text-align: left;
+        padding: 6px 10px;
+        color: var(--muted);
+        font-size: 11px;
+        border-bottom: 1px solid var(--border);
+      }
+      .diff-summary-table td {
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      .diff-stat.add {
+        color: #3fb950;
+        font-weight: 600;
+      }
+      .diff-stat.del {
+        color: #f85149;
+        font-weight: 600;
+      }
+      .diff-canvas {
+        margin-top: 14px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg);
+        font-family: var(--mono);
+        font-size: 12px;
+        overflow-x: auto;
+      }
+      .diff-line {
+        padding: 2px 10px;
+        white-space: pre;
+      }
+      .diff-line.add {
+        background: rgba(35, 134, 54, 0.2);
+        color: #7ee787;
+      }
+      .diff-line.del {
+        background: rgba(218, 54, 51, 0.2);
+        color: #ffa198;
+      }
+      .diff-line.info {
+        color: var(--muted);
+        background: var(--raised);
+      }
 
-    /* Worktree List */
-    .worktree-list { border: 1px solid var(--border); border-radius: 6px; background: var(--canvas); }
-    .worktree-row {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--border);
-      min-height: 48px;
-    }
-    .worktree-row:last-child { border-bottom: none; }
-    .worktree-copy { flex: 1; min-width: 0; }
+      /* Worktree List */
+      .worktree-list {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--canvas);
+      }
+      .worktree-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        min-height: 48px;
+      }
+      .worktree-row:last-child {
+        border-bottom: none;
+      }
+      .worktree-copy {
+        flex: 1;
+        min-width: 0;
+      }
 
-    /* Models and Environment Form Styles */
-    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 14px; }
-    .form-card { background: var(--canvas); border: 1px solid var(--border); border-radius: 6px; padding: 14px; }
-    .form-card h3 { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
-    .form-card select, .form-card input, .form-card textarea {
-      width: 100%;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 5px;
-      padding: 6px 10px;
-      color: var(--text);
-      font-size: 12px;
-      margin-top: 6px;
-      font-family: inherit;
-    }
-    .form-card textarea { font-family: var(--mono); resize: vertical; min-height: 180px; }
-  </style>
-</head>
-<body>
-
-  <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="brand">
-      <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-      <span>mini-orca</span>
-    </div>
-    <div class="nav">
-      <div class="nav-label">Core</div>
-      <button class="nav-item" id="nav-overview" onclick="switchMockup('overview')">
-        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-        <span>Overview</span>
-      </button>
-
-      <div class="nav-label">Improve</div>
-      <button class="nav-item active" id="nav-issues" onclick="switchMockup('issues')">
-        <svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="13" rx="5"/><path d="M9 7V5a3 3 0 0 1 6 0v2M3 9h4m10 0h4M3 14h4m10 0h4M4 20l4-3m8 0 4 3M12 8v12"/></svg>
-        <span>Issues</span>
-        <span class="badge-count">8</span>
-      </button>
-      <button class="nav-item" id="nav-implementation" onclick="switchMockup('implementation')">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M3 12h6m6 0h6"/></svg>
-        <span>Fix / Changes</span>
-      </button>
-
-      <div class="nav-label">Project</div>
-      <button class="nav-item" id="nav-git" onclick="switchMockup('git')">
-        <svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M6 7v10m12-10c0 6-12 3-12 8"/></svg>
-        <span>Git / Worktrees</span>
-        <span class="badge-count">2</span>
-      </button>
-      <button class="nav-item" id="nav-filescope" onclick="switchMockup('filescope')">
-        <svg viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
-        <span>File Scope</span>
-      </button>
-      <button class="nav-item" id="nav-environment" onclick="switchMockup('environment')">
-        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-        <span>Environment</span>
-      </button>
-
-      <div class="nav-label">Settings</div>
-      <button class="nav-item" id="nav-models" onclick="switchMockup('models')">
-        <svg viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-        <span>Models</span>
-      </button>
-      <button class="nav-item" id="nav-themes" onclick="switchMockup('themes')">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 0 0 20v-2a8 8 0 0 1 0-16V2z"/></svg>
-        <span>Themes</span>
-      </button>
-    </div>
-  </aside>
-
-  <!-- Main View -->
-  <main class="main-view">
-    <header class="topbar">
-      <div class="project-info">
+      /* Models and Environment Form Styles */
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 16px;
+        margin-top: 14px;
+      }
+      .form-card {
+        background: var(--canvas);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 14px;
+      }
+      .form-card h3 {
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .form-card select,
+      .form-card input,
+      .form-card textarea {
+        width: 100%;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 6px 10px;
+        color: var(--text);
+        font-size: 12px;
+        margin-top: 6px;
+        font-family: inherit;
+      }
+      .form-card textarea {
+        font-family: var(--mono);
+        resize: vertical;
+        min-height: 180px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+        </svg>
         <span>mini-orca</span>
-        <span class="branch-badge">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M6 7v10m12-10c0 6-12 3-12 8"/></svg>
-          main
-        </span>
       </div>
-      <div class="actions-row" style="gap:12px;">
-        <span class="muted" style="font-size:11px;">Theme:</span>
-        <div style="display:flex; align-items:center; gap:6px;">
-          <button title="Graphite (Warm Amber)" onclick="setTheme('dark')" style="width:18px; height:18px; border-radius:50%; background:#e5c483; border:2px solid var(--border); cursor:pointer;"></button>
-          <button title="Midnight (Ocean Cyan)" onclick="setTheme('midnight')" style="width:18px; height:18px; border-radius:50%; background:#38bdf8; border:2px solid var(--border); cursor:pointer;"></button>
-          <button title="Emerald (Pine & Jade)" onclick="setTheme('emerald')" style="width:18px; height:18px; border-radius:50%; background:#3ddc84; border:2px solid var(--border); cursor:pointer;"></button>
-          <button title="Nordic (Slate & Arctic)" onclick="setTheme('nordic')" style="width:18px; height:18px; border-radius:50%; background:#60a5fa; border:2px solid var(--border); cursor:pointer;"></button>
-          <button title="Signal (Onyx & Coral)" onclick="setTheme('signal')" style="width:18px; height:18px; border-radius:50%; background:#ff5a66; border:2px solid var(--border); cursor:pointer;"></button>
-          <button title="Amethyst (Royal Violet)" onclick="setTheme('amethyst')" style="width:18px; height:18px; border-radius:50%; background:#c084fc; border:2px solid var(--border); cursor:pointer;"></button>
-        </div>
-        <button class="btn" onclick="switchMockup('themes')" style="font-size:11px; padding:3px 8px;">Gallery</button>
+      <div class="nav">
+        <div class="nav-label">Core</div>
+        <button class="nav-item" id="nav-overview" onclick="switchMockup('overview')">
+          <svg viewBox="0 0 24 24">
+            <rect x="3" y="3" width="7" height="7" />
+            <rect x="14" y="3" width="7" height="7" />
+            <rect x="3" y="14" width="7" height="7" />
+            <rect x="14" y="14" width="7" height="7" />
+          </svg>
+          <span>Overview</span>
+        </button>
+
+        <div class="nav-label">Improve</div>
+        <button class="nav-item active" id="nav-issues" onclick="switchMockup('issues')">
+          <svg viewBox="0 0 24 24">
+            <rect x="7" y="7" width="10" height="13" rx="5" />
+            <path d="M9 7V5a3 3 0 0 1 6 0v2M3 9h4m10 0h4M3 14h4m10 0h4M4 20l4-3m8 0 4 3M12 8v12" />
+          </svg>
+          <span>Issues</span>
+          <span class="badge-count">8</span>
+        </button>
+        <button class="nav-item" id="nav-implementation" onclick="switchMockup('implementation')">
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M3 12h6m6 0h6" />
+          </svg>
+          <span>Fix / Changes</span>
+        </button>
+
+        <div class="nav-label">Project</div>
+        <button class="nav-item" id="nav-git" onclick="switchMockup('git')">
+          <svg viewBox="0 0 24 24">
+            <circle cx="6" cy="5" r="2" />
+            <circle cx="6" cy="19" r="2" />
+            <circle cx="18" cy="5" r="2" />
+            <path d="M6 7v10m12-10c0 6-12 3-12 8" />
+          </svg>
+          <span>Git / Worktrees</span>
+          <span class="badge-count">2</span>
+        </button>
+        <button class="nav-item" id="nav-filescope" onclick="switchMockup('filescope')">
+          <svg viewBox="0 0 24 24">
+            <path
+              d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"
+            />
+          </svg>
+          <span>File Scope</span>
+        </button>
+        <button class="nav-item" id="nav-environment" onclick="switchMockup('environment')">
+          <svg viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+          </svg>
+          <span>Environment</span>
+        </button>
+
+        <div class="nav-label">Settings</div>
+        <button class="nav-item" id="nav-models" onclick="switchMockup('models')">
+          <svg viewBox="0 0 24 24">
+            <polygon points="12 2 2 7 12 12 22 7 12 2" />
+            <polyline points="2 17 12 22 22 17" />
+            <polyline points="2 12 12 17 22 12" />
+          </svg>
+          <span>Models</span>
+        </button>
+        <button class="nav-item" id="nav-themes" onclick="switchMockup('themes')">
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 2a10 10 0 0 0 0 20v-2a8 8 0 0 1 0-16V2z" />
+          </svg>
+          <span>Themes</span>
+        </button>
       </div>
-    </header>
+    </aside>
 
-    <div class="content-area">
-
-      <!-- VIEW 1: UNIFIED ISSUES CONSOLE -->
-      <section class="mockup-panel active" id="panel-issues">
-        <div class="panel-heading">
-          <div>
-            <h1>Issues Console</h1>
-          </div>
-          <div class="actions-row">
-            <button class="btn">Refresh</button>
-            <button class="btn primary" onclick="runAnalysisSim()">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Run Analysis
-            </button>
-          </div>
+    <!-- Main View -->
+    <main class="main-view">
+      <header class="topbar">
+        <div class="project-info">
+          <span>mini-orca</span>
+          <span class="branch-badge">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="6" cy="5" r="2" />
+              <circle cx="6" cy="19" r="2" />
+              <circle cx="18" cy="5" r="2" />
+              <path d="M6 7v10m12-10c0 6-12 3-12 8" />
+            </svg>
+            main
+          </span>
         </div>
-
-        <!-- Live Analysis Banner (Simulation) -->
-        <div class="retry-banner" id="issues-analysis-banner" style="display:none; border-left:4px solid var(--accent); background:rgba(47,129,247,0.1);">
-          <div class="retry-info">
-            <strong style="color:var(--blue);">Analyzing project files…</strong>
-            <small>Inspecting 142 source files across 8 packages (Stage: Security & Rules)</small>
+        <div class="actions-row" style="gap: 12px">
+          <span class="muted" style="font-size: 11px">Theme:</span>
+          <div style="display: flex; align-items: center; gap: 6px">
+            <button
+              title="Graphite (Warm Amber)"
+              onclick="setTheme('dark')"
+              style="
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background: #e5c483;
+                border: 2px solid var(--border);
+                cursor: pointer;
+              "
+            ></button>
+            <button
+              title="Porcelain (Clean Light)"
+              onclick="setTheme('light')"
+              style="
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background: #ffffff;
+                border: 2px solid var(--border);
+                cursor: pointer;
+              "
+            ></button>
+            <button
+              title="Midnight (Ocean Cyan)"
+              onclick="setTheme('midnight')"
+              style="
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background: #38bdf8;
+                border: 2px solid var(--border);
+                cursor: pointer;
+              "
+            ></button>
+            <button
+              title="Signal (Onyx & Coral)"
+              onclick="setTheme('signal')"
+              style="
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background: #ff5a66;
+                border: 2px solid var(--border);
+                cursor: pointer;
+              "
+            ></button>
+            <button
+              title="Crimson Violet (Aubergine & Mint)"
+              onclick="setTheme('crimson-violet')"
+              style="
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background: #85e89d;
+                border: 2px solid var(--border);
+                cursor: pointer;
+              "
+            ></button>
+            <button
+              title="Nordic (Slate & Arctic)"
+              onclick="setTheme('nordic')"
+              style="
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background: #60a5fa;
+                border: 2px solid var(--border);
+                cursor: pointer;
+              "
+            ></button>
+            <button
+              title="Amethyst (Royal Violet)"
+              onclick="setTheme('amethyst')"
+              style="
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background: #c084fc;
+                border: 2px solid var(--border);
+                cursor: pointer;
+              "
+            ></button>
           </div>
-          <div class="retry-actions">
-            <button class="btn danger" onclick="cancelAnalysisSim()">Cancel</button>
-          </div>
+          <button
+            class="btn"
+            onclick="switchMockup('themes')"
+            style="font-size: 11px; padding: 3px 8px"
+          >
+            Gallery
+          </button>
         </div>
+      </header>
 
-        <!-- Filter Bar -->
-        <div class="filter-bar">
-          <input class="search-input" placeholder="Filter issues, files, symbols…" />
-          <div class="category-pills">
-            <button class="pill active">All (8)</button>
-            <button class="pill">Bugs (4)</button>
-            <button class="pill">Security (2)</button>
-            <button class="pill">Performance (2)</button>
+      <div class="content-area">
+        <!-- VIEW 1: UNIFIED ISSUES CONSOLE -->
+        <section class="mockup-panel active" id="panel-issues">
+          <div class="panel-heading">
+            <div>
+              <h1>Issues Console</h1>
+            </div>
+            <div class="actions-row">
+              <button class="btn">Refresh</button>
+              <button class="btn primary" onclick="runAnalysisSim()">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+                Run Analysis
+              </button>
+            </div>
           </div>
-          <label class="checkbox-filter">
-            <input type="checkbox" id="show-done-toggle" onchange="toggleDone(this.checked)" />
-            <span>Show Done</span>
-          </label>
-        </div>
 
-        <!-- Issues List -->
-        <div class="issues-table">
-          <div class="issue-row" onclick="switchMockup('implementation')">
-            <span class="issue-mark bug">
-              <svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="13" rx="5"/><path d="M9 7V5a3 3 0 0 1 6 0v2M3 9h4m10 0h4M3 14h4m10 0h4M4 20l4-3m8 0 4 3M12 8v12"/></svg>
-            </span>
-            <div class="issue-copy">
-              <div class="issue-header">
+          <!-- Live Analysis Banner (Simulation) -->
+          <div
+            class="retry-banner"
+            id="issues-analysis-banner"
+            style="
+              display: none;
+              border-left: 4px solid var(--accent);
+              background: rgba(47, 129, 247, 0.1);
+            "
+          >
+            <div class="retry-info">
+              <strong style="color: var(--blue)">Analyzing project files…</strong>
+              <small>Inspecting 142 source files across 8 packages (Stage: Security & Rules)</small>
+            </div>
+            <div class="retry-actions">
+              <button class="btn danger" onclick="cancelAnalysisSim()">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Filter Bar -->
+          <div class="filter-bar">
+            <input class="search-input" placeholder="Filter issues, files, symbols…" />
+            <div class="category-pills">
+              <button class="pill active">All (8)</button>
+              <button class="pill">Bugs (4)</button>
+              <button class="pill">Security (2)</button>
+              <button class="pill">Performance (2)</button>
+            </div>
+            <label class="checkbox-filter">
+              <input type="checkbox" id="show-done-toggle" onchange="toggleDone(this.checked)" />
+              <span>Show Done</span>
+            </label>
+          </div>
+
+          <!-- Issues List -->
+          <div class="issues-table">
+            <div class="issue-row" onclick="switchMockup('implementation')">
+              <span class="issue-mark bug">
+                <svg viewBox="0 0 24 24">
+                  <rect x="7" y="7" width="10" height="13" rx="5" />
+                  <path
+                    d="M9 7V5a3 3 0 0 1 6 0v2M3 9h4m10 0h4M3 14h4m10 0h4M4 20l4-3m8 0 4 3M12 8v12"
+                  />
+                </svg>
+              </span>
+              <div class="issue-copy">
+                <div class="issue-header">
+                  <span class="tag danger">HIGH</span>
+                  <span class="issue-title">Unchecked channel send blocking worker</span>
+                </div>
+                <div class="issue-meta">internal/worker/pool.go:42 · dispatch()</div>
+              </div>
+              <div class="issue-actions">
+                <button
+                  class="btn primary"
+                  onclick="
+                    event.stopPropagation();
+                    switchMockup('implementation');
+                  "
+                >
+                  Fix
+                </button>
+                <button class="btn">File</button>
+              </div>
+            </div>
+
+            <div class="issue-row">
+              <span class="issue-mark shield">
+                <svg viewBox="0 0 24 24">
+                  <path d="m12 3 8 3v6c0 4-3 7-8 9-5-2-8-5-8-9V6zM9 12l2 2 4-4" />
+                </svg>
+              </span>
+              <div class="issue-copy">
+                <div class="issue-header">
+                  <span class="tag danger">HIGH</span>
+                  <span class="issue-title">Unvalidated path traversal in asset handler</span>
+                </div>
+                <div class="issue-meta">pkg/server/static.go:88 · ServeHTTP()</div>
+              </div>
+              <div class="issue-actions">
+                <button class="btn primary">Fix</button>
+                <button class="btn">File</button>
+              </div>
+            </div>
+
+            <div class="issue-row">
+              <span class="issue-mark gauge">
+                <svg viewBox="0 0 24 24"><path d="M4 18a9 9 0 1 1 16 0M6 18h12M12 13l5-6" /></svg>
+              </span>
+              <div class="issue-copy">
+                <div class="issue-header">
+                  <span class="tag warning">MED</span>
+                  <span class="issue-title">Redundant mutex contention in hot loop</span>
+                </div>
+                <div class="issue-meta">internal/cache/store.go:120 · Get()</div>
+              </div>
+              <div class="issue-actions">
+                <button class="btn primary">Fix</button>
+                <button class="btn">File</button>
+              </div>
+            </div>
+
+            <!-- Done row (Hidden by default) -->
+            <div class="issue-row issue-done" id="done-row-1" style="display: none; opacity: 0.7">
+              <span class="issue-mark bug">
+                <svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></svg>
+              </span>
+              <div class="issue-copy">
+                <div class="issue-header">
+                  <span class="tag done">DONE</span>
+                  <span class="issue-title">Nil pointer dereference on config reload</span>
+                </div>
+                <div class="issue-meta">cmd/daemon/config.go:18 · Reload()</div>
+              </div>
+              <div class="issue-actions">
+                <button class="btn" disabled>Resolved</button>
+                <button class="btn">File</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 2: IMPLEMENTATION / FIX WORKSPACE (OPTION B) -->
+        <section class="mockup-panel" id="panel-implementation">
+          <div class="panel-heading">
+            <div>
+              <h1>Fix: Unchecked channel send blocking worker</h1>
+              <span class="issue-meta">internal/worker/pool.go:42 (dispatch)</span>
+            </div>
+            <div class="actions-row">
+              <button class="btn">Go to file</button>
+            </div>
+          </div>
+
+          <!-- Failure Banner with 2 Non-Duplicated Retry Strategies -->
+          <div class="retry-banner">
+            <div class="retry-info">
+              <strong>Check baseline failed: test_timeout in worker_test.go:68</strong>
+              <small>Exit code 1 · 1 check needs attention. Choose recovery strategy:</small>
+            </div>
+            <div class="retry-actions">
+              <button
+                class="btn warning"
+                title="Re-run fix using error diagnostics as input, without resetting workspace"
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M20 7a9 9 0 0 0-15-1L2 9m0-6v6h6m-4 8a9 9 0 0 0 15 1l3-3m0 6v-6h-6" />
+                </svg>
+                Retry with Diagnostics
+              </button>
+              <button class="btn danger" title="Clean edit files and retry from base">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15" />
+                </svg>
+                Reset & Retry
+              </button>
+            </div>
+          </div>
+
+          <!-- Option B: Adaptive Split Layout (falls back to Option A stacked when space constrained) -->
+          <div class="implementation-container">
+            <!-- Left Column: Finding Context & Target Location -->
+            <div class="card finding-context">
+              <div class="card-title">
+                <span>Target Finding</span>
                 <span class="tag danger">HIGH</span>
-                <span class="issue-title">Unchecked channel send blocking worker</span>
               </div>
-              <div class="issue-meta">internal/worker/pool.go:42 · dispatch()</div>
-            </div>
-            <div class="issue-actions">
-              <button class="btn primary" onclick="event.stopPropagation(); switchMockup('implementation');">Fix</button>
-              <button class="btn">File</button>
-            </div>
-          </div>
-
-          <div class="issue-row">
-            <span class="issue-mark shield">
-              <svg viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 4-3 7-8 9-5-2-8-5-8-9V6zM9 12l2 2 4-4"/></svg>
-            </span>
-            <div class="issue-copy">
-              <div class="issue-header">
-                <span class="tag danger">HIGH</span>
-                <span class="issue-title">Unvalidated path traversal in asset handler</span>
+              <div class="context-block">
+                <h4>Cause</h4>
+                <p>
+                  Worker dispatch sends to an unbuffered channel without timeout context, resulting
+                  in goroutine leaks when listeners unsubscribe.
+                </p>
               </div>
-              <div class="issue-meta">pkg/server/static.go:88 · ServeHTTP()</div>
-            </div>
-            <div class="issue-actions">
-              <button class="btn primary">Fix</button>
-              <button class="btn">File</button>
-            </div>
-          </div>
-
-          <div class="issue-row">
-            <span class="issue-mark gauge">
-              <svg viewBox="0 0 24 24"><path d="M4 18a9 9 0 1 1 16 0M6 18h12M12 13l5-6"/></svg>
-            </span>
-            <div class="issue-copy">
-              <div class="issue-header">
-                <span class="tag warning">MED</span>
-                <span class="issue-title">Redundant mutex contention in hot loop</span>
+              <div class="context-block">
+                <h4>Proposed Remediation</h4>
+                <p>
+                  Introduce a select block with <code>ctx.Done()</code> and verify drain behavior in
+                  worker tests.
+                </p>
               </div>
-              <div class="issue-meta">internal/cache/store.go:120 · Get()</div>
-            </div>
-            <div class="issue-actions">
-              <button class="btn primary">Fix</button>
-              <button class="btn">File</button>
-            </div>
-          </div>
-
-          <!-- Done row (Hidden by default) -->
-          <div class="issue-row issue-done" id="done-row-1" style="display: none; opacity: 0.7;">
-            <span class="issue-mark bug">
-              <svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>
-            </span>
-            <div class="issue-copy">
-              <div class="issue-header">
-                <span class="tag done">DONE</span>
-                <span class="issue-title">Nil pointer dereference on config reload</span>
+              <div class="context-block">
+                <h4>Acceptance Criteria</h4>
+                <ul class="criteria-list">
+                  <li>Non-blocking channel send on worker cancellation.</li>
+                  <li>Clean goroutine teardown verified by test.</li>
+                </ul>
               </div>
-              <div class="issue-meta">cmd/daemon/config.go:18 · Reload()</div>
-            </div>
-            <div class="issue-actions">
-              <button class="btn" disabled>Resolved</button>
-              <button class="btn">File</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- VIEW 2: IMPLEMENTATION / FIX WORKSPACE (OPTION B) -->
-      <section class="mockup-panel" id="panel-implementation">
-        <div class="panel-heading">
-          <div>
-            <h1>Fix: Unchecked channel send blocking worker</h1>
-            <span class="issue-meta">internal/worker/pool.go:42 (dispatch)</span>
-          </div>
-          <div class="actions-row">
-            <button class="btn">Go to file</button>
-          </div>
-        </div>
-
-        <!-- Failure Banner with 2 Non-Duplicated Retry Strategies -->
-        <div class="retry-banner">
-          <div class="retry-info">
-            <strong>Check baseline failed: test_timeout in worker_test.go:68</strong>
-            <small>Exit code 1 · 1 check needs attention. Choose recovery strategy:</small>
-          </div>
-          <div class="retry-actions">
-            <button class="btn warning" title="Re-run fix using error diagnostics as input, without resetting workspace">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7a9 9 0 0 0-15-1L2 9m0-6v6h6m-4 8a9 9 0 0 0 15 1l3-3m0 6v-6h-6"/></svg>
-              Retry with Diagnostics
-            </button>
-            <button class="btn danger" title="Clean edit files and retry from base">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15"/></svg>
-              Reset & Retry
-            </button>
-          </div>
-        </div>
-
-        <!-- Option B: Adaptive Split Layout (falls back to Option A stacked when space constrained) -->
-        <div class="implementation-container">
-          <!-- Left Column: Finding Context & Target Location -->
-          <div class="card finding-context">
-            <div class="card-title">
-              <span>Target Finding</span>
-              <span class="tag danger">HIGH</span>
-            </div>
-            <div class="context-block">
-              <h4>Cause</h4>
-              <p>Worker dispatch sends to an unbuffered channel without timeout context, resulting in goroutine leaks when listeners unsubscribe.</p>
-            </div>
-            <div class="context-block">
-              <h4>Proposed Remediation</h4>
-              <p>Introduce a select block with <code>ctx.Done()</code> and verify drain behavior in worker tests.</p>
-            </div>
-            <div class="context-block">
-              <h4>Acceptance Criteria</h4>
-              <ul class="criteria-list">
-                <li>Non-blocking channel send on worker cancellation.</li>
-                <li>Clean goroutine teardown verified by test.</li>
-              </ul>
-            </div>
-          </div>
-
-          <!-- Right Column: Proposal, Diff & Checks Pipeline -->
-          <div class="card">
-            <!-- Stepper -->
-            <div class="stepper">
-              <div class="step-item completed">1. Finding</div>
-              <div class="step-item active">2. Changes (2 files)</div>
-              <div class="step-item">3. Checks (1 failed)</div>
-              <div class="step-item">4. Commit to Worktree</div>
             </div>
 
-            <!-- Diff Summary & Collapsible Toggle -->
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <strong>Proposed Changes</strong>
-              <button class="btn" id="toggle-diff-btn" onclick="toggleDiff()">Hide Diff</button>
+            <!-- Right Column: Proposal, Diff & Checks Pipeline -->
+            <div class="card">
+              <!-- Stepper -->
+              <div class="stepper">
+                <div class="step-item completed">1. Finding</div>
+                <div class="step-item active">2. Changes (2 files)</div>
+                <div class="step-item">3. Checks (1 failed)</div>
+                <div class="step-item">4. Commit to Worktree</div>
+              </div>
+
+              <!-- Diff Summary & Collapsible Toggle -->
+              <div style="display: flex; justify-content: space-between; align-items: center">
+                <strong>Proposed Changes</strong>
+                <button class="btn" id="toggle-diff-btn" onclick="toggleDiff()">Hide Diff</button>
+              </div>
+
+              <table class="diff-summary-table">
+                <thead>
+                  <tr>
+                    <th>File</th>
+                    <th>Changes</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>internal/worker/pool.go</code></td>
+                    <td>
+                      <span class="diff-stat add">+12</span> <span class="diff-stat del">-4</span>
+                    </td>
+                    <td><span class="tag info">Modified</span></td>
+                  </tr>
+                  <tr>
+                    <td><code>internal/worker/pool_test.go</code></td>
+                    <td>
+                      <span class="diff-stat add">+28</span> <span class="diff-stat del">-0</span>
+                    </td>
+                    <td><span class="tag info">Modified</span></td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <!-- Diff Canvas -->
+              <div class="diff-canvas" id="diff-canvas-box">
+                <div class="diff-line info">
+                  @@ -40,7 +40,15 @@ func (p *Pool) dispatch(task Task) {
+                </div>
+                <div class="diff-line del">- p.queue &lt;- task</div>
+                <div class="diff-line add">+ select {</div>
+                <div class="diff-line add">+ case p.queue &lt;- task:</div>
+                <div class="diff-line add">+ return true</div>
+                <div class="diff-line add">+ case &lt;-p.ctx.Done():</div>
+                <div class="diff-line add">+ return false</div>
+                <div class="diff-line add">+ }</div>
+              </div>
+
+              <!-- Action Bar -->
+              <div
+                style="
+                  margin-top: 20px;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  border-top: 1px solid var(--border);
+                  padding-top: 14px;
+                "
+              >
+                <span class="muted" style="font-size: 11px"
+                  >Worktree: fix/worker-channel-blocking</span
+                >
+                <div class="actions-row">
+                  <button class="btn warning">Retry with Diagnostics</button>
+                  <button class="btn danger">Reset & Retry</button>
+                  <button class="btn success" onclick="switchMockup('git')">
+                    Commit to Worktree
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 3: GIT / WORKTREES PAGE -->
+        <section class="mockup-panel" id="panel-git">
+          <div class="panel-heading">
+            <div>
+              <h1>Git / Worktrees</h1>
+            </div>
+            <div class="actions-row">
+              <button class="btn">Refresh Git</button>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 12px; color: var(--muted); font-size: 12px">
+            Centralized branch integration. Commit agent fixes into worktrees, then merge them into
+            main here.
+          </div>
+
+          <!-- Worktrees List -->
+          <div class="worktree-list">
+            <div class="worktree-row">
+              <span class="issue-mark bug">
+                <svg viewBox="0 0 24 24">
+                  <rect x="7" y="7" width="10" height="13" rx="5" />
+                  <path
+                    d="M9 7V5a3 3 0 0 1 6 0v2M3 9h4m10 0h4M3 14h4m10 0h4M4 20l4-3m8 0 4 3M12 8v12"
+                  />
+                </svg>
+              </span>
+              <div class="worktree-copy">
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <strong>Unchecked channel send blocking worker</strong>
+                  <span class="tag info">BUG</span>
+                </div>
+                <small class="issue-meta"
+                  >branch: fix/worker-channel-blocking · /Users/.../worktrees/wt-1</small
+                >
+              </div>
+              <div class="actions-row">
+                <button class="btn" onclick="switchMockup('implementation')">
+                  View implementation
+                </button>
+                <button class="btn danger">Discard</button>
+                <button class="btn primary">Merge into main</button>
+              </div>
             </div>
 
-            <table class="diff-summary-table">
+            <div class="worktree-row">
+              <span class="issue-mark shield">
+                <svg viewBox="0 0 24 24">
+                  <path d="m12 3 8 3v6c0 4-3 7-8 9-5-2-8-5-8-9V6zM9 12l2 2 4-4" />
+                </svg>
+              </span>
+              <div class="worktree-copy">
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <strong>Unvalidated path traversal in asset handler</strong>
+                  <span class="tag danger">SECURITY</span>
+                </div>
+                <small class="issue-meta"
+                  >branch: fix/sec-path-traversal · /Users/.../worktrees/wt-2</small
+                >
+              </div>
+              <div class="actions-row">
+                <button class="btn">View implementation</button>
+                <button class="btn danger">Discard</button>
+                <button class="btn primary">Merge into main</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 4: FILE SCOPE & EXCLUSIONS (Configuring files to skip in analysis) -->
+        <section class="mockup-panel" id="panel-filescope">
+          <div class="panel-heading">
+            <div>
+              <h1>File Scope & Exclusions</h1>
+              <p class="issue-meta">
+                Configure which files are included or skipped during project analysis
+              </p>
+            </div>
+            <div class="actions-row">
+              <button class="btn primary">Save Selection</button>
+            </div>
+          </div>
+
+          <div class="filter-bar">
+            <input class="search-input" placeholder="Filter files to include or skip…" />
+            <button class="btn">Include shown</button>
+            <button class="btn danger">Exclude shown (skip)</button>
+          </div>
+
+          <div class="card" style="padding: 0; overflow: hidden">
+            <table class="diff-summary-table" style="margin: 0">
               <thead>
-                <tr><th>File</th><th>Changes</th><th>Status</th></tr>
+                <tr>
+                  <th style="width: 60px">Analyze</th>
+                  <th>File Path</th>
+                  <th>Status</th>
+                  <th>Reason / Policy</th>
+                </tr>
               </thead>
               <tbody>
                 <tr>
+                  <td><input type="checkbox" checked /></td>
                   <td><code>internal/worker/pool.go</code></td>
-                  <td><span class="diff-stat add">+12</span> <span class="diff-stat del">-4</span></td>
-                  <td><span class="tag info">Modified</span></td>
+                  <td><span class="tag done">Eligible</span></td>
+                  <td><span class="muted">Included in code analysis</span></td>
                 </tr>
                 <tr>
-                  <td><code>internal/worker/pool_test.go</code></td>
-                  <td><span class="diff-stat add">+28</span> <span class="diff-stat del">-0</span></td>
-                  <td><span class="tag info">Modified</span></td>
+                  <td><input type="checkbox" checked /></td>
+                  <td><code>pkg/server/static.go</code></td>
+                  <td><span class="tag done">Eligible</span></td>
+                  <td><span class="muted">Included in security analysis</span></td>
+                </tr>
+                <tr style="opacity: 0.6">
+                  <td><input type="checkbox" /></td>
+                  <td><code>vendor/modules.txt</code></td>
+                  <td><span class="tag warning">Skipped</span></td>
+                  <td><span class="muted">Vendored dependency (excluded)</span></td>
+                </tr>
+                <tr style="opacity: 0.6">
+                  <td><input type="checkbox" /></td>
+                  <td><code>testdata/fixtures.json</code></td>
+                  <td><span class="tag warning">Skipped</span></td>
+                  <td><span class="muted">Test fixture (configured to skip)</span></td>
                 </tr>
               </tbody>
             </table>
-
-            <!-- Diff Canvas -->
-            <div class="diff-canvas" id="diff-canvas-box">
-              <div class="diff-line info">@@ -40,7 +40,15 @@ func (p *Pool) dispatch(task Task) {</div>
-              <div class="diff-line del">-    p.queue &lt;- task</div>
-              <div class="diff-line add">+    select {</div>
-              <div class="diff-line add">+    case p.queue &lt;- task:</div>
-              <div class="diff-line add">+        return true</div>
-              <div class="diff-line add">+    case &lt;-p.ctx.Done():</div>
-              <div class="diff-line add">+        return false</div>
-              <div class="diff-line add">+    }</div>
-            </div>
-
-            <!-- Action Bar -->
-            <div style="margin-top:20px; display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--border); padding-top:14px;">
-              <span class="muted" style="font-size:11px;">Worktree: fix/worker-channel-blocking</span>
-              <div class="actions-row">
-                <button class="btn warning">Retry with Diagnostics</button>
-                <button class="btn danger">Reset & Retry</button>
-                <button class="btn success" onclick="switchMockup('git')">Commit to Worktree</button>
-              </div>
-            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- VIEW 3: GIT / WORKTREES PAGE -->
-      <section class="mockup-panel" id="panel-git">
-        <div class="panel-heading">
-          <div>
-            <h1>Git / Worktrees</h1>
-          </div>
-          <div class="actions-row">
-            <button class="btn">Refresh Git</button>
-          </div>
-        </div>
-
-        <div style="margin-bottom:12px; color:var(--muted); font-size:12px;">
-          Centralized branch integration. Commit agent fixes into worktrees, then merge them into main here.
-        </div>
-
-        <!-- Worktrees List -->
-        <div class="worktree-list">
-          <div class="worktree-row">
-            <span class="issue-mark bug">
-              <svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="13" rx="5"/><path d="M9 7V5a3 3 0 0 1 6 0v2M3 9h4m10 0h4M3 14h4m10 0h4M4 20l4-3m8 0 4 3M12 8v12"/></svg>
-            </span>
-            <div class="worktree-copy">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <strong>Unchecked channel send blocking worker</strong>
-                <span class="tag info">BUG</span>
-              </div>
-              <small class="issue-meta">branch: fix/worker-channel-blocking · /Users/.../worktrees/wt-1</small>
+        <!-- VIEW 5: ENVIRONMENT (AGENTS.MD & RULES) -->
+        <section class="mockup-panel" id="panel-environment">
+          <div class="panel-heading">
+            <div>
+              <h1>Environment (AGENTS.md)</h1>
+              <p class="issue-meta">
+                Configure guidelines, behavioral constraints, and instructions for agents
+              </p>
             </div>
             <div class="actions-row">
-              <button class="btn" onclick="switchMockup('implementation')">View implementation</button>
-              <button class="btn danger">Discard</button>
-              <button class="btn primary">Merge into main</button>
+              <button class="btn primary">Save AGENTS.md</button>
             </div>
           </div>
 
-          <div class="worktree-row">
-            <span class="issue-mark shield">
-              <svg viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 4-3 7-8 9-5-2-8-5-8-9V6zM9 12l2 2 4-4"/></svg>
-            </span>
-            <div class="worktree-copy">
-              <div style="display:flex; align-items:center; gap:8px;">
-                <strong>Unvalidated path traversal in asset handler</strong>
-                <span class="tag danger">SECURITY</span>
-              </div>
-              <small class="issue-meta">branch: fix/sec-path-traversal · /Users/.../worktrees/wt-2</small>
+          <div class="card">
+            <div class="card-title">
+              <span>Project Guidance (AGENTS.md)</span>
+              <span class="tag info">Root Scope</span>
             </div>
-            <div class="actions-row">
-              <button class="btn">View implementation</button>
-              <button class="btn danger">Discard</button>
-              <button class="btn primary">Merge into main</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- VIEW 4: FILE SCOPE & EXCLUSIONS (Configuring files to skip in analysis) -->
-      <section class="mockup-panel" id="panel-filescope">
-        <div class="panel-heading">
-          <div>
-            <h1>File Scope & Exclusions</h1>
-            <p class="issue-meta">Configure which files are included or skipped during project analysis</p>
-          </div>
-          <div class="actions-row">
-            <button class="btn primary">Save Selection</button>
-          </div>
-        </div>
-
-        <div class="filter-bar">
-          <input class="search-input" placeholder="Filter files to include or skip…" />
-          <button class="btn">Include shown</button>
-          <button class="btn danger">Exclude shown (skip)</button>
-        </div>
-
-        <div class="card" style="padding:0; overflow:hidden;">
-          <table class="diff-summary-table" style="margin:0;">
-            <thead>
-              <tr>
-                <th style="width: 60px;">Analyze</th>
-                <th>File Path</th>
-                <th>Status</th>
-                <th>Reason / Policy</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><input type="checkbox" checked /></td>
-                <td><code>internal/worker/pool.go</code></td>
-                <td><span class="tag done">Eligible</span></td>
-                <td><span class="muted">Included in code analysis</span></td>
-              </tr>
-              <tr>
-                <td><input type="checkbox" checked /></td>
-                <td><code>pkg/server/static.go</code></td>
-                <td><span class="tag done">Eligible</span></td>
-                <td><span class="muted">Included in security analysis</span></td>
-              </tr>
-              <tr style="opacity: 0.6;">
-                <td><input type="checkbox" /></td>
-                <td><code>vendor/modules.txt</code></td>
-                <td><span class="tag warning">Skipped</span></td>
-                <td><span class="muted">Vendored dependency (excluded)</span></td>
-              </tr>
-              <tr style="opacity: 0.6;">
-                <td><input type="checkbox" /></td>
-                <td><code>testdata/fixtures.json</code></td>
-                <td><span class="tag warning">Skipped</span></td>
-                <td><span class="muted">Test fixture (configured to skip)</span></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- VIEW 5: ENVIRONMENT (AGENTS.MD & RULES) -->
-      <section class="mockup-panel" id="panel-environment">
-        <div class="panel-heading">
-          <div>
-            <h1>Environment (AGENTS.md)</h1>
-            <p class="issue-meta">Configure guidelines, behavioral constraints, and instructions for agents</p>
-          </div>
-          <div class="actions-row">
-            <button class="btn primary">Save AGENTS.md</button>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">
-            <span>Project Guidance (AGENTS.md)</span>
-            <span class="tag info">Root Scope</span>
-          </div>
-          <p class="muted" style="margin-bottom:12px; font-size:12px;">This file defines mandatory architecture rules, coding standards, and constraints followed by all background agents.</p>
-          <textarea style="width:100%; min-height:220px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:12px; font-family:var(--mono); font-size:12px;" placeholder="# Project Instructions
+            <p class="muted" style="margin-bottom: 12px; font-size: 12px">
+              This file defines mandatory architecture rules, coding standards, and constraints
+              followed by all background agents.
+            </p>
+            <textarea
+              style="
+                width: 100%;
+                min-height: 220px;
+                background: var(--bg);
+                color: var(--text);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                padding: 12px;
+                font-family: var(--mono);
+                font-size: 12px;
+              "
+              placeholder="# Project Instructions
 
 ## Guidelines
 - Do not introduce external dependencies without approval.
 - All worker routines must support context cancellation.
 - Keep test coverage above 85% on critical paths.
-"></textarea>
-        </div>
-      </section>
-
-      <!-- VIEW 6: MODELS CONFIGURATION -->
-      <section class="mockup-panel" id="panel-models">
-        <div class="panel-heading">
-          <div>
-            <h1>AI Models Configuration</h1>
-            <p class="issue-meta">Setup and assign models for code generation, security analysis, and review</p>
+"
+            ></textarea>
           </div>
-          <div class="actions-row">
-            <button class="btn primary">Save Configuration</button>
-          </div>
-        </div>
+        </section>
 
-        <div class="form-grid">
-          <div class="form-card">
-            <h3>Code Generation Model</h3>
-            <p class="muted" style="font-size:11px;">Primary model used for analyzing issues and generating code fixes.</p>
-            <select>
-              <option selected>Claude 3.7 Sonnet (Anthropic)</option>
-              <option>Claude 3.5 Haiku (Anthropic)</option>
-              <option>GPT-4o (OpenAI)</option>
-              <option>Local Ollama / Qwen 2.5 Coder</option>
-            </select>
+        <!-- VIEW 6: MODELS CONFIGURATION -->
+        <section class="mockup-panel" id="panel-models">
+          <div class="panel-heading">
+            <div>
+              <h1>AI Models Configuration</h1>
+              <p class="issue-meta">
+                Setup and assign models for code generation, security analysis, and review
+              </p>
+            </div>
+            <div class="actions-row">
+              <button class="btn primary">Save Configuration</button>
+            </div>
           </div>
 
-          <div class="form-card">
-            <h3>Security Analysis Model</h3>
-            <p class="muted" style="font-size:11px;">Specialized reasoning model for audit passes and vulnerability detection.</p>
-            <select>
-              <option selected>Claude 3.7 Sonnet (Reasoning)</option>
-              <option>o3-mini (OpenAI)</option>
-              <option>DeepSeek R1</option>
-            </select>
-          </div>
-
-          <div class="form-card">
-            <h3>Performance Analysis Model</h3>
-            <p class="muted" style="font-size:11px;">Analyzes hotspots, lock contention, and algorithmic complexity.</p>
-            <select>
-              <option selected>Claude 3.5 Sonnet</option>
-              <option>GPT-4o</option>
-            </select>
-          </div>
-
-          <div class="form-card">
-            <h3>Review & Verifier Model</h3>
-            <p class="muted" style="font-size:11px;">Cross-checks proposal diffs against acceptance criteria before committing.</p>
-            <select>
-              <option selected>Claude 3.7 Sonnet</option>
-              <option>Claude 3.5 Haiku</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Advanced Batch Settings (moved into Settings) -->
-        <div class="card" style="margin-top:20px;">
-          <div class="card-title">
-            <span>Analysis & Batch Settings</span>
-            <span class="tag info">Settings</span>
-          </div>
-          <p class="muted" style="margin-bottom:14px; font-size:12px;">Configure execution limits, timeouts, and batch sizes for automated code analysis runs.</p>
-          <div class="form-grid" style="margin-top:0;">
+          <div class="form-grid">
             <div class="form-card">
-              <h3>Files Per Batch</h3>
-              <p class="muted" style="font-size:11px;">Maximum files grouped into each analysis batch (1–500).</p>
-              <input type="number" value="20" min="1" max="500" />
+              <h3>Code Generation Model</h3>
+              <p class="muted" style="font-size: 11px">
+                Primary model used for analyzing issues and generating code fixes.
+              </p>
+              <select>
+                <option selected>Claude 3.7 Sonnet (Anthropic)</option>
+                <option>Claude 3.5 Haiku (Anthropic)</option>
+                <option>GPT-4o (OpenAI)</option>
+                <option>Local Ollama / Qwen 2.5 Coder</option>
+              </select>
             </div>
+
             <div class="form-card">
-              <h3>Time Budget (seconds)</h3>
-              <p class="muted" style="font-size:11px;">Maximum seconds allocated per batch execution (1–3600).</p>
-              <input type="number" value="1800" min="1" max="3600" />
+              <h3>Security Analysis Model</h3>
+              <p class="muted" style="font-size: 11px">
+                Specialized reasoning model for audit passes and vulnerability detection.
+              </p>
+              <select>
+                <option selected>Claude 3.7 Sonnet (Reasoning)</option>
+                <option>o3-mini (OpenAI)</option>
+                <option>DeepSeek R1</option>
+              </select>
             </div>
+
             <div class="form-card">
-              <h3>Attempts Per Stage</h3>
-              <p class="muted" style="font-size:11px;">Includes initial run and automatic retries on failure (1–4).</p>
-              <input type="number" value="2" min="1" max="4" />
+              <h3>Performance Analysis Model</h3>
+              <p class="muted" style="font-size: 11px">
+                Analyzes hotspots, lock contention, and algorithmic complexity.
+              </p>
+              <select>
+                <option selected>Claude 3.5 Sonnet</option>
+                <option>GPT-4o</option>
+              </select>
+            </div>
+
+            <div class="form-card">
+              <h3>Review & Verifier Model</h3>
+              <p class="muted" style="font-size: 11px">
+                Cross-checks proposal diffs against acceptance criteria before committing.
+              </p>
+              <select>
+                <option selected>Claude 3.7 Sonnet</option>
+                <option>Claude 3.5 Haiku</option>
+              </select>
             </div>
           </div>
-          <label class="checkbox-filter" style="margin-top:14px; margin-left:0;">
-            <input type="checkbox" />
-            <span>Refresh previously analyzed files on next run</span>
-          </label>
-        </div>
-      </section>
 
-      <!-- VIEW 7: LEAN OVERVIEW SUMMARY DASHBOARD -->
-      <section class="mockup-panel" id="panel-overview">
-        <div class="panel-heading">
-          <div>
-            <h1>mini-orca Overview</h1>
-            <p class="issue-meta">/Users/marcoandreose/DEV/lab/mini-orca · branch: main</p>
-          </div>
-          <div class="actions-row">
-            <button class="btn">Refresh</button>
-            <button class="btn primary" onclick="runAnalysisSim()">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Run Analysis
-            </button>
-            <button class="btn" onclick="switchMockup('implementation')">+ New Task</button>
-          </div>
-        </div>
-
-        <!-- Live Analysis Banner (Simulation) -->
-        <div class="retry-banner" id="overview-analysis-banner" style="display:none; border-left:4px solid var(--accent); background:rgba(47,129,247,0.1);">
-          <div class="retry-info">
-            <strong style="color:var(--blue);">Analyzing project files…</strong>
-            <small id="overview-analysis-status">Inspecting 142 source files across 8 packages (Stage: Security & Rules)</small>
-          </div>
-          <div class="retry-actions">
-            <button class="btn danger" onclick="cancelAnalysisSim()">Cancel</button>
-          </div>
-        </div>
-
-        <!-- Top Metrics Row -->
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin-bottom:20px;">
-          <div class="card" style="cursor:pointer;" onclick="switchMockup('issues')">
-            <div style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:600; margin-bottom:4px;">Open Issues</div>
-            <div style="font-size:24px; font-weight:700; color:var(--text);">8 <span style="font-size:12px; font-weight:normal; color:#f85149;">(4 Bugs · 2 Sec · 2 Perf)</span></div>
-            <div style="font-size:11px; color:var(--blue); margin-top:4px;">View issues console →</div>
-          </div>
-
-          <div class="card">
-            <div style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:600; margin-bottom:4px;">Test Health</div>
-            <div style="font-size:24px; font-weight:700; color:#3fb950;">PASSING</div>
-            <div style="font-size:11px; color:var(--muted); margin-top:4px;">14 unit & integration tests passing</div>
-          </div>
-
-          <div class="card">
-            <div style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:600; margin-bottom:4px;">Analysis Coverage</div>
-            <div style="font-size:24px; font-weight:700; color:var(--blue);">94% <span style="font-size:12px; font-weight:normal; color:var(--muted);">Current</span></div>
-            <div style="font-size:11px; color:var(--muted); margin-top:4px;">138 of 142 source files analyzed</div>
-          </div>
-
-          <div class="card" style="cursor:pointer;" onclick="switchMockup('git')">
-            <div style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:600; margin-bottom:4px;">Git Worktrees</div>
-            <div style="font-size:24px; font-weight:700; color:var(--text);">2 <span style="font-size:12px; font-weight:normal; color:var(--muted);">Active</span></div>
-            <div style="font-size:11px; color:var(--blue); margin-top:4px;">Ready to merge into main →</div>
-          </div>
-        </div>
-
-        <!-- Issue Breakdown Summary Cards -->
-        <div class="card" style="margin-bottom:20px;">
-          <div class="card-title">
-            <span>Issue Breakdown by Category</span>
-            <button class="btn" onclick="switchMockup('issues')">Open Issues Console</button>
-          </div>
-          <div style="display:flex; flex-direction:column; gap:8px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--raised); border-radius:6px; cursor:pointer;" onclick="switchMockup('issues')">
-              <div style="display:flex; align-items:center; gap:10px;">
-                <span class="issue-mark bug" style="width:24px; height:24px;"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="13" rx="5"/><path d="M9 7V5a3 3 0 0 1 6 0v2M3 9h4m10 0h4M3 14h4m10 0h4M4 20l4-3m8 0 4 3M12 8v12"/></svg></span>
-                <strong>Bugs & Runtime Errors</strong>
+          <!-- Advanced Batch Settings (moved into Settings) -->
+          <div class="card" style="margin-top: 20px">
+            <div class="card-title">
+              <span>Analysis & Batch Settings</span>
+              <span class="tag info">Settings</span>
+            </div>
+            <p class="muted" style="margin-bottom: 14px; font-size: 12px">
+              Configure execution limits, timeouts, and batch sizes for automated code analysis
+              runs.
+            </p>
+            <div class="form-grid" style="margin-top: 0">
+              <div class="form-card">
+                <h3>Files Per Batch</h3>
+                <p class="muted" style="font-size: 11px">
+                  Maximum files grouped into each analysis batch (1–500).
+                </p>
+                <input type="number" value="20" min="1" max="500" />
               </div>
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span class="tag danger">4 OPEN</span>
-                <span style="color:var(--muted); font-size:12px;">→</span>
+              <div class="form-card">
+                <h3>Time Budget (seconds)</h3>
+                <p class="muted" style="font-size: 11px">
+                  Maximum seconds allocated per batch execution (1–3600).
+                </p>
+                <input type="number" value="1800" min="1" max="3600" />
+              </div>
+              <div class="form-card">
+                <h3>Attempts Per Stage</h3>
+                <p class="muted" style="font-size: 11px">
+                  Includes initial run and automatic retries on failure (1–4).
+                </p>
+                <input type="number" value="2" min="1" max="4" />
               </div>
             </div>
+            <label class="checkbox-filter" style="margin-top: 14px; margin-left: 0">
+              <input type="checkbox" />
+              <span>Refresh previously analyzed files on next run</span>
+            </label>
+          </div>
+        </section>
 
-            <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--raised); border-radius:6px; cursor:pointer;" onclick="switchMockup('issues')">
-              <div style="display:flex; align-items:center; gap:10px;">
-                <span class="issue-mark shield" style="width:24px; height:24px;"><svg viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 4-3 7-8 9-5-2-8-5-8-9V6zM9 12l2 2 4-4"/></svg></span>
-                <strong>Security Vulnerabilities</strong>
+        <!-- VIEW 7: LEAN OVERVIEW SUMMARY DASHBOARD -->
+        <section class="mockup-panel" id="panel-overview">
+          <div class="panel-heading">
+            <div>
+              <h1>mini-orca Overview</h1>
+              <p class="issue-meta">/Users/marcoandreose/DEV/lab/mini-orca · branch: main</p>
+            </div>
+            <div class="actions-row">
+              <button class="btn">Refresh</button>
+              <button class="btn primary" onclick="runAnalysisSim()">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+                Run Analysis
+              </button>
+              <button class="btn" onclick="switchMockup('implementation')">+ New Task</button>
+            </div>
+          </div>
+
+          <!-- Live Analysis Banner (Simulation) -->
+          <div
+            class="retry-banner"
+            id="overview-analysis-banner"
+            style="
+              display: none;
+              border-left: 4px solid var(--accent);
+              background: rgba(47, 129, 247, 0.1);
+            "
+          >
+            <div class="retry-info">
+              <strong style="color: var(--blue)">Analyzing project files…</strong>
+              <small id="overview-analysis-status"
+                >Inspecting 142 source files across 8 packages (Stage: Security & Rules)</small
+              >
+            </div>
+            <div class="retry-actions">
+              <button class="btn danger" onclick="cancelAnalysisSim()">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Top Metrics Row -->
+          <div
+            style="
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+              gap: 14px;
+              margin-bottom: 20px;
+            "
+          >
+            <div class="card" style="cursor: pointer" onclick="switchMockup('issues')">
+              <div
+                style="
+                  font-size: 11px;
+                  text-transform: uppercase;
+                  color: var(--muted);
+                  font-weight: 600;
+                  margin-bottom: 4px;
+                "
+              >
+                Open Issues
               </div>
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span class="tag danger">2 OPEN</span>
-                <span style="color:var(--muted); font-size:12px;">→</span>
+              <div style="font-size: 24px; font-weight: 700; color: var(--text)">
+                8
+                <span style="font-size: 12px; font-weight: normal; color: #f85149"
+                  >(4 Bugs · 2 Sec · 2 Perf)</span
+                >
+              </div>
+              <div style="font-size: 11px; color: var(--blue); margin-top: 4px">
+                View issues console →
               </div>
             </div>
 
-            <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--raised); border-radius:6px; cursor:pointer;" onclick="switchMockup('issues')">
-              <div style="display:flex; align-items:center; gap:10px;">
-                <span class="issue-mark gauge" style="width:24px; height:24px;"><svg viewBox="0 0 24 24"><path d="M4 18a9 9 0 1 1 16 0M6 18h12M12 13l5-6"/></svg></span>
-                <strong>Performance & Contention Hypotheses</strong>
+            <div class="card">
+              <div
+                style="
+                  font-size: 11px;
+                  text-transform: uppercase;
+                  color: var(--muted);
+                  font-weight: 600;
+                  margin-bottom: 4px;
+                "
+              >
+                Test Health
               </div>
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span class="tag warning">2 OPEN</span>
-                <span style="color:var(--muted); font-size:12px;">→</span>
+              <div style="font-size: 24px; font-weight: 700; color: #3fb950">PASSING</div>
+              <div style="font-size: 11px; color: var(--muted); margin-top: 4px">
+                14 unit & integration tests passing
+              </div>
+            </div>
+
+            <div class="card">
+              <div
+                style="
+                  font-size: 11px;
+                  text-transform: uppercase;
+                  color: var(--muted);
+                  font-weight: 600;
+                  margin-bottom: 4px;
+                "
+              >
+                Analysis Coverage
+              </div>
+              <div style="font-size: 24px; font-weight: 700; color: var(--blue)">
+                94%
+                <span style="font-size: 12px; font-weight: normal; color: var(--muted)"
+                  >Current</span
+                >
+              </div>
+              <div style="font-size: 11px; color: var(--muted); margin-top: 4px">
+                138 of 142 source files analyzed
+              </div>
+            </div>
+
+            <div class="card" style="cursor: pointer" onclick="switchMockup('git')">
+              <div
+                style="
+                  font-size: 11px;
+                  text-transform: uppercase;
+                  color: var(--muted);
+                  font-weight: 600;
+                  margin-bottom: 4px;
+                "
+              >
+                Git Worktrees
+              </div>
+              <div style="font-size: 24px; font-weight: 700; color: var(--text)">
+                2
+                <span style="font-size: 12px; font-weight: normal; color: var(--muted)"
+                  >Active</span
+                >
+              </div>
+              <div style="font-size: 11px; color: var(--blue); margin-top: 4px">
+                Ready to merge into main →
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Project Metadata & Scope -->
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
-          <div class="card">
-            <div class="card-title">Project Scope</div>
-            <p class="muted" style="margin-bottom:10px;">138 files analyzed · 4 files excluded.</p>
-            <button class="btn" onclick="switchMockup('filescope')">Manage File Scope & Exclusions →</button>
-          </div>
-          <div class="card">
-            <div class="card-title">Agent Environment</div>
-            <p class="muted" style="margin-bottom:10px;">Project guidance configured in root AGENTS.md.</p>
-            <button class="btn" onclick="switchMockup('environment')">Edit Environment & Guidelines →</button>
-          </div>
-        </div>
-      </section>
-
-
-      <!-- VIEW 8: THEMES GALLERY -->
-      <section class="mockup-panel" id="panel-themes">
-        <div class="panel-heading">
-          <div>
-            <h1>Dark Themes Palette Gallery</h1>
-            <p class="issue-meta">Explore and preview 6 distinct all-dark color personalities</p>
-          </div>
-        </div>
-
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(310px, 1fr)); gap:18px;">
-          <!-- 1. Graphite -->
-          <div class="card" style="border:2px solid #e5c483;">
+          <!-- Issue Breakdown Summary Cards -->
+          <div class="card" style="margin-bottom: 20px">
             <div class="card-title">
-              <strong>1. Graphite (Warm Amber)</strong>
-              <button class="btn primary" onclick="setTheme('dark')">Apply</button>
+              <span>Issue Breakdown by Category</span>
+              <button class="btn" onclick="switchMockup('issues')">Open Issues Console</button>
             </div>
-            <p class="muted" style="font-size:12px; margin-bottom:12px;">Warm charcoal canvas with soft golden amber accents. Easy on the eyes for late-night coding.</p>
-            <div style="display:flex; height:28px; border-radius:5px; overflow:hidden; border:1px solid var(--border);">
-              <div style="flex:2; background:#141715;" title="Canvas (#141715)"></div>
-              <div style="flex:2; background:#1b1e1b;" title="Panel (#1b1e1b)"></div>
-              <div style="flex:2; background:#242923;" title="Raised (#242923)"></div>
-              <div style="flex:3; background:#e5c483;" title="Accent (#e5c483)"></div>
-              <div style="flex:1; background:#80ddba;" title="Green"></div>
-              <div style="flex:1; background:#f87171;" title="Red"></div>
+            <div style="display: flex; flex-direction: column; gap: 8px">
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  padding: 10px 12px;
+                  background: var(--raised);
+                  border-radius: 6px;
+                  cursor: pointer;
+                "
+                onclick="switchMockup('issues')"
+              >
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <span class="issue-mark bug" style="width: 24px; height: 24px"
+                    ><svg viewBox="0 0 24 24">
+                      <rect x="7" y="7" width="10" height="13" rx="5" />
+                      <path
+                        d="M9 7V5a3 3 0 0 1 6 0v2M3 9h4m10 0h4M3 14h4m10 0h4M4 20l4-3m8 0 4 3M12 8v12"
+                      /></svg
+                  ></span>
+                  <strong>Bugs & Runtime Errors</strong>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <span class="tag danger">4 OPEN</span>
+                  <span style="color: var(--muted); font-size: 12px">→</span>
+                </div>
+              </div>
+
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  padding: 10px 12px;
+                  background: var(--raised);
+                  border-radius: 6px;
+                  cursor: pointer;
+                "
+                onclick="switchMockup('issues')"
+              >
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <span class="issue-mark shield" style="width: 24px; height: 24px"
+                    ><svg viewBox="0 0 24 24">
+                      <path d="m12 3 8 3v6c0 4-3 7-8 9-5-2-8-5-8-9V6zM9 12l2 2 4-4" /></svg
+                  ></span>
+                  <strong>Security Vulnerabilities</strong>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <span class="tag danger">2 OPEN</span>
+                  <span style="color: var(--muted); font-size: 12px">→</span>
+                </div>
+              </div>
+
+              <div
+                style="
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  padding: 10px 12px;
+                  background: var(--raised);
+                  border-radius: 6px;
+                  cursor: pointer;
+                "
+                onclick="switchMockup('issues')"
+              >
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <span class="issue-mark gauge" style="width: 24px; height: 24px"
+                    ><svg viewBox="0 0 24 24">
+                      <path d="M4 18a9 9 0 1 1 16 0M6 18h12M12 13l5-6" /></svg
+                  ></span>
+                  <strong>Performance & Contention Hypotheses</strong>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px">
+                  <span class="tag warning">2 OPEN</span>
+                  <span style="color: var(--muted); font-size: 12px">→</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- 2. Midnight -->
-          <div class="card" style="border:2px solid #38bdf8;">
-            <div class="card-title">
-              <strong>2. Midnight (Ocean Cyan)</strong>
-              <button class="btn primary" onclick="setTheme('midnight')">Apply</button>
+          <!-- Project Metadata & Scope -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px">
+            <div class="card">
+              <div class="card-title">Project Scope</div>
+              <p class="muted" style="margin-bottom: 10px">
+                138 files analyzed · 4 files excluded.
+              </p>
+              <button class="btn" onclick="switchMockup('filescope')">
+                Manage File Scope & Exclusions →
+              </button>
             </div>
-            <p class="muted" style="font-size:12px; margin-bottom:12px;">Deep oceanic navy canvas paired with vibrant cyan and seafoam highlights. Crisp and modern.</p>
-            <div style="display:flex; height:28px; border-radius:5px; overflow:hidden; border:1px solid var(--border);">
-              <div style="flex:2; background:#070e17;" title="Canvas (#070e17)"></div>
-              <div style="flex:2; background:#0c1827;" title="Panel (#0c1827)"></div>
-              <div style="flex:2; background:#132439;" title="Raised (#132439)"></div>
-              <div style="flex:3; background:#38bdf8;" title="Accent (#38bdf8)"></div>
-              <div style="flex:1; background:#34d399;" title="Green"></div>
-              <div style="flex:1; background:#f87171;" title="Red"></div>
+            <div class="card">
+              <div class="card-title">Agent Environment</div>
+              <p class="muted" style="margin-bottom: 10px">
+                Project guidance configured in root AGENTS.md.
+              </p>
+              <button class="btn" onclick="switchMockup('environment')">
+                Edit Environment & Guidelines →
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 8: THEMES GALLERY -->
+        <section class="mockup-panel" id="panel-themes">
+          <div class="panel-heading">
+            <div>
+              <h1>Themes Palette Gallery</h1>
+              <p class="issue-meta">
+                Explore and preview all 7 themes: Nordic, Amethyst, and the original project themes
+              </p>
             </div>
           </div>
 
-          <!-- 3. Emerald -->
-          <div class="card" style="border:2px solid #3ddc84;">
-            <div class="card-title">
-              <strong>3. Emerald (Pine & Jade)</strong>
-              <button class="btn primary" onclick="setTheme('emerald')">Apply</button>
+          <div
+            style="
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+              gap: 18px;
+            "
+          >
+            <!-- 1. Graphite -->
+            <div class="card" style="border: 2px solid #e5c483">
+              <div class="card-title">
+                <strong>1. Graphite (Warm Amber)</strong>
+                <button class="btn primary" onclick="setTheme('dark')">Apply</button>
+              </div>
+              <p class="muted" style="font-size: 12px; margin-bottom: 12px">
+                Warm charcoal canvas with soft golden amber accents. Default dark theme designed for
+                low eye strain.
+              </p>
+              <div
+                style="
+                  display: flex;
+                  height: 28px;
+                  border-radius: 5px;
+                  overflow: hidden;
+                  border: 1px solid var(--border);
+                "
+              >
+                <div style="flex: 2; background: #141715" title="Canvas (#141715)"></div>
+                <div style="flex: 2; background: #1b1e1b" title="Panel (#1b1e1b)"></div>
+                <div style="flex: 2; background: #242923" title="Raised (#242923)"></div>
+                <div style="flex: 3; background: #e5c483" title="Accent (#e5c483)"></div>
+                <div style="flex: 1; background: #80ddba" title="Green"></div>
+                <div style="flex: 1; background: #f87171" title="Red"></div>
+              </div>
             </div>
-            <p class="muted" style="font-size:12px; margin-bottom:12px;">Deep pine terminal dark with energetic jade green highlights. High-focus, classic hacker vibe.</p>
-            <div style="display:flex; height:28px; border-radius:5px; overflow:hidden; border:1px solid var(--border);">
-              <div style="flex:2; background:#07130e;" title="Canvas (#07130e)"></div>
-              <div style="flex:2; background:#0d1e17;" title="Panel (#0d1e17)"></div>
-              <div style="flex:2; background:#142a20;" title="Raised (#142a20)"></div>
-              <div style="flex:3; background:#3ddc84;" title="Accent (#3ddc84)"></div>
-              <div style="flex:1; background:#4ade80;" title="Green"></div>
-              <div style="flex:1; background:#f87171;" title="Red"></div>
+
+            <!-- 2. Porcelain -->
+            <div class="card" style="border: 2px solid #cdd3c6">
+              <div class="card-title">
+                <strong>2. Porcelain (Clean Light)</strong>
+                <button class="btn" onclick="setTheme('light')">Apply</button>
+              </div>
+              <p class="muted" style="font-size: 12px; margin-bottom: 12px">
+                Soft neutral stone background paired with deep forest green highlights. Crisp,
+                daylight readability.
+              </p>
+              <div
+                style="
+                  display: flex;
+                  height: 28px;
+                  border-radius: 5px;
+                  overflow: hidden;
+                  border: 1px solid var(--border);
+                "
+              >
+                <div style="flex: 2; background: #f7f6f2" title="Canvas (#f7f6f2)"></div>
+                <div style="flex: 2; background: #ffffff" title="Panel (#ffffff)"></div>
+                <div style="flex: 2; background: #edeee7" title="Raised (#edeee7)"></div>
+                <div style="flex: 3; background: #346448" title="Accent (#346448)"></div>
+                <div style="flex: 1; background: #286447" title="Green"></div>
+                <div style="flex: 1; background: #a33244" title="Red"></div>
+              </div>
+            </div>
+
+            <!-- 3. Midnight -->
+            <div class="card" style="border: 2px solid #38bdf8">
+              <div class="card-title">
+                <strong>3. Midnight (Ocean Cyan)</strong>
+                <button class="btn primary" onclick="setTheme('midnight')">Apply</button>
+              </div>
+              <p class="muted" style="font-size: 12px; margin-bottom: 12px">
+                Deep oceanic navy canvas paired with vibrant cyan and seafoam highlights. Crisp and
+                modern.
+              </p>
+              <div
+                style="
+                  display: flex;
+                  height: 28px;
+                  border-radius: 5px;
+                  overflow: hidden;
+                  border: 1px solid var(--border);
+                "
+              >
+                <div style="flex: 2; background: #070e17" title="Canvas (#070e17)"></div>
+                <div style="flex: 2; background: #0c1827" title="Panel (#0c1827)"></div>
+                <div style="flex: 2; background: #132439" title="Raised (#132439)"></div>
+                <div style="flex: 3; background: #38bdf8" title="Accent (#38bdf8)"></div>
+                <div style="flex: 1; background: #34d399" title="Green"></div>
+                <div style="flex: 1; background: #f87171" title="Red"></div>
+              </div>
+            </div>
+
+            <!-- 4. Signal -->
+            <div class="card" style="border: 2px solid #ff5a66">
+              <div class="card-title">
+                <strong>4. Signal (Onyx & Coral)</strong>
+                <button class="btn primary" onclick="setTheme('signal')">Apply</button>
+              </div>
+              <p class="muted" style="font-size: 12px; margin-bottom: 12px">
+                Pitch black stealth foundation with high-contrast neon coral and vermilion. Dramatic
+                cyberpunk tone.
+              </p>
+              <div
+                style="
+                  display: flex;
+                  height: 28px;
+                  border-radius: 5px;
+                  overflow: hidden;
+                  border: 1px solid var(--border);
+                "
+              >
+                <div style="flex: 2; background: #0a0a0d" title="Canvas (#0a0a0d)"></div>
+                <div style="flex: 2; background: #121217" title="Panel (#121217)"></div>
+                <div style="flex: 2; background: #1a1a22" title="Raised (#1a1a22)"></div>
+                <div style="flex: 3; background: #ff5a66" title="Accent (#ff5a66)"></div>
+                <div style="flex: 1; background: #86efac" title="Green"></div>
+                <div style="flex: 1; background: #fde047" title="Yellow"></div>
+              </div>
+            </div>
+
+            <!-- 5. Crimson Violet -->
+            <div class="card" style="border: 2px solid #85e89d">
+              <div class="card-title">
+                <strong>5. Crimson Violet (Aubergine & Mint)</strong>
+                <button class="btn primary" onclick="setTheme('crimson-violet')">Apply</button>
+              </div>
+              <p class="muted" style="font-size: 12px; margin-bottom: 12px">
+                Rich dark aubergine plum foundation accented with fresh mint green and lavender
+                highlights.
+              </p>
+              <div
+                style="
+                  display: flex;
+                  height: 28px;
+                  border-radius: 5px;
+                  overflow: hidden;
+                  border: 1px solid var(--border);
+                "
+              >
+                <div style="flex: 2; background: #1c0d30" title="Canvas (#1c0d30)"></div>
+                <div style="flex: 2; background: #24113d" title="Panel (#24113d)"></div>
+                <div style="flex: 2; background: #3b224f" title="Raised (#3b224f)"></div>
+                <div style="flex: 3; background: #85e89d" title="Accent (#85e89d)"></div>
+                <div style="flex: 1; background: #cca6ff" title="Lavender"></div>
+                <div style="flex: 1; background: #ffadbd" title="Crimson"></div>
+              </div>
+            </div>
+
+            <!-- 6. Nordic -->
+            <div class="card" style="border: 2px solid #60a5fa">
+              <div class="card-title">
+                <strong>6. Nordic (Slate & Arctic)</strong>
+                <button class="btn primary" onclick="setTheme('nordic')">Apply</button>
+              </div>
+              <p class="muted" style="font-size: 12px; margin-bottom: 12px">
+                Balanced slate gray background with arctic sky blue accents. Clean, restrained, and
+                architectural.
+              </p>
+              <div
+                style="
+                  display: flex;
+                  height: 28px;
+                  border-radius: 5px;
+                  overflow: hidden;
+                  border: 1px solid var(--border);
+                "
+              >
+                <div style="flex: 2; background: #0c1017" title="Canvas (#0c1017)"></div>
+                <div style="flex: 2; background: #121822" title="Panel (#121822)"></div>
+                <div style="flex: 2; background: #1a2331" title="Raised (#1a2331)"></div>
+                <div style="flex: 3; background: #60a5fa" title="Accent (#60a5fa)"></div>
+                <div style="flex: 1; background: #34d399" title="Green"></div>
+                <div style="flex: 1; background: #fb7185" title="Red"></div>
+              </div>
+            </div>
+
+            <!-- 7. Amethyst -->
+            <div class="card" style="border: 2px solid #c084fc">
+              <div class="card-title">
+                <strong>7. Amethyst (Royal Violet)</strong>
+                <button class="btn primary" onclick="setTheme('amethyst')">Apply</button>
+              </div>
+              <p class="muted" style="font-size: 12px; margin-bottom: 12px">
+                Deep cosmic plum background accented with radiant lavender and fresh mint. Elegant
+                and creative.
+              </p>
+              <div
+                style="
+                  display: flex;
+                  height: 28px;
+                  border-radius: 5px;
+                  overflow: hidden;
+                  border: 1px solid var(--border);
+                "
+              >
+                <div style="flex: 2; background: #140d21" title="Canvas (#140d21)"></div>
+                <div style="flex: 2; background: #1b122c" title="Panel (#1b122c)"></div>
+                <div style="flex: 2; background: #25193d" title="Raised (#25193d)"></div>
+                <div style="flex: 3; background: #c084fc" title="Accent (#c084fc)"></div>
+                <div style="flex: 1; background: #86efac" title="Mint"></div>
+                <div style="flex: 1; background: #f87171" title="Red"></div>
+              </div>
             </div>
           </div>
+        </section>
+      </div>
+    </main>
 
-          <!-- 4. Nordic -->
-          <div class="card" style="border:2px solid #60a5fa;">
-            <div class="card-title">
-              <strong>4. Nordic (Slate & Arctic)</strong>
-              <button class="btn primary" onclick="setTheme('nordic')">Apply</button>
-            </div>
-            <p class="muted" style="font-size:12px; margin-bottom:12px;">Balanced slate gray background with arctic sky blue accents. Clean, restrained, and architectural.</p>
-            <div style="display:flex; height:28px; border-radius:5px; overflow:hidden; border:1px solid var(--border);">
-              <div style="flex:2; background:#0c1017;" title="Canvas (#0c1017)"></div>
-              <div style="flex:2; background:#121822;" title="Panel (#121822)"></div>
-              <div style="flex:2; background:#1a2331;" title="Raised (#1a2331)"></div>
-              <div style="flex:3; background:#60a5fa;" title="Accent (#60a5fa)"></div>
-              <div style="flex:1; background:#34d399;" title="Green"></div>
-              <div style="flex:1; background:#fb7185;" title="Red"></div>
-            </div>
-          </div>
-
-          <!-- 5. Signal -->
-          <div class="card" style="border:2px solid #ff5a66;">
-            <div class="card-title">
-              <strong>5. Signal (Onyx & Coral)</strong>
-              <button class="btn primary" onclick="setTheme('signal')">Apply</button>
-            </div>
-            <p class="muted" style="font-size:12px; margin-bottom:12px;">Pitch black stealth foundation with high-contrast neon coral and vermilion. Dramatic cyberpunk tone.</p>
-            <div style="display:flex; height:28px; border-radius:5px; overflow:hidden; border:1px solid var(--border);">
-              <div style="flex:2; background:#0a0a0d;" title="Canvas (#0a0a0d)"></div>
-              <div style="flex:2; background:#121217;" title="Panel (#121217)"></div>
-              <div style="flex:2; background:#1a1a22;" title="Raised (#1a1a22)"></div>
-              <div style="flex:3; background:#ff5a66;" title="Accent (#ff5a66)"></div>
-              <div style="flex:1; background:#86efac;" title="Green"></div>
-              <div style="flex:1; background:#fde047;" title="Yellow"></div>
-            </div>
-          </div>
-
-          <!-- 6. Amethyst -->
-          <div class="card" style="border:2px solid #c084fc;">
-            <div class="card-title">
-              <strong>6. Amethyst (Royal Violet)</strong>
-              <button class="btn primary" onclick="setTheme('amethyst')">Apply</button>
-            </div>
-            <p class="muted" style="font-size:12px; margin-bottom:12px;">Deep cosmic plum background accented with radiant lavender and fresh mint. Elegant and creative.</p>
-            <div style="display:flex; height:28px; border-radius:5px; overflow:hidden; border:1px solid var(--border);">
-              <div style="flex:2; background:#140d21;" title="Canvas (#140d21)"></div>
-              <div style="flex:2; background:#1b122c;" title="Panel (#1b122c)"></div>
-              <div style="flex:2; background:#25193d;" title="Raised (#25193d)"></div>
-              <div style="flex:3; background:#c084fc;" title="Accent (#c084fc)"></div>
-              <div style="flex:1; background:#86efac;" title="Mint"></div>
-              <div style="flex:1; background:#f87171;" title="Red"></div>
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-  </main>
-
-  <script>
-    function setTheme(theme) {
-      document.documentElement.setAttribute("data-theme", theme);
-      document.body.setAttribute("data-theme", theme);
-      localStorage.setItem("mini-orca:theme", theme);
-    }
-
-    function runAnalysisSim() {
-      const b1 = document.getElementById("overview-analysis-banner");
-      const b2 = document.getElementById("issues-analysis-banner");
-      if (b1) b1.style.display = "flex";
-      if (b2) b2.style.display = "flex";
-      setTimeout(() => {
-        if (b1) b1.style.display = "none";
-        if (b2) b2.style.display = "none";
-      }, 4000);
-    }
-    function cancelAnalysisSim() {
-      const b1 = document.getElementById("overview-analysis-banner");
-      const b2 = document.getElementById("issues-analysis-banner");
-      if (b1) b1.style.display = "none";
-      if (b2) b2.style.display = "none";
-    }
-    function switchMockup(id) {
-      document.querySelectorAll(".mockup-panel").forEach(p => p.classList.remove("active"));
-      document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
-      
-      const panel = document.getElementById("panel-" + id);
-      const navBtn = document.getElementById("nav-" + id);
-      
-      if (panel) panel.classList.add("active");
-      if (navBtn) navBtn.classList.add("active");
-    }
-
-    function toggleDone(show) {
-      const doneRow = document.getElementById("done-row-1");
-      if (doneRow) doneRow.style.display = show ? "flex" : "none";
-    }
-
-    function toggleDiff() {
-      const diffBox = document.getElementById("diff-canvas-box");
-      const btn = document.getElementById("toggle-diff-btn");
-      if (diffBox.style.display === "none") {
-        diffBox.style.display = "block";
-        btn.textContent = "Hide Diff";
-      } else {
-        diffBox.style.display = "none";
-        btn.textContent = "Check Diff";
+    <script>
+      function setTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        document.body.setAttribute('data-theme', theme);
+        localStorage.setItem('mini-orca:theme', theme);
       }
-    }
-  </script>
-</body>
+
+      function runAnalysisSim() {
+        const b1 = document.getElementById('overview-analysis-banner');
+        const b2 = document.getElementById('issues-analysis-banner');
+        if (b1) b1.style.display = 'flex';
+        if (b2) b2.style.display = 'flex';
+        setTimeout(() => {
+          if (b1) b1.style.display = 'none';
+          if (b2) b2.style.display = 'none';
+        }, 4000);
+      }
+      function cancelAnalysisSim() {
+        const b1 = document.getElementById('overview-analysis-banner');
+        const b2 = document.getElementById('issues-analysis-banner');
+        if (b1) b1.style.display = 'none';
+        if (b2) b2.style.display = 'none';
+      }
+      function switchMockup(id) {
+        document.querySelectorAll('.mockup-panel').forEach((p) => p.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach((b) => b.classList.remove('active'));
+
+        const panel = document.getElementById('panel-' + id);
+        const navBtn = document.getElementById('nav-' + id);
+
+        if (panel) panel.classList.add('active');
+        if (navBtn) navBtn.classList.add('active');
+      }
+
+      function toggleDone(show) {
+        const doneRow = document.getElementById('done-row-1');
+        if (doneRow) doneRow.style.display = show ? 'flex' : 'none';
+      }
+
+      function toggleDiff() {
+        const diffBox = document.getElementById('diff-canvas-box');
+        const btn = document.getElementById('toggle-diff-btn');
+        if (diffBox.style.display === 'none') {
+          diffBox.style.display = 'block';
+          btn.textContent = 'Hide Diff';
+        } else {
+          diffBox.style.display = 'none';
+          btn.textContent = 'Check Diff';
+        }
+      }
+    </script>
+  </body>
 </html>

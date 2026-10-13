@@ -6,6 +6,8 @@ const themes = [
   ['midnight', 'Midnight', 'M'],
   ['signal', 'Signal', 'S'],
   ['crimson-violet', 'Crimson Violet', 'C'],
+  ['nordic', 'Nordic', 'N'],
+  ['amethyst', 'Amethyst', 'A'],
 ];
 
 export async function testThemes({ test, pageFor, nav, idle, layout, contrast }) {
