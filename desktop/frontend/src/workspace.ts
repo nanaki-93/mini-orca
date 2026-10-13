@@ -412,9 +412,11 @@ export class Workspace {
     try {
       const result = await request();
       if (epoch !== this.epoch || !guard()) return;
-      const resourceErrors = { ...this.state.resourceErrors };
-      delete resourceErrors[name];
-      this.set({ resourceErrors });
+      if (name in this.state.resourceErrors) {
+        const resourceErrors = { ...this.state.resourceErrors };
+        delete resourceErrors[name];
+        this.set({ resourceErrors });
+      }
       commit(result);
     } catch (error) {
       if (

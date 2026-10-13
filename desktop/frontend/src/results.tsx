@@ -36,6 +36,8 @@ import {
 
 interface ResultRow {
   key: string;
+  category?: FindingCategory;
+  featureId?: string;
   title: string;
   name: string;
   path: string;
@@ -149,6 +151,7 @@ function resultRows(s: State, category: FindingCategory): ResultRow[] {
   if (category === 'security' && s.securityReport) rows.push(...security(s.securityReport));
   return [...new Map(rows.map((row) => [row.key, row])).values()].map((row) => ({
     ...row,
+    category,
     status: s.completedFindings?.some(
       (target) =>
         target.project_id === row.target.project_id &&
@@ -163,14 +166,40 @@ function resultRows(s: State, category: FindingCategory): ResultRow[] {
 }
 export function selectedResult(s: State) {
   const selected = s.selectedFinding;
-  return selected && resultRows(s, selected.category).find((row) => row.key === selected.key);
+  if (!selected) return undefined;
+  return (
+    resultRows(s, selected.category).find((row) => row.key === selected.key) ||
+    resultRows(s, 'bugs').find((row) => row.key === selected.key) ||
+    resultRows(s, 'performance').find((row) => row.key === selected.key) ||
+    resultRows(s, 'security').find((row) => row.key === selected.key)
+  );
 }
 const pageSize = 10;
 export function Results({ s }: { s: State }) {
-  const [categoryFilter, setCategoryFilter] = useState<'all' | FindingCategory>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | FindingCategory | 'features'>(() =>
+    s.page === 'features'
+      ? 'features'
+      : findingCategory(s) && s.page !== 'bugs'
+        ? findingCategory(s)!
+        : 'all',
+  );
   const [showDone, setShowDone] = useState(false);
+  const [goals, setGoals] = useState(s.features?.goals || '');
+  useEffect(() => {
+    setGoals(s.features?.goals || '');
+  }, [s.features?.goals]);
+  useEffect(() => {
+    if (!s.features && !s.resourceErrors['feature suggestions']) void w.loadFeatures();
+  }, [s.project?.project_id]);
+  useEffect(() => {
+    if (!s.run) return;
+    for (const cat of ['bugs', 'security', 'performance'] as const) {
+      if (!s.results[cat] && !s.resourceErrors[`${cat} results`]) void w.loadResults(cat);
+    }
+  }, [s.run?.identity.id, s.run?.status, s.run?.window_files_completed]);
   const currentCategory = findingCategory(s) || 'bugs';
-  const category = categoryFilter === 'all' ? currentCategory : categoryFilter;
+  const category: FindingCategory =
+    categoryFilter === 'all' || categoryFilter === 'features' ? currentCategory : categoryFilter;
   const kind =
     category === 'performance' ? 'performance' : category === 'security' ? 'security' : 'fix';
   const results = s.results[category];
@@ -200,7 +229,7 @@ export function Results({ s }: { s: State }) {
     performance: countPerf,
   };
   const unique =
-    categoryFilter === 'all'
+    categoryFilter === 'all' || categoryFilter === 'features'
       ? [...new Map(allRows.map((row) => [row.key, row])).values()]
       : resultRows(s, categoryFilter);
   const filtered = unique.filter(
@@ -246,7 +275,12 @@ export function Results({ s }: { s: State }) {
     finding_targets: [row.target],
     title: row.name,
     paths: [row.path],
-    kind,
+    kind:
+      row.category === 'performance'
+        ? 'performance'
+        : row.category === 'security'
+          ? 'security'
+          : kind,
     message: `Address this finding: ${row.title}\nLocation: ${row.path}${row.line ? `:${row.line}` : ''}${row.symbol ? ` (${row.symbol})` : ''}\nCause: ${row.cause}\nProposed solution: ${row.solution}\n${row.text.map(([label, text]) => `${label}: ${text}`).join('\n')}\nExplain only the proposed solution, including how each changed file addresses the finding. The cause is shown separately. Report unresolved failures or limitations. Preserve unrelated behavior.`,
     acceptance_criteria: row.task?.acceptance_criteria || [],
     finding: {
@@ -428,9 +462,10 @@ export function Results({ s }: { s: State }) {
       })),
   ];
   const featureRows: ResultRow[] = (s.features?.suggestions || [])
-    .filter((idea) => idea.status !== 'dismissed')
+    .filter((idea) => (showDone ? true : idea.status !== 'dismissed'))
     .map((idea) => ({
       key: `feature:${idea.id}`,
+      featureId: idea.id,
       target: {
         project_id: s.project?.project_id || '',
         kind: 'semantic',
@@ -452,7 +487,7 @@ export function Results({ s }: { s: State }) {
       solution: idea.acceptance_criteria.join('\n'),
     }));
   const [selectedInspectorKey, setSelectedInspectorKey] = useState<string>('');
-  const showFeatures = categoryFilter === ('features' as any) || s.page === 'features';
+  const showFeatures = categoryFilter === 'features' || s.page === 'features';
   const inspectorRow =
     (showFeatures
       ? featureRows.find((r) => r.key === selectedInspectorKey) || featureRows[0]
@@ -485,6 +520,7 @@ export function Results({ s }: { s: State }) {
             void w.act('Refresh results', async () => {
               await w.refreshProject();
               await w.loadResults(category);
+              await w.loadFeatures();
             })
           }
         >
@@ -590,7 +626,7 @@ export function Results({ s }: { s: State }) {
               ))}
               <Button
                 tone={showFeatures ? 'primary small' : 'ghost small'}
-                onClick={() => setCategoryFilter('features' as any)}
+                onClick={() => setCategoryFilter('features')}
               >
                 <span>Features ({featureRows.length})</span>
               </Button>
@@ -662,86 +698,117 @@ export function Results({ s }: { s: State }) {
               <span>Show Done</span>
             </label>
           </div>
-          <div className="result-list">
-            {(showFeatures ? featureRows : filtered.slice(offset, offset + pageSize)).map((row) => (
-              <div
-                className="result-row"
-                key={row.key}
-                onClick={() => {
-                  setSelectedInspectorKey(row.key);
-                  if (!showFeatures) w.openFinding(category, row.key);
-                }}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setSelectedInspectorKey(row.key);
-                    if (!showFeatures) w.openFinding(category, row.key);
-                  }
-                }}
-              >
-                <span
-                  className={`finding-mark ${['high', 'critical'].includes(row.severity) ? 'red' : row.severity === 'low' ? 'blue' : ''}`}
-                >
-                  <Icon
-                    name={
-                      showFeatures
-                        ? 'sparkles'
-                        : category === 'security'
-                          ? 'shield'
-                          : category === 'performance'
-                            ? 'gauge'
-                            : 'bug'
-                    }
-                  />
-                </span>
-                <span className="list-copy">
-                  <span className="row" style={{ gap: '8px', alignItems: 'center' }}>
-                    <span
-                      className={`severity-tag ${['high', 'critical'].includes(row.severity) ? 'danger' : row.severity === 'medium' ? 'warning' : 'info'}`}
-                    >
-                      {showFeatures
-                        ? 'IDEA'
-                        : ['high', 'critical'].includes(row.severity)
-                          ? 'HIGH'
-                          : row.severity === 'medium'
-                            ? 'MED'
-                            : 'LOW'}
-                    </span>
-                    <strong>{row.name}</strong>
-                  </span>
-                  <span className="finding-summary">{row.cause.split('\n')[0]}</span>
-                  <small>
-                    <span className="path font-mono">
-                      {row.path}
-                      {row.line ? `:${row.line}` : ''}
-                    </span>
-                  </small>
-                </span>
-                <div className="finding-inline-actions">
+          {showFeatures && (
+            <Disclosure title="Project goals & Feature discovery">
+              <div className="stack" style={{ gap: '8px', padding: '8px 0' }}>
+                <textarea
+                  aria-label="Project goals"
+                  rows={2}
+                  value={goals}
+                  onChange={(e) => setGoals(e.target.value)}
+                  placeholder="Describe project goals or constraints to guide feature discovery…"
+                />
+                <div className="actions">
+                  <Button
+                    tone="ghost small"
+                    disabled={!!s.busy}
+                    onClick={() => void w.updateFeatures(goals)}
+                  >
+                    Save goals
+                  </Button>
                   <Button
                     tone="primary small"
-                    disabled={
-                      !!s.busy || activeChangeWorkflow(s.change) || row.freshness === 'stale'
-                    }
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (showFeatures) {
-                        const idea = s.features?.suggestions.find(
-                          (item) => `feature:${item.id}` === row.key,
-                        );
-                        if (idea) w.discussFeature(idea, false);
-                      } else {
-                        triggerFix(row);
-                      }
-                    }}
+                    icon="sparkles"
+                    disabled={!!s.busy}
+                    onClick={() => void w.searchFeatures('Features', goals)}
                   >
-                    Fix in Editor
+                    Suggest features
                   </Button>
                 </div>
               </div>
-            ))}
+            </Disclosure>
+          )}
+          <div className="result-list">
+            {(showFeatures ? featureRows : filtered.slice(offset, offset + pageSize)).map((row) => {
+              const rowCategory = row.category || category;
+              return (
+                <div
+                  className={`result-row ${inspectorRow?.key === row.key ? 'active' : ''}`}
+                  key={row.key}
+                  onClick={() => {
+                    setSelectedInspectorKey(row.key);
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedInspectorKey(row.key);
+                    }
+                  }}
+                >
+                  <span
+                    className={`finding-mark ${['high', 'critical'].includes(row.severity) ? 'red' : row.severity === 'low' ? 'blue' : ''}`}
+                  >
+                    <Icon
+                      name={
+                        showFeatures
+                          ? 'sparkles'
+                          : rowCategory === 'security'
+                            ? 'shield'
+                            : rowCategory === 'performance'
+                              ? 'gauge'
+                              : 'bug'
+                      }
+                    />
+                  </span>
+                  <span className="list-copy">
+                    <span className="row" style={{ gap: '8px', alignItems: 'center' }}>
+                      <span
+                        className={`severity-tag ${['high', 'critical'].includes(row.severity) ? 'danger' : row.severity === 'medium' ? 'warning' : 'info'}`}
+                      >
+                        {showFeatures
+                          ? 'IDEA'
+                          : ['high', 'critical'].includes(row.severity)
+                            ? 'HIGH'
+                            : row.severity === 'medium'
+                              ? 'MED'
+                              : 'LOW'}
+                      </span>
+                      <strong>{row.name}</strong>
+                    </span>
+                    <span className="finding-summary">{row.cause.split('\n')[0]}</span>
+                    <small>
+                      <span className="path font-mono">
+                        {row.path}
+                        {row.line ? `:${row.line}` : ''}
+                      </span>
+                    </small>
+                  </span>
+                  <div className="finding-inline-actions">
+                    <Button
+                      tone="primary small"
+                      disabled={
+                        !!s.busy || activeChangeWorkflow(s.change) || row.freshness === 'stale'
+                      }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (showFeatures) {
+                          const idea = s.features?.suggestions.find(
+                            (item) => `feature:${item.id}` === row.key,
+                          );
+                          if (idea) w.discussFeature(idea, false);
+                        } else {
+                          triggerFix(row);
+                        }
+                      }}
+                    >
+                      Fix in Editor
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
           {!showFeatures && !filtered.length && (
             <Empty
@@ -816,9 +883,64 @@ export function Results({ s }: { s: State }) {
         <Panel title="Selected Issue Inspector">
           {inspectorRow ? (
             <div className="stack">
+              <div className="row between wrap">
+                <div className="row wrap" style={{ gap: '6px' }}>
+                  <Badge value={inspectorRow.kind} tone="violet" />
+                  {inspectorRow.status && (
+                    <Badge
+                      value={inspectorRow.status === 'fixed' ? 'Done' : inspectorRow.status}
+                      tone={inspectorRow.status === 'fixed' ? 'green' : undefined}
+                    />
+                  )}
+                </div>
+                {inspectorRow.finding && (
+                  <div className="actions finding-actions">
+                    <Button
+                      tone={inspectorRow.status === 'dismissed' ? 'ghost small' : 'danger small'}
+                      icon={inspectorRow.status === 'dismissed' ? 'undo' : 'trash'}
+                      disabled={!!s.busy}
+                      onClick={() =>
+                        void w.triage(
+                          inspectorRow.finding!,
+                          inspectorRow.status === 'dismissed' ? 'open' : 'dismissed',
+                        )
+                      }
+                    >
+                      {inspectorRow.status === 'dismissed' ? 'Reopen' : 'Delete'}
+                    </Button>
+                    <Button
+                      tone="ghost small"
+                      icon="check"
+                      disabled={!!s.busy || inspectorRow.status === 'fixed'}
+                      onClick={() => void w.triage(inspectorRow.finding!, 'fixed')}
+                    >
+                      Mark as Done
+                    </Button>
+                  </div>
+                )}
+                {inspectorRow.featureId && (
+                  <div className="actions finding-actions">
+                    <Button
+                      tone="ghost small"
+                      icon="check"
+                      disabled={!!s.busy || inspectorRow.status === 'saved'}
+                      onClick={() => void w.setFeatureStatus(inspectorRow.featureId!, 'saved')}
+                    >
+                      Save idea
+                    </Button>
+                    <Button
+                      tone="danger small"
+                      icon="trash"
+                      disabled={!!s.busy || inspectorRow.status === 'dismissed'}
+                      onClick={() => void w.setFeatureStatus(inspectorRow.featureId!, 'dismissed')}
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
+                )}
+              </div>
               <div>
-                <Badge value={inspectorRow.kind} tone="violet" />
-                <h3 style={{ marginTop: '8px' }}>{inspectorRow.name}</h3>
+                <h3 style={{ marginTop: '4px' }}>{inspectorRow.name}</h3>
                 <p className="small muted font-mono" style={{ marginTop: '4px' }}>
                   {inspectorRow.path}
                   {inspectorRow.line ? `:${inspectorRow.line}` : ''}
@@ -832,6 +954,15 @@ export function Results({ s }: { s: State }) {
                 <strong className="small uppercase muted">Proposed Fix / Criteria</strong>
                 <Prose text={inspectorRow.solution || 'Prepare a fix to generate diff hunks.'} />
               </div>
+              {inspectorRow.text
+                .filter(([, content]) => content)
+                .map(([title, content]) => (
+                  <div key={title}>
+                    <strong className="small uppercase muted">{title}</strong>
+                    <Prose text={content} />
+                  </div>
+                ))}
+              <InsightCard insight={inspectorRow.insight} />
               <div className="actions">
                 <Button
                   tone="primary"
@@ -859,6 +990,16 @@ export function Results({ s }: { s: State }) {
                     }
                   >
                     Open File
+                  </Button>
+                )}
+                {!showFeatures && (
+                  <Button
+                    tone="ghost"
+                    onClick={() =>
+                      void w.openFinding(inspectorRow.category || category, inspectorRow.key)
+                    }
+                  >
+                    Full Details
                   </Button>
                 )}
               </div>
