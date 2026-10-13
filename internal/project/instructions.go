@@ -31,6 +31,10 @@ type EffectiveInstructions struct {
 // More local guidance applies within its directory; it cannot grant execution,
 // provider consent, retargeting or source-write authority.
 func ResolveInstructions(root, target string) (EffectiveInstructions, error) {
+	return resolveInstructionsWithPolicy(root, target, nil)
+}
+
+func resolveInstructionsWithPolicy(root, target string, policy *ContextPolicy) (EffectiveInstructions, error) {
 	result := EffectiveInstructions{Files: []InstructionFile{}, Excluded: []ContextDecision{}}
 	canonical, err := CanonicalRoot(root)
 	if err != nil {
@@ -41,9 +45,11 @@ func ResolveInstructions(root, target string) (EffectiveInstructions, error) {
 			return result, err
 		}
 	}
-	policy, err := NewContextPolicy(canonical)
-	if err != nil {
-		return result, err
+	if policy == nil {
+		policy, err = NewContextPolicy(canonical)
+		if err != nil {
+			return result, err
+		}
 	}
 	var text strings.Builder
 	for _, scope := range instructionScopes(target) {
@@ -77,7 +83,11 @@ func ResolveInstructions(root, target string) (EffectiveInstructions, error) {
 // ValidateInstructions also recognizes older reports with no guide identity when
 // no applicable guide exists. A newly added guide invalidates those reports.
 func ValidateInstructions(root, target, fingerprint string) error {
-	instructions, err := ResolveInstructions(root, target)
+	return validateInstructionsWithPolicy(root, target, fingerprint, nil)
+}
+
+func validateInstructionsWithPolicy(root, target, fingerprint string, policy *ContextPolicy) error {
+	instructions, err := resolveInstructionsWithPolicy(root, target, policy)
 	if err != nil {
 		return err
 	}

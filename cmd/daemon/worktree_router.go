@@ -8,20 +8,34 @@ import (
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
-// Cache only the most recently used checkout. Registration and scope are still
+// Cache recent checkouts with a bounded cap. Registration and scope are still
 // checked by WorktreeService on every request, and old services cannot accumulate.
-type worktreeRouter struct {
-	mu      sync.Mutex
+const maxCachedWorktreeRouters = 8
+
+type worktreeRouteEntry struct {
 	service *app.Service
 	routes  http.Handler
+}
+
+type worktreeRouter struct {
+	mu      sync.Mutex
+	entries []worktreeRouteEntry
 }
 
 func (router *worktreeRouter) handler(service *app.Service, manager *project.Manager) http.Handler {
 	router.mu.Lock()
 	defer router.mu.Unlock()
-	if router.routes == nil || router.service != service {
-		router.routes = newProjectHTTPMux(service, manager)
-		router.service = service
+	for i := range router.entries {
+		if router.entries[i].service == service {
+			return router.entries[i].routes
+		}
 	}
-	return router.routes
+	routes := newProjectHTTPMux(service, manager)
+	if len(router.entries) >= maxCachedWorktreeRouters {
+		copy(router.entries, router.entries[1:])
+		router.entries[len(router.entries)-1] = worktreeRouteEntry{service: service, routes: routes}
+	} else {
+		router.entries = append(router.entries, worktreeRouteEntry{service: service, routes: routes})
+	}
+	return routes
 }
