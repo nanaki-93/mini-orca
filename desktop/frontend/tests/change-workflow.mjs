@@ -340,4 +340,105 @@ export async function testChangeWorkflows({ test, pageFor, nav, idle, layout, ch
       }
     }
   });
+  await test('Agent workflow dispatches dynamic Agy and Pi catalog models', async () => {
+    const configured = `configured:${'a'.repeat(64)}`;
+    const availableModels = {
+      defaults: { analyze: configured, bug: configured, function: configured },
+      pi: { status: 'ready' },
+      agy: { status: 'ready' },
+      models: [
+        {
+          id: configured,
+          name: 'Gemini 3.8 Flash',
+          provider: 'openai',
+          source: 'configured',
+          location: 'remote',
+          model: {
+            model: 'gemini-3.8-flash',
+            profile: configured,
+            scope: '',
+            provider_origin: 'https://provider.invalid',
+            remote_provider: true,
+            timeout: '2m',
+            reasoning_effort: 'medium',
+          },
+        },
+        {
+          id: 'agy:gemini-4-argon-high',
+          name: 'Gemini 4 Argon (High)',
+          provider: 'agy',
+          source: 'agy',
+          location: 'unknown',
+          model: {
+            model: 'gemini-4-argon-high',
+            profile: 'agy:gemini-4-argon-high',
+            scope: '',
+            provider_origin: 'cli://agy',
+            remote_provider: true,
+            timeout: '2m',
+            reasoning_effort: '',
+          },
+        },
+        {
+          id: 'pi:lm-studio/qwen/local',
+          name: 'Qwen Local',
+          provider: 'lm-studio',
+          source: 'pi',
+          location: 'local',
+          model: {
+            model: 'lm-studio/qwen/local',
+            profile: 'pi:lm-studio/qwen/local',
+            scope: '',
+            provider_origin: 'cli://pi',
+            remote_provider: true,
+            timeout: '2m',
+            reasoning_effort: '',
+          },
+        },
+      ],
+    };
+    const { page, close } = await pageFor({ availableModels, workflowRunning: true });
+    try {
+      await prepare(page);
+      await nav(page, 'Models');
+      await chooseModel(
+        page.getByLabel('Creation model', { exact: true }),
+        'pi:lm-studio/qwen/local',
+      );
+      await chooseModel(
+        page.getByLabel('Testing model', { exact: true }),
+        'agy:gemini-4-argon-high',
+      );
+      await nav(page, 'Chat');
+      await page.getByRole('button', { name: 'Generate changes', exact: true }).click();
+      const consent = page.getByRole('dialog');
+      await consent
+        .getByText('create: lm-studio/qwen/local · pi:lm-studio/qwen/local · cli://pi', {
+          exact: true,
+        })
+        .waitFor();
+      await consent
+        .getByText('test: gemini-4-argon-high · agy:gemini-4-argon-high · cli://agy', {
+          exact: true,
+        })
+        .waitFor();
+      await consent.getByRole('button', { name: 'Start workflow', exact: true }).click();
+      await trust(page);
+      await page.getByRole('heading', { name: 'Agent workflow', exact: true }).waitFor();
+      const request = await page.evaluate(() =>
+        window.fixture.requests.find((r) => r.path.endsWith('/workflow')),
+      );
+      assert.deepEqual(request.body.models, {
+        create: 'pi:lm-studio/qwen/local',
+        test: 'agy:gemini-4-argon-high',
+        review: configured,
+      });
+      assert.deepEqual(
+        request.body.confirmed_profiles.sort(),
+        [configured, 'agy:gemini-4-argon-high', 'pi:lm-studio/qwen/local'].sort(),
+      );
+    } finally {
+      await close();
+    }
+  });
 }

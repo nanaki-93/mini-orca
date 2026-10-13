@@ -280,7 +280,7 @@ export async function testGuidedFixes({
         const dialog = page.getByRole('dialog', { name: 'Choose a model', exact: true });
         const search = dialog.getByRole('combobox', { name: 'Search models', exact: true });
         assert.equal(await search.evaluate((element) => element === document.activeElement), true);
-        assert.equal(await dialog.getByRole('button', { name: 'Pi', exact: true }).count(), 0);
+        assert.equal(await dialog.getByRole('button', { name: 'Pi', exact: true }).count(), 1);
         await search.fill('no matching model');
         await dialog.getByText('No models match these filters.', { exact: true }).waitFor();
         await search.fill('gemini');

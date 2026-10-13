@@ -33,7 +33,9 @@ export function installFixture(options = {}) {
   }));
   if (options.sourceFile) Object.assign(files[0], options.sourceFile);
   const model = (scope) =>
-    options.availableModels?.models.find((choice) => choice.id === scope)?.model || {
+    (window.fixture?.state?.availableModels || options.availableModels)?.models.find(
+      (choice) => choice.id === scope,
+    )?.model || {
       scope,
       profile: scope,
       model: options.modelNames?.[scope] || 'test-model',
