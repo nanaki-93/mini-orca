@@ -463,7 +463,21 @@
           </div>
           <div class="actions-row">
             <button class="btn">Refresh</button>
-            <button class="btn primary">Run Analysis</button>
+            <button class="btn primary" onclick="runAnalysisSim()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Run Analysis
+            </button>
+          </div>
+        </div>
+
+        <!-- Live Analysis Banner (Simulation) -->
+        <div class="retry-banner" id="issues-analysis-banner" style="display:none; border-left:4px solid var(--accent); background:rgba(47,129,247,0.1);">
+          <div class="retry-info">
+            <strong style="color:var(--blue);">Analyzing project files…</strong>
+            <small>Inspecting 142 source files across 8 packages (Stage: Security & Rules)</small>
+          </div>
+          <div class="retry-actions">
+            <button class="btn danger" onclick="cancelAnalysisSim()">Cancel</button>
           </div>
         </div>
 
@@ -862,18 +876,147 @@
             </select>
           </div>
         </div>
+
+        <!-- Advanced Batch Settings (moved into Settings) -->
+        <div class="card" style="margin-top:20px;">
+          <div class="card-title">
+            <span>Analysis & Batch Settings</span>
+            <span class="tag info">Settings</span>
+          </div>
+          <p class="muted" style="margin-bottom:14px; font-size:12px;">Configure execution limits, timeouts, and batch sizes for automated code analysis runs.</p>
+          <div class="form-grid" style="margin-top:0;">
+            <div class="form-card">
+              <h3>Files Per Batch</h3>
+              <p class="muted" style="font-size:11px;">Maximum files grouped into each analysis batch (1–500).</p>
+              <input type="number" value="20" min="1" max="500" />
+            </div>
+            <div class="form-card">
+              <h3>Time Budget (seconds)</h3>
+              <p class="muted" style="font-size:11px;">Maximum seconds allocated per batch execution (1–3600).</p>
+              <input type="number" value="1800" min="1" max="3600" />
+            </div>
+            <div class="form-card">
+              <h3>Attempts Per Stage</h3>
+              <p class="muted" style="font-size:11px;">Includes initial run and automatic retries on failure (1–4).</p>
+              <input type="number" value="2" min="1" max="4" />
+            </div>
+          </div>
+          <label class="checkbox-filter" style="margin-top:14px; margin-left:0;">
+            <input type="checkbox" />
+            <span>Refresh previously analyzed files on next run</span>
+          </label>
+        </div>
       </section>
 
-      <!-- VIEW 7: OVERVIEW PLACEHOLDER -->
+      <!-- VIEW 7: LEAN OVERVIEW SUMMARY DASHBOARD -->
       <section class="mockup-panel" id="panel-overview">
         <div class="panel-heading">
           <div>
-            <h1>Project Overview</h1>
-            <p class="issue-meta">mini-orca repository statistics and status</p>
+            <h1>mini-orca Overview</h1>
+            <p class="issue-meta">/Users/marcoandreose/DEV/lab/mini-orca · branch: main</p>
+          </div>
+          <div class="actions-row">
+            <button class="btn">Refresh</button>
+            <button class="btn primary" onclick="runAnalysisSim()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Run Analysis
+            </button>
+            <button class="btn" onclick="switchMockup('implementation')">+ New Task</button>
           </div>
         </div>
-        <div class="card">
-          <p>Repository loaded: 142 source files across 8 packages. 0 active alerts.</p>
+
+        <!-- Live Analysis Banner (Simulation) -->
+        <div class="retry-banner" id="overview-analysis-banner" style="display:none; border-left:4px solid var(--accent); background:rgba(47,129,247,0.1);">
+          <div class="retry-info">
+            <strong style="color:var(--blue);">Analyzing project files…</strong>
+            <small id="overview-analysis-status">Inspecting 142 source files across 8 packages (Stage: Security & Rules)</small>
+          </div>
+          <div class="retry-actions">
+            <button class="btn danger" onclick="cancelAnalysisSim()">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Top Metrics Row -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin-bottom:20px;">
+          <div class="card" style="cursor:pointer;" onclick="switchMockup('issues')">
+            <div style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:600; margin-bottom:4px;">Open Issues</div>
+            <div style="font-size:24px; font-weight:700; color:var(--text);">8 <span style="font-size:12px; font-weight:normal; color:#f85149;">(4 Bugs · 2 Sec · 2 Perf)</span></div>
+            <div style="font-size:11px; color:var(--blue); margin-top:4px;">View issues console →</div>
+          </div>
+
+          <div class="card">
+            <div style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:600; margin-bottom:4px;">Test Health</div>
+            <div style="font-size:24px; font-weight:700; color:#3fb950;">PASSING</div>
+            <div style="font-size:11px; color:var(--muted); margin-top:4px;">14 unit & integration tests passing</div>
+          </div>
+
+          <div class="card">
+            <div style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:600; margin-bottom:4px;">Analysis Coverage</div>
+            <div style="font-size:24px; font-weight:700; color:var(--blue);">94% <span style="font-size:12px; font-weight:normal; color:var(--muted);">Current</span></div>
+            <div style="font-size:11px; color:var(--muted); margin-top:4px;">138 of 142 source files analyzed</div>
+          </div>
+
+          <div class="card" style="cursor:pointer;" onclick="switchMockup('git')">
+            <div style="font-size:11px; text-transform:uppercase; color:var(--muted); font-weight:600; margin-bottom:4px;">Git Worktrees</div>
+            <div style="font-size:24px; font-weight:700; color:var(--text);">2 <span style="font-size:12px; font-weight:normal; color:var(--muted);">Active</span></div>
+            <div style="font-size:11px; color:var(--blue); margin-top:4px;">Ready to merge into main →</div>
+          </div>
+        </div>
+
+        <!-- Issue Breakdown Summary Cards -->
+        <div class="card" style="margin-bottom:20px;">
+          <div class="card-title">
+            <span>Issue Breakdown by Category</span>
+            <button class="btn" onclick="switchMockup('issues')">Open Issues Console</button>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--raised); border-radius:6px; cursor:pointer;" onclick="switchMockup('issues')">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="issue-mark bug" style="width:24px; height:24px;"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="13" rx="5"/><path d="M9 7V5a3 3 0 0 1 6 0v2M3 9h4m10 0h4M3 14h4m10 0h4M4 20l4-3m8 0 4 3M12 8v12"/></svg></span>
+                <strong>Bugs & Runtime Errors</strong>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="tag danger">4 OPEN</span>
+                <span style="color:var(--muted); font-size:12px;">→</span>
+              </div>
+            </div>
+
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--raised); border-radius:6px; cursor:pointer;" onclick="switchMockup('issues')">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="issue-mark shield" style="width:24px; height:24px;"><svg viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 4-3 7-8 9-5-2-8-5-8-9V6zM9 12l2 2 4-4"/></svg></span>
+                <strong>Security Vulnerabilities</strong>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="tag danger">2 OPEN</span>
+                <span style="color:var(--muted); font-size:12px;">→</span>
+              </div>
+            </div>
+
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:var(--raised); border-radius:6px; cursor:pointer;" onclick="switchMockup('issues')">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="issue-mark gauge" style="width:24px; height:24px;"><svg viewBox="0 0 24 24"><path d="M4 18a9 9 0 1 1 16 0M6 18h12M12 13l5-6"/></svg></span>
+                <strong>Performance & Contention Hypotheses</strong>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="tag warning">2 OPEN</span>
+                <span style="color:var(--muted); font-size:12px;">→</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Project Metadata & Scope -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+          <div class="card">
+            <div class="card-title">Project Scope</div>
+            <p class="muted" style="margin-bottom:10px;">138 files analyzed · 4 files excluded.</p>
+            <button class="btn" onclick="switchMockup('filescope')">Manage File Scope & Exclusions →</button>
+          </div>
+          <div class="card">
+            <div class="card-title">Agent Environment</div>
+            <p class="muted" style="margin-bottom:10px;">Project guidance configured in root AGENTS.md.</p>
+            <button class="btn" onclick="switchMockup('environment')">Edit Environment & Guidelines →</button>
+          </div>
         </div>
       </section>
 
@@ -881,6 +1024,22 @@
   </main>
 
   <script>
+    function runAnalysisSim() {
+      const b1 = document.getElementById("overview-analysis-banner");
+      const b2 = document.getElementById("issues-analysis-banner");
+      if (b1) b1.style.display = "flex";
+      if (b2) b2.style.display = "flex";
+      setTimeout(() => {
+        if (b1) b1.style.display = "none";
+        if (b2) b2.style.display = "none";
+      }, 4000);
+    }
+    function cancelAnalysisSim() {
+      const b1 = document.getElementById("overview-analysis-banner");
+      const b2 = document.getElementById("issues-analysis-banner");
+      if (b1) b1.style.display = "none";
+      if (b2) b2.style.display = "none";
+    }
     function switchMockup(id) {
       document.querySelectorAll(".mockup-panel").forEach(p => p.classList.remove("active"));
       document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));

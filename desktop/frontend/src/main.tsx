@@ -29,7 +29,6 @@ const mainNav: [Page, string, string][] = [
   ['chat', 'Chat', 'chat'],
 ];
 const improveNav: typeof mainNav = [
-  ['analysis', 'Analysis', 'activity'],
   ['bugs', 'Issues', 'bug'],
   ['features', 'Features', 'sparkles'],
   ['changes', 'Changes', 'gitCommit'],
@@ -41,10 +40,6 @@ const utilityNav: [Page, string, string][] = [
   ['diagrams', 'Architecture', 'network'],
   ['models', 'Models', 'layers'],
   ['history', 'History', 'clock'],
-];
-const analysisPages: [Page, string][] = [
-  ['analysis', 'Setup'],
-  ['analysis-run', 'Last run'],
 ];
 const contextPages: [Page, string][] = [
   ['analysis-files', 'Files to skip / Scope'],
@@ -93,7 +88,7 @@ function App() {
     category || s.page === 'finding'
       ? 'bugs'
       : ['analysis', 'analysis-preview', 'analysis-run'].includes(s.page)
-        ? 'analysis'
+        ? 'bugs'
         : contextPages.some(([page]) => page === s.page)
           ? 'analysis-files'
           : s.page;
@@ -363,8 +358,6 @@ function App() {
               )}
               {contextPages.some(([page]) => page === s.page) &&
                 sectionLinks(contextPages, 'Context sections')}
-              {analysisPages.some(([page]) => page === s.page) &&
-                sectionLinks(analysisPages, 'Analysis sections')}
               {findingPages.some(([page]) => page === s.page) &&
                 sectionLinks(findingPages, 'Finding categories')}
               <div className="page" data-accent={s.page}>
