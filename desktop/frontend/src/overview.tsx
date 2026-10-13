@@ -196,6 +196,22 @@ export function Summary({ s }: { s: State }) {
     },
   ];
   const currentWork = s.change || s.changeHistory?.find((entry) => entry.state === 'draft');
+  const bugSection = s.run?.sections.find((value) => value.category === 'bugs');
+  const secSection = s.run?.sections.find((value) => value.category === 'security');
+  const perfSection = s.run?.sections.find((value) => value.category === 'performance');
+  const bugCount =
+    bugSection?.finding_count ??
+    s.findings?.filter((f) => f.category === 'bugs' && f.status !== 'fixed').length ??
+    0;
+  const secCount =
+    secSection?.finding_count ??
+    s.findings?.filter((f) => f.category === 'security' && f.status !== 'fixed').length ??
+    0;
+  const perfCount =
+    perfSection?.finding_count ??
+    s.findings?.filter((f) => f.category === 'performance' && f.status !== 'fixed').length ??
+    0;
+  const totalIssues = (bugCount || 0) + (secCount || 0) + (perfCount || 0);
   const openWork = (id: string) => (s.change?.id === id ? w.navigate('chat') : w.viewChange(id));
   const renderMetric = ({ page, title, icon, count, status }: (typeof metrics)[number]) => (
     <button
@@ -327,6 +343,137 @@ export function Summary({ s }: { s: State }) {
           </div>
         </div>
       )}
+      {/* Top KPI Metrics Row matching ui-mockup.html */}
+      <div
+        className="kpi-metrics-row"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '14px',
+          marginBottom: '20px',
+        }}
+      >
+        <div
+          className="panel card-kpi"
+          style={{ padding: '16px', cursor: 'pointer' }}
+          onClick={() => void w.navigate('bugs')}
+        >
+          <div
+            style={{
+              fontSize: '11px',
+              textTransform: 'uppercase',
+              color: 'var(--muted)',
+              fontWeight: 600,
+              marginBottom: '4px',
+            }}
+          >
+            Open Issues
+          </div>
+          <div
+            style={{
+              fontSize: '24px',
+              fontWeight: 700,
+              color: 'var(--text)',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {totalIssues}{' '}
+            <span style={{ fontSize: '12px', fontWeight: 'normal', color: 'var(--red)' }}>
+              ({bugCount} Bugs · {secCount} Sec · {perfCount} Perf)
+            </span>
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--accent)', marginTop: '4px' }}>
+            View issues console →
+          </div>
+        </div>
+
+        <div className="panel card-kpi" style={{ padding: '16px' }}>
+          <div
+            style={{
+              fontSize: '11px',
+              textTransform: 'uppercase',
+              color: 'var(--muted)',
+              fontWeight: 600,
+              marginBottom: '4px',
+            }}
+          >
+            Test Health
+          </div>
+          <div
+            style={{
+              fontSize: '24px',
+              fontWeight: 700,
+              color:
+                s.scan?.status === 'passed'
+                  ? 'var(--green)'
+                  : s.scan?.status === 'failed'
+                    ? 'var(--red)'
+                    : 'var(--text)',
+            }}
+          >
+            {s.scan ? human(s.scan.status).toUpperCase() : 'NOT RUN'}
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
+            {s.scan?.status === 'passed' ? 'All tests passing' : 'Automated test suite status'}
+          </div>
+        </div>
+
+        <div className="panel card-kpi" style={{ padding: '16px' }}>
+          <div
+            style={{
+              fontSize: '11px',
+              textTransform: 'uppercase',
+              color: 'var(--muted)',
+              fontWeight: 600,
+              marginBottom: '4px',
+            }}
+          >
+            Analysis Coverage
+          </div>
+          <div
+            style={{
+              fontSize: '24px',
+              fontWeight: 700,
+              color: 'var(--accent)',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {percent !== null ? `${percent}%` : '—'}{' '}
+            <span style={{ fontSize: '12px', fontWeight: 'normal', color: 'var(--muted)' }}>
+              Current
+            </span>
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
+            {coverage
+              ? `${coverage.fresh} of ${coverage.total} source files analyzed`
+              : 'Run analysis to compute'}
+          </div>
+        </div>
+
+        <div
+          className="panel card-kpi"
+          style={{ padding: '16px', cursor: 'pointer' }}
+          onClick={() => void w.navigate('git')}
+        >
+          <div
+            style={{
+              fontSize: '11px',
+              textTransform: 'uppercase',
+              color: 'var(--muted)',
+              fontWeight: 600,
+              marginBottom: '4px',
+            }}
+          >
+            Git Status
+          </div>
+          <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text)' }}>
+            {s.gitWorkspace?.worktrees.length ?? (s.repository?.available ? 1 : 0)} Worktrees
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
+            branch: {s.repository?.branch || 'main'} · Manage worktrees →
+          </div>
+        </div>
+      </div>
       <section className="studio-resume" aria-label="Continue work">
         <div>
           <span className="studio-eyebrow">{currentWork ? 'Active task' : 'Next action'}</span>
