@@ -86,11 +86,7 @@ export function Features({ s }: { s: State }) {
 
   return (
     <div className="workspace-page features-page">
-      <Heading
-        title="Features"
-        detail="Goal-aware advisory ideas. Discuss an idea in Chat before preparing a change."
-        variant="intro"
-      >
+      <Heading title="Features" variant="intro">
         <Button disabled={!!s.busy} onClick={() => void w.loadFeatures()}>
           Refresh suggestions
         </Button>
@@ -135,7 +131,6 @@ export function Features({ s }: { s: State }) {
       {staleActiveCount > 0 && (
         <Notice>
           {staleActiveCount} active {staleActiveCount === 1 ? 'idea is' : 'ideas are'} outdated.
-          Search again for new ideas based on the current project.
         </Notice>
       )}
       <div className="toolbar features-toolbar">

@@ -33,14 +33,14 @@ export function ProjectGuidance({ s }: { s: State }) {
         </strong>
         <p>
           {error
-            ? 'Refresh to check the project guidance.'
+            ? 'Refresh to check instructions.'
             : active
-              ? 'Agents use the root guide and applicable directory guides. Context exclusions still apply.'
+              ? 'Root AGENTS.md active.'
               : excluded
                 ? excluded.reason
                 : guide
-                  ? 'No root AGENTS.md. Create shared guidance for analysis, fixes and agent reviews.'
-                  : 'Reading local project guidance.'}
+                  ? 'No root AGENTS.md.'
+                  : 'Reading local guidance…'}
         </p>
       </div>
       {error ? (
