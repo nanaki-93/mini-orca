@@ -21,7 +21,6 @@ profile.cov
 # vendor/
 node_modules/
 build/
-desktop/mermaid/dist/
 
 # Go workspace file
 go.work
@@ -37,19 +36,16 @@ config.yaml
 .idea/
 # .vscode/
 
-# Kotlin/Gradle desktop build output
-desktop/.gradle/
-desktop/.kotlin/
-desktop/build/
-
 # Local agent-dispatch runs, leases, schemas, worktrees, and Python cache.
 .mini-orca/autopilot/
 __pycache__/
 *.py[cod]
 .DS_Store
 
-# Pi
+# Pi & CLI cache
 .pi/
 .agy/
-.mockups/
 .npm_local/
+
+# Local codebase export bundles
+codebase-bundle.md
