@@ -1677,3 +1677,70 @@ svg.icon {
     justify-content: flex-end;
   }
 }
+
+/* Pipeline progress stepper for Fix / Changes */
+.pipeline-stepper {
+  display: flex;
+  align-items: center;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 12px 28px 16px;
+}
+.pipeline-step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  border-right: 1px solid var(--line);
+  background: none;
+  transition: all 120ms ease;
+}
+.pipeline-step:last-child {
+  border-right: none;
+}
+.pipeline-step .step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 0.72rem;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.pipeline-step.active {
+  background: var(--panel);
+  color: var(--highlight);
+  font-weight: 650;
+}
+.pipeline-step.active .step-num {
+  background: var(--highlight);
+  color: var(--accent-text);
+  border-color: var(--highlight);
+}
+.pipeline-step.completed {
+  color: var(--green);
+}
+.pipeline-step.completed .step-num {
+  background: var(--green-soft);
+  color: var(--green);
+  border-color: var(--green);
+}
+@media (max-width: 760px) {
+  .pipeline-stepper {
+    margin: 10px 16px 12px;
+  }
+  .pipeline-step {
+    padding: 6px 8px;
+    font-size: 0.74rem;
+  }
+}
