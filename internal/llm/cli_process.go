@@ -16,19 +16,21 @@ import (
 var errCLIOutputLimit = errors.New("CLI output exceeded its byte limit")
 
 type cliOutputBuffer struct {
-	bytes.Buffer
+	// Do not embed bytes.Buffer: its promoted ReadFrom would let io.Copy bypass
+	// Write and the output limit when exec drains a subprocess pipe.
+	buffer   bytes.Buffer
 	limit    int
 	cancel   context.CancelFunc
 	exceeded bool
 }
 
 func (b *cliOutputBuffer) Write(data []byte) (int, error) {
-	if len(data) > b.limit-b.Len() {
+	if len(data) > b.limit-b.buffer.Len() {
 		b.exceeded = true
 		b.cancel()
 		return 0, errCLIOutputLimit
 	}
-	return b.Buffer.Write(data)
+	return b.buffer.Write(data)
 }
 
 func runCLI(ctx context.Context, profile config.ModelProfile, invocation cliInvocation) ([]byte, error) {
@@ -67,7 +69,7 @@ func runCLI(ctx context.Context, profile config.ModelProfile, invocation cliInvo
 	if err != nil {
 		return nil, cliProcessError(profile.Provider, err)
 	}
-	return stdout.Bytes(), nil
+	return stdout.buffer.Bytes(), nil
 }
 
 func cliProcessError(provider config.ModelProvider, err error) error {

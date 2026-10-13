@@ -492,8 +492,8 @@ paths:
   /api/models/available:
     get:
       tags: [Daemon]
-      summary: Available configured and Pi models, independent of operation
-      description: Reads Pi's available-model RPC catalog in an isolated, offline, tools-disabled process. Never sends a prompt. Accepts no query parameters. Pi failures return configured choices with pi.status unavailable.
+      summary: Available configured, Pi and Agy models, independent of operation
+      description: Reads Pi's offline available-model RPC catalog and Agy's live models command in isolated processes. Never sends a prompt or project context. Agy may contact its catalog service. Accepts no query parameters. Discovery failures retain configured choices and the other CLI's models with a separate unavailable status for each failed catalog.
       responses:
         '200':
           description: Non-secret model choices and configured defaults.
@@ -915,11 +915,11 @@ components:
       type: string
       minLength: 1
       maxLength: 644
-      pattern: '^(analyze|bug|function|configured:[0-9a-fA-F]{64}|pi:[^/]+/.+)$'
+      pattern: '^(analyze|bug|function|configured:[0-9a-fA-F]{64}|pi:[^/]+/.+|agy:[a-zA-Z0-9][a-zA-Z0-9._-]{0,511})$'
       description: Opaque ID returned by the available model catalog. Legacy analyze, bug and function profile names remain supported. Catalog membership is rechecked before admission; endpoints, executable paths and credentials cannot be supplied.
     AvailableModels:
       type: object
-      required: [models, defaults, pi]
+      required: [models, defaults, pi, agy]
       properties:
         models:
           type: array
@@ -932,20 +932,24 @@ components:
             bug: {$ref: '#/components/schemas/ModelSelection'}
             function: {$ref: '#/components/schemas/ModelSelection'}
         pi:
-          type: object
-          required: [status]
-          properties:
-            status: {type: string, enum: [ready, unavailable]}
-            message: {type: string, description: Sanitized discovery failure and recovery guidance.}
+          $ref: '#/components/schemas/ModelDiscovery'
+        agy:
+          $ref: '#/components/schemas/ModelDiscovery'
+    ModelDiscovery:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [ready, unavailable]}
+        message: {type: string, description: Sanitized discovery failure and recovery guidance.}
     ModelChoice:
       type: object
       required: [id, name, provider, source, location, model]
       properties:
         id: {$ref: '#/components/schemas/ModelSelection'}
         name: {type: string}
-        provider: {type: string, description: Transport provider for configured models; Pi provider ID for discovered models.}
-        source: {type: string, enum: [configured, pi]}
-        location: {type: string, enum: [local, remote, unknown], description: Pi location is inferred from catalog baseUrl metadata. It does not waive CLI prompt consent or verify availability of the endpoint.}
+        provider: {type: string, description: Transport provider for configured or Agy models; Pi provider ID for Pi models.}
+        source: {type: string, enum: [configured, pi, agy]}
+        location: {type: string, enum: [local, remote, unknown], description: Pi location is inferred from catalog baseUrl metadata; Agy location is unknown because its catalog omits endpoints. It does not waive CLI prompt consent or verify availability of the endpoint.}
         model: {$ref: '#/components/schemas/ScopedModel'}
     ModelCatalog:
       type: object

@@ -56,6 +56,7 @@ type Service struct {
 	manager                         *project.Manager
 	runtimes                        scopedRuntimes
 	discoverPiModels                func(context.Context, string) ([]llm.PiModel, error)
+	discoverAgyModels               func(context.Context, string) ([]llm.AgyModel, error)
 	importTimeout                   time.Duration
 	analysisTimeout                 time.Duration
 	focusedCheckTimeout             time.Duration
@@ -104,11 +105,12 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 
 	contextBuilder := project.NewContextBuilder()
 	service := &Service{
-		config:           cfg,
-		worktrees:        make(map[string]*Service),
-		discoverPiModels: llm.DiscoverPiModels,
-		manager:          manager,
-		changeAuthority:  make(map[string]string),
+		config:            cfg,
+		worktrees:         make(map[string]*Service),
+		discoverPiModels:  llm.DiscoverPiModels,
+		discoverAgyModels: llm.DiscoverAgyModels,
+		manager:           manager,
+		changeAuthority:   make(map[string]string),
 		runtimes: scopedRuntimes{
 			analyze:  newModelRuntime(profiles.Analyze, importTimeout, maxRetries),
 			bug:      newModelRuntime(profiles.Bug, analysisTimeout, maxRetries),

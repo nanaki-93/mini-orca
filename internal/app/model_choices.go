@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/config"
@@ -28,6 +27,7 @@ type AvailableModels struct {
 	Models   []ModelChoice     `json:"models"`
 	Defaults map[string]string `json:"defaults"`
 	Pi       ModelDiscovery    `json:"pi"`
+	Agy      ModelDiscovery    `json:"agy"`
 }
 
 type ModelDiscovery struct {
@@ -45,19 +45,22 @@ func configuredModelID(profile config.ModelProfile) (string, error) {
 	return fmt.Sprintf("configured:%x", sha256.Sum256(encoded)), nil
 }
 
-func piModelSelection(selection string) (provider, model string, ok bool) {
-	if !strings.HasPrefix(selection, "pi:") {
-		return "", "", false
+func cliModelSelection(selection string) (config.ModelProvider, string, bool) {
+	if model, ok := strings.CutPrefix(selection, "agy:"); ok {
+		return config.AgyProvider, model, config.ValidAgyModelID(model)
 	}
-	provider, model, ok = strings.Cut(strings.TrimPrefix(selection, "pi:"), "/")
-	return provider, model, ok && llm.ValidPiModelID(provider, model)
+	if model, ok := strings.CutPrefix(selection, "pi:"); ok {
+		provider, id, found := strings.Cut(model, "/")
+		return config.PiProvider, model, found && llm.ValidPiModelID(provider, id)
+	}
+	return "", "", false
 }
 
 func validModelSelection(selection string) bool {
 	if selection == "analyze" || selection == "bug" || selection == "function" {
 		return true
 	}
-	if _, _, ok := piModelSelection(selection); ok {
+	if _, _, ok := cliModelSelection(selection); ok {
 		return true
 	}
 	if !strings.HasPrefix(selection, "configured:") {
@@ -67,74 +70,13 @@ func validModelSelection(selection string) bool {
 	return err == nil && len(value) == sha256.Size
 }
 
-func (s *Service) piExecutable() string {
+func (s *Service) cliExecutable(provider config.ModelProvider) string {
 	for _, runtime := range []modelRuntime{s.runtimes.analyze, s.runtimes.bug, s.runtimes.function} {
-		if runtime.profile.Provider == config.PiProvider {
+		if runtime.profile.Provider == provider {
 			return runtime.profile.CLIPath
 		}
 	}
-	return "pi"
-}
-
-func (s *Service) AvailableModels(ctx context.Context) (AvailableModels, error) {
-	catalog := AvailableModels{Models: []ModelChoice{}, Defaults: map[string]string{}, Pi: ModelDiscovery{Status: "ready"}}
-	seen := map[string]bool{}
-	for _, runtime := range []modelRuntime{s.runtimes.analyze, s.runtimes.bug, s.runtimes.function} {
-		id, err := configuredModelID(runtime.profile)
-		if err != nil {
-			return AvailableModels{}, err
-		}
-		catalog.Defaults[string(runtime.profile.Scope)] = id
-		if seen[id] {
-			continue
-		}
-		seen[id] = true
-		model := runtime.effective
-		model.Scope, model.Profile = "", id
-		location := "remote"
-		if runtime.profile.IsCLI() {
-			location = "unknown"
-		} else if !model.RemoteProvider {
-			location = "local"
-		}
-		catalog.Models = append(catalog.Models, ModelChoice{ID: id, Name: model.Model, Source: "configured", Provider: string(runtime.profile.Provider), Location: location, Model: model})
-	}
-	models, err := s.discoverPiModels(ctx, s.piExecutable())
-	if ctx.Err() != nil {
-		return AvailableModels{}, ctx.Err()
-	}
-	if err != nil {
-		catalog.Pi = ModelDiscovery{Status: "unavailable", Message: "Pi models could not be loaded. Check that Pi is installed, signed in, and its model configuration is valid, then refresh models."}
-		return catalog, nil
-	}
-	for _, candidate := range models {
-		id := "pi:" + candidate.Provider + "/" + candidate.ID
-		runtime := s.runtimeForAnalysisScope(config.AnalyzeModelScope, id)
-		model := runtime.effective
-		model.Scope = ""
-		name := candidate.Name
-		if name == "" {
-			name = candidate.ID
-		}
-		location := "remote"
-		if candidate.BaseURL == "" {
-			location = "unknown"
-		} else if isLoopbackURL(candidate.BaseURL) {
-			location = "local"
-		}
-		catalog.Models = append(catalog.Models, ModelChoice{ID: id, Name: name, Provider: candidate.Provider, Source: "pi", Location: location, Model: model})
-	}
-	sort.SliceStable(catalog.Models, func(i, j int) bool {
-		a, b := catalog.Models[i], catalog.Models[j]
-		if a.Source != b.Source {
-			return a.Source < b.Source
-		}
-		if a.Provider != b.Provider {
-			return a.Provider < b.Provider
-		}
-		return a.Name < b.Name
-	})
-	return catalog, nil
+	return string(provider)
 }
 
 func (s *Service) selectedRuntime(scope config.ModelScope, selection string) (modelRuntime, bool) {
@@ -159,8 +101,8 @@ func (s *Service) selectedRuntime(scope config.ModelScope, selection string) (mo
 		selected.effective.Timeout, selected.effective.MaxRetries = base.effective.Timeout, base.effective.MaxRetries
 		return selected, true
 	}
-	if provider, model, ok := piModelSelection(selection); ok {
-		profile := config.ModelProfile{Scope: scope, Provider: config.PiProvider, CLIPath: s.piExecutable(), Model: provider + "/" + model, ContextMaxTokens: base.profile.ContextMaxTokens}
+	if provider, model, ok := cliModelSelection(selection); ok {
+		profile := config.ModelProfile{Scope: scope, Provider: provider, CLIPath: s.cliExecutable(provider), Model: model, ContextMaxTokens: base.profile.ContextMaxTokens}
 		runtime := newModelRuntime(profile, duration(base.effective.Timeout), base.effective.MaxRetries)
 		runtime.effective.Profile = selection
 		return runtime, true
@@ -169,20 +111,20 @@ func (s *Service) selectedRuntime(scope config.ModelScope, selection string) (mo
 }
 
 func (s *Service) validateModelSelections(ctx context.Context, selections []string) error {
-	var available map[string]bool
+	available := map[config.ModelProvider]map[string]bool{}
 	for _, selection := range selections {
-		if _, _, pi := piModelSelection(selection); pi {
-			if available == nil {
-				models, err := s.discoverPiModels(ctx, s.piExecutable())
+		if provider, _, cli := cliModelSelection(selection); cli {
+			if available[provider] == nil {
+				models, err := s.discoverModelChoices(ctx, provider)
 				if err != nil {
-					return fmt.Errorf("pi model catalog unavailable: %w", err)
+					return fmt.Errorf("%s model catalog unavailable: %w", provider, err)
 				}
-				available = make(map[string]bool, len(models))
+				available[provider] = make(map[string]bool, len(models))
 				for _, model := range models {
-					available["pi:"+model.Provider+"/"+model.ID] = true
+					available[provider][model.ID] = true
 				}
 			}
-			if available[selection] {
+			if available[provider][selection] {
 				continue
 			}
 		} else if _, ok := s.selectedRuntime(config.AnalyzeModelScope, selection); ok {

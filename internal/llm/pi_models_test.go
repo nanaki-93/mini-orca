@@ -57,23 +57,60 @@ func TestPiModelDiscoveryDistinguishesEmptyCatalogFromInvalidResponses(t *testin
 	}
 }
 
-func TestPiModelDiscoveryPreservesCancellationAndSanitizesFailures(t *testing.T) {
+func TestCLIModelDiscoveryPreservesCancellationAndSanitizesFailures(t *testing.T) {
+	for _, provider := range []config.ModelProvider{config.PiProvider, config.AgyProvider} {
+		t.Run(string(provider), func(t *testing.T) {
+			testCLIModelDiscoveryFailures(t, provider)
+		})
+	}
+}
+
+func testCLIModelDiscoveryFailures(t *testing.T, provider config.ModelProvider) {
+	t.Helper()
+	discover := func(ctx context.Context, executable string) error {
+		if provider == config.AgyProvider {
+			_, err := DiscoverAgyModels(ctx, executable)
+			return err
+		}
+		_, err := DiscoverPiModels(ctx, executable)
+		return err
+	}
 	for _, mode := range []string{"exit", "malformed", "oversized", "stderr-limit"} {
 		t.Run(mode, func(t *testing.T) {
-			profile, _ := cliFixture(t, config.PiProvider, mode)
-			_, err := DiscoverPiModels(context.Background(), profile.CLIPath)
+			profile, _ := cliFixture(t, provider, mode)
+			err := discover(context.Background(), profile.CLIPath)
 			if err == nil || strings.Contains(err.Error(), "private-marker") {
 				t.Fatalf("catalog failure = %v", err)
 			}
+			if (mode == "oversized" || mode == "stderr-limit") && !errors.Is(err, ErrUnusableResponse) {
+				t.Fatalf("output limit was not enforced: %v", err)
+			}
 		})
 	}
-	profile, capture := cliFixture(t, config.PiProvider, "catalog")
+	profile, capture := cliFixture(t, provider, "catalog")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := DiscoverPiModels(ctx, profile.CLIPath); !errors.Is(err, context.Canceled) {
+	if err := discover(ctx, profile.CLIPath); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation = %v", err)
 	}
 	if _, err := os.Stat(capture); !os.IsNotExist(err) {
 		t.Fatal("canceled discovery launched a process")
 	}
+	t.Run("running cancellation", func(t *testing.T) {
+		profile, capture := cliFixture(t, provider, "wait")
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		result := make(chan error, 1)
+		go func() { result <- discover(ctx, profile.CLIPath) }()
+		waitForCLIFile(t, capture)
+		cancel()
+		if err := <-result; !errors.Is(err, context.Canceled) {
+			t.Fatalf("running cancellation = %v", err)
+		}
+		var request cliCapture
+		readTestJSON(t, capture, &request)
+		if _, err := os.Stat(request.Directory); !os.IsNotExist(err) {
+			t.Fatal("canceled discovery retained its directory")
+		}
+	})
 }

@@ -49,7 +49,7 @@ untrusted networks.
 | GET | `/health` | Liveness and daemon version. |
 | GET | `/status` | Daemon status and `shared_proposals` workflow identifier. |
 | GET | `/api/models/current` | Non-secret `analyze`, `bug`, and `function` model catalog. |
-| GET | `/api/models/available` | Model choices from configured transports and Pi, with defaults and discovery status. |
+| GET | `/api/models/available` | Model choices from configured transports, Pi and Agy, with defaults and separate discovery statuses. |
 | GET | `/api/projects/current/context` | Bounded context manifest for a project-relative `path`; source is never returned. |
 | POST | `/api/projects/import` | Import the user-selected project and build deterministic project facts. |
 | POST | `/api/projects/restore` | Restore a previously imported local project without contacting the model. |
@@ -247,21 +247,27 @@ requests without retries and the inclusive maximum for the remaining work.
 
 `GET /api/models/available` returns `models[]` (`id`, `name`, `provider`,
 `source`, `location`, `model`), `defaults` mapping the three legacy scopes to
-configured IDs, and `pi: {status, message?}`. Configured choices are deduplicated
+configured IDs, and `pi`/`agy: {status, message?}`. Configured choices are deduplicated
 by model/transport/sampling configuration, independently of operation. Pi entries
 include every authenticated/custom model reported by `get_available_models`,
-including local models from Pi's configuration. Discovery uses a private working
-directory, disables tools/extensions/MCP/context loading, sessions and startup
-network refreshes, and has a 20-second deadline. No prompt is sent. No query
-parameters are accepted. Pi failures retain configured choices with an explicit
-`unavailable` discovery status; an authenticated empty list is `ready`.
+including local models from Pi's configuration. Pi discovery disables
+tools/extensions/MCP/context loading, sessions and startup network refreshes.
+Agy entries use the exact slug and display name returned by `agy --log-file
+/dev/null models` (tab-separated stdout in Agy 1.3.4), including the CLI's model
+variants. Agy may contact its catalog service; no static model list is used.
+Each CLI uses a private working directory and a 20-second deadline. Neither
+receives a prompt or project context. No query parameters are accepted. Either
+CLI's failure retains configured choices and the other CLI's models with an
+explicit `unavailable` status for the failed discovery; a successful empty list
+is `ready`.
 Only safe metadata is returned, never authentication headers, full endpoint URLs
 or executable paths. `location` is `local` for loopback catalog destinations,
 `remote` for other nonempty destinations, and `unknown` when Pi omits the URL.
-This describes catalog metadata; all Pi prompt requests still require consent.
+Agy reports `unknown` because its catalog omits endpoints. This describes catalog
+metadata; all CLI prompt requests still require consent.
 
 Preview/start accept optional `models: {code, performance, security, features}`. Each value is
-an opaque catalog ID (`configured:<hash>` or `pi:<provider>/<model>`), or a legacy
+an opaque catalog ID (`configured:<hash>`, `pi:<provider>/<model>` or `agy:<slug>`), or a legacy
 configured profile name (`analyze`, `bug`, `function`); all four operations need a choice when
 the object is present. Older clients and saved runs may supply `review` as the
 fallback for either omitted `performance` or `security` choice. Explicit operation
@@ -269,12 +275,13 @@ choices take precedence; legacy captured identities remain unchanged. Omission r
 for Performance, Security AI and feature discovery. Catalog assignments use the
 operation's context and dispatch limits; legacy profile selections retain their
 original timeout/retry behavior. Configured choices retain their transport and
-sampling settings; discovered Pi choices use Pi's defaults. Logical scope remains
+sampling settings; discovered CLI choices use that CLI's defaults and exact model
+ID, without inheriting a configured scope's reasoning override. Logical scope remains
 Bug for Code and Analyze for reviews/features. Clients cannot supply endpoints,
 executable paths or credentials. Choices affect dispatch, cache freshness,
 provenance and provider accounting without changing daemon configuration.
 Preview and start must use identical choices. Invalid syntax returns 400; a
-missing choice or changed admission returns 409 before inference. Pi membership
+missing choice or changed admission returns 409 before inference. CLI membership
 is rechecked before preview, start, resume and standalone feature generation;
 discovery failure stops admission. Captured choices survive restart/resume.
 Schema-1 runs without `models` remain readable with their original defaults.
