@@ -100,6 +100,21 @@ func TestChangeMessageUsesSelectedProfileAndItsConsent(t *testing.T) {
 	if err != nil || proposal.ContextManifest.Scope != "bug" || calls.Load() != 1 {
 		t.Fatalf("selected profile ignored: %+v, %v", proposal, err)
 	}
+	service.discoverPiModels = func(context.Context, string) ([]llm.PiModel, error) { return []llm.PiModel{}, nil }
+	service.discoverAgyModels = func(context.Context, string) ([]llm.AgyModel, error) { return []llm.AgyModel{}, nil }
+	catalog, err := service.AvailableModels(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	request = ChangeMessageRequest{ChangeIdentity: changeIdentity(proposal), Message: "Add a second line.", Profile: "configured:" + strings.Repeat("0", 64), ConfirmRemoteProvider: true}
+	if _, err := service.SendChangeMessage(context.Background(), session.ID, request); !errors.Is(err, project.ErrRevisionConflict) || calls.Load() != 1 {
+		t.Fatalf("unavailable catalog profile dispatched: %v", err)
+	}
+	request.Profile = catalog.Defaults["bug"]
+	proposal, err = service.SendChangeMessage(context.Background(), session.ID, request)
+	if err != nil || proposal.ContextManifest.Scope != "function" || calls.Load() != 2 {
+		t.Fatalf("catalog profile failed: %+v, %v", proposal, err)
+	}
 }
 
 func TestChangeProposalOmitsUnchangedAndFormattingOnlyFiles(t *testing.T) {
