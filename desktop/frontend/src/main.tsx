@@ -142,9 +142,9 @@ function App() {
   const issueCount =
     (s.findings?.filter((f) => f.status !== 'fixed').length ||
       s.run?.sections.reduce((sum, sec) => sum + (sec.finding_count || 0), 0) ||
-      0) + (s.featureSuggestions?.features.length || 0);
+      0) + (s.features?.suggestions.length || 0);
   const worktreeCount = s.gitWorkspace?.worktrees.length || 0;
-  const changeCount = s.change?.edits?.length || 0;
+  const changeCount = s.change?.changes?.length || 0;
   const nav = (items: typeof mainNav) =>
     items.map(([page, label, icon]) => {
       const count =

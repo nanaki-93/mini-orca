@@ -170,14 +170,14 @@ function ChatWorkspace({ s }: { s: State }) {
                       >
                         <option value="">Choose a file…</option>
                         {s.index?.files
-                          .filter((file) => !file.binary && /\.(go|md)$/.test(file.path))
+                          .filter((file) => !file.binary)
                           .map((file) => (
                             <option key={file.path}>{file.path}</option>
                           ))}
                       </select>
                     </label>
                   </div>
-                  <p className="small muted">Up to 8 Go/Markdown files, including new files.</p>
+                  <p className="small muted">All project text files unlocked, including new files.</p>
                 </Disclosure>
               ) : (
                 <Panel
