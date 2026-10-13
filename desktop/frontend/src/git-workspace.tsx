@@ -135,13 +135,6 @@ export function GitWorkspace({ s }: { s: State }) {
                         View implementation
                       </Button>
                       <Button
-                        disabled={blocked}
-                        loading={pending === `preview:${tree.path}`}
-                        onClick={() => run(`preview:${tree.path}`, () => w.previewGitMerge(tree))}
-                      >
-                        Preview diff
-                      </Button>
-                      <Button
                         tone="danger"
                         disabled={blocked}
                         loading={pending === `discard:${tree.path}`}
