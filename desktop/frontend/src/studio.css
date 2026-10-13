@@ -1744,3 +1744,91 @@ svg.icon {
     font-size: 0.74rem;
   }
 }
+
+/* Enterprise Stepper & Diff Canvas Styles from Mockup */
+.stepper {
+  display: flex;
+  border: 1px solid var(--line);
+  background: var(--raised);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 14px 18px;
+}
+.step-item {
+  flex: 1;
+  padding: 8px 12px;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  border: none;
+  border-right: 1px solid var(--line);
+  background: none;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.step-item:last-child {
+  border-right: none;
+}
+.step-item:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.step-item.active {
+  background: var(--panel);
+  color: var(--highlight);
+  font-weight: 700;
+}
+.step-item.completed {
+  color: var(--green);
+}
+
+.diff-summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: 0.82rem;
+}
+.diff-summary-table th {
+  text-align: left;
+  padding: 8px 12px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+  background: var(--canvas);
+}
+.diff-summary-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.diff-summary-table tr:last-child td {
+  border-bottom: none;
+}
+
+.diff-canvas {
+  margin: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--canvas);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  overflow-x: auto;
+}
+.diff-line {
+  padding: 3px 12px;
+  white-space: pre;
+  line-height: 1.5;
+}
+.diff-line.add {
+  background: rgba(35, 134, 54, 0.18);
+  color: var(--green);
+}
+.diff-line.del {
+  background: rgba(218, 54, 51, 0.18);
+  color: var(--red);
+}
+.diff-line.info {
+  color: var(--muted);
+  background: var(--raised);
+}
