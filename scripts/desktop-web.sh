@@ -4,7 +4,7 @@ set -eu
 
 script_dir=$(CDPATH= cd "$(dirname "$0")" && pwd)
 repo_root=$(CDPATH= cd "$script_dir/.." && pwd)
-web_root="$repo_root/desktop/webapp"
+web_root="$repo_root/desktop"
 export npm_config_cache="${MINI_ORCA_NPM_CACHE:-$repo_root/build/npm-cache}"
 
 case "${1:-}" in

@@ -15,7 +15,7 @@ class DesktopWebHelperTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         (self.root / "scripts").mkdir()
-        (self.root / "desktop/webapp/frontend").mkdir(parents=True)
+        (self.root / "desktop/frontend").mkdir(parents=True)
         self.script = self.root / "scripts/desktop-web.sh"
         shutil.copyfile(ROOT / "scripts/desktop-web.sh", self.script)
         self.bin = self.root / "bin"
@@ -88,7 +88,7 @@ fi
         result, calls = self.run_helper("run", MINI_ORCA_URL="http://127.0.0.1:9191")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(calls[-5:], [
-            "open", "-W", "-n", str(self.root / "desktop/webapp/build/bin/Mini-Orca.app"),
+            "open", "-W", "-n", str(self.root / "desktop/build/bin/Mini-Orca.app"),
             "MINI_ORCA_URL=http://127.0.0.1:9191",
         ])
         self.assertIn("go run ./cmd/assets", calls)
