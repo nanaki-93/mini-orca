@@ -174,20 +174,6 @@ function App() {
       .split('-')
       .map((word) => word[0].toUpperCase() + word.slice(1))
       .join(' ');
-  const sectionLinks = (items: [Page, string][], label: string) => (
-    <nav className="tabs studio-sections" aria-label={label}>
-      {items.map(([page, name]) => (
-        <button
-          key={page}
-          className={`tab ${s.page === page ? 'active' : ''}`}
-          aria-current={s.page === page ? 'page' : undefined}
-          onClick={() => void w.navigate(page)}
-        >
-          {name}
-        </button>
-      ))}
-    </nav>
-  );
   let content: ReactNode;
   if (s.page === 'models') content = <Models s={s} />;
   else if (s.page === 'project' || s.page === 'welcome' || !s.project)
@@ -251,7 +237,7 @@ function App() {
             </span>
             {category ? (
               <>
-                <button onClick={() => void w.navigate('bugs')}>Findings</button>
+                <button onClick={() => void w.navigate('bugs')}>Issues</button>
                 <span className="muted" aria-hidden="true">
                   /
                 </span>
@@ -363,10 +349,6 @@ function App() {
                   )}
                 </div>
               )}
-              {contextPages.some(([page]) => page === s.page) &&
-                sectionLinks(contextPages, 'Context sections')}
-              {findingPages.some(([page]) => page === s.page) &&
-                sectionLinks(findingPages, 'Finding categories')}
               <div className="page" data-accent={s.page}>
                 {s.error && <Notice error>{s.error}</Notice>}
                 {s.notice && <Notice>{s.notice}</Notice>}
