@@ -81,6 +81,19 @@ func TestAnalysisModelsDispatchChosenProvidersAndRetainDefaults(t *testing.T) {
 			t.Fatalf("review provenance lost chosen profile: %+v", results.Performance[0])
 		}
 	}
+	if fileAnalysis, err := s.CachedFileAnalysis("main.go"); err != nil || fileAnalysis.Status != project.AnalysisStatusFresh || fileAnalysis.Profile != "function" {
+		t.Fatalf("cached file analysis lost chosen Code model freshness: %+v, %v", fileAnalysis, err)
+	}
+	reopened, err := New(cfg, base.manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview, err := reopened.ProjectOverview(); err != nil || overview.Findings.AI == 0 || overview.Coverage.Fresh == 0 {
+		t.Fatalf("reopened overview retired chosen Code model findings: %+v, %v", overview, err)
+	}
+	if findings, err := reopened.ListFindings(FindingFilter{Source: project.FindingSourceAI}); err != nil || len(findings) == 0 {
+		t.Fatalf("reopened findings retired chosen Code model findings: %+v, %v", findings, err)
+	}
 	cached := analysisModelsPreviewFor(t, s, run.Plan.Models, preview.Limits)
 	if cached.ExpectedModelRequests != 1 { // Only new feature discovery; all file stages reuse evidence.
 		t.Fatalf("selected model caches were not reused: %+v", cached)

@@ -227,7 +227,7 @@ func (s *Service) prepareFileAnalysis(targetFile string) (preparedFileAnalysis, 
 	if err != nil {
 		return preparedFileAnalysis{}, err
 	}
-	return preparedFileAnalysis{root: s.manager.Root(), runtime: s.runtimes.bug, analysis: analysis, indexedFile: indexedFile, source: fileInfo.Content, cache: cache, input: input, instructions: instructions}, nil
+	return preparedFileAnalysis{root: s.manager.Root(), runtime: s.semanticCacheRuntime(analysis), analysis: analysis, indexedFile: indexedFile, source: fileInfo.Content, cache: cache, input: input, instructions: instructions}, nil
 }
 
 func reusableFileAnalysis(cached *project.FileAnalysis) bool {
@@ -359,7 +359,26 @@ func (s *Service) fileAnalysisCacheInput(analysis *project.Analysis, file *proje
 }
 
 func (s *Service) semanticCacheInput(analysis *project.Analysis, file *project.IndexFile, contentHash, policyVersion string) project.FileAnalysisInput {
-	return semanticCacheInputForRuntime(analysis, file, contentHash, policyVersion, s.runtimes.bug)
+	return semanticCacheInputForRuntime(analysis, file, contentHash, policyVersion, s.semanticCacheRuntime(analysis))
+}
+
+func (s *Service) semanticCacheRuntime(analysis *project.Analysis) modelRuntime {
+	if analysis != nil && s.analysisRun != nil {
+		s.analysisRun.mu.Lock()
+		var models *AnalysisModels
+		if s.analysisRun.run != nil && s.analysisRun.run.Identity.ProjectID == analysis.ProjectID {
+			models = cloneAnalysisModels(s.analysisRun.run.Plan.Models)
+		} else if s.analysisRun.run == nil && s.manager != nil {
+			if run, err := loadAnalysisRun(s.manager.Root()); err == nil && run != nil && run.Identity.ProjectID == analysis.ProjectID {
+				models = cloneAnalysisModels(run.Plan.Models)
+			}
+		}
+		s.analysisRun.mu.Unlock()
+		if models.profile(AnalysisStageSemantic) != "" {
+			return s.analysisModelRuntime(AnalysisStageSemantic, models)
+		}
+	}
+	return s.runtimes.bug
 }
 
 func semanticCacheInputForRuntime(analysis *project.Analysis, file *project.IndexFile, contentHash, policyVersion string, runtime modelRuntime) project.FileAnalysisInput {

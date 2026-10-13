@@ -195,10 +195,16 @@ try {
       await page.getByRole('button', { name: 'Model Routing', exact: true }).click();
       await idle(page);
 
+      const bugModel = page.getByLabel('Bug analysis model', { exact: true });
+      await bugModel.click();
+      const dialog = page.getByRole('dialog', { name: 'Choose a model', exact: true });
+      await dialog.getByRole('button', { name: 'Agy', exact: true }).click();
+      await dialog.getByRole('option', { name: /Gemini 4 Argon \(High\)/ }).click();
+      assert.equal(await bugModel.getAttribute('value'), 'agy:gemini-4-argon-high');
+
       const creation = page.getByLabel('Creation model', { exact: true });
       assert.equal(await creation.getAttribute('value'), configured);
       await creation.click();
-      const dialog = page.getByRole('dialog', { name: 'Choose a model', exact: true });
       await dialog.getByRole('button', { name: 'Pi', exact: true }).click();
       await dialog.getByRole('option', { name: /Qwen Local/ }).click();
       assert.equal(await creation.getAttribute('value'), 'pi:lm-studio/qwen/local');
@@ -208,6 +214,42 @@ try {
       await dialog.getByRole('button', { name: 'Agy', exact: true }).click();
       await dialog.getByRole('option', { name: /Gemini 4 Argon \(High\)/ }).click();
       assert.equal(await testing.getAttribute('value'), 'agy:gemini-4-argon-high');
+
+      const batchInput = page.locator('#settings-batch_files');
+      await batchInput.fill('42');
+      await page
+        .getByLabel('Refresh previously analyzed files on next run', { exact: true })
+        .check();
+
+      // Reload the app to verify model selections and batch settings persist across restarts and project restore
+      await page.reload();
+      await page.getByRole('heading', { name: 'harbor', exact: true }).waitFor();
+      await idle(page);
+
+      await nav(page, 'Settings & Rules');
+      await idle(page);
+      await page.getByRole('button', { name: 'Model Routing', exact: true }).click();
+      await idle(page);
+
+      assert.equal(
+        await page.getByLabel('Bug analysis model', { exact: true }).getAttribute('value'),
+        'agy:gemini-4-argon-high',
+      );
+      assert.equal(
+        await page.getByLabel('Creation model', { exact: true }).getAttribute('value'),
+        'pi:lm-studio/qwen/local',
+      );
+      assert.equal(
+        await page.getByLabel('Testing model', { exact: true }).getAttribute('value'),
+        'agy:gemini-4-argon-high',
+      );
+      assert.equal(await page.locator('#settings-batch_files').inputValue(), '42');
+      assert.equal(
+        await page
+          .getByLabel('Refresh previously analyzed files on next run', { exact: true })
+          .isChecked(),
+        true,
+      );
 
       await nav(page, 'Issues & Ideas');
       await idle(page);
