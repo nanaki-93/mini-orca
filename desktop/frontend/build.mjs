@@ -5,7 +5,7 @@ import path from 'node:path';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const output = path.resolve(root, '../internal/assets/files');
-const branding = path.resolve(root, '../../../docs/icons');
+const branding = path.resolve(root, '../../docs/icons');
 await mkdir(output, { recursive: true });
 // Remove stale generated chunks while retaining the tracked asset placeholder.
 for (const name of await readdir(output))
