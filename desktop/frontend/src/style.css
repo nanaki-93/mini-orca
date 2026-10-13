@@ -1685,11 +1685,19 @@ button.list-row:hover,
   flex: 1 1 16rem;
 }
 .results-findings .result-row {
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto 20px;
+  display: flex;
+  align-items: center;
   gap: 16px;
-  padding: 20px 12px;
+  padding: 12px 14px;
   border-radius: 6px;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.results-findings .result-row:hover {
+  background: var(--hover);
 }
 .findings-columns {
   display: grid;
@@ -1831,15 +1839,14 @@ button.list-row:hover,
     display: none;
   }
   .results-findings .result-row {
-    grid-template-columns: 30px minmax(0, 1fr) 6rem;
+    flex-wrap: wrap;
+    gap: 10px;
   }
   .results-findings .result-badges {
-    grid-column: 2;
-    justify-content: flex-start;
+    margin-left: 0;
   }
-  .results-findings .finding-open {
-    grid-column: 3;
-    grid-row: 1;
+  .finding-inline-actions {
+    margin-left: auto;
   }
 }
 .table-wrap {

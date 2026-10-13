@@ -878,20 +878,32 @@ svg.icon {
 }
 .result-row {
   display: flex;
+  align-items: center;
   gap: 14px;
-  padding: 17px 0;
+  padding: 12px 14px;
   border: 0;
   border-bottom: 1px solid var(--line);
   background: none;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+.result-row:hover {
+  background: var(--hover);
 }
 .result-row .list-copy {
   flex: 1;
+  min-width: 0;
 }
 .result-row strong {
-  font-size: 1rem;
-  font-weight: 500;
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 .result-row .result-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
   margin-left: auto;
 }
 .finding-summary {
@@ -1470,8 +1482,36 @@ svg.icon {
 .finding-inline-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-left: 12px;
+  gap: 8px;
+  margin-left: 14px;
+  flex-shrink: 0;
+}
+.finding-inline-actions .button {
+  min-height: 28px;
+  padding: 4px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 5px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.finding-inline-actions .button.primary {
+  background: var(--accent);
+  color: var(--accent-text);
+  border: 1px solid var(--accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+.finding-inline-actions .button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.finding-inline-actions .button.ghost {
+  background: var(--raised);
+  border: 1px solid var(--control-line);
+}
+.finding-inline-actions .button.ghost:hover:not(:disabled) {
+  background: var(--hover);
+  border-color: var(--line);
 }
 .font-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
