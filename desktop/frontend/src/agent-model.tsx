@@ -19,18 +19,8 @@ const agentOperations: Record<AgentType, AgentOperation> = {
   test: { label: 'Test', inputLabel: 'Testing model', accent: 'performance', icon: 'circleCheck' },
 };
 
-function modelChoices(s: State, configuredOnly: boolean): ModelChoice[] {
-  // Change workflows accept configured profiles; analysis also supports catalog IDs.
-  return configuredOnly
-    ? Object.entries(s.models?.scopes || {}).map(([id, model]) => ({
-        id,
-        name: model.model,
-        provider: model.provider_origin,
-        source: 'configured',
-        location: model.remote_provider ? 'remote' : 'local',
-        model,
-      }))
-    : s.availableModels?.models || [];
+function modelChoices(s: State): ModelChoice[] {
+  return s.availableModels?.models || [];
 }
 
 export function ModelIcon({ model }: { model?: Model }) {
@@ -86,14 +76,12 @@ function ModelPicker({
   selected,
   onSelect,
   onClose,
-  configuredOnly,
 }: {
   s: State;
   label: string;
   selected?: string;
   onSelect: (id: string) => void;
   onClose: () => void;
-  configuredOnly: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const search = useRef<HTMLInputElement>(null);
@@ -101,7 +89,7 @@ function ModelPicker({
   const [filter, setFilter] = useState('all');
   const [active, setActive] = useState(selected || '');
   const listID = useId();
-  const choices = modelChoices(s, configuredOnly).filter(
+  const choices = modelChoices(s).filter(
     (choice) =>
       (filter === 'all' ||
         (filter === 'local' ? choice.location === 'local' : choice.source === filter)) &&
@@ -122,20 +110,19 @@ function ModelPicker({
   useEffect(() => {
     document.getElementById(`${listID}-${activeIndex}`)?.scrollIntoView({ block: 'nearest' });
   }, [activeIndex, listID, query, filter]);
-  const error = configuredOnly ? s.resourceErrors.models : s.resourceErrors.availableModels;
-  const discoveryErrors =
-    configuredOnly || error
-      ? []
-      : (
-          [
-            ['Pi', s.availableModels?.pi],
-            ['Agy', s.availableModels?.agy],
-          ] as const
-        ).flatMap(([name, discovery]) =>
-          discovery?.status === 'unavailable'
-            ? [discovery.message || `${name} models are unavailable. Refresh to retry.`]
-            : [],
-        );
+  const error = s.resourceErrors.availableModels;
+  const discoveryErrors = error
+    ? []
+    : (
+        [
+          ['Pi', s.availableModels?.pi],
+          ['Agy', s.availableModels?.agy],
+        ] as const
+      ).flatMap(([name, discovery]) =>
+        discovery?.status === 'unavailable'
+          ? [discovery.message || `${name} models are unavailable. Refresh to retry.`]
+          : [],
+      );
   return (
     <dialog
       ref={dialog}
@@ -187,14 +174,10 @@ function ModelPicker({
         {(
           [
             ['all', 'All models'],
-            ...(!configuredOnly
-              ? [
-                  ['agy', 'Agy'],
-                  ['pi', 'Pi'],
-                ]
-              : []),
+            ['agy', 'Agy'],
+            ['pi', 'Pi'],
             ['local', 'Local'],
-            ...(!configuredOnly ? [['configured', 'Configured']] : []),
+            ['configured', 'Configured'],
           ] as const
         ).map(([key, name]) => (
           <Button
@@ -238,15 +221,13 @@ function ModelPicker({
             <span className="model-picker-option-copy">
               <strong>{choice.name}</strong>
               <span>Thinking: {choice.model.reasoning_effort || 'Default'}</span>
-              {!configuredOnly && (
-                <small>
-                  {choice.source === 'agy'
-                    ? 'Agy'
-                    : choice.source === 'pi'
-                      ? `Pi · ${choice.provider}`
-                      : 'Configured'}
-                </small>
-              )}
+              <small>
+                {choice.source === 'agy'
+                  ? 'Agy'
+                  : choice.source === 'pi'
+                    ? `Pi · ${choice.provider}`
+                    : 'Configured'}
+              </small>
             </span>
             {choice.id === selected && <Icon name="check" />}
           </button>
@@ -296,8 +277,7 @@ export function AgentModel({
 }) {
   const [editing, setEditing] = useState(false);
   const { label, inputLabel, accent, icon } = operation;
-  const configuredOnly = type !== 'analysis';
-  const selected = modelChoices(s, configuredOnly).find((choice) => choice.id === value);
+  const selected = modelChoices(s).find((choice) => choice.id === value);
   const model = selected?.model || s.models?.scopes[value];
   return (
     <div className="analysis-model-card" data-accent={accent} data-agent-type={type}>
@@ -323,7 +303,7 @@ export function AgentModel({
           <strong>
             {selected?.name ||
               model?.model ||
-              (s.availableModels || configuredOnly ? 'Model unavailable' : 'Choose a model')}
+              (s.availableModels ? 'Model unavailable' : 'Choose a model')}
           </strong>
           <small>
             {model
@@ -339,7 +319,6 @@ export function AgentModel({
           s={s}
           label={label}
           selected={value}
-          configuredOnly={configuredOnly}
           onClose={() => setEditing(false)}
           onSelect={(id) => {
             onChange(id);

@@ -4,6 +4,7 @@ import {
   workspace as w,
   activeChangeWorkflow,
   analysisSetupModels,
+  workflowSetupModels,
   activeRun,
   type State,
   type Page,
@@ -11,7 +12,7 @@ import {
 import { ModelIcon } from './agent-model';
 import { Tests } from './tools';
 import { ModelSelectors } from './analysis-models';
-import { WorkflowModels, defaultWorkflowModels } from './change-workflow';
+import { WorkflowModels } from './change-workflow';
 import {
   Button,
   BulletContent,
@@ -448,7 +449,7 @@ export function Models({ s }: { s: State }) {
       <Panel title="Workflow models" className="fix-models">
         <WorkflowModels
           s={s}
-          value={s.workflowModels || s.change?.workflow?.models || defaultWorkflowModels}
+          value={workflowSetupModels(s)}
           disabled={!!s.busy || !s.models || activeChangeWorkflow(s.change)}
         />
       </Panel>

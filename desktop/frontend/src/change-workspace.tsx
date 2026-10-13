@@ -3,11 +3,13 @@ import { useState } from 'react';
 import {
   canAcceptChange,
   activeChangeWorkflow,
+  effectiveWorkflowModel,
+  workflowSetupModels,
   type State,
   type FixPreparationContext,
 } from './workspace';
 import { WorktreePreparation } from './git-controls';
-import { WorkflowProgress, defaultWorkflowModels } from './change-workflow';
+import { WorkflowProgress } from './change-workflow';
 import {
   Badge,
   Button,
@@ -65,7 +67,7 @@ function ChatWorkspace({ s }: { s: State }) {
     acceptance_criteria: change?.acceptance_criteria || s.changeSeed?.acceptance_criteria || [],
   };
   const running = activeChangeWorkflow(change);
-  const models = s.workflowModels || change?.workflow?.models || defaultWorkflowModels;
+  const models = workflowSetupModels(s);
   const useAgents =
     taskKind !== 'instructions' &&
     (!!change?.workflow || seed.paths.some((path) => path.endsWith('_test.go')));
@@ -92,7 +94,7 @@ function ChatWorkspace({ s }: { s: State }) {
         <WorktreePreparation
           s={{ ...s, changeSeed: seed }}
           remote={(useAgents ? Object.values(models) : [models.create]).some(
-            (profile) => preparation.models.scopes[profile]?.remote_provider,
+            (profile) => effectiveWorkflowModel(preparation, profile)?.remote_provider,
           )}
           onClose={() => setPreparation(undefined)}
           onPrepare={(workspace) => generate(preparation, workspace)}

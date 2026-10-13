@@ -14,12 +14,6 @@ import {
   human,
 } from './ui';
 
-export const defaultWorkflowModels: ChangeWorkflowModels = {
-  create: 'function',
-  test: 'bug',
-  review: 'analyze',
-};
-
 export function WorkflowModels({
   s,
   value,

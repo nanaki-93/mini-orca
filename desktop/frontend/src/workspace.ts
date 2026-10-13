@@ -45,6 +45,7 @@ export interface Confirmation {
 }
 export interface FixPreparationContext {
   models: M.ModelCatalog;
+  availableModels?: M.AvailableModels;
   trust: M.ExecutionTrust;
   repository: M.GitRepository;
 }
@@ -131,6 +132,28 @@ export function analysisSetupModels(s: State): AnalysisAssignments {
     security: resolve(setup.security || setup.review || 'analyze'),
     features: resolve(setup.features),
   };
+}
+export function workflowSetupModels(s: State): M.ChangeWorkflowModels {
+  const setup = s.workflowModels ||
+    s.change?.workflow?.models || { create: 'function', test: 'bug', review: 'analyze' };
+  const resolve = (id: string) => s.availableModels?.defaults[id] || id;
+  return {
+    create: resolve(setup.create),
+    test: resolve(setup.test),
+    review: resolve(setup.review),
+  };
+}
+export function effectiveWorkflowModel(
+  context: { models?: M.ModelCatalog; availableModels?: M.AvailableModels },
+  profile: string,
+): M.Model | undefined {
+  const resolved = context.availableModels?.defaults[profile] || profile;
+  return (
+    context.models?.scopes[profile] ||
+    context.availableModels?.models.find(
+      (choice) => choice.id === profile || choice.id === resolved,
+    )?.model
+  );
 }
 const changePage = (kind: string): Page =>
   ['fix', 'performance', 'security'].includes(kind) ? 'changes' : 'chat';
@@ -658,8 +681,8 @@ export class Workspace {
       if (
         Object.values(models).some(
           (profile) =>
-            JSON.stringify(fresh.models.scopes[profile]) !==
-            JSON.stringify(preparation.models.scopes[profile]),
+            JSON.stringify(effectiveWorkflowModel(fresh, profile)) !==
+            JSON.stringify(effectiveWorkflowModel(preparation, profile)),
         )
       )
         throw new Error(
@@ -684,7 +707,14 @@ export class Workspace {
         child = new Workspace(path, this);
         const project = await child.api.get<M.Project>(current);
         if (epoch !== this.epoch || operation !== this.operation) return;
-        child.set({ project, connected: true, models: this.state.models, page: 'history' });
+        child.set({
+          project,
+          connected: true,
+          models: this.state.models,
+          availableModels: this.state.availableModels,
+          workflowModels: this.state.workflowModels,
+          page: 'history',
+        });
         await child.refreshProject();
         if (epoch !== this.epoch || operation !== this.operation) return;
         this.set({ implementations: [...this.state.implementations, child] });
@@ -1695,11 +1725,15 @@ export class Workspace {
     const catalog = await this.api.get<M.ModelCatalog>('/api/models/current');
     this.set({ models: catalog });
     const selected = [models.create, models.test, models.review];
-    if (selected.some((profile) => !catalog.scopes[profile]))
+    const choices = selected.every((profile) => catalog.scopes[profile])
+      ? undefined
+      : await this.api.get<M.AvailableModels>('/api/models/available');
+    if (choices) this.set({ availableModels: choices });
+    const resolve = (profile: string) =>
+      effectiveWorkflowModel({ models: catalog, availableModels: choices }, profile);
+    if (selected.some((profile) => !resolve(profile)))
       throw new Error('Choose a configured model for every workflow stage.');
-    const remote = [
-      ...new Set(selected.filter((profile) => catalog.scopes[profile].remote_provider)),
-    ];
+    const remote = [...new Set(selected.filter((profile) => resolve(profile)?.remote_provider))];
     if (remote.length || seed.kind === 'security') {
       const accepted = await this.confirm({
         title: seed.kind === 'security' ? 'Start security workflow?' : 'Send workflow context?',
@@ -1707,19 +1741,30 @@ export class Workspace {
           'Create, write and run tests, then request a model review for the captured files. Human review is required before Apply.',
         accept: 'Start workflow',
         details: [
-          ...Object.entries(models).map(
-            ([stage, profile]) =>
-              `${stage}: ${catalog.scopes[profile].model} · ${profile} · ${catalog.scopes[profile].provider_origin}`,
-          ),
+          ...Object.entries(models).map(([stage, profile]) => {
+            const model = resolve(profile)!;
+            return `${stage}: ${model.model} · ${profile} · ${model.provider_origin}`;
+          }),
           ...seed.paths,
         ],
       });
       if (!accepted) return null;
-      const latest = await this.api.get<M.ModelCatalog>('/api/models/current');
+      const [latestCatalog, latestChoices] = await Promise.all([
+        this.api.get<M.ModelCatalog>('/api/models/current'),
+        choices
+          ? this.api.get<M.AvailableModels>('/api/models/available')
+          : Promise.resolve(undefined),
+      ]);
       if (
         selected.some(
           (profile) =>
-            JSON.stringify(catalog.scopes[profile]) !== JSON.stringify(latest.scopes[profile]),
+            JSON.stringify(resolve(profile)) !==
+            JSON.stringify(
+              effectiveWorkflowModel(
+                { models: latestCatalog, availableModels: latestChoices },
+                profile,
+              ),
+            ),
         )
       )
         throw new Error('Provider configuration changed. Review the new destinations.');
@@ -1735,27 +1780,35 @@ export class Workspace {
       }),
       this.api.get<M.GitRepository>(`${current}/git/repository`, this.identity()),
     ]);
+    const setup = workflowSetupModels(this.state);
+    const availableModels = Object.values(setup).every((profile) => models.scopes[profile])
+      ? this.state.availableModels
+      : await this.api.get<M.AvailableModels>('/api/models/available');
     if (epoch !== this.epoch || projectKey(trust) !== projectKey(this.state.project))
       throw new Error('Project changed. Refresh fix preparation.');
-    this.set({ models, repository });
-    return { models, trust, repository };
+    this.set({ models, ...(availableModels ? { availableModels } : {}), repository });
+    return { models, availableModels, trust, repository };
   }
   private async checkedFixPreparation(profiles: string[], preparation: FixPreparationContext) {
     const epoch = this.epoch,
       operation = this.operation;
     const latest = await this.readFixPreparation();
     if (epoch !== this.epoch || operation !== this.operation) return null;
+    if (profiles.some((profile) => !latest.models.scopes[profile]) && !latest.availableModels) {
+      latest.availableModels = await this.api.get<M.AvailableModels>('/api/models/available');
+      if (epoch !== this.epoch || operation !== this.operation) return null;
+      this.set({ availableModels: latest.availableModels });
+    }
     if (
       projectKey(latest.trust) !== projectKey(preparation.trust) ||
       latest.repository.head !== preparation.repository.head ||
       latest.repository.branch !== preparation.repository.branch ||
       JSON.stringify(latest.trust.commands) !== JSON.stringify(preparation.trust.commands) ||
-      profiles.some(
-        (profile) =>
-          !latest.models.scopes[profile] ||
-          JSON.stringify(latest.models.scopes[profile]) !==
-            JSON.stringify(preparation.models.scopes[profile]),
-      )
+      profiles.some((profile) => {
+        const currentModel = effectiveWorkflowModel(latest, profile);
+        const preparedModel = effectiveWorkflowModel(preparation, profile);
+        return !currentModel || JSON.stringify(currentModel) !== JSON.stringify(preparedModel);
+      })
     )
       throw new Error('Preparation changed. Review the current models and permissions.');
     return latest;
@@ -1764,7 +1817,9 @@ export class Workspace {
     const epoch = this.epoch;
     const latest = await this.checkedFixPreparation(profiles, preparation);
     if (!latest) return null;
-    const remote = [...new Set(profiles.filter((p) => latest.models.scopes[p].remote_provider))];
+    const remote = [
+      ...new Set(profiles.filter((p) => effectiveWorkflowModel(latest, p)?.remote_provider)),
+    ];
     if (!latest.trust.trusted) {
       if (epoch !== this.epoch) return null;
       await this.api.post(`${current}/execution-trust`, {
@@ -1981,7 +2036,7 @@ export class Workspace {
   }
   async repairChange(message = 'Repair failed checks.') {
     await this.act('Repair proposal', async () => {
-      if (await this.requestChangeMessage(message, true))
+      if (await this.requestChangeMessage(message, true, workflowSetupModels(this.state).create))
         await this.requestChangeChecks(!!this.state.change?.check_options?.run_tests);
     });
   }
