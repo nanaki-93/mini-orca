@@ -103,8 +103,32 @@ try {
       await idle(page);
       await page.getByRole('heading', { name: 'Issues & Feature Ideas', exact: true }).waitFor();
       await page.getByText('Selected Issue Inspector', { exact: true }).waitFor();
+
+      // Clicking a row keeps the split view and updates Selected Issue Inspector
+      const firstRow = page.locator('.result-row').first();
+      await firstRow.click();
+      await page.getByText('Selected Issue Inspector', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Full Details', exact: true }).waitFor();
+
       await page.getByRole('button', { name: /^Features \(/ }).click();
+      await page.getByText('Project goals & Feature discovery', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Save idea', exact: true }).waitFor();
       await page.getByRole('button', { name: 'Generate & Review Diff', exact: true }).waitFor();
+    } finally {
+      await close();
+    }
+  });
+
+  await test('Command Palette supports keyboard ArrowDown and Enter navigation', async () => {
+    const { page, close } = await pageFor();
+    try {
+      await page.getByRole('button', { name: 'Search files and commands', exact: true }).click();
+      const input = page.locator('#search');
+      await input.waitFor();
+      await input.fill('Models');
+      await input.press('Enter');
+      await idle(page);
+      await page.getByRole('heading', { name: 'Models', exact: true }).waitFor();
     } finally {
       await close();
     }

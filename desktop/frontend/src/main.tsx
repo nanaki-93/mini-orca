@@ -322,7 +322,11 @@ function App() {
               <div className="nav-label">Workspace</div>
               <nav aria-label="Workspaces">{nav(mainNav)}</nav>
             </div>
-            <p className="sidebar-note">Trusted workspace · In-place + Undo</p>
+            <p className="sidebar-note">
+              {s.workspaceTrust !== false
+                ? 'Trusted workspace · In-place + Undo'
+                : 'Untrusted workspace · Review before execution'}
+            </p>
             <button
               className="sidebar-toggle"
               aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -382,7 +386,7 @@ function App() {
               </div>
               <span className="row">
                 <Icon name="shield" />
-                Workspace trusted
+                {s.workspaceTrust !== false ? 'Workspace trusted' : 'Execution untrusted'}
               </span>
               <span>
                 {s.project

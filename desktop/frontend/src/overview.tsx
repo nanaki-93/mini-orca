@@ -608,6 +608,7 @@ export function Diagrams({ s }: { s: State }) {
 export function SearchPage({ s }: { s: State }) {
   const [query, setQuery] = useState('');
   const [limit, setLimit] = useState(100);
+  const [activeIndex, setActiveIndex] = useState(0);
   const files = (s.index?.files || []).filter((file) =>
     file.path.toLowerCase().includes(query.toLowerCase()),
   );
@@ -626,6 +627,11 @@ export function SearchPage({ s }: { s: State }) {
     ['models', 'Models', 'sparkles'],
     ['project', 'Open project', 'folder'],
   ];
+  const visibleFiles = files.slice(0, limit);
+  const visibleCommands = commands.filter(([, name]) =>
+    name.toLowerCase().includes(query.toLowerCase()),
+  );
+  const totalItems = visibleFiles.length + visibleCommands.length;
   return (
     <div className="workspace-page search-workspace">
       <Heading title="Jump to" variant="intro" />
@@ -642,6 +648,26 @@ export function SearchPage({ s }: { s: State }) {
           onChange={(event) => {
             setQuery(event.target.value);
             setLimit(100);
+            setActiveIndex(0);
+          }}
+          onKeyDown={(event) => {
+            if (!totalItems) return;
+            if (event.key === 'ArrowDown') {
+              event.preventDefault();
+              setActiveIndex((i) => (i + 1) % totalItems);
+            } else if (event.key === 'ArrowUp') {
+              event.preventDefault();
+              setActiveIndex((i) => (i - 1 + totalItems) % totalItems);
+            } else if (event.key === 'Enter') {
+              event.preventDefault();
+              const idx = Math.min(activeIndex, totalItems - 1);
+              if (idx < visibleFiles.length) {
+                void w.openFile(visibleFiles[idx].path);
+              } else {
+                const cmd = visibleCommands[idx - visibleFiles.length];
+                if (cmd) void w.navigate(cmd[0]);
+              }
+            }
           }}
           placeholder="Find a file or command…"
         />
@@ -649,8 +675,13 @@ export function SearchPage({ s }: { s: State }) {
       <div className="grid two-columns search-regions">
         <Panel title={`Files · ${files.length}`}>
           {!files.length && <p className="muted">No matching files.</p>}
-          {files.slice(0, limit).map((file) => (
-            <button className="list-row" key={file.path} onClick={() => void w.openFile(file.path)}>
+          {visibleFiles.map((file, index) => (
+            <button
+              className={`list-row ${activeIndex === index ? 'active' : ''}`}
+              aria-selected={activeIndex === index}
+              key={file.path}
+              onClick={() => void w.openFile(file.path)}
+            >
               <Icon name="file" />
               <span className="list-copy">
                 <strong>{file.path.split('/').at(-1)}</strong>
@@ -661,17 +692,21 @@ export function SearchPage({ s }: { s: State }) {
           {files.length > limit && <Button onClick={() => setLimit(limit + 100)}>Show more</Button>}
         </Panel>
         <Panel title="Commands">
-          {!commands.some(([, name]) => name.toLowerCase().includes(query.toLowerCase())) && (
-            <p className="muted">No matching commands.</p>
-          )}
-          {commands
-            .filter(([, name]) => name.toLowerCase().includes(query.toLowerCase()))
-            .map(([page, name, icon]) => (
-              <button className="list-row" key={page} onClick={() => void w.navigate(page)}>
+          {!visibleCommands.length && <p className="muted">No matching commands.</p>}
+          {visibleCommands.map(([page, name, icon], index) => {
+            const itemIndex = visibleFiles.length + index;
+            return (
+              <button
+                className={`list-row ${activeIndex === itemIndex ? 'active' : ''}`}
+                aria-selected={activeIndex === itemIndex}
+                key={page}
+                onClick={() => void w.navigate(page)}
+              >
                 <Icon name={icon} />
                 <span>{name}</span>
               </button>
-            ))}
+            );
+          })}
         </Panel>
       </div>
     </div>

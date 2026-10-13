@@ -8,7 +8,8 @@ import {
   type State,
 } from './workspace';
 import { WorkflowProgress } from './change-workflow';
-import { ChangeHistory, ChangeOutcome } from './change-shared';
+import { ChangeChecks, ChangeHistory, ChangeOutcome } from './change-shared';
+import { native } from './api';
 import type * as M from './models';
 import {
   Badge,
@@ -183,6 +184,9 @@ export function Editor({ s }: { s: State }) {
     [...new Set([activePath, ...changedPaths])].filter(Boolean),
   );
   useEffect(() => {
+    setOpened([...new Set([activePath, ...changedPaths])].filter(Boolean));
+  }, [s.project?.project_id]);
+  useEffect(() => {
     setOpened((prev) => {
       const next = [...prev];
       for (const p of [activePath, ...changedPaths]) {
@@ -232,6 +236,10 @@ export function Editor({ s }: { s: State }) {
   const dirty = !s.file?.binary && draftContent !== (s.file?.content ?? '');
 
   useEffect(() => {
+    void native().SetUnsavedDraft(Boolean(mode === 'edit' && dirty));
+  }, [mode, dirty]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         if (mode === 'edit' && activePath && !s.busy) {
@@ -269,7 +277,7 @@ export function Editor({ s }: { s: State }) {
           .replace(/^-|-$/g, '')
           .slice(0, 28) || 'task'
       }`;
-      const path = `${s.project?.path || '.'}/.mini-orca/worktrees/${branch.replace('/', '-')}`;
+      const path = `${s.project?.path || '.'}/.worktrees/${branch.replace('/', '-')}`;
       await w.prepareFixInWorktree(seed, workflowSetupModels(s), prep, branch, path, true);
     } else {
       await w.prepareChange(seed, true, workflowSetupModels(s).create);
@@ -375,6 +383,22 @@ export function Editor({ s }: { s: State }) {
                         +{stat.adds}/-{stat.dels}
                       </span>
                     )}
+                    {opened.length > 1 && (
+                      <span
+                        role="button"
+                        aria-label={`Close ${path}`}
+                        title="Close tab"
+                        style={{ marginLeft: '4px', opacity: 0.6, cursor: 'pointer' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const next = opened.filter((p) => p !== path);
+                          setOpened(next);
+                          if (activePath === path && next[0]) selectPath(next[0]);
+                        }}
+                      >
+                        ×
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -442,7 +466,8 @@ export function Editor({ s }: { s: State }) {
               </Notice>
             )}
             <ChangeOutcome s={s} />
-            {change && activeChangeWorkflow(change) && <WorkflowProgress s={s} />}
+            {change?.workflow && <WorkflowProgress s={s} />}
+            {change && change.checks.length > 0 && <ChangeChecks s={s} />}
 
             {mode === 'diff' ? (
               change && change.changes.length > 0 ? (
@@ -474,6 +499,16 @@ export function Editor({ s }: { s: State }) {
                     <div className="row wrap" style={{ gap: '8px' }}>
                       {change.state === 'draft' && (
                         <>
+                          {change.checks.some((c) => c.state === 'failed') && (
+                            <Button
+                              tone="ghost small"
+                              icon="sparkles"
+                              disabled={!!s.busy}
+                              onClick={() => void w.repairChange()}
+                            >
+                              Repair Failed Checks
+                            </Button>
+                          )}
                           <Button
                             tone="ghost small"
                             icon="play"
