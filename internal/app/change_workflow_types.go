@@ -7,18 +7,22 @@ import (
 	"time"
 )
 
-// Workflow choices reuse daemon-owned profiles, including their transport,
-// credentials, retry limits and per-request deadlines.
+// Workflow choices reference catalog models or configured profiles; credentials
+// and retry limits remain daemon-owned.
 type ChangeWorkflowModels struct {
 	Create string `json:"create"`
 	Test   string `json:"test"`
 	Review string `json:"review"`
 }
 
+func (models ChangeWorkflowModels) selections() []string {
+	return []string{models.Create, models.Test, models.Review}
+}
+
 func (models ChangeWorkflowModels) validate() error {
-	for _, profile := range []string{models.Create, models.Test, models.Review} {
-		if profile != "analyze" && profile != "bug" && profile != "function" {
-			return fmt.Errorf("workflow models must reference configured analyze, bug or function profiles")
+	for _, profile := range models.selections() {
+		if !validModelSelection(profile) {
+			return fmt.Errorf("workflow models must reference catalog model IDs or configured analyze, bug or function profiles")
 		}
 	}
 	return nil

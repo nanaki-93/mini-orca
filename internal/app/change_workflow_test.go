@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/llm"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
@@ -256,5 +257,51 @@ func TestChangeWorkflowFailuresAndReviewRejectionBlockHumanApply(t *testing.T) {
 				t.Fatal("incomplete workflow allowed Apply")
 			}
 		})
+	}
+}
+
+func TestChangeWorkflowSupportsCatalogAndCLIModels(t *testing.T) {
+	var calls [3]atomic.Int32
+	outputs := [3]func() string{}
+	for i, output := range []string{workflowImplementation, workflowTests, workflowApproval} {
+		i, output := i, output
+		outputs[i] = func() string { calls[i].Add(1); return output }
+	}
+	s, _, initial := workflowService(t, outputs)
+	s.discoverPiModels = func(context.Context, string) ([]llm.PiModel, error) {
+		return []llm.PiModel{{Provider: "openai", ID: "gpt-5"}}, nil
+	}
+	s.discoverAgyModels = func(context.Context, string) ([]llm.AgyModel, error) {
+		return []llm.AgyModel{{ID: "gemini-2.5-pro", Name: "Gemini 2.5 Pro"}}, nil
+	}
+	catalog, err := s.AvailableModels(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := workflowRequest(initial)
+	request.Models = ChangeWorkflowModels{
+		Create: catalog.Defaults["bug"],
+		Test:   catalog.Defaults["analyze"],
+		Review: "agy:unlisted-model",
+	}
+	if _, err := s.StartChangeWorkflow(context.Background(), initial.ID, request); !errors.Is(err, project.ErrRevisionConflict) {
+		t.Fatalf("unlisted CLI model admitted: %v", err)
+	}
+	request.Models.Review = catalog.Defaults["function"]
+	started, err := s.StartChangeWorkflow(context.Background(), initial.ID, request)
+	if err != nil || started.Workflow.Status != "running" {
+		t.Fatalf("catalog workflow admission: %+v, %v", started, err)
+	}
+	session := finishedWorkflow(t, s, initial.ID)
+	if session.Workflow.Status != "awaiting_human_review" {
+		t.Fatalf("catalog workflow status: %+v", session.Workflow)
+	}
+	expectedProfiles := []string{catalog.Defaults["bug"], catalog.Defaults["analyze"], catalog.Defaults["function"]}
+	expectedScopes := []string{"function", "bug", "analyze"}
+	for i, name := range []string{"creator", "tester", "reviewer"} {
+		stage := session.Workflow.Stages[i]
+		if calls[i].Load() != 1 || stage.Model.Model != name || stage.Model.Profile != expectedProfiles[i] || stage.Model.Scope != expectedScopes[i] {
+			t.Fatalf("stage %d provenance: %+v", i, stage)
+		}
 	}
 }

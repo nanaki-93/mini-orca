@@ -56,6 +56,11 @@ func TestChangeWorkflowHTTPAdmissionProgressAndCancellation(t *testing.T) {
 	if _, err := h.service.TrustProjectExecution(index.ProjectRevision, true); err != nil {
 		t.Fatal(err)
 	}
+	unavailable := request
+	unavailable.Models.Review = "configured:" + strings.Repeat("0", 64)
+	if conflict := workflowResponse(t, h.StartWorkflow, "POST", "/changes/id/workflow", session.ID, unavailable); conflict.Code != http.StatusConflict {
+		t.Fatalf("unavailable catalog model: %d %s", conflict.Code, conflict.Body.String())
+	}
 	started := workflowResponse(t, h.StartWorkflow, "POST", "/changes/id/workflow", session.ID, request)
 	if started.Code != http.StatusAccepted {
 		t.Fatalf("start: %d %s", started.Code, started.Body.String())

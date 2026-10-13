@@ -191,7 +191,7 @@ func (s *Service) ReviewChange(ctx context.Context, id string, identity ChangeId
 }
 
 func (s *Service) RepairChangeMessage(ctx context.Context, id string, request ChangeMessageRequest) (*ChangeSession, error) {
-	runtime, err := s.changeMessageRuntime(request)
+	runtime, err := s.changeMessageRuntime(ctx, request)
 	if err != nil {
 		return nil, err
 	}

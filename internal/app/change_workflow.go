@@ -8,10 +8,27 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nanaki-93/mini-orca/v2/internal/config"
 	"github.com/nanaki-93/mini-orca/v2/internal/project"
 )
 
 const changeWorkflowBudget = 30 * time.Minute
+
+func workflowStageScope(stage int) config.ModelScope {
+	switch stage {
+	case 0:
+		return config.FunctionModelScope
+	case 1:
+		return config.BugModelScope
+	default:
+		return config.AnalyzeModelScope
+	}
+}
+
+func (s *Service) workflowStageRuntime(stage int, profile string) modelRuntime {
+	runtime, _ := s.selectedRuntime(workflowStageScope(stage), profile)
+	return runtime
+}
 
 // StartChangeWorkflow captures consent and proposal identity before dispatch.
 // The HTTP request only admits the worker; polling/Cancel use its persisted ID.
@@ -21,6 +38,9 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	}
 	if strings.TrimSpace(request.Message) == "" || len(request.Message) > 8192 {
 		return nil, fmt.Errorf("provide a workflow request of at most 8192 bytes")
+	}
+	if err := s.validateModelSelections(ctx, request.Models.selections()); err != nil {
+		return nil, err
 	}
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()
@@ -36,8 +56,8 @@ func (s *Service) StartChangeWorkflow(ctx context.Context, id string, request Ch
 	now := time.Now().UTC()
 	session.Revision++ // Invalidates operations admitted before this run.
 	w := &ChangeWorkflow{ID: fmt.Sprintf("%s-%d", id, session.Revision), Status: "running", Models: request.Models, StartedAt: now, UpdatedAt: now}
-	for i, profile := range []string{request.Models.Create, request.Models.Test, request.Models.Review} {
-		runtime, _ := s.runtimes.forScope(profile)
+	for i, profile := range request.Models.selections() {
+		runtime := s.workflowStageRuntime(i, profile)
 		w.Stages = append(w.Stages, ChangeWorkflowStage{Name: []string{"create", "test", "review"}[i], Status: "pending", Model: &runtime.effective})
 	}
 	w.Stages = append(w.Stages, ChangeWorkflowStage{Name: "human_review", Status: "blocked"})
@@ -77,8 +97,8 @@ func (s *Service) admitChangeWorkflow(session *ChangeSession, request ChangeWork
 	if !hasTestTarget {
 		return fmt.Errorf("include a Go test path (_test.go) in the captured scope for the testing agent")
 	}
-	for _, profile := range []string{request.Models.Create, request.Models.Test, request.Models.Review} {
-		runtime, _ := s.runtimes.forScope(profile)
+	for i, profile := range request.Models.selections() {
+		runtime := s.workflowStageRuntime(i, profile)
 		if err := requireModelRuntimeConfirmation(runtime, slices.Contains(request.ConfirmedProfiles, profile)); err != nil {
 			return err
 		}
@@ -103,7 +123,7 @@ func (s *Service) executeChangeWorkflowStage(ctx context.Context, job *changeWor
 	if err != nil {
 		return err
 	}
-	runtime, _ := s.runtimes.forScope([]string{job.models.Create, job.models.Test, job.models.Review}[stage])
+	runtime := s.workflowStageRuntime(stage, job.models.selections()[stage])
 	switch stage {
 	case 0:
 		_, err = s.generateChangeWithRuntime(ctx, job.root, session, ChangeMessageRequest{ChangeIdentity: identityForChange(session), Message: message}, runtime)
