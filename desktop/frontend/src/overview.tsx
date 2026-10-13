@@ -153,48 +153,8 @@ export function Summary({ s }: { s: State }) {
   const coverage = overview?.analysis_coverage;
   const percent = coverage?.total ? Math.round((100 * coverage.fresh) / coverage.total) : null;
   const features = s.features;
-  const metrics: {
-    page: Page;
-    title: string;
-    icon: string;
-    count?: number | null;
-    status?: string;
-  }[] = [
-    ...(
-      [
-        ['bugs', 'Bugs', 'bug'],
-        ['performance', 'Performance', 'gauge'],
-        ['security', 'Security', 'shield'],
-      ] as const
-    ).map(([page, title, icon]) => {
-      const section = s.run?.sections.find((value) => value.category === page);
-      return {
-        page,
-        title,
-        icon,
-        count: section?.finding_count,
-        status: section?.status || 'not_run',
-      };
-    }),
-    {
-      page: 'features' as const,
-      title: 'Features',
-      icon: 'sparkles',
-      count:
-        features && (features.status === 'ready' || features.suggestions.length > 0)
-          ? features.suggestions.filter((idea) => idea.status !== 'dismissed').length
-          : undefined,
-      status:
-        features?.status === 'failed'
-          ? 'failed'
-          : features?.freshness === 'stale' ||
-              features?.suggestions.some(
-                (idea) => idea.status !== 'dismissed' && idea.freshness === 'stale',
-              )
-            ? 'stale'
-            : features?.status,
-    },
-  ];
+  const featureCount =
+    features?.suggestions.filter((idea) => idea.status !== 'dismissed').length || 0;
   const currentWork = s.change || s.changeHistory?.find((entry) => entry.state === 'draft');
   const bugSection = s.run?.sections.find((value) => value.category === 'bugs');
   const secSection = s.run?.sections.find((value) => value.category === 'security');
@@ -211,33 +171,21 @@ export function Summary({ s }: { s: State }) {
     perfSection?.finding_count ??
     s.findings?.filter((f) => f.category === 'performance' && f.status !== 'fixed').length ??
     0;
-  const totalIssues = (bugCount || 0) + (secCount || 0) + (perfCount || 0);
-  const openWork = (id: string) => (s.change?.id === id ? w.navigate('chat') : w.viewChange(id));
-  const renderMetric = ({ page, title, icon, count, status }: (typeof metrics)[number]) => (
-    <button
-      key={page}
-      className="metric-card studio-list-row"
-      data-accent={page}
-      onClick={() => void w.navigate(page)}
-    >
-      <span className="studio-row-icon">
-        <Icon name={icon} />
-      </span>
-      <span className="studio-row-copy">
-        <strong>{title}</strong>
-      </span>
-      <StatusDot value={status} label={title} />
-      <span className="metric-number">{count ?? '—'}</span>
-      <Icon name="chevron" />
-    </button>
-  );
+  const totalIssues = (bugCount || 0) + (secCount || 0) + (perfCount || 0) + featureCount;
+  const openWork = (id: string) => (s.change?.id === id ? w.navigate('editor') : w.viewChange(id));
+
+  const entryFiles = (s.index?.files || []).slice(0, 6);
+
   return (
     <div className="summary-page">
       <div className="summary-hero">
         <header className="page-heading">
           <div>
             <h1>{s.project!.name}</h1>
-            <p className="summary-path">{s.project!.path}</p>
+            <p className="summary-path">
+              {s.project!.path} · {s.project!.source_file_count ?? '—'} source files ·{' '}
+              {s.project!.total_lines?.toLocaleString() ?? '—'} lines
+            </p>
           </div>
           <div className="actions">
             <Button
@@ -257,44 +205,18 @@ export function Summary({ s }: { s: State }) {
               {activeRun(s.run) ? 'Analyzing…' : 'Run Analysis'}
             </Button>
             <Button
-              icon="plus"
+              icon="code"
               tone="primary"
-              disabled={!!s.busy || activeChangeWorkflow(s.change)}
-              onClick={() => {
-                w.newChange();
-                void w.navigate('chat');
-              }}
+              disabled={!!s.busy}
+              onClick={() => void w.navigate('editor')}
             >
-              New task
+              Open Code & Diff
             </Button>
           </div>
         </header>
-        <Disclosure title="Project details">
-          <div className="summary-description">
-            <StatusDot value={overview?.analysis.status || s.project!.ai_status} label="Overview" />
-            <Prose text={overview?.analysis.purpose || s.project!.summary} />
-          </div>
-          <dl className="summary-facts" aria-label="Project facts">
-            <div>
-              <dt>Project type</dt>
-              <dd className="summary-project-type">{s.project!.type}</dd>
-            </div>
-            <div>
-              <dt>Source files</dt>
-              <dd>{overview?.metrics.source_file_count ?? '—'}</dd>
-            </div>
-            <div>
-              <dt>Lines</dt>
-              <dd>{overview?.metrics.total_lines?.toLocaleString() ?? '—'}</dd>
-            </div>
-            <div>
-              <dt>Verified findings</dt>
-              <dd>{overview?.finding_counts.verified ?? '—'}</dd>
-            </div>
-          </dl>
-        </Disclosure>
         {overview?.analysis.failure && <p className="error-text">{overview.analysis.failure}</p>}
       </div>
+
       {activeRun(s.run) && (
         <div
           className="analysis-live-banner"
@@ -343,205 +265,136 @@ export function Summary({ s }: { s: State }) {
           </div>
         </div>
       )}
-      {/* Top KPI Metrics Row matching ui-mockup.html */}
-      <div
-        className="kpi-metrics-row"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '14px',
-          marginBottom: '20px',
-        }}
-      >
-        <div
-          className="panel card-kpi"
-          style={{ padding: '16px', cursor: 'pointer' }}
-          onClick={() => void w.navigate('bugs')}
-        >
-          <div
-            style={{
-              fontSize: '11px',
-              textTransform: 'uppercase',
-              color: 'var(--muted)',
-              fontWeight: 600,
-              marginBottom: '4px',
-            }}
-          >
-            Open Issues
+
+      {/* 3-Card Project Pulse */}
+      <div className="kpi-pulse-grid">
+        <div className="kpi-pulse-card card-kpi">
+          <span className="small muted uppercase">Active Proposal</span>
+          <div className="kpi-pulse-value" style={{ color: 'var(--accent)' }}>
+            {s.change?.changes?.length
+              ? `${s.change.changes.length} ${s.change.changes.length === 1 ? 'File' : 'Files'} Changed`
+              : currentWork
+                ? currentWork.title
+                : 'Ready to Edit'}
           </div>
-          <div
-            style={{
-              fontSize: '24px',
-              fontWeight: 700,
-              color: 'var(--text)',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
+          <p className="small muted">
+            {s.change?.title ||
+              'Edit any project file inline or generate hunk-by-hunk AI diffs in Code & Diff.'}
+          </p>
+          <div className="actions" style={{ marginTop: 'auto' }}>
+            {currentWork ? (
+              <Button
+                tone="primary small"
+                icon="code"
+                onClick={() => void openWork(currentWork.id)}
+              >
+                Review Diff Hunks →
+              </Button>
+            ) : (
+              <Button tone="primary small" icon="code" onClick={() => void w.navigate('editor')}>
+                Open Editor →
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="kpi-pulse-card card-kpi">
+          <span className="small muted uppercase">Issues & Feature Ideas</span>
+          <div className="kpi-pulse-value">
             {totalIssues}{' '}
-            <span style={{ fontSize: '12px', fontWeight: 'normal', color: 'var(--red)' }}>
-              ({bugCount} Bugs · {secCount} Sec · {perfCount} Perf)
+            <span className="small muted" style={{ fontWeight: 500 }}>
+              ({bugCount} Bugs · {secCount} Sec · {perfCount} Perf · {featureCount} Ideas)
             </span>
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--accent)', marginTop: '4px' }}>
-            View issues console →
+          <p className="small muted">
+            {percent !== null
+              ? `${percent}% analysis coverage (${coverage?.fresh}/${coverage?.total} files)`
+              : 'Run project analysis to surface bugs, security risks, and feature ideas.'}
+          </p>
+          <div className="actions" style={{ marginTop: 'auto' }}>
+            <Button tone="ghost small" icon="bug" onClick={() => void w.navigate('bugs')}>
+              Triage & Fix Issues →
+            </Button>
           </div>
         </div>
 
-        <div className="panel card-kpi" style={{ padding: '16px' }}>
-          <div
-            style={{
-              fontSize: '11px',
-              textTransform: 'uppercase',
-              color: 'var(--muted)',
-              fontWeight: 600,
-              marginBottom: '4px',
-            }}
-          >
-            Test Health
-          </div>
-          <div
-            style={{
-              fontSize: '24px',
-              fontWeight: 700,
-              color:
-                s.scan?.status === 'passed'
-                  ? 'var(--green)'
-                  : s.scan?.status === 'failed'
-                    ? 'var(--red)'
-                    : 'var(--text)',
-            }}
-          >
-            {s.scan ? human(s.scan.status).toUpperCase() : 'NOT RUN'}
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
-            {s.scan?.status === 'passed' ? 'All tests passing' : 'Automated test suite status'}
-          </div>
-        </div>
-
-        <div className="panel card-kpi" style={{ padding: '16px' }}>
-          <div
-            style={{
-              fontSize: '11px',
-              textTransform: 'uppercase',
-              color: 'var(--muted)',
-              fontWeight: 600,
-              marginBottom: '4px',
-            }}
-          >
-            Analysis Coverage
-          </div>
-          <div
-            style={{
-              fontSize: '24px',
-              fontWeight: 700,
-              color: 'var(--accent)',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-          >
-            {percent !== null ? `${percent}%` : '—'}{' '}
-            <span style={{ fontSize: '12px', fontWeight: 'normal', color: 'var(--muted)' }}>
-              Current
+        <div className="kpi-pulse-card card-kpi">
+          <span className="small muted uppercase">Git & Worktrees</span>
+          <div className="kpi-pulse-value" style={{ color: 'var(--green)' }}>
+            {s.repository?.branch || 'main'}{' '}
+            <span className="small muted" style={{ fontWeight: 500 }}>
+              · {s.gitWorkspace?.worktrees.length || 0} Worktrees
             </span>
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
-            {coverage
-              ? `${coverage.fresh} of ${coverage.total} source files analyzed`
-              : 'Run analysis to compute'}
-          </div>
-        </div>
-
-        <div
-          className="panel card-kpi"
-          style={{ padding: '16px', cursor: 'pointer' }}
-          onClick={() => void w.navigate('git')}
-        >
-          <div
-            style={{
-              fontSize: '11px',
-              textTransform: 'uppercase',
-              color: 'var(--muted)',
-              fontWeight: 600,
-              marginBottom: '4px',
-            }}
-          >
-            Git Status
-          </div>
-          <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text)' }}>
-            {s.gitWorkspace?.worktrees.length ?? (s.repository?.available ? 1 : 0)} Worktrees
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
-            branch: {s.repository?.branch || 'main'} · Manage worktrees →
+          <p className="small muted">
+            In-place edits apply with guarded Undo. Background worktrees can be merged in one click.
+          </p>
+          <div className="actions" style={{ marginTop: 'auto' }}>
+            <Button tone="ghost small" icon="branch" onClick={() => void w.navigate('git')}>
+              Manage Git & Worktrees →
+            </Button>
           </div>
         </div>
       </div>
-      <section className="studio-resume" aria-label="Continue work">
-        <div>
-          <span className="studio-eyebrow">{currentWork ? 'Active task' : 'Next action'}</span>
-          <h2>{currentWork?.title || (s.run ? 'Analysis results ready' : 'Ready for new task')}</h2>
 
-          {currentWork && (
-            <span className="small muted">
-              {('workflow_status' in currentWork && currentWork.workflow_status) ||
-                ('workflow' in currentWork && currentWork.workflow?.status) ||
-                currentWork.state}
-            </span>
-          )}
-        </div>
-        {currentWork ? (
-          <Button
-            icon="arrow"
-            tone="primary"
-            disabled={!!s.busy}
-            onClick={() => void openWork(currentWork.id)}
+      {/* Interactive System Architecture & Entry Points */}
+      <Panel
+        title="System Architecture & Entry Points"
+        actions={
+          <div className="row" style={{ gap: '8px' }}>
+            <Go page="diagrams" tone="ghost small" icon="network">
+              Full Diagrams
+            </Go>
+            <Go page="instructions" tone="ghost small" icon="shield">
+              Settings & Rules
+            </Go>
+          </div>
+        }
+      >
+        <Prose
+          text={
+            overview?.analysis.purpose ||
+            overview?.analysis.architecture ||
+            s.project!.summary ||
+            'Select any module or entry point below to inspect or edit it directly in Code & Diff.'
+          }
+        />
+        {entryFiles.length > 0 && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+              gap: '10px',
+              marginTop: '14px',
+            }}
           >
-            Open task
-          </Button>
-        ) : (
-          <Go page={s.run ? 'analysis-run' : 'chat'} icon="arrow" tone="primary">
-            {s.run ? 'View results' : 'New task'}
-          </Go>
+            {entryFiles.map((file) => (
+              <button
+                key={file.path}
+                className="panel card-kpi"
+                style={{
+                  textAlign: 'left',
+                  padding: '12px 14px',
+                  cursor: 'pointer',
+                  background: 'var(--raised)',
+                }}
+                onClick={() => void w.openFile(file.path)}
+              >
+                <div className="row between">
+                  <strong className="font-mono" style={{ fontSize: '0.82rem', color: 'var(--accent)' }}>
+                    {file.path.split('/').at(-1)}
+                  </strong>
+                  <Icon name="arrow" />
+                </div>
+                <small className="muted font-mono" style={{ display: 'block', marginTop: '4px' }}>
+                  {file.path}
+                </small>
+              </button>
+            ))}
+          </div>
         )}
-      </section>
-      <div className="summary-dashboard">
-        <section className="studio-attention" aria-label="Needs attention">
-          <h2>Triage & findings</h2>
-          <div className="metric-grid">{metrics.map(renderMetric)}</div>
-        </section>
-        <Panel className="coverage-panel">
-          <div className="coverage-ring">
-            <svg viewBox="0 0 100 100" aria-hidden="true">
-              <circle className="ring-track" cx="50" cy="50" r="42" />
-              <circle
-                className="ring-mark"
-                cx="50"
-                cy="50"
-                r="42"
-                strokeDasharray={`${(percent || 0) * 2.64} 264`}
-              />
-            </svg>
-            <strong>{percent === null ? '—' : `${percent}%`}</strong>
-          </div>
-          <div className="coverage-copy">
-            <h2>Analysis coverage</h2>
-            <p>
-              {coverage
-                ? `${coverage.fresh} of ${coverage.total} files current`
-                : 'Not available yet'}
-            </p>
-          </div>
-          <div className="legend">
-            <span className={coverage && coverage.stale > 0 ? 'coverage-stale' : undefined}>
-              Outdated <strong>{coverage?.stale ?? '—'}</strong>
-            </span>
-            <span>
-              Missing <strong>{coverage?.missing ?? '—'}</strong>
-            </span>
-            <span className={coverage && coverage.failed > 0 ? 'coverage-failed' : undefined}>
-              Failed <strong>{coverage?.failed ?? '—'}</strong>
-            </span>
-          </div>
-        </Panel>
-      </div>
+      </Panel>
+
       <Disclosure
         title={
           <span className="row">
@@ -554,27 +407,6 @@ export function Summary({ s }: { s: State }) {
       >
         <Tests s={s} />
       </Disclosure>
-      <div className="grid equal-columns section-gap summary-ops-grid">
-        <Panel title="File Scope & Exclusions">
-          <p className="muted" style={{ marginBottom: '12px', fontSize: '0.85rem' }}>
-            {s.selection?.files.filter(
-              (file) => !file.reason && !s.selection?.excluded_paths.includes(file.path),
-            ).length ?? '—'}{' '}
-            eligible files included · {s.selection?.excluded_paths.length ?? 0} files excluded
-          </p>
-          <div className="actions">
-            <Go page="analysis-files">Manage File Scope & Exclusions →</Go>
-          </div>
-        </Panel>
-        <Panel title="Agent Environment (AGENTS.md)">
-          <p className="muted" style={{ marginBottom: '12px', fontSize: '0.85rem' }}>
-            Project guidance, architecture rules, and autonomous instructions.
-          </p>
-          <div className="actions">
-            <Go page="instructions">Edit Environment & Rules →</Go>
-          </div>
-        </Panel>
-      </div>
     </div>
   );
 }
