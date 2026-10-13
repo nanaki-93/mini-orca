@@ -6,23 +6,107 @@
   <title>mini-orca UI/UX Mockup - Developer Experience</title>
   <style>
     :root {
-      --bg: #0d1117;
-      --canvas: #161b22;
-      --raised: #21262d;
-      --hover: #30363d;
-      --border: #30363d;
-      --text: #e6edf3;
-      --muted: #8b949e;
-      --accent: #2f81f7;
-      --accent-hover: #388bfd;
-      --green: #238636;
-      --green-hover: #2ea043;
-      --red: #da3633;
-      --orange: #d29922;
-      --blue: #58a6ff;
       --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
     }
+    /* All-Dark Color Palettes */
+    :root, [data-theme="dark"] {
+      --bg: #141715;
+      --canvas: #1b1e1b;
+      --raised: #242923;
+      --hover: #31372f;
+      --border: #3b4237;
+      --text: #f4f6ee;
+      --muted: #a6b29d;
+      --accent: #e5c483;
+      --accent-hover: #edd6a4;
+      --blue: #85d9ed;
+      --green: #80ddba;
+      --red: #f87171;
+      --orange: #fbbf24;
+      --theme-name: "Graphite (Warm Amber)";
+    }
+    [data-theme="midnight"] {
+      --bg: #070e17;
+      --canvas: #0c1827;
+      --raised: #132439;
+      --hover: #1c334f;
+      --border: #254366;
+      --text: #eaf4ff;
+      --muted: #91b3d6;
+      --accent: #38bdf8;
+      --accent-hover: #60d0fd;
+      --blue: #38bdf8;
+      --green: #34d399;
+      --red: #f87171;
+      --orange: #fbbf24;
+      --theme-name: "Midnight (Ocean Cyan)";
+    }
+    [data-theme="emerald"] {
+      --bg: #07130e;
+      --canvas: #0d1e17;
+      --raised: #142a20;
+      --hover: #1e3c2e;
+      --border: #294d3c;
+      --text: #ecfaf3;
+      --muted: #8ec3a7;
+      --accent: #3ddc84;
+      --accent-hover: #5eed9c;
+      --blue: #38bdf8;
+      --green: #4ade80;
+      --red: #f87171;
+      --orange: #fbbf24;
+      --theme-name: "Emerald (Pine & Jade)";
+    }
+    [data-theme="nordic"] {
+      --bg: #0c1017;
+      --canvas: #121822;
+      --raised: #1a2331;
+      --hover: #263346;
+      --border: #33435c;
+      --text: #f0f6fc;
+      --muted: #94a7bd;
+      --accent: #60a5fa;
+      --accent-hover: #8bbefa;
+      --blue: #60a5fa;
+      --green: #34d399;
+      --red: #fb7185;
+      --orange: #fbbf24;
+      --theme-name: "Nordic (Slate & Arctic)";
+    }
+    [data-theme="signal"] {
+      --bg: #0a0a0d;
+      --canvas: #121217;
+      --raised: #1a1a22;
+      --hover: #252530;
+      --border: #353545;
+      --text: #fff1ee;
+      --muted: #b5a9ad;
+      --accent: #ff5a66;
+      --accent-hover: #ff7d86;
+      --blue: #93c5fd;
+      --green: #86efac;
+      --red: #ff5a66;
+      --orange: #fde047;
+      --theme-name: "Signal (Onyx & Coral)";
+    }
+    [data-theme="amethyst"] {
+      --bg: #140d21;
+      --canvas: #1b122c;
+      --raised: #25193d;
+      --hover: #332353;
+      --border: #463070;
+      --text: #fbf5ff;
+      --muted: #b99fd6;
+      --accent: #c084fc;
+      --accent-hover: #d8b4fe;
+      --blue: #93c5fd;
+      --green: #86efac;
+      --red: #f87171;
+      --orange: #fde047;
+      --theme-name: "Amethyst (Royal Violet)";
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background: var(--bg);
@@ -435,6 +519,10 @@
         <svg viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
         <span>Models</span>
       </button>
+      <button class="nav-item" id="nav-themes" onclick="switchMockup('themes')">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 0 0 20v-2a8 8 0 0 1 0-16V2z"/></svg>
+        <span>Themes</span>
+      </button>
     </div>
   </aside>
 
@@ -448,8 +536,17 @@
           main
         </span>
       </div>
-      <div class="actions-row">
-        <span class="muted" style="font-size:11px;">Developer UI Preview</span>
+      <div class="actions-row" style="gap:12px;">
+        <span class="muted" style="font-size:11px;">Theme:</span>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <button title="Graphite (Warm Amber)" onclick="setTheme('dark')" style="width:18px; height:18px; border-radius:50%; background:#e5c483; border:2px solid var(--border); cursor:pointer;"></button>
+          <button title="Midnight (Ocean Cyan)" onclick="setTheme('midnight')" style="width:18px; height:18px; border-radius:50%; background:#38bdf8; border:2px solid var(--border); cursor:pointer;"></button>
+          <button title="Emerald (Pine & Jade)" onclick="setTheme('emerald')" style="width:18px; height:18px; border-radius:50%; background:#3ddc84; border:2px solid var(--border); cursor:pointer;"></button>
+          <button title="Nordic (Slate & Arctic)" onclick="setTheme('nordic')" style="width:18px; height:18px; border-radius:50%; background:#60a5fa; border:2px solid var(--border); cursor:pointer;"></button>
+          <button title="Signal (Onyx & Coral)" onclick="setTheme('signal')" style="width:18px; height:18px; border-radius:50%; background:#ff5a66; border:2px solid var(--border); cursor:pointer;"></button>
+          <button title="Amethyst (Royal Violet)" onclick="setTheme('amethyst')" style="width:18px; height:18px; border-radius:50%; background:#c084fc; border:2px solid var(--border); cursor:pointer;"></button>
+        </div>
+        <button class="btn" onclick="switchMockup('themes')" style="font-size:11px; padding:3px 8px;">Gallery</button>
       </div>
     </header>
 
@@ -1020,10 +1117,130 @@
         </div>
       </section>
 
+
+      <!-- VIEW 8: THEMES GALLERY -->
+      <section class="mockup-panel" id="panel-themes">
+        <div class="panel-heading">
+          <div>
+            <h1>Dark Themes Palette Gallery</h1>
+            <p class="issue-meta">Explore and preview 6 distinct all-dark color personalities</p>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(310px, 1fr)); gap:18px;">
+          <!-- 1. Graphite -->
+          <div class="card" style="border:2px solid #e5c483;">
+            <div class="card-title">
+              <strong>1. Graphite (Warm Amber)</strong>
+              <button class="btn primary" onclick="setTheme('dark')">Apply</button>
+            </div>
+            <p class="muted" style="font-size:12px; margin-bottom:12px;">Warm charcoal canvas with soft golden amber accents. Easy on the eyes for late-night coding.</p>
+            <div style="display:flex; height:28px; border-radius:5px; overflow:hidden; border:1px solid var(--border);">
+              <div style="flex:2; background:#141715;" title="Canvas (#141715)"></div>
+              <div style="flex:2; background:#1b1e1b;" title="Panel (#1b1e1b)"></div>
+              <div style="flex:2; background:#242923;" title="Raised (#242923)"></div>
+              <div style="flex:3; background:#e5c483;" title="Accent (#e5c483)"></div>
+              <div style="flex:1; background:#80ddba;" title="Green"></div>
+              <div style="flex:1; background:#f87171;" title="Red"></div>
+            </div>
+          </div>
+
+          <!-- 2. Midnight -->
+          <div class="card" style="border:2px solid #38bdf8;">
+            <div class="card-title">
+              <strong>2. Midnight (Ocean Cyan)</strong>
+              <button class="btn primary" onclick="setTheme('midnight')">Apply</button>
+            </div>
+            <p class="muted" style="font-size:12px; margin-bottom:12px;">Deep oceanic navy canvas paired with vibrant cyan and seafoam highlights. Crisp and modern.</p>
+            <div style="display:flex; height:28px; border-radius:5px; overflow:hidden; border:1px solid var(--border);">
+              <div style="flex:2; background:#070e17;" title="Canvas (#070e17)"></div>
+              <div style="flex:2; background:#0c1827;" title="Panel (#0c1827)"></div>
+              <div style="flex:2; background:#132439;" title="Raised (#132439)"></div>
+              <div style="flex:3; background:#38bdf8;" title="Accent (#38bdf8)"></div>
+              <div style="flex:1; background:#34d399;" title="Green"></div>
+              <div style="flex:1; background:#f87171;" title="Red"></div>
+            </div>
+          </div>
+
+          <!-- 3. Emerald -->
+          <div class="card" style="border:2px solid #3ddc84;">
+            <div class="card-title">
+              <strong>3. Emerald (Pine & Jade)</strong>
+              <button class="btn primary" onclick="setTheme('emerald')">Apply</button>
+            </div>
+            <p class="muted" style="font-size:12px; margin-bottom:12px;">Deep pine terminal dark with energetic jade green highlights. High-focus, classic hacker vibe.</p>
+            <div style="display:flex; height:28px; border-radius:5px; overflow:hidden; border:1px solid var(--border);">
+              <div style="flex:2; background:#07130e;" title="Canvas (#07130e)"></div>
+              <div style="flex:2; background:#0d1e17;" title="Panel (#0d1e17)"></div>
+              <div style="flex:2; background:#142a20;" title="Raised (#142a20)"></div>
+              <div style="flex:3; background:#3ddc84;" title="Accent (#3ddc84)"></div>
+              <div style="flex:1; background:#4ade80;" title="Green"></div>
+              <div style="flex:1; background:#f87171;" title="Red"></div>
+            </div>
+          </div>
+
+          <!-- 4. Nordic -->
+          <div class="card" style="border:2px solid #60a5fa;">
+            <div class="card-title">
+              <strong>4. Nordic (Slate & Arctic)</strong>
+              <button class="btn primary" onclick="setTheme('nordic')">Apply</button>
+            </div>
+            <p class="muted" style="font-size:12px; margin-bottom:12px;">Balanced slate gray background with arctic sky blue accents. Clean, restrained, and architectural.</p>
+            <div style="display:flex; height:28px; border-radius:5px; overflow:hidden; border:1px solid var(--border);">
+              <div style="flex:2; background:#0c1017;" title="Canvas (#0c1017)"></div>
+              <div style="flex:2; background:#121822;" title="Panel (#121822)"></div>
+              <div style="flex:2; background:#1a2331;" title="Raised (#1a2331)"></div>
+              <div style="flex:3; background:#60a5fa;" title="Accent (#60a5fa)"></div>
+              <div style="flex:1; background:#34d399;" title="Green"></div>
+              <div style="flex:1; background:#fb7185;" title="Red"></div>
+            </div>
+          </div>
+
+          <!-- 5. Signal -->
+          <div class="card" style="border:2px solid #ff5a66;">
+            <div class="card-title">
+              <strong>5. Signal (Onyx & Coral)</strong>
+              <button class="btn primary" onclick="setTheme('signal')">Apply</button>
+            </div>
+            <p class="muted" style="font-size:12px; margin-bottom:12px;">Pitch black stealth foundation with high-contrast neon coral and vermilion. Dramatic cyberpunk tone.</p>
+            <div style="display:flex; height:28px; border-radius:5px; overflow:hidden; border:1px solid var(--border);">
+              <div style="flex:2; background:#0a0a0d;" title="Canvas (#0a0a0d)"></div>
+              <div style="flex:2; background:#121217;" title="Panel (#121217)"></div>
+              <div style="flex:2; background:#1a1a22;" title="Raised (#1a1a22)"></div>
+              <div style="flex:3; background:#ff5a66;" title="Accent (#ff5a66)"></div>
+              <div style="flex:1; background:#86efac;" title="Green"></div>
+              <div style="flex:1; background:#fde047;" title="Yellow"></div>
+            </div>
+          </div>
+
+          <!-- 6. Amethyst -->
+          <div class="card" style="border:2px solid #c084fc;">
+            <div class="card-title">
+              <strong>6. Amethyst (Royal Violet)</strong>
+              <button class="btn primary" onclick="setTheme('amethyst')">Apply</button>
+            </div>
+            <p class="muted" style="font-size:12px; margin-bottom:12px;">Deep cosmic plum background accented with radiant lavender and fresh mint. Elegant and creative.</p>
+            <div style="display:flex; height:28px; border-radius:5px; overflow:hidden; border:1px solid var(--border);">
+              <div style="flex:2; background:#140d21;" title="Canvas (#140d21)"></div>
+              <div style="flex:2; background:#1b122c;" title="Panel (#1b122c)"></div>
+              <div style="flex:2; background:#25193d;" title="Raised (#25193d)"></div>
+              <div style="flex:3; background:#c084fc;" title="Accent (#c084fc)"></div>
+              <div style="flex:1; background:#86efac;" title="Mint"></div>
+              <div style="flex:1; background:#f87171;" title="Red"></div>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   </main>
 
   <script>
+    function setTheme(theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+      document.body.setAttribute("data-theme", theme);
+      localStorage.setItem("mini-orca:theme", theme);
+    }
+
     function runAnalysisSim() {
       const b1 = document.getElementById("overview-analysis-banner");
       const b2 = document.getElementById("issues-analysis-banner");
