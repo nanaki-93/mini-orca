@@ -252,9 +252,9 @@ export function ProposalDiff({
   return (
     <div className="diff" aria-label={`Read-only diff for ${edit.path}`} tabIndex={0}>
       <div className="code-header">
-        <strong>{edit.path}</strong>
-        <span>
-          Read-only · {index + 1} of {total}
+        <strong className="font-mono">{edit.path}</strong>
+        <span className="font-mono">
+          {index + 1} / {total}
         </span>
       </div>
       <pre tabIndex={0} aria-label={`Changes in ${edit.path}`}>

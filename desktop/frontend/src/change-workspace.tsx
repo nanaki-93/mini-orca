@@ -100,9 +100,7 @@ function ChatWorkspace({ s }: { s: State }) {
       )}
       <header className="chat-meta">
         <div>
-          <span className="studio-eyebrow">
-            {reviewOnly ? 'Proposal review' : 'Task conversation'}
-          </span>
+          <span className="studio-eyebrow">{reviewOnly ? 'Proposal' : 'Task'}</span>
           <h1>{change?.title || s.changeSeed?.title || (reviewOnly ? 'Changes' : 'Chat')}</h1>
         </div>
         <div className="actions">
@@ -271,13 +269,8 @@ function ChatWorkspace({ s }: { s: State }) {
                   Run project tests after generation
                 </label>
               )}
-              <p className="small muted">
-                {useAgents
-                  ? 'Creation, tests and agent review run automatically.'
-                  : 'Generation and checks use the models configured for this workspace.'}
-              </p>
               <div className="actions section-gap composer-footer">
-                <span className="small muted">{seed.paths.length} files · review before Apply</span>
+                <span className="small muted font-mono">{seed.paths.length} paths</span>
                 <Button
                   tone="primary"
                   icon="sparkles"

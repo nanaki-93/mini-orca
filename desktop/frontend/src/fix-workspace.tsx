@@ -301,15 +301,17 @@ export function ProposalReview({
         {tab === 'changes' && (
           <>
             <div className="row between wrap fix-evidence" aria-live="polite">
-              <span className="row wrap">
+              <span className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
                 <Icon name={ready ? 'circleCheck' : 'clock'} />
-                {ready
-                  ? 'Required checks passed · ready for your review'
-                  : running
-                    ? 'Generation and checks in progress'
-                    : 'Resolve checks and review before applying'}
+                <strong>
+                  {ready
+                    ? 'Checks passed · ready for review'
+                    : running
+                      ? 'Checks in progress'
+                      : 'Resolve checks before applying'}
+                </strong>
               </span>
-              <span className="small muted">Read-only diff</span>
+              <span className="small muted font-mono">Diff review</span>
             </div>
             <h2 className="sr-only">Proposal diff</h2>
             <FixTabs
@@ -351,13 +353,8 @@ export function ProposalReview({
         <div className="fix-action-bar">
           <div>
             <strong>
-              {viewed.length} of {files.length} files viewed
+              {viewed.length} of {files.length} files reviewed
             </strong>
-            <p className="small muted">
-              {next
-                ? 'Review each file before applying.'
-                : `Apply writes only these ${files.length} ${files.length === 1 ? 'file' : 'files'}.`}
-            </p>
           </div>
           {running ? (
             <Button
