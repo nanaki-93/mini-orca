@@ -765,6 +765,12 @@ export function Editor({ s }: { s: State }) {
   );
 }
 
+function canSelectSymbol(s: State, symbol: M.SymbolInfo): boolean {
+  if (!symbol.atomic_target) return false;
+  if (s.file?.language === 'Go') return symbol.confidence === 'exact';
+  return symbol.confidence === 'exact' || symbol.confidence === 'approximate';
+}
+
 function DeclarationPicker({ s }: { s: State }) {
   const w = useWorkspace();
   return (
@@ -784,9 +790,9 @@ function DeclarationPicker({ s }: { s: State }) {
           <option
             value={symbol.name}
             key={`${symbol.name}:${i}`}
-            disabled={!symbol.atomic_target || symbol.confidence !== 'exact'}
+            disabled={!canSelectSymbol(s, symbol)}
           >
-            {symbol.name} · {symbol.kind}
+            {symbol.name} · {symbol.kind} (L{symbol.start_line}–{symbol.end_line})
           </option>
         ))}
       </select>
@@ -798,8 +804,35 @@ function FileInspectionDrawer({ s }: { s: State }) {
   const w = useWorkspace();
   return (
     <div style={{ marginTop: '14px' }}>
-      <Disclosure title="Inspect declarations, file analysis & security">
+      <Disclosure
+        title={`Symbols, Blast Radius & File Inspection${s.symbols.length ? ` (${s.symbols.length} symbols)` : ''}`}
+      >
         <DeclarationPicker s={s} />
+        {s.symbols.length > 0 && (
+          <div
+            className="row wrap symbol-pills"
+            aria-label="File symbols"
+            style={{ gap: '6px', marginTop: '8px' }}
+          >
+            {s.symbols.map((symbol, i) => {
+              const selectable = canSelectSymbol(s, symbol);
+              const active = s.symbol === symbol.name;
+              return (
+                <Button
+                  key={`${symbol.name}:${i}`}
+                  tone={active ? 'primary small' : 'ghost small'}
+                  disabled={!!s.busy || s.fileStale || !selectable}
+                  onClick={() => void w.selectSymbol(active ? '' : symbol.name)}
+                >
+                  <span>{symbol.name}</span>
+                  <small className="muted" style={{ marginLeft: '4px' }}>
+                    L{symbol.start_line}
+                  </small>
+                </Button>
+              );
+            })}
+          </div>
+        )}
         <div className="actions" style={{ marginTop: '8px' }}>
           <Button disabled={!!s.busy || !s.symbol || s.fileStale} onClick={() => void w.explain()}>
             Explain declaration
@@ -814,6 +847,46 @@ function FileInspectionDrawer({ s }: { s: State }) {
             AI Security review
           </Button>
         </div>
+        {s.impact && s.impact.target_symbol === s.symbol && (
+          <Panel
+            title={`Blast Radius · ${s.impact.target_symbol} (${s.impact.references.length} ${s.impact.references.length === 1 ? 'reference' : 'references'})`}
+            className="symbol-impact-panel"
+          >
+            {s.impact.references.length === 0 ? (
+              <p className="small muted">
+                No external callers or references indexed for this symbol.
+              </p>
+            ) : (
+              <div className="stack" style={{ gap: '6px' }}>
+                {s.impact.references.map((ref, idx) => (
+                  <div
+                    key={`${ref.path}:${ref.symbol}:${idx}`}
+                    className="row between wrap"
+                    style={{
+                      padding: '6px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--line)',
+                    }}
+                  >
+                    <div className="row wrap" style={{ gap: '8px' }}>
+                      <strong className="font-mono small">{ref.path}</strong>
+                      {ref.symbol && <Badge value={ref.symbol} tone="violet" />}
+                      <span className="small muted">{ref.reason}</span>
+                    </div>
+                    <Button
+                      tone="ghost small"
+                      icon="code"
+                      disabled={!!s.busy}
+                      onClick={() => void w.openFile(ref.path, ref.symbol)}
+                    >
+                      Open
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+        )}
         {s.explanation && (
           <Panel title={`About ${s.explanation.anchor.symbol}`}>
             <Prose text={s.explanation.summary} />
