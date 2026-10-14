@@ -70,7 +70,7 @@ export function Tests({ s }: { s: State }) {
       ) : (
         <Empty
           title="No test run yet"
-          detail="Use Run Tests in the top bar to run the project checks."
+          detail="Use the Run button in the Tests & Checks box to run the project checks."
           icon="circleCheck"
         />
       )}

@@ -55,7 +55,68 @@ export interface Insight {
   tradeoff_or_failure_mode?: string;
   transferable_lesson?: string;
 }
+export interface ProjectDocsContract {
+  name: string;
+  kind: string;
+  summary: string;
+}
+export interface ProjectDocsComponent {
+  name: string;
+  layer: string;
+  path: string;
+  summary: string;
+  responsibilities: string[];
+  contracts: ProjectDocsContract[];
+  dependencies: string[];
+}
+export interface ProjectDocsScenarioStep {
+  phase: string;
+  layer: string;
+  title: string;
+  detail: string;
+  path?: string;
+}
+export interface ProjectDocsScenario {
+  title: string;
+  trigger: string;
+  invariant: string;
+  summary: string;
+  diagram?: string;
+  steps: ProjectDocsScenarioStep[];
+}
+export interface ProjectDocsDecision {
+  title: string;
+  category: string;
+  decision: string;
+  tradeoff: string;
+}
+export interface ProjectDocsRunbookItem {
+  label: string;
+  command: string;
+  description: string;
+}
+export interface ProjectDocsGlossaryItem {
+  term: string;
+  definition: string;
+}
+export interface ProjectDocsReport extends ProjectIdentity {
+  schema_version: string;
+  status: string;
+  context: {
+    purpose: string;
+    topology: string;
+    stack: string[];
+    architecture_diagram?: string;
+  };
+  components: ProjectDocsComponent[];
+  scenarios: ProjectDocsScenario[];
+  decisions: ProjectDocsDecision[];
+  runbook: ProjectDocsRunbookItem[];
+  glossary: ProjectDocsGlossaryItem[];
+  updated_at: string;
+}
 export interface Overview extends ProjectIdentity {
+  docs?: ProjectDocsReport;
   metrics: {
     type: string;
     file_count: number;

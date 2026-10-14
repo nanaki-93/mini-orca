@@ -25,7 +25,8 @@ export type Page =
   | 'terminal'
   | 'search'
   | 'models'
-  | 'diagrams';
+  | 'diagrams'
+  | 'docs';
 export type FindingCategory = 'bugs' | 'performance' | 'security';
 export interface FindingListView {
   query: string;
