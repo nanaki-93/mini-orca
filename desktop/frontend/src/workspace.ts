@@ -109,7 +109,16 @@ export interface State {
   analysisRefresh?: boolean;
   analysisSelectionDraft?: { selectionID: string; excluded: string[] };
   workflowModels?: M.ChangeWorkflowModels;
+  modelPresets?: ModelPreset[];
   workspaceTrust?: boolean;
+}
+export interface ModelPreset {
+  id: string;
+  name: string;
+  description: string;
+  builtIn?: boolean;
+  analysis: M.AnalysisModels;
+  workflow: M.ChangeWorkflowModels;
 }
 export interface ChatDraft {
   sessionID?: string;
@@ -142,6 +151,90 @@ export function workflowSetupModels(s: State): M.ChangeWorkflowModels {
     test: resolve(setup.test),
     review: resolve(setup.review),
   };
+}
+export function builtInModelPresets(s: State): ModelPreset[] {
+  const resolve = (id: string) => s.availableModels?.defaults[id] || id;
+  const fastModel =
+    s.availableModels?.models.find((m) => m.location === 'local' || !m.model.remote_provider)?.id ||
+    resolve('function');
+  const deepModel = resolve('analyze');
+  const bugModel = resolve('bug');
+  const fnModel = resolve('function');
+  return [
+    {
+      id: 'preset-fast-local',
+      name: 'Fast Local / Speed',
+      description: 'Routes all analysis and workflow stages to your fastest or local model.',
+      builtIn: true,
+      analysis: {
+        code: fastModel,
+        performance: fastModel,
+        security: fastModel,
+        features: fastModel,
+      },
+      workflow: {
+        create: fastModel,
+        test: fastModel,
+        review: fastModel,
+      },
+    },
+    {
+      id: 'preset-deep-audit',
+      name: 'Deep Audit',
+      description:
+        'Routes every analysis, creation, test, and review stage to the deep analysis model.',
+      builtIn: true,
+      analysis: {
+        code: deepModel,
+        performance: deepModel,
+        security: deepModel,
+        features: deepModel,
+      },
+      workflow: {
+        create: deepModel,
+        test: deepModel,
+        review: deepModel,
+      },
+    },
+    {
+      id: 'preset-hybrid-roles',
+      name: 'Hybrid Multi-Role',
+      description:
+        'Balanced routing across specialized creation, bug/security, and deep review profiles.',
+      builtIn: true,
+      analysis: {
+        code: bugModel,
+        performance: deepModel,
+        security: bugModel,
+        features: deepModel,
+      },
+      workflow: {
+        create: fnModel,
+        test: bugModel,
+        review: deepModel,
+      },
+    },
+  ];
+}
+export function allModelPresets(s: State): ModelPreset[] {
+  return [...builtInModelPresets(s), ...(s.modelPresets || [])];
+}
+export function isModelPresetActive(s: State, preset: ModelPreset): boolean {
+  const currentAnalysis = analysisSetupModels(s);
+  const currentWorkflow = workflowSetupModels(s);
+  const targetAnalysis = preset.analysis;
+  const targetWorkflow = preset.workflow;
+  return (
+    currentAnalysis.code === targetAnalysis.code &&
+    currentAnalysis.performance ===
+      (targetAnalysis.performance || targetAnalysis.review || targetAnalysis.code) &&
+    currentAnalysis.security ===
+      (targetAnalysis.security || targetAnalysis.review || targetAnalysis.code) &&
+    currentAnalysis.features === targetAnalysis.features &&
+    currentWorkflow.create === targetWorkflow.create &&
+    currentWorkflow.test === targetWorkflow.test &&
+    currentWorkflow.review === targetWorkflow.review
+  );
 }
 export function effectiveWorkflowModel(
   context: { models?: M.ModelCatalog; availableModels?: M.AvailableModels },
@@ -205,6 +298,7 @@ const initial = (): State => ({
   workflowModels: readStoredJson<M.ChangeWorkflowModels>('mini-orca:workflow-models'),
   analysisLimits: readStoredJson<M.Limits>('mini-orca:analysis-limits'),
   analysisRefresh: readStoredBool('mini-orca:analysis-refresh'),
+  modelPresets: readStoredJson<ModelPreset[]>('mini-orca:model-presets') || [],
   workspaceTrust:
     typeof localStorage !== 'undefined' &&
     localStorage.getItem('mini-orca:workspace-trust') === 'true',
@@ -384,6 +478,7 @@ export class Workspace {
       writeStoredJson('mini-orca:analysis-limits', patch.analysisLimits);
     if ('analysisRefresh' in patch)
       writeStoredJson('mini-orca:analysis-refresh', patch.analysisRefresh);
+    if ('modelPresets' in patch) writeStoredJson('mini-orca:model-presets', patch.modelPresets);
     this.state = { ...this.state, ...patch };
     this.listeners.forEach((fn) => fn());
   }
@@ -546,6 +641,7 @@ export class Workspace {
         workflowModels: this.state.workflowModels ?? defaults.workflowModels,
         analysisLimits: this.state.analysisLimits ?? defaults.analysisLimits,
         analysisRefresh: this.state.analysisRefresh ?? defaults.analysisRefresh,
+        modelPresets: this.state.modelPresets ?? defaults.modelPresets,
         workspaceTrust: this.state.workspaceTrust ?? defaults.workspaceTrust,
         busy: this.state.busy,
         page: 'summary',
@@ -771,9 +867,7 @@ export class Workspace {
     const originalEpoch = this.epoch;
     await this.act('Create worktree', async () => {
       const epoch = this.epoch;
-      const profiles = seed.paths.some(isTestFilePath)
-        ? Object.values(models)
-        : [models.create];
+      const profiles = seed.paths.some(isTestFilePath) ? Object.values(models) : [models.create];
       const latest = await this.checkedFixPreparation(profiles, preparation);
       if (!latest || epoch !== this.epoch) return;
       await this.api.post(`${current}/execution-trust`, {
@@ -819,8 +913,7 @@ export class Workspace {
       return;
     }
     if (originalEpoch !== this.epoch) return;
-    if (seed.paths.some(isTestFilePath))
-      await child.startChangeWorkflow(seed, models, fresh);
+    if (seed.paths.some(isTestFilePath)) await child.startChangeWorkflow(seed, models, fresh);
     else await child.prepareChange(seed, tests, models.create, fresh);
   }
   async openWorktree(path: string) {
@@ -1046,6 +1139,39 @@ export class Workspace {
   }
   setAnalysisSetup(setup: M.AnalysisModels) {
     this.set({ analysisSetup: setup, preview: undefined, resume: undefined });
+  }
+  applyModelPreset(preset: ModelPreset) {
+    this.set({
+      analysisSetup: { ...preset.analysis },
+      workflowModels: { ...preset.workflow },
+      preview: undefined,
+      resume: undefined,
+      notice: `Applied model preset "${preset.name}".`,
+    });
+  }
+  saveCustomModelPreset(name: string, description = 'Custom saved model routing preset.') {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const analysis = analysisSetupModels(this.state);
+    const workflow = workflowSetupModels(this.state);
+    const existing = (this.state.modelPresets || []).filter(
+      (p) => p.name.toLowerCase() !== trimmed.toLowerCase(),
+    );
+    const preset: ModelPreset = {
+      id: `custom-${Date.now()}`,
+      name: trimmed,
+      description,
+      analysis,
+      workflow,
+    };
+    this.set({
+      modelPresets: [...existing, preset],
+      notice: `Saved model preset "${trimmed}".`,
+    });
+  }
+  deleteCustomModelPreset(id: string) {
+    const next = (this.state.modelPresets || []).filter((p) => p.id !== id);
+    this.set({ modelPresets: next });
   }
   async previewAnalysis(
     mode: 'new' | 'repair' | 'resume' | 'stale',
@@ -1964,7 +2090,9 @@ export class Workspace {
       if (activeChangeWorkflow(this.state.change))
         throw new Error('Finish or cancel the active workflow.');
       if (!seed.paths.some(isTestFilePath))
-        throw new Error('Include a test path (e.g. _test.go, .test.ts, test_*.py) in Files to change.');
+        throw new Error(
+          'Include a test path (e.g. _test.go, .test.ts, test_*.py) in Files to change.',
+        );
       const epoch = this.epoch,
         operation = this.operation;
       const profiles = preparation

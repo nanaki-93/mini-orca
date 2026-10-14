@@ -5,6 +5,8 @@ import {
   activeChangeWorkflow,
   analysisSetupModels,
   workflowSetupModels,
+  allModelPresets,
+  isModelPresetActive,
   activeRun,
   type State,
   type Page,
@@ -416,6 +418,8 @@ export function Summary({ s }: { s: State }) {
 }
 export function Models({ s }: { s: State }) {
   const w = useWorkspace();
+  const [presetName, setPresetName] = useState('');
+  const presets = allModelPresets(s);
   return (
     <div className="workspace-page models-workspace">
       <Heading
@@ -438,6 +442,78 @@ export function Models({ s }: { s: State }) {
           </Go>
         </div>
       )}
+      <Panel title="Saved model presets" className="model-presets-panel">
+        <div className="stack">
+          <div className="grid models-grid">
+            {presets.map((preset) => {
+              const active = isModelPresetActive(s, preset);
+              return (
+                <div
+                  key={preset.id}
+                  className={`panel model-preset-card ${active ? 'active-preset' : ''}`}
+                  style={{
+                    padding: '12px',
+                    borderRadius: '6px',
+                    border: active ? '1px solid var(--accent)' : '1px solid var(--line)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    gap: '8px',
+                  }}
+                >
+                  <div>
+                    <div
+                      className="row"
+                      style={{ justifyContent: 'space-between', alignItems: 'center' }}
+                    >
+                      <strong>{preset.name}</strong>
+                      {active && <span className="pill">Active</span>}
+                    </div>
+                    <p className="small muted" style={{ marginTop: '4px' }}>
+                      {preset.description}
+                    </p>
+                  </div>
+                  <div className="actions">
+                    <Button
+                      tone={active ? undefined : 'primary'}
+                      disabled={!!s.busy}
+                      onClick={() => w.applyModelPreset(preset)}
+                    >
+                      {active ? 'Reapply preset' : 'Apply preset'}
+                    </Button>
+                    {!preset.builtIn && (
+                      <Button
+                        disabled={!!s.busy}
+                        onClick={() => w.deleteCustomModelPreset(preset.id)}
+                      >
+                        Delete
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="row" style={{ gap: '8px', alignItems: 'center', marginTop: '4px' }}>
+            <input
+              aria-label="Custom preset name"
+              placeholder="Save current routing as preset (e.g. Offline Ollama)…"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              style={{ maxWidth: '320px' }}
+            />
+            <Button
+              disabled={!!s.busy || !presetName.trim()}
+              onClick={() => {
+                w.saveCustomModelPreset(presetName);
+                setPresetName('');
+              }}
+            >
+              Save preset
+            </Button>
+          </div>
+        </div>
+      </Panel>
       <Panel title="Analysis models" className="analysis-model-settings">
         <ModelSelectors
           s={s}
@@ -631,7 +707,10 @@ export function SearchPage({ s }: { s: State }) {
   const visibleCommands = commands.filter(([, name]) =>
     name.toLowerCase().includes(query.toLowerCase()),
   );
-  const totalItems = visibleFiles.length + visibleCommands.length;
+  const visiblePresets = allModelPresets(s).filter((preset) =>
+    `Preset: ${preset.name}`.toLowerCase().includes(query.toLowerCase()),
+  );
+  const totalItems = visibleFiles.length + visibleCommands.length + visiblePresets.length;
   return (
     <div className="workspace-page search-workspace">
       <Heading title="Jump to" variant="intro" />
@@ -663,9 +742,12 @@ export function SearchPage({ s }: { s: State }) {
               const idx = Math.min(activeIndex, totalItems - 1);
               if (idx < visibleFiles.length) {
                 void w.openFile(visibleFiles[idx].path);
-              } else {
+              } else if (idx < visibleFiles.length + visibleCommands.length) {
                 const cmd = visibleCommands[idx - visibleFiles.length];
                 if (cmd) void w.navigate(cmd[0]);
+              } else {
+                const preset = visiblePresets[idx - visibleFiles.length - visibleCommands.length];
+                if (preset) w.applyModelPreset(preset);
               }
             }
           }}
@@ -692,7 +774,9 @@ export function SearchPage({ s }: { s: State }) {
           {files.length > limit && <Button onClick={() => setLimit(limit + 100)}>Show more</Button>}
         </Panel>
         <Panel title="Commands">
-          {!visibleCommands.length && <p className="muted">No matching commands.</p>}
+          {!visibleCommands.length && !visiblePresets.length && (
+            <p className="muted">No matching commands.</p>
+          )}
           {visibleCommands.map(([page, name, icon], index) => {
             const itemIndex = visibleFiles.length + index;
             return (
@@ -704,6 +788,20 @@ export function SearchPage({ s }: { s: State }) {
               >
                 <Icon name={icon} />
                 <span>{name}</span>
+              </button>
+            );
+          })}
+          {visiblePresets.map((preset, index) => {
+            const itemIndex = visibleFiles.length + visibleCommands.length + index;
+            return (
+              <button
+                className={`list-row ${activeIndex === itemIndex ? 'active' : ''}`}
+                aria-selected={activeIndex === itemIndex}
+                key={preset.id}
+                onClick={() => w.applyModelPreset(preset)}
+              >
+                <Icon name="sparkles" />
+                <span>Preset: {preset.name}</span>
               </button>
             );
           })}
