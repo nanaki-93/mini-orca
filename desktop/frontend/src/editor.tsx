@@ -1,5 +1,5 @@
 import { useWorkspace } from './workspace-context';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   activeChangeWorkflow,
   canAcceptChange,
@@ -35,6 +35,61 @@ interface DiffHunk {
   newStart: number;
   newEnd: number;
   lines: { kind: string; old_line: number; new_line: number; text: string }[];
+}
+
+interface SplitDiffRow {
+  oldLine?: number;
+  oldText?: string;
+  oldKind?: 'del' | 'ctx';
+  newLine?: number;
+  newText?: string;
+  newKind?: 'add' | 'ctx';
+}
+
+function buildSplitDiffRows(
+  lines: { kind: string; old_line: number; new_line: number; text: string }[],
+): SplitDiffRow[] {
+  const rows: SplitDiffRow[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.kind !== 'add' && line.kind !== 'delete') {
+      rows.push({
+        oldLine: line.old_line || undefined,
+        oldText: line.text,
+        oldKind: 'ctx',
+        newLine: line.new_line || undefined,
+        newText: line.text,
+        newKind: 'ctx',
+      });
+      i++;
+      continue;
+    }
+    const dels: typeof lines = [];
+    const adds: typeof lines = [];
+    while (i < lines.length && lines[i].kind === 'delete') {
+      dels.push(lines[i]);
+      i++;
+    }
+    while (i < lines.length && lines[i].kind === 'add') {
+      adds.push(lines[i]);
+      i++;
+    }
+    const maxLen = Math.max(dels.length, adds.length);
+    for (let j = 0; j < maxLen; j++) {
+      const d = dels[j];
+      const a = adds[j];
+      rows.push({
+        oldLine: d ? d.old_line || undefined : undefined,
+        oldText: d ? d.text : undefined,
+        oldKind: d ? 'del' : undefined,
+        newLine: a ? a.new_line || undefined : undefined,
+        newText: a ? a.text : undefined,
+        newKind: a ? 'add' : undefined,
+      });
+    }
+  }
+  return rows;
 }
 
 function splitDiffIntoHunks(
@@ -164,6 +219,11 @@ export function Editor({ s }: { s: State }) {
   const [useWorktree, setUseWorktree] = useState(false);
   const [prompt, setPrompt] = useState(s.changeSeed?.message || '');
   const [acceptedHunks, setAcceptedHunks] = useState<Record<string, number[]>>({});
+  const [diffLayout, setDiffLayout] = useState<'unified' | 'split'>('unified');
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [customTargets, setCustomTargets] = useState<string[]>([]);
+  const [contextPickerOpen, setContextPickerOpen] = useState(false);
+  const gutterRef = useRef<HTMLDivElement | null>(null);
 
   const change = s.change;
   const changedPaths = useMemo(() => (change?.changes || []).map((c) => c.path), [change?.changes]);
@@ -234,6 +294,20 @@ export function Editor({ s }: { s: State }) {
   const hunks = useMemo(() => splitDiffIntoHunks(activeEdit?.diff?.lines || []), [activeEdit]);
   const fileAcceptedHunks = acceptedHunks[activePath] || [];
   const dirty = !s.file?.binary && draftContent !== (s.file?.content ?? '');
+  const draftLineCount = useMemo(
+    () => Math.max(1, draftContent.split('\n').length),
+    [draftContent],
+  );
+
+  const composerTargets = useMemo(() => {
+    const base =
+      change?.targets.map((t) => t.path) ||
+      (s.changeSeed?.paths.length ? s.changeSeed.paths : activePath ? [activePath] : []);
+    return [...new Set([...base, ...(activePath ? [activePath] : []), ...customTargets])].slice(
+      0,
+      8,
+    );
+  }, [change?.targets, s.changeSeed?.paths, activePath, customTargets]);
 
   useEffect(() => {
     void native().SetUnsavedDraft(Boolean(mode === 'edit' && dirty));
@@ -255,9 +329,7 @@ export function Editor({ s }: { s: State }) {
   const submitPrompt = async () => {
     const trimmed = prompt.trim();
     if (!trimmed || s.busy) return;
-    const targetPaths =
-      change?.targets.map((t) => t.path) ||
-      (s.changeSeed?.paths.length ? s.changeSeed.paths : activePath ? [activePath] : []);
+    const targetPaths = composerTargets;
     if (!targetPaths.length) return;
     const seed: M.ChangeSeed = {
       title: change?.title || s.changeSeed?.title || `Update ${targetPaths[0].split('/').at(-1)}`,
@@ -268,6 +340,7 @@ export function Editor({ s }: { s: State }) {
       finding: s.changeSeed?.finding,
     };
     setPrompt('');
+    setContextPickerOpen(false);
     if (useWorktree && s.repository?.available && !w.worktreePath) {
       const prep = await w.readFixPreparation();
       const branch = `orca/${
@@ -415,6 +488,26 @@ export function Editor({ s }: { s: State }) {
                   Undo Last Change
                 </Button>
               )}
+              {mode === 'diff' && (
+                <div className="mode-switch-group" role="group" aria-label="Diff layout">
+                  <button
+                    type="button"
+                    aria-pressed={diffLayout === 'unified'}
+                    className={`mode-switch-btn ${diffLayout === 'unified' ? 'active' : ''}`}
+                    onClick={() => setDiffLayout('unified')}
+                  >
+                    Unified
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={diffLayout === 'split'}
+                    className={`mode-switch-btn ${diffLayout === 'split' ? 'active' : ''}`}
+                    onClick={() => setDiffLayout('split')}
+                  >
+                    Split
+                  </button>
+                </div>
+              )}
               <div className="mode-switch-group" role="tablist" aria-label="Editor mode">
                 <button
                   role="tab"
@@ -433,6 +526,15 @@ export function Editor({ s }: { s: State }) {
                   Direct Edit
                 </button>
               </div>
+              <Button
+                tone={inspectorOpen ? 'primary small' : 'ghost small'}
+                icon="compass"
+                aria-label="Toggle symbol inspector"
+                aria-pressed={inspectorOpen}
+                onClick={() => setInspectorOpen((v) => !v)}
+              >
+                Inspector {s.symbols.length > 0 ? `(${s.symbols.length})` : ''}
+              </Button>
               {mode === 'edit' && activePath && !s.file?.binary && (
                 <Button
                   tone="primary small"
@@ -456,241 +558,378 @@ export function Editor({ s }: { s: State }) {
             </div>
           </div>
 
-          <div className="unified-ide-body">
-            {s.fileStale && s.file && (
-              <Notice>
-                File evidence is outdated.{' '}
-                <Button tone="ghost small" disabled={!!s.busy} onClick={() => void w.reindex()}>
-                  Refresh project
-                </Button>
-              </Notice>
-            )}
-            <ChangeOutcome s={s} />
-            {change?.workflow && <WorkflowProgress s={s} />}
-            {change && change.checks.length > 0 && <ChangeChecks s={s} />}
+          <div className="unified-ide-workarea">
+            <div className="unified-ide-body">
+              {s.fileStale && s.file && (
+                <Notice>
+                  File evidence is outdated.{' '}
+                  <Button tone="ghost small" disabled={!!s.busy} onClick={() => void w.reindex()}>
+                    Refresh project
+                  </Button>
+                </Notice>
+              )}
+              <ChangeOutcome s={s} />
+              {change?.workflow && <WorkflowProgress s={s} />}
+              {change && change.checks.length > 0 && <ChangeChecks s={s} />}
 
-            {mode === 'diff' ? (
-              change && change.changes.length > 0 ? (
-                <div>
-                  <div className="proposal-action-banner">
-                    <div>
-                      <div className="row wrap" style={{ gap: '8px' }}>
-                        <strong>{change.title}</strong>
-                        <Badge
-                          value={
-                            change.state !== 'draft'
-                              ? change.state
-                              : changeChecksPassed(change)
-                                ? 'checks passed'
-                                : 'draft'
-                          }
-                          tone={changeChecksPassed(change) ? 'green' : 'violet'}
-                        />
-                        <span className="small muted font-mono">
-                          {change.changes.length} {change.changes.length === 1 ? 'file' : 'files'}{' '}
-                          in proposal
-                        </span>
+              {mode === 'diff' ? (
+                change && change.changes.length > 0 ? (
+                  <div>
+                    <div className="proposal-action-banner">
+                      <div>
+                        <div className="row wrap" style={{ gap: '8px' }}>
+                          <strong>{change.title}</strong>
+                          <Badge
+                            value={
+                              change.state !== 'draft'
+                                ? change.state
+                                : changeChecksPassed(change)
+                                  ? 'checks passed'
+                                  : 'draft'
+                            }
+                            tone={changeChecksPassed(change) ? 'green' : 'violet'}
+                          />
+                          <span className="small muted font-mono">
+                            {change.changes.length} {change.changes.length === 1 ? 'file' : 'files'}{' '}
+                            in proposal
+                          </span>
+                        </div>
+                        <p className="small muted" style={{ marginTop: '4px' }}>
+                          Accept or reject each hunk individually, edit inline, or apply all changes
+                          in-place with 1-click Undo.
+                        </p>
                       </div>
-                      <p className="small muted" style={{ marginTop: '4px' }}>
-                        Accept or reject each hunk individually, edit inline, or apply all changes
-                        in-place with 1-click Undo.
-                      </p>
-                    </div>
-                    <div className="row wrap" style={{ gap: '8px' }}>
-                      {change.state === 'draft' && (
-                        <>
-                          {change.checks.some((c) => c.state === 'failed') && (
+                      <div className="row wrap" style={{ gap: '8px' }}>
+                        {change.state === 'draft' && (
+                          <>
+                            {change.checks.some((c) => c.state === 'failed') && (
+                              <Button
+                                tone="ghost small"
+                                icon="sparkles"
+                                disabled={!!s.busy}
+                                onClick={() => void w.repairChange()}
+                              >
+                                Repair Failed Checks
+                              </Button>
+                            )}
                             <Button
                               tone="ghost small"
-                              icon="sparkles"
+                              icon="play"
                               disabled={!!s.busy}
-                              onClick={() => void w.repairChange()}
+                              onClick={() => void w.checkChange(true)}
                             >
-                              Repair Failed Checks
+                              Verify Checks
                             </Button>
-                          )}
-                          <Button
-                            tone="ghost small"
-                            icon="play"
-                            disabled={!!s.busy}
-                            onClick={() => void w.checkChange(true)}
-                          >
-                            Verify Checks
-                          </Button>
-                          <Button
-                            tone="ghost small"
-                            icon="close"
-                            disabled={!!s.busy}
-                            onClick={() => w.newChange()}
-                          >
-                            Discard Proposal
-                          </Button>
-                          <Button
-                            tone="primary small"
-                            icon="check"
-                            disabled={!!s.busy}
-                            onClick={() => void w.applyProposalNow(change.title)}
-                          >
-                            {canAcceptChange(s) ? 'Commit & Apply' : 'Check & Apply Now'}
-                          </Button>
-                        </>
-                      )}
+                            <Button
+                              tone="ghost small"
+                              icon="close"
+                              disabled={!!s.busy}
+                              onClick={() => w.newChange()}
+                            >
+                              Discard Proposal
+                            </Button>
+                            <Button
+                              tone="primary small"
+                              icon="check"
+                              disabled={!!s.busy}
+                              onClick={() => void w.applyProposalNow(change.title)}
+                            >
+                              {canAcceptChange(s) ? 'Commit & Apply' : 'Check & Apply Now'}
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                  {activeEdit ? (
-                    hunks.map((hunk) => {
-                      const isAccepted = fileAcceptedHunks.includes(hunk.index);
-                      return (
-                        <div
-                          key={hunk.index}
-                          className={`hunk-card ${isAccepted ? 'accepted' : ''}`}
-                        >
-                          <div className="hunk-card-head">
-                            <span>
-                              {activeEdit.path} · Hunk #{hunk.index + 1} (Lines {hunk.newStart}–
-                              {hunk.newEnd})
-                            </span>
-                            <div className="row" style={{ gap: '6px' }}>
-                              <Button
-                                tone={isAccepted ? 'primary small' : 'ghost small'}
-                                icon="check"
-                                disabled={!!s.busy || change.state !== 'draft'}
-                                onClick={() =>
-                                  setAcceptedHunks((prev) => ({
-                                    ...prev,
-                                    [activePath]: isAccepted
-                                      ? (prev[activePath] || []).filter((i) => i !== hunk.index)
-                                      : [...(prev[activePath] || []), hunk.index],
-                                  }))
-                                }
-                              >
-                                {isAccepted ? 'Accepted' : 'Accept Hunk'}
-                              </Button>
-                              <Button
-                                tone="ghost small"
-                                icon="close"
-                                disabled={!!s.busy || change.state !== 'draft'}
-                                onClick={() => {
-                                  const nextContent = rejectHunkFromDiff(
-                                    activeEdit.diff.lines,
-                                    hunk,
-                                  );
-                                  void w.updateProposalFileContent(
-                                    activeEdit.path,
-                                    nextContent,
-                                    `Rejected hunk #${hunk.index + 1} in ${activeEdit.path}.`,
-                                  );
-                                }}
-                              >
-                                Reject Hunk
-                              </Button>
-                              <Button
-                                tone="ghost small"
-                                icon="code"
-                                onClick={() => {
-                                  setDraftContent(activeEdit.content);
-                                  setMode('edit');
-                                }}
-                              >
-                                Edit Inline
-                              </Button>
+                    {activeEdit ? (
+                      hunks.map((hunk) => {
+                        const isAccepted = fileAcceptedHunks.includes(hunk.index);
+                        return (
+                          <div
+                            key={hunk.index}
+                            className={`hunk-card ${isAccepted ? 'accepted' : ''}`}
+                          >
+                            <div className="hunk-card-head">
+                              <span>
+                                {activeEdit.path} · Hunk #{hunk.index + 1} (Lines {hunk.newStart}–
+                                {hunk.newEnd})
+                              </span>
+                              <div className="row" style={{ gap: '6px' }}>
+                                <Button
+                                  tone={isAccepted ? 'primary small' : 'ghost small'}
+                                  icon="check"
+                                  disabled={!!s.busy || change.state !== 'draft'}
+                                  onClick={() =>
+                                    setAcceptedHunks((prev) => ({
+                                      ...prev,
+                                      [activePath]: isAccepted
+                                        ? (prev[activePath] || []).filter((i) => i !== hunk.index)
+                                        : [...(prev[activePath] || []), hunk.index],
+                                    }))
+                                  }
+                                >
+                                  {isAccepted ? 'Accepted' : 'Accept Hunk'}
+                                </Button>
+                                <Button
+                                  tone="ghost small"
+                                  icon="close"
+                                  disabled={!!s.busy || change.state !== 'draft'}
+                                  onClick={() => {
+                                    const nextContent = rejectHunkFromDiff(
+                                      activeEdit.diff.lines,
+                                      hunk,
+                                    );
+                                    void w.updateProposalFileContent(
+                                      activeEdit.path,
+                                      nextContent,
+                                      `Rejected hunk #${hunk.index + 1} in ${activeEdit.path}.`,
+                                    );
+                                  }}
+                                >
+                                  Reject Hunk
+                                </Button>
+                                <Button
+                                  tone="ghost small"
+                                  icon="code"
+                                  onClick={() => {
+                                    setDraftContent(activeEdit.content);
+                                    setMode('edit');
+                                  }}
+                                >
+                                  Edit Inline
+                                </Button>
+                              </div>
                             </div>
+                            {diffLayout === 'split' ? (
+                              <table className="hunk-code-table hunk-split-table">
+                                <tbody>
+                                  {buildSplitDiffRows(hunk.lines).map((row, rowIdx) => (
+                                    <tr key={rowIdx}>
+                                      <td className={`ln ${row.oldKind === 'del' ? 'del' : ''}`}>
+                                        {row.oldLine ?? ''}
+                                      </td>
+                                      <td
+                                        className={`split-cell ${row.oldKind === 'del' ? 'del' : ''}`}
+                                      >
+                                        {row.oldText !== undefined
+                                          ? `${row.oldKind === 'del' ? '- ' : '  '}${row.oldText}`
+                                          : ''}
+                                      </td>
+                                      <td className={`ln ${row.newKind === 'add' ? 'add' : ''}`}>
+                                        {row.newLine ?? ''}
+                                      </td>
+                                      <td
+                                        className={`split-cell ${row.newKind === 'add' ? 'add' : ''}`}
+                                      >
+                                        {row.newText !== undefined
+                                          ? `${row.newKind === 'add' ? '+ ' : '  '}${row.newText}`
+                                          : ''}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            ) : (
+                              <table className="hunk-code-table">
+                                <tbody>
+                                  {hunk.lines.map((line, lineIdx) => {
+                                    const cls =
+                                      line.kind === 'add'
+                                        ? 'add'
+                                        : line.kind === 'delete'
+                                          ? 'del'
+                                          : '';
+                                    const prefix =
+                                      line.kind === 'add'
+                                        ? '+'
+                                        : line.kind === 'delete'
+                                          ? '-'
+                                          : ' ';
+                                    return (
+                                      <tr key={lineIdx} className={cls}>
+                                        <td className="ln">
+                                          {line.kind === 'add' ? '' : line.old_line || ''}
+                                        </td>
+                                        <td className="ln">
+                                          {line.kind === 'delete' ? '' : line.new_line || ''}
+                                        </td>
+                                        <td>
+                                          {prefix} {line.text}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            )}
                           </div>
-                          <table className="hunk-code-table">
-                            <tbody>
-                              {hunk.lines.map((line, lineIdx) => {
-                                const cls =
-                                  line.kind === 'add' ? 'add' : line.kind === 'delete' ? 'del' : '';
-                                const prefix =
-                                  line.kind === 'add' ? '+' : line.kind === 'delete' ? '-' : ' ';
-                                return (
-                                  <tr key={lineIdx} className={cls}>
-                                    <td className="ln">
-                                      {line.kind === 'delete'
-                                        ? line.old_line
-                                        : line.new_line || line.old_line}
-                                    </td>
-                                    <td>
-                                      {prefix} {line.text}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <Empty
-                      title="Select a changed file to inspect hunks"
-                      detail="Click one of the changed file tabs above to review its diff hunks."
-                      icon="code"
-                    />
-                  )}
-                </div>
-              ) : (
-                <Empty
-                  title="No active diff for this file"
-                  detail="Switch to Direct Edit to modify the file directly, or describe a change in the AI prompt bar below to generate a hunk-by-hunk diff."
-                  icon="sparkles"
-                >
-                  {activePath && (
-                    <Button tone="primary" icon="code" onClick={() => setMode('edit')}>
-                      Switch to Direct Edit
-                    </Button>
-                  )}
-                </Empty>
-              )
-            ) : activePath && s.file ? (
-              <div className="source-document">
-                <div className="row between wrap" style={{ marginBottom: '10px' }}>
-                  <span className="row" style={{ gap: '8px' }}>
-                    <Icon name="code" />
-                    <strong className="font-mono">{s.file.path}</strong>
-                    <Badge
-                      value={dirty ? 'Unsaved edits' : 'Direct edit'}
-                      tone={dirty ? 'amber' : 'violet'}
-                    />
-                  </span>
-                  <div className="row" style={{ gap: '8px' }}>
-                    <span className="small muted">
-                      {s.file.line_count} lines · {s.file.language || 'text'}
-                    </span>
-                    {dirty && (
-                      <Button
-                        tone="ghost small"
-                        onClick={() => setDraftContent(s.file?.content || '')}
-                      >
-                        Reset
+                        );
+                      })
+                    ) : (
+                      <Empty
+                        title="Select a changed file to inspect hunks"
+                        detail="Click one of the changed file tabs above to review its diff hunks."
+                        icon="code"
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <Empty
+                    title="No active diff for this file"
+                    detail="Switch to Direct Edit to modify the file directly, or describe a change in the AI prompt bar below to generate a hunk-by-hunk diff."
+                    icon="sparkles"
+                  >
+                    {activePath && (
+                      <Button tone="primary" icon="code" onClick={() => setMode('edit')}>
+                        Switch to Direct Edit
                       </Button>
                     )}
-                    <Button
-                      tone="primary small"
-                      icon="check"
-                      disabled={!!s.busy || !dirty}
-                      onClick={() => void w.saveDirectFile(s.file!.path, draftContent)}
-                    >
-                      Save File (⌘S)
-                    </Button>
+                  </Empty>
+                )
+              ) : activePath && s.file ? (
+                <div className="source-document">
+                  <div className="row between wrap" style={{ marginBottom: '10px' }}>
+                    <span className="row" style={{ gap: '8px' }}>
+                      <Icon name="code" />
+                      <strong className="font-mono">{s.file.path}</strong>
+                      <Badge
+                        value={dirty ? 'Unsaved edits' : 'Direct edit'}
+                        tone={dirty ? 'amber' : 'violet'}
+                      />
+                      {s.symbol && <Badge value={`Symbol: ${s.symbol}`} tone="blue" />}
+                    </span>
+                    <div className="row" style={{ gap: '8px' }}>
+                      <span className="small muted">
+                        {draftLineCount} lines · {s.file.language || 'text'}
+                      </span>
+                      {dirty && (
+                        <Button
+                          tone="ghost small"
+                          onClick={() => setDraftContent(s.file?.content || '')}
+                        >
+                          Reset
+                        </Button>
+                      )}
+                      <Button
+                        tone="primary small"
+                        icon="check"
+                        disabled={!!s.busy || !dirty}
+                        onClick={() => void w.saveDirectFile(s.file!.path, draftContent)}
+                      >
+                        Save File (⌘S)
+                      </Button>
+                    </div>
                   </div>
+                  {s.file.binary ? (
+                    <Empty title="Binary file" />
+                  ) : (
+                    <div className="code-editor-with-gutter">
+                      <div className="code-gutter" ref={gutterRef} aria-hidden="true">
+                        {Array.from({ length: draftLineCount }, (_, idx) => (
+                          <div key={idx + 1} className="code-gutter-ln">
+                            {idx + 1}
+                          </div>
+                        ))}
+                      </div>
+                      <textarea
+                        aria-label="Direct code editor"
+                        className="direct-code-editor"
+                        value={draftContent}
+                        onChange={(e) => setDraftContent(e.target.value)}
+                        onScroll={(e) => {
+                          if (gutterRef.current) {
+                            gutterRef.current.scrollTop = e.currentTarget.scrollTop;
+                          }
+                        }}
+                        spellCheck={false}
+                      />
+                    </div>
+                  )}
+                  <FileInspectionDrawer s={s} />
                 </div>
-                {s.file.binary ? (
-                  <Empty title="Binary file" />
+              ) : (
+                <Empty title="Choose a file from the Explorer" icon="code" />
+              )}
+            </div>
+
+            {inspectorOpen && (
+              <aside
+                className="unified-ide-inspector"
+                aria-label="Symbol and blast radius inspector"
+              >
+                <div className="row between" style={{ marginBottom: '10px' }}>
+                  <strong>Symbols & Blast Radius</strong>
+                  <Button tone="ghost small" icon="close" onClick={() => setInspectorOpen(false)} />
+                </div>
+                <DeclarationPicker s={s} />
+                <div className="actions" style={{ marginTop: '8px', marginBottom: '10px' }}>
+                  <Button
+                    tone="ghost small"
+                    disabled={!!s.busy || !s.symbol || s.fileStale}
+                    onClick={() => void w.explain()}
+                  >
+                    Explain
+                  </Button>
+                  <Button
+                    tone="ghost small"
+                    disabled={!!s.busy || s.fileStale}
+                    onClick={() => void w.analyzeFile()}
+                  >
+                    Analyze File
+                  </Button>
+                  <Button
+                    tone="ghost small"
+                    disabled={!!s.busy || s.fileStale}
+                    onClick={() => void w.securityReview(false)}
+                  >
+                    Security Scan
+                  </Button>
+                </div>
+                {s.impact && s.impact.target_symbol === s.symbol ? (
+                  <div className="stack" style={{ gap: '6px' }}>
+                    <small className="uppercase muted">
+                      Blast Radius · {s.impact.target_symbol} ({s.impact.references.length})
+                    </small>
+                    {s.impact.references.length === 0 ? (
+                      <p className="small muted">No external references indexed.</p>
+                    ) : (
+                      s.impact.references.map((ref, idx) => (
+                        <div
+                          key={`${ref.path}:${ref.symbol}:${idx}`}
+                          className="row between wrap"
+                          style={{
+                            padding: '6px 8px',
+                            borderRadius: '6px',
+                            border: '1px solid var(--line)',
+                            background: 'var(--canvas)',
+                          }}
+                        >
+                          <div className="stack" style={{ gap: '2px' }}>
+                            <strong className="font-mono small">{ref.path}</strong>
+                            <span className="small muted">
+                              {ref.symbol ? `${ref.symbol} · ` : ''}
+                              {ref.reason}
+                            </span>
+                          </div>
+                          <Button
+                            tone="ghost small"
+                            icon="code"
+                            disabled={!!s.busy}
+                            onClick={() => void w.openFile(ref.path, ref.symbol)}
+                          >
+                            Open
+                          </Button>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 ) : (
-                  <textarea
-                    aria-label="Direct code editor"
-                    className="direct-code-editor"
-                    value={draftContent}
-                    onChange={(e) => setDraftContent(e.target.value)}
-                    spellCheck={false}
-                  />
+                  <p className="small muted">
+                    Select a declaration above to inspect callers and blast radius across the
+                    repository.
+                  </p>
                 )}
-                <FileInspectionDrawer s={s} />
-              </div>
-            ) : (
-              <Empty title="Choose a file from the Explorer" icon="code" />
+              </aside>
             )}
           </div>
 
@@ -716,6 +955,42 @@ export function Editor({ s }: { s: State }) {
                 <ChangeHistory s={s} />
               </div>
             )}
+            {contextPickerOpen && (
+              <div className="composer-history-drawer" aria-label="Context file picker">
+                <div className="row between">
+                  <strong className="small uppercase muted">
+                    Target Files in AI Context ({composerTargets.length}/8 max)
+                  </strong>
+                  <Button
+                    tone="ghost small"
+                    icon="close"
+                    onClick={() => setContextPickerOpen(false)}
+                  >
+                    Done
+                  </Button>
+                </div>
+                <div className="row wrap" style={{ gap: '6px' }}>
+                  {allPaths.slice(0, 24).map((path) => {
+                    const included = composerTargets.includes(path);
+                    const isPrimary = path === activePath;
+                    return (
+                      <Button
+                        key={path}
+                        tone={included ? 'primary small' : 'ghost small'}
+                        disabled={isPrimary || (!included && composerTargets.length >= 8)}
+                        onClick={() =>
+                          setCustomTargets((prev) =>
+                            prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path],
+                          )
+                        }
+                      >
+                        @{path.split('/').at(-1)}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <form
               className="docked-composer-row"
               onSubmit={(e) => {
@@ -726,7 +1001,19 @@ export function Editor({ s }: { s: State }) {
               <Button tone="ghost small" icon="clock" onClick={() => setHistoryOpen((v) => !v)}>
                 History ({(change?.messages.length || 0) + (s.changeHistory?.length || 0)})
               </Button>
-              {activePath && <Badge value={`@${activePath.split('/').at(-1)}`} tone="violet" />}
+              <div className="row wrap" style={{ gap: '4px' }}>
+                {composerTargets.map((target) => (
+                  <Badge key={target} value={`@${target.split('/').at(-1)}`} tone="violet" />
+                ))}
+                <Button
+                  tone="ghost small"
+                  aria-label="Add context file"
+                  title="Attach up to 8 files to the AI proposal context"
+                  onClick={() => setContextPickerOpen((v) => !v)}
+                >
+                  + Context ({composerTargets.length}/8)
+                </Button>
+              </div>
               <input
                 aria-label="Ask about this file"
                 className="docked-composer-input"

@@ -9,7 +9,14 @@ import {
   type ReactNode,
 } from 'react';
 import { createRoot } from 'react-dom/client';
-import { workspace as w, canCancelOperation, findingCategory, type Page } from './workspace';
+import {
+  workspace as w,
+  canCancelOperation,
+  findingCategory,
+  allModelPresets,
+  isModelPresetActive,
+  type Page,
+} from './workspace';
 import { Button, Heading, Icon, Modal, Notice, Overlay, Spinner } from './ui';
 import { Summary, ProjectPage, Models, Diagrams, SearchPage } from './overview';
 import { DocsWorkspace } from './docs';
@@ -58,6 +65,12 @@ const themes = [
     name: 'Linear Carbon',
     letter: 'L',
     mark: '/mo-mark-linear-carbon.svg',
+  },
+  {
+    id: 'porcelain',
+    name: 'Porcelain',
+    letter: 'P',
+    mark: '/mo-mark-porcelain.svg',
   },
 ] as const;
 function App() {
@@ -136,14 +149,27 @@ function App() {
   }, [s.page, finding?.key]);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && !s.confirmation) {
+      if (s.confirmation) return;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         void w.navigate('search');
+      } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'b') {
+        event.preventDefault();
+        setSidebarCollapsed((collapsed) => !collapsed);
+      } else if (
+        ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'j') ||
+        (event.ctrlKey && event.key === '`')
+      ) {
+        if (s.project) {
+          event.preventDefault();
+          if (live.page === 'terminal') void w.navigate(lastPage.current);
+          else void w.navigate('terminal');
+        }
       }
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [s.confirmation]);
+  }, [s.confirmation, s.project, live.page]);
   const issueCount =
     (s.findings?.filter((f) => f.status !== 'fixed').length ||
       s.run?.sections.reduce((sum, sec) => sum + (sec.finding_count || 0), 0) ||
@@ -258,6 +284,31 @@ function App() {
                   /
                 </span>
                 <span aria-current="page">Last Run</span>
+              </>
+            ) : ['editor', 'chat', 'changes'].includes(s.page) &&
+              (s.file?.path || s.change?.changes?.[0]?.path) ? (
+              <>
+                <button onClick={() => void w.navigate('editor')}>Code & Diff</button>
+                <span className="muted" aria-hidden="true">
+                  /
+                </span>
+                <span aria-current="page" className="font-mono">
+                  {s.file?.path || s.change?.changes?.[0]?.path}
+                </span>
+              </>
+            ) : ['models', 'analysis-files', 'context'].includes(s.page) ? (
+              <>
+                <button onClick={() => void w.navigate('instructions')}>Settings & Rules</button>
+                <span className="muted" aria-hidden="true">
+                  /
+                </span>
+                <span aria-current="page">
+                  {s.page === 'models'
+                    ? 'Model Routing'
+                    : s.page === 'analysis-files'
+                      ? 'File Scope'
+                      : 'Provider Context'}
+                </span>
               </>
             ) : (
               <span aria-current="page">{title}</span>
@@ -386,25 +437,66 @@ function App() {
               <TerminalWorkspace s={live} visible={terminalOpen} />
             </div>
             <footer className="statusbar">
-              {' '}
               <div className={`connection ${s.connected ? '' : 'offline'}`}>
                 <span className={`status-dot ${s.connected ? '' : 'offline'}`} />
                 {s.connected ? 'Daemon connected' : 'Daemon offline'}
               </div>
-              <span className="row">
+              {s.project && s.repository?.available && (
+                <button
+                  className="statusbar-item"
+                  title="Open Git & Worktrees"
+                  onClick={() => void w.navigate('git')}
+                >
+                  <Icon name="branch" />
+                  <span className="font-mono">{s.repository.branch || 'Detached'}</span>
+                  {s.gitWorkspace?.dirty && (
+                    <span className="statusbar-dirty-dot" title="Uncommitted changes" />
+                  )}
+                </button>
+              )}
+              <button
+                className="statusbar-item"
+                title="Open Settings & Workspace Trust"
+                onClick={() => void w.navigate('instructions')}
+              >
                 <Icon name="shield" />
                 {s.workspaceTrust !== false ? 'Workspace trusted' : 'Execution untrusted'}
-              </span>
-              <span>
+              </button>
+              {s.project && (
+                <button
+                  className="statusbar-item"
+                  title="Configure Model Routing"
+                  onClick={() => void w.navigate('models')}
+                >
+                  <Icon name="sparkles" />
+                  <span>
+                    {`Routing: ${
+                      allModelPresets(s).find((p) => isModelPresetActive(s, p))?.name || 'Custom'
+                    }`}
+                  </span>
+                </button>
+              )}
+              <span className="statusbar-meta">
                 {s.project
                   ? `${s.project.source_file_count ?? '—'} source files`
                   : 'No project open'}
               </span>
               <div className="statusbar-end">
+                {s.project && issueCount > 0 && (
+                  <button
+                    className="statusbar-item"
+                    title="Open Issues & Ideas"
+                    onClick={() => void w.navigate('bugs')}
+                  >
+                    <Icon name="bug" />
+                    <span>{issueCount} open</span>
+                  </button>
+                )}
                 <button
-                  className="row"
+                  className="row statusbar-item"
                   disabled={!s.project}
                   aria-expanded={terminalOpen}
+                  title="Toggle Terminal (⌘J)"
                   onClick={() => (terminalOpen ? closeOverlay() : void w.navigate('terminal'))}
                 >
                   <Icon name="terminal" />
