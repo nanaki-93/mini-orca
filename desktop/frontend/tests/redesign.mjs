@@ -92,7 +92,7 @@ try {
     }
   });
 
-  await test('Unified Code & Diff supports Direct Edit, Save File, Hunk-by-Hunk Diff Review, and Docked AI Composer', async () => {
+  await test('Unified Code & Diff supports Direct Edit with line gutter, Split/Unified Diff Review, Inspector, and Multi-File Docked AI Composer', async () => {
     const { page, close } = await pageFor({ proposalReady: true });
     try {
       await nav(page, 'Code & Diff');
@@ -103,15 +103,20 @@ try {
       await page.locator('.explorer-file-btn').first().click();
       await idle(page);
 
-      // Verify Hunk-by-Hunk Diff Review controls
+      // Verify Hunk-by-Hunk Diff Review controls & Split/Unified diff layout switcher
       await page.getByRole('tab', { name: 'Diff Review', exact: true }).click();
+      const diffLayoutGroup = page.getByRole('group', { name: 'Diff layout', exact: true });
+      await diffLayoutGroup.waitFor();
+      await diffLayoutGroup.getByRole('button', { name: 'Split', exact: true }).click();
+      await diffLayoutGroup.getByRole('button', { name: 'Unified', exact: true }).click();
       const acceptHunk = page.getByRole('button', { name: 'Accept Hunk', exact: true }).first();
       if ((await acceptHunk.count()) > 0) {
         await acceptHunk.click();
       }
 
-      // Switch to Direct Edit mode and edit inline
+      // Switch to Direct Edit mode, verify line-number gutter, and edit inline
       await page.getByRole('tab', { name: 'Direct Edit', exact: true }).click();
+      await page.locator('.code-gutter').waitFor();
       const editor = page.getByLabel('Direct code editor', { exact: true });
       await editor.waitFor();
       await editor.fill('package worker\n\n// Updated inline\n');
@@ -120,12 +125,21 @@ try {
         true,
       );
 
+      // Toggle side-by-side Symbol Inspector
+      await page.getByRole('button', { name: 'Toggle symbol inspector', exact: true }).click();
+      await page.getByLabel('Symbol and blast radius inspector', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Toggle symbol inspector', exact: true }).click();
+
       // Toggle Explorer collapse
       await page.getByRole('button', { name: 'Toggle file explorer', exact: true }).click();
       assert.equal(await page.locator('.unified-ide-explorer.collapsed').count(), 1);
       await page.getByRole('button', { name: 'Toggle file explorer', exact: true }).click();
 
-      // Open History drawer in docked composer
+      // Open multi-file @context picker and History drawer in docked composer
+      await page.getByRole('button', { name: 'Add context file', exact: true }).click();
+      await page.getByLabel('Context file picker', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Add context file', exact: true }).click();
+
       await page.getByRole('button', { name: /^History \(/ }).click();
       await page.getByLabel('Conversation history', { exact: true }).waitFor();
     } finally {
@@ -133,13 +147,26 @@ try {
     }
   });
 
-  await test('Issues & Ideas unifies Bugs, Security, Performance, and Features with Inspector card', async () => {
+  await test('Issues & Ideas removes KPI boxes and supports sorting, select-all on page, keyboard j/k nav, and Inspector card', async () => {
     const { page, close } = await pageFor({ featuresReady: true });
     try {
       await nav(page, 'Issues & Ideas');
       await idle(page);
       await page.getByRole('heading', { name: 'Issues & Feature Ideas', exact: true }).waitFor();
+      assert.equal(await page.locator('.kpi-pulse-card').count(), 0);
       await page.getByText('Selected Issue Inspector', { exact: true }).waitFor();
+
+      // Sort issues and Select all on page
+      const sortSelect = page.getByLabel('Sort issues', { exact: true });
+      await sortSelect.waitFor();
+      await sortSelect.selectOption('path');
+      await sortSelect.selectOption('severity');
+
+      const selectAllCheckbox = page.getByLabel('Select all issues on page', { exact: true });
+      await selectAllCheckbox.check();
+      const batchBar = page.getByRole('region', { name: 'Batch issue actions', exact: true });
+      await batchBar.waitFor();
+      await selectAllCheckbox.uncheck();
 
       // Clicking a row keeps the split view and updates Selected Issue Inspector
       const firstRow = page.locator('.result-row').first();

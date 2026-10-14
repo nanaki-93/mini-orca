@@ -4,6 +4,7 @@ const themes = [
   ['amethyst', 'Amethyst', 'A'],
   ['tokyo-night', 'Tokyo Night', 'T'],
   ['linear-carbon', 'Linear Carbon', 'L'],
+  ['porcelain', 'Porcelain', 'P'],
 ];
 
 export async function testThemes({ test, pageFor, nav, idle }) {
@@ -54,7 +55,7 @@ export async function testThemes({ test, pageFor, nav, idle }) {
     }
   });
 
-  await test('Curated theme pills switch between Amethyst, Tokyo Night, and Linear Carbon', async () => {
+  await test('Curated theme pills switch between Amethyst, Tokyo Night, Linear Carbon, and Porcelain', async () => {
     const { page, close } = await pageFor();
     try {
       await idle(page);

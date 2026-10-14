@@ -2331,3 +2331,125 @@ svg.icon {
     grid-template-columns: 1fr;
   }
 }
+
+/* Enterprise Telemetry Statusbar, Sticky Triage Inspector & Split Diff IDE */
+.statusbar-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+button.statusbar-item:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.statusbar-dirty-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--amber);
+  display: inline-block;
+}
+
+.results-inspector-panel {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+}
+.select-all-issues {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  cursor: pointer;
+}
+.findings-sort {
+  min-width: 145px;
+  font-size: 0.82rem;
+  padding: 5px 8px;
+}
+
+.unified-ide-workarea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+.unified-ide-inspector {
+  width: 310px;
+  min-width: 280px;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  padding: 14px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hunk-split-table {
+  table-layout: fixed;
+}
+.hunk-split-table td.ln {
+  width: 42px;
+  border-right: 1px solid var(--subtle-line);
+}
+.hunk-split-table td.split-cell {
+  width: calc(50% - 42px);
+  border-right: 1px solid var(--line);
+}
+.hunk-split-table td.split-cell.del,
+.hunk-split-table td.ln.del {
+  background: var(--red-soft);
+  color: var(--red);
+}
+.hunk-split-table td.split-cell.add,
+.hunk-split-table td.ln.add {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.code-editor-with-gutter {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  overflow: hidden;
+}
+.code-editor-with-gutter:focus-within {
+  border-color: var(--control-line);
+}
+.code-gutter {
+  width: 48px;
+  min-width: 48px;
+  padding: 14px 8px 14px 4px;
+  background: var(--sidebar);
+  border-right: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.84rem;
+  line-height: 1.6;
+  text-align: right;
+  user-select: none;
+  overflow: hidden;
+}
+.code-gutter-ln {
+  height: calc(0.84rem * 1.6);
+}
+.code-editor-with-gutter .direct-code-editor {
+  border: 0;
+  border-radius: 0;
+  flex: 1;
+}

@@ -185,6 +185,7 @@ export function Results({ s }: { s: State }) {
         : 'all',
   );
   const [showDone, setShowDone] = useState(false);
+  const [sortBy, setSortBy] = useState<'default' | 'severity' | 'path' | 'category'>('default');
   const [goals, setGoals] = useState(s.features?.goals || '');
   useEffect(() => {
     setGoals(s.features?.goals || '');
@@ -244,14 +245,40 @@ export function Results({ s }: { s: State }) {
     categoryFilter === 'all' || categoryFilter === 'features'
       ? [...new Map(allRows.map((row) => [row.key, row])).values()]
       : resultRows(s, categoryFilter);
-  const filtered = unique.filter(
-    (row) =>
-      (!showDone ? row.status !== 'fixed' : true) &&
-      `${row.name} ${row.title} ${row.path} ${row.symbol}`
-        .toLowerCase()
-        .includes(query.toLowerCase()) &&
-      (!severity || row.severity === severity),
-  );
+  const severityRank: Record<string, number> = {
+    critical: 0,
+    high: 1,
+    medium: 2,
+    low: 3,
+    info: 4,
+  };
+  const filtered = unique
+    .filter(
+      (row) =>
+        (!showDone ? row.status !== 'fixed' : true) &&
+        `${row.name} ${row.title} ${row.path} ${row.symbol}`
+          .toLowerCase()
+          .includes(query.toLowerCase()) &&
+        (!severity || row.severity === severity),
+    )
+    .sort((a, b) => {
+      if (sortBy === 'severity') {
+        return (
+          (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9) ||
+          a.path.localeCompare(b.path)
+        );
+      }
+      if (sortBy === 'path') {
+        return a.path.localeCompare(b.path) || a.line - b.line;
+      }
+      if (sortBy === 'category') {
+        return (
+          (a.category || '').localeCompare(b.category || '') ||
+          (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9)
+        );
+      }
+      return 0;
+    });
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const page = Math.min(listView.page, pageCount);
   const offset = (page - 1) * pageSize;
@@ -556,10 +583,48 @@ export function Results({ s }: { s: State }) {
     }));
   const [selectedInspectorKey, setSelectedInspectorKey] = useState<string>('');
   const showFeatures = categoryFilter === 'features' || s.page === 'features';
+  const pageRows = showFeatures ? featureRows : filtered.slice(offset, offset + pageSize);
   const inspectorRow =
     (showFeatures
       ? featureRows.find((r) => r.key === selectedInspectorKey) || featureRows[0]
       : filtered.find((r) => r.key === selectedInspectorKey) || filtered[0]) || undefined;
+  useEffect(() => {
+    if (s.page === 'finding') return;
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
+      if (
+        tag === 'input' ||
+        tag === 'textarea' ||
+        tag === 'select' ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey
+      ) {
+        return;
+      }
+      if (!pageRows.length) return;
+      const currentIndex = Math.max(
+        0,
+        pageRows.findIndex((r) => r.key === (inspectorRow?.key || '')),
+      );
+      if (e.key === 'j') {
+        e.preventDefault();
+        const next = pageRows[Math.min(pageRows.length - 1, currentIndex + 1)];
+        if (next) setSelectedInspectorKey(next.key);
+      } else if (e.key === 'k') {
+        e.preventDefault();
+        const prev = pageRows[Math.max(0, currentIndex - 1)];
+        if (prev) setSelectedInspectorKey(prev.key);
+      } else if (e.key === 'x' && !showFeatures && inspectorRow) {
+        e.preventDefault();
+        toggleRowSelection(inspectorRow.key);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [s.page, pageRows, inspectorRow, showFeatures]);
+  const allPageSelected =
+    !showFeatures && pageRows.length > 0 && pageRows.every((r) => selectedKeys.includes(r.key));
   const pausedOrInterrupted = !!s.run && ['paused', 'interrupted'].includes(s.run.status);
   const runTotal = s.run?.sections.reduce((sum, sec) => sum + sec.coverage.total, 0) || 0;
   const runDone =
@@ -760,81 +825,30 @@ export function Results({ s }: { s: State }) {
           </div>
         </div>
       )}
-      <div className="kpi-pulse-grid box-grid-4">
-        <div
-          className={`kpi-pulse-card card-kpi box-card clickable ${!showFeatures && categoryFilter === 'all' ? 'active-box' : ''}`}
-          onClick={() => {
-            if (s.page === 'features') void w.navigate('bugs');
-            setCategoryFilter('all');
-            updateView({ page: 1 });
-          }}
-        >
-          <div className="box-head">
-            <span className="box-eyebrow">
-              <Icon name="bug" /> Total Open Issues
-            </span>
-          </div>
-          <div className="kpi-pulse-value box-value">{countAll}</div>
-          <div className="box-meta">
-            <span>All categories</span>
-          </div>
-        </div>
-        <div
-          className={`kpi-pulse-card card-kpi box-card clickable ${!showFeatures && categoryFilter === 'bugs' ? 'active-box' : ''}`}
-          onClick={() => {
-            if (s.page === 'features') void w.navigate('bugs');
-            setCategoryFilter('bugs');
-            updateView({ page: 1 });
-          }}
-        >
-          <div className="box-head">
-            <span className="box-eyebrow">
-              <Icon name="code" /> Bugs &amp; Logic
-            </span>
-          </div>
-          <div className="kpi-pulse-value box-value">{countBugs}</div>
-          <div className="box-meta">
-            <span>Correctness findings</span>
-          </div>
-        </div>
-        <div
-          className={`kpi-pulse-card card-kpi box-card clickable ${!showFeatures && (categoryFilter === 'security' || categoryFilter === 'performance') ? 'active-box' : ''}`}
-          onClick={() => {
-            if (s.page === 'features') void w.navigate('bugs');
-            setCategoryFilter('security');
-            updateView({ page: 1 });
-          }}
-        >
-          <div className="box-head">
-            <span className="box-eyebrow">
-              <Icon name="shield" /> Security &amp; Perf
-            </span>
-          </div>
-          <div className="kpi-pulse-value box-value">{countSec + countPerf}</div>
-          <div className="box-meta">
-            <span>
-              {countSec} security · {countPerf} perf
-            </span>
-          </div>
-        </div>
-        <div
-          className={`kpi-pulse-card card-kpi box-card clickable ${showFeatures ? 'active-box' : ''}`}
-          onClick={() => setCategoryFilter('features')}
-        >
-          <div className="box-head">
-            <span className="box-eyebrow">
-              <Icon name="sparkles" /> Feature Ideas
-            </span>
-          </div>
-          <div className="kpi-pulse-value box-value">{featureRows.length}</div>
-          <div className="box-meta">
-            <span>Roadmap proposals</span>
-          </div>
-        </div>
-      </div>
       <div className="issue-split-grid">
         <Panel title="Issues & Ideas" className="results-findings">
           <div className="toolbar findings-toolbar">
+            {!showFeatures && pageRows.length > 0 && (
+              <label
+                className="checkbox-filter select-all-issues"
+                title="Select or deselect all issues on this page"
+              >
+                <input
+                  type="checkbox"
+                  aria-label="Select all issues on page"
+                  checked={allPageSelected}
+                  onChange={(e) => {
+                    const pageKeys = pageRows.map((r) => r.key);
+                    if (e.target.checked) {
+                      setSelectedKeys((prev) => [...new Set([...prev, ...pageKeys])]);
+                    } else {
+                      setSelectedKeys((prev) => prev.filter((k) => !pageKeys.includes(k)));
+                    }
+                  }}
+                />
+                <span>All</span>
+              </label>
+            )}
             <div
               className="category-pills"
               style={{ display: 'inline-flex', gap: '4px', flexWrap: 'wrap' }}
@@ -915,6 +929,26 @@ export function Results({ s }: { s: State }) {
               </select>
               <Icon name="down" />
             </div>
+            {!showFeatures && (
+              <div className="priority-filter" data-active={sortBy !== 'default'}>
+                <span className="priority-filter-icon" aria-hidden="true">
+                  <Icon name="layers" />
+                </span>
+                <select
+                  aria-label="Sort issues"
+                  value={sortBy}
+                  onChange={(e) =>
+                    setSortBy(e.target.value as 'default' | 'severity' | 'path' | 'category')
+                  }
+                >
+                  <option value="default">Sort: Default</option>
+                  <option value="severity">Sort: Severity</option>
+                  <option value="path">Sort: File Path</option>
+                  <option value="category">Sort: Category</option>
+                </select>
+                <Icon name="down" />
+              </div>
+            )}
             <label
               className="checkbox-filter"
               style={{
@@ -1038,7 +1072,7 @@ export function Results({ s }: { s: State }) {
             </Disclosure>
           )}
           <div className="result-list">
-            {(showFeatures ? featureRows : filtered.slice(offset, offset + pageSize)).map((row) => {
+            {pageRows.map((row) => {
               const rowCategory = row.category || category;
               return (
                 <div
@@ -1199,7 +1233,11 @@ export function Results({ s }: { s: State }) {
           </nav>
         </Panel>
 
-        <Panel title="Selected Issue Inspector">
+        <Panel
+          title="Selected Issue Inspector"
+          className="results-inspector-panel"
+          actions={<span className="small muted font-mono">j/k navigate · x select</span>}
+        >
           {inspectorRow ? (
             <div className="stack">
               <div className="row between wrap">
