@@ -273,13 +273,6 @@ function App() {
                 </button>
               ))}
             </div>
-            <Button
-              icon={s.scan?.status === 'running' ? 'close' : 'play'}
-              disabled={!s.project || !!s.busy}
-              onClick={() => void w.scanProject(s.scan?.status === 'running')}
-            >
-              {s.scan?.status === 'running' ? 'Cancel Tests' : 'Run Tests'}
-            </Button>
             <button
               className="search-trigger"
               onClick={() => void w.navigate('search')}

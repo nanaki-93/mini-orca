@@ -192,6 +192,30 @@ export function Summary({ s }: { s: State }) {
       0,
     ) || 0;
 
+  const phases = s.scan?.phases || [];
+  const passedPhases = phases.filter((p) => p.state === 'passed' || p.state === 'completed').length;
+  const scanRunning = s.scan?.status === 'running';
+  const testValue = scanRunning
+    ? 'Running…'
+    : phases.length > 0
+      ? `${passedPhases} / ${phases.length} Passed`
+      : s.scan
+        ? human(s.scan.status)
+        : 'Not run';
+  const testMeta =
+    phases.length > 0
+      ? phases.map((p) => `${p.name}: ${human(p.state)}`).join(' · ')
+      : 'parser · vet · test';
+
+  const docs = overview?.docs;
+  const componentCount =
+    docs?.components?.length ||
+    overview?.analysis.components?.length ||
+    Math.max(1, new Set((s.index?.files || []).map((f) => f.path.split('/')[0])).size);
+  const scenarioCount =
+    docs?.scenarios?.length || Math.max(1, overview?.analysis.flows?.length || 1);
+  const docsStatus = docs?.status || overview?.analysis.status || s.project?.ai_status || 'fresh';
+
   return (
     <div className="summary-page">
       <div className="summary-hero">
@@ -204,13 +228,6 @@ export function Summary({ s }: { s: State }) {
             </p>
           </div>
           <div className="actions">
-            <Button
-              icon="refresh"
-              disabled={!!s.busy}
-              onClick={() => void w.act('Refresh overview', () => w.refreshProject())}
-            >
-              Refresh
-            </Button>
             {s.run && (
               <Button
                 icon="activity"
@@ -249,14 +266,6 @@ export function Summary({ s }: { s: State }) {
                 {activeRun(s.run) ? 'Analyzing…' : 'Run Analysis'}
               </Button>
             )}
-            <Button
-              icon="code"
-              tone="primary"
-              disabled={!!s.busy}
-              onClick={() => void w.navigate('editor')}
-            >
-              Open Code & Diff
-            </Button>
           </div>
         </header>
         {overview?.analysis.failure && <p className="error-text">{overview.analysis.failure}</p>}
@@ -325,119 +334,181 @@ export function Summary({ s }: { s: State }) {
                 >
                   New Analysis
                 </Button>
-                <Button
-                  tone="ghost small"
-                  disabled={!!s.busy}
-                  onClick={() => void w.navigate('analysis-run')}
-                >
-                  Last Run
-                </Button>
               </>
             ) : (
-              <>
-                <Button
-                  tone="ghost small"
-                  disabled={!!s.busy}
-                  onClick={() => void w.navigate('analysis-run')}
-                >
-                  Last Run
-                </Button>
-                <Button
-                  tone="ghost small"
-                  disabled={!!s.busy || s.run?.status === 'canceling'}
-                  onClick={() => void w.controlRun('cancel')}
-                >
-                  Cancel
-                </Button>
-              </>
+              <Button
+                tone="ghost small"
+                disabled={!!s.busy || s.run?.status === 'canceling'}
+                onClick={() => void w.controlRun('cancel')}
+              >
+                Cancel
+              </Button>
             )}
           </div>
         </div>
       )}
 
-      {/* 3-Card Project Pulse */}
-      <div className="kpi-pulse-grid">
-        <div className="kpi-pulse-card card-kpi">
-          <span className="small muted uppercase">Active Proposal</span>
-          <div className="kpi-pulse-value" style={{ color: 'var(--accent)' }}>
+      {/* 4-Box Project Pulse */}
+      <div className="kpi-pulse-grid box-grid-4">
+        <div
+          className="kpi-pulse-card card-kpi box-card clickable"
+          role="button"
+          tabIndex={0}
+          aria-expanded={showTests}
+          onClick={() => setShowTests((prev) => !prev)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setShowTests((prev) => !prev);
+            }
+          }}
+        >
+          <div className="box-head">
+            <span className="box-eyebrow">
+              <StatusDot value={s.scan?.status || 'fresh'} /> Tests &amp; Checks
+            </span>
+            <Button
+              tone={scanRunning ? 'ghost small' : 'primary small'}
+              icon={scanRunning ? 'stop' : 'play'}
+              aria-label={scanRunning ? 'Cancel Tests' : 'Run Tests'}
+              disabled={!s.project || !!s.busy}
+              onClick={(e) => {
+                e.stopPropagation();
+                void w.scanProject(scanRunning);
+              }}
+            >
+              {scanRunning ? 'Stop' : 'Run'}
+            </Button>
+          </div>
+          <div
+            className="kpi-pulse-value box-value"
+            style={{ color: s.scan?.status === 'failed' ? 'var(--red)' : 'var(--green)' }}
+          >
+            {testValue}
+          </div>
+          <div className="box-meta">
+            <span>{testMeta}</span>
+            <span>{showTests ? '▲' : '▼'}</span>
+          </div>
+        </div>
+
+        <div
+          className="kpi-pulse-card card-kpi box-card clickable"
+          role="button"
+          tabIndex={0}
+          onClick={() => void w.navigate('docs')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              void w.navigate('docs');
+            }
+          }}
+        >
+          <div className="box-head">
+            <span className="box-eyebrow">
+              <Icon name="book" /> System Docs
+            </span>
+            <span className="pill">{human(docsStatus)}</span>
+          </div>
+          <div className="kpi-pulse-value box-value">
+            {componentCount} Subsystems{' '}
+            <span className="small muted" style={{ fontWeight: 500 }}>
+              · {scenarioCount} Scenarios
+            </span>
+          </div>
+          <div className="box-meta">
+            <span>C4 Context · Components · ADRs</span>
+            <Icon name="arrow" />
+          </div>
+        </div>
+
+        <div
+          className="kpi-pulse-card card-kpi box-card clickable"
+          role="button"
+          tabIndex={0}
+          onClick={() => void w.navigate('bugs')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              void w.navigate('bugs');
+            }
+          }}
+        >
+          <div className="box-head">
+            <span className="box-eyebrow">
+              <Icon name="bug" /> Issues &amp; Ideas
+            </span>
+            {percent !== null && <span className="pill">{percent}% analyzed</span>}
+          </div>
+          <div className="kpi-pulse-value box-value">
+            {totalIssues} Open{' '}
+            <span className="small muted" style={{ fontWeight: 500 }}>
+              ({bugCount} Bugs · {secCount} Sec · {perfCount} Perf · {featureCount} Ideas)
+            </span>
+          </div>
+          <div className="box-meta">
+            <span>
+              {percent !== null
+                ? `${coverage?.fresh}/${coverage?.total} files covered`
+                : 'Triage & fix issues in one click'}
+            </span>
+            <Icon name="arrow" />
+          </div>
+        </div>
+
+        <div
+          className="kpi-pulse-card card-kpi box-card clickable"
+          role="button"
+          tabIndex={0}
+          onClick={() => (currentWork ? void openWork(currentWork.id) : void w.navigate('editor'))}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              if (currentWork) void openWork(currentWork.id);
+              else void w.navigate('editor');
+            }
+          }}
+        >
+          <div className="box-head">
+            <span className="box-eyebrow">
+              <Icon name="code" /> Active Proposal
+            </span>
+            <span className="pill">{s.repository?.branch || 'main'}</span>
+          </div>
+          <div className="kpi-pulse-value box-value" style={{ color: 'var(--accent)' }}>
             {s.change?.changes?.length
               ? `${s.change.changes.length} ${s.change.changes.length === 1 ? 'File' : 'Files'} Changed`
               : currentWork
                 ? currentWork.title
                 : 'Ready to Edit'}
           </div>
-          <p className="small muted">
-            {s.change?.title ||
-              'Edit any project file inline or generate hunk-by-hunk AI diffs in Code & Diff.'}
-          </p>
-          <div className="actions" style={{ marginTop: 'auto' }}>
-            {currentWork ? (
-              <Button
-                tone="primary small"
-                icon="code"
-                onClick={() => void openWork(currentWork.id)}
-              >
-                Review Diff Hunks →
-              </Button>
-            ) : (
-              <Button tone="primary small" icon="code" onClick={() => void w.navigate('editor')}>
-                Open Editor →
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <div className="kpi-pulse-card card-kpi">
-          <span className="small muted uppercase">Issues & Feature Ideas</span>
-          <div className="kpi-pulse-value">
-            {totalIssues}{' '}
-            <span className="small muted" style={{ fontWeight: 500 }}>
-              ({bugCount} Bugs · {secCount} Sec · {perfCount} Perf · {featureCount} Ideas)
-            </span>
-          </div>
-          <p className="small muted">
-            {percent !== null
-              ? `${percent}% analysis coverage (${coverage?.fresh}/${coverage?.total} files)`
-              : 'Run project analysis to surface bugs, security risks, and feature ideas.'}
-          </p>
-          <div className="actions" style={{ marginTop: 'auto' }}>
-            <Button tone="ghost small" icon="bug" onClick={() => void w.navigate('bugs')}>
-              Triage & Fix Issues →
-            </Button>
-          </div>
-        </div>
-
-        <div className="kpi-pulse-card card-kpi">
-          <span className="small muted uppercase">Git & Worktrees</span>
-          <div className="kpi-pulse-value" style={{ color: 'var(--green)' }}>
-            {s.repository?.branch || 'main'}{' '}
-            <span className="small muted" style={{ fontWeight: 500 }}>
-              · {s.gitWorkspace?.worktrees.length || 0} Worktrees
-            </span>
-          </div>
-          <p className="small muted">
-            In-place edits apply with guarded Undo. Background worktrees can be merged in one click.
-          </p>
-          <div className="actions" style={{ marginTop: 'auto' }}>
-            <Button tone="ghost small" icon="branch" onClick={() => void w.navigate('git')}>
-              Manage Git & Worktrees →
-            </Button>
+          <div className="box-meta">
+            <span>{s.gitWorkspace?.worktrees.length || 0} Worktrees · Open Code &amp; Diff</span>
+            <Icon name="arrow" />
           </div>
         </div>
       </div>
+
+      {showTests && (
+        <Panel
+          title="Verification Phases"
+          actions={
+            <Button tone="ghost small" icon="close" onClick={() => setShowTests(false)}>
+              Hide
+            </Button>
+          }
+        >
+          <Tests s={s} />
+        </Panel>
+      )}
 
       {/* Interactive System Architecture & Entry Points */}
       <Panel
         title="System Architecture & Entry Points"
         actions={
-          <div className="row" style={{ gap: '8px' }}>
-            <Go page="diagrams" tone="ghost small" icon="network">
-              Full Diagrams
-            </Go>
-            <Go page="instructions" tone="ghost small" icon="shield">
-              Settings & Rules
-            </Go>
-          </div>
+          <Go page="docs" tone="ghost small" icon="book">
+            Engineering Spec →
+          </Go>
         }
       >
         <Prose
@@ -460,7 +531,7 @@ export function Summary({ s }: { s: State }) {
             {entryFiles.map((file) => (
               <button
                 key={file.path}
-                className="panel card-kpi"
+                className="panel card-kpi box-card clickable"
                 style={{
                   textAlign: 'left',
                   padding: '12px 14px',
@@ -486,19 +557,6 @@ export function Summary({ s }: { s: State }) {
           </div>
         )}
       </Panel>
-
-      <Disclosure
-        title={
-          <span className="row">
-            <strong>Tests</strong>
-            <StatusDot value={s.scan?.status} />
-            <span>{s.scan ? human(s.scan.status) : 'Not run'}</span>
-          </span>
-        }
-        open={showTests}
-      >
-        <Tests s={s} />
-      </Disclosure>
     </div>
   );
 }
