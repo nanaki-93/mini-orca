@@ -12,6 +12,7 @@ import { createRoot } from 'react-dom/client';
 import { workspace as w, canCancelOperation, findingCategory, type Page } from './workspace';
 import { Button, Heading, Icon, Modal, Notice, Overlay, Spinner } from './ui';
 import { Summary, ProjectPage, Models, Diagrams, SearchPage } from './overview';
+import { DocsWorkspace } from './docs';
 import { Analysis, AnalysisFiles, AnalysisPreview, AnalysisRun } from './analysis';
 import { Results, selectedResult } from './results';
 import { Editor, Context } from './editor';
@@ -23,6 +24,7 @@ import './studio.css';
 
 const mainNav: [Page, string, string][] = [
   ['summary', 'Overview', 'grid'],
+  ['docs', 'Docs', 'book'],
   ['editor', 'Code & Diff', 'code'],
   ['bugs', 'Issues & Ideas', 'bug'],
   ['git', 'Git & Worktrees', 'branch'],
@@ -86,13 +88,15 @@ function App() {
     s.page === 'features' ||
     ['analysis', 'analysis-preview', 'analysis-run'].includes(s.page)
       ? 'bugs'
-      : ['editor', 'chat', 'changes', 'history'].includes(s.page)
-        ? 'editor'
-        : ['git', 'worktree'].includes(s.page)
-          ? 'git'
-          : ['instructions', 'models', 'analysis-files', 'context', 'diagrams'].includes(s.page)
-            ? 'instructions'
-            : s.page;
+      : ['docs', 'diagrams'].includes(s.page)
+        ? 'docs'
+        : ['editor', 'chat', 'changes', 'history'].includes(s.page)
+          ? 'editor'
+          : ['git', 'worktree'].includes(s.page)
+            ? 'git'
+            : ['instructions', 'models', 'analysis-files', 'context'].includes(s.page)
+              ? 'instructions'
+              : s.page;
   useEffect(() => {
     void w.start();
     const focus = () => {
@@ -188,6 +192,7 @@ function App() {
   else if (s.page === 'worktree' && s.implementation)
     content = <WorktreeImplementation child={s.implementation} />;
   else if (s.page === 'summary') content = <Summary s={s} />;
+  else if (s.page === 'docs') content = <DocsWorkspace s={s} />;
   else if (s.page === 'analysis') content = <Analysis s={s} />;
   else if (s.page === 'analysis-files') content = <AnalysisFiles s={s} />;
   else if (s.page === 'analysis-preview') content = <AnalysisPreview s={s} />;

@@ -457,6 +457,15 @@ export function AnalysisPreview({ s }: { s: State }) {
               <Go page="features">Review project goals</Go>
             </Panel>
           )}
+          <Panel title="Engineering specification (Docs)">
+            <p className="small muted">
+              Synthesizes C4 System Context, Subsystem Contracts, Runtime Scenarios, and ADRs from
+              project facts and analysis evidence.
+            </p>
+            <Go page="docs" icon="book">
+              Open Docs
+            </Go>
+          </Panel>
         </div>
         <Panel title="Selected files">
           {p.files.length === 0 && <Empty title="No selected files" />}
@@ -552,9 +561,12 @@ export function AnalysisRun({ s }: { s: State }) {
             : run.status === 'queued'
               ? 'Preparing analysis…'
               : total > 0 && done === total
-                ? 'Finalizing analysis…'
+                ? 'Finalizing analysis & engineering docs…'
                 : 'Waiting for the next step…';
   const pausedOrInterrupted = ['paused', 'interrupted'].includes(run.status);
+  const docsCount =
+    s.overview?.docs?.components?.length || s.overview?.analysis.components?.length || 0;
+  const docsStatus = activeRun(run) ? 'running' : s.overview?.docs?.status || run.status;
   return (
     <div className="workspace-page analysis-run">
       <Heading
@@ -667,6 +679,20 @@ export function AnalysisRun({ s }: { s: State }) {
             </span>
           </div>
         )}
+        <div
+          className="analysis-feature-progress"
+          role="status"
+          aria-label="Engineering specification progress"
+        >
+          <span className="row">
+            <Icon name="book" />
+            Engineering specification (Docs)
+          </span>
+          <span className="analysis-run-status">
+            <StatusDot value={docsStatus} label="Engineering specification" />
+            <span>{human(docsStatus)}</span>
+          </span>
+        </div>
       </Panel>
       <div className="run-category-list">
         {run.sections.map((section) => (
@@ -737,6 +763,20 @@ export function AnalysisRun({ s }: { s: State }) {
               </Disclosure>
             </Panel>
           )}
+          <Panel
+            title="Engineering Specification"
+            className="run-result-card"
+            actions={<StatusDot value={docsStatus} label="Docs" />}
+          >
+            <div data-accent="docs" className="run-result-summary">
+              <div className="metric-number">{docsCount || '—'}</div>
+              <span>Subsystems</span>
+            </div>
+            <p className="small muted">C4 Context · Contracts · Scenarios · ADRs</p>
+            <Go page="docs" icon="book">
+              Open Engineering Spec →
+            </Go>
+          </Panel>
         </div>
         <Panel title="Captured models" className="analysis-run-models">
           <CapturedModels plan={run.plan} compact />

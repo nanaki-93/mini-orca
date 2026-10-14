@@ -834,6 +834,7 @@ export function SearchPage({ s }: { s: State }) {
   );
   const commands: [Page, string, string][] = [
     ['summary', 'Overview', 'grid'],
+    ['docs', 'Docs', 'book'],
     ['analysis', 'Analyze project', 'activity'],
     ['analysis-run', 'Last Run', 'activity'],
     ['editor', 'Source', 'code'],

@@ -1378,9 +1378,15 @@ export class Workspace {
               : undefined,
           }
         : {}),
-      page: ['summary', 'bugs', 'security', 'performance', 'finding', 'analysis-run'].includes(
-        this.state.page,
-      )
+      page: [
+        'summary',
+        'docs',
+        'bugs',
+        'security',
+        'performance',
+        'finding',
+        'analysis-run',
+      ].includes(this.state.page)
         ? this.state.page
         : 'bugs',
       featureGenerationRequested: this.state.featureGenerationRequested || !!p.features,
