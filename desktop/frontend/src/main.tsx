@@ -31,11 +31,15 @@ import './studio.css';
 
 const mainNav: [Page, string, string][] = [
   ['summary', 'Overview', 'grid'],
+  ['diagrams', 'Architecture', 'layers'],
   ['docs', 'Docs', 'book'],
   ['editor', 'Code & Diff', 'code'],
   ['bugs', 'Issues & Ideas', 'bug'],
+  ['features', 'Features', 'sparkles'],
+  ['analysis-run', 'Last Run', 'activity'],
   ['git', 'Git & Worktrees', 'branch'],
   ['instructions', 'Settings & Rules', 'shield'],
+  ['models', 'Model Routing', 'compass'],
 ];
 const contextPages: [Page, string][] = [
   ['analysis-files', 'Files to skip / Scope'],
@@ -96,20 +100,25 @@ function App() {
   const finding = s.page === 'finding' ? selectedResult(s) : undefined;
   const categoryTitle = findingPages.find(([page]) => page === category)?.[1];
   const activePage: Page =
-    category ||
-    s.page === 'finding' ||
-    s.page === 'features' ||
-    ['analysis', 'analysis-preview', 'analysis-run'].includes(s.page)
-      ? 'bugs'
-      : ['docs', 'diagrams'].includes(s.page)
-        ? 'docs'
-        : ['editor', 'chat', 'changes', 'history'].includes(s.page)
-          ? 'editor'
-          : ['git', 'worktree'].includes(s.page)
-            ? 'git'
-            : ['instructions', 'models', 'analysis-files', 'context'].includes(s.page)
-              ? 'instructions'
-              : s.page;
+    s.page === 'features'
+      ? 'features'
+      : ['analysis', 'analysis-preview', 'analysis-run'].includes(s.page)
+        ? 'analysis-run'
+        : category || s.page === 'finding'
+          ? 'bugs'
+          : s.page === 'diagrams'
+            ? 'diagrams'
+            : s.page === 'docs'
+              ? 'docs'
+              : ['editor', 'chat', 'changes', 'history'].includes(s.page)
+                ? 'editor'
+                : ['git', 'worktree'].includes(s.page)
+                  ? 'git'
+                  : s.page === 'models'
+                    ? 'models'
+                    : ['instructions', 'analysis-files', 'context'].includes(s.page)
+                      ? 'instructions'
+                      : s.page;
   useEffect(() => {
     void w.start();
     const focus = () => {

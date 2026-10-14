@@ -8,7 +8,7 @@ const themes = [
 ];
 
 export async function testThemes({ test, pageFor, nav, idle }) {
-  await test('Collapsible 6-view sidebar keeps every destination accessible and remembers its width', async () => {
+  await test('Collapsible 10-view sidebar keeps every destination accessible and remembers its width', async () => {
     const { page, close } = await pageFor();
     try {
       await idle(page);
@@ -18,11 +18,15 @@ export async function testThemes({ test, pageFor, nav, idle }) {
         .evaluateAll((links) => links.map((link) => link.getAttribute('aria-label')));
       assert.deepEqual(destinations, [
         'Overview',
+        'Architecture',
         'Docs',
         'Code & Diff',
         'Issues & Ideas',
+        'Features',
+        'Last Run',
         'Git & Worktrees',
         'Settings & Rules',
+        'Model Routing',
       ]);
       const expanded = await sidebar.boundingBox();
       await sidebar.getByRole('button', { name: 'Collapse sidebar' }).focus();

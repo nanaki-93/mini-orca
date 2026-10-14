@@ -694,22 +694,6 @@ export function AnalysisRun({ s }: { s: State }) {
           </span>
         </div>
       </Panel>
-      <div className="run-category-list">
-        {run.sections.map((section) => (
-          <button
-            className="studio-list-row"
-            key={section.category}
-            onClick={() => void w.navigate(section.category as 'bugs' | 'performance' | 'security')}
-          >
-            <StatusDot value={section.status} />
-            <strong className="studio-row-copy">{human(section.category)}</strong>
-            <span>
-              {section.finding_count ?? '—'} suggestions · {human(section.status)}
-            </span>
-            <Icon name="chevron" />
-          </button>
-        ))}
-      </div>
       <section className="stack analysis-run-details" aria-labelledby="analysis-run-details-title">
         <h2 id="analysis-run-details-title">Run details</h2>
         <div className="grid analysis-run-categories">
@@ -778,47 +762,55 @@ export function AnalysisRun({ s }: { s: State }) {
             </Go>
           </Panel>
         </div>
-        <Panel title="Captured models" className="analysis-run-models">
-          <CapturedModels plan={run.plan} compact />
-        </Panel>
-        <Panel title="Files with failures" className="analysis-failed-files">
-          {failedFiles.length === 0 && <p className="small muted">No file failures reported.</p>}
-          <div className="scroll-list">
-            {failedFiles.map((file) => (
-              <Disclosure
-                title={
-                  <span className="row between wrap">
-                    <span className="mono small analysis-file-path">{file.path}</span>
-                    <span className="row wrap analysis-file-statuses">
-                      {file.stages.map((stage) => (
-                        <span key={stage.stage} title={stageNames[stage.stage]}>
-                          <StatusDot value={stage.status} label={stageNames[stage.stage]} />
+        <Disclosure
+          title={`Captured models & failure diagnostics (${failedFiles.length} failed files)`}
+        >
+          <div className="stack" style={{ gap: '12px', paddingTop: '8px' }}>
+            <Panel title="Captured models" className="analysis-run-models">
+              <CapturedModels plan={run.plan} compact />
+            </Panel>
+            <Panel title="Files with failures" className="analysis-failed-files">
+              {failedFiles.length === 0 && (
+                <p className="small muted">No file failures reported.</p>
+              )}
+              <div className="scroll-list">
+                {failedFiles.map((file) => (
+                  <Disclosure
+                    title={
+                      <span className="row between wrap">
+                        <span className="mono small analysis-file-path">{file.path}</span>
+                        <span className="row wrap analysis-file-statuses">
+                          {file.stages.map((stage) => (
+                            <span key={stage.stage} title={stageNames[stage.stage]}>
+                              <StatusDot value={stage.status} label={stageNames[stage.stage]} />
+                            </span>
+                          ))}
                         </span>
-                      ))}
-                    </span>
-                  </span>
-                }
-                key={file.path}
-              >
-                {file.stages.map((stage) => (
-                  <div className="list-row" key={stage.stage}>
-                    <span className="list-copy">
-                      <strong>{stageNames[stage.stage]}</strong>
-                      <small>
-                        {stage.reason ||
-                          `${stage.attempts} attempts${stage.cached ? ' · cached' : ''}`}
-                      </small>
-                    </span>
-                    <span className="analysis-run-status small">
-                      <StatusDot value={stage.status} label={stageNames[stage.stage]} />
-                      <span>{human(stage.status)}</span>
-                    </span>
-                  </div>
+                      </span>
+                    }
+                    key={file.path}
+                  >
+                    {file.stages.map((stage) => (
+                      <div className="list-row" key={stage.stage}>
+                        <span className="list-copy">
+                          <strong>{stageNames[stage.stage]}</strong>
+                          <small>
+                            {stage.reason ||
+                              `${stage.attempts} attempts${stage.cached ? ' · cached' : ''}`}
+                          </small>
+                        </span>
+                        <span className="analysis-run-status small">
+                          <StatusDot value={stage.status} label={stageNames[stage.stage]} />
+                          <span>{human(stage.status)}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </Disclosure>
                 ))}
-              </Disclosure>
-            ))}
+              </div>
+            </Panel>
           </div>
-        </Panel>
+        </Disclosure>
       </section>
     </div>
   );

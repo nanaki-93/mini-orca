@@ -477,6 +477,33 @@ try {
       await close();
     }
   });
+
+  await test('Dedicated Architecture, Features, Last Run, and Model Routing pages render simplified single-focus views', async () => {
+    const { page, close } = await pageFor({ featuresReady: true });
+    try {
+      await nav(page, 'Architecture');
+      await idle(page);
+      await page.getByRole('heading', { name: 'Architecture', exact: true }).waitFor();
+      await page.getByText('Quick Entry Files', { exact: true }).waitFor();
+
+      await nav(page, 'Features');
+      await idle(page);
+      await page.getByText('Project goals & Feature discovery', { exact: true }).waitFor();
+
+      await nav(page, 'Last Run');
+      await idle(page);
+      await page.getByRole('heading', { name: 'Last Run', exact: true }).waitFor();
+      assert.equal(await page.locator('.run-category-list').count(), 0);
+
+      await nav(page, 'Model Routing');
+      await idle(page);
+      await page.getByRole('heading', { name: 'Models', exact: true }).waitFor();
+      await page.getByText('Analysis models', { exact: true }).waitFor();
+      await page.getByText('Workflow models', { exact: true }).waitFor();
+    } finally {
+      await close();
+    }
+  });
 } finally {
   await browser.close();
   server.close();

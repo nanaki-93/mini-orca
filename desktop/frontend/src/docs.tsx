@@ -8,7 +8,7 @@ import type {
   ProjectDocsRunbookItem,
   ProjectDocsScenario,
 } from './models';
-import { Button, Empty, Heading, Icon, Panel, Prose, StatusDot, human } from './ui';
+import { Button, Disclosure, Empty, Heading, Icon, Panel, Prose, StatusDot } from './ui';
 
 type DocsTab = 'context' | 'components' | 'scenarios' | 'decisions';
 
@@ -364,111 +364,50 @@ export function DocsWorkspace({ s }: { s: State }) {
         </Button>
       </Heading>
 
-      {/* 4 C4/Arc42 Specification Section Boxes */}
-      <div
-        className="kpi-pulse-grid box-grid-4"
-        role="tablist"
-        aria-label="Engineering specification sections"
-      >
-        <div
-          className={`kpi-pulse-card card-kpi box-card clickable ${tab === 'context' ? 'active-box' : ''}`}
-          role="tab"
-          tabIndex={0}
-          aria-selected={tab === 'context'}
-          onClick={() => setTab('context')}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              setTab('context');
-            }
-          }}
-        >
-          <div className="box-head">
-            <span className="box-eyebrow">
-              <Icon name="layers" /> 1. System Context
-            </span>
-            <span className="pill">{human(docs.status)}</span>
-          </div>
-          <div className="kpi-pulse-value box-value">{Math.max(1, layers.length)} Layers</div>
-          <div className="box-meta">
-            <span>Topology &amp; Tech Stack</span>
-          </div>
-        </div>
-
-        <div
-          className={`kpi-pulse-card card-kpi box-card clickable ${tab === 'components' ? 'active-box' : ''}`}
-          role="tab"
-          tabIndex={0}
-          aria-selected={tab === 'components'}
-          onClick={() => setTab('components')}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              setTab('components');
-            }
-          }}
-        >
-          <div className="box-head">
-            <span className="box-eyebrow">
-              <Icon name="grid" /> 2. Components
-            </span>
-          </div>
-          <div className="kpi-pulse-value box-value">{docs.components.length} Subsystems</div>
-          <div className="box-meta">
-            <span>Boundaries &amp; Contracts</span>
-          </div>
-        </div>
-
-        <div
-          className={`kpi-pulse-card card-kpi box-card clickable ${tab === 'scenarios' ? 'active-box' : ''}`}
-          role="tab"
-          tabIndex={0}
-          aria-selected={tab === 'scenarios'}
-          onClick={() => setTab('scenarios')}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              setTab('scenarios');
-            }
-          }}
-        >
-          <div className="box-head">
-            <span className="box-eyebrow">
-              <Icon name="activity" /> 3. Runtime Scenarios
-            </span>
-          </div>
-          <div className="kpi-pulse-value box-value">{docs.scenarios.length} Data Flows</div>
-          <div className="box-meta">
-            <span>End-to-End Sequences</span>
-          </div>
-        </div>
-
-        <div
-          className={`kpi-pulse-card card-kpi box-card clickable ${tab === 'decisions' ? 'active-box' : ''}`}
-          role="tab"
-          tabIndex={0}
-          aria-selected={tab === 'decisions'}
-          onClick={() => setTab('decisions')}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              setTab('decisions');
-            }
-          }}
-        >
-          <div className="box-head">
-            <span className="box-eyebrow">
-              <Icon name="shield" /> 4. Decisions &amp; Ops
-            </span>
-          </div>
-          <div className="kpi-pulse-value box-value">{docs.decisions.length} ADRs</div>
-          <div className="box-meta">
-            <span>Tradeoffs · Runbook · Glossary</span>
-          </div>
-        </div>
-      </div>
-
       <div className="toolbar">
+        <div
+          className="mode-switch-group"
+          role="tablist"
+          aria-label="Engineering specification sections"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'context'}
+            className={`mode-switch-btn ${tab === 'context' ? 'active' : ''}`}
+            onClick={() => setTab('context')}
+          >
+            1. System Context ({Math.max(1, layers.length)})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'components'}
+            className={`mode-switch-btn ${tab === 'components' ? 'active' : ''}`}
+            onClick={() => setTab('components')}
+          >
+            2. Components ({docs.components.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'scenarios'}
+            className={`mode-switch-btn ${tab === 'scenarios' ? 'active' : ''}`}
+            onClick={() => setTab('scenarios')}
+          >
+            3. Runtime Scenarios ({docs.scenarios.length})
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'decisions'}
+            className={`mode-switch-btn ${tab === 'decisions' ? 'active' : ''}`}
+            onClick={() => setTab('decisions')}
+          >
+            4. Decisions &amp; Ops ({docs.decisions.length})
+          </button>
+        </div>
+
         <div className="input-wrap" style={{ flex: 1 }}>
           <Icon name="search" />
           <input
@@ -486,29 +425,13 @@ export function DocsWorkspace({ s }: { s: State }) {
       {/* TAB 1: SYSTEM CONTEXT & LAYERED TOPOLOGY */}
       {tab === 'context' && (
         <div className="stack">
-          <div className="kpi-pulse-grid box-grid-3">
-            <div className="kpi-pulse-card card-kpi box-card">
-              <div className="box-head">
-                <span className="box-eyebrow">System Purpose</span>
-                <span className="pill">C4 Level 1</span>
-              </div>
-              <p style={{ fontSize: '0.88rem', lineHeight: 1.55 }}>{docs.context.purpose}</p>
-            </div>
-
-            <div className="kpi-pulse-card card-kpi box-card">
-              <div className="box-head">
-                <span className="box-eyebrow">Runtime Topology</span>
-                <span className="pill">C4 Level 2</span>
-              </div>
-              <p style={{ fontSize: '0.88rem', lineHeight: 1.55 }}>{docs.context.topology}</p>
-            </div>
-
-            <div className="kpi-pulse-card card-kpi box-card">
-              <div className="box-head">
-                <span className="box-eyebrow">Technology &amp; Storage Stack</span>
-                <span className="pill">Runtime</span>
-              </div>
-              <div className="row wrap" style={{ gap: '6px', marginTop: '4px' }}>
+          <Panel title="System Summary">
+            <div className="stack" style={{ gap: '10px' }}>
+              <p style={{ fontSize: '0.9rem', lineHeight: 1.55 }}>{docs.context.purpose}</p>
+              <p className="small muted" style={{ lineHeight: 1.5 }}>
+                {docs.context.topology}
+              </p>
+              <div className="row wrap" style={{ gap: '6px' }}>
                 {docs.context.stack.map((item) => (
                   <span key={item} className="pill font-mono">
                     {item}
@@ -516,7 +439,7 @@ export function DocsWorkspace({ s }: { s: State }) {
                 ))}
               </div>
             </div>
-          </div>
+          </Panel>
 
           <Panel
             title="Layered Architecture Map"
@@ -551,12 +474,12 @@ export function DocsWorkspace({ s }: { s: State }) {
           </Panel>
 
           {docs.context.architecture_diagram && (
-            <Panel title="System Dependency Graph">
+            <Disclosure title="System Dependency Graph">
               <Prose
                 text={docs.context.architecture_diagram}
                 diagramLabel="System architecture diagram"
               />
-            </Panel>
+            </Disclosure>
           )}
         </div>
       )}
@@ -564,39 +487,32 @@ export function DocsWorkspace({ s }: { s: State }) {
       {/* TAB 2: COMPONENTS & CONTRACTS */}
       {tab === 'components' && (
         <div className="grid two-columns docs-components-layout">
-          <div className="stack">
-            {filteredComponents.length === 0 && <Empty title="No matching components" />}
-            {filteredComponents.map((comp, idx) => {
-              const selected = activeComp?.path === comp.path;
-              return (
-                <div
-                  key={comp.path}
-                  className={`kpi-pulse-card card-kpi box-card clickable ${selected ? 'active-box' : ''}`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelectedComponent(idx)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setSelectedComponent(idx);
-                    }
-                  }}
-                >
-                  <div className="box-head">
-                    <strong style={{ fontSize: '0.96rem' }}>{comp.name}</strong>
+          <Panel title={`Subsystems (${filteredComponents.length})`}>
+            <div className="stack" style={{ gap: '6px' }}>
+              {filteredComponents.length === 0 && <Empty title="No matching components" />}
+              {filteredComponents.map((comp, idx) => {
+                const selected = activeComp?.path === comp.path;
+                return (
+                  <button
+                    key={comp.path}
+                    type="button"
+                    className={`studio-list-row ${selected ? 'active' : ''}`}
+                    style={{
+                      border: selected ? '1px solid var(--accent)' : '1px solid var(--line)',
+                      background: selected ? 'var(--accent-soft)' : 'var(--raised)',
+                    }}
+                    onClick={() => setSelectedComponent(idx)}
+                  >
+                    <span className="studio-row-copy">
+                      <strong>{comp.name}</strong>
+                      <small className="font-mono muted">{comp.path}</small>
+                    </span>
                     <span className="pill">{comp.layer}</span>
-                  </div>
-                  <p className="small muted" style={{ lineHeight: 1.5 }}>
-                    {comp.summary}
-                  </p>
-                  <div className="box-meta">
-                    <span className="font-mono">{comp.path}</span>
-                    <span>{comp.contracts.length} contracts →</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  </button>
+                );
+              })}
+            </div>
+          </Panel>
 
           {activeComp && (
             <Panel
@@ -653,21 +569,6 @@ export function DocsWorkspace({ s }: { s: State }) {
                     ))}
                   </div>
                 </div>
-
-                {activeComp.dependencies.length > 0 && (
-                  <div>
-                    <h4 className="box-eyebrow" style={{ marginBottom: '8px' }}>
-                      Upstream / Downstream Collaborators
-                    </h4>
-                    <div className="row wrap" style={{ gap: '6px' }}>
-                      {activeComp.dependencies.map((dep) => (
-                        <span key={dep} className="pill">
-                          → {dep}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             </Panel>
           )}
@@ -682,12 +583,7 @@ export function DocsWorkspace({ s }: { s: State }) {
             <Panel
               key={idx}
               title={`Scenario ${idx + 1}: ${scenario.title}`}
-              actions={
-                <div className="row wrap" style={{ gap: '6px' }}>
-                  <span className="pill">Trigger: {scenario.trigger}</span>
-                  <span className="pill">Invariant: {scenario.invariant}</span>
-                </div>
-              }
+              actions={<span className="pill">Trigger: {scenario.trigger}</span>}
             >
               <div className="stack">
                 <p style={{ fontSize: '0.88rem', lineHeight: 1.55 }}>{scenario.summary}</p>
@@ -695,7 +591,8 @@ export function DocsWorkspace({ s }: { s: State }) {
                   {scenario.steps.map((step, sIdx) => (
                     <div
                       key={sIdx}
-                      className="kpi-pulse-card card-kpi box-card clickable"
+                      className="panel box-card clickable"
+                      style={{ padding: '12px 14px', background: 'var(--raised)' }}
                       role="button"
                       tabIndex={0}
                       onClick={() => openPath(step.path)}
@@ -712,21 +609,17 @@ export function DocsWorkspace({ s }: { s: State }) {
                         </span>
                         <span className="pill">{step.layer}</span>
                       </div>
-                      <strong style={{ fontSize: '0.9rem' }}>{step.title}</strong>
+                      <strong style={{ fontSize: '0.88rem' }}>{step.title}</strong>
                       <p className="small muted" style={{ lineHeight: 1.45 }}>
                         {step.detail}
                       </p>
-                      {step.path && (
-                        <div className="box-meta">
-                          <span className="font-mono">{step.path}</span>
-                          <Icon name="arrow" />
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
                 {scenario.diagram && (
-                  <Prose text={scenario.diagram} diagramLabel={`${scenario.title} diagram`} />
+                  <Disclosure title="Sequence / Flow Diagram">
+                    <Prose text={scenario.diagram} diagramLabel={`${scenario.title} diagram`} />
+                  </Disclosure>
                 )}
               </div>
             </Panel>
@@ -737,33 +630,29 @@ export function DocsWorkspace({ s }: { s: State }) {
       {/* TAB 4: DECISIONS (ADRs), RUNBOOK & GLOSSARY */}
       {tab === 'decisions' && (
         <div className="grid two-columns">
-          <div className="stack">
-            <Panel title="Architectural Decision Records (ADRs)">
-              <div className="stack">
-                {filteredDecisions.length === 0 && <Empty title="No matching ADRs" />}
-                {filteredDecisions.map((adr, idx) => (
-                  <div
-                    key={idx}
-                    className="kpi-pulse-card card-kpi box-card"
-                    style={{ background: 'var(--raised)' }}
-                  >
-                    <div className="box-head">
-                      <span className="box-eyebrow">
-                        ADR-{String(idx + 1).padStart(2, '0')} · {adr.category}
-                      </span>
-                    </div>
-                    <strong style={{ fontSize: '0.95rem' }}>{adr.title}</strong>
-                    <p className="small" style={{ lineHeight: 1.5 }}>
-                      <strong>Decision:</strong> {adr.decision}
-                    </p>
-                    <p className="small muted" style={{ lineHeight: 1.5 }}>
-                      <strong>Tradeoff / Constraint:</strong> {adr.tradeoff}
-                    </p>
+          <Panel title="Architectural Decision Records (ADRs)">
+            <div className="stack">
+              {filteredDecisions.length === 0 && <Empty title="No matching ADRs" />}
+              {filteredDecisions.map((adr, idx) => (
+                <div
+                  key={idx}
+                  className="panel"
+                  style={{ padding: '12px 14px', background: 'var(--raised)' }}
+                >
+                  <div className="row between wrap" style={{ marginBottom: '4px' }}>
+                    <strong>{adr.title}</strong>
+                    <span className="pill">{adr.category}</span>
                   </div>
-                ))}
-              </div>
-            </Panel>
-          </div>
+                  <p className="small" style={{ lineHeight: 1.5 }}>
+                    {adr.decision}
+                  </p>
+                  <p className="small muted" style={{ lineHeight: 1.45, marginTop: '4px' }}>
+                    Tradeoff: {adr.tradeoff}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </Panel>
 
           <div className="stack">
             <Panel title="Operational Runbook">
@@ -771,14 +660,16 @@ export function DocsWorkspace({ s }: { s: State }) {
                 {docs.runbook.map((item, idx) => (
                   <div
                     key={idx}
-                    className="kpi-pulse-card card-kpi box-card"
-                    style={{ background: 'var(--raised)' }}
+                    className="panel"
+                    style={{ padding: '10px 12px', background: 'var(--raised)' }}
                   >
-                    <div className="box-head">
+                    <div className="row between wrap">
                       <strong>{item.label}</strong>
                       <code className="pill font-mono">{item.command}</code>
                     </div>
-                    <p className="small muted">{item.description}</p>
+                    <p className="small muted" style={{ marginTop: '4px' }}>
+                      {item.description}
+                    </p>
                   </div>
                 ))}
               </div>
