@@ -52,7 +52,8 @@ await writeFile(path.join(output, 'mo-mark-tokyo-night.svg'), tokyoNightSvg);
 const graphiteSvg = await readFile(path.join(branding, 'graphite/ui/mo-mark.svg'), 'utf8');
 const linearCarbonSvg = graphiteSvg
   .replaceAll('graphite transparent mark', 'linear-carbon transparent mark')
-  .replaceAll('#E4C38B', '#5E6AD2');
+  .replaceAll('#E4C38B', '#5E6AD2')
+  .replaceAll('#F8C274', '#5E6AD2');
 await writeFile(path.join(output, 'mo-mark-linear-carbon.svg'), linearCarbonSvg);
 await copyFile(path.join(branding, 'favicon.png'), path.join(output, 'favicon.png'));
 await copyFile(

@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
 	if output, err := compile.CombinedOutput(); err != nil {
 		t.Fatalf("compile icon probe: %v\n%s", err, output)
 	}
-	probe := exec.CommandContext(ctx, binary, "../../../../docs/icons/graphite/app-icon/app-icon-1024.png")
+	probe := exec.CommandContext(ctx, binary, "../../../docs/icons/graphite/app-icon/app-icon-1024.png")
 	if output, err := probe.CombinedOutput(); err != nil {
 		t.Fatalf("apply bundled icon on AppKit main queue: %v\n%s", err, output)
 	}
