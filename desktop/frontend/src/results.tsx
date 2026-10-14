@@ -340,18 +340,18 @@ export function Results({ s }: { s: State }) {
       confidence: row.confidence,
     },
   });
-  const triggerFix = (row: ResultRow) => {
+  const triggerFix = (row: ResultRow, targetPage: 'agents' | 'changes' = 'agents') => {
     const preparedSeed = workflowSeed(fixSeed(row));
-    w.seedChange(preparedSeed);
+    w.seedChange(preparedSeed, targetPage);
     void (async () => {
       try {
         const context = await w.readFixPreparation();
         const useAgents = preparedSeed.paths.some(isTestFilePath);
         const models = workflowSetupModels(s);
         if (useAgents) {
-          await w.startChangeWorkflow(preparedSeed, models, context);
+          await w.startChangeWorkflow(preparedSeed, models, context, targetPage);
         } else {
-          await w.prepareChange(preparedSeed, true, models.create, context);
+          await w.prepareChange(preparedSeed, true, models.create, context, targetPage);
         }
       } catch (error) {
         w.fail(error);
@@ -398,16 +398,16 @@ export function Results({ s }: { s: State }) {
     if (!rows.length) return;
     const preparedSeed = workflowSeed(batchFixSeed(rows));
     setSelectedKeys([]);
-    w.seedChange(preparedSeed);
+    w.seedChange(preparedSeed, 'agents');
     void (async () => {
       try {
         const context = await w.readFixPreparation();
         const useAgents = preparedSeed.paths.some(isTestFilePath);
         const models = workflowSetupModels(s);
         if (useAgents) {
-          await w.startChangeWorkflow(preparedSeed, models, context);
+          await w.startChangeWorkflow(preparedSeed, models, context, 'agents');
         } else {
-          await w.prepareChange(preparedSeed, true, models.create, context);
+          await w.prepareChange(preparedSeed, true, models.create, context, 'agents');
         }
       } catch (error) {
         w.fail(error);
@@ -1149,6 +1149,7 @@ export function Results({ s }: { s: State }) {
                   <div className="finding-inline-actions">
                     <Button
                       tone="primary small"
+                      icon="sparkles"
                       disabled={
                         !!s.busy || activeChangeWorkflow(s.change) || row.freshness === 'stale'
                       }
@@ -1160,11 +1161,11 @@ export function Results({ s }: { s: State }) {
                           );
                           if (idea) w.discussFeature(idea, false);
                         } else {
-                          triggerFix(row);
+                          triggerFix(row, 'agents');
                         }
                       }}
                     >
-                      Fix in Editor
+                      Fix with Agent
                     </Button>
                   </div>
                 </div>
@@ -1335,9 +1336,19 @@ export function Results({ s }: { s: State }) {
                 </Disclosure>
               )}
               <div className="actions">
+                {!showFeatures && (
+                  <Button
+                    tone="primary"
+                    icon="sparkles"
+                    disabled={!!s.busy || activeChangeWorkflow(s.change)}
+                    onClick={() => triggerFix(inspectorRow, 'agents')}
+                  >
+                    Dispatch Agent Fix
+                  </Button>
+                )}
                 <Button
-                  tone="primary"
-                  icon="sparkles"
+                  tone={showFeatures ? 'primary' : 'ghost'}
+                  icon={showFeatures ? 'sparkles' : 'code'}
                   disabled={!!s.busy || activeChangeWorkflow(s.change)}
                   onClick={() => {
                     if (showFeatures) {
@@ -1346,7 +1357,7 @@ export function Results({ s }: { s: State }) {
                       );
                       if (idea) w.discussFeature(idea, false);
                     } else {
-                      triggerFix(inspectorRow);
+                      triggerFix(inspectorRow, 'changes');
                     }
                   }}
                 >

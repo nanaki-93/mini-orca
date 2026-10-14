@@ -26,7 +26,8 @@ export type Page =
   | 'search'
   | 'models'
   | 'diagrams'
-  | 'docs';
+  | 'docs'
+  | 'agents';
 export type FindingCategory = 'bugs' | 'performance' | 'security';
 export interface FindingListView {
   query: string;
@@ -1772,19 +1773,19 @@ export class Workspace {
       this.set({ scan });
     });
   }
-  seedChange(seed: M.ChangeSeed) {
+  seedChange(seed: M.ChangeSeed, targetPage?: Page) {
     if (this.state.busy || activeChangeWorkflow(this.state.change)) return;
     this.set({
       changeSeed: seed,
       change: undefined,
       changeReceipt: undefined,
-      page: changePage(seed.kind),
+      page: targetPage || changePage(seed.kind),
       error: '',
     });
     void this.loadChangeHistory();
   }
-  seedWorkflow(seed: M.ChangeSeed) {
-    this.seedChange(workflowSeed(seed));
+  seedWorkflow(seed: M.ChangeSeed, targetPage?: Page) {
+    this.seedChange(workflowSeed(seed), targetPage);
   }
   async loadFeatures() {
     if (!this.state.project) return;
@@ -2200,6 +2201,7 @@ export class Workspace {
     seed: M.ChangeSeed,
     models: M.ChangeWorkflowModels,
     preparation?: FixPreparationContext,
+    targetPage?: Page,
   ) {
     await this.act('Start workflow', async () => {
       if (activeChangeWorkflow(this.state.change))
@@ -2228,7 +2230,7 @@ export class Workspace {
         if (epoch !== this.epoch || operation !== this.operation) return;
         if (projectKey(change) !== projectKey(this.state.project))
           throw new Error('Conversation belongs to another project revision.');
-        this.set({ change, page: changePage(change.kind) });
+        this.set({ change, page: targetPage || changePage(change.kind) });
       }
       const id = change.id;
       try {
@@ -2250,7 +2252,7 @@ export class Workspace {
           change: next,
           changeReceipt: undefined,
           workflowModels: models,
-          page: changePage(next.kind),
+          page: targetPage || changePage(next.kind),
         });
       } catch (error) {
         if (epoch === this.epoch && this.state.change?.id === id) await this.viewChange(id);
@@ -2349,6 +2351,7 @@ export class Workspace {
     tests: boolean,
     profile = 'function',
     preparation?: FixPreparationContext,
+    targetPage?: Page,
   ) {
     await this.act('Prepare change', async () => {
       if (!seed.message.trim()) throw new Error('Describe the change.');
@@ -2368,7 +2371,7 @@ export class Workspace {
         if (epoch !== this.epoch || operation !== this.operation) return;
         if (projectKey(change) !== projectKey(this.state.project))
           throw new Error('Conversation belongs to another project revision.');
-        this.set({ change, page: changePage(change.kind) });
+        this.set({ change, page: targetPage || changePage(change.kind) });
       }
       if (!(await this.requestChangeMessage(seed.message, false, profile, preparation))) return;
       if (!(await this.requestChangeChecks(tests))) return;

@@ -23,6 +23,7 @@ export async function testThemes({ test, pageFor, nav, idle }) {
         'Code & Diff',
         'Issues & Ideas',
         'Features',
+        'Agents',
         'Last Run',
         'Git & Worktrees',
         'Settings & Rules',
