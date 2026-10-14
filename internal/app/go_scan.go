@@ -125,6 +125,18 @@ func (s *Service) recordGoScanPhase(root string, report *GoScanReport, findings 
 }
 
 func (s *Service) runGoScanToolPhases(ctx context.Context, scan *preparedGoScan) error {
+	if !workspaceHasGo(scan.workspace, nil) && !hasGoPath(scan.fileHashes) {
+		for _, phase := range []struct {
+			name   string
+			source string
+		}{{"vet", project.FindingSourceVet}, {"tests", project.FindingSourceTest}} {
+			scan.report.Phases = append(scan.report.Phases, GoScanPhase{Name: phase.name, State: CheckSkipped, Output: "Go toolchain phase skipped for non-Go workspace."})
+			if err := s.recordGoScanPhase(scan.root, scan.report, scan.findings, scan.fileHashes, phase.source); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	for _, phase := range []struct {
 		name    string
 		command []string
@@ -141,6 +153,15 @@ func (s *Service) runGoScanToolPhases(ctx context.Context, scan *preparedGoScan)
 		}
 	}
 	return nil
+}
+
+func hasGoPath(hashes map[string]string) bool {
+	for path := range hashes {
+		if filepath.Ext(path) == ".go" {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) completeGoScan(ctx context.Context, root string, report *GoScanReport, findings []project.UnifiedFinding, hashes map[string]string) (*GoScanReport, error) {

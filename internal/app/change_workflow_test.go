@@ -305,3 +305,68 @@ func TestChangeWorkflowSupportsCatalogAndCLIModels(t *testing.T) {
 		}
 	}
 }
+
+func TestChangeWorkflowAndExplanationSupportPolyglotProjects(t *testing.T) {
+	tsImpl := `{"explanation":"Add compute helper.","changes":[{"path":"app.ts","content":"export function compute(): number {\n  return 42;\n}\n"}]}`
+	tsTests := `{"explanation":"Add TypeScript test.","changes":[{"path":"app.test.ts","content":"import { compute } from './app';\nif (compute() !== 42) throw new Error('bad');\n"}]}`
+	var fnCalls atomic.Int32
+	fnServer := changeProvider(t, func() string {
+		if fnCalls.Add(1) == 1 {
+			return validDeclarationExplanation
+		}
+		return workflowApproval
+	})
+	create, testSrv := changeProvider(t, func() string { return tsImpl }), changeProvider(t, func() string { return tsTests })
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"name":"ts-fixture"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "app.ts"), []byte("import { helper } from './helper';\nexport function compute(): number {\n  return 1;\n}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := project.NewManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Set(root, &project.Analysis{Name: "ts-fixture", Path: root, Type: "typescript"}); err != nil {
+		t.Fatal(err)
+	}
+	cfg := scopedTestConfig(create.URL)
+	cfg.ModelScopes.Bug.APIBaseURL, cfg.ModelScopes.Bug.Model = create.URL, "creator"
+	cfg.ModelScopes.Analyze.APIBaseURL, cfg.ModelScopes.Analyze.Model = testSrv.URL, "tester"
+	cfg.ModelScopes.Function.APIBaseURL, cfg.ModelScopes.Function.Model = fnServer.URL, "reviewer"
+	s, err := New(cfg, manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.CancelChangeWorkflows)
+
+	index, err := s.manager.Index()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tsFile, err := s.manager.IndexedFile("app.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	explanation, err := s.ExplainDeclaration(context.Background(), DeclarationExplanationRequest{
+		ProjectID: index.ProjectID, ProjectRevision: index.ProjectRevision, BaseFileHash: tsFile.ContentHash,
+		TargetPath: "app.ts", TargetSymbol: "compute",
+	})
+	if err != nil || explanation.Anchor.Symbol != "compute" {
+		t.Fatalf("TypeScript declaration explanation failed: %+v, %v", explanation, err)
+	}
+
+	session := openChangeFixture(t, s, "app.ts", "app.test.ts")
+	if _, err := s.TrustProjectExecution(session.ProjectRevision, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.StartChangeWorkflow(context.Background(), session.ID, workflowRequest(session)); err != nil {
+		t.Fatalf("TypeScript workflow start failed: %v", err)
+	}
+	finished := finishedWorkflow(t, s, session.ID)
+	if finished.Workflow.Status != "awaiting_human_review" || len(finished.Changes) != 2 {
+		t.Fatalf("TypeScript workflow did not reach human review: %+v", finished)
+	}
+}

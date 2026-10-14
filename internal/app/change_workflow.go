@@ -92,10 +92,10 @@ func (s *Service) admitChangeWorkflow(session *ChangeSession, request ChangeWork
 	}
 	hasTestTarget := false
 	for _, target := range session.Targets {
-		hasTestTarget = hasTestTarget || strings.HasSuffix(target.Path, "_test.go")
+		hasTestTarget = hasTestTarget || isTestFilePath(target.Path)
 	}
 	if !hasTestTarget {
-		return fmt.Errorf("include a Go test path (_test.go) in the captured scope for the testing agent")
+		return fmt.Errorf("include a test path (e.g. _test.go, .test.ts, test_*.py) in the captured scope for the testing agent")
 	}
 	for i, profile := range request.Models.selections() {
 		runtime := s.workflowStageRuntime(i, profile)

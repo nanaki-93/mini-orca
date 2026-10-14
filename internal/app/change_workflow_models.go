@@ -17,12 +17,12 @@ func (s *Service) generateWorkflowTests(ctx context.Context, root string, sessio
 	if err != nil {
 		return nil, err
 	}
-	message := "Write meaningful regression and boundary tests for this proposal and its acceptance criteria. Return complete test file contents only for captured _test.go paths. Preserve existing tests and all pinned regression tests. Do not change implementation files or claim tests ran."
+	message := "Write meaningful regression and boundary tests for this proposal and its acceptance criteria. Return complete test file contents only for captured test file paths (such as _test.go, .test.ts, test_*.py, or tests/ files). Preserve existing tests and all pinned regression tests. Do not change implementation files or claim tests ran."
 	messages, err := changeMessages(session, message, text)
 	if err != nil {
 		return nil, err
 	}
-	messages[0].Content += " You are the testing agent. Only captured _test.go files may appear in changes; implementation is fixed."
+	messages[0].Content += " You are the testing agent. Only captured test files may appear in changes; implementation is fixed."
 	schema := changeResponseSchema()
 	result, err := s.requestWorkflowModel(ctx, root, session, runtime, messages, schema)
 	if err != nil {
@@ -33,7 +33,7 @@ func (s *Service) generateWorkflowTests(ctx context.Context, root string, sessio
 		return nil, err
 	}
 	for _, edit := range edits {
-		if !strings.HasSuffix(edit.Path, "_test.go") {
+		if !isTestFilePath(edit.Path) {
 			return nil, fmt.Errorf("testing agent attempted to change implementation")
 		}
 	}

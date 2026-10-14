@@ -11,23 +11,36 @@ type projectDetection struct {
 	BuildFile string
 }
 
+var projectBuildMarkers = []projectDetection{
+	{Type: "rust", BuildFile: "Cargo.toml"},
+	{Type: "typescript", BuildFile: "package.json"},
+	{Type: "typescript", BuildFile: "deno.json"},
+	{Type: "python", BuildFile: "pyproject.toml"},
+	{Type: "python", BuildFile: "requirements.txt"},
+	{Type: "java", BuildFile: "pom.xml"},
+	{Type: "cpp", BuildFile: "CMakeLists.txt"},
+	{Type: "swift", BuildFile: "Package.swift"},
+	{Type: "ruby", BuildFile: "Gemfile"},
+	{Type: "php", BuildFile: "composer.json"},
+	{Type: "elixir", BuildFile: "mix.exs"},
+	{Type: "dart", BuildFile: "pubspec.yaml"},
+	{Type: "zig", BuildFile: "build.zig"},
+	{Type: "make", BuildFile: "Makefile"},
+}
+
 func detectProject(root string) projectDetection {
-	switch {
-	case projectFileExists(root, "go.mod"):
+	if projectFileExists(root, "go.mod") {
 		return projectDetection{Type: "go", BuildFile: "go.mod"}
-	case projectFileExists(root, "build.gradle.kts") || projectFileExists(root, "build.gradle"):
-		return detectGradleProject(root)
-	case projectFileExists(root, "Cargo.toml"):
-		return projectDetection{Type: "rust", BuildFile: "Cargo.toml"}
-	case projectFileExists(root, "package.json"):
-		return projectDetection{Type: "typescript", BuildFile: "package.json"}
-	case projectFileExists(root, "pyproject.toml"):
-		return projectDetection{Type: "python", BuildFile: "pyproject.toml"}
-	case projectFileExists(root, "requirements.txt"):
-		return projectDetection{Type: "python", BuildFile: "requirements.txt"}
-	default:
-		return projectDetection{Type: "unknown"}
 	}
+	if projectFileExists(root, "build.gradle.kts") || projectFileExists(root, "build.gradle") {
+		return detectGradleProject(root)
+	}
+	for _, marker := range projectBuildMarkers {
+		if projectFileExists(root, marker.BuildFile) {
+			return marker
+		}
+	}
+	return projectDetection{Type: "unknown"}
 }
 
 func detectGradleProject(root string) projectDetection {

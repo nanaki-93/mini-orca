@@ -73,7 +73,7 @@ export function ChangeOutcome({ s }: { s: State }) {
                     >
                       Verify applied change
                     </Button>
-                    {change?.changes.some((edit) => edit.path.endsWith('.go')) && (
+                    {change?.changes.some((edit) => !/\.(md|txt)$/i.test(edit.path)) && (
                       <Button
                         disabled={
                           !!s.busy || s.uncertain || change.id !== s.changeReceipt.session_id

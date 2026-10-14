@@ -95,7 +95,7 @@ func functionContextFile(index *ProjectIndex, path string) *IndexFile {
 
 func functionContextDeclaration(source string, file IndexFile, symbol string) (string, error) {
 	for _, candidate := range file.Symbols {
-		if candidate.Name == symbol && candidate.Confidence == "exact" && candidate.AtomicTarget {
+		if candidate.Name == symbol && (candidate.Confidence == "exact" || candidate.Confidence == "approximate") && candidate.AtomicTarget {
 			return sourceLines(source, candidate.StartLine, candidate.EndLine), nil
 		}
 	}
@@ -136,7 +136,7 @@ func renderFunctionContext(path string, file IndexFile, declaration string, opti
 func directlyRelevantSignatures(file IndexFile, target string) []string {
 	values := make([]string, 0, len(file.Symbols))
 	for _, symbol := range file.Symbols {
-		if symbol.Name == target || symbol.Confidence == "exact" {
+		if symbol.Name == target || symbol.Confidence == "exact" || symbol.Confidence == "approximate" {
 			values = append(values, symbol.Name+": "+symbol.Signature)
 		}
 	}

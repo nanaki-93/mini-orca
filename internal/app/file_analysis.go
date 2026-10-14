@@ -693,7 +693,7 @@ func validateBugTaskSpec(spec *project.BugTaskSpec, target project.IndexFile, so
 	if err := validateBugTaskItems(spec.NonGoals, false); err != nil {
 		return nil, err
 	}
-	matching, ok := exactAtomicSymbol(target.Symbols, spec.TargetSymbol)
+	matching, ok := exactAtomicSymbol(target.Language, target.Symbols, spec.TargetSymbol)
 	if !ok {
 		return nil, fmt.Errorf("semantic analysis bug task target is not one exact atomic symbol")
 	}
@@ -713,14 +713,20 @@ func validBugTaskTarget(spec *project.BugTaskSpec, targetPath string) bool {
 		spec.TargetPath == targetPath && strings.TrimSpace(spec.TargetSymbol) != ""
 }
 
-func exactAtomicSymbol(symbols []project.SymbolInfo, name string) (project.SymbolInfo, bool) {
+func exactAtomicSymbol(language string, symbols []project.SymbolInfo, name string) (project.SymbolInfo, bool) {
 	matching := make([]project.SymbolInfo, 0, 1)
 	for _, symbol := range symbols {
 		if symbol.Name == name {
 			matching = append(matching, symbol)
 		}
 	}
-	if len(matching) != 1 || matching[0].Confidence != "exact" || !matching[0].AtomicTarget || matching[0].Signature == "" {
+	if len(matching) != 1 || !matching[0].AtomicTarget || matching[0].Signature == "" {
+		return project.SymbolInfo{}, false
+	}
+	if language == "Go" && matching[0].Confidence != "exact" {
+		return project.SymbolInfo{}, false
+	}
+	if language != "Go" && matching[0].Confidence != "exact" && matching[0].Confidence != "approximate" {
 		return project.SymbolInfo{}, false
 	}
 	return matching[0], true

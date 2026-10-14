@@ -7,8 +7,12 @@ func TestGenericExtractorsRemainApproximate(t *testing.T) {
 		{"Kotlin", "import kotlin.io.println\nclass Screen\nfun render() {}", "Screen"},
 		{"Java", "import java.util.List;\npublic class App {}", "App"},
 		{"TypeScript", "import { x } from 'x';\nexport function run() {}", "run"},
+		{"JavaScript", "import { x } from 'x';\nexport async function run() {}", "run"},
 		{"Python", "from pathlib import Path\ndef run(): pass", "run"},
 		{"Rust", "use std::fmt;\npub fn run() {}", "run"},
+		{"Ruby", "require 'json'\ndef run\nend", "run"},
+		{"Swift", "import Foundation\npublic func run() {}", "run"},
+		{"C++", "#include <vector>\nint run() {\n  return 0;\n}", "run"},
 	}
 	for _, test := range tests {
 		t.Run(test.language, func(t *testing.T) {

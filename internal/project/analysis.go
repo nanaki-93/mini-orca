@@ -28,10 +28,19 @@ var ignoredProjectDirectories = map[string]bool{
 
 var languageByExtension = map[string]string{
 	".go": "Go", ".kt": "Kotlin", ".kts": "Kotlin", ".java": "Java",
-	".rs": "Rust", ".ts": "TypeScript", ".tsx": "TypeScript", ".js": "JavaScript",
-	".jsx": "JavaScript", ".py": "Python", ".html": "HTML", ".css": "CSS",
-	".scss": "SCSS", ".sql": "SQL", ".sh": "Shell", ".yaml": "YAML",
-	".yml": "YAML", ".json": "JSON", ".md": "Markdown", ".xml": "XML",
+	".rs": "Rust", ".ts": "TypeScript", ".tsx": "TypeScript", ".mts": "TypeScript", ".cts": "TypeScript",
+	".js": "JavaScript", ".jsx": "JavaScript", ".mjs": "JavaScript", ".cjs": "JavaScript",
+	".py": "Python", ".pyi": "Python", ".rb": "Ruby", ".php": "PHP", ".swift": "Swift",
+	".c": "C", ".h": "C", ".cpp": "C++", ".cc": "C++", ".cxx": "C++", ".hpp": "C++", ".hh": "C++",
+	".cs": "C#", ".scala": "Scala", ".dart": "Dart", ".lua": "Lua", ".zig": "Zig",
+	".ex": "Elixir", ".exs": "Elixir", ".erl": "Erlang", ".hs": "Haskell", ".ml": "OCaml", ".mli": "OCaml",
+	".r": "R", ".jl": "Julia", ".clj": "Clojure", ".groovy": "Groovy", ".gradle": "Groovy", ".sol": "Solidity",
+	".vue": "Vue", ".svelte": "Svelte", ".astro": "Astro",
+	".html": "HTML", ".css": "CSS", ".scss": "SCSS", ".sql": "SQL",
+	".graphql": "GraphQL", ".gql": "GraphQL", ".proto": "Protobuf", ".tf": "Terraform", ".hcl": "HCL",
+	".sh": "Shell", ".bash": "Shell", ".zsh": "Shell", ".fish": "Shell", ".ps1": "PowerShell", ".bat": "Batch", ".cmd": "Batch",
+	".yaml": "YAML", ".yml": "YAML", ".json": "JSON", ".toml": "TOML", ".ini": "INI", ".cfg": "INI", ".conf": "Config",
+	".md": "Markdown", ".xml": "XML",
 }
 
 type projectAnalysisClient interface {
@@ -332,6 +341,16 @@ func countLines(data []byte) int {
 func detectLanguage(path string) string {
 	if language := languageByExtension[strings.ToLower(filepath.Ext(path))]; language != "" {
 		return language
+	}
+	switch strings.ToLower(filepath.Base(path)) {
+	case "dockerfile":
+		return "Dockerfile"
+	case "makefile", "gnumakefile":
+		return "Makefile"
+	case "gemfile", "rakefile":
+		return "Ruby"
+	case "cmakelists.txt":
+		return "CMake"
 	}
 	return "Text"
 }

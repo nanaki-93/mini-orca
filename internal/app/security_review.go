@@ -223,7 +223,7 @@ func securityReviewSource(root string, file project.IndexFile, baseHash string) 
 func exactSecurityReviewSymbol(file project.IndexFile, name string) *project.SymbolInfo {
 	var match *project.SymbolInfo
 	for _, candidate := range file.Symbols {
-		if candidate.Name != name || !candidate.AtomicTarget || candidate.Confidence != "exact" {
+		if candidate.Name != name || !candidate.AtomicTarget || (candidate.Confidence != "exact" && candidate.Confidence != "approximate") {
 			continue
 		}
 		if match != nil {

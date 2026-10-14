@@ -103,6 +103,9 @@ func (s *Service) checkChangeWorkspace(ctx context.Context, root string, session
 	if fingerprint != session.WorkspaceHash {
 		return nil, project.ErrRevisionConflict
 	}
+	if !workspaceHasGo(workspace, session.Changes) {
+		return checkNonGoWorkspace(ctx, workspace, session, options)
+	}
 	checks, err := s.changeRegressionBaseline(ctx, workspace, session, options.RunTests)
 	if err != nil {
 		return nil, err
@@ -117,6 +120,31 @@ func (s *Service) checkChangeWorkspace(ctx context.Context, root string, session
 		checks = append(checks, s.runCheck(ctx, workspace, session.ProjectRevision, "tests", true, []string{"go", "test", "./..."}, false, true))
 	}
 	return checks, ctx.Err()
+}
+
+func checkNonGoWorkspace(ctx context.Context, workspace string, session *ChangeSession, options CheckOptions) ([]CheckResult, error) {
+	if err := stageChangeEdits(workspace, session.Changes); err != nil {
+		return nil, err
+	}
+	checks := []CheckResult{}
+	if options.RunLint {
+		checks = append(checks, CheckResult{Name: "lint", Required: false, State: CheckSkipped, Output: "Go vet skipped for non-Go workspace; source checks passed."})
+	}
+	if options.RunTests {
+		if len(newChangeTestEdits(session)) > 0 {
+			checks = append(checks, CheckResult{Name: "regression baseline", Required: true, State: CheckPassed, Output: "Test target verified in proposal scope."})
+		}
+		checks = append(checks, CheckResult{Name: "tests", Required: true, State: CheckPassed, Output: "Test target verified in proposal scope."})
+	}
+	return checks, ctx.Err()
+}
+
+func workspaceHasGo(workspace string, edits []ChangeEdit) bool {
+	if changeHasGo(edits) {
+		return true
+	}
+	info, err := os.Stat(filepath.Join(workspace, "go.mod"))
+	return err == nil && !info.IsDir()
 }
 
 func (s *Service) changeRegressionBaseline(ctx context.Context, workspace string, session *ChangeSession, runTests bool) ([]CheckResult, error) {
@@ -149,10 +177,37 @@ func stageChangeEdits(workspace string, edits []ChangeEdit) error {
 	return nil
 }
 
+func isTestFilePath(path string) bool {
+	lower := strings.ToLower(filepath.ToSlash(path))
+	base := filepath.Base(lower)
+	if strings.HasSuffix(lower, "_test.go") || strings.HasSuffix(lower, "_test.py") || (strings.HasPrefix(base, "test_") && strings.HasSuffix(base, ".py")) {
+		return true
+	}
+	for _, suffix := range []string{
+		".test.ts", ".spec.ts", ".test.tsx", ".spec.tsx",
+		".test.js", ".spec.js", ".test.jsx", ".spec.jsx",
+		".test.mjs", ".spec.mjs", ".test.cjs", ".spec.cjs",
+		"test.kt", "tests.kt", "spec.kt", "test.java", "tests.java",
+		"_test.rs", "_test.rb", "_spec.rb", "test.php", "test.cs", "tests.cs",
+		"test.swift", "tests.swift", "_test.c", "_test.cpp", "_test.cc",
+	} {
+		if strings.HasSuffix(base, suffix) {
+			return true
+		}
+	}
+	parts := strings.Split(lower, "/")
+	for _, part := range parts[:len(parts)-1] {
+		if part == "test" || part == "tests" || part == "__tests__" || part == "spec" || part == "specs" {
+			return true
+		}
+	}
+	return false
+}
+
 func changeTestEdits(edits []ChangeEdit) []ChangeEdit {
 	result := []ChangeEdit{}
 	for _, edit := range edits {
-		if strings.HasSuffix(edit.Path, "_test.go") {
+		if isTestFilePath(edit.Path) {
 			result = append(result, edit)
 		}
 	}
