@@ -122,6 +122,46 @@ export function Instructions({ s }: { s: State }) {
         </Button>
       </Heading>
 
+      <div className="kpi-pulse-grid box-grid-3">
+        <div className="kpi-pulse-card card-kpi box-card">
+          <div className="box-head">
+            <span className="box-eyebrow">Workspace Trust</span>
+            <Badge
+              value={s.workspaceTrust ? 'Trusted' : 'Guarded'}
+              tone={s.workspaceTrust ? 'green' : 'violet'}
+            />
+          </div>
+          <div className="kpi-pulse-value box-value">
+            {s.workspaceTrust ? 'Trusted' : 'Confirmations'}
+          </div>
+          <div className="box-meta">
+            <span>Remote AI, security scans &amp; test execution</span>
+          </div>
+        </div>
+        <div className="kpi-pulse-card card-kpi box-card">
+          <div className="box-head">
+            <span className="box-eyebrow">Instruction Scope</span>
+            <Badge value={preview?.exists ? 'Included' : 'New file'} />
+          </div>
+          <div className="kpi-pulse-value box-value font-mono">{path || 'AGENTS.md'}</div>
+          <div className="box-meta">
+            <span>{preview?.effective.files.length || 0} active rule files</span>
+          </div>
+        </div>
+        <div
+          className="kpi-pulse-card card-kpi box-card clickable"
+          onClick={() => void w.navigate('models')}
+        >
+          <div className="box-head">
+            <span className="box-eyebrow">Model Routing</span>
+          </div>
+          <div className="kpi-pulse-value box-value">AI Providers</div>
+          <div className="box-meta">
+            <span>Configure analysis &amp; proposal models</span>
+          </div>
+        </div>
+      </div>
+
       <Panel
         title="Consolidated Workspace Trust"
         actions={

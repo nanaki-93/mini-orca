@@ -158,6 +158,47 @@ export function GitWorkspace({ s }: { s: State }) {
               ))}
             </Notice>
           )}
+          <div className="kpi-pulse-grid box-grid-3">
+            <div className="kpi-pulse-card card-kpi box-card">
+              <div className="box-head">
+                <span className="box-eyebrow">
+                  <Icon name="git" /> Current Branch
+                </span>
+              </div>
+              <div className="kpi-pulse-value box-value font-mono">
+                {repository.branch || 'Detached'}
+              </div>
+              <div className="box-meta">
+                <span className="font-mono">HEAD {repository.head || '—'}</span>
+              </div>
+            </div>
+            <div className="kpi-pulse-card card-kpi box-card">
+              <div className="box-head">
+                <span className="box-eyebrow">
+                  <Icon name="check" /> Working Tree
+                </span>
+              </div>
+              <div className="kpi-pulse-value box-value">
+                {repository.dirty ? 'Dirty' : 'Clean'}
+              </div>
+              <div className="box-meta">
+                <span>
+                  {repository.dirty ? 'Uncommitted local changes' : 'Ready for proposals & merges'}
+                </span>
+              </div>
+            </div>
+            <div className="kpi-pulse-card card-kpi box-card">
+              <div className="box-head">
+                <span className="box-eyebrow">
+                  <Icon name="layers" /> Ready Worktrees
+                </span>
+              </div>
+              <div className="kpi-pulse-value box-value">{worktrees.length}</div>
+              <div className="box-meta">
+                <span>Isolated implementation branches</span>
+              </div>
+            </div>
+          </div>
           <div className="git-split-grid">
             <Panel title={`Current Branch (${repository.branch || 'Detached HEAD'})`}>
               <div className="stack">

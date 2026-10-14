@@ -760,6 +760,78 @@ export function Results({ s }: { s: State }) {
           </div>
         </div>
       )}
+      <div className="kpi-pulse-grid box-grid-4">
+        <div
+          className={`kpi-pulse-card card-kpi box-card clickable ${!showFeatures && categoryFilter === 'all' ? 'active-box' : ''}`}
+          onClick={() => {
+            if (s.page === 'features') void w.navigate('bugs');
+            setCategoryFilter('all');
+            updateView({ page: 1 });
+          }}
+        >
+          <div className="box-head">
+            <span className="box-eyebrow">
+              <Icon name="bug" /> Total Open Issues
+            </span>
+          </div>
+          <div className="kpi-pulse-value box-value">{countAll}</div>
+          <div className="box-meta">
+            <span>All categories</span>
+          </div>
+        </div>
+        <div
+          className={`kpi-pulse-card card-kpi box-card clickable ${!showFeatures && categoryFilter === 'bugs' ? 'active-box' : ''}`}
+          onClick={() => {
+            if (s.page === 'features') void w.navigate('bugs');
+            setCategoryFilter('bugs');
+            updateView({ page: 1 });
+          }}
+        >
+          <div className="box-head">
+            <span className="box-eyebrow">
+              <Icon name="code" /> Bugs &amp; Logic
+            </span>
+          </div>
+          <div className="kpi-pulse-value box-value">{countBugs}</div>
+          <div className="box-meta">
+            <span>Correctness findings</span>
+          </div>
+        </div>
+        <div
+          className={`kpi-pulse-card card-kpi box-card clickable ${!showFeatures && (categoryFilter === 'security' || categoryFilter === 'performance') ? 'active-box' : ''}`}
+          onClick={() => {
+            if (s.page === 'features') void w.navigate('bugs');
+            setCategoryFilter('security');
+            updateView({ page: 1 });
+          }}
+        >
+          <div className="box-head">
+            <span className="box-eyebrow">
+              <Icon name="shield" /> Security &amp; Perf
+            </span>
+          </div>
+          <div className="kpi-pulse-value box-value">{countSec + countPerf}</div>
+          <div className="box-meta">
+            <span>
+              {countSec} security · {countPerf} perf
+            </span>
+          </div>
+        </div>
+        <div
+          className={`kpi-pulse-card card-kpi box-card clickable ${showFeatures ? 'active-box' : ''}`}
+          onClick={() => setCategoryFilter('features')}
+        >
+          <div className="box-head">
+            <span className="box-eyebrow">
+              <Icon name="sparkles" /> Feature Ideas
+            </span>
+          </div>
+          <div className="kpi-pulse-value box-value">{featureRows.length}</div>
+          <div className="box-meta">
+            <span>Roadmap proposals</span>
+          </div>
+        </div>
+      </div>
       <div className="issue-split-grid">
         <Panel title="Issues & Ideas" className="results-findings">
           <div className="toolbar findings-toolbar">
