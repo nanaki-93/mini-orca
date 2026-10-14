@@ -27,6 +27,7 @@ import { ChangeHistory } from './change-shared';
 import { Instructions } from './instructions';
 import { TerminalWorkspace } from './tools';
 import { AgentsWorkspace } from './agents';
+import { TuiApp } from './tui';
 import './style.css';
 import './studio.css';
 
@@ -97,6 +98,9 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem('mini-orca:sidebar-collapsed') === 'true',
   );
+  const [uiMode, setUiMode] = useState<'gui' | 'tui'>(() =>
+    localStorage.getItem('mini-orca:ui-mode') === 'tui' ? 'tui' : 'gui',
+  );
   const main = useRef<HTMLElement>(null);
   const category = findingCategory(s);
   const finding = s.page === 'finding' ? selectedResult(s) : undefined;
@@ -154,6 +158,9 @@ function App() {
   useEffect(() => {
     localStorage.setItem('mini-orca:sidebar-collapsed', String(sidebarCollapsed));
   }, [sidebarCollapsed]);
+  useEffect(() => {
+    localStorage.setItem('mini-orca:ui-mode', uiMode);
+  }, [uiMode]);
   useEffect(() => {
     main.current?.focus();
     main.current?.scrollTo(0, 0);
@@ -258,6 +265,14 @@ function App() {
   else if (s.page === 'context') content = <Context s={s} />;
   else if (s.page === 'search') content = <SearchPage s={s} />;
   else if (s.page === 'diagrams') content = <Diagrams s={s} />;
+  if (uiMode === 'tui') {
+    return (
+      <>
+        <TuiApp s={s} activePage={activePage} onExitTui={() => setUiMode('gui')} />
+        {s.confirmation && <Modal key={s.confirmation.title} />}
+      </>
+    );
+  }
   return (
     <>
       <a className="skip" href="#main">
@@ -331,6 +346,16 @@ function App() {
             )}
           </nav>
           <div className="topbar-actions">
+            <button
+              type="button"
+              className="theme-pill-btn"
+              aria-label="Switch to Terminal UI (TUI) mode"
+              title="Switch to keyboard-first Terminal UI (TUI)"
+              onClick={() => setUiMode('tui')}
+            >
+              <Icon name="terminal" />
+              <span>TUI Mode</span>
+            </button>
             <div className="theme-pill-group" role="group" aria-label="Theme">
               {themes.map((choice) => (
                 <button
