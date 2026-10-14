@@ -1,6 +1,6 @@
-# Mini-Orca — MO Orbit v2 logo assets
+# Mini-Orca — MO Orbit logo assets
 
-Prepared from the user-provided logo reference image. The transparent SVG symbol is a faithful **vector trace of the reference screenshot** (not an original editable design document); the original visible M/O geometry and orca eye are preserved. The original screenshot's antialiasing and gradients were simplified to solid theme colors for reliable UI rendering.
+Prepared from the user-provided logo reference image and reconstructed with smooth cubic Bézier vector paths. The original visible M/O geometry and orca eye are preserved using solid theme colors for crisp rendering at both small UI header sizes and high-DPI application icons.
 
 The [desktop client](../../desktop/README.md) uses this directory as
 its branding source. Its build copies the theme marks and favicon into the
