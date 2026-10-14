@@ -30,6 +30,7 @@ const mainNav: [Page, string, string][] = [
 ];
 const contextPages: [Page, string][] = [
   ['analysis-files', 'Files to skip / Scope'],
+  ['analysis-run', 'Last Run'],
   ['context', 'Provider context'],
 ];
 const findingPages: [Page, string][] = [
@@ -244,6 +245,14 @@ function App() {
                   /
                 </span>
                 <span aria-current="page">{finding?.name || 'Finding unavailable'}</span>
+              </>
+            ) : s.page === 'analysis-run' ? (
+              <>
+                <button onClick={() => void w.navigate('bugs')}>Issues & Ideas</button>
+                <span className="muted" aria-hidden="true">
+                  /
+                </span>
+                <span aria-current="page">Last Run</span>
               </>
             ) : (
               <span aria-current="page">{title}</span>

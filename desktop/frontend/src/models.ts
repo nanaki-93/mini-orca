@@ -211,6 +211,7 @@ export interface AnalysisPreview {
   stale_only?: boolean;
   stale_path?: string;
   recover_incomplete?: boolean;
+  clear_results?: boolean;
 }
 export interface Coverage {
   total: number;

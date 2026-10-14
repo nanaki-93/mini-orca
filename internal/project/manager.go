@@ -144,6 +144,26 @@ func (m *Manager) UpdateFileAnalysisStatus(projectID, projectRevision, relative,
 	return m.updateIndexedFileStatus(normalized, status)
 }
 
+// ResetFileAnalysisStatuses resets every indexed file's analysis status to missing.
+func (m *Manager) ResetFileAnalysisStatuses(projectID, projectRevision string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.validFileAnalysisStatusUpdate(projectID, projectRevision); err != nil {
+		return err
+	}
+	changed := false
+	for index := range m.index.Files {
+		if m.index.Files[index].AnalysisStatus != "" && m.index.Files[index].AnalysisStatus != AnalysisStatusMissing {
+			m.index.Files[index].AnalysisStatus = AnalysisStatusMissing
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return writeIndex(m.root, m.index)
+}
+
 func normalizedIndexedPath(relative string) (string, error) {
 	normalized := filepath.ToSlash(filepath.Clean(relative))
 	if normalized == "." || normalized == ".." || strings.HasPrefix(normalized, "../") || filepath.IsAbs(relative) {

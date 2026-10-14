@@ -97,7 +97,7 @@ func TestAnalysisHandlerStaleOnlyAdmission(t *testing.T) {
 			}
 		}
 	}
-	for _, flag := range []string{"refresh", "retry_stale_failed", "recover_incomplete", "include_features"} {
+	for _, flag := range []string{"refresh", "clear_results", "retry_stale_failed", "recover_incomplete", "include_features"} {
 		for _, endpoint := range []string{"preview", "start"} {
 			var payload map[string]any
 			value, handler := any(request), h.Preview
@@ -304,7 +304,7 @@ func TestAnalysisHandlerRecoveryRequiresExplicitCompatibleAdmission(t *testing.T
 	}
 	limits := `"limits":{"batch_files":100,"budget_seconds":30,"max_attempts_per_stage":2}`
 	identity := `"project_id":"` + analysis.ProjectID + `","project_revision":"` + analysis.ProjectRevision + `","scope":"project"`
-	for _, option := range []string{`"refresh":true`, `"refresh":false,"retry_stale_failed":true`, `"refresh":false,"include_features":true`} {
+	for _, option := range []string{`"refresh":true`, `"refresh":true,"clear_results":true`, `"refresh":false,"clear_results":true`, `"refresh":false,"retry_stale_failed":true`, `"refresh":false,"include_features":true`} {
 		w := analysisHandlerRequest(t, h.Preview, "POST", "/analysis/preview", `{`+identity+`,`+limits+`,"recover_incomplete":true,`+option+`}`)
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("recovery with %s => %d %s", option, w.Code, w.Body)
@@ -328,6 +328,7 @@ func TestAnalysisHandlerRecoveryRequiresExplicitCompatibleAdmission(t *testing.T
 	start.RecoverIncomplete = true
 	for _, combine := range []func(*app.AnalysisRunStartRequest){
 		func(r *app.AnalysisRunStartRequest) { r.Refresh = true },
+		func(r *app.AnalysisRunStartRequest) { r.ClearResults = true },
 		func(r *app.AnalysisRunStartRequest) { r.RetryStaleFailed = true },
 		func(r *app.AnalysisRunStartRequest) { r.IncludeFeatures = true },
 	} {

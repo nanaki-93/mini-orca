@@ -500,8 +500,22 @@ export function AnalysisRun({ s }: { s: State }) {
   if (!run)
     return (
       <div className="workspace-page analysis-run">
-        <Heading variant="intro" title="Project analysis" />
-        <Empty title="No analysis run yet">Execute analysis from Analysis in the sidebar.</Empty>
+        <Heading variant="intro" title="Last Run">
+          <Go page="bugs" icon="bug">
+            Issues & Ideas
+          </Go>
+          <Button
+            tone="primary"
+            icon="play"
+            disabled={!!s.busy}
+            onClick={() => void w.runAnalysisDirect(true)}
+          >
+            Run Analysis
+          </Button>
+        </Heading>
+        <Empty title="No analysis run yet">
+          Start a project analysis to inspect progress, file coverage, and findings.
+        </Empty>
       </div>
     );
   const total = run.sections.reduce((sum, section) => sum + section.coverage.total, 0);
@@ -540,11 +554,12 @@ export function AnalysisRun({ s }: { s: State }) {
               : total > 0 && done === total
                 ? 'Finalizing analysis…'
                 : 'Waiting for the next step…';
+  const pausedOrInterrupted = ['paused', 'interrupted'].includes(run.status);
   return (
     <div className="workspace-page analysis-run">
       <Heading
         variant="intro"
-        title="Project analysis"
+        title="Last Run"
         detail={
           <span className="analysis-run-status">
             <StatusDot value={run.status} label="Analysis" />
@@ -552,23 +567,44 @@ export function AnalysisRun({ s }: { s: State }) {
           </span>
         }
       >
+        <Go page="bugs" icon="bug">
+          Issues & Ideas
+        </Go>
         {['running', 'queued'].includes(run.status) && (
           <Button icon="pause" disabled={!!s.busy} onClick={() => void w.controlRun('pause')}>
             Pause
           </Button>
         )}
-        {['paused', 'interrupted'].includes(run.status) && (
+        {pausedOrInterrupted && (
+          <>
+            <Button
+              tone="primary"
+              icon="play"
+              disabled={!!s.busy}
+              onClick={() => void w.resumeAnalysisDirect()}
+            >
+              Resume Analysis
+            </Button>
+            <Button
+              icon="refresh"
+              disabled={!!s.busy}
+              onClick={() => void w.runAnalysisDirect(true)}
+            >
+              New Analysis
+            </Button>
+          </>
+        )}
+        {!activeRun(run) && !pausedOrInterrupted && (
           <Button
             tone="primary"
+            icon="play"
             disabled={!!s.busy}
-            onClick={() =>
-              void w.previewAnalysis('resume', run.plan.limits, false, undefined, undefined, true)
-            }
+            onClick={() => void w.runAnalysisDirect(true)}
           >
-            Execute analysis
+            New Analysis
           </Button>
         )}
-        {(activeRun(run) || ['paused', 'interrupted'].includes(run.status)) && (
+        {(activeRun(run) || pausedOrInterrupted) && (
           <Button
             disabled={!!s.busy || run.status === 'canceling'}
             onClick={() => void w.controlRun('cancel')}

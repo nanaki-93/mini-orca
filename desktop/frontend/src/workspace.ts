@@ -1150,7 +1150,13 @@ export class Workspace {
     if (JSON.stringify(this.state.run) !== old) {
       await this.refreshProject();
       const category = findingCategory(this.state);
-      if (category) await this.loadResults(category);
+      if (category) {
+        await Promise.all([
+          this.loadResults('bugs'),
+          this.loadResults('security'),
+          this.loadResults('performance'),
+        ]);
+      }
     }
     if (this.state.scan?.status === 'running') {
       await this.resource(
@@ -1218,6 +1224,7 @@ export class Workspace {
     models?: M.AnalysisModels,
     stalePath?: string,
     start = false,
+    clearResults = false,
   ) {
     await this.act(start ? 'Execute analysis' : 'Preview analysis', async () => {
       const epoch = this.epoch;
@@ -1232,7 +1239,9 @@ export class Workspace {
         include_features: run ? !!run.plan.features : mode === 'new',
         models: run ? run.plan.models : models,
         limits: run?.plan.limits || limits,
-        refresh: run?.plan.refresh || refresh,
+        refresh: run ? run.plan.refresh : refresh || clearResults,
+        clear_results: run ? !!run.plan.clear_results : clearResults,
+        retry_stale_failed: run ? !!run.plan.retry_stale_failed : false,
         recover_incomplete: mode === 'repair',
         stale_only: mode === 'stale',
         stale_path: stalePath,
@@ -1254,15 +1263,27 @@ export class Workspace {
       if (start) await this.dispatchAnalysis(false);
     });
   }
-  async runAnalysisDirect() {
+  async resumeAnalysisDirect() {
+    const run = this.state.run;
+    if (!run) return;
+    await this.previewAnalysis(
+      'resume',
+      run.plan.limits,
+      run.plan.refresh,
+      run.plan.models,
+      run.plan.stale_path,
+      true,
+    );
+  }
+  async runAnalysisDirect(clearResults = true) {
     const limits = this.state.analysisLimits || {
       batch_files: 20,
       budget_seconds: 1800,
       max_attempts_per_stage: 2,
     };
-    const refresh = this.state.analysisRefresh || false;
+    const refresh = clearResults || this.state.analysisRefresh || false;
     const models = analysisSetupModels(this.state);
-    await this.previewAnalysis('new', limits, refresh, models, undefined, true);
+    await this.previewAnalysis('new', limits, refresh, models, undefined, true, clearResults);
   }
   async startAnalysis() {
     await this.act('Start analysis', async () => {
@@ -1318,6 +1339,7 @@ export class Workspace {
       provider_ids: remote.map((provider) => provider.id),
       security_review: p.security_review_intent_required,
     };
+    const clearing = !!p.clear_results && !this.state.resume;
     const run = this.state.resume
       ? await this.api.post<M.AnalysisRun>(`${current}/analysis/run/control`, {
           identity: this.state.resume,
@@ -1330,6 +1352,7 @@ export class Workspace {
           preview_id: p.preview_id,
           limits: p.limits,
           refresh: p.refresh,
+          clear_results: p.clear_results || false,
           include_features: !!p.features,
           models: p.models,
           retry_stale_failed: p.retry_stale_failed || false,
@@ -1346,11 +1369,22 @@ export class Workspace {
       preview: undefined,
       resume: undefined,
       results: {},
-      page: ['summary', 'bugs', 'security', 'performance', 'finding'].includes(this.state.page)
+      ...(clearing
+        ? {
+            findings: [],
+            features: this.state.features
+              ? { ...this.state.features, suggestions: [], generations: [] }
+              : undefined,
+          }
+        : {}),
+      page: ['summary', 'bugs', 'security', 'performance', 'finding', 'analysis-run'].includes(
+        this.state.page,
+      )
         ? this.state.page
         : 'bugs',
       featureGenerationRequested: this.state.featureGenerationRequested || !!p.features,
     });
+    if (clearing) await this.refreshProject();
     await this.loadFeatures();
   }
   async controlRun(action: 'pause' | 'cancel') {
