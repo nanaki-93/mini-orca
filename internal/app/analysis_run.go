@@ -140,6 +140,7 @@ type AnalysisPreviewRequest struct {
 	StaleOnly         bool                 `json:"stale_only,omitempty"`
 	StalePath         string               `json:"stale_path,omitempty"`
 	RecoverIncomplete bool                 `json:"recover_incomplete,omitempty"`
+	ClearResults      bool                 `json:"clear_results,omitempty"`
 	ProjectID         string               `json:"project_id"`
 	ProjectRevision   string               `json:"project_revision"`
 	Scope             string               `json:"scope"`
@@ -155,7 +156,7 @@ func (request AnalysisPreviewRequest) Validate() error {
 	if request.RetryStaleFailed && request.Refresh {
 		return fmt.Errorf("stale/failed analysis cannot refresh fresh results")
 	}
-	if err := validateAnalysisSelectionOptions(request.RecoverIncomplete, request.Refresh, request.RetryStaleFailed, request.IncludeFeatures, request.StaleOnly, request.StalePath); err != nil {
+	if err := validateAnalysisSelectionOptions(request.RecoverIncomplete, request.Refresh, request.ClearResults, request.RetryStaleFailed, request.IncludeFeatures, request.StaleOnly, request.StalePath); err != nil {
 		return err
 	}
 	if request.ProjectID == "" || request.ProjectRevision == "" || request.Scope != AnalysisRunScopeProject {
@@ -214,6 +215,7 @@ type AnalysisRunPreview struct {
 	StaleOnly                    bool                          `json:"stale_only,omitempty"`
 	StalePath                    string                        `json:"stale_path,omitempty"`
 	RecoverIncomplete            bool                          `json:"recover_incomplete,omitempty"`
+	ClearResults                 bool                          `json:"clear_results,omitempty"`
 	SchemaVersion                string                        `json:"schema_version"`
 	PreviewID                    string                        `json:"preview_id"`
 	Identity                     AnalysisQueueIdentity         `json:"identity"`
@@ -242,6 +244,7 @@ type AnalysisRunStartRequest struct {
 	StaleOnly         bool                     `json:"stale_only,omitempty"`
 	StalePath         string                   `json:"stale_path,omitempty"`
 	RecoverIncomplete bool                     `json:"recover_incomplete,omitempty"`
+	ClearResults      bool                     `json:"clear_results,omitempty"`
 	Identity          AnalysisQueueIdentity    `json:"identity"`
 	PreviewID         string                   `json:"preview_id"`
 	Limits            AnalysisRunLimits        `json:"limits"`
@@ -258,7 +261,7 @@ func (request AnalysisRunStartRequest) Validate() error {
 	if request.RetryStaleFailed && request.Refresh {
 		return fmt.Errorf("stale/failed analysis cannot refresh fresh results")
 	}
-	if err := validateAnalysisSelectionOptions(request.RecoverIncomplete, request.Refresh, request.RetryStaleFailed, request.IncludeFeatures, request.StaleOnly, request.StalePath); err != nil {
+	if err := validateAnalysisSelectionOptions(request.RecoverIncomplete, request.Refresh, request.ClearResults, request.RetryStaleFailed, request.IncludeFeatures, request.StaleOnly, request.StalePath); err != nil {
 		return err
 	}
 	if err := request.Identity.Validate(); err != nil {
@@ -272,14 +275,18 @@ func (request AnalysisRunStartRequest) Validate() error {
 
 // Recovery completes unfinished file stages only. It never refreshes current
 // results, reinterprets the stale/failed retry contract or discovers features.
-func validateAnalysisSelectionOptions(recoverIncomplete, refresh, retryStaleFailed, includeFeatures, staleOnly bool, stalePath string) error {
+func validateAnalysisSelectionOptions(recoverIncomplete, refresh, clearResults, retryStaleFailed, includeFeatures, staleOnly bool, stalePath string) error {
+	if clearResults && !refresh {
+		return fmt.Errorf("clear_results requires refresh")
+	}
 	if stalePath != "" && (!staleOnly || !analysisMetadataPath(stalePath)) {
 		return fmt.Errorf("stale_path requires stale_only and a project-relative file path")
 	}
-	if staleOnly && (refresh || retryStaleFailed || recoverIncomplete || includeFeatures) {
+	incompatible := refresh || clearResults || retryStaleFailed || includeFeatures
+	if staleOnly && (incompatible || recoverIncomplete) {
 		return fmt.Errorf("stale-only analysis cannot be combined with refresh, retry_stale_failed, recover_incomplete or include_features")
 	}
-	if recoverIncomplete && (refresh || retryStaleFailed || includeFeatures) {
+	if recoverIncomplete && incompatible {
 		return fmt.Errorf("incomplete-work recovery cannot be combined with refresh, retry_stale_failed or include_features")
 	}
 	return nil
@@ -471,10 +478,28 @@ func (s *Service) StartAnalysisRun(ctx context.Context, request AnalysisRunStart
 	}
 	s.jobLifecycleMu.Lock()
 	defer s.jobLifecycleMu.Unlock()
+	if request.ClearResults {
+		s.changesMu.Lock()
+		defer s.changesMu.Unlock()
+	}
 	c := s.analysisRun
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return s.startAnalysisRunLocked(ctx, request)
+}
+
+func canReplaceAnalysisRun(run *AnalysisRun, clearResults bool) bool {
+	if run == nil {
+		return true
+	}
+	switch run.Status {
+	case AnalysisRunRunning, AnalysisRunQueued, AnalysisRunPausing, AnalysisRunCanceling:
+		return false
+	case AnalysisRunPaused, AnalysisRunInterrupted:
+		return clearResults
+	default:
+		return true
+	}
 }
 
 // Caller holds both lifecycle and controller locks.
@@ -489,13 +514,10 @@ func (s *Service) startAnalysisRunLocked(ctx context.Context, request AnalysisRu
 	if c.fault != nil {
 		return cloneAnalysisRun(c.run), errAnalysisRunPersistence
 	}
-	if c.run != nil {
-		switch c.run.Status {
-		case AnalysisRunRunning, AnalysisRunQueued, AnalysisRunPausing, AnalysisRunPaused, AnalysisRunInterrupted:
-			return cloneAnalysisRun(c.run), errAnalysisRunBusy
-		}
+	if !canReplaceAnalysisRun(c.run, request.ClearResults) {
+		return cloneAnalysisRun(c.run), errAnalysisRunBusy
 	}
-	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{Models: request.Models, IncludeFeatures: request.IncludeFeatures, ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: request.RetryStaleFailed, StaleOnly: request.StaleOnly, StalePath: request.StalePath, RecoverIncomplete: request.RecoverIncomplete, Refresh: request.Refresh, Limits: request.Limits})
+	preview, err := s.analysisPreviewLocked(ctx, AnalysisPreviewRequest{Models: request.Models, IncludeFeatures: request.IncludeFeatures, ProjectID: request.Identity.ProjectID, ProjectRevision: request.Identity.ProjectRevision, Scope: AnalysisRunScopeProject, RetryStaleFailed: request.RetryStaleFailed, StaleOnly: request.StaleOnly, StalePath: request.StalePath, RecoverIncomplete: request.RecoverIncomplete, Refresh: request.Refresh, ClearResults: request.ClearResults, Limits: request.Limits})
 	if err != nil {
 		return nil, err
 	}
@@ -508,6 +530,11 @@ func (s *Service) startAnalysisRunLocked(ctx context.Context, request AnalysisRu
 	if err := s.validateAnalysisQueue(ctx, s.manager.Root(), preview, true); err != nil {
 		return nil, err
 	}
+	if request.ClearResults {
+		if err := s.clearAnalysisResultsLocked(s.manager.Root(), preview); err != nil {
+			return nil, err
+		}
+	}
 	c.root = s.manager.Root()
 	c.run = newAnalysisRun(*preview)
 	if err := s.saveAnalysisRunLocked(false); err != nil {
@@ -516,6 +543,50 @@ func (s *Service) startAnalysisRunLocked(ctx context.Context, request AnalysisRu
 	result := cloneAnalysisRun(c.run)
 	s.launchAnalysisRunLocked(preview, request.Confirmations)
 	return result, nil
+}
+
+func (s *Service) clearAnalysisResultsLocked(root string, preview *AnalysisRunPreview) error {
+	fileCache, err := project.NewFileAnalysisCache(root)
+	if err != nil {
+		return err
+	}
+	if err := fileCache.Clear(); err != nil {
+		return err
+	}
+	if err := project.ClearPerformanceFileReports(root); err != nil {
+		return err
+	}
+	securityCache, err := project.NewSecurityReportCache(root)
+	if err != nil {
+		return err
+	}
+	if err := securityCache.Clear(); err != nil {
+		return err
+	}
+	findingStore, err := project.NewFindingStore(root)
+	if err != nil {
+		return err
+	}
+	if err := findingStore.Clear(); err != nil {
+		return err
+	}
+	if err := s.manager.ResetFileAnalysisStatuses(preview.Identity.ProjectID, preview.Identity.ProjectRevision); err != nil {
+		return err
+	}
+	index, err := s.manager.Index()
+	if err != nil {
+		return err
+	}
+	report, err := clearFeatureSuggestions(root, index)
+	if err != nil {
+		return err
+	}
+	if preview.Features != nil {
+		preview.Features.ExpectedHash = report.Hash
+	}
+	s.notifyEvent("findings")
+	s.notifyEvent("features")
+	return nil
 }
 
 // The caller holds jobLifecycleMu through its complete project read.

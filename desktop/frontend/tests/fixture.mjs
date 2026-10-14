@@ -1240,7 +1240,8 @@ export function installFixture(options = {}) {
           if (path.endsWith('/findings'))
             return response({
               ...rev,
-              findings: options.empty ? [] : [state.finding],
+              findings:
+                options.empty || state.clearedResults ? [] : state.findingsList || [state.finding],
               completed: state.completedFindings,
             });
           if (path.includes('/findings/')) {
@@ -1289,6 +1290,10 @@ export function installFixture(options = {}) {
           if (path.endsWith('/analysis/preview')) {
             state.preview = structuredClone(body.resume_run ? state.run.plan : preview);
             if (!body.resume_run) state.preview.limits = structuredClone(body.limits);
+            state.preview.refresh = body.resume_run ? !!state.run.plan.refresh : !!body.refresh;
+            state.preview.clear_results = body.resume_run
+              ? !!state.run.plan.clear_results
+              : !!body.clear_results;
             const choices = body.resume_run ? state.run.plan.models : body.models;
             state.preview.models = choices;
             if (body.recover_incomplete) {
@@ -1365,17 +1370,33 @@ export function installFixture(options = {}) {
             return response(state.preview);
           }
           if (path.endsWith('/analysis/run/control')) {
-            state.run.status = { pause: 'paused', resume: 'running', cancel: 'canceled' }[
-              body.action
-            ];
+            const nextStatus = {
+              pause: 'paused',
+              resume: options.resumeCompletes ? 'completed' : 'running',
+              cancel: 'canceled',
+            }[body.action];
+            state.run = {
+              ...state.run,
+              identity: {
+                ...state.run.identity,
+                generation:
+                  body.action === 'resume'
+                    ? `${state.run.identity.generation}-resumed`
+                    : state.run.identity.generation,
+              },
+              status: nextStatus,
+              sections: state.run.sections.map((section) => ({
+                ...section,
+                status: nextStatus,
+              })),
+            };
             return response(state.run);
           }
           if (path.endsWith('/analysis/run')) {
             if (method === 'POST') {
               if (
-                ['queued', 'running', 'pausing', 'paused', 'interrupted', 'canceling'].includes(
-                  state.run?.status,
-                )
+                ['queued', 'running', 'pausing', 'canceling'].includes(state.run?.status) ||
+                (['paused', 'interrupted'].includes(state.run?.status) && !body.clear_results)
               )
                 return {
                   status: 409,
@@ -1385,10 +1406,60 @@ export function installFixture(options = {}) {
                       'An analysis run is already active or paused. Continue or cancel it before starting a new analysis.',
                   }),
                 };
+              if (body.clear_results) {
+                state.clearedResults = true;
+                state.findingsList = [];
+                state.features = {
+                  ...state.features,
+                  hash: 'features-cleared',
+                  status: 'not_generated',
+                  failure: '',
+                  suggestions: [],
+                  generations: [],
+                  last_generation: undefined,
+                };
+                state.results = {
+                  bugs: {
+                    saved_finding_count: 0,
+                    semantic: [],
+                    performance: [],
+                    security: [],
+                    unclassified: [],
+                  },
+                  performance: {
+                    saved_finding_count: 0,
+                    semantic: [],
+                    performance: [],
+                    security: [],
+                    unclassified: [],
+                  },
+                  security: {
+                    saved_finding_count: 0,
+                    semantic: [],
+                    performance: [],
+                    security: [],
+                    unclassified: [],
+                  },
+                };
+              }
+              const nextStatus = options.analysisCompletes ? 'completed' : 'running';
               state.run = {
                 ...run,
+                identity: {
+                  ...queue,
+                  id: body.clear_results ? 'run-cleared' : 'run-1',
+                  generation: body.clear_results ? 'generation-cleared' : 'generation-1',
+                },
                 plan: { ...state.preview },
-                status: options.analysisCompletes ? 'completed' : 'running',
+                status: nextStatus,
+                sections: run.sections.map((sec) => ({
+                  ...sec,
+                  status: nextStatus,
+                  finding_count:
+                    body.clear_results && !options.analysisCompletes ? 0 : sec.finding_count,
+                })),
+                window_files_completed:
+                  body.clear_results && !options.analysisCompletes ? 0 : run.window_files_completed,
               };
               if (body.include_features) {
                 state.run.features = {

@@ -220,6 +220,16 @@ func (c *FileAnalysisCache) Store(analysis FileAnalysis) error {
 	return nil
 }
 
+// Clear removes all cached file analysis reports for the project root.
+func (c *FileAnalysisCache) Clear() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if err := os.RemoveAll(filepath.Join(c.root, fileAnalysisRelativeDir)); err != nil {
+		return fmt.Errorf("clear file analysis cache: %w", err)
+	}
+	return nil
+}
+
 func (c *FileAnalysisCache) validateInputWithPolicy(input FileAnalysisInput, policy *ContextPolicy) error {
 	decision := policy.Decide(input.Path)
 	if decision.Reason == "unsafe path" || !decision.Include {

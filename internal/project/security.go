@@ -375,6 +375,15 @@ func (c *SecurityReportCache) Load(input SecurityReportInput) (*SecurityFileRepo
 	return cloneSecurityFileReport(&report), nil
 }
 
+func (c *SecurityReportCache) Clear() error {
+	securityCacheMu.Lock()
+	defer securityCacheMu.Unlock()
+	if err := os.RemoveAll(filepath.Join(c.root, ".mini-orca", "security", "files")); err != nil {
+		return fmt.Errorf("clear security cache: %w", err)
+	}
+	return nil
+}
+
 func (c *SecurityReportCache) reportCurrent(report SecurityFileReport, input SecurityReportInput) (bool, error) {
 	if !securityReportMatchesInput(report, input) {
 		return false, nil

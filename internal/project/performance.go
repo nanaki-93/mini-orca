@@ -250,6 +250,23 @@ func StorePerformanceFileReport(root string, report PerformanceFileReport) error
 	return storage.WriteFile(performanceCachePath(root, report.Path), data, 0600)
 }
 
+func ClearPerformanceFileReports(root string) error {
+	canonical, err := CanonicalRoot(root)
+	if err != nil {
+		return err
+	}
+	mu, err := performanceReportLock(canonical)
+	if err != nil {
+		return err
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if err := os.RemoveAll(filepath.Join(canonical, ".mini-orca", "performance", "files")); err != nil {
+		return fmt.Errorf("clear performance cache: %w", err)
+	}
+	return nil
+}
+
 // LoadPerformanceFileReport reads only sanitized metadata. Changed identity,
 // prompt version, context policy, or an unavailable source file is reported as
 // stale instead of being presented as a current review.

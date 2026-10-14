@@ -352,6 +352,67 @@ try {
       await close();
     }
   });
+
+  await test('Paused analysis can be inspected in Last Run, resumed, or restarted from zero with New Analysis', async () => {
+    const { page, close } = await pageFor({
+      runStatus: 'paused',
+      featuresReady: true,
+      resumeCompletes: true,
+    });
+    try {
+      await nav(page, 'Issues & Ideas');
+      await idle(page);
+      await page.getByText('3 issues · 1 feature ideas', { exact: true }).waitFor();
+      await page.getByText('Analysis paused', { exact: true }).waitFor();
+
+      // Navigate to Last Run to inspect progress and coverage
+      await page.getByRole('button', { name: 'Last Run', exact: true }).first().click();
+      await idle(page);
+      await page.getByRole('heading', { name: 'Last Run', exact: true }).waitFor();
+      await page.getByText('Run details', { exact: true }).waitFor();
+
+      // Resume the paused analysis directly from Last Run
+      await page.getByRole('button', { name: 'Resume Analysis', exact: true }).click();
+      await idle(page);
+      const resumeControl = await page.evaluate(() =>
+        window.fixture.requests.find(
+          (r) => r.path.endsWith('/analysis/run/control') && r.body?.action === 'resume',
+        ),
+      );
+      assert.ok(
+        resumeControl,
+        'Resume Analysis dispatches /analysis/run/control with action=resume',
+      );
+
+      // Pause the run again and start a New Analysis from Issues & Ideas, verifying issues & feature ideas clear to 0
+      await page.evaluate(() => {
+        window.fixture.state.run.status = 'paused';
+        window.fixture.state.run.sections.forEach((sec) => {
+          sec.status = 'paused';
+        });
+      });
+      await page.getByRole('button', { name: 'Issues & Ideas', exact: true }).first().click();
+      await idle(page);
+      await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+      await idle(page);
+
+      await page.getByRole('button', { name: 'New Analysis', exact: true }).first().click();
+      await idle(page);
+
+      const startReq = await page.evaluate(() =>
+        window.fixture.requests.find(
+          (r) => r.method === 'POST' && r.path.endsWith('/analysis/run'),
+        ),
+      );
+      assert.ok(startReq, 'New Analysis dispatches POST /analysis/run');
+      assert.equal(startReq.body.clear_results, true);
+      assert.equal(startReq.body.refresh, true);
+
+      await page.getByText('0 issues · 0 feature ideas', { exact: true }).waitFor();
+    } finally {
+      await close();
+    }
+  });
 } finally {
   await browser.close();
   server.close();

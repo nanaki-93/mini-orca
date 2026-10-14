@@ -207,6 +207,16 @@ func (s *FindingStore) SetStatus(id, status string) error {
 	return fmt.Errorf("finding not found")
 }
 
+// Clear removes persisted findings and completion records for the project root.
+func (s *FindingStore) Clear() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := os.Remove(filepath.Join(s.root, findingStorePath)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("clear findings: %w", err)
+	}
+	return nil
+}
+
 func (s *FindingStore) loadLocked(recoverCorrupt bool) (*findingDocument, error) {
 	path := filepath.Join(s.root, findingStorePath)
 	data, err := os.ReadFile(path)

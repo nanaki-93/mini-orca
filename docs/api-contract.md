@@ -219,7 +219,10 @@ unknown file yields 409. Filtering leaves the run's project coverage unchanged.
 - `POST /api/projects/current/analysis/preview`: accepts `AnalysisPreviewRequest`;
   returns `AnalysisRunPreview` without provider calls, subprocesses or source writes.
 - `POST /api/projects/current/analysis/run`: accepts `AnalysisRunStartRequest`;
-  returns an admitted `AnalysisRun` with status 202 after durable admission.
+  returns an admitted `AnalysisRun` with status 202 after durable admission. When
+  `clear_results: true` is paired with `refresh: true`, admission clears saved
+  findings, stage reports and feature suggestions (preserving saved project goals)
+  and replaces any paused or interrupted run so the new run starts from 0.
 - `GET /api/projects/current/analysis/run`: reads current progress for the required
   `project_id` and `project_revision`; it never starts or resumes work.
 - `POST /api/projects/current/analysis/run/control`: accepts

@@ -195,9 +195,20 @@ export function Results({ s }: { s: State }) {
   useEffect(() => {
     if (!s.run) return;
     for (const cat of ['bugs', 'security', 'performance'] as const) {
-      if (!s.results[cat] && !s.resourceErrors[`${cat} results`]) void w.loadResults(cat);
+      const current = s.results[cat];
+      const section = s.run.sections.find((sec) => sec.category === cat);
+      const needsLoad =
+        !current ||
+        JSON.stringify(current.identity) !== JSON.stringify(s.run.identity) ||
+        JSON.stringify(current.progress) !== JSON.stringify(section);
+      if (needsLoad && !s.resourceErrors[cat] && !s.resourceErrors[`${cat} results`]) {
+        void w.loadResults(cat);
+      }
     }
-  }, [s.run?.identity.id, s.run?.status, s.run?.window_files_completed]);
+  }, [s.run]);
+  useEffect(() => {
+    if (s.run?.features && !s.resourceErrors['feature suggestions']) void w.loadFeatures();
+  }, [s.run?.features?.status, s.run?.features?.report_hash]);
   const currentCategory = findingCategory(s) || 'bugs';
   const category: FindingCategory =
     categoryFilter === 'all' || categoryFilter === 'features' ? currentCategory : categoryFilter;
@@ -549,6 +560,20 @@ export function Results({ s }: { s: State }) {
     (showFeatures
       ? featureRows.find((r) => r.key === selectedInspectorKey) || featureRows[0]
       : filtered.find((r) => r.key === selectedInspectorKey) || filtered[0]) || undefined;
+  const pausedOrInterrupted = !!s.run && ['paused', 'interrupted'].includes(s.run.status);
+  const runTotal = s.run?.sections.reduce((sum, sec) => sum + sec.coverage.total, 0) || 0;
+  const runDone =
+    s.run?.sections.reduce(
+      (sum, sec) =>
+        sum +
+        sec.coverage.succeeded +
+        sec.coverage.partial +
+        sec.coverage.failed +
+        sec.coverage.skipped +
+        sec.coverage.unavailable,
+      0,
+    ) || 0;
+  const runStatus = results?.progress.status || s.run?.status;
 
   return (
     <div className="workspace-page results-page">
@@ -556,11 +581,11 @@ export function Results({ s }: { s: State }) {
         variant="intro"
         title="Issues & Feature Ideas"
         detail={
-          results ? (
+          runStatus ? (
             <span className="row wrap">
               <span className="results-state">
-                <StatusDot value={results.progress.status} label="Analysis" />
-                <span>{human(results.progress.status)}</span>
+                <StatusDot value={runStatus} label="Analysis" />
+                <span>{human(runStatus)}</span>
               </span>
               <span>
                 {filtered.length} {filtered.length === 1 ? 'issue' : 'issues'} ·{' '}
@@ -576,22 +601,55 @@ export function Results({ s }: { s: State }) {
           onClick={() =>
             void w.act('Refresh results', async () => {
               await w.refreshProject();
-              await w.loadResults(category);
+              await Promise.all([
+                w.loadResults('bugs'),
+                w.loadResults('security'),
+                w.loadResults('performance'),
+              ]);
               await w.loadFeatures();
             })
           }
         >
           Refresh
         </Button>
-        <Button
-          icon="play"
-          tone="primary"
-          disabled={!!s.busy || activeRun(s.run)}
-          loading={activeRun(s.run)}
-          onClick={() => void w.runAnalysisDirect()}
-        >
-          {activeRun(s.run) ? 'Analyzing…' : 'Run Analysis'}
-        </Button>
+        {s.run && (
+          <Button
+            icon="activity"
+            disabled={!!s.busy}
+            onClick={() => void w.navigate('analysis-run')}
+          >
+            Last Run
+          </Button>
+        )}
+        {pausedOrInterrupted ? (
+          <>
+            <Button
+              icon="play"
+              tone="primary"
+              disabled={!!s.busy}
+              onClick={() => void w.resumeAnalysisDirect()}
+            >
+              Resume Analysis
+            </Button>
+            <Button
+              icon="refresh"
+              disabled={!!s.busy}
+              onClick={() => void w.runAnalysisDirect(true)}
+            >
+              New Analysis
+            </Button>
+          </>
+        ) : (
+          <Button
+            icon="play"
+            tone="primary"
+            disabled={!!s.busy || activeRun(s.run)}
+            loading={activeRun(s.run)}
+            onClick={() => void w.runAnalysisDirect(true)}
+          >
+            {activeRun(s.run) ? 'Analyzing…' : 'Run Analysis'}
+          </Button>
+        )}
       </Heading>
       {results?.retained_files?.length ? (
         <Notice>
@@ -601,7 +659,7 @@ export function Results({ s }: { s: State }) {
       {s.run?.status === 'stale' && (
         <Notice>Unchanged files keep saved analysis; reanalyze stale files to refresh.</Notice>
       )}
-      {activeRun(s.run) && (
+      {(activeRun(s.run) || pausedOrInterrupted) && (
         <div
           className="analysis-live-banner"
           style={{
@@ -619,33 +677,86 @@ export function Results({ s }: { s: State }) {
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
             <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
-              <Spinner />
-              <strong style={{ fontSize: '0.88rem' }}>Analyzing project…</strong>
+              {activeRun(s.run) ? (
+                <>
+                  <Spinner />
+                  <strong style={{ fontSize: '0.88rem' }}>Analyzing project…</strong>
+                </>
+              ) : (
+                <>
+                  <StatusDot value={s.run?.status} label="Analysis" />
+                  <strong style={{ fontSize: '0.88rem' }}>
+                    Analysis {human(s.run?.status || '')}
+                  </strong>
+                </>
+              )}
               <span className="small muted font-mono">
-                {s.run?.window_files_completed ?? 0} files completed
+                {runTotal > 0 ? `${runDone} of ${runTotal} steps · ` : ''}
+                {s.run?.window_files_completed ?? 0} files completed this batch
               </span>
+              {s.run?.reason && <span className="small muted">· {s.run.reason}</span>}
             </div>
             <progress
               className="analysis-progress-bar"
               style={{ width: '100%', height: '5px', marginTop: '4px' }}
-              value={
-                s.run?.sections.reduce(
-                  (sum, sec) =>
-                    sum + sec.coverage.succeeded + sec.coverage.failed + sec.coverage.partial,
-                  0,
-                ) || 0
-              }
-              max={s.run?.sections.reduce((sum, sec) => sum + sec.coverage.total, 0) || 100}
+              value={runDone}
+              max={runTotal || 100}
             />
           </div>
           <div className="actions" style={{ flexShrink: 0 }}>
-            <Button
-              tone="ghost small"
-              disabled={!!s.busy || s.run?.status === 'canceling'}
-              onClick={() => void w.controlRun('cancel')}
-            >
-              Cancel
-            </Button>
+            {pausedOrInterrupted ? (
+              <>
+                <Button
+                  tone="primary small"
+                  icon="play"
+                  disabled={!!s.busy}
+                  onClick={() => void w.resumeAnalysisDirect()}
+                >
+                  Resume Analysis
+                </Button>
+                <Button
+                  tone="ghost small"
+                  icon="refresh"
+                  disabled={!!s.busy}
+                  onClick={() => void w.runAnalysisDirect(true)}
+                >
+                  New Analysis
+                </Button>
+                <Button
+                  tone="ghost small"
+                  disabled={!!s.busy}
+                  onClick={() => void w.navigate('analysis-run')}
+                >
+                  Last Run
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  tone="ghost small"
+                  disabled={!!s.busy}
+                  onClick={() => void w.navigate('analysis-run')}
+                >
+                  Last Run
+                </Button>
+                {['running', 'queued'].includes(s.run?.status || '') && (
+                  <Button
+                    tone="ghost small"
+                    disabled={!!s.busy}
+                    onClick={() => void w.controlRun('pause')}
+                  >
+                    Pause
+                  </Button>
+                )}
+                <Button
+                  tone="ghost small"
+                  disabled={!!s.busy || s.run?.status === 'canceling'}
+                  onClick={() => void w.controlRun('cancel')}
+                >
+                  Cancel
+                </Button>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -194,6 +194,36 @@ func writeFeatures(root string, report *FeatureReport) error {
 	return storage.WriteFile(path, data, 0600)
 }
 
+func clearFeatureSuggestions(root string, index *project.ProjectIndex) (*FeatureReport, error) {
+	report, err := readFeatures(root, index)
+	if err != nil {
+		return nil, err
+	}
+	if report.Goals == "" {
+		path, err := changeMetadataPath(root, "features.json")
+		if err != nil {
+			return nil, err
+		}
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return nil, err
+		}
+		return emptyFeatureReport(index), nil
+	}
+	report.ProjectRevision = index.ProjectRevision
+	report.Status = "not_generated"
+	report.Freshness = "current"
+	report.Failure = ""
+	report.Suggestions = []FeatureSuggestion{}
+	report.Generations = []FeatureGeneration{}
+	report.LastGeneration = nil
+	report.WorkspaceHash = ""
+	report.ContextManifest = project.ContextManifest{}
+	if err := writeFeatures(root, report); err != nil {
+		return nil, err
+	}
+	return report, nil
+}
+
 func referencedFeatureGenerations(report *FeatureReport) []FeatureGeneration {
 	referenced := map[string]bool{}
 	for _, idea := range report.Suggestions {

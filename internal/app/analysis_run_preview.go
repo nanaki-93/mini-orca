@@ -116,7 +116,7 @@ func (s *Service) analysisPreviewLocked(ctx context.Context, request AnalysisPre
 	if err != nil {
 		return nil, err
 	}
-	preview := &AnalysisRunPreview{Models: cloneAnalysisModels(request.Models), RetryStaleFailed: request.RetryStaleFailed, StaleOnly: request.StaleOnly, StalePath: request.StalePath, RecoverIncomplete: request.RecoverIncomplete, SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
+	preview := &AnalysisRunPreview{Models: cloneAnalysisModels(request.Models), RetryStaleFailed: request.RetryStaleFailed, StaleOnly: request.StaleOnly, StalePath: request.StalePath, RecoverIncomplete: request.RecoverIncomplete, ClearResults: request.ClearResults, SchemaVersion: AnalysisRunSchemaVersion, Scope: AnalysisRunScopeProject, Refresh: request.Refresh, Limits: request.Limits,
 		Identity: AnalysisQueueIdentity{ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision, PolicyFingerprint: policy.Version(), ProviderFingerprint: fingerprint},
 		Files:    []AnalysisPlannedFile{}, Excluded: []AnalysisExcludedFile{}, Providers: providers}
 	root := s.manager.Root()
@@ -141,6 +141,10 @@ func captureAnalysisResumeOptions(request *AnalysisPreviewRequest, run *Analysis
 		return project.ErrRevisionConflict
 	}
 	request.RecoverIncomplete = run.Plan.RecoverIncomplete
+	if request.ClearResults && !run.Plan.ClearResults {
+		return project.ErrRevisionConflict
+	}
+	request.ClearResults = run.Plan.ClearResults
 	if request.StaleOnly && !run.Plan.StaleOnly {
 		return project.ErrRevisionConflict
 	}
@@ -468,7 +472,7 @@ func (s *Service) planAnalysisStage(analysis project.Analysis, file project.Inde
 		if err != nil {
 			return AnalysisStagePlan{}, err
 		}
-		if request.Refresh && stage != AnalysisStageSecurityRules {
+		if request.Refresh && (stage != AnalysisStageSecurityRules || request.ClearResults) {
 			plan.Cached = false
 		}
 	}

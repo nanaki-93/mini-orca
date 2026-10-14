@@ -178,6 +178,19 @@ export function Summary({ s }: { s: State }) {
   const openWork = (id: string) => (s.change?.id === id ? w.navigate('editor') : w.viewChange(id));
 
   const entryFiles = (s.index?.files || []).slice(0, 6);
+  const pausedOrInterrupted = !!s.run && ['paused', 'interrupted'].includes(s.run.status);
+  const runTotal = s.run?.sections.reduce((sum, sec) => sum + sec.coverage.total, 0) || 0;
+  const runDone =
+    s.run?.sections.reduce(
+      (sum, sec) =>
+        sum +
+        sec.coverage.succeeded +
+        sec.coverage.partial +
+        sec.coverage.failed +
+        sec.coverage.skipped +
+        sec.coverage.unavailable,
+      0,
+    ) || 0;
 
   return (
     <div className="summary-page">
@@ -198,15 +211,44 @@ export function Summary({ s }: { s: State }) {
             >
               Refresh
             </Button>
-            <Button
-              icon="play"
-              tone="primary"
-              disabled={!!s.busy || activeRun(s.run)}
-              loading={activeRun(s.run)}
-              onClick={() => void w.runAnalysisDirect()}
-            >
-              {activeRun(s.run) ? 'Analyzing…' : 'Run Analysis'}
-            </Button>
+            {s.run && (
+              <Button
+                icon="activity"
+                disabled={!!s.busy}
+                onClick={() => void w.navigate('analysis-run')}
+              >
+                Last Run
+              </Button>
+            )}
+            {pausedOrInterrupted ? (
+              <>
+                <Button
+                  icon="play"
+                  tone="primary"
+                  disabled={!!s.busy}
+                  onClick={() => void w.resumeAnalysisDirect()}
+                >
+                  Resume Analysis
+                </Button>
+                <Button
+                  icon="refresh"
+                  disabled={!!s.busy}
+                  onClick={() => void w.runAnalysisDirect(true)}
+                >
+                  New Analysis
+                </Button>
+              </>
+            ) : (
+              <Button
+                icon="play"
+                tone="primary"
+                disabled={!!s.busy || activeRun(s.run)}
+                loading={activeRun(s.run)}
+                onClick={() => void w.runAnalysisDirect(true)}
+              >
+                {activeRun(s.run) ? 'Analyzing…' : 'Run Analysis'}
+              </Button>
+            )}
             <Button
               icon="code"
               tone="primary"
@@ -220,7 +262,7 @@ export function Summary({ s }: { s: State }) {
         {overview?.analysis.failure && <p className="error-text">{overview.analysis.failure}</p>}
       </div>
 
-      {activeRun(s.run) && (
+      {(activeRun(s.run) || pausedOrInterrupted) && (
         <div
           className="analysis-live-banner"
           style={{
@@ -238,33 +280,77 @@ export function Summary({ s }: { s: State }) {
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
             <div className="row wrap" style={{ gap: '8px', alignItems: 'center' }}>
-              <Spinner />
-              <strong style={{ fontSize: '0.88rem' }}>Analyzing project…</strong>
+              {activeRun(s.run) ? (
+                <>
+                  <Spinner />
+                  <strong style={{ fontSize: '0.88rem' }}>Analyzing project…</strong>
+                </>
+              ) : (
+                <>
+                  <StatusDot value={s.run?.status} label="Analysis" />
+                  <strong style={{ fontSize: '0.88rem' }}>
+                    Analysis {human(s.run?.status || '')}
+                  </strong>
+                </>
+              )}
               <span className="small muted font-mono">
-                {s.run?.window_files_completed ?? 0} files completed
+                {runTotal > 0 ? `${runDone} of ${runTotal} steps · ` : ''}
+                {s.run?.window_files_completed ?? 0} files completed this batch
               </span>
+              {s.run?.reason && <span className="small muted">· {s.run.reason}</span>}
             </div>
             <progress
               className="analysis-progress-bar"
               style={{ width: '100%', height: '5px', marginTop: '4px' }}
-              value={
-                s.run?.sections.reduce(
-                  (sum, sec) =>
-                    sum + sec.coverage.succeeded + sec.coverage.failed + sec.coverage.partial,
-                  0,
-                ) || 0
-              }
-              max={s.run?.sections.reduce((sum, sec) => sum + sec.coverage.total, 0) || 100}
+              value={runDone}
+              max={runTotal || 100}
             />
           </div>
           <div className="actions" style={{ flexShrink: 0 }}>
-            <Button
-              tone="ghost small"
-              disabled={!!s.busy || s.run?.status === 'canceling'}
-              onClick={() => void w.controlRun('cancel')}
-            >
-              Cancel
-            </Button>
+            {pausedOrInterrupted ? (
+              <>
+                <Button
+                  tone="primary small"
+                  icon="play"
+                  disabled={!!s.busy}
+                  onClick={() => void w.resumeAnalysisDirect()}
+                >
+                  Resume Analysis
+                </Button>
+                <Button
+                  tone="ghost small"
+                  icon="refresh"
+                  disabled={!!s.busy}
+                  onClick={() => void w.runAnalysisDirect(true)}
+                >
+                  New Analysis
+                </Button>
+                <Button
+                  tone="ghost small"
+                  disabled={!!s.busy}
+                  onClick={() => void w.navigate('analysis-run')}
+                >
+                  Last Run
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  tone="ghost small"
+                  disabled={!!s.busy}
+                  onClick={() => void w.navigate('analysis-run')}
+                >
+                  Last Run
+                </Button>
+                <Button
+                  tone="ghost small"
+                  disabled={!!s.busy || s.run?.status === 'canceling'}
+                  onClick={() => void w.controlRun('cancel')}
+                >
+                  Cancel
+                </Button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -691,6 +777,7 @@ export function SearchPage({ s }: { s: State }) {
   const commands: [Page, string, string][] = [
     ['summary', 'Overview', 'grid'],
     ['analysis', 'Analyze project', 'activity'],
+    ['analysis-run', 'Last Run', 'activity'],
     ['editor', 'Source', 'code'],
     ['chat', 'Chat', 'chat'],
     ['changes', 'Changes', 'branch'],

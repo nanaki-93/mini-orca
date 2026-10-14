@@ -1618,6 +1618,7 @@ components:
         stale_path: {type: string, maxLength: 4096, description: Optional exact project-relative file path to narrow stale_only analysis. Requires stale_only and an eligible saved selection target. Captured in both identities; start must echo it and resume preserves it. Other saved results remain available.}
         retry_stale_failed: {type: boolean, default: false, description: Select only files with stale or failed analysis; incompatible with refresh. Resume preserves the admitted selection.}
         recover_incomplete: {type: boolean, default: false, description: 'Select only files with recoverable unfinished stages (stale, failed, partial, missing, canceled, interrupted or unavailable with a configured model); current stages stay cached and no source changes. Incompatible with refresh, retry_stale_failed and include_features. On resume the captured plan decides it; true for a non-recovery run returns 409.'}
+        clear_results: {type: boolean, default: false, description: 'Clear previously saved analysis findings and feature suggestions when starting a refreshed run from the beginning. Requires refresh and cannot be combined with stale_only, retry_stale_failed or recover_incomplete.'}
         limits: {$ref: '#/components/schemas/AnalysisRunLimits'}
         resume_run: {$ref: '#/components/schemas/AnalysisRunIdentity'}
     AnalysisFileIdentity:
@@ -1674,6 +1675,7 @@ components:
         stale_path: {type: string, maxLength: 4096, description: Optional exact project-relative file path to narrow stale_only analysis. Requires stale_only and an eligible saved selection target. Captured in both identities; start must echo it and resume preserves it. Other saved results remain available.}
         retry_stale_failed: {type: boolean, default: false, description: Select only files with stale or failed analysis; incompatible with refresh. Resume preserves the admitted selection.}
         recover_incomplete: {type: boolean, default: false, description: 'Select only files with recoverable unfinished stages (stale, failed, partial, missing, canceled, interrupted or unavailable with a configured model); current stages stay cached and no source changes. Incompatible with refresh, retry_stale_failed and include_features. On resume the captured plan decides it; true for a non-recovery run returns 409.'}
+        clear_results: {type: boolean, default: false, description: 'Clear previously saved analysis findings and feature suggestions when starting a refreshed run from the beginning.'}
         limits: {$ref: '#/components/schemas/AnalysisRunLimits'}
         files: {type: array, description: Selected files; remaining inventory is accounted for in excluded, items: {$ref: '#/components/schemas/AnalysisPlannedFile'}}
         excluded: {type: array, items: {$ref: '#/components/schemas/AnalysisExcludedFile'}}
@@ -1703,6 +1705,7 @@ components:
         stale_path: {type: string, maxLength: 4096, description: Optional exact project-relative file path to narrow stale_only analysis. Requires stale_only and an eligible saved selection target. Captured in both identities; start must echo it and resume preserves it. Other saved results remain available.}
         retry_stale_failed: {type: boolean, default: false, description: Select only files with stale or failed analysis; incompatible with refresh. Resume preserves the admitted selection.}
         recover_incomplete: {type: boolean, default: false, description: 'Select only files with recoverable unfinished stages (stale, failed, partial, missing, canceled, interrupted or unavailable with a configured model); current stages stay cached and no source changes. Incompatible with refresh, retry_stale_failed and include_features. On resume the captured plan decides it; true for a non-recovery run returns 409.'}
+        clear_results: {type: boolean, default: false, description: 'Clear previously saved analysis findings and feature suggestions when starting a refreshed run from the beginning. Must match the admitted preview.'}
         confirmations: {$ref: '#/components/schemas/AnalysisRunConfirmations'}
     AnalysisRunControlRequest:
       type: object
