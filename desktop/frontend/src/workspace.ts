@@ -1360,6 +1360,22 @@ export class Workspace {
       if (category) await this.loadResults(category);
     });
   }
+  async batchTriage(findings: M.Finding[], status: string) {
+    if (!findings.length) return;
+    await this.act('Update findings', async () => {
+      const project_revision = this.identity().project_revision;
+      for (const finding of findings) {
+        await this.api.request('PATCH', `${current}/findings/${encodeURIComponent(finding.id)}`, {
+          project_revision,
+          status,
+        });
+      }
+      await this.refreshProject();
+      for (const cat of ['bugs', 'security', 'performance'] as const) {
+        if (this.state.results[cat]) await this.loadResults(cat);
+      }
+    });
+  }
   async openFile(path: string, symbol = '') {
     if (this.state.busy) return;
     if (this.state.file?.path === path) {
@@ -1426,17 +1442,37 @@ export class Workspace {
         (git) => this.set({ git }),
         () => epoch === this.fileEpoch,
       ),
+      ...(symbol && !this.state.fileStale
+        ? [
+            this.resource(
+              'impact',
+              () => this.api.get<M.Impact>(`${current}/impact`, { path, symbol }),
+              (impact) => this.set({ impact }),
+              () => epoch === this.fileEpoch,
+            ),
+          ]
+        : []),
     ]);
   }
   async selectSymbol(symbol: string) {
     if (this.state.busy) return;
-    this.fileEpoch++;
+    const epoch = ++this.fileEpoch;
+    const path = this.state.file?.path;
     this.set({
       symbol,
       explanation: undefined,
       context: undefined,
       impact: undefined,
     });
+    if (symbol && path && !this.state.fileStale) {
+      const key = fileKey(this.state);
+      await this.resource(
+        'impact',
+        () => this.api.get<M.Impact>(`${current}/impact`, { path, symbol }),
+        (impact) => this.set({ impact }),
+        () => fileKey(this.state) === key && epoch === this.fileEpoch,
+      );
+    }
   }
   refreshFile() {
     this.fileRefresh = this.fileRefresh.then(() => this.readFreshFile());

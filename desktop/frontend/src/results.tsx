@@ -311,6 +311,62 @@ export function Results({ s }: { s: State }) {
       }
     })();
   };
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const toggleRowSelection = (key: string) => {
+    setSelectedKeys((prev) =>
+      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key],
+    );
+  };
+  const selectedRows = unique.filter((row) => selectedKeys.includes(row.key));
+  const batchFixSeed = (rows: ResultRow[]): M.ChangeSeed => {
+    if (rows.length === 1) return fixSeed(rows[0]);
+    const paths = [...new Set(rows.map((r) => r.path).filter(Boolean))].slice(0, 8);
+    const acceptance_criteria = [
+      ...new Set(rows.flatMap((r) => r.task?.acceptance_criteria || [])),
+    ];
+    const itemsText = rows
+      .map(
+        (row, idx) =>
+          `${idx + 1}. ${row.title} (${row.path}${row.line ? `:${row.line}` : ''}${row.symbol ? ` · ${row.symbol}` : ''})\n   Cause: ${row.cause}\n   Proposed solution: ${row.solution}`,
+      )
+      .join('\n\n');
+    return {
+      finding_targets: rows.map((r) => r.target),
+      title: `Batch fix (${rows.length} issues)`,
+      paths,
+      kind,
+      message: `Address these ${rows.length} findings across the selected files:\n\n${itemsText}\n\nExplain how each changed file addresses the findings. Preserve unrelated behavior.`,
+      acceptance_criteria,
+      finding: {
+        path: rows[0].path,
+        symbol: rows[0].symbol,
+        line: rows[0].line,
+        cause: rows.map((r) => `${r.name}: ${r.cause}`).join('\n\n'),
+        solution: rows.map((r) => `${r.name}: ${r.solution}`).join('\n\n'),
+        confidence: rows[0].confidence,
+      },
+    };
+  };
+  const triggerBatchFix = (rows: ResultRow[]) => {
+    if (!rows.length) return;
+    const preparedSeed = workflowSeed(batchFixSeed(rows));
+    setSelectedKeys([]);
+    w.seedChange(preparedSeed);
+    void (async () => {
+      try {
+        const context = await w.readFixPreparation();
+        const useAgents = preparedSeed.paths.some(isTestFilePath);
+        const models = workflowSetupModels(s);
+        if (useAgents) {
+          await w.startChangeWorkflow(preparedSeed, models, context);
+        } else {
+          await w.prepareChange(preparedSeed, true, models.create, context);
+        }
+      } catch (error) {
+        w.fail(error);
+      }
+    })();
+  };
   const seed = detail ? workflowSeed(fixSeed(detail)) : undefined;
   const fixDisabled = !!s.busy || activeChangeWorkflow(s.change) || detail?.freshness === 'stale';
   const detailPanel = detail ? (
@@ -699,6 +755,75 @@ export function Results({ s }: { s: State }) {
               <span>Show Done</span>
             </label>
           </div>
+          {!showFeatures && selectedRows.length > 0 && (
+            <div
+              className="batch-findings-bar row between wrap"
+              role="region"
+              aria-label="Batch issue actions"
+              style={{
+                padding: '8px 12px',
+                marginBottom: '8px',
+                borderRadius: '6px',
+                border: '1px solid var(--accent)',
+                background: 'var(--panel)',
+                gap: '8px',
+              }}
+            >
+              <span className="small">
+                <strong>{selectedRows.length}</strong> selected (
+                {[...new Set(selectedRows.map((r) => r.path))].slice(0, 8).length} files)
+              </span>
+              <div className="actions" style={{ gap: '6px' }}>
+                <Button
+                  tone="primary small"
+                  icon="sparkles"
+                  disabled={
+                    !!s.busy ||
+                    activeChangeWorkflow(s.change) ||
+                    selectedRows.some((r) => r.freshness === 'stale')
+                  }
+                  onClick={() => triggerBatchFix(selectedRows)}
+                >
+                  Fix Selected ({selectedRows.length})
+                </Button>
+                {selectedRows.some((r) => r.finding) && (
+                  <>
+                    <Button
+                      tone="ghost small"
+                      icon="check"
+                      disabled={!!s.busy}
+                      onClick={() => {
+                        const findings = selectedRows
+                          .map((r) => r.finding)
+                          .filter((f): f is M.Finding => !!f);
+                        setSelectedKeys([]);
+                        void w.batchTriage(findings, 'fixed');
+                      }}
+                    >
+                      Mark Done
+                    </Button>
+                    <Button
+                      tone="danger small"
+                      icon="trash"
+                      disabled={!!s.busy}
+                      onClick={() => {
+                        const findings = selectedRows
+                          .map((r) => r.finding)
+                          .filter((f): f is M.Finding => !!f);
+                        setSelectedKeys([]);
+                        void w.batchTriage(findings, 'dismissed');
+                      }}
+                    >
+                      Dismiss
+                    </Button>
+                  </>
+                )}
+                <Button tone="ghost small" onClick={() => setSelectedKeys([])}>
+                  Clear
+                </Button>
+              </div>
+            </div>
+          )}
           {showFeatures && (
             <Disclosure title="Project goals & Feature discovery">
               <div className="stack" style={{ gap: '8px', padding: '8px 0' }}>
@@ -748,6 +873,16 @@ export function Results({ s }: { s: State }) {
                     }
                   }}
                 >
+                  {!showFeatures && (
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${row.name}`}
+                      checked={selectedKeys.includes(row.key)}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => toggleRowSelection(row.key)}
+                      style={{ cursor: 'pointer', flexShrink: 0 }}
+                    />
+                  )}
                   <span
                     className={`finding-mark ${['high', 'critical'].includes(row.severity) ? 'red' : row.severity === 'low' ? 'blue' : ''}`}
                   >
