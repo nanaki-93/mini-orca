@@ -67,6 +67,7 @@ untrusted networks.
 | GET | `/api/projects/current/scan` | Read an explicitly started Go scan for `project_revision` from a temporary copied workspace. |
 | POST | `/api/projects/current/scan` | Start an explicit Go parser/vet/test scan in a temporary copied workspace. |
 | DELETE | `/api/projects/current/scan` | Cancel the active explicit Go scan. |
+| GET | `/api/projects/current/events` | Stream Server-Sent Events (SSE) when analysis runs, scans, or change workflows transition state. |
 | GET | `/api/projects/current/execution-trust` | Read current-session trusted local execution status and exact project-code command scope; `task_test_name` selects a generated task-test argv. |
 | POST | `/api/projects/current/execution-trust` | Explicitly trust local execution for the current project revision. |
 | GET | `/api/projects/current/index` | Read deterministic eligible-file and symbol facts. |

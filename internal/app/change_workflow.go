@@ -168,7 +168,9 @@ func (s *Service) beginChangeWorkflowStage(ctx context.Context, job *changeWorkf
 	}
 	session.Workflow.Stages[stage].Status = "running"
 	session.Workflow.UpdatedAt, session.UpdatedAt = time.Now().UTC(), time.Now().UTC()
-	return session, writeChangeSession(job.root, session)
+	err = writeChangeSession(job.root, session)
+	s.notifyEvent("workflow")
+	return session, err
 }
 
 func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJob, runErr error) {
@@ -200,6 +202,7 @@ func (s *Service) finishChangeWorkflow(ctx context.Context, job *changeWorkflowJ
 	if err != nil {
 		job.failure = "Workflow progress could not be saved. Restore the conversation and run again."
 	}
+	s.notifyEvent("workflow")
 }
 
 func workflowFailure(err error) (string, string) {

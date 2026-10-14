@@ -297,6 +297,61 @@ try {
       await close();
     }
   });
+
+  await test('Saved Model Presets, Batch Multi-Finding Fix Queue, and Symbol Blast Radius Explorer', async () => {
+    const { page, close } = await pageFor({ trusted: true });
+    try {
+      // 1. Saved Model Presets in Models page and Command Palette
+      await nav(page, 'Settings & Rules');
+      await idle(page);
+      await page.getByRole('button', { name: 'Model Routing', exact: true }).click();
+      await idle(page);
+      await page.getByText('Saved model presets', { exact: true }).waitFor();
+      await page.getByText('Fast Local / Speed', { exact: true }).waitFor();
+      await page.getByText('Deep Audit', { exact: true }).waitFor();
+
+      const presetInput = page.getByLabel('Custom preset name', { exact: true });
+      await presetInput.fill('Offline Audit');
+      await page.getByRole('button', { name: 'Save preset', exact: true }).click();
+      await page.getByText('Offline Audit', { exact: true }).waitFor();
+
+      // Switch preset from Command Palette
+      await page.getByRole('button', { name: 'Search files and commands', exact: true }).click();
+      const searchInput = page.locator('#search');
+      await searchInput.fill('Preset: Deep Audit');
+      await page.getByRole('button', { name: 'Preset: Deep Audit', exact: true }).click();
+
+      // 2. Batch Multi-Finding Selection & Action Bar in Issues & Ideas
+      await nav(page, 'Issues & Ideas');
+      await idle(page);
+      const firstCheckbox = page.locator('.result-row input[type="checkbox"]').first();
+      await firstCheckbox.check();
+      const batchBar = page.getByRole('region', { name: 'Batch issue actions', exact: true });
+      await batchBar.waitFor();
+      await batchBar.getByRole('button', { name: 'Fix Selected (1)', exact: true }).waitFor();
+      await batchBar.getByRole('button', { name: 'Clear', exact: true }).click();
+
+      // 3. Interactive Symbols & Blast Radius Explorer in Code & Diff
+      await nav(page, 'Code & Diff');
+      await idle(page);
+      await page.locator('.explorer-file-btn').first().click();
+      await idle(page);
+      await page.getByRole('tab', { name: 'Direct Edit', exact: true }).click();
+      const symbolDisclosure = page.locator('summary', {
+        hasText: 'Symbols, Blast Radius & File Inspection',
+      });
+      await symbolDisclosure.click();
+      const processPill = page
+        .getByLabel('File symbols', { exact: true })
+        .getByRole('button', { name: /^Process/ });
+      await processPill.click();
+      await idle(page);
+      await page.getByText(/Blast Radius · Process/).waitFor();
+      await page.getByText('Calls Process', { exact: true }).waitFor();
+    } finally {
+      await close();
+    }
+  });
 } finally {
   await browser.close();
   server.close();

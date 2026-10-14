@@ -629,6 +629,19 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+  /api/projects/current/events:
+    parameters:
+      - {$ref: '#/components/parameters/WorktreePath'}
+    get:
+      tags: [Projects]
+      summary: Stream Server-Sent Events (SSE) for project analysis, scan, and workflow progress
+      responses:
+        '200':
+          description: Server-Sent Events stream of ready and update notifications.
+          content:
+            text/event-stream:
+              schema:
+                type: string
   /api/projects/current/execution-trust:
     parameters:
       - {$ref: '#/components/parameters/WorktreePath'}

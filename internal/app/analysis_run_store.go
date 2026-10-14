@@ -201,6 +201,7 @@ func (s *Service) saveAnalysisRunLocked(recoverFault bool) error {
 		return errAnalysisRunPersistence
 	}
 	c.fault = nil
+	s.notifyEvent("analysis")
 	return nil
 }
 

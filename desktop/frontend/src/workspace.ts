@@ -520,6 +520,7 @@ export class Workspace {
     if (this.state.connected) {
       const path = localStorage.getItem('mini-orca:last-project');
       if (path && !this.explicitProjectAction) await this.openProject(path, false, false);
+      this.connectEvents();
     }
     this.schedule();
   }
@@ -530,8 +531,44 @@ export class Workspace {
     for (const child of this.state.implementations) child.stop();
     this.stopped = true;
     clearTimeout(this.timer);
+    if (this.eventSource) {
+      this.eventSource.close();
+      this.eventSource = undefined;
+    }
     this.respond(false);
     void this.api.cancelAll().catch((error) => this.fail(error));
+  }
+  private eventSource?: EventSource;
+  private connectEvents() {
+    if (
+      typeof EventSource === 'undefined' ||
+      this.stopped ||
+      (typeof window !== 'undefined' &&
+        (window as { fixture?: { enableSSE?: boolean } }).fixture &&
+        !(window as { fixture?: { enableSSE?: boolean } }).fixture?.enableSSE)
+    ) {
+      return;
+    }
+    if (this.eventSource) this.eventSource.close();
+    const url = this.worktreePath
+      ? `${current}/events?worktree_path=${encodeURIComponent(this.worktreePath)}`
+      : `${current}/events`;
+    try {
+      const es = new EventSource(url);
+      es.addEventListener('update', () => {
+        this.handleServerEvent();
+      });
+      this.eventSource = es;
+    } catch {
+      // Fallback to timer polling when SSE is unavailable.
+    }
+  }
+  handleServerEvent() {
+    if (this.stopped) return;
+    clearTimeout(this.timer);
+    void this.poll().finally(() => {
+      this.schedule();
+    });
   }
   private schedule() {
     if (this.stopped) return;
@@ -1146,6 +1183,7 @@ export class Workspace {
       workflowModels: { ...preset.workflow },
       preview: undefined,
       resume: undefined,
+      page: this.state.page === 'search' ? 'models' : this.state.page,
       notice: `Applied model preset "${preset.name}".`,
     });
   }
