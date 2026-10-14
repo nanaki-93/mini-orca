@@ -505,6 +505,51 @@ try {
       await close();
     }
   });
+
+  await test('Agent Mission Control 4-stage pipeline and interactive Terminal UI (TUI) mode', async () => {
+    const { page, close } = await pageFor({ trusted: true, featuresReady: true });
+    try {
+      // 1. Dispatch Fix with Agent from Issues & Ideas and inspect Agent Mission Control
+      await nav(page, 'Issues & Ideas');
+      await idle(page);
+      await page.getByRole('button', { name: 'Fix with Agent', exact: true }).first().click();
+      await idle(page);
+
+      await page.getByRole('heading', { name: 'Agent Mission Control', exact: true }).waitFor();
+      await page.getByText('Architect & Code Agent', { exact: true }).waitFor();
+      await page.getByText('Verification & Test Agent', { exact: true }).waitFor();
+      await page.getByText('Clean-Code Critic Agent', { exact: true }).waitFor();
+      await page.getByText('Human Precision Gate', { exact: true }).waitFor();
+      await page.getByText('Clean-Software Precision Gate', { exact: true }).waitFor();
+      await page.getByText('Critic Agent Verdict', { exact: true }).waitFor();
+
+      // 2. Switch to live Terminal UI (TUI) mode
+      await page.getByRole('button', { name: 'Switch to Terminal UI (TUI) mode' }).click();
+      const tui = page.getByRole('application', { name: 'Mini-Orca Terminal UI' });
+      await tui.waitFor();
+      await page.getByText('MINI-ORCA // TUI', { exact: true }).waitFor();
+      await page.getByText('4-STAGE AUTONOMOUS CLEAN-CODE PIPELINE', { exact: true }).waitFor();
+      await page.getByText('CLEAN-SOFTWARE PRECISION SCORECARD', { exact: true }).waitFor();
+
+      // Switch TUI palette to CRT Green
+      await page.getByRole('button', { name: 'CRT Green', exact: true }).click();
+      assert.equal(await tui.getAttribute('data-tui-palette'), 'crt');
+
+      // Navigate TUI views via numbered tabs ([1] Overview, [5] Issues)
+      await page.getByRole('button', { name: /\[1\] Overview/ }).click();
+      await page.getByText('SOURCE FILES', { exact: true }).waitFor();
+      await page.getByRole('button', { name: /\[5\] Issues/ }).click();
+      await page.getByText('FINDING INSPECTOR', { exact: true }).waitFor();
+
+      // Use orca> command prompt to return to GUI mode
+      const cmdPrompt = page.getByLabel('TUI command prompt', { exact: true });
+      await cmdPrompt.fill(':gui');
+      await cmdPrompt.press('Enter');
+      await page.getByRole('heading', { name: 'Issues & Feature Ideas', exact: true }).waitFor();
+    } finally {
+      await close();
+    }
+  });
 } finally {
   await browser.close();
   server.close();
