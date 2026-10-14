@@ -70,8 +70,7 @@ function ChatWorkspace({ s }: { s: State }) {
   const running = activeChangeWorkflow(change);
   const models = workflowSetupModels(s);
   const useAgents =
-    taskKind !== 'instructions' &&
-    (!!change?.workflow || seed.paths.some(isTestFilePath));
+    taskKind !== 'instructions' && (!!change?.workflow || seed.paths.some(isTestFilePath));
   const blocked =
     !!s.busy ||
     running ||
