@@ -1014,8 +1014,31 @@ components:
         project_revision: {type: string}
         metrics: {$ref: '#/components/schemas/ProjectMetrics'}
         analysis: {$ref: '#/components/schemas/ProjectAnalysisReport'}
+        docs: {$ref: '#/components/schemas/ProjectDocsReport'}
         analysis_coverage: {$ref: '#/components/schemas/AnalysisCoverage'}
         finding_counts: {$ref: '#/components/schemas/FindingCounts'}
+    ProjectDocsReport:
+      type: object
+      required: [schema_version, project_id, project_revision, status, context, components, scenarios, decisions, runbook, glossary]
+      properties:
+        schema_version: {type: string}
+        project_id: {type: string}
+        project_revision: {type: string}
+        status: {type: string}
+        context:
+          type: object
+          required: [purpose, topology, stack]
+          properties:
+            purpose: {type: string}
+            topology: {type: string}
+            stack: {type: array, items: {type: string}}
+            architecture_diagram: {type: string}
+        components: {type: array, items: {type: object}}
+        scenarios: {type: array, items: {type: object}}
+        decisions: {type: array, items: {type: object}}
+        runbook: {type: array, items: {type: object}}
+        glossary: {type: array, items: {type: object}}
+        updated_at: {type: string}
     ProjectMetrics:
       type: object
       required: [type, file_count, source_file_count, total_lines, languages]
