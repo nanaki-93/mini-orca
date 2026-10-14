@@ -26,6 +26,7 @@ import { Editor, Context } from './editor';
 import { ChangeHistory } from './change-shared';
 import { Instructions } from './instructions';
 import { TerminalWorkspace } from './tools';
+import { AgentsWorkspace } from './agents';
 import './style.css';
 import './studio.css';
 
@@ -36,6 +37,7 @@ const mainNav: [Page, string, string][] = [
   ['editor', 'Code & Diff', 'code'],
   ['bugs', 'Issues & Ideas', 'bug'],
   ['features', 'Features', 'sparkles'],
+  ['agents', 'Agents', 'sparkles'],
   ['analysis-run', 'Last Run', 'activity'],
   ['git', 'Git & Worktrees', 'branch'],
   ['instructions', 'Settings & Rules', 'shield'],
@@ -190,11 +192,15 @@ function App() {
       const count =
         page === 'editor' && changeCount > 0
           ? `${changeCount} diff`
-          : page === 'bugs' && issueCount > 0
-            ? issueCount
-            : page === 'git' && worktreeCount > 0
-              ? worktreeCount
-              : undefined;
+          : page === 'agents' && s.change?.workflow
+            ? s.change.workflow.status === 'running'
+              ? 'run'
+              : 'ready'
+            : page === 'bugs' && issueCount > 0
+              ? issueCount
+              : page === 'git' && worktreeCount > 0
+                ? worktreeCount
+                : undefined;
       return (
         <button
           key={page}
@@ -228,6 +234,7 @@ function App() {
     content = <WorktreeImplementation child={s.implementation} />;
   else if (s.page === 'summary') content = <Summary s={s} />;
   else if (s.page === 'docs') content = <DocsWorkspace s={s} />;
+  else if (s.page === 'agents') content = <AgentsWorkspace s={s} />;
   else if (s.page === 'analysis') content = <Analysis s={s} />;
   else if (s.page === 'analysis-files') content = <AnalysisFiles s={s} />;
   else if (s.page === 'analysis-preview') content = <AnalysisPreview s={s} />;

@@ -341,13 +341,14 @@ try {
 
       await nav(page, 'Issues & Ideas');
       await idle(page);
-      await page.getByRole('button', { name: 'Fix in Editor', exact: true }).first().click();
+      await page.getByRole('button', { name: 'Fix with Agent', exact: true }).first().click();
       await idle(page);
+      await page.getByRole('heading', { name: 'Agent Mission Control', exact: true }).waitFor();
 
       const workflowReq = await page.evaluate(() =>
         window.fixture.requests.find((r) => r.path.endsWith('/workflow')),
       );
-      assert.ok(workflowReq, 'Fix in Editor dispatches a workflow request');
+      assert.ok(workflowReq, 'Fix with Agent dispatches a workflow request');
       assert.deepEqual(workflowReq.body.models, {
         create: 'pi:lm-studio/qwen/local',
         test: 'agy:gemini-4-argon-high',
