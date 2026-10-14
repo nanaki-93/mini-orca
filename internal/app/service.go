@@ -70,6 +70,7 @@ type Service struct {
 	writeAnalysisRun                func(string, []byte, os.FileMode) error
 	goScan                          *goScanController
 	executionTrust                  *executionTrustStore
+	events                          *eventBroker
 	buildDeclarationContext         func(string, project.FunctionContextOptions) (string, project.ContextManifest, error)
 	loadSecurityFileReport          func(string, project.SecurityReportInput) (*project.SecurityFileReport, error)
 	beforeSecurityReviewPublication func()
@@ -124,6 +125,7 @@ func New(cfg *config.Config, manager *project.Manager) (*Service, error) {
 		analysisRun:             &analysisRunController{},
 		goScan:                  newGoScanController(),
 		executionTrust:          newExecutionTrustStore(),
+		events:                  newEventBroker(),
 		buildDeclarationContext: contextBuilder.BuildFunctionWithManifest,
 		loadSecurityFileReport:  project.LoadSecurityFileReport,
 	}

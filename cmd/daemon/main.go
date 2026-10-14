@@ -251,6 +251,7 @@ func newProjectHTTPMux(application *app.Service, projectManager *project.Manager
 	mux.HandleFunc("POST /api/projects/current/files/explanation", projectHandler.ExplainDeclaration)
 	mux.HandleFunc("POST /api/projects/current/security-review", projectHandler.ReviewSecurityFile)
 	mux.HandleFunc("POST /api/projects/current/reindex", projectHandler.Reindex)
+	mux.HandleFunc("GET /api/projects/current/events", projectHandler.Events)
 
 	return mux
 }

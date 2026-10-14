@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/nanaki-93/mini-orca/v2/internal/api"
 	"github.com/nanaki-93/mini-orca/v2/internal/app"
@@ -453,6 +455,45 @@ func (h *ProjectHandler) ReviewSecurityFile(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	api.WriteJSON(w, http.StatusOK, report)
+}
+
+// Events streams Server-Sent Events (SSE) when analysis runs, scans, or
+// change workflows transition state for the active project.
+func (h *ProjectHandler) Events(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		api.WriteError(w, http.StatusInternalServerError, "streaming unsupported")
+		return
+	}
+	ch, unsubscribe := h.service.SubscribeEvents()
+	defer unsubscribe()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("event: ready\ndata: {\"status\":\"connected\"}\n\n"))
+	flusher.Flush()
+
+	if !strings.Contains(r.Header.Get("Accept"), "text/event-stream") || r.URL.Query().Get("once") == "true" {
+		return
+	}
+
+	ticker := time.NewTicker(25 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case kind := <-ch:
+			_, _ = w.Write([]byte("event: update\ndata: {\"kind\":\"" + kind + "\"}\n\n"))
+			flusher.Flush()
+		case <-ticker.C:
+			_, _ = w.Write([]byte(": heartbeat\n\n"))
+			flusher.Flush()
+		}
+	}
 }
 
 func (h *ProjectHandler) decodeFileAnalysisRequest(w http.ResponseWriter, r *http.Request) (fileAnalysisRequest, bool) {

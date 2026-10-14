@@ -353,7 +353,9 @@ func (s *Service) finishGoScan(root string, report *GoScanReport, findings []pro
 	if err != nil {
 		return err
 	}
-	return writeGoScanReport(root, data)
+	err = writeGoScanReport(root, data)
+	s.notifyEvent("scan")
+	return err
 }
 
 func parserScanFindings(index *project.ProjectIndex) []project.UnifiedFinding {
