@@ -22,7 +22,13 @@ func (s *Service) reindexActiveProject() (*project.ProjectIndex, error) {
 }
 
 func (s *Service) ActivateProject(root string, analysis *project.Analysis) error {
-	return s.replaceActiveProject(func() error { return s.manager.Set(root, analysis) })
+	return s.replaceActiveProject(func() error {
+		if err := s.manager.Set(root, analysis); err != nil {
+			return err
+		}
+		s.persistProjectDocs()
+		return nil
+	})
 }
 
 func (s *Service) RestoreActiveProject(root string, analysis *project.Analysis) error {

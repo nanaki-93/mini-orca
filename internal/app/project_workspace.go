@@ -13,6 +13,7 @@ import (
 // remains useful when no model analysis or scan has been performed.
 type ProjectOverview struct {
 	Run             *AnalysisRun                  `json:"analysis_run,omitempty"`
+	Docs            *project.ProjectDocsReport    `json:"docs,omitempty"`
 	ProjectID       string                        `json:"project_id"`
 	ProjectRevision string                        `json:"project_revision"`
 	Metrics         ProjectMetrics                `json:"metrics"`
@@ -89,12 +90,45 @@ func (s *Service) ProjectOverview() (*ProjectOverview, error) {
 			counts.Verified++
 		}
 	}
+	docs, err := s.projectDocs(analysis, index)
+	if err != nil {
+		return nil, err
+	}
 	return &ProjectOverview{
 		Run:       run,
+		Docs:      docs,
 		ProjectID: analysis.ProjectID, ProjectRevision: analysis.ProjectRevision,
 		Metrics:  ProjectMetrics{Type: analysis.Type, BuildFile: analysis.BuildFile, FileCount: analysis.FileCount, SourceFileCount: analysis.SourceFileCount, TotalLines: analysis.TotalLines, Languages: cloneLanguageCounts(analysis.Languages)},
 		Analysis: analysis.Report, Coverage: coverage, Findings: counts,
 	}, nil
+}
+
+func (s *Service) projectDocs(analysis *project.Analysis, index *project.ProjectIndex) (*project.ProjectDocsReport, error) {
+	stored, err := project.LoadProjectDocsReport(s.manager.Root(), analysis.ProjectID, analysis.ProjectRevision)
+	if err != nil {
+		return nil, err
+	}
+	if stored != nil && len(stored.Components) > 0 {
+		if analysis.Report.Status == project.ProjectAnalysisStatusStale {
+			stored.Status = project.ProjectAnalysisStatusStale
+		}
+		return stored, nil
+	}
+	built := project.BuildProjectDocs(*analysis, index)
+	return &built, nil
+}
+
+func (s *Service) persistProjectDocs() {
+	analysis, err := s.manager.Analysis()
+	if err != nil {
+		return
+	}
+	index, err := s.manager.Index()
+	if err != nil {
+		return
+	}
+	docs := project.BuildProjectDocs(*analysis, index)
+	_ = project.StoreProjectDocsReport(s.manager.Root(), docs)
 }
 
 // ListFindings returns sanitized persisted tool reports and fresh cached AI
