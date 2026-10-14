@@ -182,8 +182,8 @@ func (s *Service) currentDeclarationExplanationTargetWithIndex(request Declarati
 	if err != nil {
 		return currentDeclarationExplanationTarget{}, nil, err
 	}
-	if file.Language != "Go" || file.Binary {
-		return currentDeclarationExplanationTarget{}, nil, fmt.Errorf("%w: declaration explanation requires an indexed Go source file", project.ErrUnsupportedFile)
+	if file.Binary || file.Language == "Text" || file.Language == "Markdown" {
+		return currentDeclarationExplanationTarget{}, nil, fmt.Errorf("%w: declaration explanation requires an indexed source file", project.ErrUnsupportedFile)
 	}
 	symbol := exactExplanationSymbol(*file, request.TargetSymbol)
 	if symbol == nil {
@@ -200,7 +200,7 @@ func exactExplanationSymbol(file project.IndexFile, target string) *project.Symb
 	var match *project.SymbolInfo
 	for i := range file.Symbols {
 		candidate := file.Symbols[i]
-		if candidate.Name == target && candidate.AtomicTarget && candidate.Confidence == "exact" {
+		if candidate.Name == target && candidate.AtomicTarget && (candidate.Confidence == "exact" || candidate.Confidence == "approximate") {
 			if match != nil {
 				return nil
 			}
@@ -212,7 +212,7 @@ func exactExplanationSymbol(file project.IndexFile, target string) *project.Symb
 }
 
 func declarationExplanationPrompt(functionContext string) string {
-	return "Explain exactly the supplied Go declaration. Return one JSON object only, without Markdown or code fences. " +
+	return "Explain the supplied declaration. Return one JSON object only, without Markdown or code fences. " +
 		"Required fields: version (\"v1\"), summary (string), behavior (string array), inputs (string array), outputs (string array), side_effects (string array), error_behavior (string array). " +
 		"Each array must contain at most six concise items. Optionally include engineering_insight with exactly mechanism, why_it_matters_here, and optional tradeoff_or_failure_mode and transferable_lesson. " + project.EngineeringInsightPromptInstructions +
 		"Ground every statement in the supplied declaration and indexed facts. Do not propose edits, invent callers, or reproduce the declaration wholesale.\n\n" + functionContext

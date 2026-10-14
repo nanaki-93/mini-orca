@@ -258,11 +258,83 @@ export function canApplyChange(s: State) {
 
 export const activeChangeWorkflow = (change?: M.ChangeSession) =>
   !!change?.workflow && ['running', 'canceling'].includes(change.workflow.status);
+
+export function isTestFilePath(path: string): boolean {
+  const lower = path.replace(/\\/g, '/').toLowerCase();
+  const parts = lower.split('/');
+  const base = parts[parts.length - 1] || '';
+  if (
+    lower.endsWith('_test.go') ||
+    lower.endsWith('_test.py') ||
+    (base.startsWith('test_') && base.endsWith('.py'))
+  ) {
+    return true;
+  }
+  for (const suffix of [
+    '.test.ts',
+    '.spec.ts',
+    '.test.tsx',
+    '.spec.tsx',
+    '.test.js',
+    '.spec.js',
+    '.test.jsx',
+    '.spec.jsx',
+    '.test.mjs',
+    '.spec.mjs',
+    '.test.cjs',
+    '.spec.cjs',
+    'test.kt',
+    'tests.kt',
+    'spec.kt',
+    'test.java',
+    'tests.java',
+    '_test.rs',
+    '_test.rb',
+    '_spec.rb',
+    'test.php',
+    'test.cs',
+    'tests.cs',
+    'test.swift',
+    'tests.swift',
+    '_test.c',
+    '_test.cpp',
+    '_test.cc',
+  ]) {
+    if (base.endsWith(suffix)) return true;
+  }
+  return parts
+    .slice(0, -1)
+    .some((part) => ['test', 'tests', '__tests__', 'spec', 'specs'].includes(part));
+}
+
+export function inferTestPath(path: string): string | undefined {
+  if (isTestFilePath(path)) return undefined;
+  if (path.endsWith('.go')) return path.replace(/\.go$/, '_test.go');
+  if (/\.(ts|tsx|js|jsx|mjs|cjs)$/.test(path))
+    return path.replace(/\.(ts|tsx|js|jsx|mjs|cjs)$/, '.test.$1');
+  if (path.endsWith('.py')) return path.replace(/\.py$/, '_test.py');
+  if (path.endsWith('.rs')) return path.replace(/\.rs$/, '_test.rs');
+  if (path.endsWith('.kt')) return path.replace(/\.kt$/, 'Test.kt');
+  if (path.endsWith('.java')) return path.replace(/\.java$/, 'Test.java');
+  if (path.endsWith('.rb')) return path.replace(/\.rb$/, '_spec.rb');
+  if (path.endsWith('.php')) return path.replace(/\.php$/, 'Test.php');
+  if (path.endsWith('.cs')) return path.replace(/\.cs$/, 'Tests.cs');
+  if (path.endsWith('.swift')) return path.replace(/\.swift$/, 'Tests.swift');
+  if (/\.(c|cpp|cc)$/.test(path)) return path.replace(/\.(c|cpp|cc)$/, '_test.$1');
+  return undefined;
+}
+
 export function workflowSeed(seed: M.ChangeSeed): M.ChangeSeed {
   const paths = [...seed.paths];
-  const source = paths.find((path) => path.endsWith('.go') && !path.endsWith('_test.go'));
-  if (source && paths.length < 8 && !paths.some((path) => path.endsWith('_test.go')))
-    paths.push(source.replace(/\.go$/, '_test.go'));
+  if (paths.length < 8 && !paths.some(isTestFilePath)) {
+    for (const path of paths) {
+      const testPath = inferTestPath(path);
+      if (testPath) {
+        paths.push(testPath);
+        break;
+      }
+    }
+  }
   return { ...seed, paths };
 }
 export function workflowReviewable(change: M.ChangeSession) {
@@ -699,7 +771,7 @@ export class Workspace {
     const originalEpoch = this.epoch;
     await this.act('Create worktree', async () => {
       const epoch = this.epoch;
-      const profiles = seed.paths.some((path) => path.endsWith('_test.go'))
+      const profiles = seed.paths.some(isTestFilePath)
         ? Object.values(models)
         : [models.create];
       const latest = await this.checkedFixPreparation(profiles, preparation);
@@ -747,7 +819,7 @@ export class Workspace {
       return;
     }
     if (originalEpoch !== this.epoch) return;
-    if (seed.paths.some((value) => value.endsWith('_test.go')))
+    if (seed.paths.some(isTestFilePath))
       await child.startChangeWorkflow(seed, models, fresh);
     else await child.prepareChange(seed, tests, models.create, fresh);
   }
@@ -1891,8 +1963,8 @@ export class Workspace {
     await this.act('Start workflow', async () => {
       if (activeChangeWorkflow(this.state.change))
         throw new Error('Finish or cancel the active workflow.');
-      if (!seed.paths.some((path) => path.endsWith('_test.go')))
-        throw new Error('Include a Go test path (_test.go) in Files to change.');
+      if (!seed.paths.some(isTestFilePath))
+        throw new Error('Include a test path (e.g. _test.go, .test.ts, test_*.py) in Files to change.');
       const epoch = this.epoch,
         operation = this.operation;
       const profiles = preparation
@@ -2338,7 +2410,7 @@ export class Workspace {
         epoch = this.epoch,
         operation = this.operation;
       const paths = change.changes
-        .filter((edit) => edit.path.endsWith('.go'))
+        .filter((edit) => !/\.(md|txt)$/i.test(edit.path))
         .map((edit) => edit.path);
       const confirmed = await this.confirmModel('bug', 'Reanalyze changed files', false, paths);
       if (confirmed === null || epoch !== this.epoch || operation !== this.operation) return;

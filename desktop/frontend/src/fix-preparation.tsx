@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from 'react';
 import type { ChangeSeed } from './models';
 import {
   effectiveWorkflowModel,
+  isTestFilePath,
   workflowSeed,
   workflowSetupModels,
   type FixPreparationContext,
@@ -46,7 +47,7 @@ export function FixPreparation({
     };
   }, [s.project?.project_id, s.project?.project_revision, modelKey, refresh]);
   const prepared = workflowSeed(seed);
-  const useAgents = prepared.paths.some((path) => path.endsWith('_test.go'));
+  const useAgents = prepared.paths.some(isTestFilePath);
   const models = workflowSetupModels(s);
   const profiles = useAgents ? Object.values(models) : [models.create];
   const modelContext = context && {

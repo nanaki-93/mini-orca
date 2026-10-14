@@ -4,6 +4,7 @@ import {
   canAcceptChange,
   activeChangeWorkflow,
   effectiveWorkflowModel,
+  isTestFilePath,
   workflowSetupModels,
   type State,
   type FixPreparationContext,
@@ -70,7 +71,7 @@ function ChatWorkspace({ s }: { s: State }) {
   const models = workflowSetupModels(s);
   const useAgents =
     taskKind !== 'instructions' &&
-    (!!change?.workflow || seed.paths.some((path) => path.endsWith('_test.go')));
+    (!!change?.workflow || seed.paths.some(isTestFilePath));
   const blocked =
     !!s.busy ||
     running ||

@@ -5,6 +5,7 @@ import type { ChangeSession, ChangeSeed } from './models';
 import {
   activeChangeWorkflow,
   canAcceptChange,
+  isTestFilePath,
   workflowSeed,
   workflowSetupModels,
   type State,
@@ -105,7 +106,7 @@ export function FixWorkspace({ s }: { s: State }) {
     void (async () => {
       try {
         const context = await w.readFixPreparation();
-        const useAgents = preparedSeed.paths.some((path) => path.endsWith('_test.go'));
+        const useAgents = preparedSeed.paths.some(isTestFilePath);
         const models = workflowSetupModels(s);
         if (useAgents) {
           await w.startChangeWorkflow(preparedSeed, models, context);
