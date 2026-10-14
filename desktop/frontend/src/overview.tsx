@@ -177,7 +177,6 @@ export function Summary({ s }: { s: State }) {
   const totalIssues = (bugCount || 0) + (secCount || 0) + (perfCount || 0) + featureCount;
   const openWork = (id: string) => (s.change?.id === id ? w.navigate('editor') : w.viewChange(id));
 
-  const entryFiles = (s.index?.files || []).slice(0, 6);
   const pausedOrInterrupted = !!s.run && ['paused', 'interrupted'].includes(s.run.status);
   const runTotal = s.run?.sections.reduce((sum, sec) => sum + sec.coverage.total, 0) || 0;
   const runDone =
@@ -410,14 +409,9 @@ export function Summary({ s }: { s: State }) {
             </span>
             <span className="pill">{human(docsStatus)}</span>
           </div>
-          <div className="kpi-pulse-value box-value">
-            {componentCount} Subsystems{' '}
-            <span className="small muted" style={{ fontWeight: 500 }}>
-              · {scenarioCount} Scenarios
-            </span>
-          </div>
+          <div className="kpi-pulse-value box-value">{componentCount} Subsystems</div>
           <div className="box-meta">
-            <span>C4 Context · Components · ADRs</span>
+            <span>{scenarioCount} Scenarios</span>
             <Icon name="arrow" />
           </div>
         </div>
@@ -440,17 +434,10 @@ export function Summary({ s }: { s: State }) {
             </span>
             {percent !== null && <span className="pill">{percent}% analyzed</span>}
           </div>
-          <div className="kpi-pulse-value box-value">
-            {totalIssues} Open{' '}
-            <span className="small muted" style={{ fontWeight: 500 }}>
-              ({bugCount} Bugs · {secCount} Sec · {perfCount} Perf · {featureCount} Ideas)
-            </span>
-          </div>
+          <div className="kpi-pulse-value box-value">{totalIssues} Open</div>
           <div className="box-meta">
             <span>
-              {percent !== null
-                ? `${coverage?.fresh}/${coverage?.total} files covered`
-                : 'Triage & fix issues in one click'}
+              {bugCount} Bugs · {secCount} Sec · {perfCount} Perf
             </span>
             <Icon name="arrow" />
           </div>
@@ -483,7 +470,7 @@ export function Summary({ s }: { s: State }) {
                 : 'Ready to Edit'}
           </div>
           <div className="box-meta">
-            <span>{s.gitWorkspace?.worktrees.length || 0} Worktrees · Open Code &amp; Diff</span>
+            <span>Open Code &amp; Diff</span>
             <Icon name="arrow" />
           </div>
         </div>
@@ -502,60 +489,27 @@ export function Summary({ s }: { s: State }) {
         </Panel>
       )}
 
-      {/* Interactive System Architecture & Entry Points */}
+      {/* Concise System Summary — detailed architecture & entry points live on the dedicated Architecture page */}
       <Panel
         title="System Architecture & Entry Points"
         actions={
-          <Go page="docs" tone="ghost small" icon="book">
-            Engineering Spec →
-          </Go>
+          <div className="actions">
+            <Go page="diagrams" tone="ghost small" icon="layers">
+              Architecture →
+            </Go>
+            <Go page="docs" tone="ghost small" icon="book">
+              Engineering Spec →
+            </Go>
+          </div>
         }
       >
         <Prose
           text={
             overview?.analysis.purpose ||
-            overview?.analysis.architecture ||
             s.project!.summary ||
-            'Select any module or entry point below to inspect or edit it directly in Code & Diff.'
+            'Open Architecture or Engineering Spec to inspect subsystem boundaries, diagrams, and entry points.'
           }
         />
-        {entryFiles.length > 0 && (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-              gap: '10px',
-              marginTop: '14px',
-            }}
-          >
-            {entryFiles.map((file) => (
-              <button
-                key={file.path}
-                className="panel card-kpi box-card clickable"
-                style={{
-                  textAlign: 'left',
-                  padding: '12px 14px',
-                  cursor: 'pointer',
-                  background: 'var(--raised)',
-                }}
-                onClick={() => void w.openFile(file.path)}
-              >
-                <div className="row between">
-                  <strong
-                    className="font-mono"
-                    style={{ fontSize: '0.82rem', color: 'var(--accent)' }}
-                  >
-                    {file.path.split('/').at(-1)}
-                  </strong>
-                  <Icon name="arrow" />
-                </div>
-                <small className="muted font-mono" style={{ display: 'block', marginTop: '4px' }}>
-                  {file.path}
-                </small>
-              </button>
-            ))}
-          </div>
-        )}
       </Panel>
     </div>
   );
@@ -571,6 +525,9 @@ export function Models({ s }: { s: State }) {
         detail="Model assignments for analysis, creation, testing and review."
         variant="intro"
       >
+        <Go page="analysis-files" tone="ghost" icon="folder">
+          File Scope
+        </Go>
         <Button
           icon="refresh"
           disabled={!!s.busy}
@@ -658,21 +615,23 @@ export function Models({ s }: { s: State }) {
           </div>
         </div>
       </Panel>
-      <Panel title="Analysis models" className="analysis-model-settings">
-        <ModelSelectors
-          s={s}
-          value={analysisSetupModels(s)}
-          disabled={!!s.busy}
-          onChange={(models) => w.setAnalysisSetup(models)}
-        />
-      </Panel>
-      <Panel title="Workflow models" className="fix-models">
-        <WorkflowModels
-          s={s}
-          value={workflowSetupModels(s)}
-          disabled={!!s.busy || !s.models || activeChangeWorkflow(s.change)}
-        />
-      </Panel>
+      <div className="grid two-columns">
+        <Panel title="Analysis models" className="analysis-model-settings">
+          <ModelSelectors
+            s={s}
+            value={analysisSetupModels(s)}
+            disabled={!!s.busy}
+            onChange={(models) => w.setAnalysisSetup(models)}
+          />
+        </Panel>
+        <Panel title="Workflow models" className="fix-models">
+          <WorkflowModels
+            s={s}
+            value={workflowSetupModels(s)}
+            disabled={!!s.busy || !s.models || activeChangeWorkflow(s.change)}
+          />
+        </Panel>
+      </div>
       <Panel title="Analysis & batch settings" className="analysis-batch-settings">
         <div className="form-grid analysis-settings-fields">
           {(
@@ -745,31 +704,32 @@ export function Models({ s }: { s: State }) {
           <span style={{ fontSize: '0.85rem' }}>Refresh previously analyzed files on next run</span>
         </label>
       </Panel>
-      <h2>Configured profiles</h2>
-      <div className="grid models-grid">
-        {Object.values(s.models?.scopes || {}).map((model) => (
-          <Panel
-            key={model.scope}
-            title={
-              {
-                analyze: 'Project analysis',
-                bug: 'File & Security',
-                function: 'Creation & explanations',
-              }[model.scope] || model.scope
-            }
-          >
-            <div className="stack model-configuration">
-              <div className="row model-identity">
-                <ModelIcon model={model} />
-                <h3>{model.model}</h3>
+      <Disclosure title="Configured profiles & daemon config">
+        <div className="grid models-grid">
+          {Object.values(s.models?.scopes || {}).map((model) => (
+            <Panel
+              key={model.scope}
+              title={
+                {
+                  analyze: 'Project analysis',
+                  bug: 'File & Security',
+                  function: 'Creation & explanations',
+                }[model.scope] || model.scope
+              }
+            >
+              <div className="stack model-configuration">
+                <div className="row model-identity">
+                  <ModelIcon model={model} />
+                  <h3>{model.model}</h3>
+                </div>
+                <p className="small muted">Thinking: {model.reasoning_effort || 'Default'}</p>
               </div>
-              <p className="small muted">Thinking: {model.reasoning_effort || 'Default'}</p>
-            </div>
-          </Panel>
-        ))}
-      </div>
-      <Disclosure title="Configuration">
-        <p className="small muted">Edit config.yaml, then restart the daemon.</p>
+            </Panel>
+          ))}
+        </div>
+        <p className="small muted" style={{ marginTop: '8px' }}>
+          Edit config.yaml, then restart the daemon.
+        </p>
       </Disclosure>
       {!s.models ? (
         <Empty title="Model configuration unavailable" />
@@ -780,10 +740,20 @@ export function Models({ s }: { s: State }) {
   );
 }
 export function Diagrams({ s }: { s: State }) {
+  const entryFiles = (s.index?.files || []).slice(0, 6);
   return (
-    <>
-      <Heading title="Architecture and flow">
-        <Go page="summary">Back to overview</Go>
+    <div className="workspace-page">
+      <Heading
+        title="Architecture and flow"
+        detail="System topology, core components, and repository entry points."
+        variant="intro"
+      >
+        <Go page="docs" icon="book">
+          Engineering Spec
+        </Go>
+        <Go page="editor" icon="code">
+          Explore source
+        </Go>
       </Heading>
       <div className="architecture-layout">
         <section className="architecture-canvas">
@@ -796,15 +766,32 @@ export function Diagrams({ s }: { s: State }) {
               <BulletContent title="Entry points" items={s.overview.analysis.entry_points} />
             )}
           </Panel>
-          {(s.overview?.analysis.flows || []).map((flow, i) => (
-            <Panel title={`Flow ${i + 1}`} key={i}>
-              <Prose text={flow} diagramLabel={`Flow ${i + 1} diagram`} />
+          {entryFiles.length > 0 && (
+            <Panel title="Quick Entry Files">
+              <div className="row wrap" style={{ gap: '8px' }}>
+                {entryFiles.map((file) => (
+                  <Button
+                    key={file.path}
+                    tone="ghost small"
+                    icon="file"
+                    onClick={() => void w.openFile(file.path)}
+                  >
+                    <span className="font-mono">{file.path}</span>
+                  </Button>
+                ))}
+              </div>
             </Panel>
-          ))}
-          {!s.overview?.analysis.flows?.length && (
-            <Panel title="Project flows">
-              <p className="muted">No project flows saved.</p>
-            </Panel>
+          )}
+          {!!s.overview?.analysis.flows?.length && (
+            <Disclosure title={`Runtime flows (${s.overview.analysis.flows.length})`}>
+              <div className="stack">
+                {s.overview.analysis.flows.map((flow, i) => (
+                  <Panel title={`Flow ${i + 1}`} key={i}>
+                    <Prose text={flow} diagramLabel={`Flow ${i + 1} diagram`} />
+                  </Panel>
+                ))}
+              </div>
+            </Disclosure>
           )}
         </section>
         <aside className="architecture-notes">
@@ -814,15 +801,9 @@ export function Diagrams({ s }: { s: State }) {
             </Panel>
           )}
           <InsightCard insight={s.overview?.analysis.engineering_insight} />
-          <Panel title="Next steps">
-            <BulletContent title="" items={s.overview?.analysis.next_steps} />
-          </Panel>
-          <Go page="editor" icon="code">
-            Explore source
-          </Go>
         </aside>
       </div>
-    </>
+    </div>
   );
 }
 export function SearchPage({ s }: { s: State }) {

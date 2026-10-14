@@ -184,6 +184,15 @@ export function Results({ s }: { s: State }) {
         ? findingCategory(s)!
         : 'all',
   );
+  useEffect(() => {
+    if (s.page === 'features') {
+      setCategoryFilter('features');
+    } else if (s.page === 'bugs' && categoryFilter === 'features') {
+      setCategoryFilter('all');
+    } else if (s.page === 'security' || s.page === 'performance') {
+      setCategoryFilter(s.page);
+    }
+  }, [s.page]);
   const [showDone, setShowDone] = useState(false);
   const [sortBy, setSortBy] = useState<'default' | 'severity' | 'path' | 'category'>('default');
   const [goals, setGoals] = useState(s.features?.goals || '');
@@ -1130,7 +1139,6 @@ export function Results({ s }: { s: State }) {
                       </span>
                       <strong>{row.name}</strong>
                     </span>
-                    <span className="finding-summary">{row.cause.split('\n')[0]}</span>
                     <small>
                       <span className="path font-mono">
                         {row.path}
@@ -1311,15 +1319,21 @@ export function Results({ s }: { s: State }) {
                 <strong className="small uppercase muted">Proposed Fix / Criteria</strong>
                 <Prose text={inspectorRow.solution || 'Prepare a fix to generate diff hunks.'} />
               </div>
-              {inspectorRow.text
-                .filter(([, content]) => content)
-                .map(([title, content]) => (
-                  <div key={title}>
-                    <strong className="small uppercase muted">{title}</strong>
-                    <Prose text={content} />
+              {(inspectorRow.text.some(([, content]) => content) || inspectorRow.insight) && (
+                <Disclosure title="Extended Evidence & Insight">
+                  <div className="stack" style={{ gap: '8px', paddingTop: '6px' }}>
+                    {inspectorRow.text
+                      .filter(([, content]) => content)
+                      .map(([title, content]) => (
+                        <div key={title}>
+                          <strong className="small uppercase muted">{title}</strong>
+                          <Prose text={content} />
+                        </div>
+                      ))}
+                    <InsightCard insight={inspectorRow.insight} />
                   </div>
-                ))}
-              <InsightCard insight={inspectorRow.insight} />
+                </Disclosure>
+              )}
               <div className="actions">
                 <Button
                   tone="primary"

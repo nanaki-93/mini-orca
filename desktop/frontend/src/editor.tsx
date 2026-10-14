@@ -423,10 +423,6 @@ export function Editor({ s }: { s: State }) {
               </Button>
             )}
           </div>
-          <div className="explorer-footer">
-            <Icon name="check" />
-            All file types unlocked
-          </div>
         </aside>
 
         <div className="unified-ide-center editor-content">
@@ -576,28 +572,21 @@ export function Editor({ s }: { s: State }) {
                 change && change.changes.length > 0 ? (
                   <div>
                     <div className="proposal-action-banner">
-                      <div>
-                        <div className="row wrap" style={{ gap: '8px' }}>
-                          <strong>{change.title}</strong>
-                          <Badge
-                            value={
-                              change.state !== 'draft'
-                                ? change.state
-                                : changeChecksPassed(change)
-                                  ? 'checks passed'
-                                  : 'draft'
-                            }
-                            tone={changeChecksPassed(change) ? 'green' : 'violet'}
-                          />
-                          <span className="small muted font-mono">
-                            {change.changes.length} {change.changes.length === 1 ? 'file' : 'files'}{' '}
-                            in proposal
-                          </span>
-                        </div>
-                        <p className="small muted" style={{ marginTop: '4px' }}>
-                          Accept or reject each hunk individually, edit inline, or apply all changes
-                          in-place with 1-click Undo.
-                        </p>
+                      <div className="row wrap" style={{ gap: '8px' }}>
+                        <strong>{change.title}</strong>
+                        <Badge
+                          value={
+                            change.state !== 'draft'
+                              ? change.state
+                              : changeChecksPassed(change)
+                                ? 'checks passed'
+                                : 'draft'
+                          }
+                          tone={changeChecksPassed(change) ? 'green' : 'violet'}
+                        />
+                        <span className="small muted font-mono">
+                          {change.changes.length} {change.changes.length === 1 ? 'file' : 'files'}
+                        </span>
                       </div>
                       <div className="row wrap" style={{ gap: '8px' }}>
                         {change.state === 'draft' && (
@@ -788,14 +777,10 @@ export function Editor({ s }: { s: State }) {
                 )
               ) : activePath && s.file ? (
                 <div className="source-document">
-                  <div className="row between wrap" style={{ marginBottom: '10px' }}>
+                  <div className="row between wrap" style={{ marginBottom: '8px' }}>
                     <span className="row" style={{ gap: '8px' }}>
-                      <Icon name="code" />
-                      <strong className="font-mono">{s.file.path}</strong>
-                      <Badge
-                        value={dirty ? 'Unsaved edits' : 'Direct edit'}
-                        tone={dirty ? 'amber' : 'violet'}
-                      />
+                      <strong className="font-mono small">{s.file.path}</strong>
+                      {dirty && <Badge value="Unsaved edits" tone="amber" />}
                       {s.symbol && <Badge value={`Symbol: ${s.symbol}`} tone="blue" />}
                     </span>
                     <div className="row" style={{ gap: '8px' }}>
@@ -810,14 +795,6 @@ export function Editor({ s }: { s: State }) {
                           Reset
                         </Button>
                       )}
-                      <Button
-                        tone="primary small"
-                        icon="check"
-                        disabled={!!s.busy || !dirty}
-                        onClick={() => void w.saveDirectFile(s.file!.path, draftContent)}
-                      >
-                        Save File (⌘S)
-                      </Button>
                     </div>
                   </div>
                   {s.file.binary ? (
