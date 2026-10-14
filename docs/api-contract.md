@@ -54,7 +54,7 @@ untrusted networks.
 | POST | `/api/projects/import` | Import the user-selected project and build deterministic project facts. |
 | POST | `/api/projects/restore` | Restore a previously imported local project without contacting the model. |
 | GET | `/api/projects/current` | Read the selected project summary without changing the active project. |
-| GET | `/api/projects/current/overview` | Read source-free metrics, structured analysis, coverage, and finding counts for `project_revision`. |
+| GET | `/api/projects/current/overview` | Read source-free metrics, structured analysis, optional engineering specification (`docs`), coverage, and finding counts for `project_revision`. |
 | GET | `/api/projects/current/analysis/selection` | Read the file checklist and saved exclusions with project/revision guards; no dispatch. |
 | POST | `/api/projects/current/analysis/selection` | Save excluded paths with project/revision and selection identity guards; no source changes. |
 | POST | `/api/projects/current/analysis/preview` | Whole-project, read-only preflight with strict project/revision guards. |

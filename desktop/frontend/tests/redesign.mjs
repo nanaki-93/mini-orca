@@ -42,14 +42,51 @@ async function test(name, fn) {
 try {
   await testThemes({ test, pageFor, nav, idle });
 
-  await test('Overview displays 3-card Project Pulse and interactive Architecture entry points', async () => {
+  await test('Overview displays 4-box Project Pulse with Tests & Checks box and inline Verification Phases drawer', async () => {
     const { page, close } = await pageFor();
     try {
-      assert.equal(await page.locator('.kpi-pulse-card').count(), 3);
+      assert.equal(await page.locator('.kpi-pulse-card').count(), 4);
+      assert.equal(await page.locator('.topbar button:has-text("Run Tests")').count(), 0);
       await page.getByText('System Architecture & Entry Points', { exact: true }).waitFor();
-      await page.getByRole('button', { name: 'Open Code & Diff', exact: true }).click();
+
+      // Clicking the Tests & Checks box toggles the inline Verification Phases drawer
+      await page.locator('.kpi-pulse-card').first().click();
+      await page.getByText('Verification Phases', { exact: true }).waitFor();
+      await page.locator('.kpi-pulse-card').first().click();
+
+      // Clicking the Active Proposal box navigates to Code & Diff
+      await page.locator('.kpi-pulse-card').nth(3).click();
       await idle(page);
       await page.locator('.unified-ide-shell').waitFor();
+    } finally {
+      await close();
+    }
+  });
+
+  await test('Engineering Specification (Docs) supports C4 System Context, Subsystem Contracts, Runtime Scenarios, and ADRs', async () => {
+    const { page, close } = await pageFor();
+    try {
+      await nav(page, 'Docs');
+      await idle(page);
+      await page.getByRole('heading', { name: 'Engineering Specification', exact: true }).waitFor();
+      await page.getByText('Layered Architecture Map', { exact: true }).waitFor();
+
+      // Switch to 2. Components & Contracts
+      await page.getByRole('tab', { name: /2\. Components/ }).click();
+      await page.getByText('Domain Responsibilities', { exact: true }).waitFor();
+      await page.getByText('Public Contracts & Interfaces', { exact: true }).waitFor();
+
+      // Switch to 3. Runtime Scenarios
+      await page.getByRole('tab', { name: /3\. Runtime Scenarios/ }).click();
+      await page.getByText('Step 1 · Admission', { exact: true }).first().waitFor();
+      await page.getByText('Step 2 · Execution', { exact: true }).first().waitFor();
+      await page.getByText('Step 3 · Publication', { exact: true }).first().waitFor();
+
+      // Switch to 4. Decisions & Ops
+      await page.getByRole('tab', { name: /4\. Decisions & Ops/ }).click();
+      await page.getByText('Architectural Decision Records (ADRs)', { exact: true }).waitFor();
+      await page.getByText('Operational Runbook', { exact: true }).waitFor();
+      await page.getByText('Ubiquitous Domain Language (Glossary)', { exact: true }).waitFor();
     } finally {
       await close();
     }
