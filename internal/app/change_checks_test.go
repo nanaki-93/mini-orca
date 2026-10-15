@@ -98,3 +98,29 @@ func TestChangeFailedChecksRepairAndApprovalInvalidation(t *testing.T) {
 		t.Fatalf("historical approval reused: %v", err)
 	}
 }
+
+func TestReviewChangeAcrossRestartAndDirectHunkEdits(t *testing.T) {
+	server := changeProvider(t, func() string { return groupedChangeResponse })
+	service, _ := newSemanticAnalysisService(t, server.URL, 0)
+	session := prepareChangeFixture(t, service, "main.go", "docs/change.md")
+	checked, err := service.CheckChange(context.Background(), session.ID, ChangeCheckRequest{ChangeIdentity: changeIdentity(session)})
+	if err != nil || !requiredChecksPassed(checked.Checks) {
+		t.Fatalf("checks: %+v, %v", checked, err)
+	}
+
+	restarted, err := New(scopedTestConfig(server.URL), service.manager)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restarted.ApplyChange(context.Background(), checked.ID, ChangeApplyRequest{ChangeIdentity: changeIdentity(checked), Confirm: true}); err == nil {
+		t.Fatal("apply succeeded without review after restart")
+	}
+	reviewed, err := restarted.ReviewChange(context.Background(), checked.ID, changeIdentity(checked))
+	if err != nil || reviewed.ReviewedHash != checked.Hash {
+		t.Fatalf("review after restart failed: %+v, %v", reviewed, err)
+	}
+	reviewedAgain, err := restarted.ReviewChange(context.Background(), reviewed.ID, changeIdentity(reviewed))
+	if err != nil || reviewedAgain.ReviewedHash != reviewed.Hash {
+		t.Fatalf("repeat review failed: %+v, %v", reviewedAgain, err)
+	}
+}
